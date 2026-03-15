@@ -1,0 +1,24 @@
+{
+  "api_surface": [
+    {
+      "statement_type": "inference",
+      "path": "/api/v1/users",
+      "api_type": "rest_like",
+      "auth_boundary_hint": "frontend_to_backend",
+      "confidence": 0.73,
+      "evidence_refs": [
+        "js:https://example.com/static/app.js"
+      ]
+    },
+    {
+      "statement_type": "inference",
+      "path": "/graphql",
+      "api_type": "graphql",
+      "auth_boundary_hint": "unknown",
+      "confidence": 0.69,
+      "evidence_refs": [
+        "js:https://example.com/static/app.js"
+      ]
+    }
+  ]
+}

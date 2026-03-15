@@ -1,0 +1,4 @@
+# ARGUS MCP Server — Phase 4: FastMCP, stdio transport
+
+fastmcp>=2.0.0
+requests>=2.31.0

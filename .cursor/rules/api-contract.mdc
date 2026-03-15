@@ -1,0 +1,22 @@
+---
+description: ARGUS API Contract First — Frontend источник истины, Backend по контрактам
+globs: ARGUS/backend/**/*.py, ARGUS/admin-frontend/**/*
+alwaysApply: true
+---
+
+# ARGUS API Contract Rule
+
+**Frontend — источник истины. Backend реализуется строго по API контрактам.**
+
+Полное правило: [docs/api-contract-rule.md](../../docs/api-contract-rule.md)
+
+## Кратко
+
+- Перед реализацией endpoint — проверить контракт в `docs/api-contracts.md`
+- Изменения API — только после обновления Frontend или явного согласования
+- Contract tests — проверка совместимости backend с ожиданиями Frontend
+
+## Референс
+
+- ARGUS/Frontend — основной источник
+- test/pentagi/frontend — референс при пустом ARGUS/Frontend

@@ -1,0 +1,15 @@
+{
+  "anomalies": [
+    {
+      "statement_type": "hypothesis",
+      "host": "cpanel.example.com",
+      "classification": "catch_all",
+      "confidence": 0.86,
+      "recommendation": "Validate wildcard DNS and edge routing ownership for this host.",
+      "evidence_refs": [
+        "content_clusters.csv",
+        "anomaly_validation.md"
+      ]
+    }
+  ]
+}

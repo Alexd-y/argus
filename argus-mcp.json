@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "argus": {
+      "command": "python",
+      "args": [
+        "ARGUS/mcp-server/argus_mcp.py",
+        "--server",
+        "http://127.0.0.1:8000"
+      ],
+      "env": {
+        "ARGUS_SERVER_URL": "http://127.0.0.1:8000",
+        "ARGUS_TENANT_ID": ""
+      },
+      "description": "ARGUS MCP — Security scan orchestration. Tools: create_scan, get_scan_status, list_findings, get_report.",
+      "timeout": 300,
+      "alwaysAllow": []
+    }
+  }
+}

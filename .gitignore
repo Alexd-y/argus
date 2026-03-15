@@ -1,0 +1,33 @@
+# Environment files — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# IDE / editor (keep .cursor/rules for project config)
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Reports (generated)
+pentest_reports_*/
+report_*.csv
+report_*.html
+report_*.json
+report_*.pdf
+
+# Logs
+*.log

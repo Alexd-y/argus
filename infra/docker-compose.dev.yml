@@ -1,0 +1,26 @@
+# ARGUS Development overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    environment:
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../backend:/app
+    # Hot reload via CMD override in future Phase 2

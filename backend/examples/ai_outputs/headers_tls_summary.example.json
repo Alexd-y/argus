@@ -1,0 +1,25 @@
+{
+  "summary": "Most hosts expose moderate header posture with uneven cookie security controls.",
+  "controls": [
+    {
+      "statement_type": "observation",
+      "host": "https://example.com",
+      "posture": "strong",
+      "confidence": 0.81,
+      "evidence_refs": [
+        "headers_detailed.csv:https://example.com",
+        "tls_summary.md:https://example.com"
+      ]
+    },
+    {
+      "statement_type": "observation",
+      "host": "https://admin.example.com",
+      "posture": "moderate",
+      "confidence": 0.74,
+      "evidence_refs": [
+        "headers_detailed.csv:https://admin.example.com",
+        "tls_summary.md:https://admin.example.com"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+# ARGUS Infrastructure — production-like stack
+# PostgreSQL, Redis, MinIO, Backend, Celery worker, Sandbox
+# Usage: docker compose -f infra/docker-compose.yml up
+
+name: argus
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: argus-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-argus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-argus}
+      POSTGRES_DB: ${POSTGRES_DB:-argus}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: argus-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: argus-minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-argussecret}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: argus-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:-argus}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-prod-32chars}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      SANDBOX_ENABLED: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  celery-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: argus-celery-worker
+    command: celery -A src.celery_app worker -l INFO -Q argus.scans,argus.reports,argus.tools,argus.recon,argus.default
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:-argus}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      SANDBOX_ENABLED: "false"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  sandbox:
+    build:
+      context: ../sandbox
+      dockerfile: Dockerfile
+    container_name: argus-sandbox
+    profiles:
+      - tools
+
+  # ARGUS MCP Server — HTTP transport in Docker (keeps container running); stdio for local Cursor
+  mcp-server:
+    build:
+      context: ../mcp-server
+      dockerfile: Dockerfile
+    container_name: argus-mcp
+    environment:
+      ARGUS_SERVER_URL: http://backend:8000
+      MCP_TRANSPORT: http
+      MCP_PORT: "8000"
+    ports:
+      - "8001:8000"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

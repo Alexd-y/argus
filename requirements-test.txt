@@ -1,0 +1,8 @@
+# Test dependencies for ARGUS (docs + ARGUS-002, ARGUS-003)
+# Install: pip install -r requirements-test.txt
+# Backend tests also need: pip install -r backend/requirements.txt (or Backend/)
+
+pytest>=7.4.0
+PyYAML>=6.0
+fastapi>=0.109.0
+httpx>=0.25.0

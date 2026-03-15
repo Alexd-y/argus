@@ -1,0 +1,11 @@
+# ARGUS Backend — exclude from Docker build
+__pycache__
+*.pyc
+.pytest_cache
+*.egg-info
+.venv
+venv
+.env
+.env.*
+*.md
+tests

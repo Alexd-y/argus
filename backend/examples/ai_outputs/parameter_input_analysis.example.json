@@ -1,0 +1,24 @@
+{
+  "params": [
+    {
+      "statement_type": "observation",
+      "name": "redirect",
+      "category": "redirect",
+      "context_url": "https://example.com/login",
+      "confidence": 0.7,
+      "evidence_refs": [
+        "html_form:https://example.com/login#1"
+      ]
+    },
+    {
+      "statement_type": "observation",
+      "name": "query",
+      "category": "search",
+      "context_url": "https://example.com/search",
+      "confidence": 0.68,
+      "evidence_refs": [
+        "html_form:https://example.com/search#1"
+      ]
+    }
+  ]
+}

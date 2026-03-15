@@ -1,0 +1,23 @@
+{
+  "summary": "Static JS analysis indicates client routing and backend API references in public bundles.",
+  "findings": [
+    {
+      "statement_type": "observation",
+      "category": "client_route",
+      "value": "/account/settings",
+      "confidence": 0.72,
+      "evidence_refs": [
+        "js:https://example.com/static/app.js"
+      ]
+    },
+    {
+      "statement_type": "observation",
+      "category": "api_ref",
+      "value": "https://example.com/api/v1/users/42",
+      "confidence": 0.76,
+      "evidence_refs": [
+        "js:https://example.com/static/app.js"
+      ]
+    }
+  ]
+}

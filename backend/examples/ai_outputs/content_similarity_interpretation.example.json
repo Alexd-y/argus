@@ -1,0 +1,15 @@
+{
+  "summary": "Multiple hosts share common response templates and redirect behavior.",
+  "clusters": [
+    {
+      "statement_type": "inference",
+      "cluster_id": "content_cluster_1",
+      "interpretation": "shared_404_or_platform_template",
+      "confidence": 0.75,
+      "evidence_refs": [
+        "content_clusters.csv",
+        "custom_fetch:https://example.com/not-found"
+      ]
+    }
+  ]
+}

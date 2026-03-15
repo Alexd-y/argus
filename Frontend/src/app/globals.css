@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+:root {
+  /* Backgrounds - dark grays */
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
+  
+  /* Borders */
+  --border: #262626;
+  --border-light: #333333;
+  
+  /* Accent colors */
+  --accent: #A655F7;
+  --accent-hover: #b875f8;
+  --accent-dim: #8b44d4;
+  --secondary: #393A84;
+  --highlight: #E3CAFE;
+  
+  /* Text */
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #525252;
+  
+  /* Status */
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+}
+
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono), 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg-primary);
+}
+
+:focus {
+  outline: none;
+}
+
+input::placeholder {
+  color: var(--text-muted);
+}
+
+button {
+  user-select: none;
+}
+
+/* Glitch Text Effect */
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.glitch-text::before {
+  color: #E3CAFE;
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+}
+
+.glitch-text::after {
+  color: #393A84;
+  clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+}
+
+.glitch-text:hover {
+  animation: glitch-main 0.4s ease-in-out forwards;
+}
+
+.glitch-text:not(:hover) {
+  animation: none;
+  text-shadow: none;
+  transform: translate(0);
+}
+
+.glitch-text:hover::before {
+  animation: glitch-layer 0.4s ease-in-out forwards;
+}
+
+.glitch-text:hover::after {
+  animation: glitch-layer 0.4s ease-in-out reverse forwards;
+}
+
+.glitch-text:not(:hover)::before,
+.glitch-text:not(:hover)::after {
+  animation: none;
+  opacity: 0;
+  transform: translate(0);
+}
+
+@keyframes glitch-main {
+  0% { transform: translate(0); text-shadow: none; }
+  10% { transform: translate(-3px, 2px); }
+  20% { transform: translate(3px, -2px); text-shadow: -2px 0 #E3CAFE, 2px 0 #393A84; }
+  30% { transform: translate(-2px, -1px); }
+  40% { transform: translate(2px, 2px); text-shadow: 2px 0 #E3CAFE, -2px 0 #393A84; }
+  50% { transform: translate(-1px, 1px); }
+  60% { transform: translate(1px, -1px); text-shadow: -1px 0 #E3CAFE, 1px 0 #393A84; }
+  70% { transform: translate(0); text-shadow: none; }
+  80% { transform: translate(-1px, 0); }
+  90% { transform: translate(0); }
+  100% { transform: translate(0); text-shadow: none; }
+}
+
+@keyframes glitch-layer {
+  0% { transform: translate(0); opacity: 0; }
+  15% { transform: translate(-4px, 1px); opacity: 0.9; }
+  30% { transform: translate(4px, -1px); opacity: 0.7; }
+  45% { transform: translate(-3px, 2px); opacity: 0.8; }
+  60% { transform: translate(2px, -2px); opacity: 0.5; }
+  75% { transform: translate(-1px, 1px); opacity: 0.3; }
+  85% { transform: translate(0); opacity: 0.1; }
+  100% { transform: translate(0); opacity: 0; }
+}
+
+@keyframes glitch {
+  0% { transform: translate(0); }
+  20% { transform: translate(-2px, 2px); }
+  40% { transform: translate(-2px, -2px); }
+  60% { transform: translate(2px, 2px); }
+  80% { transform: translate(2px, -2px); }
+  100% { transform: translate(0); }
+}
+
+/* Glitch Hover for Buttons */
+.glitch-hover:hover:not(:disabled) {
+  animation: glitch-button 0.2s ease-in-out;
+}
+
+@keyframes glitch-button {
+  0% { transform: translate(0); }
+  25% { transform: translate(-1px, 1px); }
+  50% { transform: translate(1px, -1px); }
+  75% { transform: translate(-1px, -1px); }
+  100% { transform: translate(0); }
+}
+
+/* Pulse Glow */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px #A655F7, 0 0 8px #A655F7;
+  }
+  50% {
+    box-shadow: 0 0 8px #A655F7, 0 0 16px #A655F7, 0 0 24px #A655F7;
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Flicker Effect */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.7; }
+  94% { opacity: 1; }
+  96% { opacity: 0.8; }
+  97% { opacity: 1; }
+}
+
+.flicker {
+  animation: flicker 4s ease-in-out infinite;
+}
+
+/* Mobile Modal Improvements */
+@media (max-width: 640px) {
+  .modal-content {
+    border-radius: 16px 16px 0 0;
+  }
+
+  .modal-tab {
+    padding: 12px 8px;
+  }
+}
+
+/* Protocol Selector */
+select {
+  background-image: none;
+}
+
+select:focus {
+  outline: none;
+}
+
+/* Prevent iOS Safari auto-zoom on input focus */
+@media screen and (max-width: 640px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="number"],
+  input[type="password"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+.glow-amber {
+  box-shadow: 0 0 8px #fbbf24;
+}
+
+.glow-emerald {
+  box-shadow: 0 0 8px #22c55e;
+}

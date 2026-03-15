@@ -1,0 +1,25 @@
+{
+  "summary": "Stage 2 should prioritize suspicious routing and auth-adjacent API surfaces.",
+  "next_steps": [
+    {
+      "statement_type": "hypothesis",
+      "step": "Validate suspicious host ownership and wildcard routing behavior.",
+      "priority": "high",
+      "confidence": 0.78,
+      "evidence_refs": [
+        "anomaly_validation.md",
+        "content_clusters.csv"
+      ]
+    },
+    {
+      "statement_type": "hypothesis",
+      "step": "Review redirect clusters for shared platform aliasing.",
+      "priority": "medium",
+      "confidence": 0.69,
+      "evidence_refs": [
+        "redirect_clusters.csv",
+        "04_live_hosts/http_probe.csv"
+      ]
+    }
+  ]
+}
