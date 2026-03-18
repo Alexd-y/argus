@@ -1,5 +1,6 @@
-# ARGUS Development overrides
-# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ARGUS Development overrides — port exposure for local tools
+# Production compose does NOT expose postgres/redis/minio ports.
+# Usage: docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up
 
 services:
   postgres:
@@ -18,7 +19,7 @@ services:
   backend:
     build:
       context: ../backend
-      dockerfile: Dockerfile
+      dockerfile: ../infra/backend/Dockerfile
     environment:
       LOG_LEVEL: DEBUG
     volumes:

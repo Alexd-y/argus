@@ -1,0 +1,10 @@
+# ARGUS Infra — exclude from Docker build (worker uses FROM backend; context rarely used)
+.git
+__pycache__
+*.pyc
+.pytest_cache
+.env
+.env.*
+.venv
+venv
+node_modules

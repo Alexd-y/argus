@@ -1,0 +1,24 @@
+# ARGUS Development overrides — auto-loaded when running from infra/
+# Port exposure for local tools, backend hot-reload
+# Usage: docker compose up (from infra/ — override is loaded automatically)
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  backend:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ../backend:/app
+    environment:
+      LOG_LEVEL: DEBUG

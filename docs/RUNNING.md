@@ -35,8 +35,16 @@ copy infra\.env.example infra\.env
 
 ### 2.2 Запуск
 
+**Production** (порты postgres/redis/minio не пробрасываются):
+
 ```powershell
 docker compose -f infra/docker-compose.yml up -d
+```
+
+**Dev** (с пробросом портов для локальных инструментов — pgAdmin, Redis CLI, MinIO Console):
+
+```powershell
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d
 ```
 
 С Celery worker и sandbox (для сканирования и отчётов):
@@ -47,7 +55,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d
 
 ### 2.3 Сервисы
 
-| Сервис | Порт | Назначение |
+| Сервис | Порт (dev) | Назначение |
 |--------|------|------------|
 | postgres | 5432 | PostgreSQL + pgvector |
 | redis | 6379 | Redis (кеш, Celery broker) |
@@ -70,11 +78,11 @@ docker compose -f infra/docker-compose.yml --profile tools up -d
 
 ### 3.1 Инфраструктура (Docker)
 
-Запустить только БД, Redis и MinIO:
+Запустить только БД, Redis и MinIO (с пробросом портов для локального backend):
 
 ```powershell
 cd ARGUS
-docker compose -f infra/docker-compose.yml up -d postgres redis minio
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d postgres redis minio
 ```
 
 ### 3.2 Backend
