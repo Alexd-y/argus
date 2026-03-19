@@ -66,6 +66,7 @@ class VulnerabilityAnalysisAiTask(StrEnum):
     FINDING_TO_SCENARIO_MAPPING = "finding_to_scenario_mapping"
     REMEDIATION_GENERATION = "remediation_generation"
     STAGE3_CONFIRMATION_SUMMARY = "stage3_confirmation_summary"
+    EXPLOITATION_CANDIDATE_GENERATION = "exploitation_candidate_generation"
 
 
 class ThreatModelingAiTask(StrEnum):

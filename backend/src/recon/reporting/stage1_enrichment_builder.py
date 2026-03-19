@@ -1068,6 +1068,7 @@ def _persist_ai_task(
         {
             "mcp_invocation_audit_meta.json",
             "mcp_invocation_audit.jsonl",
+            "mcp_trace.jsonl",
             *(
                 "mcp_invocation_audit.jsonl"
                 for ref in source_refs
@@ -2273,7 +2274,7 @@ def build_stage1_enrichment_artifacts(
             "",
             f"- [Evidence] Source artifacts: `{', '.join(evidence_artifacts)}`",
             "- [Evidence] Each boundary candidate links to source via `evidence_ref` (e.g. `api_surface.csv:row_N`, `endpoint_inventory.csv:row_M`, `route_inventory.csv` URL ref).",
-            "- [Evidence] MCP traces: `mcp_invocation_audit_meta.json`, `mcp_invocation_audit.jsonl`",
+            "- [Evidence] MCP traces: `mcp_invocation_audit_meta.json`, `mcp_invocation_audit.jsonl`, `mcp_trace.jsonl`",
         ]
     )
     frontend_backend_boundaries_md = "\n".join(frontend_backend_boundaries_md_lines)
@@ -2707,6 +2708,7 @@ def build_stage1_enrichment_artifacts(
                 "js_findings.md",
                 "mcp_invocation_audit_meta.json",
                 "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
             ],
             evidence_refs=[
                 *[x["evidence_ref"] for x in js_client_routes[:100]],
@@ -2756,6 +2758,7 @@ def build_stage1_enrichment_artifacts(
                 "forms_inventory.csv",
                 "mcp_invocation_audit_meta.json",
                 "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
             ],
             evidence_refs=[p["evidence_ref"] for p in params_rows[:300] if p.get("evidence_ref")],
         )
@@ -2801,6 +2804,7 @@ def build_stage1_enrichment_artifacts(
                 "frontend_backend_boundaries.md",
                 "mcp_invocation_audit_meta.json",
                 "mcp_invocation_audit.jsonl",
+                "mcp_trace.jsonl",
             ],
             evidence_refs=[a["evidence_ref"] for a in api_rows[:300] if a.get("evidence_ref")],
         )
@@ -3148,10 +3152,13 @@ def build_stage1_enrichment_artifacts(
                 "job_link",
                 "trace_id",
             ],
-            "mcp_trace_refs": [
-                "mcp_invocation_audit_meta.json",
-                "mcp_invocation_audit.jsonl",
-            ],
+            "mcp_trace_refs": sorted(
+                [
+                    "mcp_invocation_audit_meta.json",
+                    "mcp_invocation_audit.jsonl",
+                    "mcp_trace.jsonl",
+                ]
+            ),
         },
         indent=2,
         ensure_ascii=False,

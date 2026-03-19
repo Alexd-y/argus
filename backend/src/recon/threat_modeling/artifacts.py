@@ -1,7 +1,7 @@
-"""Report/artifact generators for Threat Modeling — 12 artifact types.
+"""Report/artifact generators for Threat Modeling — 13 artifact types.
 
-Generates threat_model.md, CSVs, markdown reports, and JSON traces from
-pipeline outputs (bundle, AI task results, MCP traces).
+Generates stage2_inputs.json (traceability), threat_model.md, CSVs, markdown
+reports, and JSON traces from pipeline outputs (bundle, AI task results, MCP traces).
 """
 
 from __future__ import annotations
@@ -15,9 +15,19 @@ from typing import Any
 from app.schemas.ai.common import PriorityLevel
 from app.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
+    AttackerProfile,
     MCPInvocationTrace,
     ThreatModelArtifact,
     ThreatModelInputBundle,
+)
+from app.schemas.threat_modeling.stage2_artifacts import ThreatModelUnified
+from src.recon.threat_modeling.stage2_parsers import (
+    parse_application_flows_to_stage3,
+    parse_critical_assets_to_stage3,
+    parse_entry_points_to_stage3,
+    parse_priority_hypotheses,
+    parse_threat_scenarios_to_stage3,
+    parse_trust_boundaries_to_stage3,
 )
 
 # --- Helpers ---
@@ -662,7 +672,7 @@ def generate_ai_reasoning_trace_json(
     artifact: ThreatModelArtifact,
     ai_traces: list[AIReasoningTrace] | None = None,
 ) -> str:
-    """Generate ai_reasoning_trace.json — full AI task traces."""
+    """Generate ai_reasoning_traces.json — full AI task traces."""
     traces = ai_traces if ai_traces is not None else artifact.ai_reasoning_traces
     payload = {
         "run_id": artifact.run_id,
@@ -670,6 +680,117 @@ def generate_ai_reasoning_trace_json(
         "traces": [_ai_trace_to_dict(t) for t in traces],
     }
     return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+
+
+def generate_stage2_inputs_json(
+    bundle: ThreatModelInputBundle,
+    *,
+    generated_at: str | None = None,
+    engagement_id: str | None = None,
+    target_id: str | None = None,
+    job_id: str | None = None,
+    run_id: str | None = None,
+) -> str:
+    """Generate stage2_inputs.json — traceability copy of input bundle with metadata.
+
+    Returns JSON with metadata (generated_at, engagement_id, target_id, job_id, run_id)
+    and full bundle dump for Stage 3 traceability.
+    """
+    now = datetime.now()
+    payload: dict[str, Any] = {
+        "metadata": {
+            "generated_at": generated_at or now.isoformat(),
+            "engagement_id": engagement_id if engagement_id is not None else bundle.engagement_id,
+            "target_id": target_id if target_id is not None else bundle.target_id,
+            "job_id": job_id,
+            "run_id": run_id,
+        },
+        "bundle": bundle.model_dump(mode="json"),
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+
+
+def generate_threat_model_json(
+    bundle: ThreatModelInputBundle,
+    prior_outputs: dict[str, Any],
+    run_id: str,
+    job_id: str,
+) -> str:
+    """Generate threat_model.json — ThreatModelUnified JSON (TM2-003).
+
+    Parses prior_outputs via stage2_parsers into Stage3 models and outputs
+    unified threat model JSON. run_id/job_id included in metadata if needed.
+    """
+    critical_assets = parse_critical_assets_to_stage3(prior_outputs, bundle)
+    trust_boundaries = parse_trust_boundaries_to_stage3(prior_outputs, bundle)
+    entry_points = parse_entry_points_to_stage3(prior_outputs, bundle)
+    threat_scenarios = parse_threat_scenarios_to_stage3(prior_outputs)
+
+    profiles_data = prior_outputs.get("attacker_profiles", {}) or {}
+    raw_profiles = (
+        profiles_data.get("profiles")
+        if isinstance(profiles_data, dict)
+        else []
+    ) or []
+    attacker_profiles: list[AttackerProfile] = []
+    for i, p in enumerate(raw_profiles):
+        if not isinstance(p, dict):
+            continue
+        try:
+            attacker_profiles.append(
+                AttackerProfile(
+                    id=str(p.get("id") or f"ap_{i}")[:100],
+                    name=str(p.get("name") or "")[:200] or f"profile_{i}",
+                    capability_level=str(p.get("capability_level") or "unknown")[:50],
+                    description=(str(p.get("description"))[:2000] if p.get("description") else None),
+                )
+            )
+        except Exception:
+            pass
+    if not attacker_profiles and bundle.attacker_profiles:
+        attacker_profiles = list(bundle.attacker_profiles[:50])
+
+    unified = ThreatModelUnified(
+        critical_assets=critical_assets,
+        trust_boundaries=trust_boundaries,
+        entry_points=entry_points,
+        attacker_profiles=attacker_profiles,
+        threat_scenarios=threat_scenarios,
+    )
+    payload: dict[str, Any] = {
+        "run_id": run_id,
+        "job_id": job_id,
+        **unified.model_dump(mode="json"),
+    }
+    return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+
+
+def generate_priority_hypotheses_json(
+    bundle: ThreatModelInputBundle,
+    prior_outputs: dict[str, Any],
+) -> str:
+    """Generate ai_tm_priority_hypotheses.json — AiTmPriorityHypotheses JSON (TM2-004)."""
+    hypotheses = parse_priority_hypotheses(bundle, prior_outputs)
+    return json.dumps(
+        hypotheses.model_dump(mode="json"),
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+    )
+
+
+def generate_application_flows_json(
+    prior_outputs: dict[str, Any],
+    bundle: ThreatModelInputBundle,
+) -> str:
+    """Generate ai_tm_application_flows.json — normalized Stage3ApplicationFlow list JSON (TM2-005)."""
+    flows = parse_application_flows_to_stage3(prior_outputs, bundle)
+    return json.dumps(
+        [f.model_dump(mode="json") for f in flows],
+        indent=2,
+        ensure_ascii=False,
+        default=str,
+    )
 
 
 def generate_mcp_trace_json(
@@ -709,9 +830,15 @@ def generate_all_artifacts(
     artifact: ThreatModelArtifact,
     ai_results: dict[str, Any] | None = None,
     mcp_traces: list[MCPInvocationTrace] | list[dict[str, Any]] | None = None,
+    prior_outputs: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    """Generate all 12 artifact types. Returns dict mapping artifact_type -> content."""
+    """Generate all artifact types including TM2-003/004/005. Returns dict mapping filename -> content."""
     result: dict[str, str] = {}
+    result["stage2_inputs.json"] = generate_stage2_inputs_json(
+        bundle,
+        job_id=artifact.job_id,
+        run_id=artifact.run_id,
+    )
     result["threat_model.md"] = generate_threat_model_md(bundle, artifact, ai_results)
     result["critical_assets.csv"] = generate_critical_assets_csv(bundle, ai_results)
     result["entry_points.csv"] = generate_entry_points_csv(bundle, ai_results)
@@ -722,6 +849,18 @@ def generate_all_artifacts(
     result["threat_scenarios.csv"] = generate_threat_scenarios_csv(artifact)
     result["testing_priorities.md"] = generate_testing_priorities_md(artifact)
     result["evidence_gaps.md"] = generate_evidence_gaps_md(artifact, ai_results)
-    result["ai_reasoning_trace.json"] = generate_ai_reasoning_trace_json(artifact)
+    result["ai_reasoning_traces.json"] = generate_ai_reasoning_trace_json(artifact)
     result["mcp_trace.json"] = generate_mcp_trace_json(artifact, mcp_traces)
+
+    if prior_outputs is not None:
+        result["threat_model.json"] = generate_threat_model_json(
+            bundle, prior_outputs, artifact.run_id, artifact.job_id
+        )
+        result["ai_tm_priority_hypotheses.json"] = generate_priority_hypotheses_json(
+            bundle, prior_outputs
+        )
+        result["ai_tm_application_flows.json"] = generate_application_flows_json(
+            prior_outputs, bundle
+        )
+
     return result

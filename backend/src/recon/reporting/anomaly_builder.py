@@ -15,6 +15,9 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from app.schemas.recon.stage1 import AnomaliesStructured
 from src.core.llm_config import get_llm_client, has_any_llm_key
 
 logger = logging.getLogger(__name__)
@@ -271,7 +274,7 @@ def _to_structured_hypotheses(
     hypotheses: list[dict],
     anomaly_sources: dict[str, str],
 ) -> list[dict]:
-    """Convert hypotheses to structured format: {id, type, source, text}.
+    """Convert hypotheses to HypothesisEntry format: {id, type, source, text}.
 
     Uses anomaly_sources mapping (anomaly_id -> artifact path) for proper source citation.
     """
@@ -279,44 +282,51 @@ def _to_structured_hypotheses(
     for i, h in enumerate(hypotheses):
         anomaly_id = h.get("anomaly_id", "")
         source = anomaly_sources.get(anomaly_id, SOURCE_CLASSIFICATION)
+        text = (h.get("hypothesis", "") or "").strip()
+        if not text:
+            text = "Unspecified hypothesis"
         structured.append({
             "id": f"hyp_{i + 1}",
             "type": "hypothesis",
             "source": source,
-            "text": h.get("hypothesis", ""),
+            "text": text,
         })
     return structured
 
 
 def _to_structured_anomalies(anomalies: list[dict]) -> list[dict]:
-    """Convert anomalies to structured format for JSON output."""
+    """Convert anomalies to AnomalyEntry-compatible format: id, type, source, host, description, evidence."""
+    result: list[dict] = []
+    for a in anomalies:
+        host = (a.get("host") or "").strip()
+        desc = (a.get("description") or "").strip()
+        if not host:
+            host = "unknown"
+        if not desc:
+            desc = "No description"
+        result.append({
+            "id": a.get("id") or f"anom_{len(result) + 1}",
+            "type": a.get("type") or "observation",
+            "source": a.get("source") or SOURCE_HTTP_PROBE,
+            "host": host,
+            "description": desc,
+            "evidence": a.get("evidence") or "",
+        })
+    return result
+
+
+def _build_coverage_gaps_structured() -> list[str | dict[str, object]]:
+    """Build coverage gaps as list for AnomaliesStructured (AI-ready)."""
     return [
-        {
-            "id": a.get("id", ""),
-            "type": a.get("type", "observation"),
-            "source": a.get("source", SOURCE_HTTP_PROBE),
-            "host": a.get("host"),
-            "status": a.get("status"),
-            "server": a.get("server"),
-            "description": a.get("description", ""),
-        }
-        for a in anomalies
-    ]
-
-
-def _build_coverage_gaps_structured() -> dict:
-    """Build structured coverage gaps for JSON output."""
-    return {
-        "type": "coverage_gap",
-        "source": "stage1_report",
-        "items": [
+        {"section": "covered", "items": [
             "Subdomain enumeration and DNS resolution",
             "Live host probing (HTTP/HTTPS)",
             "Technology fingerprinting (Server headers)",
             "Subdomain role classification",
             "CNAME mapping and redirect chains",
             "Basic endpoint inventory (robots.txt, security.txt, etc.)",
-            "---",
+        ]},
+        {"section": "not_covered", "items": [
             "Deep URL crawling and path discovery",
             "JavaScript analysis (secrets, endpoints, API discovery)",
             "Parameter and form analysis",
@@ -325,15 +335,16 @@ def _build_coverage_gaps_structured() -> dict:
             "Content clustering and deduplication",
             "OSINT correlation",
             "Manual validation of hypotheses",
-            "---",
+        ]},
+        {"section": "recommended", "items": [
             "Run URL crawler on live hosts to discover paths and forms",
             "Extract and analyze JavaScript for secrets and API endpoints",
             "Validate mail/admin subdomains manually (MX records, SMTP probes)",
             "Check CNAME targets for takeover opportunities",
             "Run port scan on critical hosts (if in scope)",
             "Perform TLS/certificate analysis for misconfigurations",
-        ],
-    }
+        ]},
+    ]
 
 
 def build_anomalies(
@@ -424,10 +435,17 @@ def build_anomalies(
     markdown_content = "\n".join(lines)
 
     anomaly_sources = {a["id"]: a.get("source", SOURCE_HTTP_PROBE) for a in anomalies}
-    structured = {
+    structured_raw = {
         "anomalies": _to_structured_anomalies(anomalies),
         "hypotheses": _to_structured_hypotheses(hypotheses, anomaly_sources),
         "coverage_gaps": _build_coverage_gaps_structured(),
     }
+
+    try:
+        validated = AnomaliesStructured.model_validate(structured_raw)
+        structured = validated.model_dump(mode="json")
+    except ValidationError as e:
+        logger.error("AnomaliesStructured validation failed", extra={"errors": str(e.errors())})
+        raise
 
     return markdown_content, structured

@@ -1,4 +1,4 @@
-"""Tech fingerprint builder — builds tech_profile.csv from Stage 1 artifacts."""
+"""Tech fingerprint builder — builds tech_profile.csv and tech_profile.json from Stage 1 artifacts."""
 
 import csv
 import io
@@ -8,9 +8,13 @@ from pathlib import Path
 
 from src.recon.parsers.http_probe_parser import parse_http_probe
 
+from app.schemas.recon.stage1 import TechProfileEntry
+
 logger = logging.getLogger(__name__)
 
 COLUMNS = ["indicator_type", "value", "evidence", "confidence"]
+
+_CONFIDENCE_MAP = {"high": 0.9, "medium": 0.5, "low": 0.3}
 
 # Server header -> (indicator_type, confidence). Compiled at load.
 _SERVER_SIGNATURES: list[tuple[re.Pattern[str], str, str]] = [
@@ -63,21 +67,15 @@ def _match_server(server: str) -> list[tuple[str, str, str]]:
     return results
 
 
-def build_tech_profile(http_probe_path: str | Path) -> str:
-    """Build tech_profile.csv from http_probe.csv.
-
-    Parses server header to infer platform, framework, cdn, waf.
-    Columns: indicator_type, value, evidence, confidence.
-    """
-    http_probe_path = Path(http_probe_path)
+def _build_tech_indicators(http_probe_path: Path) -> list[dict[str, str]]:
+    """Build raw tech indicators from http_probe.csv. Returns list of dicts with host, indicator_type, value, evidence, confidence."""
     http_rows = parse_http_probe(http_probe_path)
-
     indicators: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
 
     for row in http_rows:
         server = (row.get("server") or "").strip()
-        host = (row.get("host") or "").strip()
+        host = (row.get("host") or row.get("url") or "").strip()
         if not server:
             continue
 
@@ -89,11 +87,23 @@ def build_tech_profile(http_probe_path: str | Path) -> str:
             seen.add(key)
             evidence = f"Server header on {host}" if host else "Server header"
             indicators.append({
+                "host": host or "unknown",
                 "indicator_type": indicator_type,
                 "value": value,
                 "evidence": evidence,
                 "confidence": confidence,
             })
+    return indicators
+
+
+def build_tech_profile(http_probe_path: str | Path) -> str:
+    """Build tech_profile.csv from http_probe.csv.
+
+    Parses server header to infer platform, framework, cdn, waf.
+    Columns: indicator_type, value, evidence, confidence.
+    """
+    http_probe_path = Path(http_probe_path)
+    indicators = _build_tech_indicators(http_probe_path)
 
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
@@ -107,3 +117,31 @@ def build_tech_profile(http_probe_path: str | Path) -> str:
         ])
 
     return output.getvalue()
+
+
+def build_tech_profile_json(http_probe_path: str | Path) -> list[TechProfileEntry]:
+    """Build tech profile as list of TechProfileEntry from http_probe.csv.
+
+    Same logic as build_tech_profile but returns validated TechProfileEntry[].
+    Output can be serialized to tech_profile.json.
+    """
+    http_probe_path = Path(http_probe_path)
+    indicators = _build_tech_indicators(http_probe_path)
+
+    entries: list[TechProfileEntry] = []
+    for ind in indicators:
+        conf_str = (ind.get("confidence") or "").lower()
+        confidence = _CONFIDENCE_MAP.get(conf_str)
+        host = (ind.get("host") or "unknown").strip()[:512]
+        if not host:
+            host = "unknown"
+        entries.append(
+            TechProfileEntry(
+                host=host,
+                indicator_type=ind["indicator_type"][:128],
+                value=ind["value"][:1024],
+                evidence=(ind.get("evidence") or "")[:2000],
+                confidence=confidence,
+            )
+        )
+    return entries[:2000]

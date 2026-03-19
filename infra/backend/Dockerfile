@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy application
 COPY main.py .
 COPY src/ ./src/
+COPY app/ ./app/
 COPY alembic.ini .
 COPY alembic/ ./alembic/
 

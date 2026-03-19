@@ -5,7 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.recon.mcp.audit import MCP_AUDIT_LOG_FILENAME, MCP_AUDIT_META_FILENAME, mcp_audit_context
+from src.recon.mcp.audit import (
+    MCP_AUDIT_LOG_FILENAME,
+    MCP_AUDIT_META_FILENAME,
+    MCP_TRACE_LOG_FILENAME,
+    build_mcp_trace_from_audit,
+    mcp_audit_context,
+    record_mcp_invocation,
+)
 from src.recon.mcp.client import fetch_url_mcp
 from src.recon.mcp.policy import evaluate_recon_stage1_policy, sanitize_args
 from src.recon.reporting.stage1_contract import (
@@ -121,7 +128,7 @@ def test_stage1_report_writes_contract_and_mcp_linkage_artifacts(tmp_path: Path)
     assert contract["stage"] == "recon_stage1"
     assert contract["run_id"] == tmp_path.name
     assert contract["job_id"] == f"{tmp_path.name}-stage1"
-    assert len(contract["report_sections_required"]) == 16
+    assert len(contract["report_sections_required"]) == len(STAGE1_REPORT_SECTIONS)
 
     meta_path = tmp_path / MCP_AUDIT_META_FILENAME
     assert meta_path.exists()
@@ -402,3 +409,125 @@ def test_fetch_url_mcp_logs_redacted_url_in_structured_extra(
     assert hasattr(record, "url")
     assert "very-secret" not in record.url
     assert "token=%5BREDACTED%5D" in record.url
+
+
+def test_record_mcp_invocation_with_output_summary(tmp_path: Path) -> None:
+    """record_mcp_invocation accepts optional output_summary and stores it in audit event."""
+    with mcp_audit_context(
+        stage="recon_stage1",
+        run_id="run-out",
+        job_id="job-out",
+        recon_dir=tmp_path,
+        trace_id="trace-out",
+    ):
+        record_mcp_invocation(
+            tool_name="fetch",
+            operation="endpoint_extraction",
+            args={"url": "https://example.com/robots.txt"},
+            allowed=True,
+            policy_id="stage1",
+            decision_reason="allowlisted",
+            output_summary="Found 3 disallow rules",
+        )
+
+    lines = [
+        line
+        for line in (tmp_path / MCP_AUDIT_LOG_FILENAME).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert lines
+    event = json.loads(lines[-1])
+    assert event["output_summary"] == "Found 3 disallow rules"
+    assert event["allowed"] is True
+
+
+def test_record_mcp_invocation_with_output_summary_dict(tmp_path: Path) -> None:
+    """record_mcp_invocation accepts output_summary as dict, stored as JSON string."""
+    with mcp_audit_context(
+        stage="recon_stage1",
+        run_id="run-dict",
+        job_id="job-dict",
+        recon_dir=tmp_path,
+        trace_id="trace-dict",
+    ):
+        record_mcp_invocation(
+            tool_name="read_file",
+            operation="enrichment",
+            args={"path": "artifacts/report.json"},
+            allowed=True,
+            policy_id="va",
+            decision_reason="allowlisted",
+            output_summary={"status": "ok", "bytes_read": 1024},
+        )
+
+    lines = [
+        line
+        for line in (tmp_path / MCP_AUDIT_LOG_FILENAME).read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert lines
+    event = json.loads(lines[-1])
+    parsed = json.loads(event["output_summary"])
+    assert parsed["status"] == "ok"
+    assert parsed["bytes_read"] == 1024
+
+
+def test_build_mcp_trace_from_audit_produces_mcp_trace_jsonl(tmp_path: Path) -> None:
+    """build_mcp_trace_from_audit post-processes audit to produce mcp_trace.jsonl with McpTraceEvent schema."""
+    with mcp_audit_context(
+        stage="recon_stage1",
+        run_id="run-trace",
+        job_id="job-trace",
+        recon_dir=tmp_path,
+        trace_id="trace-trace",
+    ):
+        record_mcp_invocation(
+            tool_name="fetch",
+            operation="endpoint_extraction",
+            args={"url": "https://example.com/sitemap.xml"},
+            allowed=True,
+            policy_id="stage1",
+            decision_reason="allowlisted",
+        )
+        record_mcp_invocation(
+            tool_name="fetch",
+            operation="endpoint_extraction",
+            args={"url": "https://evil.com/"},
+            allowed=False,
+            policy_id="stage1",
+            decision_reason="domain_not_in_scope",
+        )
+
+    trace_path = build_mcp_trace_from_audit(tmp_path)
+    assert trace_path is not None
+    assert trace_path == tmp_path / MCP_TRACE_LOG_FILENAME
+    assert trace_path.exists()
+
+    lines = [line for line in trace_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    assert len(lines) == 2
+
+    ev1 = json.loads(lines[0])
+    assert ev1["tool_name"] == "fetch"
+    assert ev1["input_parameters"]["url"] == "https://example.com/sitemap.xml"
+    assert ev1["run_id"] == "run-trace"
+    assert ev1["job_id"] == "job-trace"
+    assert ev1["status"] == "success"
+    assert ev1["output_summary"] is None
+
+    ev2 = json.loads(lines[1])
+    assert ev2["tool_name"] == "fetch"
+    assert ev2["status"] == "error"
+    assert "denied" in ev2["output_summary"].lower() or "domain" in ev2["output_summary"].lower()
+
+
+def test_build_mcp_trace_from_audit_returns_none_when_audit_missing(tmp_path: Path) -> None:
+    """build_mcp_trace_from_audit returns None when mcp_invocation_audit.jsonl does not exist."""
+    result = build_mcp_trace_from_audit(tmp_path)
+    assert result is None
+
+
+def test_build_mcp_trace_from_audit_returns_none_when_audit_empty(tmp_path: Path) -> None:
+    """build_mcp_trace_from_audit returns None when audit file is empty."""
+    (tmp_path / MCP_AUDIT_LOG_FILENAME).write_text("", encoding="utf-8")
+    result = build_mcp_trace_from_audit(tmp_path)
+    assert result is None

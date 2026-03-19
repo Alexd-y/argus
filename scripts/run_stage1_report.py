@@ -42,7 +42,8 @@ def main() -> int:
     def _mock_headers_fetch(url: str) -> dict:
         return {"status_code": 0, "headers": {}, "url": url}
 
-    recon_dir = Path(__file__).resolve().parent.parent / "pentest_reports_svalbard" / "recon" / "svalbard-stage1"
+    argus_root = Path(__file__).resolve().parent.parent
+    recon_dir = argus_root / "pentest_reports_svalbard" / "recon" / "svalbard-stage1"
     fetch_func = _mock_endpoint_fetch if args.fast else None
     headers_fetch_func = _mock_headers_fetch if args.fast else None
     paths = generate_stage1_report(
@@ -51,6 +52,7 @@ def main() -> int:
         skip_intel=skip_intel,
         fetch_func=fetch_func,
         headers_fetch_func=headers_fetch_func,
+        artifacts_base=argus_root,
     )
     print(f"Generated: {len(paths)} files")
     for p in paths:

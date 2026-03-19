@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     recon_rate_limit_per_second: int = 10
     recon_max_subdomains: int = 10000
     recon_output_base_dir: str = "./recon_output"
+    stage1_artifacts_bucket: str = "stage1-artifacts"
+    stage2_artifacts_bucket: str = "stage2-artifacts"
+    stage3_artifacts_bucket: str = "stage3-artifacts"
 
     @property
     def celery_broker(self) -> str:

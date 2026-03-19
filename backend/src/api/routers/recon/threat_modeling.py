@@ -33,6 +33,10 @@ router = APIRouter(tags=["recon-threat-modeling"])
 
 # Artifact type -> filename mapping for download
 ARTIFACT_TYPE_TO_FILENAME: dict[str, str] = {
+    "stage2_inputs": "stage2_inputs.json",
+    "threat_model_json": "threat_model.json",
+    "ai_tm_priority_hypotheses": "ai_tm_priority_hypotheses.json",
+    "ai_tm_application_flows": "ai_tm_application_flows.json",
     "threat_model": "threat_model.md",
     "critical_assets": "critical_assets.csv",
     "entry_points": "entry_points.csv",

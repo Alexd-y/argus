@@ -37,7 +37,7 @@ async def test_execute_threat_modeling_run_file_based_fallback(complete_recon_di
     assert result.engagement_id == "e1"
     assert result.run_id == "run1"
     assert result.job_id == "job1"
-    assert len(result.artifact_refs) == 22  # 11 base + 11 report artifacts (mcp_trace shared)
+    assert len(result.artifact_refs) == 25  # 11 base + 11 report + 3 TM2-003/004/005
 
 
 @pytest.mark.asyncio
@@ -74,9 +74,12 @@ async def test_execute_threat_modeling_run_with_mock_llm(complete_recon_dir: Pat
         mcp_tools=[],
     )
     assert result.status == "completed"
-    assert len(result.artifact_refs) == 22  # 11 base + 11 report artifacts
+    assert len(result.artifact_refs) == 25  # 11 base + 11 report + 3 TM2-003/004/005
     assert "ai_tm_critical_assets_normalized.json" in result.artifact_refs
     assert "threat_model.md" in result.artifact_refs
+    assert "threat_model.json" in result.artifact_refs
+    assert "ai_tm_priority_hypotheses.json" in result.artifact_refs
+    assert "ai_tm_application_flows.json" in result.artifact_refs
     assert (complete_recon_dir / "ai_tm_critical_assets_normalized.json").exists()
 
 

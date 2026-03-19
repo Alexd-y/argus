@@ -1,7 +1,9 @@
 # ARGUS — полный гайд по запуску
 
-**Версия:** 0.1  
-**Источники:** `infra/docker-compose.yml`, `backend/.env.example`, `docs/deployment.md`, `Frontend/package.json`, `admin-frontend/package.json`
+**Версия:** 0.2  
+**Источники:** `infra/docker-compose.yml`, `backend/.env.example`, `docs/deployment.md`, `docs/DOCKER.md`, `Frontend/package.json`, `admin-frontend/package.json`
+
+> **ℹ️ Обновление v0.2 (2026-03-19):** Добавлена полная документация Docker-конфигурации в [DOCKER.md](./DOCKER.md). Backend Dockerfile теперь корректно копирует директорию `app/` (schemas, prompts). Смотрите [DOCKER.md](./DOCKER.md) для деталей конфигурации, сборки, проверки и troubleshooting.
 
 ---
 
@@ -190,6 +192,17 @@ Backend в Docker, frontend локально.
 ```powershell
 cd ARGUS
 docker compose -f infra/docker-compose.yml up -d
+
+Сборка и запуск
+cd d:\Developer\Pentest_test\ARGUS
+docker compose -f infra/docker-compose.yml build backend worker
+docker compose -f infra/docker-compose.yml up -d
+Для dev с пробросом портов postgres/redis/minio:
+
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d
+Замечания
+Frontend и admin-frontend не в Docker — запускаются локально (см. docs/RUNNING.md).
+Перед production: скопировать infra/.env.example → infra/.env и задать секреты.
 ```
 
 ### 4.2 Frontend

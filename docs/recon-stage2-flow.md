@@ -2,7 +2,7 @@
 
 Документ описывает полный flow Stage 2 — аркестрация потока угроз (threat modeling) с использованием выходов Stage 1 как входов.
 
-**Дата обновления:** 2026-03-12  
+**Дата обновления:** 2026-03-19  
 **Статус:** ✅ Production-Ready  
 **Связанный документ:** `recon-stage1-flow.md`
 
@@ -16,7 +16,7 @@ Stage 2 (Threat Modeling) — второй этап пентеста, котор
 2. **Загружает bundle входов** из DB-артефактов или файловой системы
 3. **Обогащает данные через MCP** (fetch URLs, обновление контекста)
 4. **Выполняет 9 AI-задач** последовательно (с кэшированием и fallback)
-5. **Генерирует 12 финальных артефактов** (markdown, CSV, JSON traces)
+5. **Генерирует 16 финальных артефактов** (markdown, CSV, JSON traces, machine-readable)
 6. **Сохраняет результаты** в DB или MinIO
 
 ---
@@ -56,7 +56,7 @@ graph LR
     
     ArtifactGen -->|AI Traces| AIReasoningTraces["📋 ai_reasoning_traces.json<br/>(all task outputs)"]
     ArtifactGen -->|MCP Trace| MCPTrace["🔍 mcp_trace.json<br/>(enrichment audit)"]
-    ArtifactGen -->|Human Reports| HumanReports["📑 threat_model.md<br/>critical_assets.csv<br/>entry_points.csv<br/>... (11 типов)"]
+    ArtifactGen -->|Human Reports| HumanReports["📑 threat_model.md<br/>critical_assets.csv<br/>entry_points.csv<br/>... (16 типов)"]
     
     AIReasoningTraces --> Storage["💾 Storage<br/>(MinIO или recon_dir)"]
     MCPTrace --> Storage
@@ -205,7 +205,7 @@ ai_tm_<task_name>_rendered_prompt.md    # Отображенный шаблон 
 
 ---
 
-## 7. Артефакты Stage 2 (12 типов)
+## 7. Артефакты Stage 2 (16 типов)
 
 ### 7.1 Структурированные JSON (9 типов — нормализованные AI выходы)
 
@@ -263,8 +263,91 @@ ARTIFACT_TYPE_TO_FILENAME = {
     # ... (все 9 задач)
     "ai_reasoning_traces": "ai_reasoning_traces.json",
     "mcp_trace": "mcp_trace.json",
+    "threat_model_json": "threat_model.json",
+    "ai_tm_priority_hypotheses": "ai_tm_priority_hypotheses.json",
+    "ai_tm_application_flows": "ai_tm_application_flows.json",
+    "stage2_inputs": "stage2_inputs.json",
 }
 ```
+
+---
+
+### 7.5 Stage 3 Machine-Readable Artifacts
+
+Четыре JSON-артефакта для машинной обработки (Stage 3, Vulnerability Analysis). Схемы: `backend/app/schemas/threat_modeling/stage2_artifacts.py`.
+
+#### 7.5.1 threat_model.json
+
+Унифицированная модель угроз (`ThreatModelUnified`):
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `critical_assets` | `list[Stage3CriticalAsset]` | Критичные активы (id, name, type, source) |
+| `trust_boundaries` | `list[Stage3TrustBoundary]` | Границы доверия (id, name, components, source) |
+| `entry_points` | `list[Stage3EntryPoint]` | Точки входа (id, name, component_id, type, source) |
+| `attacker_profiles` | `list[AttackerProfile]` | Профили атакующих |
+| `threat_scenarios` | `list[Stage3ThreatScenario]` | Сценарии угроз (id, priority, entry_point_id, attacker_profile_id, description) |
+
+#### 7.5.2 ai_tm_priority_hypotheses.json
+
+Приоритизированные гипотезы (`AiTmPriorityHypotheses`). Корневой объект: `{ "hypotheses": [...] }`.
+
+Схема элемента `PriorityHypothesis`:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | `str` | Идентификатор гипотезы |
+| `hypothesis_text` | `str` | Текст гипотезы |
+| `priority` | `PriorityLevel` | Приоритет (high/medium/low) |
+| `confidence` | `float` | Уверенность 0.0–1.0 |
+| `related_asset_id` | `str \| null` | Связанный актив |
+| `source_artifact` | `str` | Исходный артефакт |
+
+#### 7.5.3 ai_tm_application_flows.json
+
+Нормализованные потоки приложения — массив `Stage3ApplicationFlow` (extends `ApplicationFlow`):
+
+- `id`, `source`, `sink`, `data_type`, `description`
+
+#### 7.5.4 stage2_inputs.json
+
+Traceability-копия входов Stage 1. Структура соответствует `Stage2InputsArtifact`:
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `metadata` | `object` | `generated_at`, `engagement_id`, `target_id`, `job_id`, `run_id` |
+| `bundle` | `ThreatModelInputBundle` | Полный bundle входов Stage 1 (critical_assets, trust_boundaries, entry_points, urls, hostnames, …) |
+
+#### 7.5.5 Хранение (MinIO и файловая система)
+
+**MinIO bucket:** `stage2-artifacts`  
+**Object key pattern:** `{scan_id}/{filename}` (scan_id = job_id)
+
+```
+s3://stage2-artifacts/
+  └── {scan_id}/
+      ├── threat_model.json
+      ├── ai_tm_priority_hypotheses.json
+      ├── ai_tm_application_flows.json
+      └── stage2_inputs.json
+```
+
+**File layout (локально):**
+
+```
+artifacts/
+  └── stage2/
+      └── {scan_id}/
+          ├── threat_model.json
+          ├── ai_tm_priority_hypotheses.json
+          ├── ai_tm_application_flows.json
+          └── stage2_inputs.json
+```
+
+**Реализация:**
+- Схемы: `backend/app/schemas/threat_modeling/stage2_artifacts.py`
+- Генерация: `backend/src/recon/threat_modeling/artifacts.py` (`generate_threat_model_json`, `generate_priority_hypotheses_json`, `generate_application_flows_json`, `generate_stage2_inputs_json`)
+- Загрузка в MinIO: `backend/src/recon/stage2_storage.py` (`upload_stage2_artifacts`)
 
 ---
 
@@ -394,7 +477,7 @@ argus-recon threat-modeling run \
 Created run tm-run-789 (job_id=job-456)
 Threat modeling completed.
   Status: completed
-  Artifacts: 12
+  Artifacts: 16
 ```
 
 **Реализация:** `backend/src/recon/cli/commands/threat_modeling.py`
@@ -420,6 +503,8 @@ mcp_client.call_tool("argus_threat_modeling_trigger", {
 
 ### 9.1 MinIO (cloud/production)
 
+**Основной bucket** `argus-reports`:
+
 ```
 s3://argus-reports/
   └── threat_modeling/
@@ -432,6 +517,19 @@ s3://argus-reports/
               ├── mcp_trace.json
               └── ... (все артефакты)
 ```
+
+**Bucket Stage 3 machine-readable** `stage2-artifacts` (см. раздел 7.5):
+
+```
+s3://stage2-artifacts/
+  └── {scan_id}/
+      ├── threat_model.json
+      ├── ai_tm_priority_hypotheses.json
+      ├── ai_tm_application_flows.json
+      └── stage2_inputs.json
+```
+
+Object key pattern: `{scan_id}/{filename}` (scan_id = job_id).
 
 ### 9.2 File System (локально)
 
@@ -568,6 +666,7 @@ Stage 2 Threat Modeling Pipeline
 - **Stage 1 Flow:** `recon-stage1-flow.md`
 - **API Contract:** `frontend-api-contract.md` (endpoints `/threat-modeling/`)
 - **Threat Modeling Schemas:** `backend/app/schemas/threat_modeling/schemas.py`
+- **Stage 2 Machine-Readable Schemas:** `backend/app/schemas/threat_modeling/stage2_artifacts.py`
 - **AI Task Registry:** `backend/src/recon/threat_modeling/ai_task_registry.py`
 - **MCP Policy:** `backend/src/recon/mcp/policy.py`
 
@@ -624,12 +723,12 @@ argus-recon threat-modeling run --engagement eng-123 --recon-dir ./pentest_repor
 Created run tm-run-789 (job_id=job-456)
 Threat modeling completed.
   Status: completed
-  Artifacts: 12
+  Artifacts: 16
 ```
 
 ---
 
-**Версия документа:** 1.0  
-**Последнее обновление:** 2026-03-12  
+**Версия документа:** 1.1  
+**Последнее обновление:** 2026-03-19  
 **Автор:** ARGUS Documentation Agent  
 **Лицензия:** As per project LICENSE

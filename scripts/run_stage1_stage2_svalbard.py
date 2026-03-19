@@ -29,7 +29,12 @@ TARGET = "svalbard.ca"
 def run_stage1() -> bool:
     """Generate Stage 1 report."""
     print("[Stage 1] Intelligence Gathering...")
-    paths = generate_stage1_report(RECON_DIR, use_mcp=True, skip_intel=False)
+    paths = generate_stage1_report(
+        RECON_DIR,
+        use_mcp=True,
+        skip_intel=False,
+        artifacts_base=ARGUS_ROOT,
+    )
     if not paths:
         print("[Stage 1] ERROR: No artifacts generated")
         return False
@@ -37,8 +42,8 @@ def run_stage1() -> bool:
     return True
 
 
-async def run_stage2() -> bool:
-    """Run Stage 2 Threat Modeling."""
+async def run_stage2() -> tuple[bool, str | None]:
+    """Run Stage 2 Threat Modeling. Returns (success, job_id)."""
     print("[Stage 2] Threat Modeling...")
     run_id = str(uuid4())[:8]
     job_id = f"tm_{run_id}"
@@ -48,21 +53,23 @@ async def run_stage2() -> bool:
             run_id=run_id,
             job_id=job_id,
             recon_dir=RECON_DIR,
+            artifacts_base=ARGUS_ROOT,
             db=None,
             mcp_tools=["fetch"],
             use_llm_fallback=True,
         )
         print(f"[Stage 2] Status: {result.status}, Artifacts: {len(result.artifact_refs)}")
-        return result.status == "completed"
+        return (result.status == "completed", job_id)
     except Exception as e:
         print(f"[Stage 2] ERROR: {e}")
-        return False
+        return (False, None)
 
 
-def build_combined_html() -> Path:
+def build_combined_html(stage2_dir: Path | None = None) -> Path:
     """Build combined HTML report (Stage 1 + Stage 2)."""
     stage1_html = RECON_DIR / "stage1_report.html"
-    threat_model_md = RECON_DIR / "threat_model.md"
+    # TM2-009: when artifacts_base used, threat_model.md is in stage2/{job_id}/
+    threat_model_md = (stage2_dir / "threat_model.md") if stage2_dir else RECON_DIR / "threat_model.md"
 
     stage1_content = ""
     if stage1_html.exists():
@@ -120,11 +127,13 @@ def main() -> int:
         return 1
 
     # Stage 2
-    if not asyncio.run(run_stage2()):
+    stage2_ok, stage2_job_id = asyncio.run(run_stage2())
+    if not stage2_ok:
         print("Stage 2 failed; continuing with Stage 1 report only.")
+    stage2_dir = (ARGUS_ROOT / "stage2" / stage2_job_id) if stage2_job_id else None
 
     # Combined report
-    html_path = build_combined_html()
+    html_path = build_combined_html(stage2_dir=stage2_dir)
     print(f"\n[Report] HTML: {html_path}")
 
     # Copy stage1 for standalone

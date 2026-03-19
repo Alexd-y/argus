@@ -40,7 +40,7 @@ argus-recon vulnerability-analysis run --engagement eng-123 [--target t-1] [--re
 Created run va-run-789 (job_id=job-456)
 Vulnerability analysis completed.
   Status: completed
-  Artifacts: 17
+  Artifacts: 18+
 ```
 
 ### 3. Download Artifacts
@@ -60,16 +60,17 @@ curl http://localhost:8000/recon/engagements/eng-123/vulnerability-analysis/runs
 ## Flow в 3 шага
 
 ```
-1. Input Bundle           2. 15 AI Tasks        3. 17 Artifacts
+1. Input Bundle           2. 15 AI Tasks        3. 18+ Artifacts
    (Stage 1+2 data)       (Sequential)          (Human + JSON)
         ↓                      ↓                    ↓
  - Threat scenarios   - validation_targets   - vulnerability_analysis.md
  - Entry points       - auth_surfaces        - validation_targets.csv
  - Critical assets    - authorization_checks - auth_surfaces.csv
  - Trust boundaries   - input_surface_checks - finding_candidates.csv
- - Testing roadmap    - route_workflows      - (15 normalized AI outputs)
- - Route inventory    - api_surface_checks   - ai_reasoning_traces.json
- - API surface        - resource_access      - mcp_trace.json
+ - Testing roadmap    - route_workflows      - exploitation_candidates.json
+ - Route inventory    - api_surface_checks   - (15 normalized AI outputs)
+ - API surface        - resource_access      - ai_reasoning_traces.json
+                      - ...                  - mcp_trace.json
                       - frontend_logic
                       - security_controls
                       - anomalous_hosts
@@ -82,7 +83,7 @@ curl http://localhost:8000/recon/engagements/eng-123/vulnerability-analysis/runs
 
 ---
 
-## 17 Типов артефактов
+## Артефакты Stage 3 (18+ типов)
 
 | # | Артефакт | Формат | Назначение |
 |----|----------|--------|-----------|
@@ -90,9 +91,24 @@ curl http://localhost:8000/recon/engagements/eng-123/vulnerability-analysis/runs
 | 2️⃣ | `validation_targets.csv` | CSV | Цели валидации |
 | 3️⃣ | `auth_surfaces.csv` | CSV | Auth endpoints |
 | 4️⃣ | `finding_candidates.csv` | CSV | Кандидаты на findings |
-| 5️⃣-1️⃣9️⃣ | `ai_va_*_normalized.json` | JSON | 15 нормализованных AI выходов |
-| 🔟 | `ai_reasoning_traces.json` | JSON | Все AI выходы |
-| 1️⃣1️⃣ | `mcp_trace.json` | JSON | MCP audit log |
+| 5️⃣ | `exploitation_candidates.json` | JSON | Кандидаты для Stage 4 (мост Stage 3→4) |
+| 6️⃣-2️⃣0️⃣ | `ai_va_*_normalized.json` | JSON | 15 нормализованных AI выходов |
+| 2️⃣1️⃣ | `ai_reasoning_traces.json` | JSON | Все AI выходы |
+| 2️⃣2️⃣ | `mcp_trace.json` | JSON | MCP audit log |
+
+### exploitation_candidates.json — схема и роль
+
+**Роль:** Мост между Stage 3 (Vulnerability Analysis) и Stage 4 (Exploitation). Содержит кандидатов, готовых к эксплуатации.
+
+**Схема:**
+- `run_id`, `job_id` — идентификаторы run
+- `candidates[]` — массив кандидатов
+  - `target` — URL/endpoint/ресурс-цель
+  - `vulnerability_type` — `idor`, `sql_injection`, `weak_password`, `misconfiguration`, `cve`, `xss`, `ssrf`, `other`
+  - `exploitation_details` — детали по типу (parameter_name, method, base_request для idor/sqli; username_hints, password_hints для weak_password; и т.д.)
+  - `source_artifacts` — артефакты Stage 3, из которых выведен кандидат
+
+**Хранение:** MinIO bucket `stage3-artifacts`, путь `{scan_id}/exploitation_candidates.json` (логически: `artifacts/stage3/{scan_id}/`).
 
 ---
 
@@ -178,11 +194,24 @@ GET /recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/arti
 ## Хранилища артефактов
 
 ### MinIO (Production)
+
+**argus-reports:**
 ```
 s3://argus-reports/vulnerability_analysis/{engagement_id}/{run_id}/
 ├── vulnerability_analysis.md
+├── exploitation_candidates.json
 ├── validation_targets.csv
 ├── ai_va_validation_target_planning_normalized.json
+├── ai_reasoning_traces.json
+└── ...
+```
+
+**stage3-artifacts (Stage 3 uploads):**
+```
+s3://stage3-artifacts/{scan_id}/
+├── vulnerability_analysis.md
+├── exploitation_candidates.json
+├── ai_va_*_normalized.json
 ├── ai_reasoning_traces.json
 └── ...
 ```
@@ -191,6 +220,7 @@ s3://argus-reports/vulnerability_analysis/{engagement_id}/{run_id}/
 ```
 pentest_reports_{engagement_id}/recon/vulnerability_analysis/{run_id}/
 ├── vulnerability_analysis.md
+├── exploitation_candidates.json
 ├── validation_targets.csv
 ├── ai_va_validation_target_planning_normalized.json
 ├── ai_reasoning_traces.json

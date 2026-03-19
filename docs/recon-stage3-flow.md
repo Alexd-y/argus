@@ -281,14 +281,68 @@ artifact_type: "ai_va_stage3_report_summary_normalized"
 | **auth_surfaces.csv** | Auth endpoints и hint информация | CSV |
 | **finding_candidates.csv** | Кандидаты на findings с приоритетом | CSV |
 
-### 7.3 Служебные trace-файлы (2 типа)
+### 7.3 exploitation_candidates.json (мост к Stage 4)
+
+| Артефакт | Содержание | Роль |
+|----------|-----------|------|
+| **exploitation_candidates.json** | Кандидаты для эксплуатации, готовые к Stage 4 | Мост между Stage 3 и Stage 4 |
+
+**Схема артефакта:**
+
+```json
+{
+  "run_id": "va-run-789",
+  "job_id": "job-456",
+  "candidates": [
+    {
+      "target": "https://example.com/api/users/{id}",
+      "vulnerability_type": "idor",
+      "cwe_id": "CWE-639",
+      "cve_id": null,
+      "confidence": "high",
+      "evidence": "Описание доказательств уязвимости",
+      "exploitation_details": {
+        "vulnerability_type": "idor",
+        "parameter_name": "id",
+        "method": "GET",
+        "base_request": "GET /api/users/1"
+      },
+      "source_artifacts": ["ai_va_finding_correlation_normalized.json", "ai_va_resource_access_analysis_normalized.json"]
+    }
+  ]
+}
+```
+
+**Поля кандидата:**
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `target` | string | URL, endpoint или ресурс-цель |
+| `vulnerability_type` | string | `idor`, `sql_injection`, `weak_password`, `misconfiguration`, `cve`, `xss`, `ssrf`, `other` |
+| `exploitation_details` | object | Детали по типу (см. ниже) |
+| `source_artifacts` | string[] | Артефакты Stage 3, из которых выведен кандидат |
+
+**exploitation_details по типу:**
+
+| Тип | Поля |
+|-----|------|
+| `idor` | `parameter_name`, `method`, `base_request` |
+| `sql_injection` | `parameter_name`, `method`, `base_request` |
+| `weak_password` | `username_hints`, `password_hints` |
+| `cve` | `exploit_link` (optional) |
+| `misconfiguration` | `try_access_path`, `check_default_creds` |
+| `xss`, `ssrf`, `other` | `extra` (dict) |
+
+**Хранение:** MinIO bucket `stage3-artifacts`, путь `{scan_id}/exploitation_candidates.json` (см. раздел 9).
+
+### 7.4 Служебные trace-файлы (2 типа)
 
 | Артефакт | Содержание |
 |----------|-----------|
 | **ai_reasoning_traces.json** | Все 15 нормализованных выходов + метаданные |
 | **mcp_trace.json** | Audit log всех MCP вызовов (если применимо) |
 
-### 7.4 Маппинг artifact_type → filename
+### 7.5 Маппинг artifact_type → filename
 
 ```python
 ARTIFACT_TYPE_TO_FILENAME = {
@@ -296,6 +350,7 @@ ARTIFACT_TYPE_TO_FILENAME = {
     "validation_targets": "validation_targets.csv",
     "auth_surfaces": "auth_surfaces.csv",
     "finding_candidates": "finding_candidates.csv",
+    "exploitation_candidates": "exploitation_candidates.json",
     # JSON normalized outputs (15 tasks)
     "ai_va_validation_target_planning_normalized": "ai_va_validation_target_planning_normalized.json",
     "ai_va_auth_surface_analysis_normalized": "ai_va_auth_surface_analysis_normalized.json",
@@ -476,6 +531,8 @@ mcp_client.call_tool("argus_vulnerability_analysis_trigger", {
 
 ### 9.1 MinIO (cloud/production)
 
+**Вариант A — argus-reports (legacy):**
+
 ```
 s3://argus-reports/
   └── vulnerability_analysis/
@@ -485,11 +542,27 @@ s3://argus-reports/
               ├── validation_targets.csv
               ├── auth_surfaces.csv
               ├── finding_candidates.csv
+              ├── exploitation_candidates.json
               ├── ai_va_validation_target_planning_normalized.json
               ├── ai_reasoning_traces.json
               ├── mcp_trace.json
               └── ... (все артефакты)
 ```
+
+**Вариант B — stage3-artifacts bucket (Stage 3 uploads):**
+
+```
+s3://stage3-artifacts/
+  └── {scan_id}/
+      ├── vulnerability_analysis.md
+      ├── exploitation_candidates.json
+      ├── ai_va_*_normalized.json
+      ├── ai_reasoning_traces.json
+      ├── mcp_trace.json
+      └── ... (все Stage 3 артефакты)
+```
+
+Bucket `stage3-artifacts` используется для загрузки артефактов Stage 3; объекты хранятся по ключу `{scan_id}/{filename}`. Логический путь: `artifacts/stage3/{scan_id}/`.
 
 ### 9.2 File System (локально)
 
@@ -502,6 +575,7 @@ pentest_reports_{engagement_id}/
               ├── validation_targets.csv
               ├── auth_surfaces.csv
               ├── finding_candidates.csv
+              ├── exploitation_candidates.json
               ├── ai_va_validation_target_planning_normalized.json
               ├── ai_reasoning_traces.json
               ├── mcp_trace.json
@@ -628,11 +702,12 @@ VA Input Bundle
 
         ↓ (Generate)
 
-VA Output Artifacts (17)
+VA Output Artifacts (18+)
 ├── vulnerability_analysis.md
 ├── validation_targets.csv
 ├── auth_surfaces.csv
 ├── finding_candidates.csv
+├── exploitation_candidates.json
 ├── ai_va_validation_target_planning_normalized.json
 ├── ... (13 more normalized outputs)
 ├── ai_reasoning_traces.json

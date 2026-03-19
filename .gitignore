@@ -24,6 +24,8 @@ __pycache__/
 
 # Reports (generated)
 pentest_reports_*/
+stage1/
+stage2/
 report_*.csv
 report_*.html
 report_*.json

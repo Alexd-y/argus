@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from app.schemas.ai.common import PriorityLevel
 from app.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
@@ -21,6 +23,7 @@ from src.recon.threat_modeling.artifacts import (
     generate_all_artifacts,
     generate_critical_assets_csv,
     generate_mcp_trace_json,
+    generate_stage2_inputs_json,
     generate_threat_scenarios_csv,
 )
 
@@ -76,13 +79,14 @@ def _minimal_artifact() -> ThreatModelArtifact:
 
 
 class TestGenerateAllArtifacts:
-    """Test generate_all_artifacts returns all 12 artifact types."""
+    """Test generate_all_artifacts returns all 13 artifact types."""
 
-    def test_returns_twelve_artifacts(self) -> None:
+    def test_returns_thirteen_artifacts(self) -> None:
         bundle = _minimal_bundle()
         artifact = _minimal_artifact()
         result = generate_all_artifacts(bundle, artifact)
-        assert len(result) == 12
+        assert len(result) == 13
+        assert "stage2_inputs.json" in result
         assert "threat_model.md" in result
         assert "critical_assets.csv" in result
         assert "entry_points.csv" in result
@@ -93,8 +97,27 @@ class TestGenerateAllArtifacts:
         assert "threat_scenarios.csv" in result
         assert "testing_priorities.md" in result
         assert "evidence_gaps.md" in result
-        assert "ai_reasoning_trace.json" in result
+        assert "ai_reasoning_traces.json" in result
         assert "mcp_trace.json" in result
+
+    def test_stage2_inputs_json_valid(self) -> None:
+        bundle = _minimal_bundle()
+        artifact = _minimal_artifact()
+        result = generate_stage2_inputs_json(
+            bundle,
+            job_id=artifact.job_id,
+            run_id=artifact.run_id,
+        )
+        data = json.loads(result)
+        assert "metadata" in data
+        assert data["metadata"]["generated_at"]
+        assert data["metadata"]["engagement_id"] == "e1"
+        assert data["metadata"]["target_id"] == "t1"
+        assert data["metadata"]["job_id"] == "j1"
+        assert data["metadata"]["run_id"] == "r1"
+        assert "bundle" in data
+        assert data["bundle"]["engagement_id"] == "e1"
+        assert "critical_assets" in data["bundle"]
 
     def test_threat_model_md_has_sections(self) -> None:
         bundle = _minimal_bundle()

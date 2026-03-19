@@ -174,7 +174,12 @@ class TestGenerateStage1ReportFull:
         )
 
         generated_names = {p.name for p in generated}
-        conditional_outputs = {"intel_findings.json", "intel_summary.md"}
+        conditional_outputs = {
+            "intel_findings.json",
+            "intel_summary.md",
+            "mcp_trace.jsonl",  # Only generated when mcp_invocation_audit.jsonl has events
+            "raw_tool_outputs",  # REC-008: only when subfinder/httpx/nuclei outputs exist
+        }
         mandatory_outputs = [name for name in STAGE1_OUTPUTS if name not in conditional_outputs]
         for name in mandatory_outputs:
             assert name in generated_names, f"Expected {name} in generated outputs"
@@ -524,8 +529,9 @@ class TestGenerateStage1ReportMockedFetch:
         assert manifest["job_link"] == expected_job_link
         assert manifest["trace_id"] == expected_trace_prefix
         assert manifest["mcp_trace_refs"] == [
-            "mcp_invocation_audit_meta.json",
             "mcp_invocation_audit.jsonl",
+            "mcp_invocation_audit_meta.json",
+            "mcp_trace.jsonl",
         ]
 
         saw_non_empty_evidence_refs = False
@@ -570,10 +576,13 @@ class TestGenerateStage1ReportMockedFetch:
                 saw_non_empty_evidence_refs = True
             assert "mcp_invocation_audit_meta.json" in raw_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit.jsonl" in raw_doc["evidence_trace"]["mcp_trace_refs"]
+            assert "mcp_trace.jsonl" in raw_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit_meta.json" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit.jsonl" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
+            assert "mcp_trace.jsonl" in normalized_doc["evidence_trace"]["mcp_trace_refs"]
             assert "mcp_invocation_audit_meta.json" in input_bundle_doc["mcp_trace_refs"]
             assert "mcp_invocation_audit.jsonl" in input_bundle_doc["mcp_trace_refs"]
+            assert "mcp_trace.jsonl" in input_bundle_doc["mcp_trace_refs"]
 
             assert f"Task: {task_name}" in rendered_prompt
             assert f"Trace ID: {expected_trace_prefix}:{task_name}" in rendered_prompt

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 MCP_AUDIT_LOG_FILENAME = "mcp_invocation_audit.jsonl"
 MCP_AUDIT_META_FILENAME = "mcp_invocation_audit_meta.json"
+MCP_TRACE_LOG_FILENAME = "mcp_trace.jsonl"
 
 _AUDIT_CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar(
     "recon_mcp_audit_context",
@@ -88,9 +89,26 @@ def record_mcp_invocation(
     allowed: bool,
     policy_id: str,
     decision_reason: str,
+    output_summary: str | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Record one MCP invocation event in structured log + JSONL trace."""
+    """Record one MCP invocation event in structured log + JSONL trace.
+
+    Args:
+        output_summary: Optional summary of tool output or error status.
+            When dict, stored as JSON string. When omitted, derived from
+            allowed/decision_reason during mcp_trace.jsonl generation.
+    """
     ctx = current_audit_context()
+    out_summary_val: str | None = None
+    if output_summary is not None:
+        out_summary_val = (
+            json.dumps(output_summary, ensure_ascii=False)
+            if isinstance(output_summary, dict)
+            else str(output_summary)
+        )
+        if len(out_summary_val) > 10000:
+            out_summary_val = out_summary_val[:9997] + "..."
+
     event = {
         "event_type": "mcp_invocation_audit",
         "timestamp": _utc_now(),
@@ -107,6 +125,8 @@ def record_mcp_invocation(
         "decision_reason": str(decision_reason or ""),
         "args_sanitized": sanitize_args(args),
     }
+    if out_summary_val is not None:
+        event["output_summary"] = out_summary_val
     logger.info("mcp_invocation_audit", extra=event)
 
     recon_dir = str(ctx.get("recon_dir", "") or "")
@@ -128,3 +148,87 @@ def record_mcp_invocation(
                 },
             )
     return event
+
+
+def build_mcp_trace_from_audit(recon_dir: str | Path) -> Path | None:
+    """Post-process mcp_invocation_audit.jsonl to produce mcp_trace.jsonl with McpTraceEvent schema.
+
+    Each line in mcp_trace.jsonl is a McpTraceEvent JSON with: timestamp, tool_name,
+    input_parameters (incl target), output_summary (or error status), run_id, job_id, status.
+
+    Returns path to mcp_trace.jsonl or None if audit file missing/empty.
+    """
+    base = Path(recon_dir)
+    audit_path = base / MCP_AUDIT_LOG_FILENAME
+    if not audit_path.exists():
+        return None
+
+    trace_path = base / MCP_TRACE_LOG_FILENAME
+    events: list[dict[str, Any]] = []
+
+    with audit_path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "mcp_audit_parse_failed",
+                    extra={"event_type": "mcp_audit_parse_failed", "line_preview": line[:100]},
+                )
+                continue
+
+            if raw.get("event_type") != "mcp_invocation_audit":
+                continue
+
+            run_id = str(raw.get("run_id", "") or "").strip() or "unknown"
+            job_id = str(raw.get("job_id", "") or "").strip() or "unknown"
+            allowed = bool(raw.get("allowed", False))
+            args_sanitized = raw.get("args_sanitized") or {}
+            if not isinstance(args_sanitized, dict):
+                args_sanitized = {}
+
+            out_summary = raw.get("output_summary")
+            if out_summary is None:
+                out_summary = (
+                    json.dumps({"status": "denied", "reason": str(raw.get("decision_reason", ""))})
+                    if not allowed
+                    else None
+                )
+
+            ts_str = str(raw.get("timestamp", ""))
+            try:
+                ts_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                ts_dt = datetime.now(UTC)
+
+            trace_event = {
+                "timestamp": ts_dt.isoformat(),
+                "tool_name": str(raw.get("tool", "") or "unknown"),
+                "input_parameters": args_sanitized,
+                "output_summary": out_summary,
+                "run_id": run_id,
+                "job_id": job_id,
+                "status": "success" if allowed else "error",
+            }
+            events.append(trace_event)
+
+    if not events:
+        return None
+
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+        with trace_path.open("w", encoding="utf-8", newline="\n") as handle:
+            for ev in events:
+                handle.write(json.dumps(ev, ensure_ascii=False))
+                handle.write("\n")
+    except OSError:
+        logger.warning(
+            "mcp_trace_write_failed",
+            extra={"event_type": "mcp_trace_write_failed", "path": str(trace_path)},
+        )
+        return None
+
+    return trace_path

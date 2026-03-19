@@ -336,6 +336,74 @@ def _extract_tls_info(host: str, port: int = 443, timeout: float = 5.0) -> dict[
         }
 
 
+def get_ssl_cert_entry(host: str, port: int = 443, timeout: float = 5.0) -> dict[str, object] | None:
+    """Fetch TLS cert and return SslCertEntry-compatible dict for recon_results.
+
+    Returns dict with common_name, subject_alternative_names, issuer,
+    validity_not_before, validity_not_after. Returns None on fetch failure.
+    """
+    try:
+        ctx = ssl.create_default_context()
+        with socket.create_connection((host, port), timeout=timeout) as sock, ctx.wrap_socket(
+            sock, server_hostname=host
+        ) as ssock:
+            cert = ssock.getpeercert()
+
+        san = [
+            entry[1]
+            for entry in cert.get("subjectAltName", [])
+            if isinstance(entry, tuple) and len(entry) == 2 and entry[0] == "DNS"
+        ]
+
+        issuer_parts = cert.get("issuer", [])
+        issuer = ""
+        if issuer_parts:
+            flattened = []
+            for item in issuer_parts:
+                if item and isinstance(item, tuple) and item[0]:
+                    flattened.append(f"{item[0][0]}={item[0][1]}")
+            issuer = ", ".join(flattened)
+
+        common_name = ""
+        for item in cert.get("subject", []):
+            if item and isinstance(item, tuple):
+                for attr in item:
+                    if isinstance(attr, tuple) and len(attr) == 2 and attr[0] == "commonName":
+                        common_name = str(attr[1])
+                        break
+            if common_name:
+                break
+
+        if not common_name and san:
+            common_name = san[0]
+
+        not_before_str = cert.get("notBefore", "")
+        not_after_str = cert.get("notAfter", "")
+        try:
+            not_before = datetime.strptime(not_before_str, "%b %d %H:%M:%S %Y %Z")
+            not_after = datetime.strptime(not_after_str, "%b %d %H:%M:%S %Y %Z")
+        except (ValueError, TypeError):
+            logger.info(
+                "stage1_tls_date_parse_failed",
+                extra={"host": host, "not_before": str(not_before_str)[:50], "not_after": str(not_after_str)[:50]},
+            )
+            return None
+
+        return {
+            "common_name": common_name or host,
+            "subject_alternative_names": san,
+            "issuer": issuer or "unknown",
+            "validity_not_before": not_before,
+            "validity_not_after": not_after,
+        }
+    except Exception as exc:
+        logger.info(
+            "stage1_tls_fetch_failed",
+            extra={"host": host, "error": str(exc)[:120]},
+        )
+        return None
+
+
 def build_tls_summary(
     live_hosts: list[str],
     tls_data: dict[str, dict] | None = None,

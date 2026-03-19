@@ -97,21 +97,23 @@ def build_object_key(
     return f"{t}/{s}/{o}/{f}"
 
 
-def ensure_bucket() -> bool:
-    """Create bucket if not exists. Returns True if bucket is available."""
+def ensure_bucket(bucket_name: str | None = None) -> bool:
+    """Create bucket if not exists. Returns True if bucket is available.
+    When bucket_name is None, uses settings.minio_bucket."""
     client = _get_client()
     if not client:
         return False
+    bucket = bucket_name or settings.minio_bucket
     try:
-        client.head_bucket(Bucket=settings.minio_bucket)
+        client.head_bucket(Bucket=bucket)
         return True
     except client.exceptions.ClientError as e:
         if e.response["Error"]["Code"] == "404":
             try:
-                client.create_bucket(Bucket=settings.minio_bucket)
+                client.create_bucket(Bucket=bucket)
                 return True
             except Exception:
-                logger.warning("Failed to create bucket", extra={"bucket": settings.minio_bucket})
+                logger.warning("Failed to create bucket", extra={"bucket": bucket})
                 return False
         return False
     except Exception:

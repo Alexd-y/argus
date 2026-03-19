@@ -41,6 +41,7 @@ from src.recon.threat_modeling.input_loader import (
     load_threat_model_input_bundle,
     load_threat_model_input_bundle_from_artifacts,
 )
+from src.recon.stage2_storage import upload_stage2_artifacts
 from src.recon.threat_modeling.mcp_enrichment import enrich_with_mcp
 
 if TYPE_CHECKING:
@@ -608,6 +609,7 @@ async def execute_threat_modeling_run(
     *,
     target_id: str | None = None,
     recon_dir: Path | str | None = None,
+    artifacts_base: Path | str | None = None,
     db: AsyncSession | None = None,
     existing_run_id: str | None = None,
     llm_callable: Callable[[str, dict], str] | None = None,
@@ -632,6 +634,9 @@ async def execute_threat_modeling_run(
         job_id: Job identifier.
         target_id: Optional target ID for DB path.
         recon_dir: Path to recon directory (file-based). When None, uses DB.
+        artifacts_base: Optional base path for artifacts/stage2/{job_id}/ layout (TM2-009).
+                       When provided with recon_dir, writes to artifacts_base/stage2/{job_id}/.
+                       When omitted, writes to recon_dir.
         db: AsyncSession for DB operations. Required for DB path.
         llm_callable: Optional LLM callable for testing. If None, uses get_llm_client when keys present.
         mcp_tools: MCP tools for enrichment (e.g. ["fetch", "read_file"]). Empty/None skips.
@@ -729,7 +734,13 @@ async def execute_threat_modeling_run(
         if recon_dir is not None:
             base = Path(recon_dir)
             bundle = load_threat_model_input_bundle(base, engagement_id, target_id)
-            save_to_dir: Path | None = base
+            # TM2-009: resolve artifacts dir — artifacts_base/stage2/{job_id}/ or base
+            if artifacts_base is not None:
+                artifacts_base_path = Path(artifacts_base)
+                save_to_dir = artifacts_base_path / "stage2" / job_id
+                save_to_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                save_to_dir = base
         elif db is not None:
             bundle = await load_threat_model_input_bundle_from_artifacts(db, engagement_id, target_id)
             save_to_dir = None
@@ -801,9 +812,6 @@ async def execute_threat_modeling_run(
             data = json.dumps(out, indent=2, ensure_ascii=False).encode("utf-8")
             _persist_artifact(f"ai_tm_{task_name}_normalized.json", data)
 
-        ai_traces_data = _traces_to_json(ai_reasoning_traces)
-        _persist_artifact("ai_reasoning_traces.json", ai_traces_data)
-
         mcp_trace_data = _traces_to_json(mcp_traces)
         _persist_artifact("mcp_trace.json", mcp_trace_data)
 
@@ -817,11 +825,24 @@ async def execute_threat_modeling_run(
             if not k.startswith("_")
         }
         generated = generate_all_artifacts(
-            bundle, tm_artifact, ai_results=ai_results, mcp_traces=mcp_traces
+            bundle,
+            tm_artifact,
+            ai_results=ai_results,
+            mcp_traces=mcp_traces,
+            prior_outputs=prior_outputs,
         )
         for filename, content in generated.items():
             data = content.encode("utf-8")
             _persist_artifact(filename, data)
+
+        # TM2-008: upload Stage 2 artifacts to MinIO when available on disk
+        if save_to_dir:
+            upload_stage2_artifacts(
+                artifacts_dir=save_to_dir,
+                scan_id=job_id,
+                run_id=run_id,
+                job_id=job_id,
+            )
 
         # DB path: upload to storage via artifact_service
         if db is not None and not save_to_dir:
@@ -857,18 +878,6 @@ async def execute_threat_modeling_run(
                     artifact_type="threat_model",
                 )
 
-            await create_artifact(
-                db,
-                tenant_id=tenant_id,
-                engagement_id=engagement_id,
-                target_id=target_id,
-                job_id=j_id,
-                stage=TM_STAGE,
-                filename="ai_reasoning_traces.json",
-                data=ai_traces_data,
-                content_type="application/json",
-                artifact_type="threat_model",
-            )
             await create_artifact(
                 db,
                 tenant_id=tenant_id,

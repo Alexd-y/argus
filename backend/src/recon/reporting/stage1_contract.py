@@ -7,10 +7,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 STAGE1_BASELINE_ARTIFACTS: tuple[str, ...] = (
+    "recon_results.json",
     "dns_summary.md",
     "subdomain_classification.csv",
     "live_hosts_detailed.csv",
     "tech_profile.csv",
+    "tech_profile.json",
     "headers_summary.md",
     "headers_detailed.csv",
     "tls_summary.md",
@@ -94,7 +96,9 @@ STAGE1_BASELINE_ARTIFACTS: tuple[str, ...] = (
     "ai_persistence_manifest.json",
     "mcp_invocation_audit.jsonl",
     "mcp_invocation_audit_meta.json",
+    "mcp_trace.jsonl",
     "stage1_contract_baseline.json",
+    "raw_tool_outputs",  # REC-008: directory with subfinder, httpx, nuclei outputs
 )
 
 STAGE1_REPORT_SECTIONS: tuple[dict[str, Any], ...] = (

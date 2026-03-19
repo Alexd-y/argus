@@ -229,7 +229,7 @@ def _render_anomalies_from_structured(structured: dict) -> str:
             if source:
                 out.append(f'<span class="badge" style="background:#e0e0e0;color:#424242;">{_escape(source)}</span>')
             out.append("<ul>")
-            for key in ("host", "status", "server", "description"):
+            for key in ("host", "description", "evidence"):
                 val = a.get(key)
                 if val is not None and val != "":
                     out.append(f"<li><strong>{key}:</strong> {_escape(str(val))}</li>")

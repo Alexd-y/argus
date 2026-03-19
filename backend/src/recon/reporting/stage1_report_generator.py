@@ -4,17 +4,20 @@ import asyncio
 import json
 import logging
 import re
+import shutil
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.llm_config import get_llm_client, get_llm_provider_info, has_any_llm_key
-from src.recon.mcp.audit import mcp_audit_context, write_mcp_audit_meta
+from src.recon.mcp.audit import build_mcp_trace_from_audit, mcp_audit_context, write_mcp_audit_meta
+from src.recon.reporting.raw_outputs_builder import RAW_OUTPUTS_DIR, aggregate_raw_tool_outputs
 from src.recon.reporting.stage1_contract import (
     STAGE1_BASELINE_ARTIFACTS,
     build_stage1_contract_snapshot,
 )
+from src.recon.stage1_storage import upload_stage1_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +105,7 @@ def generate_stage1_report(
     fetch_func: Callable[[str], dict] | None = None,
     headers_fetch_func: Callable[[str], dict] | None = None,
     skip_intel: bool = False,
+    artifacts_base: Path | None = None,
 ) -> list[Path]:
     """Generate Stage 1 reports from recon directory artifacts.
 
@@ -117,6 +121,9 @@ def generate_stage1_report(
                     When provided, used for endpoint inventory instead of MCP/httpx.
         headers_fetch_func: Optional custom fetch(url) -> {status_code, headers, url}.
                            When provided, used for headers summary instead of httpx.
+        artifacts_base: Optional base path for artifacts/stage1/{scan_id}/ layout (REC-008).
+                       When provided, copies recon_results.json, tech_profile.json, mcp_trace.jsonl,
+                       anomalies_structured.json, raw_tool_outputs/* to artifacts_base/stage1/{scan_id}/.
 
     Returns:
         List of generated file paths.
@@ -191,15 +198,40 @@ def generate_stage1_report(
 
         # --- Tech profile ---
         try:
-            from src.recon.reporting.tech_builder import build_tech_profile
+            from src.recon.reporting.tech_builder import build_tech_profile, build_tech_profile_json
 
             http_probe_path = live_dir / "http_probe.csv"
             content = build_tech_profile(http_probe_path=http_probe_path)
             out_path = recon_dir / "tech_profile.csv"
             out_path.write_text(content, encoding="utf-8")
             generated.append(out_path)
+
+            entries = build_tech_profile_json(http_probe_path=http_probe_path)
+            json_path = recon_dir / "tech_profile.json"
+            json_path.write_text(
+                json.dumps([e.model_dump(mode="json") for e in entries], indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            generated.append(json_path)
         except Exception:
             logger.warning("Skipped tech_profile", extra={"error_code": "tech_profile_failed"})
+
+        # --- Recon results (REC-002) — aggregated ReconResults for recon_results.json ---
+        try:
+            from src.recon.reporting.recon_results_builder import build_recon_results
+
+            recon_results = build_recon_results(recon_dir, run_id)
+            out_path = recon_dir / "recon_results.json"
+            out_path.write_text(
+                recon_results.model_dump_json(indent=2, exclude_none=True),
+                encoding="utf-8",
+            )
+            generated.append(out_path)
+        except Exception:
+            logger.warning(
+                "Skipped recon_results",
+                extra={"error_code": "recon_results_failed"},
+            )
 
         # --- Headers / TLS / Endpoint inventory (use live hosts from http_probe) ---
         http_probe_path = live_dir / "http_probe.csv"
@@ -424,6 +456,46 @@ def generate_stage1_report(
         if not audit_log_path.exists():
             audit_log_path.write_text("", encoding="utf-8")
         generated.append(audit_log_path)
+
+        trace_path = build_mcp_trace_from_audit(recon_dir)
+        if trace_path is not None:
+            generated.append(trace_path)
+
+    # REC-008/REC-009: aggregate raw tool outputs, optional artifacts layout, upload to MinIO
+    aggregate_raw_tool_outputs(recon_dir, recon_dir)
+    raw_dir = recon_dir / RAW_OUTPUTS_DIR
+    if raw_dir.is_dir():
+        generated.append(raw_dir)
+        for p in raw_dir.iterdir():
+            if p.is_file():
+                generated.append(p)
+
+    if artifacts_base is not None:
+        artifacts_stage1_dir = artifacts_base / "stage1" / run_id
+        artifacts_stage1_dir.mkdir(parents=True, exist_ok=True)
+        _stage1_artifacts = (
+            "recon_results.json",
+            "tech_profile.json",
+            "mcp_trace.jsonl",
+            "anomalies_structured.json",
+        )
+        for name in _stage1_artifacts:
+            src = recon_dir / name
+            if src.is_file():
+                shutil.copy2(src, artifacts_stage1_dir / name)
+        if raw_dir.is_dir():
+            dest_raw = artifacts_stage1_dir / RAW_OUTPUTS_DIR
+            dest_raw.mkdir(exist_ok=True)
+            for f in raw_dir.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, dest_raw / f.name)
+
+    upload_stage1_artifacts(
+        artifacts_dir=recon_dir,
+        scan_id=run_id,
+        run_id=run_id,
+        job_id=job_id,
+    )
 
     logger.info(
         "Stage 1 report generated",
