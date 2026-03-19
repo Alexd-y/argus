@@ -90,6 +90,29 @@ services:
       retries: 5
       start_period: 10s
 
+  minio-init:
+    image: minio/mc:latest
+    container_name: argus-minio-init
+    env_file: .env
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set argus http://minio:9000 $${MINIO_ACCESS_KEY:-argus} $${MINIO_SECRET_KEY:-argussecret} 2>/dev/null; do
+          echo 'Waiting for MinIO...' && sleep 2;
+        done;
+        mc mb --ignore-existing argus/$${MINIO_BUCKET:-argus};
+        mc mb --ignore-existing argus/stage1-artifacts;
+        mc mb --ignore-existing argus/stage2-artifacts;
+        mc mb --ignore-existing argus/stage3-artifacts;
+        mc mb --ignore-existing argus/stage4-artifacts;
+        mc mb --ignore-existing argus/argus-recon;
+        echo 'MinIO buckets ready';
+      "
+    networks:
+      - data
+    depends_on:
+      minio:
+        condition: service_healthy
+
   backend:
     build:
       context: ../backend
@@ -178,6 +201,35 @@ services:
       retries: 5
       start_period: 30s
 
+  sandbox:
+    build:
+      context: ../sandbox
+      dockerfile: Dockerfile
+    image: argus-sandbox
+    container_name: argus-sandbox
+    volumes:
+      - ../plugins/exploit_scripts:/opt/exploit_scripts:ro
+      - sandbox_tmp:/tmp/argus-sandbox
+    networks:
+      - data
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "id argus || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   nginx:
     image: nginx:alpine
     container_name: argus-nginx
@@ -204,6 +256,7 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  sandbox_tmp:
 
 networks:
   frontend:

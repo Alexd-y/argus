@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     stage1_artifacts_bucket: str = "stage1-artifacts"
     stage2_artifacts_bucket: str = "stage2-artifacts"
     stage3_artifacts_bucket: str = "stage3-artifacts"
+    stage4_artifacts_bucket: str = "stage4-artifacts"
+    exploitation_timeout_minutes: int = 10
+    exploitation_max_concurrent: int = 3
+    exploitation_approval_timeout_minutes: int = 60
 
     @property
     def celery_broker(self) -> str:

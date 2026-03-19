@@ -123,6 +123,41 @@ def report_generation_task(
         return {"status": "failed", "report_id": report_id}
 
 
+@app.task(bind=True, name="argus.exploitation", max_retries=1)
+def run_exploitation(
+    self,
+    engagement_id: str,
+    run_id: str,
+    options: dict | None = None,
+) -> dict[str, Any]:
+    """Execute Stage 4 exploitation pipeline in background."""
+    async def _run():
+        from src.recon.exploitation.pipeline import execute_exploitation_run
+
+        engine, session_factory = create_task_engine_and_session()
+        try:
+            async with session_factory() as session:
+                result = await execute_exploitation_run(
+                    engagement_id,
+                    run_id,
+                    db=session,
+                    options=options,
+                )
+                await session.commit()
+                return result
+        finally:
+            await engine.dispose()
+
+    try:
+        return asyncio.run(_run())
+    except Exception as exc:
+        logger.exception(
+            "Exploitation task failed",
+            extra={"engagement_id": engagement_id, "run_id": run_id},
+        )
+        raise self.retry(exc=exc, countdown=60) from exc
+
+
 @app.task(bind=True, name="argus.tool_run")
 def tool_run_task(
     _self,

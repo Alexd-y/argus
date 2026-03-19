@@ -33,3 +33,6 @@ report_*.pdf
 
 # Logs
 *.log
+
+# Control scripts (platform-specific)
+gunicorn.ctl

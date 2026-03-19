@@ -130,8 +130,97 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ```powershell
 cd ARGUS/backend
-celery -A src.celery_app worker -l INFO -Q argus.scans,argus.reports,argus.tools,argus.default
+celery -A src.celery_app worker -l INFO -Q argus.scans,argus.reports,argus.tools,argus.exploitation,argus.default
 ```
+
+
+### 3.3.1 Sandbox контейнер (Stage 4 Exploitation)
+
+**Требуется для Stage 4 (Exploitation).** Sandbox — изолированный Docker контейнер с инструментами пентестирования.
+
+**Инструменты в песочнице:**
+
+| Инструмент | Назначение | Stage |
+|-----------|-----------|-------|
+| **nmap** | Сканирование портов, сервисов | 1-3 |
+| **dnsutils** | DNS reconnaissance | 1-3 |
+| **whois** | WHOIS lookup | 1-3 |
+| **sqlmap** | SQL injection testing & exploitation | 4 |
+| **hydra** | Brute force, default credentials | 4 |
+| **nuclei** | CVE verification, vulnerability scanning | 4 |
+| **metasploit-framework** | CVE exploitation (RCE, LFI, etc.) | 4 (опционально) |
+| **Python 3** | Custom exploit scripts | 4 |
+
+**Сборка контейнера:**
+
+```powershell
+# Базовая сборка (без Metasploit)
+cd ARGUS
+docker build -f sandbox/Dockerfile -t argus-exploits:latest .
+
+# С Metasploit (~1.5 GB, опционально)
+docker build -f sandbox/Dockerfile --build-arg INSTALL_MSF=true -t argus-exploits:latest .
+```
+
+**Запуск с Docker Compose:**
+
+Sandbox автоматически запускается когда используется `--profile tools`:
+
+```powershell
+docker compose -f infra/docker-compose.yml --profile tools up -d
+```
+
+**Health check:**
+
+```powershell
+# Проверить, что контейнер запущен
+docker ps | findstr argus-exploit-sandbox
+
+# Проверить инструменты
+docker exec argus-exploit-sandbox sqlmap --version
+docker exec argus-exploit-sandbox nuclei -version
+```
+
+**Ресурсные ограничения:**
+
+```yaml
+# Из docker-compose.yml
+cpus: "2"           # 2 CPU cores
+memory: 2gb            # 2 GB RAM
+memory_swap: 2gb       # No swap
+```
+
+**Custom exploit scripts:**
+
+Поместите пользовательские скрипты в `plugins/exploit_scripts/`:
+
+```
+plugins/exploit_scripts/
+├── sqli/              # SQL injection payloads
+├── xss/               # XSS verification
+├── rce/               # Remote code execution chains
+├── auth_bypass/       # Authentication bypass
+└── custom/            # Other custom exploits
+```
+
+Скрипты монтируются read-only в `/opt/exploit_scripts/` внутри контейнера.
+
+**Требования к скриптам:**
+
+- Язык: Python 3 или Bash
+- Exit code: `0` = успех, non-zero = ошибка
+- Output: JSON предпочтительно
+- Безопасность: запускаются в изолированном контейнере с ограничениями ресурсов
+
+**MinIO buckets:**
+
+При запуске `minio-init` создаёт все необходимые buckets:
+
+| Bucket | Назначение |
+|--------|-----------|
+| `argus` | Default bucket для Stage 1-3 артефактов |
+| `stage3-artifacts` | Stage 3 vulnerability analysis results |
+| `stage4-artifacts` | **Stage 4 exploitation results, shells, evidence** |
 
 ### 3.4 Frontend
 
@@ -504,6 +593,12 @@ EXPLOITDB_API_KEY       # Exploits
 | Frontend/.env.local | NEXT_PUBLIC_API_URL | API base URL | обязательно |
 | admin-frontend/.env.local | NEXT_PUBLIC_API_URL | API base URL | обязательно |
 | admin-frontend/.env.local | NEXT_PUBLIC_ADMIN_KEY | Admin API key для UI | опционально |
+| backend/.env | SANDBOX_ENABLED | Enable sandbox execution for Stage 4 | обязательно в Docker |
+| backend/.env | SANDBOX_CONTAINER_NAME | Docker container name | опционально |
+| backend/.env | EXPLOIT_TIMEOUT_SECONDS | Timeout per exploit (default 600) | опционально |
+| backend/.env | EXPLOIT_MAX_CONCURRENT | Max concurrent exploits (default 5) | опционально |
+| backend/.env | APPROVAL_TIMEOUT_MINUTES | Approval request timeout (default 60) | опционально |
+| backend/.env | STAGE4_ARTIFACTS_BUCKET | MinIO bucket for Stage 4 results | обязательно |
 ## 10. Куда вставлять API ключи
 
 | Файл/место | Переменная | Назначение | Обязательность |

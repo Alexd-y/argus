@@ -8,4 +8,4 @@
 ARG BACKEND_IMAGE=argus-backend
 FROM ${BACKEND_IMAGE}
 
-CMD ["celery", "-A", "src.celery_app", "worker", "-l", "INFO", "-Q", "argus.scans,argus.reports,argus.tools,argus.recon,argus.default"]
+CMD ["celery", "-A", "src.celery_app", "worker", "-l", "INFO", "-Q", "argus.scans,argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default"]

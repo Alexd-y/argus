@@ -22,3 +22,8 @@ services:
       - ../backend:/app
     environment:
       LOG_LEVEL: DEBUG
+      SANDBOX_ENABLED: "true"
+
+  sandbox:
+    volumes:
+      - ../plugins/exploit_scripts:/opt/exploit_scripts:ro

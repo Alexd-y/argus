@@ -25,6 +25,7 @@ app.conf.update(
         "argus.report_generation": {"queue": "argus.reports"},
         "argus.tool_run": {"queue": "argus.tools"},
         "argus.recon_job": {"queue": "argus.recon"},
+        "argus.exploitation": {"queue": "argus.exploitation"},
     },
     task_default_queue="argus.default",
 )

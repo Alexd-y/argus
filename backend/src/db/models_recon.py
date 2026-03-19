@@ -269,3 +269,68 @@ class VulnerabilityAnalysisRun(Base):
         Index("ix_vulnerability_analysis_runs_engagement", "engagement_id"),
         Index("ix_vulnerability_analysis_runs_job_run", "job_id", "run_id"),
     )
+
+
+class ExploitationRun(Base):
+    """Exploitation run (Stage 4) — engagement-scoped, traceable via run_id."""
+
+    __tablename__ = "exploitation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    engagement_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False
+    )
+    target_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("recon_targets.id", ondelete="CASCADE"), nullable=True
+    )
+    scan_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    plan_ref: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    results_ref: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    artifact_refs: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True, default=dict)
+    total_candidates: Mapped[int] = mapped_column(Integer, default=0)
+    successful_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0)
+    job_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    run_id: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_exploitation_runs_tenant_status", "tenant_id", "status"),
+        Index("ix_exploitation_runs_engagement", "engagement_id"),
+    )
+
+
+class ExploitationApproval(Base):
+    """Pending approval for high-risk exploitation action."""
+
+    __tablename__ = "exploitation_approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("exploitation_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    candidate_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    attack_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(32), nullable=False)
+    proposed_command: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    resolved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_exploitation_approvals_run_status", "run_id", "status"),
+    )

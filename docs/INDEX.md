@@ -1,8 +1,8 @@
 # ARGUS Documentation Index
 
-**Generated:** 2026-03-13  
-**Orchestration:** orch-2026-03-12-06-01-argus-stage1-tm + TM-010 Documentation + VA-006 Implementation  
-**Status:** ✅ **Production-Ready (100% — All Tasks Completed + Stage 3 Documented)**
+**Generated:** 2026-03-19  
+**Orchestration:** orch-2026-03-12-06-01-argus-stage1-tm + TM-010 Documentation + VA-006 Implementation + EX-007 Stage 4 Exploitation  
+**Status:** ✅ **Production-Ready (100% — All Tasks Completed + Stage 4 Documented)**
 
 ---
 
@@ -44,7 +44,7 @@
 
 ## 📊 Documentation Status
 
-### Completed (13/13) ✅
+### Completed (15/15) ✅
 - ✅ Frontend API Contract
 - ✅ Backend Architecture
 - ✅ Entity-Relationship Diagram
@@ -56,8 +56,10 @@
 - ✅ Running Guide
 - ✅ Implementation Report
 - ✅ Completion Summary
+- ✅ Recon Stage 1 Flow
 - ✅ Recon Stage 2 Flow (TM-010)
 - ✅ Recon Stage 3 Flow (VA-006)
+- ✅ Recon Stage 4 Flow (EX-007)
 
 ---
 
@@ -71,6 +73,7 @@
 - ✅ **Report Generation**: 4 formats (HTML, PDF, JSON, CSV) with MinIO storage
 - ✅ **ARGUS MCP Server**: Model Context Protocol for external AI integration
 - ✅ **Stage 3 Pipeline**: 15 sequential AI tasks for vulnerability analysis (17 artifacts)
+- ✅ **Stage 4 Pipeline**: 5 tool adapters, policy engine, approval gate, sandbox execution (4 artifacts)
 
 ### Infrastructure
 - ✅ **Docker Stack**: PostgreSQL, Redis, MinIO, backend, worker services
@@ -95,6 +98,7 @@
 - **Deploy**: See [deployment.md](./deployment.md) for infrastructure configuration
 - **API**: See [frontend-api-contract.md](./frontend-api-contract.md) for endpoint reference
 - **Stage 3 Quick Start**: See [STAGE3_QUICK_REF.md](./STAGE3_QUICK_REF.md) for vulnerability analysis
+- **Stage 4 Quick Start**: See [STAGE4_QUICK_REF.md](./STAGE4_QUICK_REF.md) for exploitation
 
 ---
 
@@ -103,10 +107,10 @@
 | Metric | Value |
 |--------|-------|
 | **Tasks Completed** | 11/11 (100%) ✅ |
-| **Documentation Pages** | 13 (includes 3 stage flows) |
-| **Backend Modules** | 18+ |
-| **Database Entities** | 24 |
-| **API Endpoints** | 15+ |
+| **Documentation Pages** | 15 (includes 4 stage flows) |
+| **Backend Modules** | 20+ |
+| **Database Entities** | 26 |
+| **API Endpoints** | 22+ |
 | **LLM Providers** | 6 |
 | **Report Formats** | 4 |
 | **Test Coverage Target** | 75%+ |
@@ -114,6 +118,8 @@
 | **Stage 1 AI Tasks** | 7 |
 | **Stage 2 AI Tasks** | 9 (sequential, 12 artifacts) |
 | **Stage 3 AI Tasks** | 15 (sequential, 17 artifacts) |
+| **Stage 4 Tool Adapters** | 5 (Metasploit, SQLMap, Nuclei, Hydra, Custom) |
+| **Stage 4 Artifacts** | 4 (exploitation_plan, stage4_results, shells, ai_exploitation_summary) |
 
 ---
 
@@ -121,10 +127,11 @@
 
 ### Backend Implementation
 - `ARGUS/backend/src/main.py` — FastAPI app
-- `ARGUS/backend/src/db/models.py` — 24 data entities
+- `ARGUS/backend/src/db/models.py` — 26 data entities
 - `ARGUS/backend/src/orchestration/` — State machine, phase handlers
-- `ARGUS/backend/src/api/routers/` — 8 router modules (including vulnerability-analysis)
+- `ARGUS/backend/src/api/routers/` — 9 router modules (including vulnerability-analysis, exploitation)
 - `ARGUS/backend/src/recon/vulnerability_analysis/` — Stage 3 pipeline
+- `ARGUS/backend/src/recon/exploitation/` — Stage 4 pipeline with tool adapters
 - `ARGUS/backend/src/llm/adapters.py` — LLM provider adapters
 - `ARGUS/backend/tests/` — Unit, integration, contract, security tests
 
@@ -162,12 +169,13 @@ pytest tests/ -v --cov=src --cov-report=html
 
 | Date | Status | Changes |
 |------|--------|---------|
+| 2026-03-19 | Updated | Stage 4 Exploitation documentation (EX-007): recon-stage4-flow.md, STAGE4_QUICK_REF.md, INDEX.md updated with metrics |
 | 2026-03-13 | Updated | Stage 3 Vulnerability Analysis documentation (VA-006): recon-stage3-flow.md, STAGE3_QUICK_REF.md, implementation summary |
 | 2026-03-12 | Updated | Stage 2 Threat Modeling documentation (TM-010): recon-stage2-flow.md, STAGE2_QUICK_REF.md |
 | 2026-03-09 | Stable | RUNNING.md implementation guide added; all 11 tasks complete |
 
 ---
 
-**Last Updated:** 2026-03-13  
+**Last Updated:** 2026-03-19  
 **Maintainer:** ARGUS Documentation Agent  
 **License:** As per project LICENSE file

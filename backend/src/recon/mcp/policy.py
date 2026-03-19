@@ -81,6 +81,36 @@ VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
     "report_artifact_generation",
 })
 
+# Stage 4 Exploitation
+EXPLOITATION_POLICY_ID = "exploitation_stage4_policy_v1"
+EXPLOITATION_ALLOWED_TOOLS = frozenset({
+    "metasploit", "sqlmap", "nuclei", "hydra", "medusa", "nmap",
+    "custom_script", "curl", "wget", "python3", "bash",
+})
+EXPLOITATION_ALLOWED_OPERATIONS = frozenset({
+    "exploit_execution",
+    "credential_bruteforce",
+    "vulnerability_verification",
+    "payload_generation",
+    "session_management",
+    "data_extraction",
+    "evidence_collection",
+    "log_capture",
+})
+EXPLOITATION_BLOCKED_PATTERNS = (
+    "--drop",
+    "--delete",
+    "rm -rf",
+    "format ",
+    "mkfs",
+    "DROP TABLE",
+    "DELETE FROM",
+    "TRUNCATE",
+    "ALTER TABLE",
+    "--os-pwn",
+    "--os-bof",
+)
+
 RECON_STAGE1_ALLOWED_OPERATIONS = {
     "html_extraction",
     "form_extraction",
@@ -414,4 +444,52 @@ def evaluate_vulnerability_analysis_policy(
         allowed=True,
         reason="allowed",
         policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
+    )
+
+
+def evaluate_exploitation_policy(
+    *,
+    tool_name: str,
+    operation: str,
+    args: dict[str, Any],
+) -> McpPolicyDecision:
+    """Evaluate Stage 4 Exploitation MCP policy.
+
+    Allows exploitation tools (metasploit, sqlmap, nuclei, hydra, etc.).
+    Blocks destructive patterns (DROP TABLE, rm -rf, etc.).
+    """
+    normalized_tool = str(tool_name or "").strip().lower()
+    normalized_operation = str(operation or "").strip().lower()
+
+    if normalized_tool not in EXPLOITATION_ALLOWED_TOOLS:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="tool_not_allowlisted",
+            policy_id=EXPLOITATION_POLICY_ID,
+        )
+    if normalized_operation not in EXPLOITATION_ALLOWED_OPERATIONS:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="operation_not_allowlisted",
+            policy_id=EXPLOITATION_POLICY_ID,
+        )
+
+    searchable_blob = " ".join(
+        [
+            normalized_operation,
+            json.dumps(sanitize_args(args), ensure_ascii=True, default=str).lower(),
+        ]
+    )
+    for marker in EXPLOITATION_BLOCKED_PATTERNS:
+        if marker.lower() in searchable_blob:
+            return McpPolicyDecision(
+                allowed=False,
+                reason=f"denylist_keyword:{marker}",
+                policy_id=EXPLOITATION_POLICY_ID,
+            )
+
+    return McpPolicyDecision(
+        allowed=True,
+        reason="allowed",
+        policy_id=EXPLOITATION_POLICY_ID,
     )
