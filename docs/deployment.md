@@ -9,6 +9,8 @@
 
 ARGUS разворачивается через Docker Compose. Backend, PostgreSQL, Redis, MinIO и опционально Celery worker и sandbox объединены в единый стек.
 
+**Публичный hostname и ingress:** указывайте как целевой сервис только внутренние адреса стека — `http://nginx:80` (предпочтительно) или `http://backend:8000` в сети Compose. Не задавайте произвольные внешние URL как destination туннеля или обратного прокси: клиент должен подключаться к процессу внутри compose. **Nginx** удобнее как единая точка входа (маршрутизация, заголовки, **rate limiting**).
+
 ---
 
 ## 2. Docker Compose
@@ -131,9 +133,51 @@ MINIO_SECRET_KEY=argussecret
 MINIO_BUCKET=argus
 ```
 
+### 3.7 CORS и фронтенд
+
+| Переменная | Назначение |
+|------------|------------|
+| `CORS_ORIGINS` | Список через запятую допустимых origin для браузера |
+| `VERCEL_FRONTEND_URL` | URL приложения на Vercel (без завершающего `/`), добавляется к списку CORS вместе с localhost для разработки |
+
+Бэкенд разрешает методы `GET`, `POST`, `OPTIONS` и заголовки `Content-Type`, `Authorization`; `allow_credentials=True` для совместимости с будущей cookie-сессией.
+
 ---
 
-## 4. Backend Dockerfile
+## 4. Cloudflare Tunnel (опционально)
+
+Публичный HTTPS-доступ к стеку за NAT без открытия портов на роутере: трафик идёт из Cloudflare в контейнер **cloudflared**, который подключается к **nginx** (или напрямую к backend) во внутренней сети Compose.
+
+### 4.1 Запуск
+
+В `infra/docker-compose.yml` сервис `cloudflared` включён в **profile `tunnel`**:
+
+```bash
+cd infra
+docker compose --profile tunnel up -d
+```
+
+В `infra/.env` задайте `CLOUDFLARE_TUNNEL_TOKEN` (см. ниже).
+
+### 4.2 Получение токена (Cloudflare Zero Trust)
+
+1. [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels** → **Create a tunnel**.
+2. Выберите тип **Cloudflared**, задайте имя туннеля.
+3. Скопируйте **token** установки (длинная строка) в `CLOUDFLARE_TUNNEL_TOKEN` в `infra/.env`.
+4. В настройках туннеля добавьте **Public Hostname**:
+   - **Subdomain + Domain** — ваш публичный URL (например `api.example.com`).
+   - **Service type** HTTP, **URL** `http://nginx:80` (как в Compose: cloudflared в сети `frontend` с nginx) или `http://backend:8000`, если нужен прямой доступ к API без nginx.
+
+### 4.3 Связка с Vercel
+
+- В проекте Next.js задайте **`NEXT_PUBLIC_BACKEND_URL`** на публичный URL бэкенда — тот же hostname, что настроен в туннеле (например `https://api.example.com`), либо URL корня, если nginx проксирует `/api/v1` на backend.
+- **`VERCEL_FRONTEND_URL`** на бэкенде должен совпадать с URL приложения Vercel (например `https://your-app.vercel.app`), чтобы CORS пропускал запросы браузера с прод-фронта.
+
+Локальная разработка: `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000` и фронт на `localhost:5000` — localhost уже входит в список CORS по умолчанию.
+
+---
+
+## 5. Backend Dockerfile
 
 **Путь:** `backend/Dockerfile`
 
@@ -156,16 +200,16 @@ docker build -t argus-backend backend
 
 ---
 
-## 5. CI/CD
+## 6. CI/CD
 
 **Файл:** `.github/workflows/ci.yml`
 
-### 5.1 Триггеры
+### 6.1 Триггеры
 
 - Push в `main`, `develop`
 - Pull request в `main`, `develop`
 
-### 5.2 Jobs
+### 6.2 Jobs
 
 | Job | Назначение |
 |-----|------------|
@@ -174,19 +218,19 @@ docker build -t argus-backend backend
 | security | Bandit, Safety |
 | build | Docker build backend (после lint, test, security) |
 
-### 5.3 Переменные CI
+### 6.3 Переменные CI
 
 - `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL` — для тестов
 - `JWT_SECRET`, `DEFAULT_TENANT_ID` — для прогона приложения
 
-### 5.4 Тесты
+### 6.4 Тесты
 
 ```yaml
 - alembic upgrade head
 - pytest tests -v --tb=short
 ```
 
-### 5.5 Сборка образа
+### 6.5 Сборка образа
 
 - `docker/build-push-action` с `push: false`, `load: true`
 - Тег: `argus-backend:ci`
@@ -194,7 +238,7 @@ docker build -t argus-backend backend
 
 ---
 
-## 6. Миграции БД
+## 7. Миграции БД
 
 Перед первым запуском или обновлением:
 
@@ -207,7 +251,7 @@ alembic upgrade head
 
 ---
 
-## 7. Health Checks
+## 8. Health Checks
 
 - **PostgreSQL:** `pg_isready -U $POSTGRES_USER -d $POSTGRES_DB`
 - **Redis:** `redis-cli ping`
@@ -215,7 +259,7 @@ alembic upgrade head
 
 ---
 
-## 8. See Also
+## 9. See Also
 
 For complete startup instructions including all 3 deployment scenarios, environment setup, and API key placement, see **[RUNNING.md](./RUNNING.md)** — the definitive guide for:
 - Docker full stack setup

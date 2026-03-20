@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # Target: URL or domain, 1-512 chars
 TARGET_PATTERN = r"^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$"
@@ -50,6 +50,8 @@ class ScanOptionsVulnerabilities(BaseModel):
 class ScanOptions(BaseModel):
     """Full scan options per api-contracts."""
 
+    model_config = ConfigDict(extra="ignore")
+
     scanType: str = "quick"
     reportFormat: str = "pdf"
     rateLimit: str = "normal"
@@ -63,6 +65,8 @@ class ScanOptions(BaseModel):
 
 class ScanCreateRequest(BaseModel):
     """POST /scans request."""
+
+    model_config = ConfigDict(extra="ignore")
 
     target: str = Field(
         min_length=1,

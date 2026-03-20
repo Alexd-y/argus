@@ -6,6 +6,16 @@ All notable changes to ARGUS platform are documented in this file.
 
 ### Added
 
+#### Frontend API contract alignment — backend, CORS, tunnel, tests (2026-03-20)
+
+- **Errors:** для путей `/api/v1/scans*` и `/api/v1/reports*` ответы 4xx/5xx в форме `{ "error", "code"?, "details"? }` (HTTPException, RequestValidationError, 500).
+- **GET `/api/v1/scans/{id}`:** поле `created_at` в UTC с суффиксом `Z`.
+- **SSE:** события ошибок дополняют полями `message` / `progress` для согласованности с контрактом.
+- **CORS:** `VERCEL_FRONTEND_URL` + `CORS_ORIGINS` (через запятую) + localhost dev; методы `GET`, `POST`, `OPTIONS`; заголовки `Content-Type`, `Authorization`; `allow_credentials=True`.
+- **Infra:** сервис `cloudflared` (profile `tunnel`), переменные `CLOUDFLARE_TUNNEL_TOKEN`, `VERCEL_FRONTEND_URL` в `infra/.env.example`; `VERCEL_FRONTEND_URL` прокидывается в backend в Compose.
+- **Docs:** `docs/backend-frontend-contract-gap.md`, раздел Cloudflare Tunnel в `docs/deployment.md`.
+- **Tests:** `backend/tests/test_frontend_compatibility.py` — контрактные проверки POST/GET scans, GET reports[], ошибки, SSE smoke, download headers.
+
 #### Docker Configuration & Build Fixes (2026-03-19)
 
 **Status:** ✅ v0.2 (Fixed & Documented)

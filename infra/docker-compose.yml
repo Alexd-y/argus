@@ -140,6 +140,7 @@ services:
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      VERCEL_FRONTEND_URL: ${VERCEL_FRONTEND_URL:-}
     networks:
       - backend
       - data
@@ -251,6 +252,22 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: argus-cloudflared
+    env_file: .env
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      # cloudflared reads token from TUNNEL_TOKEN (not argv); .env may use CLOUDFLARE_TUNNEL_TOKEN
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - frontend
+    depends_on:
+      nginx:
+        condition: service_healthy
+    profiles:
+      - tunnel
 
 volumes:
   postgres_data:

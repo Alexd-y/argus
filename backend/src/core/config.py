@@ -1,5 +1,7 @@
 """ARGUS Backend — configuration from environment."""
 
+import os
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,6 +27,8 @@ class Settings(BaseSettings):
     jwt_expiry: str = "15m"
     jwt_algorithm: str = "HS256"
     cors_origins: str = "*"
+    vercel_frontend_url: str = ""
+    debug: bool = False
     log_level: str = "INFO"
     version: str = "0.1.0"
     default_tenant_id: str = "00000000-0000-0000-0000-000000000001"
@@ -81,20 +85,45 @@ class Settings(BaseSettings):
         return self.celery_broker_url or self.redis_url
 
     def get_cors_origins_list(self) -> list[str]:
-        """Return explicit origins list. * or empty -> default dev origins (credentials-safe)."""
+        """Merge VERCEL_FRONTEND_URL, CORS_ORIGINS, and localhost dev origins (deduped)."""
+        dev_defaults = [
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5800",
+            "http://127.0.0.1:5800",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
+        seen: set[str] = set()
+        out: list[str] = []
+
+        def add(origin: str) -> None:
+            o = origin.strip().rstrip("/")
+            if o and o not in seen:
+                seen.add(o)
+                out.append(o)
+
+        vf = (self.vercel_frontend_url or "").strip()
+        if vf:
+            add(vf)
+
         raw = (self.cors_origins or "").strip()
-        if not raw or raw == "*":
-            return [
-                "http://localhost:5000",
-                "http://127.0.0.1:5000",
-                "http://localhost:5800",
-                "http://127.0.0.1:5800",
-                "http://localhost:8000",
-                "http://127.0.0.1:8000",
-                "http://localhost:3001",
-                "http://127.0.0.1:3001",
-            ]
-        return [o.strip() for o in raw.split(",") if o.strip()]
+        if raw and raw != "*":
+            for part in raw.split(","):
+                add(part)
+
+        include_dev = self.debug or os.getenv("CORS_INCLUDE_DEV_ORIGINS", "true").lower() == "true"
+        if not out:
+            return list(dev_defaults) if include_dev else []
+
+        if include_dev:
+            for d in dev_defaults:
+                add(d)
+        return out
 
 
 settings = Settings()

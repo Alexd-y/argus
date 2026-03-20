@@ -278,7 +278,8 @@ class TestScansEndpoint:
         ):
             response = client.get(f"/api/v1/scans/{scan_id}")
         assert response.status_code == 404
-        assert response.json().get("detail") == "Scan not found"
+        body = response.json()
+        assert body.get("error") == "Scan not found"
 
     def test_get_scan_events_returns_sse(self, client: TestClient) -> None:
         """GET /scans/:id/events returns SSE stream."""

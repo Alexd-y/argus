@@ -36,3 +36,6 @@ report_*.pdf
 
 # Control scripts (platform-specific)
 gunicorn.ctl
+
+# Archives (do not commit)
+*.rar

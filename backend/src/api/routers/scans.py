@@ -4,7 +4,6 @@ import asyncio
 import json
 import time
 import uuid
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import cast, select, String
@@ -20,6 +19,7 @@ from src.api.schemas import (
     ScanDetailResponse,
 )
 from src.core.config import settings
+from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
@@ -113,9 +113,7 @@ async def get_scan(
             progress=scan.progress,
             phase=scan.phase,
             target=scan.target_url,
-            created_at=scan.created_at.isoformat()
-            if scan.created_at
-            else datetime.now(UTC).isoformat(),
+            created_at=format_created_at_iso_z(scan.created_at),
         )
 
 
@@ -221,7 +219,10 @@ def _format_sse_event(event: str, payload: dict) -> dict:
 
 def _yield_error_event(message: str) -> dict:
     """Generic error event for SSE (no internal details leaked). Frontend reads payload.error."""
-    return _format_sse_event("error", {"event": "error", "error": message})
+    return _format_sse_event(
+        "error",
+        {"event": "error", "message": message, "error": message, "progress": 0},
+    )
 
 
 @router.get("/{scan_id}/events")
