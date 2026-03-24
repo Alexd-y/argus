@@ -13,10 +13,13 @@ RECON_STAGE1 allowlist for HTML/JS parsing:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+logger = logging.getLogger(__name__)
 
 RECON_STAGE1_POLICY_ID = "recon_stage1_safe_ops_v1"
 
@@ -80,6 +83,134 @@ VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
     "evidence_bundle_transformation",
     "report_artifact_generation",
 })
+
+# VA active scan / MCP sandbox tools (OWASP-001, OWASP2-001): separate fail-closed branch from
+# VULNERABILITY_ANALYSIS_ALLOWED_TOOLS (fetch/read_file). Callers that run sandbox
+# scanners must use evaluate_va_active_scan_tool_policy — not widening Stage 3 safe MCP.
+VA_ACTIVE_SCAN_POLICY_ID = "va_active_scan_sandbox_tools_v1"
+# Canonical tool ids after normalization (lowercase, underscores/hyphens stripped).
+VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
+    "dalfox",
+    "xsstrike",
+    "ffuf",
+    # sqlmap: runner MUST enforce non-interactive --batch, target URL only from
+    # validate_target_for_tool / engagement scope (guardrails), and MUST NOT pass
+    # dangerous defaults (--os-pwn, --os-shell, --file-read, unrestricted --risk/--level)
+    # unless explicitly enabled by a separate policy flag (executor fail-closed).
+    "sqlmap",
+    "nuclei",
+    "gobuster",
+    # OWASP2-001: wfuzz (fuzzing), commix (command injection) — same executor scope rules as sqlmap/ffuf.
+    "wfuzz",
+    "commix",
+})
+
+# VA-006 — MCP / internal enqueue operation ids (Celery task names mirror these with argus.va.*)
+VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
+    "run_dalfox",
+    "run_xsstrike",
+    "run_ffuf",
+    "run_sqlmap",
+    "run_nuclei",
+})
+
+
+def is_va_active_scan_mcp_operation(operation: str) -> bool:
+    """True if *operation* is a registered VA sandbox MCP enqueue / task id (VA-006)."""
+    n = str(operation or "").strip().lower().replace("-", "_")
+    return n in VA_ACTIVE_SCAN_MCP_OPERATIONS
+
+
+def _normalize_va_active_scan_tool_identifier(raw: str) -> str:
+    """Normalize MCP/sandbox tool alias: case, underscores, hyphens (fail-closed match)."""
+    s = str(raw or "").strip().lower().replace("_", "").replace("-", "")
+    return s
+
+
+def resolve_va_active_scan_tool_canonical(tool_name: str) -> str | None:
+    """Return canonical tool id if allowlisted; unknown or empty => None (fail-closed)."""
+    normalized = _normalize_va_active_scan_tool_identifier(tool_name)
+    if not normalized:
+        return None
+    if normalized in VA_ACTIVE_SCAN_ALLOWED_TOOLS:
+        return normalized
+    return None
+
+
+def evaluate_va_active_scan_tool_policy(*, tool_name: str) -> McpPolicyDecision:
+    """Fail-closed allowlist for VA sandbox active-scan tool names only.
+
+    Does not replace evaluate_vulnerability_analysis_policy for fetch/read_file MCP.
+    """
+    canonical = resolve_va_active_scan_tool_canonical(tool_name)
+    if canonical is None:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="active_scan_tool_not_allowlisted",
+            policy_id=VA_ACTIVE_SCAN_POLICY_ID,
+        )
+    return McpPolicyDecision(
+        allowed=True,
+        reason="allowed",
+        policy_id=VA_ACTIVE_SCAN_POLICY_ID,
+    )
+
+
+# WEB-006 — per-tool approval policy for destructive active-scan tools
+TOOL_APPROVAL_POLICY_ID = "tool_approval_policy_v1"
+
+
+def evaluate_tool_approval_policy(
+    tool_name: str,
+    *,
+    scan_approval_flags: dict[str, bool] | None = None,
+) -> McpPolicyDecision:
+    """Per-tool approval: base allowlist + explicit approval for destructive tools.
+
+    Backward compatible: when *scan_approval_flags* is ``None``, destructive
+    tools are allowed if they pass the base VA active-scan allowlist (existing
+    behaviour preserved).
+    """
+    from src.core.config import settings
+
+    base_decision = evaluate_va_active_scan_tool_policy(tool_name=tool_name)
+    canonical = resolve_va_active_scan_tool_canonical(tool_name)
+    is_destructive = (canonical in settings.destructive_tools) if canonical else False
+
+    if not base_decision.allowed:
+        decision = McpPolicyDecision(
+            allowed=False,
+            reason=base_decision.reason,
+            policy_id=TOOL_APPROVAL_POLICY_ID,
+        )
+    elif (
+        is_destructive
+        and scan_approval_flags is not None
+        and not scan_approval_flags.get(canonical or tool_name, False)
+    ):
+        decision = McpPolicyDecision(
+            allowed=False,
+            reason="requires_approval",
+            policy_id=TOOL_APPROVAL_POLICY_ID,
+        )
+    else:
+        decision = McpPolicyDecision(
+            allowed=True,
+            reason="allowed",
+            policy_id=TOOL_APPROVAL_POLICY_ID,
+        )
+
+    logger.info(
+        "policy_decision",
+        extra={
+            "tool": tool_name,
+            "allowed": decision.allowed,
+            "reason": decision.reason,
+            "approval_required": is_destructive,
+        },
+    )
+    return decision
+
 
 # Stage 4 Exploitation
 EXPLOITATION_POLICY_ID = "exploitation_stage4_policy_v1"

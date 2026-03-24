@@ -1,10 +1,15 @@
 """Reports router — GET /reports, GET /reports/:id, GET /reports/:id/download."""
 
+from __future__ import annotations
+
+import contextlib
 import io
+from typing import Any
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse, StreamingResponse
-from sqlalchemy import cast, select, String
+from sqlalchemy import String, cast, select
 
 from src.api.schemas import (
     Finding,
@@ -15,12 +20,10 @@ from src.api.schemas import (
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Evidence as EvidenceModel
 from src.db.models import Finding as FindingModel
-from src.db.models import PhaseOutput
-from src.db.models import Report
-from src.db.models import ReportObject
-from src.db.models import ScanTimeline
+from src.db.models import PhaseOutput, Report, ReportObject, ScanTimeline
 from src.db.models import Screenshot as ScreenshotModel
 from src.db.session import async_session_factory, set_session_tenant
+from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
 from src.reports.generators import (
     EvidenceEntry,
     PhaseOutputEntry,
@@ -33,20 +36,58 @@ from src.reports.generators import (
     generate_json,
     generate_pdf,
 )
+from src.reports.report_pipeline import _upsert_report_object
 from src.reports.storage import download as storage_download
 from src.reports.storage import exists as storage_exists
 from src.reports.storage import get_presigned_url
-from src.reports.storage import upload
+from src.storage.s3 import download_by_key, get_presigned_url_by_key, upload_report_artifact
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _hostname_from_target_string(value: str) -> str | None:
+    """Parse hostname from a full URL or a bare host (for list filter fallback)."""
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        raw = f"https://{raw}"
+    try:
+        host = urlparse(raw).hostname
+        return host.lower() if host else None
+    except Exception:
+        return None
+
 
 VALID_FORMATS = {"pdf", "html", "json", "csv"}
 CONTENT_TYPES = {
     "pdf": "application/pdf",
-    "html": "text/html",
-    "json": "application/json",
-    "csv": "text/csv",
+    "html": "text/html; charset=utf-8",
+    "json": "application/json; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
 }
+
+
+def _serialize_requested_formats(raw: Any) -> list[str] | None:
+    """Normalize Report.requested_formats JSONB (list or {formats: [...]}) for API responses."""
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    if isinstance(raw, dict):
+        inner = raw.get("formats")
+        if isinstance(inner, list):
+            return [str(x) for x in inner]
+    return None
+
+
+def _attachment_content_disposition(filename: str) -> str:
+    """
+    RFC 6266 attachment header: ASCII fallback + RFC 5987 filename* for UTF-8 (RPT-009).
+    """
+    safe_ascii = filename.encode("ascii", "replace").decode("ascii").replace('"', "_")
+    encoded = quote(filename, safe="")
+    return f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
 
 
 def _report_to_summary(report: Report) -> ReportSummary:
@@ -105,6 +146,22 @@ async def list_reports(
         result = await session.execute(q)
         reports = list(result.scalars().all())
 
+        # Frontend historically passed host-only (?target=example.com) while Report.target is full URL.
+        if target and not reports:
+            want_host = _hostname_from_target_string(target)
+            if want_host:
+                q2 = (
+                    select(Report)
+                    .where(cast(Report.tenant_id, String) == tenant_id)
+                    .order_by(Report.created_at.desc())
+                )
+                result2 = await session.execute(q2)
+                reports = [
+                    r
+                    for r in result2.scalars().all()
+                    if _hostname_from_target_string(r.target or "") == want_host
+                ]
+
         if not reports:
             return []
 
@@ -122,6 +179,9 @@ async def list_reports(
                     summary=summary,
                     findings=_findings_to_schema(findings),
                     technologies=report.technologies or [],
+                    generation_status=report.generation_status or "ready",
+                    tier=report.tier or "midgard",
+                    requested_formats=_serialize_requested_formats(report.requested_formats),
                 )
             )
         return out
@@ -155,6 +215,9 @@ async def get_report(
             technologies=report.technologies or [],
             created_at=report.created_at.isoformat() if report.created_at else None,
             scan_id=report.scan_id,
+            generation_status=report.generation_status or "ready",
+            tier=report.tier or "midgard",
+            requested_formats=_serialize_requested_formats(report.requested_formats),
         )
 
 
@@ -258,12 +321,34 @@ async def download_report(
         )
         findings = list(findings_result.scalars().all())
 
-        t_id = report.tenant_id or "default"
-        scan_id = report.scan_id or report_id
+        t_id = str(report.tenant_id or "default")
+        scan_id = str(report.scan_id or report_id)
         filename = f"report.{fmt}"
 
         use_cache = not regenerate
         if use_cache:
+            ro_result = await session.execute(
+                select(ReportObject).where(
+                    cast(ReportObject.report_id, String) == report_id,
+                    ReportObject.format == fmt,
+                    cast(ReportObject.tenant_id, String) == t_id,
+                )
+            )
+            ro = ro_result.scalar_one_or_none()
+            if ro and ro.object_key:
+                if redirect:
+                    presigned_url = get_presigned_url_by_key(ro.object_key)
+                    if presigned_url:
+                        return RedirectResponse(url=presigned_url, status_code=302)
+                data = download_by_key(ro.object_key)
+                if data:
+                    fname = f"report-{report_id}.{fmt}"
+                    return StreamingResponse(
+                        io.BytesIO(data),
+                        media_type=CONTENT_TYPES[fmt],
+                        headers={"Content-Disposition": _attachment_content_disposition(fname)},
+                    )
+
             cached = storage_exists(t_id, scan_id, "reports", filename)
             if cached:
                 if redirect:
@@ -272,53 +357,63 @@ async def download_report(
                         return RedirectResponse(url=presigned_url, status_code=302)
                 data = storage_download(t_id, scan_id, "reports", filename)
                 if data:
+                    fname = f"report-{report_id}.{fmt}"
                     return StreamingResponse(
                         io.BytesIO(data),
                         media_type=CONTENT_TYPES[fmt],
-                        headers={"Content-Disposition": f'attachment; filename="report-{report_id}.{fmt}"'},
+                        headers={"Content-Disposition": _attachment_content_disposition(fname)},
                     )
 
         report_data = await _load_report_data(session, report, findings)
+        tier_str = str(report.tier or "midgard")
+        jctx = minimal_jinja_context_from_report_data(report_data, tier_str)
         if fmt == "pdf":
-            content = generate_pdf(report_data)
+            content = generate_pdf(report_data, jinja_context=jctx, tier=tier_str)
         elif fmt == "html":
-            content = generate_html(report_data)
+            content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
         elif fmt == "json":
-            content = generate_json(report_data)
+            content = generate_json(report_data, jinja_context=jctx)
         else:
-            content = generate_csv(report_data)
+            content = generate_csv(report_data, jinja_context=jctx)
 
+        stored_key: str | None = None
         try:
-            stored_key = upload(
-                t_id, scan_id, "reports", filename, content, content_type=CONTENT_TYPES[fmt]
+            tier_str = str(report.tier or "midgard")
+            stored_key = upload_report_artifact(
+                t_id,
+                scan_id,
+                tier_str,
+                str(report.id),
+                fmt,
+                content,
+                content_type=CONTENT_TYPES[fmt],
             )
             if stored_key:
-                ro = ReportObject(
+                await _upsert_report_object(
+                    session,
                     tenant_id=t_id,
                     scan_id=scan_id,
-                    report_id=report.id,
-                    format=fmt,
+                    report_id=str(report.id),
+                    fmt=fmt,
                     object_key=stored_key,
                     size_bytes=len(content),
                 )
-                session.add(ro)
                 try:
                     await session.commit()
                 except Exception:
-                    try:
+                    with contextlib.suppress(Exception):
                         await session.rollback()
-                    except Exception:
-                        pass
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid report path")
+            raise HTTPException(status_code=400, detail="Invalid report path") from None
 
-        if redirect:
-            presigned_url = get_presigned_url(t_id, scan_id, "reports", filename)
+        if redirect and stored_key:
+            presigned_url = get_presigned_url_by_key(stored_key)
             if presigned_url:
                 return RedirectResponse(url=presigned_url, status_code=302)
 
+    fname = f"report-{report_id}.{fmt}"
     return StreamingResponse(
         io.BytesIO(content),
         media_type=CONTENT_TYPES[fmt],
-        headers={"Content-Disposition": f'attachment; filename="report-{report_id}.{fmt}"'},
+        headers={"Content-Disposition": _attachment_content_disposition(fname)},
     )

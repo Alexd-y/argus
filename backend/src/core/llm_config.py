@@ -30,18 +30,14 @@ _PROVIDER_CONFIG: list[tuple[str, str, str]] = [
 
 
 def has_any_llm_key() -> bool:
-    """Check os.environ for any non-empty key from LLM_KEYS."""
-    for key in LLM_KEYS:
-        val = os.environ.get(key, "").strip()
-        if val:
-            return True
-    return False
+    """True if any LLM key is in ``os.environ`` (including sync from ``backend/.env`` at startup)."""
+    return any((os.environ.get(key) or "").strip() for key in LLM_KEYS)
 
 
 def _get_first_available_provider() -> tuple[str, str, str] | None:
     """Return (env_key, base_url, default_model) for first configured provider."""
     for env_key, base_url, default_model in _PROVIDER_CONFIG:
-        val = os.environ.get(env_key, "").strip()
+        val = (os.environ.get(env_key) or "").strip()
         if val:
             return (env_key, base_url, default_model)
     return None
@@ -71,7 +67,7 @@ def get_llm_client() -> Callable[[str, dict], str]:
         )
 
     env_key, base_url, default_model = provider
-    api_key = os.environ.get(env_key, "").strip()
+    api_key = (os.environ.get(env_key) or "").strip()
 
     try:
         from openai import OpenAI

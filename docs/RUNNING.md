@@ -70,7 +70,20 @@ docker compose -f infra/docker-compose.yml --profile tools up -d
 ### 2.4 Проверка
 
 - Backend: http://localhost:8000/api/v1/health
-- MinIO Console: http://localhost:9001
+- MinIO Console: http://localhost:9001 — **только если** в `docker ps` у `argus-minio` есть проброс `0.0.0.0:9001->9001/tcp` (см. ниже).
+
+**MinIO Console не открывается (`connection refused` на 9001):**
+
+1. Вы запустили **только** `infra/docker-compose.yml` — в нём **нет** `ports` у MinIO (by design). Нужен второй файл:
+   ```powershell
+   docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d
+   ```
+   или из каталога `infra/` (подхватится `docker-compose.override.yml`):
+   ```powershell
+   cd infra
+   docker compose up -d
+   ```
+2. Убедитесь, что контейнер пересоздан после обновления образа: в `docker-compose.yml` для MinIO задана консоль на **9001** (`--console-address ":9001"`).
 
 ---
 
@@ -109,6 +122,7 @@ MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=argus
 MINIO_SECRET_KEY=argussecret
 MINIO_BUCKET=argus
+MINIO_REPORTS_BUCKET=argus-reports
 MINIO_SECURE=false
 ```
 
@@ -181,6 +195,55 @@ docker exec argus-exploit-sandbox sqlmap --version
 docker exec argus-exploit-sandbox nuclei -version
 ```
 
+### 3.3.2 Пересборка образа sandbox для VA active-scan (dalfox, ffuf, sqlmap, …)
+
+Фаза **vulnerability analysis → active scan** запускает allowlisted-инструменты внутри sandbox через `docker exec` (см. `sandbox/Dockerfile`: **ffuf**, **gobuster**, **wfuzz**, **sqlmap** из apt; **dalfox** и **nuclei** — pinned binary; **commix**, **XSStrike** — git + pip). Если вы меняли Dockerfile, build-args или версии инструментов — пересоберите образ и пересоздайте контейнер, иначе worker продолжит использовать старый слой.
+
+**Через Compose (рекомендуется, образ `argus-sandbox`, контейнер `argus-sandbox`):**
+
+```powershell
+cd ARGUS
+docker compose -f infra/docker-compose.yml build sandbox --no-cache
+docker compose -f infra/docker-compose.yml up -d sandbox
+```
+
+С dev-оверлеем (порты БД/Redis и т.д.):
+
+```powershell
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml build sandbox --no-cache
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d sandbox
+```
+
+**Вручную (тот же контекст, что и в compose):**
+
+```powershell
+cd ARGUS
+docker build -f sandbox/Dockerfile -t argus-sandbox:latest .
+```
+
+Опциональные аргументы образа (см. комментарии в `sandbox/Dockerfile`): `DALFOX_VERSION`, `NUCLEI_VERSION`, `INSTALL_MSF=true` для Metasploit.
+
+**Проверка бинарников после пересборки:**
+
+```powershell
+docker exec argus-sandbox dalfox version
+docker exec argus-sandbox ffuf -V
+docker exec argus-sandbox sqlmap --version
+docker exec argus-sandbox nuclei -version
+```
+
+**Переменные `backend/.env`, относящиеся к VA active-scan и sandbox:**
+
+| Переменная | Назначение |
+|------------|------------|
+| `SANDBOX_ENABLED` | Включить выполнение через sandbox (`docker exec`); без этого фаза active-scan пропускается. |
+| `SANDBOX_CONTAINER_NAME` | Имя контейнера (по умолчанию `argus-sandbox` — должно совпадать с `container_name` в compose). |
+| `VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC` | Таймаут одного вызова инструмента (сек). |
+| `FFUF_VA_WORDLIST_PATH` | Путь к wordlist для **ffuf** на стороне процесса backend/worker (при необходимости смонтируйте том или положите файл туда, откуда worker читает путь). |
+| `SQLMAP_VA_ENABLED` | Включить **sqlmap** в плане VA (по умолчанию выкл.; политика/approval могут дополнительно ограничивать запуск). |
+| `ACTIVE_SCAN_MAX_CONCURRENT_JOBS` | Максимум параллельных async-задач active-scan. |
+| `ACTIVE_SCAN_MAX_CAPTURE_BYTES` | Верхний предел размера stdout/stderr на поток. |
+
 **Ресурсные ограничения:**
 
 ```yaml
@@ -212,15 +275,41 @@ plugins/exploit_scripts/
 - Output: JSON предпочтительно
 - Безопасность: запускаются в изолированном контейнере с ограничениями ресурсов
 
-**MinIO buckets:**
+**Сервис `minio-init` — зачем и почему «падает»**
 
-При запуске `minio-init` создаёт все необходимые buckets:
+- **Назначение:** контейнер с `minio/mc` подключается к MinIO и выполняет **`mc mb --ignore-existing`** — создаёт нужные **buckets**, если их ещё нет. Без этого backend/worker могут получать ошибки при записи в S3.
+- **Поведение:** это **не** долгоживущий сервис. Скрипт отрабатывает и процесс **завершается с кодом 0**. В списке контейнеров статус **Exited (0)** — это **норма**, а не авария. Постоянно «Running» он быть не должен.
+- **Логи (успех или ошибка):**
+  ```powershell
+  docker logs argus-minio-init
+  ```
+  В конце при успехе должна быть строка `MinIO buckets ready`. Если **Exited (1)** — смотри логи: чаще всего неверные `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` относительно уже существующего volume MinIO (учётка задаётся при первом старте тома).
+- **Повторно создать buckets вручную:**
+  ```powershell
+  docker compose -f infra/docker-compose.yml run --rm minio-init
+  ```
+
+**Логин и пароль MinIO (Web Console `http://127.0.0.1:9001` при пробросе портов)**
+
+| Поле в форме входа | Что вводить |
+|--------------------|-------------|
+| **User** / Access Key | Значение **`MINIO_ACCESS_KEY`** из **`infra/.env`** |
+| **Password** / Secret Key | Значение **`MINIO_SECRET_KEY`** из **`infra/.env`** |
+
+Если переменных нет в `.env`, в `docker-compose.yml` подставляются дефолты **`argus`** / **`argussecret`**.
+
+**Не путать:** логин MinIO **не** `POSTGRES_USER` / **не** пароль БД.
+
+**Вводишь верные ключи из `.env`, но «Invalid login»:** MinIO один раз зафиксировал root при **первом** запуске тома. Смена `MINIO_SECRET_KEY` в `.env` **не** меняет пароль в уже существующем volume — либо верни старый пароль, либо удалить volume `minio_data` (потеря объектов в MinIO) и поднять заново.
+
+**MinIO buckets (создаёт `minio-init`):**
 
 | Bucket | Назначение |
 |--------|-----------|
-| `argus` | Default bucket для Stage 1-3 артефактов |
-| `stage3-artifacts` | Stage 3 vulnerability analysis results |
-| `stage4-artifacts` | **Stage 4 exploitation results, shells, evidence** |
+| `argus` (или `MINIO_BUCKET`) | Основной bucket: raw, screenshots, evidence, attachments и т.п. |
+| `argus-reports` (или `MINIO_REPORTS_BUCKET`) | Кэш экспортов отчётов (PDF/HTML/JSON/CSV), presigned/download |
+| `stage1-artifacts` … `stage4-artifacts` | Артефакты по стадиям recon/exploitation |
+| `argus-recon` | Recon-модуль |
 
 ### 3.4 Frontend
 
@@ -302,7 +391,8 @@ docker compose -f infra/docker-compose.yml --profile tunnel up -d
 
 На Vercel в переменных окружения фронта указать URL бэкенда через туннель (например NEXT_PUBLIC_BACKEND_URL=https://argus-tunnel.your-domain.com), как описано в docs/deployment.md.
 
-
+задать токен: vercel.com → Account → Tokens → VERCEL_TOKEN в окружении и снова vercel deploy --prod --yes
+cloudflared tunnel --url http://127.0.0.1:80
 
 ### 4.2 Frontend
 
@@ -603,8 +693,13 @@ EXPLOITDB_API_KEY       # Exploits
 | Frontend/.env.local | NEXT_PUBLIC_API_URL | API base URL | обязательно |
 | admin-frontend/.env.local | NEXT_PUBLIC_API_URL | API base URL | обязательно |
 | admin-frontend/.env.local | NEXT_PUBLIC_ADMIN_KEY | Admin API key для UI | опционально |
-| backend/.env | SANDBOX_ENABLED | Enable sandbox execution for Stage 4 | обязательно в Docker |
-| backend/.env | SANDBOX_CONTAINER_NAME | Docker container name | опционально |
+| backend/.env | SANDBOX_ENABLED | Enable sandbox execution for Stage 4 / VA active-scan | обязательно в Docker |
+| backend/.env | SANDBOX_CONTAINER_NAME | Docker container name (compose: `argus-sandbox`) | опционально |
+| backend/.env | VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC | Таймаут одного VA active-scan инструмента (сек) | опционально |
+| backend/.env | FFUF_VA_WORDLIST_PATH | Wordlist для ffuf в VA | опционально |
+| backend/.env | SQLMAP_VA_ENABLED | Включить sqlmap в VA active-scan | опционально |
+| backend/.env | ACTIVE_SCAN_MAX_CONCURRENT_JOBS | Параллельность VA active-scan | опционально |
+| backend/.env | ACTIVE_SCAN_MAX_CAPTURE_BYTES | Лимит захвата stdout/stderr | опционально |
 | backend/.env | EXPLOIT_TIMEOUT_SECONDS | Timeout per exploit (default 600) | опционально |
 | backend/.env | EXPLOIT_MAX_CONCURRENT | Max concurrent exploits (default 5) | опционально |
 | backend/.env | APPROVAL_TIMEOUT_MINUTES | Approval request timeout (default 60) | опционально |
@@ -672,7 +767,7 @@ openssl rand -hex 32
 |------|--------|---------|
 | 5432 | PostgreSQL | Изменить `POSTGRES_PORT` в `infra/.env` |
 | 6379 | Redis | Изменить `REDIS_PORT` |
-| 9000, 9001 | MinIO | Изменить `MINIO_PORT`, `MINIO_CONSOLE_PORT` |
+| 9000, 9001 | MinIO | Изменить `MINIO_PORT`, `_CONSOLE_PORT` |
 | 8000 | Backend | Изменить `BACKEND_PORT` |
 | 5000 | Frontend | Уже в `package.json` (`next dev -p 5000`) |
 | 3001 | admin-frontend | Уже в `package.json` (`next dev -p 3001`) |
@@ -825,6 +920,26 @@ docker compose -f infra/docker-compose.yml --profile tools down
 docker compose -f infra/docker-compose.yml --profile tools build --no-cache backend celery-worker
 docker compose -f infra/docker-compose.yml --profile tools up -d
 ```
+
+### 10.14 PDF-отчёты (RPT-009, WeasyPrint)
+
+Backend формирует **PDF из того же HTML**, что и веб-отчёт, через **WeasyPrint**. В `ARGUS/backend/Dockerfile` установлены системные библиотеки (**Pango, Cairo, GDK-Pixbuf**, `shared-mime-info`).
+
+**Локально без этих библиотек** импорт WeasyPrint может вызвать `OSError` — используйте Docker или установите зависимости ОС ([WeasyPrint — Install](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation)).
+
+**CI / pytest без нативных зависимостей:** задайте переменную и пропускайте интеграционные тесты PDF (юнит-тест с моком WeasyPrint выполняется всегда):
+
+```powershell
+$env:ARGUS_SKIP_WEASYPRINT_PDF = "1"
+pytest tests/ -v
+```
+
+```bash
+export ARGUS_SKIP_WEASYPRINT_PDF=1
+pytest tests/ -v
+```
+
+Тесты с маркером `weasyprint_pdf` получат **skip** с явной причиной.
 
 ---
 

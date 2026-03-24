@@ -3,7 +3,7 @@
 Tests verify handler structure and integration with tools, NOT mock fallbacks.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from src.orchestration.handlers import (
@@ -142,3 +142,118 @@ class TestRunReporting:
             out = await run_reporting("https://target.com", None, None, None, None, None)
             assert isinstance(out, ReportingOutput)
             assert "summary" in out.report
+
+
+def _upload_raw_phase(call: MagicMock) -> str:
+    """Phase is the 3rd positional arg to upload_raw_artifact."""
+    args, kwargs = call
+    if "phase" in kwargs:
+        return str(kwargs["phase"])
+    return str(args[2])
+
+
+class TestRawPhaseArtifactsRecon:
+    """RAW-002: run_recon persists raw artifacts under phase ``recon`` when tenant + scan are set."""
+
+    @staticmethod
+    def _assert_all_calls_recon(mock_upload: MagicMock) -> None:
+        assert mock_upload.call_count >= 1
+        for c in mock_upload.call_args_list:
+            assert _upload_raw_phase(c) == "recon"
+
+    @pytest.mark.asyncio
+    async def test_upload_raw_artifact_uses_recon_phase_with_tenant_and_scan(self) -> None:
+        tenant_id = "00000000-0000-0000-0000-0000000000aa"
+        scan_id = "scan-raw-002"
+        with (
+            patch(
+                "src.orchestration.raw_phase_artifacts.upload_raw_artifact",
+                return_value="tenant/scan/recon/raw/x.txt",
+            ) as mock_upload,
+            patch("src.orchestration.handlers.execute_command", return_value=_NMAP_OUTPUT),
+            patch("src.orchestration.handlers.CrtShClient") as mock_crtsh,
+            patch("src.orchestration.handlers.ShodanClient") as mock_shodan,
+            patch("src.orchestration.handlers.ai_recon", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_crtsh.return_value.query = AsyncMock(return_value={"results": []})
+            mock_shodan.return_value.is_available.return_value = False
+            mock_ai.return_value = ReconOutput(assets=["a"], subdomains=[], ports=[80])
+            out = await run_recon(
+                "https://example.com",
+                {},
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+            )
+            assert isinstance(out, ReconOutput)
+            self._assert_all_calls_recon(mock_upload)
+            mock_ai.assert_called_once()
+            call_kw = mock_ai.call_args.kwargs
+            assert call_kw.get("raw_sink") is not None
+            assert call_kw["raw_sink"].phase == "recon"
+            assert call_kw["raw_sink"].tenant_id == tenant_id
+            assert call_kw["raw_sink"].scan_id == scan_id
+
+    @pytest.mark.asyncio
+    async def test_no_raw_upload_without_tenant_or_scan(self) -> None:
+        with (
+            patch(
+                "src.orchestration.raw_phase_artifacts.upload_raw_artifact",
+                return_value=None,
+            ) as mock_upload,
+            patch("src.orchestration.handlers.execute_command", return_value=_NMAP_OUTPUT),
+            patch("src.orchestration.handlers.CrtShClient") as mock_crtsh,
+            patch("src.orchestration.handlers.ShodanClient") as mock_shodan,
+            patch("src.orchestration.handlers.ai_recon", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_crtsh.return_value.query = AsyncMock(return_value={"results": []})
+            mock_shodan.return_value.is_available.return_value = False
+            mock_ai.return_value = ReconOutput(assets=["a"], subdomains=[], ports=[])
+            await run_recon("https://example.com", {}, tenant_id=None, scan_id="s1")
+            mock_upload.assert_not_called()
+            await run_recon("https://example.com", {}, tenant_id="t1", scan_id=None)
+            mock_upload.assert_not_called()
+            assert mock_ai.call_args_list[-1].kwargs.get("raw_sink") is None
+
+
+class TestRawPhaseArtifactsPostExploitation:
+    """RAW-003: run_post_exploitation uses phase ``post_exploitation`` when tenant + scan are set."""
+
+    @pytest.mark.asyncio
+    async def test_upload_raw_artifact_uses_post_exploitation_phase(self) -> None:
+        tenant_id = "00000000-0000-0000-0000-0000000000bb"
+        scan_id = "scan-raw-003"
+        llm_json = '{"lateral": [], "persistence": []}'
+        with (
+            patch(
+                "src.orchestration.raw_phase_artifacts.upload_raw_artifact",
+                return_value="tenant/scan/post_exploitation/raw/x.txt",
+            ) as mock_upload,
+            patch("src.orchestration.ai_prompts.is_llm_available", return_value=True),
+            patch("src.orchestration.ai_prompts.call_llm", new_callable=AsyncMock) as mock_llm,
+        ):
+            mock_llm.return_value = llm_json
+            out = await run_post_exploitation(
+                [{"id": "e1", "title": "x"}],
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+            )
+            assert isinstance(out, PostExploitationOutput)
+            assert mock_upload.call_count >= 1
+            for c in mock_upload.call_args_list:
+                assert _upload_raw_phase(c) == "post_exploitation"
+            mock_llm.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_no_raw_upload_without_tenant_or_scan(self) -> None:
+        with (
+            patch(
+                "src.orchestration.raw_phase_artifacts.upload_raw_artifact",
+                return_value=None,
+            ) as mock_upload,
+            patch("src.orchestration.handlers.ai_post_exploitation", new_callable=AsyncMock) as mock_ai,
+        ):
+            mock_ai.return_value = PostExploitationOutput(lateral=[], persistence=[])
+            await run_post_exploitation([{"id": "e1"}], tenant_id=None, scan_id="s1")
+            mock_upload.assert_not_called()
+            await run_post_exploitation([{"id": "e1"}], tenant_id="t1", scan_id=None)
+            mock_upload.assert_not_called()

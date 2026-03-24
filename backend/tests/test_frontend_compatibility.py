@@ -325,7 +325,11 @@ def test_download_content_disposition_headers(client: TestClient) -> None:
                 _mock_db_reports_download(report_id),
             ),
             patch("src.api.routers.reports.storage_exists", return_value=False),
-            patch("src.api.routers.reports.upload"),
+            patch("src.api.routers.reports.upload_report_artifact"),
+            patch(
+                "src.api.routers.reports.generate_pdf",
+                return_value=b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n",
+            ),
         ):
             r = client.get(f"/api/v1/reports/{report_id}/download?format={fmt}")
         assert r.status_code == 200, fmt

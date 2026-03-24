@@ -19,6 +19,8 @@ from src.reports.generators import (
 )
 from starlette.testclient import TestClient
 
+from tests.weasyprint_skips import WSP_REASON, WSP_SKIP
+
 
 # --- Generators (no mocks) ---
 class TestReportGenerators:
@@ -71,6 +73,10 @@ class TestReportGenerators:
         assert len(data["findings"]) == 2
         assert data["findings"][0]["severity"] == "critical"
         assert len(data["ai_conclusions"]) == 2
+        assert "ai_sections" in data
+        assert data["scan_artifacts"]["status"] == "skipped"
+        assert "active_web_scan" in data
+        assert data["active_web_scan"] == {}
 
     def test_generate_csv(self, sample_data: ReportData) -> None:
         content = generate_csv(sample_data)
@@ -89,6 +95,8 @@ class TestReportGenerators:
         assert "AI Conclusions" in text
         assert "Prioritize SQLi" in text
 
+    @pytest.mark.weasyprint_pdf
+    @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
     def test_generate_pdf(self, sample_data: ReportData) -> None:
         content = generate_pdf(sample_data)
         assert isinstance(content, bytes)
@@ -140,7 +148,9 @@ class TestReportGenerators:
         assert "Severity" in text
         assert "Title" in text
         lines = text.strip().split("\n")
-        assert len(lines) == 1
+        assert lines[0].startswith("Severity")
+        assert "# ai_sections" in text
+        assert "# scan_artifacts" in text
 
     def test_generate_html_empty_findings(self) -> None:
         """HTML renders with empty findings table."""
@@ -159,6 +169,8 @@ class TestReportGenerators:
         assert b"Findings" in content
         assert b"<tbody>" in content
 
+    @pytest.mark.weasyprint_pdf
+    @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
     def test_generate_pdf_empty_findings(self) -> None:
         """PDF generates with empty findings table."""
         data = ReportData(
@@ -210,6 +222,8 @@ class TestReportGenerators:
         assert len(parsed["findings"]) == 500
         assert parsed["findings"][0]["title"] == "Finding 0"
 
+    @pytest.mark.weasyprint_pdf
+    @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
     def test_generate_pdf_large_report(self) -> None:
         """PDF generates for large report (500 findings)."""
         findings = [
@@ -236,6 +250,22 @@ class TestReportGenerators:
         assert isinstance(content, bytes)
         assert content[:4] == b"%PDF"
         assert len(content) > 1000
+
+
+# --- RPT-002: Settings default for dedicated reports bucket ---
+class TestRpt002MinioReportsBucketSettings:
+    """MINIO_REPORTS_BUCKET / minio_reports_bucket defaults (RPT-002)."""
+
+    def test_minio_reports_bucket_field_exists(self) -> None:
+        from src.core.config import Settings
+
+        assert "minio_reports_bucket" in Settings.model_fields
+
+    def test_minio_reports_bucket_default_is_argus_reports(self) -> None:
+        from src.core.config import Settings
+
+        default = Settings.model_fields["minio_reports_bucket"].default
+        assert default == "argus-reports"
 
 
 # --- Storage (mocked boto3) ---
@@ -265,21 +295,142 @@ class TestReportStorage:
     def test_upload_returns_key(self, mock_s3_client) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
             import src.reports.storage as storage
+            from src.core.config import settings
+
             key = storage.upload(
                 "tenant-1",
                 "scan-1",
-                "report",
+                "reports",
                 "report.pdf",
                 b"fake-pdf-content",
                 "application/pdf",
             )
-            assert key == "tenant-1/scan-1/report/report.pdf"
+            assert key == "tenant-1/scan-1/reports/report.pdf"
             mock_s3_client.put_object.assert_called_once()
+            _call = mock_s3_client.put_object.call_args
+            assert _call.kwargs.get("Bucket") == settings.minio_reports_bucket
+
+    def test_upload_report_artifact_returns_five_segment_key(self, mock_s3_client) -> None:
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import upload_report_artifact
+
+            mock_s3_client.put_object.reset_mock()
+            key = upload_report_artifact(
+                "tenant-1",
+                "scan-1",
+                "valhalla",
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "pdf",
+                b"x",
+                content_type="application/pdf",
+            )
+            assert key == "tenant-1/scan-1/reports/valhalla/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf"
+            mock_s3_client.put_object.assert_called_once()
+            assert (
+                mock_s3_client.put_object.call_args.kwargs.get("Bucket")
+                == settings.minio_reports_bucket
+            )
+
+    @pytest.mark.parametrize(
+        "object_type",
+        ["raw", "screenshots", "evidence", "attachments"],
+    )
+    def test_upload_uses_minio_bucket_for_non_reports_object_type(
+        self, mock_s3_client, object_type: str
+    ) -> None:
+        """RPT-002: only object_type ``reports`` targets minio_reports_bucket."""
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import upload as s3_upload
+
+            mock_s3_client.put_object.reset_mock()
+            key = s3_upload(
+                "tenant-1",
+                "scan-1",
+                object_type,
+                "artifact.bin",
+                b"x",
+                "application/octet-stream",
+            )
+            assert key == f"tenant-1/scan-1/{object_type}/artifact.bin"
+            mock_s3_client.put_object.assert_called_once()
+            assert (
+                mock_s3_client.put_object.call_args.kwargs.get("Bucket")
+                == settings.minio_bucket
+            )
+
+    def test_download_by_key_uses_reports_bucket_when_path_segment_reports(
+        self, mock_s3_client
+    ) -> None:
+        """Full key with .../reports/... selects minio_reports_bucket."""
+        body = MagicMock()
+        body.read.return_value = b"pdf-bytes"
+        mock_s3_client.get_object = MagicMock(return_value={"Body": body})
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import download_by_key
+
+            out = download_by_key("tenant-1/scan-1/reports/export.pdf")
+            assert out == b"pdf-bytes"
+            mock_s3_client.get_object.assert_called_once_with(
+                Bucket=settings.minio_reports_bucket,
+                Key="tenant-1/scan-1/reports/export.pdf",
+            )
+
+    def test_download_by_key_five_segment_reports_key_uses_reports_bucket(
+        self, mock_s3_client
+    ) -> None:
+        body = MagicMock()
+        body.read.return_value = b"tier-pdf"
+        mock_s3_client.get_object = MagicMock(return_value={"Body": body})
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import download_by_key
+
+            key = "tenant-1/scan-1/reports/midgard/report-uuid.pdf"
+            out = download_by_key(key)
+            assert out == b"tier-pdf"
+            mock_s3_client.get_object.assert_called_once_with(
+                Bucket=settings.minio_reports_bucket,
+                Key=key,
+            )
+
+    def test_download_by_key_uses_minio_bucket_for_raw_segment(
+        self, mock_s3_client
+    ) -> None:
+        body = MagicMock()
+        body.read.return_value = b"raw-bytes"
+        mock_s3_client.get_object = MagicMock(return_value={"Body": body})
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import download_by_key
+
+            out = download_by_key("tenant-1/scan-1/raw/output.txt")
+            assert out == b"raw-bytes"
+            mock_s3_client.get_object.assert_called_once_with(
+                Bucket=settings.minio_bucket,
+                Key="tenant-1/scan-1/raw/output.txt",
+            )
+
+    def test_exists_non_reports_uses_minio_bucket(self, mock_s3_client) -> None:
+        mock_s3_client.head_object = MagicMock(return_value={})
+        with patch("src.storage.s3._get_client", return_value=mock_s3_client):
+            from src.core.config import settings
+            from src.storage.s3 import exists as s3_exists
+
+            ok = s3_exists("t1", "s1", "evidence", "shot.png")
+            assert ok is True
+            mock_s3_client.head_object.assert_called_once_with(
+                Bucket=settings.minio_bucket,
+                Key="t1/s1/evidence/shot.png",
+            )
 
     def test_download_returns_none_when_not_found(self, mock_s3_client) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
             import src.reports.storage as storage
-            data = storage.download("tenant-1", "scan-1", "report", "report.pdf")
+
+            data = storage.download("tenant-1", "scan-1", "reports", "report.pdf")
             assert data is None
 
     def test_exists_returns_false_when_404(self, mock_s3_client) -> None:
@@ -291,7 +442,8 @@ class TestReportStorage:
         mock_s3_client.head_object = MagicMock(side_effect=err)
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
             import src.reports.storage as storage
-            ok = storage.exists("tenant-1", "scan-1", "report", "report.pdf")
+
+            ok = storage.exists("tenant-1", "scan-1", "reports", "report.pdf")
             assert ok is False
 
 
@@ -423,11 +575,11 @@ class TestReportsRouter:
         with (
             patch("src.api.routers.reports.async_session_factory", mock_db_reports),
             patch("src.api.routers.reports.storage_exists", return_value=False),
-            patch("src.api.routers.reports.upload"),
+            patch("src.api.routers.reports.upload_report_artifact"),
         ):
             resp = client.get("/api/v1/reports/rep-001/download?format=json")
         assert resp.status_code == 200, f"Got {resp.status_code}: {resp.text}"
-        assert resp.headers["content-type"] == "application/json"
+        assert resp.headers["content-type"].startswith("application/json")
         data = json.loads(resp.content.decode("utf-8"))
         assert data["report_id"] == "rep-001"
         assert data["target"] == "https://target.example.com"
@@ -458,11 +610,11 @@ class TestReportsRouter:
             patch("src.api.routers.reports.async_session_factory", mock_db_reports),
             patch("src.api.routers.reports.storage_exists", return_value=True),
             patch("src.api.routers.reports.storage_download", return_value=None),
-            patch("src.api.routers.reports.upload"),
+            patch("src.api.routers.reports.upload_report_artifact"),
         ):
             resp = client.get("/api/v1/reports/rep-001/download?format=json")
         assert resp.status_code == 200
-        assert resp.headers["content-type"] == "application/json"
+        assert resp.headers["content-type"].startswith("application/json")
         data = json.loads(resp.content.decode("utf-8"))
         assert data["report_id"] == "rep-001"
         assert data["target"] == "https://target.example.com"
@@ -523,7 +675,7 @@ class TestReportsRouter:
         with (
             patch("src.api.routers.reports.async_session_factory", _factory),
             patch("src.api.routers.reports.storage_exists", return_value=False),
-            patch("src.api.routers.reports.upload"),
+            patch("src.api.routers.reports.upload_report_artifact"),
         ):
             resp = client.get("/api/v1/reports/rep-empty/download?format=json")
         assert resp.status_code == 200

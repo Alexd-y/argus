@@ -30,7 +30,7 @@ async def ready() -> ReadinessResponse:
         pass
 
     redis_ok = redis_ping()
-    storage_ok = ensure_bucket()
+    storage_ok = ensure_bucket() and ensure_bucket(settings.minio_reports_bucket)
 
     status = "ok" if (db_ok and redis_ok and storage_ok) else "degraded"
     return ReadinessResponse(status=status, database=db_ok, redis=redis_ok, storage=storage_ok)

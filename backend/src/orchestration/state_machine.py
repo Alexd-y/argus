@@ -1,19 +1,31 @@
 """ScanStateMachine — transitions between phases, DB recording."""
 
+import asyncio
 import logging
 import time
 import uuid
 
-from sqlalchemy import cast, select, String, update
+from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.schemas import ReportSummary
+from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS, ReportSummary
 from src.core.observability import (
     record_phase_duration,
     record_tool_run,
     trace_phase,
 )
-from src.db.models import Finding, PhaseInput, PhaseOutput, Policy, Report, Scan, ScanEvent, ScanStep, ScanTimeline
+from src.db.models import (
+    Finding,
+    PhaseInput,
+    PhaseOutput,
+    Policy,
+    Report,
+    Scan,
+    ScanEvent,
+    ScanStep,
+    ScanTimeline,
+)
+from src.orchestration.aggressive_exploit_tools import maybe_run_aggressive_exploit_tools
 from src.orchestration.handlers import (
     run_exploit_attempt,
     run_exploit_verify,
@@ -24,10 +36,10 @@ from src.orchestration.handlers import (
     run_vuln_analysis,
 )
 from src.orchestration.phases import (
-    ExploitationOutput,
-    ExploitationSubPhase,
     PHASE_ORDER,
     PHASE_PROGRESS,
+    ExploitationOutput,
+    ExploitationSubPhase,
     PostExploitationOutput,
     ReconOutput,
     ReportingOutput,
@@ -35,12 +47,41 @@ from src.orchestration.phases import (
     ThreatModelOutput,
     VulnAnalysisOutput,
 )
+from src.orchestration.raw_phase_artifacts import RawPhaseSink
+from src.reports.bundle_enqueue import (
+    enqueue_generate_all_bundle,
+    schedule_generate_all_reports_task_safe,
+)
 
 logger = logging.getLogger(__name__)
 
 
+async def _upload_raw_phase_snapshot(
+    tenant_id: str,
+    scan_id: str,
+    phase_key: str,
+    artifact_type: str,
+    payload: dict,
+) -> None:
+    """Best-effort MinIO raw artifact; failures are logged inside upload_raw_artifact."""
+    sink = RawPhaseSink(tenant_id, scan_id, phase_key)
+    await asyncio.to_thread(sink.upload_json, artifact_type, payload)
+
+
 class ExploitationApprovalRequiredError(Exception):
     """Raised when exploitation phase requires approval and scan is not approved."""
+
+
+def _scan_approval_flags_from_options(options: dict | None) -> dict[str, bool] | None:
+    """Parse ``scan_approval_flags`` from scan options (WEB-006); None if absent or invalid."""
+    if not options or not isinstance(options, dict):
+        return None
+    raw = options.get("scan_approval_flags")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return {str(k).strip().lower(): bool(v) for k, v in raw.items()}
 
 
 def _phase_to_progress(phase: ScanPhase) -> int:
@@ -342,6 +383,18 @@ async def run_scan_state_machine(
         else:
             input_data = {}
         await _persist_phase_input(session, tenant_id, scan_id, phase_str, input_data)
+        if phase == ScanPhase.RECON:
+            await _upload_raw_phase_snapshot(
+                tenant_id, scan_id, "recon", "phase_input", input_data
+            )
+        elif phase == ScanPhase.VULN_ANALYSIS:
+            await _upload_raw_phase_snapshot(
+                tenant_id, scan_id, "vuln_analysis", "phase_input", input_data
+            )
+        elif phase == ScanPhase.POST_EXPLOITATION:
+            await _upload_raw_phase_snapshot(
+                tenant_id, scan_id, "post_exploitation", "phase_input", input_data
+            )
 
         # Policy gate: exploitation requires approval
         if phase == ScanPhase.EXPLOITATION:
@@ -402,7 +455,9 @@ async def run_scan_state_machine(
             with trace_phase(scan_id, phase_str):
                 if phase == ScanPhase.RECON:
                     record_tool_run("recon")
-                    recon_out = await run_recon(target, options)
+                    recon_out = await run_recon(
+                        target, options, tenant_id=tenant_id, scan_id=scan_id
+                    )
                     output_data = recon_out.model_dump()
                 elif phase == ScanPhase.THREAT_MODELING:
                     record_tool_run("threat_modeling")
@@ -413,10 +468,19 @@ async def run_scan_state_machine(
                     record_tool_run("vuln_analysis")
                     tm = threat_out.threat_model if threat_out else {}
                     assets = recon_out.assets if recon_out else []
-                    vuln_out = await run_vuln_analysis(tm, assets)
+                    vuln_out = await run_vuln_analysis(
+                        tm, assets, target=target, tenant_id=tenant_id, scan_id=scan_id
+                    )
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:
                     findings = vuln_out.findings if vuln_out else []
+                    maybe_run_aggressive_exploit_tools(
+                        findings,
+                        tenant_id,
+                        scan_id,
+                        target,
+                        scan_approval_flags=_scan_approval_flags_from_options(options),
+                    )
                     await _record_event(
                         session,
                         tenant_id,
@@ -466,7 +530,9 @@ async def run_scan_state_machine(
                     output_data = exploit_out.model_dump()
                 elif phase == ScanPhase.POST_EXPLOITATION:
                     exploits = exploit_out.exploits if exploit_out else []
-                    post_out = await run_post_exploitation(exploits)
+                    post_out = await run_post_exploitation(
+                        exploits, tenant_id=tenant_id, scan_id=scan_id
+                    )
                     output_data = post_out.model_dump()
                 elif phase == ScanPhase.REPORTING:
                     record_tool_run("reporting")
@@ -508,6 +574,21 @@ async def run_scan_state_machine(
         await _persist_phase_output(
             session, tenant_id, scan_id, phase_str, output_data
         )
+        if phase in (ScanPhase.RECON, ScanPhase.VULN_ANALYSIS, ScanPhase.POST_EXPLOITATION):
+            await _upload_raw_phase_snapshot(
+                tenant_id, scan_id, phase_str, "phase_output_final", output_data
+            )
+            await _upload_raw_phase_snapshot(
+                tenant_id,
+                scan_id,
+                phase_str,
+                "phase_execution_summary",
+                {
+                    "phase": phase_str,
+                    "order_index": order_index,
+                    "duration_seconds": round(phase_duration, 2),
+                },
+            )
         await _record_timeline_entry(
             session,
             tenant_id,
@@ -568,4 +649,14 @@ async def run_scan_state_machine(
         100,
         message="Scan completed",
     )
+    post_scan_bundle = await enqueue_generate_all_bundle(
+        session,
+        tenant_id,
+        scan_id,
+        list(DEFAULT_GENERATE_ALL_FORMATS),
+        set_post_scan_idempotency_flag=True,
+    )
     await session.commit()
+    if post_scan_bundle:
+        b_id, r_ids = post_scan_bundle
+        schedule_generate_all_reports_task_safe(tenant_id, scan_id, b_id, r_ids)

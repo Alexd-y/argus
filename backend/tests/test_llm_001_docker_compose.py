@@ -1,6 +1,6 @@
 """LLM-001: Verify docker-compose.yml contains all required LLM env vars.
 
-Ensures backend and celery-worker services have DEEPSEEK_API_KEY, GOOGLE_API_KEY,
+Ensures backend and worker services have DEEPSEEK_API_KEY, GOOGLE_API_KEY,
 KIMI_API_KEY, PERPLEXITY_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY.
 """
 
@@ -22,7 +22,7 @@ REQUIRED_LLM_ENV_VARS = [
     "PERPLEXITY_API_KEY",
 ]
 
-SERVICES_WITH_LLM = ["backend", "celery-worker"]
+SERVICES_WITH_LLM = ["backend", "worker"]
 
 
 @pytest.fixture(scope="module")
@@ -50,7 +50,7 @@ class TestLLM001DockerComposeLLMKeys:
     def test_service_has_environment_section(
         self, compose_config: dict, service: str
     ) -> None:
-        """Backend and celery-worker have environment section."""
+        """Backend and worker have environment section."""
         services = compose_config.get("services", {})
         assert service in services, f"Service '{service}' must be defined"
         env = services[service].get("environment")
@@ -62,7 +62,7 @@ class TestLLM001DockerComposeLLMKeys:
     def test_service_has_llm_env_var(
         self, compose_config: dict, service: str, key: str
     ) -> None:
-        """Each LLM env var is present in backend and celery-worker."""
+        """Each LLM env var is present in backend and worker."""
         services = compose_config.get("services", {})
         env = services.get(service, {}).get("environment", {})
         assert key in env, (

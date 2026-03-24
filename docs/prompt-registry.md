@@ -35,6 +35,19 @@ src/orchestration/
 
 ## 3. Промпты по фазам
 
+### 3.0a — `active_scan_planning` (VA / sandbox)
+
+Используется **не** как ключ в `PHASE_PROMPTS`, а напрямую в `plan_active_scan_with_ai` (`src/recon/vulnerability_analysis/active_scan_planner.py`) при `VA_AI_PLAN_ENABLED=true`.
+
+| Константа | Назначение |
+|-----------|------------|
+| `ACTIVE_SCAN_PLANNING_SYSTEM` | Системное сообщение: только JSON-массив объектов `{tool, args}`; allowlist инструментов (dalfox, xsstrike, ffuf, sqlmap, nuclei, gobuster, wfuzz, commix). |
+| `ACTIVE_SCAN_PLANNING_USER_TEMPLATE` | User-часть с плейсхолдером `{bundle_summary_json}` — сжатый контекст бандла (см. `build_active_scan_bundle_summary`). |
+| `build_active_scan_planning_user_prompt(summary)` | Сборка user-prompt с санитизацией JSON. |
+| `ACTIVE_SCAN_PLANNING_JSON_ARRAY_FIXER_USER` | Fixer, если ответ не распарсился как JSON-массив. |
+
+Запрос/ответ LLM дополнительно сохраняются в MinIO (`ai_active_scan_planning_request` / `ai_active_scan_planning_response`, фаза `vuln_analysis`).
+
 ### 3.1 Базовый системный промпт
 
 ```

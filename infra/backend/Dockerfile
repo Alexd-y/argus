@@ -26,9 +26,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Runtime deps (nmap, dnsutils, etc. for recon)
+# Runtime deps: recon tools + WeasyPrint (RPT-009 PDF)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap dnsutils whois curl net-tools \
+    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+    libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy application

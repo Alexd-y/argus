@@ -67,6 +67,15 @@ class VulnerabilityAnalysisAiTask(StrEnum):
     REMEDIATION_GENERATION = "remediation_generation"
     STAGE3_CONFIRMATION_SUMMARY = "stage3_confirmation_summary"
     EXPLOITATION_CANDIDATE_GENERATION = "exploitation_candidate_generation"
+    # OWASP-006: post active-scan tool interpretation (enum values appended for backward compatibility)
+    ACTIVE_SCAN_PLANNING = "active_scan_planning"
+    XSS_ANALYSIS = "xss_analysis"
+    SQLI_ANALYSIS = "sqli_analysis"
+    # OWASP2-006: Nuclei JSONL summaries — triage false positives, enrich descriptions
+    NUCLEI_ANALYSIS = "nuclei_analysis"
+    # WEB-003: web-specific active scan interpretation
+    WEB_SCAN_PLANNING = "web_scan_planning"
+    GENERIC_WEB_FINDING = "generic_web_finding"
 
 
 class ThreatModelingAiTask(StrEnum):

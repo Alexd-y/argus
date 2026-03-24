@@ -74,7 +74,8 @@ services:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: argus-minio
     env_file: .env
-    command: server /data
+    # Console on fixed port so host mapping 9001:9001 (override/dev) works
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-argus}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-argussecret}
@@ -90,16 +91,21 @@ services:
       retries: 5
       start_period: 10s
 
+  # One-shot job: mc creates S3 buckets after MinIO is healthy. The container EXITS 0 when done —
+  # in Docker Desktop this looks "stopped"; that is expected (not a crash). Re-run if needed:
+  #   docker compose -f infra/docker-compose.yml run --rm minio-init
   minio-init:
     image: minio/mc:latest
     container_name: argus-minio-init
     env_file: .env
+    restart: "no"
     entrypoint: >
       /bin/sh -c "
         until mc alias set argus http://minio:9000 $${MINIO_ACCESS_KEY:-argus} $${MINIO_SECRET_KEY:-argussecret} 2>/dev/null; do
           echo 'Waiting for MinIO...' && sleep 2;
         done;
         mc mb --ignore-existing argus/$${MINIO_BUCKET:-argus};
+        mc mb --ignore-existing argus/$${MINIO_REPORTS_BUCKET:-argus-reports};
         mc mb --ignore-existing argus/stage1-artifacts;
         mc mb --ignore-existing argus/stage2-artifacts;
         mc mb --ignore-existing argus/stage3-artifacts;
@@ -128,10 +134,11 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-prod-32chars}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
-      SANDBOX_ENABLED: "false"
+      SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -173,9 +180,10 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
-      SANDBOX_ENABLED: "false"
+      SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -253,14 +261,23 @@ services:
       retries: 5
       start_period: 5s
 
+  # Cloudflare Tunnel (remotely managed). Start only with: docker compose --profile tunnel up
+  #
+  # If CLOUDFLARE_TUNNEL_TOKEN is empty/unset and you enable this profile, the official cloudflared
+  # image would run `tunnel run` without credentials and exit with:
+  #   "cloudflared tunnel run" requires the ID or name of the tunnel
+  # This service uses a thin Alpine wrapper so we validate the token first and call:
+  #   cloudflared tunnel --no-autoupdate run --token <JWT>
+  # Compose maps infra/.env CLOUDFLARE_TUNNEL_TOKEN → TUNNEL_TOKEN inside the container (compatible with --token).
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    build:
+      context: ./cloudflared
+      dockerfile: Dockerfile
+    image: argus-cloudflared:latest
     container_name: argus-cloudflared
     env_file: .env
-    command: ["tunnel", "--no-autoupdate", "run"]
     environment:
-      # cloudflared reads token from TUNNEL_TOKEN (not argv); .env may use CLOUDFLARE_TUNNEL_TOKEN
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     networks:
       - frontend
     depends_on:

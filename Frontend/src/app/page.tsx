@@ -325,8 +325,8 @@ function CompleteRedirect({
       setRedirectCountdown((prev) => {
         if (prev <= 1) {
           const normalizedTarget = normalizeTarget(target, protocol);
-          const targetUrl = normalizedTarget.replace(/^https?:\/\//, "").split("/")[0];
-          router.push(`/report?target=${encodeURIComponent(targetUrl)}`);
+          // Must match Scan.target_url / Report.target in API (full URL), not host-only.
+          router.push(`/report?target=${encodeURIComponent(normalizedTarget)}`);
           return 0;
         }
         return prev - 1;
@@ -624,10 +624,10 @@ export default function Home() {
                           <p className="text-neutral-400">
                             Report will also be available at:{" "}
                             <a
-                              href={`/report?target=${encodeURIComponent(normalizeTarget(target, protocol).replace(/^https?:\/\//, "").split("/")[0])}`}
+                              href={`/report?target=${encodeURIComponent(normalizeTarget(target, protocol))}`}
                               className="text-[#A655F7] hover:text-[#b875f8] underline break-all"
                             >
-                              {window.location.origin}/report?target={normalizeTarget(target, protocol).replace(/^https?:\/\//, "").split("/")[0]}
+                              {`${window.location.origin}/report?target=${encodeURIComponent(normalizeTarget(target, protocol))}`}
                             </a>
                           </p>
                         </div>
@@ -696,8 +696,7 @@ export default function Home() {
                   protocol={protocol}
                   onViewNow={() => {
                     const normalizedTarget = normalizeTarget(target, protocol);
-                    const targetUrl = normalizedTarget.replace(/^https?:\/\//, "").split("/")[0];
-                    router.push(`/report?target=${encodeURIComponent(targetUrl)}`);
+                    router.push(`/report?target=${encodeURIComponent(normalizedTarget)}`);
                   }}
                 />
               )}

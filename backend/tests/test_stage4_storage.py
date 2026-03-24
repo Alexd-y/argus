@@ -6,7 +6,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
+from src.recon.stage_object_download import StageObjectFetchError
 from src.recon.stage4_storage import (
     STAGE4_ROOT_FILES,
     _build_object_key,
@@ -169,9 +171,11 @@ class TestUploadStage4Artifacts:
 
 class TestDownloadStage4Artifact:
     @patch("src.recon.stage4_storage._get_client")
-    def test_no_client_returns_none(self, mock_client) -> None:
+    def test_no_client_raises_storage_error(self, mock_client) -> None:
         mock_client.return_value = None
-        assert download_stage4_artifact("scan-1", "stage4_results.json") is None
+        with pytest.raises(StageObjectFetchError) as ei:
+            download_stage4_artifact("scan-1", "stage4_results.json")
+        assert ei.value.code == "storage_error"
 
     @patch("src.recon.stage4_storage._get_client")
     def test_successful_download(self, mock_client) -> None:
@@ -185,12 +189,25 @@ class TestDownloadStage4Artifact:
         assert data == b'{"results": []}'
 
     @patch("src.recon.stage4_storage._get_client")
-    def test_download_failure_returns_none(self, mock_client) -> None:
+    def test_object_missing_returns_none(self, mock_client) -> None:
         client = MagicMock()
-        client.get_object.side_effect = Exception("Not found")
+        client.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey", "Message": "not found"}},
+            "GetObject",
+        )
         mock_client.return_value = client
 
         assert download_stage4_artifact("scan-1", "nonexistent.json") is None
+
+    @patch("src.recon.stage4_storage._get_client")
+    def test_download_other_error_raises_fetch_failed(self, mock_client) -> None:
+        client = MagicMock()
+        client.get_object.side_effect = RuntimeError("timeout")
+        mock_client.return_value = client
+
+        with pytest.raises(StageObjectFetchError) as ei:
+            download_stage4_artifact("scan-1", "nonexistent.json")
+        assert ei.value.code == "fetch_failed"
 
     @patch("src.recon.stage4_storage._get_client")
     def test_download_path_traversal_rejected(self, mock_client) -> None:

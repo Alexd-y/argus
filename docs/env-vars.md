@@ -41,7 +41,8 @@
 | `MINIO_ENDPOINT` | — | S3-compatible storage |
 | `MINIO_ACCESS_KEY` | — | MinIO access key |
 | `MINIO_SECRET_KEY` | — | MinIO secret key |
-| `MINIO_BUCKET` | — | Bucket для отчётов и артефактов |
+| `MINIO_BUCKET` | `argus` | Основной bucket (raw, screenshots, evidence, attachments) |
+| `MINIO_REPORTS_BUCKET` | `argus-reports` | Bucket для файлов отчётов (PDF/HTML/JSON/CSV), presigned URL |
 
 ### 3.2 LLM Providers (Phase 6)
 

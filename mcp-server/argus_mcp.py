@@ -21,6 +21,7 @@ from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
 from tools.kali_registry import KALI_TOOL_REGISTRY, ToolDefinition
+from tools.va_sandbox_tools import build_enqueue_payload
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -109,6 +110,14 @@ def _get_tenant_headers(tenant_id: Optional[str]) -> dict[str, str]:
     tid = tenant_id or os.environ.get("ARGUS_TENANT_ID")
     if tid:
         return {"X-Tenant-ID": tid}
+    return {}
+
+
+def _get_admin_headers() -> dict[str, str]:
+    """Internal VA enqueue: X-Admin-Key when ARGUS_ADMIN_KEY is set (matches backend require_admin)."""
+    key = (os.environ.get("ARGUS_ADMIN_KEY") or "").strip()
+    if key:
+        return {"X-Admin-Key": key}
     return {}
 
 
@@ -271,6 +280,32 @@ class ArgusClient:
         except requests.exceptions.RequestException as e:
             logger.error("execute failed: %s", e)
             return {"error": str(e), "success": False, "stdout": "", "stderr": str(e), "return_code": -1}
+
+    def enqueue_va_sandbox_tool(
+        self,
+        tool_name: str,
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        args_json: str = "",
+    ) -> dict[str, Any]:
+        """
+        Queue VA sandbox scanner via backend Celery (mcp_runner in worker, MinIO sink).
+        Uses POST /api/v1/internal/va-tools/enqueue — requires ARGUS_ADMIN_KEY when backend enforces admin.
+        """
+        payload, err = build_enqueue_payload(tool_name, tenant_id, scan_id, target, args_json)
+        if err or not payload:
+            return {"success": False, "error": err or "invalid_payload", "task_id": ""}
+        url = f"{self.server_url}/api/v1/internal/va-tools/enqueue"
+        try:
+            hdrs = {**self._headers(), **_get_admin_headers()}
+            r = self.session.post(url, json=payload, headers=hdrs, timeout=60)
+            r.raise_for_status()
+            data = r.json()
+            return {"success": True, **data}
+        except requests.exceptions.RequestException as e:
+            logger.error("enqueue_va_sandbox_tool failed: %s", e)
+            return {"success": False, "error": str(e), "task_id": ""}
 
 
 def _normalize_payload_for_endpoint(endpoint: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -437,8 +472,29 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         return client.list_reports(target=target)
 
     _register_kali_tools(mcp, client)
+    _register_va_sandbox_enqueue_tools(mcp, client)
 
     return mcp
+
+
+def _register_va_sandbox_enqueue_tools(mcp: FastMCP, client: ArgusClient) -> None:
+    """VA-005 — MCP tools that enqueue backend Celery VA runs (allowlisted tools only; no shell)."""
+
+    @mcp.tool()
+    def va_enqueue_sandbox_scanner(
+        tool_name: str,
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        args_json: str = "",
+    ) -> dict[str, Any]:
+        """
+        Enqueue a sandbox VA scan (dalfox, xsstrike, ffuf, sqlmap, nuclei) as a Celery task.
+        Execution uses backend mcp_runner + policy; stdout/stderr go to MinIO under vuln_analysis.
+        Optional args_json: JSON array of CLI strings (must keep safe tool prefix). Empty = server defaults.
+        Set ARGUS_ADMIN_KEY if the backend requires X-Admin-Key.
+        """
+        return client.enqueue_va_sandbox_tool(tool_name, tenant_id, scan_id, target, args_json)
 
 
 def _register_kali_tools(mcp: FastMCP, client: ArgusClient) -> None:

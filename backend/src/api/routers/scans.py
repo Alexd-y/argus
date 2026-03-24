@@ -4,32 +4,40 @@ import asyncio
 import json
 import time
 import uuid
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import cast, select, String
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
+from sqlalchemy import String, cast, select
 from sse_starlette.sse import EventSourceResponse
-
-SSE_POLL_INTERVAL_SEC = 1.5
-SSE_MAX_WAIT_SEC = 300
 
 from src.api.schemas import (
     Finding,
+    ReportGenerateAcceptedResponse,
+    ReportGenerateAllAcceptedResponse,
+    ReportGenerateAllRequest,
+    ReportGenerateRequest,
+    ScanArtifactItem,
     ScanCreateRequest,
     ScanCreateResponse,
     ScanDetailResponse,
 )
-from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
+from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
-from src.tasks import scan_phase_task
+from src.reports.bundle_enqueue import enqueue_generate_all_bundle
+from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
+from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
+
+SSE_POLL_INTERVAL_SEC = 1.5
+# Max wall time for GET /scans/{id}/events SSE before emitting "Event stream timeout" (30 minutes).
+SSE_MAX_WAIT_SEC = 30 * 60
 
 router = APIRouter(prefix="/scans", tags=["scans"])
-
-DEFAULT_TENANT_ID = settings.default_tenant_id
 
 
 @router.post("", response_model=ScanCreateResponse, status_code=201)
@@ -150,6 +158,174 @@ async def get_scan_findings(
         )
         findings = list(result.scalars().all())
         return [_finding_to_schema(f) for f in findings]
+
+
+@router.get("/{scan_id}/artifacts", response_model=list[ScanArtifactItem])
+async def get_scan_artifacts(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+    phase: str | None = Query(
+        default=None,
+        description="Limit to a phase folder (recon, threat_modeling, vuln_analysis, exploitation, post_exploitation)",
+    ),
+    raw_only: bool = Query(False, alias="raw"),
+    presigned: bool = Query(False, description="Include presigned GET URL per object"),
+) -> list[ScanArtifactItem]:
+    """List MinIO/S3 objects for this scan. Tenant-scoped prefix; same auth as GET /scans/{id}."""
+    if phase is not None and phase not in RAW_ARTIFACT_PHASES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid phase",
+        )
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+    try:
+        rows = list_scan_artifacts(
+            tenant_id,
+            scan_id,
+            phase=phase,
+            raw_only=raw_only,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid phase",
+        ) from None
+
+    if rows is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Storage unavailable",
+        )
+
+    out: list[ScanArtifactItem] = []
+    for row in rows:
+        url = None
+        if presigned:
+            url = get_presigned_url_by_key(row["key"])
+        out.append(
+            ScanArtifactItem(
+                key=row["key"],
+                size=row["size"],
+                last_modified=format_created_at_iso_z(row["last_modified"]),
+                content_type=row["content_type"],
+                download_url=url,
+            )
+        )
+    return out
+
+
+@router.post(
+    "/{scan_id}/reports/generate",
+    response_model=ReportGenerateAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_scan_report(
+    scan_id: str,
+    req: ReportGenerateRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ReportGenerateAcceptedResponse:
+    """Queue report generation for a scan — tenant-scoped (IDOR-safe). RPT-007."""
+    report_id = str(uuid.uuid4())
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        row = ReportModel(
+            id=report_id,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            target=scan.target_url,
+            tier=req.type,
+            generation_status="pending",
+            requested_formats=list(req.formats),
+            summary={},
+            technologies=None,
+        )
+        session.add(row)
+        await session.commit()
+
+    async_result = generate_report_task.delay(
+        report_id,
+        tenant_id,
+        scan_id,
+        list(req.formats),
+    )
+    task_id = getattr(async_result, "id", None)
+    return ReportGenerateAcceptedResponse(report_id=report_id, task_id=task_id)
+
+
+@router.post(
+    "/{scan_id}/reports/generate-all",
+    response_model=ReportGenerateAllAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def generate_all_scan_reports(
+    scan_id: str,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ReportGenerateAllAcceptedResponse:
+    """Queue generation for all tiers and selected formats (default: four formats × three tiers = 12 reports)."""
+    raw: dict[str, Any] = {}
+    try:
+        body = await request.body()
+        if body:
+            parsed = json.loads(body)
+            if not isinstance(parsed, dict):
+                raise HTTPException(status_code=422, detail="Body must be a JSON object")
+            raw = parsed
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Invalid JSON body") from None
+
+    try:
+        req = ReportGenerateAllRequest.model_validate(raw)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=exc.errors(include_url=False, include_context=False),
+        ) from None
+    formats = req.resolved_formats()
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        bundle = await enqueue_generate_all_bundle(
+            session,
+            tenant_id,
+            scan_id,
+            formats,
+            set_post_scan_idempotency_flag=False,
+        )
+        if not bundle:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        bundle_id, report_ids = bundle
+        await session.commit()
+
+    async_result = generate_all_reports_task.delay(tenant_id, scan_id, bundle_id, report_ids)
+    task_id = getattr(async_result, "id", None)
+    return ReportGenerateAllAcceptedResponse(
+        bundle_id=bundle_id,
+        report_ids=report_ids,
+        task_id=task_id,
+        count=len(report_ids),
+    )
 
 
 # SSE event types per api-contracts/sse-polling.md

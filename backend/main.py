@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
-from src.api.routers import admin, auth, health, metrics, reports, scans, tools
+from src.api.routers import admin, auth, health, internal_va, metrics, reports, scans, tools
 from src.api.routers.recon import recon_router
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
@@ -57,6 +57,7 @@ app.include_router(scans.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(internal_va.router, prefix="/api/v1")
 app.include_router(recon_router, prefix="/api/v1")
 
 

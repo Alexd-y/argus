@@ -197,6 +197,12 @@ class TestReportDetailResponse:
             summary=ReportSummary(),
             created_at=None,
             scan_id=None,
+            generation_status="pending",
+            tier="asgard",
+            requested_formats=["pdf", "html"],
         )
         assert r.created_at is None
         assert r.scan_id is None
+        assert r.generation_status == "pending"
+        assert r.tier == "asgard"
+        assert r.requested_formats == ["pdf", "html"]

@@ -1,0 +1,14 @@
+<section class="ai-sections panel" id="ai-sections">
+    <h2>AI Conclusions</h2>
+    {% set active = tier %}
+    {% if jinja[active] is defined %}
+        {% for key, text in jinja[active].slots.items() %}
+            {% if text %}
+                <section class="ai-slot" data-section="{{ key }}">
+                    <h3>{{ key | replace("_", " ") | title }}</h3>
+                    <div class="ai-slot-body">{{ text }}</div>
+                </section>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</section>

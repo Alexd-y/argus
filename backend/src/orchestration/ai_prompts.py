@@ -1,5 +1,6 @@
 """AI prompt handlers — LLM is mandatory, no mock fallbacks."""
 
+import asyncio
 import json
 import logging
 import re
@@ -31,6 +32,7 @@ from src.orchestration.prompt_registry import (
     get_prompt,
     get_schema,
 )
+from src.orchestration.raw_phase_artifacts import RawPhaseSink
 
 logger = logging.getLogger(__name__)
 
@@ -55,19 +57,34 @@ async def _call_llm_with_json_retry(
     phase: str,
     user_prompt: str,
     system_prompt: str,
+    *,
+    raw_sink: RawPhaseSink | None = None,
+    raw_label_prefix: str = "llm",
 ) -> dict[str, Any] | None:
     """
     Call LLM, parse JSON. On parse failure, retry once with fixer prompt.
     Returns parsed dict or None.
     """
     response = await call_llm(user_prompt, system_prompt=system_prompt)
+    if raw_sink is not None and response:
+        await asyncio.to_thread(
+            raw_sink.upload_text,
+            f"{raw_label_prefix}_response_initial",
+            response,
+        )
     data = _parse_llm_json(response)
     if data is not None:
         return data
 
-    for _ in range(MAX_JSON_RETRIES):
+    for attempt in range(MAX_JSON_RETRIES):
         fixer_system, fixer_user = get_fixer_prompt(response, get_schema(phase))
         response = await call_llm(fixer_user, system_prompt=fixer_system)
+        if raw_sink is not None and response:
+            await asyncio.to_thread(
+                raw_sink.upload_text,
+                f"{raw_label_prefix}_response_fixer_{attempt + 1}",
+                response,
+            )
         data = _parse_llm_json(response)
         if data is not None:
             return data
@@ -96,14 +113,26 @@ def _require_json(data: dict[str, Any] | None, phase: str) -> dict[str, Any]:
     return data
 
 
-async def ai_recon(inp: ReconInput, tool_results: str = "") -> ReconOutput:
+async def ai_recon(
+    inp: ReconInput,
+    tool_results: str = "",
+    *,
+    raw_sink: RawPhaseSink | None = None,
+) -> ReconOutput:
     """Analyze real tool output via LLM to produce structured recon. Raises on failure."""
     _require_llm()
     system, user = get_prompt(
         RECON, target=inp.target, options=inp.options, tool_results=tool_results
     )
     data = _require_json(
-        await _call_llm_with_json_retry(RECON, user, system), RECON
+        await _call_llm_with_json_retry(
+            RECON,
+            user,
+            system,
+            raw_sink=raw_sink,
+            raw_label_prefix="recon_llm",
+        ),
+        RECON,
     )
     if not isinstance(data.get("assets"), list):
         raise RuntimeError(f"LLM returned invalid response for {RECON}")
@@ -127,13 +156,18 @@ async def ai_threat_modeling(inp: ThreatModelInput, nvd_data: str = "") -> Threa
     return ThreatModelOutput(threat_model=data["threat_model"])
 
 
-async def ai_vuln_analysis(inp: VulnAnalysisInput) -> VulnAnalysisOutput:
+async def ai_vuln_analysis(
+    inp: VulnAnalysisInput,
+    *,
+    active_scan_context: str = "",
+) -> VulnAnalysisOutput:
     """Call LLM to analyze vulns from threat model. Raises on failure."""
     _require_llm()
     system, user = get_prompt(
         VULN_ANALYSIS,
         threat_model=inp.threat_model,
         assets=inp.assets,
+        active_scan_context=active_scan_context,
     )
     data = _require_json(
         await _call_llm_with_json_retry(VULN_ANALYSIS, user, system),
@@ -160,12 +194,22 @@ async def ai_exploitation(inp: ExploitationInput) -> ExploitationOutput:
     )
 
 
-async def ai_post_exploitation(inp: PostExploitationInput) -> PostExploitationOutput:
+async def ai_post_exploitation(
+    inp: PostExploitationInput,
+    *,
+    raw_sink: RawPhaseSink | None = None,
+) -> PostExploitationOutput:
     """Call LLM for lateral movement / persistence. Raises on failure."""
     _require_llm()
     system, user = get_prompt(POST_EXPLOITATION, exploits=inp.exploits)
     data = _require_json(
-        await _call_llm_with_json_retry(POST_EXPLOITATION, user, system),
+        await _call_llm_with_json_retry(
+            POST_EXPLOITATION,
+            user,
+            system,
+            raw_sink=raw_sink,
+            raw_label_prefix="post_exploitation_llm",
+        ),
         POST_EXPLOITATION,
     )
     return PostExploitationOutput(

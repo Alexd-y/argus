@@ -64,7 +64,8 @@ docker compose -f infra/docker-compose.yml --profile tools up
 | MINIO_ENDPOINT | MinIO endpoint | `minio:9000` |
 | MINIO_ACCESS_KEY | MinIO access key | `argus` |
 | MINIO_SECRET_KEY | MinIO secret key | `argussecret` |
-| MINIO_BUCKET | Bucket name | `argus` |
+| MINIO_BUCKET | Основной bucket (артефакты, не отчёты) | `argus` |
+| MINIO_REPORTS_BUCKET | Bucket для экспортов отчётов (presigned/download) | `argus-reports` |
 | JWT_SECRET | Секрет для JWT | — (обязательно в prod) |
 | LOG_LEVEL | Уровень логирования | `INFO` |
 
@@ -131,6 +132,7 @@ MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=argus
 MINIO_SECRET_KEY=argussecret
 MINIO_BUCKET=argus
+MINIO_REPORTS_BUCKET=argus-reports
 ```
 
 ### 3.7 CORS и фронтенд
@@ -159,19 +161,27 @@ docker compose --profile tunnel up -d
 
 В `infra/.env` задайте `CLOUDFLARE_TUNNEL_TOKEN` (см. ниже).
 
-### 4.2 Получение токена (Cloudflare Zero Trust)
+### 4.2 Получение `CLOUDFLARE_TUNNEL_TOKEN` (Cloudflare Zero Trust)
 
-1. [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels** → **Create a tunnel**.
-2. Выберите тип **Cloudflared**, задайте имя туннеля.
-3. Скопируйте **token** установки (длинная строка) в `CLOUDFLARE_TUNNEL_TOKEN` в `infra/.env`.
-4. В настройках туннеля добавьте **Public Hostname**:
-   - **Subdomain + Domain** — ваш публичный URL (например `api.example.com`).
-   - **Service type** HTTP, **URL** `http://nginx:80` (как в Compose: cloudflared в сети `frontend` с nginx) или `http://backend:8000`, если нужен прямой доступ к API без nginx.
+Токен — это JWT из вашей панели Zero Trust; подставлять «выдуманный» токен нельзя.
+
+1. Откройте [Cloudflare Zero Trust](https://one.dash.cloudflare.com/).
+2. Перейдите в **Networks** → **Tunnels**.
+3. Создайте туннель (**Create a tunnel**) или выберите существующий.
+4. Для типа **Cloudflared** задайте имя туннеля и продолжите мастер установки.
+5. На шаге установки коннектора выберите **Docker** (или **Install connector**) и найдите команду вида `cloudflared tunnel run --token <JWT>`.
+6. Скопируйте только значение JWT после `--token` (длинная строка) в `CLOUDFLARE_TUNNEL_TOKEN` в файле `infra/.env` (файл в `.gitignore`, секреты в репозиторий не коммитить).
+7. Запускайте стек с профилем только после того, как переменная задана: `docker compose --profile tunnel up` из каталога `infra/`.
+8. В настройках туннеля добавьте **Public Hostname**: **Service type** HTTP, **URL** `http://nginx:80` (или `http://backend:8000` при прямом доступе к API).
+
+Если запустить профиль `tunnel` с пустым токеном, `cloudflared` завершится с сообщением вроде: `"cloudflared tunnel run" requires the ID or name of the tunnel`.
 
 ### 4.3 Связка с Vercel
 
 - В проекте Next.js задайте **`NEXT_PUBLIC_BACKEND_URL`** на публичный URL бэкенда — тот же hostname, что настроен в туннеле (например `https://api.example.com`), либо URL корня, если nginx проксирует `/api/v1` на backend.
 - **`VERCEL_FRONTEND_URL`** на бэкенде должен совпадать с URL приложения Vercel (например `https://your-app.vercel.app`), чтобы CORS пропускал запросы браузера с прод-фронта.
+
+**Без своего домена в Cloudflare** (нет зоны DNS / недоступен Public hostname): используйте временный публичный URL — **Quick Tunnel** (`cloudflared tunnel --url …`) или **ngrok**. Пошагово: [`docs/vercel-local-backend.md`](vercel-local-backend.md).
 
 Локальная разработка: `NEXT_PUBLIC_BACKEND_URL=http://localhost:8000` и фронт на `localhost:5000` — localhost уже входит в список CORS по умолчанию.
 

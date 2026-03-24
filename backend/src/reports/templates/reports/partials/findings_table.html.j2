@@ -1,0 +1,29 @@
+<section class="findings" id="findings">
+    <h2>Findings</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>CWE</th>
+                <th>CVSS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in findings %}
+                <tr>
+                    <td><span class="sev-{{ (row.severity or "info") | lower }}">{{ row.severity }}</span></td>
+                    <td>{{ row.title }}</td>
+                    <td class="desc">{{ row.description or "" }}</td>
+                    <td>{{ row.cwe or "—" }}</td>
+                    <td>{% if row.cvss is not none %}{{ row.cvss }}{% else %}—{% endif %}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="5" class="empty">No findings in this report.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>

@@ -16,27 +16,44 @@ Backend MUST implement these contracts exactly. No changes to names, paths, stat
 
 ## 2. REST API Endpoints
 
+All paths below are under **`/api/v1`** (e.g. full URL `POST /api/v1/scans`, `POST /api/v1/scans/{id}/reports/generate`). See [reporting.md](./reporting.md) for pipeline architecture (RPT-010).
+
 ### 2.1 Scans
 
 | Endpoint | Method | Request Schema | Response Schema | Error Schema |
 |----------|--------|----------------|-----------------|--------------|
 | `POST /scans` | POST | `CreateScanRequest` | `CreateScanResponse` | `ApiError` |
 | `GET /scans/:id` | GET | — | `ScanStatus` | `ApiError` |
+| `GET /scans/:id/findings` | GET | — | `Finding[]` | `ApiError` |
+| `POST /scans/:id/reports/generate` | POST | `ReportGenerateRequest` | `ReportGenerateAcceptedResponse` | `ApiError` |
 | `GET /scans/:id/events` | GET (SSE) | — | SSE stream: `SSEEventPayload` | — |
 
 **Auth:** None (current frontend does not send auth headers for scans).
+
+**Report generation (`POST /scans/:id/reports/generate`):**
+
+- **Status:** `202 Accepted` — report row is created and background generation is queued (Celery `argus.generate_report`).
+- **Body:** `type` — report tier `midgard` \| `asgard` \| `valhalla`; `formats` — non-empty array of `pdf` \| `html` \| `json` \| `csv` (duplicates removed, lowercased).
+- **Response:** `report_id` (UUID string), `task_id` (Celery task id when available, else `null`).
+
+Poll **`GET /api/v1/reports/:report_id`** (or list **`GET /api/v1/reports`**) for `generation_status`, `tier`, and summary; when `generation_status === "ready"`, download via **`GET /api/v1/reports/:report_id/download?format=...`**.
 
 ### 2.2 Reports
 
 | Endpoint | Method | Request Schema | Response Schema | Error Schema |
 |----------|--------|----------------|-----------------|--------------|
-| `GET /reports?target={string}` | GET | Query: `target` | `Report[]` | `ApiError` |
-| `GET /reports/:id` | GET | — | `Report` | `ApiError` |
-| `GET /reports/:id/download?format={format}` | GET | Query: `format` | Binary/stream | `ApiError` |
+| `GET /reports?target={string}` | GET | Query: optional `target` | `ReportListItem[]` (see below) | `ApiError` |
+| `GET /reports/:id` | GET | — | `ReportDetail` | `ApiError` |
+| `GET /reports/:id/download?format={format}` | GET | Query: `format`; optional `regenerate`, `redirect` | Binary stream or `302` to presigned URL | `ApiError` |
 
 **Auth:** None (current frontend does not send auth headers for reports).
 
 **Report download formats:** `pdf`, `html`, `json`, `csv`.
+
+**Query flags (download):**
+
+- `regenerate=true` — bypass MinIO cache, re-render and re-upload.
+- `redirect=true` — respond with redirect to presigned URL when cached object exists (or after upload).
 
 ---
 
@@ -196,16 +213,52 @@ interface Finding {
 }
 ```
 
-### 4.9 Report
+### 4.9 Report (list item)
+
+List endpoint aligns with backend `ReportListResponse`:
 
 ```ts
-interface Report {
+type ReportGenerationStatus = "pending" | "processing" | "ready" | "failed";
+
+interface ReportListItem {
   report_id: string;
   target: string;
   summary: ReportSummary;
   findings: Finding[];
   technologies: string[];
-  [key: string]: unknown;
+  generation_status: ReportGenerationStatus;
+  tier: "midgard" | "asgard" | "valhalla";
+  requested_formats: string[] | null;
+}
+```
+
+### 4.10 Report detail
+
+```ts
+interface ReportDetail extends ReportListItem {
+  created_at: string | null;
+  scan_id: string | null;
+}
+```
+
+### 4.11 ReportGenerateRequest
+
+```ts
+type ReportTier = "midgard" | "asgard" | "valhalla";
+type ReportExportFormat = "pdf" | "html" | "json" | "csv";
+
+interface ReportGenerateRequest {
+  type: ReportTier;
+  formats: ReportExportFormat[];
+}
+```
+
+### 4.12 ReportGenerateAcceptedResponse
+
+```ts
+interface ReportGenerateAcceptedResponse {
+  report_id: string;
+  task_id: string | null;
 }
 ```
 
@@ -217,6 +270,7 @@ interface Report {
 |------|-------|
 | 200 | Success (GET) |
 | 201 | Created (POST /scans) |
+| **202** | **Accepted (POST /scans/:id/reports/generate — queued)** |
 | 400 | Validation error, bad request |
 | 401 | Unauthorized |
 | 403 | Forbidden |
@@ -229,6 +283,7 @@ Frontend throws on `!res.ok` and uses `body.error` or `Request failed (${res.sta
 
 ## 6. Related Documents
 
+- [reporting.md](./reporting.md) — RPT-010 reporting pipeline, Celery, MinIO, tiers, prompts
 - [api-contracts.md](./api-contracts.md) — extended contracts (tools, auth, health)
 - [api-contract-rule.md](./api-contract-rule.md) — contract-first rule
 - [sse-polling.md](./sse-polling.md) — SSE vs polling details

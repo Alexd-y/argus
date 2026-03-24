@@ -126,6 +126,39 @@ def _mock_db_scan_get(scan_id: str, exists: bool = True):
     return factory
 
 
+def _mock_db_report_generate(scan_id: str, *, scan_exists: bool = True):
+    """Mock async_session_factory for POST /scans/:id/reports/generate."""
+    scan_result = MagicMock()
+    if scan_exists:
+        mock_scan = MagicMock()
+        mock_scan.id = scan_id
+        mock_scan.target_url = "https://example.com"
+        scan_result.scalar_one_or_none.return_value = mock_scan
+    else:
+        scan_result.scalar_one_or_none.return_value = None
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    session.flush = AsyncMock()
+
+    async def execute_mock(query, *args, **kwargs):
+        qstr = str(query).lower()
+        if "set local" in qstr or "app.current_tenant_id" in qstr:
+            return MagicMock()
+        return scan_result
+
+    session.execute = AsyncMock(side_effect=execute_mock)
+
+    @asynccontextmanager
+    async def _cm():
+        yield session
+
+    def factory():
+        return _cm()
+    return factory
+
+
 def _mock_db_reports(
     report_id: str = "00000000-0000-0000-0000-000000000001",
     has_reports: bool = True,
@@ -185,6 +218,9 @@ def _mock_db_reports(
 
     session = AsyncMock()
     session.execute = AsyncMock(side_effect=execute_mock)
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
 
     @asynccontextmanager
     async def _cm():
@@ -312,6 +348,9 @@ class TestReportsEndpoint:
             assert "summary" in item
             assert "findings" in item
             assert "technologies" in item
+            assert "generation_status" in item
+            assert "tier" in item
+            assert "requested_formats" in item
 
     def test_get_reports_with_target_filter(self, client: TestClient) -> None:
         """GET /reports?target=... returns filtered list."""
@@ -349,6 +388,10 @@ class TestReportsEndpoint:
                 _mock_db_reports(report_id=report_id, has_reports=True),
             ),
             patch("src.api.routers.reports.storage_exists", return_value=False),
+            patch(
+                "src.api.routers.reports.generate_pdf",
+                return_value=b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n",
+            ),
         ):
             response = client.get(f"/api/v1/reports/{report_id}/download?format=pdf")
         assert response.status_code == 200
@@ -474,6 +517,53 @@ class TestOpenAPIContract:
         for r in required:
             assert r in props, f"Missing property in GET /reports: {r}"
 
+    def test_openapi_post_scan_reports_generate_schema(self, client: TestClient) -> None:
+        """POST /scans/{scan_id}/reports/generate — RPT-007: 202 body report_id, task_id?."""
+        response = client.get("/api/v1/openapi.json")
+        spec = response.json()
+        gen_path = spec.get("paths", {}).get("/api/v1/scans/{scan_id}/reports/generate")
+        assert gen_path, "POST /scans/{scan_id}/reports/generate not in OpenAPI"
+        post_op = gen_path.get("post", {})
+        raw_req = (
+            post_op.get("requestBody", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("schema", {})
+        )
+        req_schema = _resolve_schema(spec, raw_req)
+        props = req_schema.get("properties", {})
+        assert "type" in props
+        assert "formats" in props
+        raw_202 = (
+            post_op.get("responses", {})
+            .get("202", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("schema", {})
+        )
+        resp_schema = _resolve_schema(spec, raw_202)
+        assert "report_id" in resp_schema.get("properties", {})
+
+    def test_openapi_post_scan_reports_generate_all_schema(self, client: TestClient) -> None:
+        """POST /scans/{scan_id}/reports/generate-all — 202: bundle_id, report_ids, count, task_id?."""
+        response = client.get("/api/v1/openapi.json")
+        spec = response.json()
+        path_key = "/api/v1/scans/{scan_id}/reports/generate-all"
+        gen_path = spec.get("paths", {}).get(path_key)
+        assert gen_path, f"POST {path_key} not in OpenAPI"
+        post_op = gen_path.get("post", {})
+        raw_202 = (
+            post_op.get("responses", {})
+            .get("202", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("schema", {})
+        )
+        resp_schema = _resolve_schema(spec, raw_202)
+        props = resp_schema.get("properties", {})
+        for key in ("bundle_id", "report_ids", "count"):
+            assert key in props, f"Missing {key} in generate-all 202 schema"
+
     def test_openapi_validation_invalid_schema_fails(self) -> None:
         """Validation rejects invalid or malformed OpenAPI spec structure."""
         assert _validate_openapi_contract(None)
@@ -549,7 +639,16 @@ class TestFrontendApiContract:
         assert isinstance(data, list)
         if data:
             item = data[0]
-            for key in ["report_id", "target", "summary", "findings", "technologies"]:
+            for key in [
+                "report_id",
+                "target",
+                "summary",
+                "findings",
+                "technologies",
+                "generation_status",
+                "tier",
+                "requested_formats",
+            ]:
                 assert key in item, f"Report missing field: {key}"
             summary = item["summary"]
             for k in ["critical", "high", "medium", "low", "info", "technologies",
@@ -568,7 +667,18 @@ class TestFrontendApiContract:
             response = client.get(f"/api/v1/reports/{report_id}")
         assert response.status_code == 200
         data = response.json()
-        for key in ["report_id", "target", "summary", "findings", "technologies"]:
+        for key in [
+            "report_id",
+            "target",
+            "summary",
+            "findings",
+            "technologies",
+            "generation_status",
+            "tier",
+            "requested_formats",
+            "created_at",
+            "scan_id",
+        ]:
             assert key in data, f"Report missing field: {key}"
         assert "critical" in data["summary"]
         assert "high" in data["summary"]
@@ -593,10 +703,114 @@ class TestFrontendApiContract:
                     _mock_db_reports(report_id=report_id, has_reports=True),
                 ),
                 patch("src.api.routers.reports.storage_exists", return_value=False),
-                patch("src.api.routers.reports.upload"),
+                patch("src.api.routers.reports.upload_report_artifact"),
+                patch(
+                    "src.api.routers.reports.generate_pdf",
+                    return_value=b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n",
+                ),
             ):
                 response = client.get(f"/api/v1/reports/{report_id}/download?format={fmt}")
             assert response.status_code == 200, f"Format {fmt} should be valid"
+
+    def test_report_list_with_target_query_param(self, client: TestClient) -> None:
+        """GET /reports?target=... returns array (RPT-007 / frontend contract)."""
+        with patch(
+            "src.api.routers.reports.async_session_factory",
+            _mock_db_reports(has_reports=True),
+        ):
+            response = client.get(
+                "/api/v1/reports",
+                params={"target": "https://filtered.com"},
+            )
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+
+    def test_report_generate_returns_202(self, client: TestClient) -> None:
+        """POST /scans/{id}/reports/generate returns 202 with report_id and task_id (RPT-007)."""
+        scan_id = str(uuid.uuid4())
+        celery_result = MagicMock()
+        celery_result.id = "celery-task-rpt-007"
+        with (
+            patch(
+                "src.api.routers.scans.async_session_factory",
+                _mock_db_report_generate(scan_id, scan_exists=True),
+            ),
+            patch("src.api.routers.scans.generate_report_task") as mock_gen,
+        ):
+            mock_gen.delay.return_value = celery_result
+            response = client.post(
+                f"/api/v1/scans/{scan_id}/reports/generate",
+                json={"type": "midgard", "formats": ["pdf", "html"]},
+            )
+        assert response.status_code == 202
+        data = response.json()
+        assert "report_id" in data
+        assert isinstance(data["report_id"], str)
+        assert len(data["report_id"]) >= 32
+        assert data.get("task_id") == "celery-task-rpt-007"
+        mock_gen.delay.assert_called_once()
+        call_kw = mock_gen.delay.call_args
+        assert call_kw[0][0] == data["report_id"]
+        assert call_kw[0][1] == "00000000-0000-0000-0000-000000000001"
+        assert call_kw[0][2] == scan_id
+        assert call_kw[0][3] == ["pdf", "html"]
+
+    def test_report_generate_all_returns_202(self, client: TestClient) -> None:
+        """POST /scans/{id}/reports/generate-all returns 202 with bundle_id, 12 report_ids, task_id."""
+        scan_id = str(uuid.uuid4())
+        celery_result = MagicMock()
+        celery_result.id = "celery-task-generate-all"
+        with (
+            patch(
+                "src.api.routers.scans.async_session_factory",
+                _mock_db_report_generate(scan_id, scan_exists=True),
+            ),
+            patch("src.api.routers.scans.generate_all_reports_task") as mock_task,
+        ):
+            mock_task.delay.return_value = celery_result
+            response = client.post(
+                f"/api/v1/scans/{scan_id}/reports/generate-all",
+                json={},
+            )
+        assert response.status_code == 202
+        data = response.json()
+        assert "bundle_id" in data and len(data["bundle_id"]) >= 32
+        assert data["count"] == 12
+        assert len(data["report_ids"]) == 12
+        assert data.get("task_id") == "celery-task-generate-all"
+        mock_task.delay.assert_called_once()
+        args = mock_task.delay.call_args[0]
+        assert args[0] == "00000000-0000-0000-0000-000000000001"
+        assert args[1] == scan_id
+        assert args[2] == data["bundle_id"]
+        assert args[3] == data["report_ids"]
+
+    def test_report_generate_404_when_scan_missing(self, client: TestClient) -> None:
+        scan_id = str(uuid.uuid4())
+        with (
+            patch(
+                "src.api.routers.scans.async_session_factory",
+                _mock_db_report_generate(scan_id, scan_exists=False),
+            ),
+            patch("src.api.routers.scans.generate_report_task") as mock_gen,
+        ):
+            response = client.post(
+                f"/api/v1/scans/{scan_id}/reports/generate",
+                json={"type": "asgard", "formats": ["json"]},
+            )
+        assert response.status_code == 404
+        assert "error" in response.json()
+        mock_gen.delay.assert_not_called()
+
+    def test_report_generate_422_invalid_format(self, client: TestClient) -> None:
+        scan_id = str(uuid.uuid4())
+        response = client.post(
+            f"/api/v1/scans/{scan_id}/reports/generate",
+            json={"type": "valhalla", "formats": ["xml"]},
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert "error" in body
 
     def test_error_response_has_user_message(self, client: TestClient) -> None:
         """404/400 responses have error or detail for user-facing message (ApiError)."""

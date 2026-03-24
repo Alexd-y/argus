@@ -108,6 +108,7 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
         "Analyze vulnerabilities based on the real threat model and assets.\n\n"
         "Threat model: {threat_model}\n"
         "Assets: {assets}\n\n"
+        "{active_scan_context}"
         "For each vulnerability, provide:\n"
         '- "severity": critical/high/medium/low/info\n'
         '- "title": descriptive title\n'
@@ -117,6 +118,8 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
         '- "affected_asset": which asset is affected\n'
         '- "remediation": recommended fix\n\n'
         "Only report vulnerabilities supported by evidence from the threat model.\n"
+        "If active scan findings are provided above, incorporate them into your analysis — "
+        "confirm, correlate, or augment them with additional context.\n"
         'Return JSON: {{"findings": [{{"severity": "string", "title": "string", "cwe": "string", '
         '"cvss": 0.0, "description": "string", "affected_asset": "string", "remediation": "string"}}]}}',
     ),
@@ -172,6 +175,7 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
 _TEMPLATE_DEFAULTS: dict[str, Any] = {
     "tool_results": "",
     "nvd_data": "No CVE data available",
+    "active_scan_context": "",
 }
 
 
@@ -330,3 +334,136 @@ def get_schema(phase: str) -> dict[str, Any]:
     if phase not in PHASE_SCHEMAS:
         raise ValueError(f"Unknown phase: {phase}")
     return PHASE_SCHEMAS[phase]
+
+
+# ---------------------------------------------------------------------------
+# RPT-004 — Report AI text sections (Prompt Registry for Celery ai_text_generation)
+# ---------------------------------------------------------------------------
+
+REPORT_AI_SECTION_EXECUTIVE_SUMMARY = "executive_summary"
+REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION = "vulnerability_description"
+REPORT_AI_SECTION_REMEDIATION_STEP = "remediation_step"
+REPORT_AI_SECTION_BUSINESS_RISK = "business_risk"
+REPORT_AI_SECTION_COMPLIANCE_CHECK = "compliance_check"
+REPORT_AI_SECTION_PRIORITIZATION_ROADMAP = "prioritization_roadmap"
+REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS = "hardening_recommendations"
+REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA = "executive_summary_valhalla"
+
+REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
+    {
+        REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
+        REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
+        REPORT_AI_SECTION_REMEDIATION_STEP,
+        REPORT_AI_SECTION_BUSINESS_RISK,
+        REPORT_AI_SECTION_COMPLIANCE_CHECK,
+        REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
+        REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
+        REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
+    }
+)
+
+# Bump segment when template semantics change (invalidates Redis cache for that section).
+REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "rpt004-20250320a",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "rpt004-20250320a",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "rpt004-20250320a",
+    REPORT_AI_SECTION_BUSINESS_RISK: "rpt004-20250320a",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "rpt004-20250320a",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "rpt004-20250320a",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "rpt004-20250320a",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "rpt004-20250320a",
+}
+
+REPORT_AI_SYSTEM = (
+    "You are a senior penetration testing report author. "
+    "Use only facts present in the context JSON. Do not fabricate CVEs, systems, or test results. "
+    "Output plain prose suitable for embedding in a formal report (no JSON, no code fences unless quoting)."
+)
+
+REPORT_AI_USER_TEMPLATES: dict[str, str] = {
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: (
+        "Write a concise executive summary (2–4 short paragraphs) for business stakeholders.\n"
+        "Cover scope, overall risk posture, and top themes. Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: (
+        "Describe the vulnerability in technical but readable language: root cause, affected component, "
+        "and exploitation preconditions as supported by the context. Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_REMEDIATION_STEP: (
+        "Provide actionable remediation steps ordered by practicality. Reference controls and verification "
+        "where the context allows. Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_BUSINESS_RISK: (
+        "Explain business impact: operational, financial, and reputational angles grounded in the context. "
+        "Avoid alarmism without evidence. Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: (
+        "Map findings in the context to relevant compliance themes (e.g. confidentiality, integrity, "
+        "availability, privacy). Only cite frameworks or controls implied or named in the context. "
+        "Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: (
+        "Propose a prioritized remediation roadmap (near-term vs longer-term) using severity and "
+        "dependencies evident in the context. Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: (
+        "List hardening and defense-in-depth recommendations aligned with the engagement context "
+        "(configuration, monitoring, architecture). Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: (
+        "Write an executive summary in a direct, high-signal style suitable for a technical leadership "
+        "brief (Valhalla report variant): bullets for key risks, one paragraph for posture, no fluff. "
+        "Context JSON:\n{context_json}"
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# VA — AI-assisted active scan planning (OWASP / sandbox tool argv suggestions)
+# ---------------------------------------------------------------------------
+
+ACTIVE_SCAN_PLANNING_SYSTEM = (
+    "You are an expert penetration tester planning passive-to-active validation steps. "
+    "You MUST output only a JSON array (no markdown fences, no prose). "
+    "Each array element is an object with keys \"tool\" (string) and \"args\" (array of strings). "
+    "Use only tools from this allowlist: dalfox, xsstrike, ffuf, sqlmap, nuclei, gobuster, wfuzz, commix. "
+    "Args must be a safe, non-interactive argv for the sandbox runner (no shell metacharacters; "
+    "use full http(s) URLs from the provided target_urls only). "
+    "If no additional scans are justified, return an empty array []."
+)
+
+ACTIVE_SCAN_PLANNING_USER_TEMPLATE = (
+    "Plan sandbox scanner invocations from the following bundle summary (JSON). "
+    "Prefer short, focused extra runs that complement a baseline scan (e.g. nuclei templates, "
+    "ffuf on interesting paths). "
+    "Return ONLY a JSON array of objects: {{\"tool\": \"...\", \"args\": [\"...\", ...]}}.\n\n"
+    "=== BUNDLE SUMMARY ===\n{bundle_summary_json}\n=== END ==="
+)
+
+
+def build_active_scan_planning_user_prompt(bundle_summary: dict[str, Any]) -> str:
+    """Serialize and sanitize bundle summary for the active-scan planning user message."""
+    raw = json.dumps(bundle_summary, ensure_ascii=False, sort_keys=True, default=str)
+    sanitized = _sanitize_for_prompt(raw, MAX_PROMPT_OBJECT_LENGTH)
+    return ACTIVE_SCAN_PLANNING_USER_TEMPLATE.format(bundle_summary_json=sanitized)
+
+
+ACTIVE_SCAN_PLANNING_JSON_ARRAY_FIXER_USER = (
+    "The following text was supposed to be ONLY a JSON array of objects, each with "
+    '"tool" (string) and "args" (array of strings). '
+    "Return ONLY the corrected JSON array, nothing else.\n\nInvalid response:\n{invalid_fragment}"
+)
+
+
+def get_report_ai_section_prompt(
+    section_key: str, input_payload: dict[str, Any]
+) -> tuple[str, str, str]:
+    """Return (system_prompt, user_prompt, prompt_version) for a registered report AI section."""
+    if section_key not in REPORT_AI_SECTION_KEYS:
+        raise ValueError(f"Unknown report AI section: {section_key}")
+    version = REPORT_AI_PROMPT_VERSIONS[section_key]
+    template = REPORT_AI_USER_TEMPLATES[section_key]
+    raw_json = json.dumps(input_payload, sort_keys=True, separators=(",", ":"), default=str)
+    context_json = _sanitize_for_prompt(raw_json, MAX_PROMPT_OBJECT_LENGTH)
+    user = template.format(context_json=context_json)
+    return REPORT_AI_SYSTEM, user, version

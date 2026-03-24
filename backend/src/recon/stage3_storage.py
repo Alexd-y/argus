@@ -9,13 +9,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.config import settings
-from src.recon.vulnerability_analysis.ai_task_registry import VA_AI_TASKS
+from src.recon.stage_object_download import StageObjectFetchError, fetch_stage_bucket_object
 from src.storage.s3 import _get_client, _sanitize_path_component, ensure_bucket
 
 logger = logging.getLogger(__name__)
 
-STAGE3_ROOT_FILES = (
-    *(f"ai_va_{t}_normalized.json" for t in VA_AI_TASKS),
+_STAGE3_STATIC_FILES: tuple[str, ...] = (
     "ai_reasoning_traces.json",
     "mcp_trace.json",
     "exploitation_candidates.json",
@@ -24,6 +23,16 @@ STAGE3_ROOT_FILES = (
     "evidence_bundles.json",
     "next_phase_gate.json",
 )
+
+
+def get_stage3_root_files() -> tuple[str, ...]:
+    """Filenames uploaded/collected for stage 3 (lazy import avoids VA package import cycles)."""
+    try:
+        from src.recon.vulnerability_analysis.ai_task_registry import VA_AI_TASKS
+    except (ImportError, ModuleNotFoundError):
+        return tuple(_STAGE3_STATIC_FILES)
+
+    return tuple(f"ai_va_{t}_normalized.json" for t in VA_AI_TASKS) + _STAGE3_STATIC_FILES
 
 
 def ensure_stage3_artifacts_bucket() -> bool:
@@ -91,7 +100,7 @@ def upload_stage3_artifacts(
     uploaded: list[str] = []
     bucket = settings.stage3_artifacts_bucket
 
-    for filename in STAGE3_ROOT_FILES:
+    for filename in get_stage3_root_files():
         filepath = artifacts_dir / filename
         if not filepath.is_file():
             continue
@@ -118,3 +127,22 @@ def upload_stage3_artifacts(
             extra={"scan_id": scan_id, "count": len(uploaded), "keys": uploaded[:10]},
         )
     return uploaded
+
+
+def download_stage3_artifact(scan_id: str, filename: str) -> bytes | None:
+    """Download a Stage 3 artifact object from MinIO ({scan_id}/{filename}).
+
+    Returns ``None`` only if the object is missing. Raises
+    :class:`StageObjectFetchError` if storage is unavailable or ``get_object`` fails.
+    """
+    client = _get_client()
+    if not client:
+        raise StageObjectFetchError("storage_error")
+    bucket = settings.stage3_artifacts_bucket
+    try:
+        key = _build_object_key(scan_id, filename)
+    except ValueError:
+        raise
+    return fetch_stage_bucket_object(
+        client, bucket, key, scan_id=scan_id, filename=filename
+    )

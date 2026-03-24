@@ -332,7 +332,7 @@ async def health_dashboard(
         pass
 
     redis_ok = redis_ping()
-    storage_ok = ensure_bucket()
+    storage_ok = ensure_bucket() and ensure_bucket(settings.minio_reports_bucket)
 
     status_val = "ok" if (db_ok and redis_ok and storage_ok) else "degraded"
 

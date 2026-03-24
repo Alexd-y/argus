@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.config import settings
+from src.recon.stage_object_download import StageObjectFetchError, fetch_stage_bucket_object
 from src.storage.s3 import _get_client, _sanitize_path_component, ensure_bucket
 
 logger = logging.getLogger(__name__)
@@ -116,3 +117,22 @@ def upload_stage2_artifacts(
             extra={"scan_id": scan_id, "count": len(uploaded), "keys": uploaded},
         )
     return uploaded
+
+
+def download_stage2_artifact(scan_id: str, filename: str) -> bytes | None:
+    """Download a Stage 2 artifact object from MinIO ({scan_id}/{filename}).
+
+    Returns ``None`` only if the object is missing. Raises
+    :class:`StageObjectFetchError` if storage is unavailable or ``get_object`` fails.
+    """
+    client = _get_client()
+    if not client:
+        raise StageObjectFetchError("storage_error")
+    bucket = settings.stage2_artifacts_bucket
+    try:
+        key = _build_object_key(scan_id, filename)
+    except ValueError:
+        raise
+    return fetch_stage_bucket_object(
+        client, bucket, key, scan_id=scan_id, filename=filename
+    )

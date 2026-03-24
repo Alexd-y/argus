@@ -1,0 +1,1 @@
+{"type":"V","method":"GET","url":"https://alf.nu/alert1?world=alert&level=alert0","param":"level","poc":"https://alf.nu/alert1?world=alert&level=%3Cscript%3Ealert(1)%3C%2Fscript%3E","severity":"critical","cvss_score":7.4}

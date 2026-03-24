@@ -6,6 +6,142 @@ All notable changes to ARGUS platform are documented in this file.
 
 ### Added
 
+- **VA-007 — Exploitation aggressive sqlmap enqueue:** `maybe_run_aggressive_exploit_tools` + `VA_EXPLOIT_AGGRESSIVE_ENABLED` (`va_exploit_aggressive_enabled`); при SQLi-сигнале в findings, approval sqlmap и `SQLMAP_VA_ENABLED` — `run_sqlmap.delay` из state machine (фаза `exploitation`). Флаги `scan.options["scan_approval_flags"]` (WEB-006).
+- **VA-008 — Отчёт «Сырые выводы»:** якорь `raw-tool-outputs` и пояснение в `artifacts.html.j2`; документировано в `docs/reporting.md`.
+- **VA-009 — Тесты:** `tests/test_xss_detection.py` — mock active-scan / `run_vuln_analysis`, проверка `sink_raw_text` (dalfox) и XSS с `alert(1)`, CVSS ≥ 7.
+- **VA-010 — Документация:** `docs/scan-state-machine.md` (агрессивные инструменты, `VA_AI_PLAN_ENABLED`), `docs/prompt-registry.md` (`active_scan_planning` / `ACTIVE_SCAN_PLANNING_*`).
+
+- **State Machine ↔ Active Scan Bridge (WEB-001):** `run_vuln_analysis()` теперь вызывает `run_va_active_scan_phase()` напрямую из state machine при `SANDBOX_ENABLED=true`. Ранее active-scan был доступен только из recon engagement flow.
+- **URL Parameter & Form Extraction (WEB-002):** Автоматическое извлечение query-параметров и HTML-форм из target URL в фазах recon и vuln_analysis. Для `alf.nu/alert1?world=alert&level=alert0` параметры `world` и `level` извлекаются и передаются в active scan planner.
+- **Web-Specific AI Prompts (WEB-003):** Новые промпты `web_scan_planning`, `generic_web_finding`; усиленные `xss_analysis` (CVSS 7.1/9.0, PoC URL) и `sqli_analysis` (CVSS tier scoring, DBMS detection).
+- **OWASP Top 10 Heuristics (WEB-005):** SSRF (CWE-918, CVSS 8.6), CSRF (CWE-352), IDOR (CWE-639), open redirect (CWE-601) — автоматические проверки через HTTP-запросы.
+- **Destructive Tool Approval Policy (WEB-006):** `evaluate_tool_approval_policy()` — sqlmap/commix требуют явного approval. Per-tool concurrency semaphore (limit=1 для destructive tools). Audit logging всех policy decisions.
+- **Raw Artifacts in Reports (WEB-007):** Секция «Артефакты этапов» в HTML/PDF отчётах со ссылками на presigned MinIO URLs. `ScanReportData.raw_artifacts` автоматически заполняется при `include_minio=True`.
+- **CVSS Scoring & PoC Generation (WEB-008):** Reflected XSS = CVSS 7.2, Stored XSS = 9.0, SQLi = 8.6–9.8. curl-based PoC генерация. Post-processing: CVSS floors, CWE auto-mapping, сортировка по severity.
+- **Integration Test (WEB-009):** `test_web_scan_xss_detection.py` — 15+ unit/integration тестов для parameter extraction, finding normalization, CVSS scoring, active scan bridge.
+
+### Changed
+
+- `SANDBOX_ENABLED` в docker-compose теперь `${SANDBOX_ENABLED:-true}` (ранее hardcoded `false`)
+- State machine vuln_analysis передаёт `target`, `tenant_id`, `scan_id` в handler
+- AI prompt для vuln_analysis включает active scan context при наличии
+- dalfox/xsstrike адаптеры: CVSS v3.1 scoring (reflected=7.2, stored=9.0), CWE-79 auto-tag
+
+### Security
+
+- sqlmap требует `SQLMAP_VA_ENABLED=true` + policy approval check
+- Destructive tools ограничены 1 параллельным запуском
+- HTTP crawl: timeout 10s, max 3 redirects, body cap 500KB
+- All policy decisions audit-logged (structured JSON)
+
+---
+
+- **OWASP2 batch — docs:** `docs/RUNNING.md` § 3.3.2 — пересборка образа sandbox для VA active-scan (dalfox, ffuf и др.) и таблица env-флагов; уточнения в § 9 для тех же переменных.
+
+#### OWASP MCP Active Web Scanning Pipeline — Dalfox, FFuf, SQLMap, XSSStrike, Nuclei Integration (OWASP-VA, 2026-03-24)
+
+- **Active Web Scanning Phase (vuln_analysis § 4.3a):**
+  - **Integrated tools:** dalfox (XSS detection), ffuf (directory/parameter fuzzing), xsstrike (advanced XSS), nuclei (template-based OWASP coverage), gobuster (vhost discovery)
+  - **Policy-gated tools:** sqlmap (SQL injection) requires approval gate when `policy.exploit_approval=true`; destructive operations disabled by default
+  - **Scope validation:** Target scope enforcement before each tool invocation; out-of-scope blocks tool execution
+  - **MCP allowlist extended:** `web_vulnerability_scanning`, `xss_testing`, `sql_injection_testing`, `directory_discovery` operations
+  - **Rate limiting:** Tenant-level configurable (default: 10 req/sec via `policies.config`)
+
+- **Raw Artifacts (vuln_analysis active_web_scan subphase):**
+  - `web_scan_requests.json` — dalfox, ffuf, nuclei requests (credentials redacted)
+  - `web_scan_responses.json` — HTTP responses (sensitive data excluded)
+  - `xss_payloads.json` — xsstrike payload templates and bypass techniques
+  - `sqlmap_output.json` — SQL injection findings (empty if approval denied)
+  - `web_findings.csv` — Vulnerability summary (endpoint, type, severity, PoC link)
+
+- **Evidence Integration:**
+  - XSS findings tagged with CWE-79 threat scenarios
+  - Payloads and PoC responses preserved in `finding_confirmation_matrix.csv`
+  - Contradiction detection: Similar XSS findings clustered via duplicate correlator
+  - Severity mapping: High/Critical based on payload type (reflected, stored, DOM)
+
+- **Documentation:**
+  - `docs/scan-state-machine.md` § 4.3a — Active Web Scanning table with tool allowlist, policy gates, sandbox controls, artifact list
+  - `docs/reporting.md` § Артефакты этапов — Raw tool outputs subsection; JSON/CSV export structures for ai_sections and scan_artifacts
+  - Policy & Sandbox references: [deployment.md](./deployment.md#policies-and-approval), [deployment.md](./deployment.md#sandbox-environment)
+
+- **Compliance & Security:**
+  - Log redaction: Credentials, cookies, auth headers excluded from MinIO artifacts
+  - Sandbox isolation: Containerized environment with network controls (see [deployment.md](./deployment.md#sandbox-environment))
+  - OWASP Top 10 alignment: XSS (A03), Injection (A03), Path Traversal (A01) detection and reporting
+
+#### Reporting — Stage Artifacts Documentation (DOC-002, 2026-03-24)
+
+- **Artifact Structure:** Documented all 6 phases' raw artifacts (recon, threat_modeling, vuln_analysis, exploitation, post_exploitation) with MinIO path layout and examples
+- **CSV Export Formats:** Standardized finding_confirmation_matrix.csv, evidence_sufficiency.csv, web_findings.csv structures for tabular reporting
+- **JSON Export Structures:** ai_sections and scan_artifacts metadata with presigned URLs, timestamps, tool attribution
+- **API Reference:** Reinforced `GET /api/v1/scans/{id}/artifacts` query params (phase, raw, presigned) and response examples
+- **Files:** `docs/reporting.md` updated with new § Артефакты этапов + subsections (Raw Tool Outputs, JSON/CSV Export Structures)
+
+#### Scan Artifacts & Raw Data Storage — MinIO Integration (DOC-001, 2026-03-24)
+
+- **Raw Artifact Persistence:** All 5 scan phases now persist raw outputs to MinIO under `{tenant_id}/{scan_id}/{phase}/raw/`:
+  - **recon** (handler: `state_machine/handlers`) — tool logs, nmap XML, nuclei JSON, subdomain lists
+  - **threat_modeling** (pipeline: `pipelines/threat_modeling`) — threat model JSON, LLM responses
+  - **vuln_analysis** (pipeline: `pipelines/vulnerability_analysis`) — evidence bundles, contradiction analysis, confirmation matrices
+  - **exploitation** (pipeline: `pipelines/exploitation`) — exploit attempts, PoC evidence, tool outputs
+  - **post_exploitation** (handler: `state_machine/handlers`) — lateral movement, persistence mechanisms, session data
+- **Artifacts in HTML Reports:** Tiered HTML reports (Midgard/Asgard/Valhalla) now include **Artifacts** section with:
+  - Per-phase artifact listings (filename, type, size, timestamp)
+  - Presigned download links (1-hour TTL) for direct browser access
+  - Embedded artifact metadata and links
+- **Artifacts API Endpoint:** `GET /api/v1/scans/{id}/artifacts` — Programmatic access to raw artifacts
+  - Query params: `phase` (filter by phase), `raw` (include raw data), `presigned` (generate URLs)
+  - Response includes: artifact metadata, MinIO keys, presigned URLs (1 hour), total size
+  - Tenant isolation: All access validated via `X-Tenant-ID` / auth context
+  - Audit logging: All artifact downloads tracked
+- **Documentation:** `docs/scan-state-machine.md` § 10 Raw Artifact Storage (table with phase → MinIO path → handler/pipeline); `docs/reporting.md` § Artifacts in HTML Reports (API, response examples, implementation notes)
+- **Config env vars:** `ARTIFACT_PRESIGNED_URL_TTL_SECONDS` (default 3600)
+
+#### XSStrike Integration — XSS Vulnerability Analysis (XSS-VA, 2026-03-24)
+
+- **XSStrike Tool:** Integrated into Stage 3 (vulnerability_analysis) phase as advanced XSS scanner
+  - Replaces basic XSS detection with comprehensive payload testing
+  - Detects: reflected/stored/DOM-based XSS, filter evasion, WAF bypass techniques
+  - Output: JSON structured findings with proof-of-concept (PoC) evidence
+- **Evidence Collection:** XSStrike findings tagged as direct evidence in finding confirmation workflow
+  - Links to threat scenarios: Client-Side Code Injection (CWE-79)
+  - Severity mapping: High/Critical based on payload type
+  - Incorporated into Stage 3 evidence bundles and confirmation matrix
+- **Reporting:** XSS findings included in HTML/PDF/JSON reports with:
+  - Payload examples (sanitized for safe report display)
+  - WAF bypass techniques discovered
+  - Remediation recommendations (output encoding, CSP, input validation)
+  - Related findings de-duplicated via duplicate finding correlator
+- **Documentation:** `docs/scan-state-machine.md` § vuln_analysis phase updated; XSStrike noted in tool allowlist
+
+#### Reporting — Scan State Machine Integration (RPT-001, 2026-03-24)
+
+- **Auto-Generate Bundle Post-Scan:** After successful scan completion (all phases through `reporting`, status=`completed`), backend automatically enqueues **12** default report rows (3 tiers × 4 formats) via `state_machine.py` completion hook
+- **Documentation:** `docs/reporting.md` § HTTP API updated with `/api/v1/scans/{id}/artifacts` endpoint; examples for presigned URLs, raw data, error responses
+
+#### Reporting stage 5 / RPT-010 — docs, API contract, tests (2026-03-20)
+
+- **Orchestration:** After a successful full scan (`run_scan_state_machine` final `complete` / `completed`), enqueue **12** report rows (default tier × format matrix) and `argus.generate_all_reports` — same path as `POST .../reports/generate-all` via `src/reports/bundle_enqueue.py`.
+- **Idempotency:** `Scan.options["_argus_post_scan_generate_all_bundle_id"]` prevents duplicate bundles on repeat completion.
+- **Tasks:** `generate_all_reports_task` resolves each row’s `requested_formats` before calling `run_generate_report_pipeline` so each pipeline run renders exactly the formats on that row.
+- **Pipeline:** `normalize_generation_formats` treats a **string** `requested_formats` value as a single format (avoids iterating characters if JSONB is stored as a scalar string).
+- **Docs:** `docs/reporting.md` — automatic generation section; tests in `tests/test_generate_all_reports.py`.
+
+#### Reporting — Bulk Generate-All Endpoint (2026-03-20)
+
+- **API:** `POST /api/v1/scans/{scan_id}/reports/generate-all` (202) — Creates one report row per tier × format (default four formats × three tiers = **12** rows); optional `formats` with length **M** yields **3×M** rows. Response: `bundle_id`, `report_ids[]` (same length as rows created), `task_id`, `count` (equals `len(report_ids)`).
+- **Celery:** New task `argus.generate_all_reports` runs `run_generate_report_pipeline` once per report id (tier × format matrix) with bounded concurrency.
+- **MinIO layout:** Tiered key structure `{tenant_id}/{scan_id}/reports/{tier}/{report_id}.{fmt}` for organized storage (tier ∈ {midgard, asgard, valhalla}).
+- **Docs:** `docs/reporting.md` updated with new endpoint, Celery task, and MinIO layout; API difference from single-report generate documented.
+
+#### Reporting stage 5 / RPT-010 — docs, API contract, tests (2026-03-20)
+
+- **Docs:** `docs/reporting.md` — canonical RPT-010 architecture (`ReportDataCollector`, `ScanReportData`, `ReportGenerator`, `run_generate_report_pipeline`, Celery `argus.generate_report` / `argus.ai_text_generation`), tiers, prompt keys table, formats, `/api/v1` report routes, `MINIO_REPORTS_BUCKET`, env vars, Valhalla follow-up scan stub; `backend/docs/reporting.md` links to repo-root doc.
+- **API:** `ReportListResponse` / `ReportDetailResponse` include `generation_status`, `tier`, `requested_formats` (from `Report.requested_formats` JSONB).
+- **Frontend contract:** `docs/frontend-api-contract.md` — `/api/v1` prefix, polling fields on list/detail, link to `reporting.md`; generate/list/download unchanged semantically.
+- **Tests:** `backend/tests/test_rpt010_reporting_coverage.py` and related — `data_collector`, `report_pipeline` branches, `reporting` / `jinja_minimal_context`, `storage`, `generators` coverage extensions.
+
 #### Frontend API contract alignment — backend, CORS, tunnel, tests (2026-03-20)
 
 - **Errors:** для путей `/api/v1/scans*` и `/api/v1/reports*` ответы 4xx/5xx в форме `{ "error", "code"?, "details"? }` (HTTPException, RequestValidationError, 500).

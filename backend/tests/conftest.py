@@ -14,6 +14,13 @@ if str(BACKEND_DIR) not in sys.path:
 pytest_plugins = ["pytest_asyncio"]
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "weasyprint_pdf: needs WeasyPrint (Pango/Cairo); skip with ARGUS_SKIP_WEASYPRINT_PDF=1 or if import fails",
+    )
+
+
 @pytest.fixture(scope="module")
 def app():
     """FastAPI app instance."""

@@ -1,16 +1,23 @@
 """Report generators — HTML, JSON, PDF, CSV."""
 
 import csv
-import html
 import io
 import json
+import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from src.api.schemas import Finding, ReportSummary
 from src.db.models import Finding as FindingModel
 from src.db.models import Report
+from src.reports.data_collector import (
+    FindingRow,
+    RawArtifactItem,
+    ScanReportData,
+    TimelineRow,
+)
 
 
 @dataclass
@@ -66,11 +73,12 @@ class ReportData:
     screenshots: list[ScreenshotEntry] = field(default_factory=list)
     executive_summary: str | None = None
     remediation: str | list[str] = field(default_factory=list)
+    raw_artifacts: list[dict[str, Any]] = field(default_factory=list)
 
 
-def report_to_summary(report: Report) -> ReportSummary:
-    """Build ReportSummary from Report.summary JSONB."""
-    s = dict(report.summary or {})
+def summary_dict_to_report_summary(summary: dict[str, Any] | None) -> ReportSummary:
+    """Build ReportSummary from a summary JSON blob (e.g. Report.summary or ReportRowSlice.summary)."""
+    s = dict(summary or {})
     s.pop("ai_insights", None)
     return ReportSummary(
         critical=int(s.get("critical", 0)),
@@ -82,6 +90,134 @@ def report_to_summary(report: Report) -> ReportSummary:
         sslIssues=int(s.get("sslIssues", 0)),
         headerIssues=int(s.get("headerIssues", 0)),
         leaksFound=bool(s.get("leaksFound", False)),
+    )
+
+
+def report_to_summary(report: Report) -> ReportSummary:
+    """Build ReportSummary from Report.summary JSONB."""
+    return summary_dict_to_report_summary(report.summary)
+
+
+def _timeline_row_to_entry(row: TimelineRow) -> TimelineEntry:
+    ca = row.created_at
+    if ca is None:
+        created = None
+    elif hasattr(ca, "isoformat"):
+        created = ca.isoformat()
+    else:
+        created = str(ca)
+    return TimelineEntry(
+        phase=row.phase,
+        order_index=row.order_index,
+        entry=row.entry,
+        created_at=created,
+    )
+
+
+def _finding_row_to_schema(row: FindingRow) -> Finding:
+    return Finding(
+        severity=row.severity,
+        title=row.title,
+        description=row.description or "",
+        cwe=row.cwe,
+        cvss=row.cvss,
+    )
+
+
+def build_report_data_from_scan_report(
+    data: ScanReportData,
+    *,
+    report_id: str | None = None,
+    executive_summary: str | None = None,
+    remediation: str | list[str] | None = None,
+    ai_insights: str | list[str] | None = None,
+) -> ReportData:
+    """
+    Map RPT-003 ``ScanReportData`` into ``ReportData`` for ``generate_*`` export helpers.
+    AI-related fields are optional overrides (e.g. filled after RPT-004 generation).
+    """
+    rid = report_id
+    if rid is None and data.report is not None:
+        rid = data.report.id
+    if rid is None:
+        rid = data.scan_id or "unknown"
+
+    target = ""
+    if data.report and data.report.target:
+        target = data.report.target
+    elif data.scan is not None:
+        target = data.scan.target_url
+
+    summary = summary_dict_to_report_summary(data.report.summary if data.report else None)
+    technologies: list[str] = []
+    if data.report and data.report.technologies:
+        technologies = [str(t) for t in data.report.technologies]
+
+    created_at: str | None = None
+    if data.report and data.report.created_at is not None:
+        ca = data.report.created_at
+        created_at = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
+
+    timeline = [_timeline_row_to_entry(t) for t in data.timeline]
+    phase_outputs = [
+        PhaseOutputEntry(phase=row.phase, output_data=row.output_data) for row in data.phase_outputs
+    ]
+
+    s = dict(data.report.summary or {}) if data.report else {}
+    ai_from_summary = s.get("ai_insights")
+    default_ai: str | list[str]
+    if isinstance(ai_from_summary, list):
+        default_ai = [str(x) for x in ai_from_summary]
+    elif ai_from_summary:
+        default_ai = [str(ai_from_summary)]
+    else:
+        default_ai = []
+    final_ai = ai_insights if ai_insights is not None else default_ai
+    if isinstance(final_ai, str):
+        final_ai_list: str | list[str] = [final_ai] if final_ai else []
+    else:
+        final_ai_list = final_ai
+
+    exec_s = executive_summary
+    if exec_s is None:
+        raw_exec = s.get("executive_summary") or s.get("executiveSummary")
+        if isinstance(raw_exec, dict):
+            exec_s = str(raw_exec)
+        elif raw_exec is not None:
+            exec_s = str(raw_exec)
+
+    rem = remediation
+    if rem is None:
+        raw_rem = s.get("remediation") or s.get("recommendations")
+        if isinstance(raw_rem, str):
+            rem = [raw_rem] if raw_rem else []
+        elif raw_rem is None:
+            rem = []
+        else:
+            rem = [str(x) for x in raw_rem] if isinstance(raw_rem, list) else []
+    elif isinstance(rem, str):
+        rem = [rem] if rem else []
+
+    raw_artifacts_dicts = [
+        item.model_dump(mode="json") for item in data.raw_artifacts
+    ]
+
+    return ReportData(
+        report_id=rid,
+        target=target,
+        summary=summary,
+        findings=[_finding_row_to_schema(f) for f in data.findings],
+        technologies=technologies,
+        created_at=created_at,
+        scan_id=data.scan_id,
+        ai_insights=final_ai_list,
+        timeline=timeline,
+        phase_outputs=phase_outputs,
+        evidence=[],
+        screenshots=[],
+        executive_summary=exec_s,
+        remediation=rem,
+        raw_artifacts=raw_artifacts_dicts,
     )
 
 
@@ -138,7 +274,79 @@ def _finding_to_dict(f: Finding) -> dict[str, Any]:
     }
 
 
-def generate_json(data: ReportData) -> bytes:
+# RPT-009 — stable severity ordering for JSON/CSV (HTML/PDF keep template order)
+_SEVERITY_RANK: dict[str, int] = {
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+    "info": 4,
+    "informational": 4,
+}
+
+
+def _findings_sorted(findings: list[Finding]) -> list[Finding]:
+    """Deterministic findings order: severity, title, CWE, CVSS."""
+
+    def key(f: Finding) -> tuple[int, str, str, float]:
+        rank = _SEVERITY_RANK.get((f.severity or "").lower().strip(), 99)
+        title = (f.title or "").lower()
+        cwe = f.cwe or ""
+        cvss = float(f.cvss) if f.cvss is not None else -1.0
+        return (rank, title, cwe, cvss)
+
+    return sorted(findings, key=key)
+
+
+def _summary_ordered(s: ReportSummary) -> dict[str, Any]:
+    """Stable key order for JSON export (RPT-009)."""
+    techs = sorted(str(t) for t in (s.technologies or []))
+    return {
+        "critical": s.critical,
+        "high": s.high,
+        "medium": s.medium,
+        "low": s.low,
+        "info": s.info,
+        "technologies": techs,
+        "sslIssues": s.sslIssues,
+        "headerIssues": s.headerIssues,
+        "leaksFound": s.leaksFound,
+    }
+
+
+def _canonical_json_nested(obj: Any) -> Any:
+    """Recursively sort dict keys for stable JSON inside timeline/output blobs."""
+    if isinstance(obj, dict):
+        return {k: _canonical_json_nested(obj[k]) for k in sorted(obj.keys())}
+    if isinstance(obj, list):
+        return [_canonical_json_nested(x) for x in obj]
+    return obj
+
+
+def _jinja_ai_sections_and_scan_artifacts(
+    jinja_context: dict[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """OWASP-008: stable additive keys for JSON/CSV from full Jinja context when available."""
+    if not jinja_context:
+        return {}, {"status": "skipped", "phase_blocks": []}
+    ai = jinja_context.get("ai_sections")
+    scan = jinja_context.get("scan_artifacts")
+    if not isinstance(ai, dict):
+        ai = {}
+    if not isinstance(scan, dict):
+        scan = {"status": "skipped", "phase_blocks": []}
+    return ai, scan
+
+
+def _jinja_active_web_scan(jinja_context: dict[str, Any] | None) -> dict[str, Any]:
+    """OWASP2-007: active web scan section snapshot for JSON export."""
+    if not jinja_context:
+        return {}
+    block = jinja_context.get("active_web_scan")
+    return block if isinstance(block, dict) else {}
+
+
+def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
     """Generate JSON report — full schema with metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
     ai_list = (
         data.ai_insights
@@ -154,50 +362,81 @@ def generate_json(data: ReportData) -> bytes:
         if data.remediation
         else []
     )
+    tech_sorted = sorted(str(t) for t in (data.technologies or []))
+    findings_ordered = _findings_sorted(data.findings)
+    timeline_rows = sorted(
+        data.timeline,
+        key=lambda t: (t.order_index, t.phase or "", t.created_at or ""),
+    )
+    phase_rows = sorted(data.phase_outputs, key=lambda p: (p.phase or "",))
+    evidence_rows = sorted(
+        data.evidence,
+        key=lambda e: (e.finding_id, e.object_key, e.description or ""),
+    )
+    screenshot_rows = sorted(
+        data.screenshots,
+        key=lambda s: (s.object_key, s.url_or_email or ""),
+    )
+    metadata = {
+        "report_id": data.report_id,
+        "target": data.target,
+        "scan_id": data.scan_id,
+        "created_at": data.created_at,
+        "technologies": tech_sorted,
+    }
+    timeline = [
+        {
+            "phase": t.phase,
+            "order_index": t.order_index,
+            "entry": _canonical_json_nested(t.entry),
+            "created_at": t.created_at,
+        }
+        for t in timeline_rows
+    ]
+    phase_outputs = [
+        {"phase": p.phase, "output_data": _canonical_json_nested(p.output_data)}
+        for p in phase_rows
+    ]
+    evidence = [
+        {"finding_id": e.finding_id, "object_key": e.object_key, "description": e.description}
+        for e in evidence_rows
+    ]
+    screenshots = [
+        {"object_key": s.object_key, "url_or_email": s.url_or_email}
+        for s in screenshot_rows
+    ]
+    ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
+    active_web_scan = _jinja_active_web_scan(jinja_context)
     output = {
         "report_id": data.report_id,
         "target": data.target,
         "scan_id": data.scan_id,
         "created_at": data.created_at,
-        "metadata": {
-            "report_id": data.report_id,
-            "target": data.target,
-            "scan_id": data.scan_id,
-            "created_at": data.created_at,
-            "technologies": data.technologies,
-        },
+        "metadata": metadata,
         "executive_summary": data.executive_summary,
-        "summary": data.summary.model_dump(),
-        "findings": [_finding_to_dict(f) for f in data.findings],
-        "technologies": data.technologies,
-        "timeline": [
-            {"phase": t.phase, "order_index": t.order_index, "entry": t.entry, "created_at": t.created_at}
-            for t in data.timeline
-        ],
-        "phase_outputs": [
-            {"phase": p.phase, "output_data": p.output_data}
-            for p in data.phase_outputs
-        ],
-        "evidence": [
-            {"finding_id": e.finding_id, "object_key": e.object_key, "description": e.description}
-            for e in data.evidence
-        ],
-        "screenshots": [
-            {"object_key": s.object_key, "url_or_email": s.url_or_email}
-            for s in data.screenshots
-        ],
+        "summary": _summary_ordered(data.summary),
+        "findings": [_finding_to_dict(f) for f in findings_ordered],
+        "technologies": tech_sorted,
+        "timeline": timeline,
+        "phase_outputs": phase_outputs,
+        "evidence": evidence,
+        "screenshots": screenshots,
         "ai_conclusions": ai_list,
         "remediation": rem_list,
+        "ai_sections": _canonical_json_nested(ai_sections),
+        "scan_artifacts": _canonical_json_nested(scan_artifacts),
+        "active_web_scan": _canonical_json_nested(active_web_scan),
+        "raw_artifacts": data.raw_artifacts,
     }
     return json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
 
 
-def generate_csv(data: ReportData) -> bytes:
-    """Generate CSV report — findings as rows."""
+def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
+    """Generate CSV report — findings as rows (same severity order as JSON, RPT-009); optional AI/artifacts appendix."""
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["Severity", "Title", "Description", "CWE", "CVSS"])
-    for f in data.findings:
+    for f in _findings_sorted(data.findings):
         writer.writerow([
             f.severity,
             f.title or "",
@@ -205,259 +444,67 @@ def generate_csv(data: ReportData) -> bytes:
             f.cwe or "",
             str(f.cvss) if f.cvss is not None else "",
         ])
+    ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
+    writer.writerow([])
+    writer.writerow(["# ai_sections (section_key, text)"])
+    writer.writerow(["section_key", "section_text"])
+    for k in sorted(ai_sections.keys(), key=str):
+        writer.writerow([k, str(ai_sections[k] or "")])
+    writer.writerow([])
+    writer.writerow(["# scan_artifacts (single JSON cell)"])
+    writer.writerow([json.dumps(_canonical_json_nested(scan_artifacts), ensure_ascii=False)])
     return buf.getvalue().encode("utf-8")
 
 
-def generate_html(data: ReportData) -> bytes:
-    """Generate HTML report with metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
-    created = data.created_at or datetime.now(UTC).isoformat()
-    summary = data.summary
+def generate_html(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
+) -> bytes:
+    """RPT-008 — Tiered Jinja2 HTML (autoescape). Pass ``jinja_context`` from Report pipeline when available."""
+    from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
+    from src.reports.template_env import render_tier_report_html
 
-    findings_html = ""
-    for f in data.findings:
-        desc = html.escape(f.description or "").replace("\n", "<br>")
-        cwe = html.escape(f.cwe or "-")
-        cvss = str(f.cvss) if f.cvss is not None else "-"
-        findings_html += f"""
-        <tr>
-            <td><span class="sev-{html.escape(f.severity.lower())}">{html.escape(f.severity)}</span></td>
-            <td>{html.escape(f.title)}</td>
-            <td>{desc}</td>
-            <td>{cwe}</td>
-            <td>{cvss}</td>
-        </tr>"""
+    ctx = jinja_context if jinja_context is not None else minimal_jinja_context_from_report_data(
+        data, tier or "midgard"
+    )
+    eff_tier = str(ctx.get("tier") or tier or "midgard")
+    ctx = {**ctx, "tier": eff_tier}
+    html_str = render_tier_report_html(eff_tier, ctx)
+    return html_str.encode("utf-8")
 
-    tech_list = ", ".join(html.escape(t) for t in data.technologies) or "-"
 
-    exec_block = ""
-    if data.executive_summary:
-        exec_block = f"""
-        <section class="executive-summary">
-            <h2>Executive Summary</h2>
-            <p>{html.escape(data.executive_summary)}</p>
-        </section>"""
+def generate_pdf(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
+) -> bytes:
+    """
+    RPT-009 — PDF from the same tiered HTML as ``generate_html``, via WeasyPrint.
+    Requires native libs (Pango, Cairo); use Docker image or OS packages.
+    """
+    from src.reports.template_env import report_templates_directory
 
-    timeline_block = ""
-    if data.timeline:
-        items = "".join(
-            f"<li>{html.escape(t.phase)} (order: {t.order_index})"
-            + (f" — {html.escape(str(t.entry)[:100])}..." if t.entry else "")
-            + "</li>"
-            for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))
+    html_bytes = generate_html(data, jinja_context=jinja_context, tier=tier)
+    html_str = html_bytes.decode("utf-8")
+    base_url = str(report_templates_directory())
+
+    try:
+        from weasyprint import HTML
+    except (OSError, ImportError) as exc:
+        logger.error(
+            "weasyprint_unavailable",
+            extra={"event": "weasyprint_unavailable", "error_type": type(exc).__name__},
         )
-        timeline_block = f"""
-        <section class="timeline">
-            <h2>Timeline</h2>
-            <ul>{items}</ul>
-        </section>"""
+        raise RuntimeError("PDF generation unavailable (WeasyPrint system libraries missing)") from exc
 
-    phase_block = ""
-    if data.phase_outputs:
-        items = "".join(
-            f"<li><strong>{html.escape(p.phase)}</strong>: output available</li>"
-            for p in data.phase_outputs
+    try:
+        return HTML(string=html_str, base_url=base_url).write_pdf()
+    except Exception as exc:
+        logger.exception(
+            "pdf_generation_failed",
+            extra={"event": "pdf_generation_failed", "report_id": data.report_id},
         )
-        phase_block = f"""
-        <section class="phase-outputs">
-            <h2>Phase Outputs</h2>
-            <ul>{items}</ul>
-        </section>"""
-
-    evidence_block = ""
-    if data.evidence:
-        items = "".join(
-            f"<li>Finding {html.escape(e.finding_id[:8])}... — {html.escape(e.description or e.object_key)}</li>"
-            for e in data.evidence[:20]
-        )
-        evidence_block = f"""
-        <section class="evidence">
-            <h2>Evidence</h2>
-            <ul>{items}</ul>
-        </section>"""
-
-    screenshots_block = ""
-    if data.screenshots:
-        items = "".join(
-            f"<li>{html.escape(s.url_or_email or s.object_key)}</li>"
-            for s in data.screenshots[:20]
-        )
-        screenshots_block = f"""
-        <section class="screenshots">
-            <h2>Screenshots</h2>
-            <ul>{items}</ul>
-        </section>"""
-
-    ai_block = ""
-    if data.ai_insights:
-        insights = data.ai_insights if isinstance(data.ai_insights, list) else [data.ai_insights]
-        ai_items = "".join(f"<li>{html.escape(str(i))}</li>" for i in insights)
-        ai_block = f"""
-        <section class="ai-insights">
-            <h2>AI Conclusions</h2>
-            <ul>{ai_items}</ul>
-        </section>"""
-
-    rem_block = ""
-    if data.remediation:
-        rem_list = data.remediation if isinstance(data.remediation, list) else [data.remediation]
-        rem_items = "".join(f"<li>{html.escape(str(r))}</li>" for r in rem_list)
-        rem_block = f"""
-        <section class="remediation">
-            <h2>Remediation</h2>
-            <ul>{rem_items}</ul>
-        </section>"""
-
-    html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARGUS Report — {html.escape(data.target)}</title>
-    <style>
-        body {{ font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }}
-        h1 {{ color: #1a1a2e; }}
-        .meta {{ color: #666; font-size: 0.9rem; margin-bottom: 2rem; }}
-        table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{ border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }}
-        th {{ background: #f5f5f5; }}
-        .sev-critical {{ color: #c00; font-weight: bold; }}
-        .sev-high {{ color: #e67e22; font-weight: bold; }}
-        .sev-medium {{ color: #f39c12; }}
-        .sev-low {{ color: #27ae60; }}
-        .sev-info {{ color: #3498db; }}
-        .executive-summary, .timeline, .phase-outputs, .evidence, .screenshots, .ai-insights, .remediation {{
-            margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 6px;
-        }}
-        .executive-summary ul, .timeline ul, .phase-outputs ul, .evidence ul, .screenshots ul, .ai-insights ul, .remediation ul {{
-            margin: 0.5rem 0 0 1.5rem;
-        }}
-    </style>
-</head>
-<body>
-    <h1>ARGUS Security Report</h1>
-    <div class="meta">
-        <p><strong>Target:</strong> {html.escape(data.target)}</p>
-        <p><strong>Report ID:</strong> {html.escape(data.report_id)}</p>
-        <p><strong>Created:</strong> {html.escape(created)}</p>
-        <p><strong>Technologies:</strong> {tech_list}</p>
-        <p><strong>Summary:</strong> Critical: {summary.critical}, High: {summary.high}, Medium: {summary.medium}, Low: {summary.low}, Info: {summary.info}</p>
-    </div>
-    {exec_block}
-    <section>
-        <h2>Findings</h2>
-        <table>
-            <thead>
-                <tr><th>Severity</th><th>Title</th><th>Description</th><th>CWE</th><th>CVSS</th></tr>
-            </thead>
-            <tbody>{findings_html}
-            </tbody>
-        </table>
-    </section>
-    {timeline_block}
-    {phase_block}
-    {evidence_block}
-    {screenshots_block}
-    {ai_block}
-    {rem_block}
-</body>
-</html>"""
-    return html_content.encode("utf-8")
-
-
-def generate_pdf(data: ReportData) -> bytes:
-    """Generate PDF report via reportlab — metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.units import cm
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=2 * cm, leftMargin=2 * cm)
-    styles = getSampleStyleSheet()
-    story = []
-
-    story.append(Paragraph("ARGUS Security Report", styles["Title"]))
-    story.append(Spacer(1, 0.5 * cm))
-    story.append(Paragraph(f"<b>Target:</b> {html.escape(str(data.target))}", styles["Normal"]))
-    story.append(Paragraph(f"<b>Report ID:</b> {html.escape(str(data.report_id))}", styles["Normal"]))
-    story.append(Paragraph(f"<b>Created:</b> {html.escape(str(data.created_at or '-'))}", styles["Normal"]))
-    story.append(Spacer(1, 0.5 * cm))
-
-    if data.executive_summary:
-        story.append(Paragraph("Executive Summary", styles["Heading2"]))
-        story.append(Paragraph(html.escape(data.executive_summary[:1500]), styles["Normal"]))
-        story.append(Spacer(1, 0.5 * cm))
-
-    summary = data.summary
-    story.append(Paragraph(
-        f"Summary: Critical: {summary.critical}, High: {summary.high}, Medium: {summary.medium}, Low: {summary.low}, Info: {summary.info}",
-        styles["Normal"],
-    ))
-    story.append(Spacer(1, 0.5 * cm))
-
-    story.append(Paragraph("Findings", styles["Heading2"]))
-    table_data = [["Severity", "Title", "Description", "CWE", "CVSS"]]
-    for f in data.findings:
-        desc = (f.description or "")[:200] + ("..." if len(f.description or "") > 200 else "")
-        table_data.append([
-            f.severity,
-            f.title or "",
-            desc,
-            f.cwe or "-",
-            str(f.cvss) if f.cvss is not None else "-",
-        ])
-    tbl = Table(table_data, colWidths=[1.5 * cm, 3 * cm, 6 * cm, 1.5 * cm, 1 * cm])
-    tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-        ("FONTSIZE", (0, 0), (-1, 0), 10),
-        ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-        ("BACKGROUND", (0, 1), (-1, -1), colors.beige),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
-        ("FONTSIZE", (0, 1), (-1, -1), 8),
-    ]))
-    story.append(tbl)
-    story.append(Spacer(1, 0.5 * cm))
-
-    if data.timeline:
-        story.append(Paragraph("Timeline", styles["Heading2"]))
-        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:15]:
-            story.append(Paragraph(f"• {html.escape(t.phase)} (order {t.order_index})", styles["Normal"]))
-        story.append(Spacer(1, 0.5 * cm))
-
-    if data.phase_outputs:
-        story.append(Paragraph("Phase Outputs", styles["Heading2"]))
-        for p in data.phase_outputs[:10]:
-            story.append(Paragraph(f"• {html.escape(p.phase)}", styles["Normal"]))
-        story.append(Spacer(1, 0.5 * cm))
-
-    if data.evidence:
-        story.append(Paragraph("Evidence", styles["Heading2"]))
-        for e in data.evidence[:10]:
-            story.append(Paragraph(f"• {html.escape(e.description or e.object_key)[:200]}", styles["Normal"]))
-        story.append(Spacer(1, 0.5 * cm))
-
-    if data.screenshots:
-        story.append(Paragraph("Screenshots", styles["Heading2"]))
-        for s in data.screenshots[:10]:
-            story.append(Paragraph(f"• {html.escape(s.url_or_email or s.object_key)[:200]}", styles["Normal"]))
-        story.append(Spacer(1, 0.5 * cm))
-
-    if data.ai_insights:
-        story.append(Paragraph("AI Conclusions", styles["Heading2"]))
-        insights = data.ai_insights if isinstance(data.ai_insights, list) else [data.ai_insights]
-        for i in insights:
-            story.append(Paragraph(html.escape(str(i)), styles["Normal"]))
-            story.append(Spacer(1, 0.2 * cm))
-        story.append(Spacer(1, 0.5 * cm))
-
-    if data.remediation:
-        story.append(Paragraph("Remediation", styles["Heading2"]))
-        rem_list = data.remediation if isinstance(data.remediation, list) else [data.remediation]
-        for r in rem_list:
-            story.append(Paragraph(html.escape(str(r)), styles["Normal"]))
-            story.append(Spacer(1, 0.2 * cm))
-
-    doc.build(story)
-    return buf.getvalue()
+        raise RuntimeError("PDF generation failed") from exc

@@ -1,0 +1,14 @@
+{
+  "name": "xsstrike",
+  "display_name": "XSStrike",
+  "description": "Reflected and DOM XSS scanner (CLI). Used by ARGUS vulnerability_analysis via xsstrike_adapter.",
+  "upstream": "https://github.com/s0md3v/XSStrike",
+  "upstream_version_note": "3.1.x (upstream tag varies; see vendor clone)",
+  "license": "GPL-3.0",
+  "entry_script": "vendor/XSStrike/xsstrike.py",
+  "recommended_cli_args": ["-u", "{url}", "--skip", "--skip-dom"],
+  "env": {
+    "XSSTRIKE_SCRIPT": "Optional absolute path to xsstrike.py on the host when not using Docker sandbox.",
+    "XSSTRIKE_EXTRA_ARGS": "Optional space-separated extra flags (parsed with shlex)."
+  }
+}

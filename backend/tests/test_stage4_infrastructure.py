@@ -40,7 +40,7 @@ STAGE4_ENV_VARS = [
     "EXPLOITATION_APPROVAL_TIMEOUT_MINUTES",
 ]
 
-SANDBOX_REQUIRED_TOOLS = ["sqlmap", "hydra", "nuclei", "python3"]
+SANDBOX_REQUIRED_TOOLS = ["sqlmap", "hydra", "nuclei", "python3", "xsstrike"]
 
 
 def _parse_env_keys(content: str) -> set[str]:
@@ -369,6 +369,32 @@ class TestStage4DockerComposeMinioInit:
         entrypoint = str(minio_init.get("entrypoint", ""))
         assert "stage4-artifacts" in entrypoint, (
             "minio-init must create 'stage4-artifacts' bucket"
+        )
+
+    def test_minio_init_creates_reports_bucket(self, compose_config: dict) -> None:
+        """minio-init should create MINIO_REPORTS_BUCKET (RPT-002)."""
+        minio_init = compose_config["services"]["minio-init"]
+        entrypoint = str(minio_init.get("entrypoint", ""))
+        assert "MINIO_REPORTS_BUCKET" in entrypoint and "argus-reports" in entrypoint, (
+            "minio-init must create reports bucket via MINIO_REPORTS_BUCKET"
+        )
+
+
+class TestRpt002EnvExamples:
+    """RPT-002: MINIO_REPORTS_BUCKET present in env templates (aligns with Settings)."""
+
+    def test_backend_env_example_has_minio_reports_bucket(
+        self, backend_env_example_keys: set[str]
+    ) -> None:
+        assert "MINIO_REPORTS_BUCKET" in backend_env_example_keys, (
+            "backend/.env.example must define MINIO_REPORTS_BUCKET"
+        )
+
+    def test_infra_env_example_has_minio_reports_bucket(
+        self, infra_env_example_keys: set[str]
+    ) -> None:
+        assert "MINIO_REPORTS_BUCKET" in infra_env_example_keys, (
+            "infra/.env.example must define MINIO_REPORTS_BUCKET"
         )
 
 

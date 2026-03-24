@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     minio_access_key: str = "argus"
     minio_secret_key: str = "argussecret"
     minio_bucket: str = "argus"
+    # Dedicated bucket for generated report files (presigned/download); stage artifacts stay in minio_bucket / stage buckets.
+    minio_reports_bucket: str = "argus-reports"
     minio_secure: bool = False
 
     # Redis & Celery (Phase 5)
@@ -65,7 +67,20 @@ class Settings(BaseSettings):
 
     # Recon Module (Phase 8)
     recon_tools_timeout: int = 300
+    # Optional path to xsstrike.py on the host (see plugins/tools/xsstrike). Env: XSSTRIKE_SCRIPT_PATH
+    xsstrike_script_path: str | None = None
     recon_max_concurrent_jobs: int = 5
+    # VA active scan / sandbox (OWASP-002): max concurrent async tool runs
+    active_scan_max_concurrent_jobs: int = 3
+    active_scan_max_capture_bytes: int = 4 * 1024 * 1024
+    # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
+    sqlmap_va_enabled: bool = False
+    # VA-007 — after vuln findings, exploitation phase may enqueue Celery sqlmap (policy + approval)
+    va_exploit_aggressive_enabled: bool = False
+    # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)
+    va_ai_plan_enabled: bool = False
+    va_active_scan_tool_timeout_sec: float = 120.0
+    ffuf_va_wordlist_path: str = ""
     recon_artifact_bucket: str = "argus-recon"
     recon_default_dns_resolver: str = "8.8.8.8"
     recon_scope_strict: bool = True
@@ -80,9 +95,24 @@ class Settings(BaseSettings):
     exploitation_max_concurrent: int = 3
     exploitation_approval_timeout_minutes: int = 60
 
+    # WEB-006 — destructive tools requiring explicit per-scan approval
+    destructive_tool_names: str = "sqlmap,commix"
+
+    # RPT-004 — AI report section text cache (Redis)
+    ai_text_cache_ttl_seconds: int = 604800
+
     @property
     def celery_broker(self) -> str:
         return self.celery_broker_url or self.redis_url
+
+    @property
+    def destructive_tools(self) -> frozenset[str]:
+        """Parse DESTRUCTIVE_TOOL_NAMES into a deduplicated frozenset of canonical names."""
+        return frozenset(
+            t.strip().lower()
+            for t in self.destructive_tool_names.split(",")
+            if t.strip()
+        )
 
     def get_cors_origins_list(self) -> list[str]:
         """Merge VERCEL_FRONTEND_URL, CORS_ORIGINS, and localhost dev origins (deduped)."""
@@ -127,3 +157,29 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _sync_llm_api_keys_to_environ() -> None:
+    """Copy LLM keys from Pydantic-loaded ``backend/.env`` into ``os.environ``.
+
+    Pydantic Settings reads ``.env`` into ``settings`` fields but does not populate
+    ``os.environ``. Code in ``src.llm.adapters`` and ``src.core.llm_config`` only
+    reads ``os.environ``. Values already set in the real environment win.
+    """
+    pairs: list[tuple[str, str | None]] = [
+        ("OPENAI_API_KEY", settings.openai_api_key),
+        ("DEEPSEEK_API_KEY", settings.deepseek_api_key),
+        ("OPENROUTER_API_KEY", settings.openrouter_api_key),
+        ("GOOGLE_API_KEY", settings.google_api_key),
+        ("KIMI_API_KEY", settings.kimi_api_key),
+        ("PERPLEXITY_API_KEY", settings.perplexity_api_key),
+    ]
+    for env_key, val in pairs:
+        if not val or not str(val).strip():
+            continue
+        if (os.environ.get(env_key) or "").strip():
+            continue
+        os.environ[env_key] = str(val).strip()
+
+
+_sync_llm_api_keys_to_environ()

@@ -1,0 +1,37 @@
+{% set stub = tier_stubs.get(tier) or {} %}
+{% if active_web_scan.visible %}
+<section class="panel active-web-scan" id="active-web-scan">
+    <h2>Активное веб-сканирование</h2>
+    <p class="meta">Динамическое тестирование (фазы <code>vuln_analysis</code>, <code>exploitation</code>): выводы инструментов в сырых артефактах и сжатый ИИ-контекст по разделам отчёта.</p>
+
+    {% if active_web_scan.tools_run %}
+        <h3>Запускавшиеся инструменты (по именам артефактов)</h3>
+        <ul>
+            {% for name in active_web_scan.tools_run %}
+                <li><code>{{ name | e }}</code></li>
+            {% endfor %}
+        </ul>
+    {% elif stub.active_web_scan %}
+        <p class="empty">По именам raw-артефактов инструменты активного сканирования не выявлены (или артефакты не загружались).</p>
+    {% endif %}
+
+    <h3>Артефакты и API</h3>
+    <p>Сырые логи см. в разделе <a href="#{{ active_web_scan.artifacts_section_id | e }}">«Артефакты этапов»</a>.
+        Дополнительно: <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=vuln_analysis&amp;raw=true</code>,
+        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=exploitation&amp;raw=true</code>.</p>
+
+    {% if active_web_scan.ai_summary_rows %}
+        <h3>Краткий ИИ-контекст (разделы отчёта)</h3>
+        {% for row in active_web_scan.ai_summary_rows %}
+            <h4>{{ row.label | e }}</h4>
+            <p class="ai-slot-body">{{ row.text | e }}</p>
+        {% endfor %}
+    {% elif stub.active_web_scan %}
+        <p class="empty">Тексты ИИ для связанных разделов пока пусты или не сгенерированы.</p>
+    {% endif %}
+
+    <h3>Пример безопасной проверки отражённого ввода (curl)</h3>
+    <p>Используйте только на разрешённых стендах. Подставьте безопасную тестовую строку вместо плейсхолдера; не вставляйте исполняемый HTML/JS в отчёт.</p>
+    <pre class="ai-slot-body"><code>{{ active_web_scan.curl_xss_example | e }}</code></pre>
+</section>
+{% endif %}

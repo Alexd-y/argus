@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import (
     http_exception_handler as default_http_exception_handler,
     request_validation_exception_handler as default_validation_exception_handler,
@@ -86,7 +87,7 @@ async def contract_validation_exception_handler(
         422,
         "Validation failed",
         "validation_error",
-        exc.errors(),
+        jsonable_encoder(exc.errors()),
     )
 
 

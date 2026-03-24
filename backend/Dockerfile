@@ -13,12 +13,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
+# WeasyPrint (RPT-009): Pango/Cairo/HarfBuzz + fonts for PDF text rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap dnsutils whois curl net-tools \
+    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+    libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

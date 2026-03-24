@@ -1,4 +1,4 @@
-"""Tests for ARGUS-007 Celery tasks — scan_phase_task, tool_run_task.
+"""Tests for ARGUS-007 Celery tasks — scan_phase_task, tool_run_task, va_active_scan_tool.
 
 All tests use mocks only. No real Redis/Celery broker in CI.
 """
@@ -202,3 +202,99 @@ class TestToolRunTask:
                     "https://example.com",
                     {},
                 )
+
+
+class TestVaActiveScanToolTask:
+    """OWASP-003 — argus.va_active_scan_tool delegates to run_va_active_scan_sync."""
+
+    def test_task_registered_on_celery_app(self) -> None:
+        import src.tasks  # noqa: F401 — register tasks
+
+        from src.celery_app import app as celery_app
+
+        assert "argus.va_active_scan_tool" in celery_app.tasks
+
+    def test_task_route_argus_tools_queue(self) -> None:
+        from src.celery_app import app as celery_app
+
+        routes = celery_app.conf.task_routes or {}
+        assert routes.get("argus.va_active_scan_tool", {}).get("queue") == "argus.tools"
+
+    def test_va_active_scan_tool_task_calls_runner(self) -> None:
+        fake = {
+            "exit_code": 0,
+            "stdout": "ok",
+            "stderr": "",
+            "duration_ms": 10,
+            "tool_id": "nuclei",
+            "error_reason": "",
+        }
+        with patch("src.tasks.run_va_active_scan_sync", return_value=fake) as mock_run:
+            from src.tasks import va_active_scan_tool_task
+
+            result = va_active_scan_tool_task(
+                "nuclei",
+                "https://example.com",
+                ["nuclei", "-version"],
+                60.0,
+                False,
+            )
+
+            mock_run.assert_called_once_with(
+                tool_name="nuclei",
+                target="https://example.com",
+                argv=["nuclei", "-version"],
+                timeout_sec=60.0,
+                use_sandbox=False,
+            )
+            assert result == fake
+
+    def test_va_active_scan_tool_task_apply_eager(self) -> None:
+        """task.apply() with task_always_eager returns structured result."""
+        from src.celery_app import app as celery_app
+
+        fake = {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "duration_ms": 1,
+            "tool_id": "test",
+            "error_reason": "",
+        }
+        prev_eager = celery_app.conf.task_always_eager
+        prev_prop = celery_app.conf.task_eager_propagates
+        try:
+            celery_app.conf.task_always_eager = True
+            celery_app.conf.task_eager_propagates = True
+            with patch("src.tasks.run_va_active_scan_sync", return_value=fake):
+                from src.tasks import va_active_scan_tool_task
+
+                ar = va_active_scan_tool_task.apply(
+                    kwargs={
+                        "tool_name": "nuclei",
+                        "target": "https://example.com",
+                        "argv": ["nuclei", "-h"],
+                        "timeout_sec": 5.0,
+                        "use_sandbox": True,
+                    }
+                )
+                assert ar.successful()
+                assert ar.result == fake
+        finally:
+            celery_app.conf.task_always_eager = prev_eager
+            celery_app.conf.task_eager_propagates = prev_prop
+
+    def test_va_active_scan_tool_task_exception_returns_error_dict(self) -> None:
+        with patch("src.tasks.run_va_active_scan_sync", side_effect=RuntimeError("boom")):
+            from src.tasks import va_active_scan_tool_task
+
+            result = va_active_scan_tool_task(
+                "nuclei",
+                "https://example.com",
+                ["nuclei"],
+                1.0,
+                False,
+            )
+            assert result["exit_code"] == -1
+            assert result["error_reason"] == "task_error"
+            assert result["tool_id"] == ""

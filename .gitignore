@@ -19,6 +19,12 @@ __pycache__/
 # IDE / editor (keep .cursor/rules for project config)
 .idea/
 .vscode/
+.cursor/workspace/
+
+# Coverage
+.coverage
+htmlcov/
+
 *.swp
 *.swo
 

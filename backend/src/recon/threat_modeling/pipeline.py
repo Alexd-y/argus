@@ -28,6 +28,8 @@ from app.schemas.threat_modeling.schemas import (
 from pydantic import BaseModel
 
 from src.core.llm_config import get_llm_client, has_any_llm_key
+from src.recon.raw_artifact_sink import sink_raw_bytes, sink_raw_json, sink_raw_text
+from src.recon.stage2_storage import upload_stage2_artifacts
 from src.recon.threat_modeling.ai_task_registry import (
     THREAT_MODELING_AI_TASKS,
     validate_threat_modeling_ai_payload,
@@ -41,7 +43,6 @@ from src.recon.threat_modeling.input_loader import (
     load_threat_model_input_bundle,
     load_threat_model_input_bundle_from_artifacts,
 )
-from src.recon.stage2_storage import upload_stage2_artifacts
 from src.recon.threat_modeling.mcp_enrichment import enrich_with_mcp
 
 if TYPE_CHECKING:
@@ -49,8 +50,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+def _ai_task_error_log_extra(err: str | None) -> dict[str, int | str]:
+    """Safe log fields for failed AI tasks — category and length only, no provider text."""
+    if not err:
+        return {"error_code": "unknown", "error_message_len": 0}
+    low = err.lower()
+    if "timeout" in low:
+        code = "timeout"
+    elif "rate limit" in low or "429" in err:
+        code = "rate_limited"
+    elif "401" in err or "403" in err or "unauthorized" in low or "forbidden" in low:
+        code = "auth_error"
+    elif "502" in err or "503" in err or "504" in err or "500" in err:
+        code = "upstream_http"
+    else:
+        code = "provider_error"
+    return {"error_code": code, "error_message_len": len(err)}
+
+
 # Stage for threat model artifacts in recon storage
 TM_STAGE = 18  # 18_reporting
+
+RAW_PHASE_THREAT_MODELING = "threat_modeling"
 
 # 11 artifacts: 9 normalized outputs + ai_reasoning_traces + mcp_trace
 TM_ARTIFACT_FILENAMES: tuple[str, ...] = (
@@ -444,8 +466,8 @@ def _run_ai_task(
     job_id: str,
     call_llm: Callable[[str, dict], str] | None,
     use_fallback_on_llm_error: bool = True,
-) -> tuple[dict[str, Any], str | None]:
-    """Execute single AI task. Returns (output_dict, error_message)."""
+) -> tuple[dict[str, Any], str | None, str | None]:
+    """Execute single AI task. Returns (output_dict, error_message, raw_llm_text_or_none)."""
     prior_outputs["_run_id"] = run_id
     prior_outputs["_job_id"] = job_id
     prior_outputs["_trace_id"] = f"{run_id}:{job_id}:{task_name}"
@@ -461,14 +483,17 @@ def _run_ai_task(
     else:
         prompt = f"{prompt_template}\n\nRecon bundle (excerpt):\n{bundle_json}\n\nOutput valid JSON only."
 
+    raw_llm: str | None = None
     if call_llm:
         try:
             raw = call_llm(prompt, {"task": task_name})
-            parsed = _extract_json_from_llm_response(raw)
+            if isinstance(raw, str):
+                raw_llm = raw
+            parsed = _extract_json_from_llm_response(raw) if isinstance(raw, str) else None
             if parsed:
                 validation = validate_threat_modeling_ai_payload(task_name, input_payload, parsed)
                 if validation["output"]["is_valid"]:
-                    return (parsed, None)
+                    return (parsed, None, raw_llm)
                 if use_fallback_on_llm_error:
                     logger.warning(
                         "LLM output validation failed, using fallback",
@@ -484,11 +509,11 @@ def _run_ai_task(
             if use_fallback_on_llm_error:
                 pass
             else:
-                return ({}, str(e))
+                return ({}, str(e), raw_llm)
 
     # Fallback
     output = _build_fallback_output(task_name, bundle, prior_outputs)
-    return (output, None)
+    return (output, None, raw_llm)
 
 
 def _save_artifact_file(recon_dir: Path, filename: str, data: bytes) -> None:
@@ -750,6 +775,22 @@ async def execute_threat_modeling_run(
                 blocking_reason=BLOCKED_MISSING_RECON,
             )
 
+        tenant_id_raw: str | None = run_record.tenant_id if run_record is not None else None
+        scan_id_raw = job_id
+        exec_log_lines: list[str] = []
+
+        def _tm_raw_log(msg: str) -> None:
+            exec_log_lines.append(f"{datetime.now(UTC).isoformat()} {msg}")
+
+        sink_raw_json(
+            tenant_id=tenant_id_raw,
+            scan_id=scan_id_raw,
+            phase=RAW_PHASE_THREAT_MODELING,
+            artifact_type="pipeline_input_bundle",
+            payload=bundle.model_dump(mode="json"),
+        )
+        _tm_raw_log(f"threat_modeling_start engagement={engagement_id} run_id={run_id} job_id={job_id}")
+
         # 3. MCP enrichment (optional)
         mcp_tools_list = mcp_tools or []
         mcp_traces: list[MCPInvocationTrace] = []
@@ -761,13 +802,22 @@ async def execute_threat_modeling_run(
                 job_id,
                 recon_dir=save_to_dir,
             )
+            if mcp_traces:
+                sink_raw_json(
+                    tenant_id=tenant_id_raw,
+                    scan_id=scan_id_raw,
+                    phase=RAW_PHASE_THREAT_MODELING,
+                    artifact_type="mcp_enrichment_trace",
+                    payload=[t.model_dump(mode="json") for t in mcp_traces],
+                )
+                _tm_raw_log(f"mcp_enrichment_calls={len(mcp_traces)}")
 
         # 4. Execute 9 AI tasks
         prior_outputs: dict[str, dict[str, Any]] = {}
         ai_reasoning_traces: list[AIReasoningTrace] = []
 
         for task_name in THREAT_MODELING_AI_TASKS:
-            output, err = _run_ai_task(
+            output, err, raw_llm = _run_ai_task(
                 task_name,
                 bundle,
                 prior_outputs,
@@ -776,10 +826,27 @@ async def execute_threat_modeling_run(
                 call_llm,
                 use_fallback_on_llm_error=use_llm_fallback,
             )
+            if raw_llm:
+                sink_raw_text(
+                    tenant_id=tenant_id_raw,
+                    scan_id=scan_id_raw,
+                    phase=RAW_PHASE_THREAT_MODELING,
+                    artifact_type=f"ai_task_{task_name}_llm_raw",
+                    text=raw_llm,
+                    ext="txt",
+                )
+            sink_raw_json(
+                tenant_id=tenant_id_raw,
+                scan_id=scan_id_raw,
+                phase=RAW_PHASE_THREAT_MODELING,
+                artifact_type=f"ai_task_{task_name}_output",
+                payload=output,
+            )
+            _tm_raw_log(f"ai_task_done task={task_name} err={err is not None}")
             if err and not use_llm_fallback:
                 logger.error(
                     "AI task failed",
-                    extra={"task": task_name, "error": err},
+                    extra={"task": task_name, **_ai_task_error_log_extra(err)},
                 )
                 raise ThreatModelPipelineError(
                     "AI task failed",
@@ -815,6 +882,23 @@ async def execute_threat_modeling_run(
         mcp_trace_data = _traces_to_json(mcp_traces)
         _persist_artifact("mcp_trace.json", mcp_trace_data)
 
+        sink_raw_json(
+            tenant_id=tenant_id_raw,
+            scan_id=scan_id_raw,
+            phase=RAW_PHASE_THREAT_MODELING,
+            artifact_type="ai_reasoning_traces",
+            payload=[t.model_dump(mode="json") for t in ai_reasoning_traces],
+        )
+        sink_raw_bytes(
+            tenant_id=tenant_id_raw,
+            scan_id=scan_id_raw,
+            phase=RAW_PHASE_THREAT_MODELING,
+            artifact_type="mcp_trace_final",
+            ext="json",
+            data=mcp_trace_data,
+        )
+        _tm_raw_log("normalized_artifacts_written")
+
         # 9. Generate and persist report artifacts via generate_all_artifacts
         tm_artifact = _build_threat_model_artifact(
             run_id, job_id, prior_outputs, ai_reasoning_traces, mcp_traces
@@ -843,6 +927,7 @@ async def execute_threat_modeling_run(
                 run_id=run_id,
                 job_id=job_id,
             )
+            _tm_raw_log("stage2_minio_upload_done")
 
         # DB path: upload to storage via artifact_service
         if db is not None and not save_to_dir:
@@ -912,6 +997,17 @@ async def execute_threat_modeling_run(
                     content_type=content_type,
                     artifact_type="threat_model",
                 )
+            _tm_raw_log("db_artifacts_persisted")
+
+        _tm_raw_log("pipeline_completed")
+        sink_raw_text(
+            tenant_id=tenant_id_raw,
+            scan_id=scan_id_raw,
+            phase=RAW_PHASE_THREAT_MODELING,
+            artifact_type="pipeline_execution_log",
+            text="\n".join(exec_log_lines),
+            ext="log",
+        )
 
         completed_at = datetime.now(UTC)
 

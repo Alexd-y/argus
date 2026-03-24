@@ -19,7 +19,7 @@ _PROVIDERS: list[tuple[str, str, str]] = [
 
 
 def _get_key(env_key: str) -> str | None:
-    """Get env value, return None if empty or missing."""
+    """Get env value (populated from ``settings`` at app startup — see ``config._sync_llm_api_keys_to_environ``)."""
     v = os.environ.get(env_key)
     return (v or "").strip() or None
 

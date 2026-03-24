@@ -1,8 +1,8 @@
 """Pydantic schemas per api-contracts.md."""
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Target: URL or domain, 1-512 chars
 TARGET_PATTERN = r"^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$"
@@ -97,6 +97,19 @@ class ScanDetailResponse(BaseModel):
     created_at: str
 
 
+class ScanArtifactItem(BaseModel):
+    """GET /scans/{scan_id}/artifacts — one object in tenant scan prefix (MinIO/S3)."""
+
+    key: str
+    size: int = Field(ge=0, description="Object size in bytes")
+    last_modified: str = Field(description="UTC instant as ISO-8601 with Z")
+    content_type: str
+    download_url: str | None = Field(
+        default=None,
+        description="Presigned GET URL when presigned=true",
+    )
+
+
 # --- Report ---
 class ReportSummary(BaseModel):
     """Report summary per api-contracts."""
@@ -130,6 +143,15 @@ class ReportListResponse(BaseModel):
     summary: ReportSummary
     findings: list[Finding] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
+    generation_status: str = Field(
+        default="ready",
+        description="Report artifact generation: pending | processing | ready | failed",
+    )
+    tier: str = Field(default="midgard", description="Report tier from generate request")
+    requested_formats: list[str] | None = Field(
+        default=None,
+        description="Formats requested at generation time (from Report.requested_formats JSONB)",
+    )
 
 
 class ReportDetailResponse(BaseModel):
@@ -142,6 +164,113 @@ class ReportDetailResponse(BaseModel):
     technologies: list[str] = Field(default_factory=list)
     created_at: str | None = None
     scan_id: str | None = None
+    generation_status: str = Field(
+        default="ready",
+        description="Report artifact generation: pending | processing | ready | failed",
+    )
+    tier: str = Field(default="midgard", description="Report tier from generate request")
+    requested_formats: list[str] | None = Field(
+        default=None,
+        description="Formats requested at generation time (from Report.requested_formats JSONB)",
+    )
+
+
+ReportTierLiteral = Literal["midgard", "asgard", "valhalla"]
+
+
+class ReportGenerateRequest(BaseModel):
+    """POST /scans/{scan_id}/reports/generate — RPT-007."""
+
+    type: ReportTierLiteral = Field(..., description="Report tier / template family")
+    formats: list[str] = Field(..., min_length=1, description="Export formats to produce")
+
+    @field_validator("formats", mode="before")
+    @classmethod
+    def normalize_format_strings(cls, v: Any) -> list[str]:
+        if not isinstance(v, list):
+            raise TypeError("formats must be a list")
+        return [str(x).lower().strip() for x in v if str(x).strip()]
+
+    @field_validator("formats")
+    @classmethod
+    def validate_formats(cls, v: list[str]) -> list[str]:
+        allowed = frozenset({"pdf", "html", "json", "csv"})
+        if not v:
+            raise ValueError("formats must contain at least one value")
+        bad = [x for x in v if x not in allowed]
+        if bad:
+            raise ValueError(f"Invalid format(s): use pdf, html, json, csv (got: {bad})")
+        # de-dupe preserving order
+        seen: set[str] = set()
+        out: list[str] = []
+        for x in v:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+
+class ReportGenerateAcceptedResponse(BaseModel):
+    """202 Accepted after queuing report generation (RPT-007)."""
+
+    report_id: str
+    task_id: str | None = Field(default=None, description="Background task id when queued via Celery")
+
+
+DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv")
+
+
+class ReportGenerateAllRequest(BaseModel):
+    """POST /scans/{scan_id}/reports/generate-all — optional body; default formats = all four."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    formats: list[str] | None = Field(
+        default=None,
+        description="Export formats; omit or null for pdf, html, json, csv",
+    )
+
+    @field_validator("formats", mode="before")
+    @classmethod
+    def normalize_format_strings_optional(cls, v: Any) -> list[str] | None:
+        if v is None:
+            return None
+        if not isinstance(v, list):
+            raise TypeError("formats must be a list or null")
+        return [str(x).lower().strip() for x in v if str(x).strip()]
+
+    @field_validator("formats")
+    @classmethod
+    def validate_formats_optional(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("formats must contain at least one value when provided")
+        allowed = frozenset({"pdf", "html", "json", "csv"})
+        bad = [x for x in v if x not in allowed]
+        if bad:
+            raise ValueError(f"Invalid format(s): use pdf, html, json, csv (got: {bad})")
+        seen: set[str] = set()
+        out: list[str] = []
+        for x in v:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+    def resolved_formats(self) -> list[str]:
+        if self.formats is None:
+            return list(DEFAULT_GENERATE_ALL_FORMATS)
+        return list(self.formats)
+
+
+class ReportGenerateAllAcceptedResponse(BaseModel):
+    """202 Accepted after queuing bulk report generation."""
+
+    bundle_id: str
+    report_ids: list[str]
+    task_id: str | None = Field(default=None, description="Celery task id for generate_all_reports")
+    count: int = Field(description="Number of report rows created (tiers × formats)")
 
 
 # --- Health ---

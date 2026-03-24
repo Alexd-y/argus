@@ -15,8 +15,11 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# PK/FK ids: VARCHAR(36) per Alembic 001 — ORM must use String(36), not dialect UUID, or UPDATEs get
+# ::uuid binds and Postgres raises: operator does not exist (character varying = uuid).
 
 
 def gen_uuid() -> str:
@@ -37,7 +40,7 @@ class Tenant(Base):
 
     __tablename__ = "tenants"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -50,9 +53,9 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -70,9 +73,9 @@ class Subscription(Base):
 
     __tablename__ = "subscriptions"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     plan: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -88,9 +91,9 @@ class Target(Base):
 
     __tablename__ = "targets"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     url: Mapped[str] = mapped_column(String(2048), nullable=False)
     scope_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -102,12 +105,12 @@ class Scan(Base):
 
     __tablename__ = "scans"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     target_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("targets.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("targets.id", ondelete="SET NULL"), nullable=True
     )
     target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
@@ -130,12 +133,12 @@ class ScanStep(Base):
 
     __tablename__ = "scan_steps"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     step_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
@@ -151,12 +154,12 @@ class ScanEvent(Base):
 
     __tablename__ = "scan_events"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     event: Mapped[str] = mapped_column(String(100), nullable=False)
     phase: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -173,12 +176,12 @@ class ScanTimeline(Base):
 
     __tablename__ = "scan_timeline"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     phase: Mapped[str] = mapped_column(String(50), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0)
@@ -191,12 +194,12 @@ class Asset(Base):
 
     __tablename__ = "assets"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     asset_type: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -209,17 +212,31 @@ class Report(Base):
 
     __tablename__ = "reports"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
+        String(36), ForeignKey("scans.id", ondelete="SET NULL"), nullable=True
     )
     target: Mapped[str] = mapped_column(String(2048), nullable=False)
+    tier: Mapped[str] = mapped_column(String(32), nullable=False, default="midgard")
+    generation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="ready")
+    template_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Sanitized short message for operators only; no tracebacks or raw exception text.
+    last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_formats: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Extension JSON; no secrets or PII; prefer an allowlisted key set at API boundaries.
+    report_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     technologies: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_reports_tenant_target_created", "tenant_id", "target", "created_at"),
+        Index("ix_reports_scan_tier", "scan_id", "tier"),
+    )
 
 
 class Finding(Base):
@@ -227,15 +244,15 @@ class Finding(Base):
 
     __tablename__ = "findings"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     report_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("reports.id", ondelete="CASCADE"), nullable=True
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=True
     )
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -255,12 +272,12 @@ class ToolRun(Base):
 
     __tablename__ = "tool_runs"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
@@ -276,15 +293,15 @@ class Evidence(Base):
 
     __tablename__ = "evidence"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     finding_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
     )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     content_type: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -297,9 +314,9 @@ class AuditLog(Base):
 
     __tablename__ = "audit_logs"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     user_id: Mapped[str] = mapped_column(String(36), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -320,9 +337,9 @@ class Policy(Base):
 
     __tablename__ = "policies"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     policy_type: Mapped[str] = mapped_column(String(100), nullable=False)
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -338,9 +355,9 @@ class UsageMetering(Base):
 
     __tablename__ = "usage_metering"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     metric_type: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -353,9 +370,9 @@ class ProviderConfig(Base):
 
     __tablename__ = "provider_configs"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     provider_key: Mapped[str] = mapped_column(String(100), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -371,9 +388,9 @@ class ProviderHealth(Base):
 
     __tablename__ = "provider_health"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     provider_key: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -386,12 +403,12 @@ class PhaseInput(Base):
 
     __tablename__ = "phase_inputs"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     phase: Mapped[str] = mapped_column(String(50), nullable=False)
     input_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -403,12 +420,12 @@ class PhaseOutput(Base):
 
     __tablename__ = "phase_outputs"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     phase: Mapped[str] = mapped_column(String(50), nullable=False)
     output_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -420,15 +437,15 @@ class ReportObject(Base):
 
     __tablename__ = "report_objects"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     report_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
     )
     format: Mapped[str] = mapped_column(String(20), nullable=False)
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
@@ -441,12 +458,12 @@ class Screenshot(Base):
 
     __tablename__ = "screenshots"
 
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     scan_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
+        String(36), ForeignKey("scans.id", ondelete="CASCADE"), nullable=False
     )
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     url_or_email: Mapped[str] = mapped_column(String(2048), nullable=True)
