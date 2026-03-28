@@ -1,0 +1,88 @@
+<section class="valhalla-remediation panel" id="remediation-priority">
+    <h2>Рекомендации и приоритизация</h2>
+    <h3>Этапы устранения уязвимостей</h3>
+    <div class="ai-slot-body">
+        {% set st = ai_sections.get("remediation_stages") if ai_sections is defined else "" %}
+        {% if st and st.strip() %}
+            {{ st }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Дорожная карта приоритетов</h3>
+    <div class="ai-slot-body">
+        {% set road = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
+        {% if road and road.strip() %}
+            {{ road }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Ответственные и сроки (заготовка)</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Уязвимость</th>
+                <th>Ответственное подразделение</th>
+                <th>Рекомендуемый срок</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td colspan="3" class="empty">Нет данных — заполнить по согласованию с заказчиком (ИИ / процесс).</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<section class="valhalla-zero-day panel" id="zero-day-potential">
+    <h2>Zero-day потенциал</h2>
+    <div class="ai-slot-body">
+        {% set zd = ai_sections.get("zero_day_potential") if ai_sections is defined else "" %}
+        {% if zd and zd.strip() %}
+            {{ zd }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+</section>
+
+<section class="valhalla-conclusion panel" id="conclusion">
+    <h2>Заключение</h2>
+    <h3>Итоговая оценка (ИИ)</h3>
+    <div class="ai-slot-body">
+        {% set ex = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
+        {% if ex and ex.strip() %}
+            {{ ex }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Рекомендации по усилению (hardening)</h3>
+    <div class="ai-slot-body">
+        {% set hd = ai_sections.get("hardening_recommendations") if ai_sections is defined else "" %}
+        {% if hd and hd.strip() %}
+            {{ hd }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Шаги устранения и готовность к продакшену</h3>
+    <div class="ai-slot-body">
+        {% set rs = ai_sections.get("remediation_step") if ai_sections is defined else "" %}
+        {% if rs and rs.strip() %}
+            {{ rs }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Дополнительное описание уязвимостей (ИИ)</h3>
+    <div class="ai-slot-body">
+        {% set vd = ai_sections.get("vulnerability_description") if ai_sections is defined else "" %}
+        {% if vd and vd.strip() %}
+            {{ vd }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+</section>

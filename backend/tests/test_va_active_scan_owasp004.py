@@ -176,9 +176,9 @@ async def test_va_active_scan_phase_runs_tools_mocked() -> None:
                             va_raw_log=log.append,
                         )
     assert len(out.intel_findings) >= 4
-    # One job × (dalfox, ffuf, sqlmap, nuclei, gobuster, wfuzz, commix)
-    assert m_run.await_count >= 7
-    assert m_text.call_count >= 21
+    # One job × core + OWASP2 tail + KAL-004 hooks (whatweb, nikto, testssl)
+    assert m_run.await_count >= 11
+    assert m_text.call_count >= 33
     assert m_json.call_count >= 2
     assert any("va_active_scan_phase_done" in x for x in log)
 

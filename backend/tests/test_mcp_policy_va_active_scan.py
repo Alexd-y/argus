@@ -41,6 +41,19 @@ from src.recon.mcp.policy import (
         ("COMMIX", "commix"),
         ("com_mix", "commix"),
         ("com-mix", "commix"),
+        ("whatweb", "whatweb"),
+        ("What_Web", "whatweb"),
+        ("nikto", "nikto"),
+        ("NIKTO", "nikto"),
+        ("testssl", "testssl"),
+        ("testssl.sh", "testssl"),
+        ("sslscan", "sslscan"),
+        ("SSL_Scan", "sslscan"),
+        ("feroxbuster", "feroxbuster"),
+        ("hydra", "hydra"),
+        ("medusa", "medusa"),
+        ("mitmdump", "mitmdump"),
+        ("tcpdump", "tcpdump"),
     ],
 )
 def test_resolve_canonical_normalizes_and_allowlists(raw: str, expected: str) -> None:
@@ -52,7 +65,6 @@ def test_resolve_canonical_normalizes_and_allowlists(raw: str, expected: str) ->
     [
         "",
         "   ",
-        "nikto",
         "zap",
         "unknown_scanner",
         "sqlmap_extra_suffix_not_allowed",
@@ -74,13 +86,40 @@ def test_allowed_tools_frozenset_matches_policy() -> None:
             "gobuster",
             "wfuzz",
             "commix",
+            "whatweb",
+            "nikto",
+            "testssl",
+            "sslscan",
+            "feroxbuster",
+            "hydra",
+            "medusa",
+            "mitmdump",
+            "tcpdump",
         }
     )
 
 
 @pytest.mark.parametrize(
     "tool",
-    ["dalfox", "xsstrike", "ffuf", "sqlmap", "nuclei", "gobuster", "wfuzz", "commix"],
+    [
+        "dalfox",
+        "xsstrike",
+        "ffuf",
+        "sqlmap",
+        "nuclei",
+        "gobuster",
+        "wfuzz",
+        "commix",
+        "whatweb",
+        "nikto",
+        "testssl",
+        "sslscan",
+        "feroxbuster",
+        "hydra",
+        "medusa",
+        "mitmdump",
+        "tcpdump",
+    ],
 )
 def test_evaluate_allowed_each_canonical(tool: str) -> None:
     d = evaluate_va_active_scan_tool_policy(tool_name=tool)
@@ -110,6 +149,9 @@ def test_va_active_scan_mcp_operations_frozenset() -> None:
             "run_ffuf",
             "run_sqlmap",
             "run_nuclei",
+            "run_whatweb",
+            "run_nikto",
+            "run_testssl",
         }
     )
 
@@ -120,6 +162,8 @@ def test_va_active_scan_mcp_operations_frozenset() -> None:
         ("run_dalfox", True),
         ("RUN_SQLMAP", True),
         ("run-nuclei", True),
+        ("run_whatweb", True),
+        ("RUN_TESTSSL", True),
         ("run_other", False),
         ("", False),
     ],

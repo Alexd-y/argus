@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from src.api.schemas import Finding, ReportSummary
-from src.reports.generators import ReportData, generate_csv, generate_json, generate_pdf
+from src.reports.generators import (
+    ReportData,
+    build_valhalla_report_payload,
+    generate_csv,
+    generate_json,
+    generate_pdf,
+    generate_valhalla_sections_csv,
+)
 
 from tests.weasyprint_skips import WSP_REASON, WSP_SKIP
 
@@ -113,6 +120,7 @@ def test_generate_json_top_level_key_order() -> None:
         "ai_sections",
         "scan_artifacts",
         "active_web_scan",
+        "raw_artifacts",
     ]
     assert list(parsed["summary"].keys()) == [
         "critical",
@@ -207,6 +215,130 @@ def test_generate_json_nested_dict_key_sorting() -> None:
     raw = content.decode("utf-8")
     assert raw.index('"alpha"') < raw.index('"zebra"')
     assert raw.index('"a"') < raw.index('"b"')
+
+
+def test_vhl005_valhalla_json_includes_valhalla_report() -> None:
+    data = ReportData(
+        report_id="r-vhl",
+        target="https://vhl.example",
+        summary=ReportSummary(
+            critical=0,
+            high=1,
+            medium=0,
+            low=0,
+            info=0,
+            technologies=[],
+            sslIssues=0,
+            headerIssues=0,
+            leaksFound=False,
+        ),
+        findings=[
+            Finding(severity="high", title="H", description="D", cwe="CWE-89", cvss=8.0),
+        ],
+        technologies=[],
+        scan_id="s-vhl",
+        tenant_id="t-vhl",
+    )
+    jctx = {
+        "tier": "valhalla",
+        "target": data.target,
+        "scan_id": data.scan_id,
+        "tenant_id": data.tenant_id,
+        "valhalla_context": {
+            "robots_txt_analysis": {"found": False},
+            "sitemap_analysis": {"found": False, "url_count": 0, "sample_urls": []},
+            "tech_stack_table": [],
+            "outdated_components": [],
+            "leaked_emails": [],
+            "ssl_tls_analysis": {},
+            "security_headers_analysis": {"rows": []},
+            "dependency_analysis": [],
+            "threat_model": {},
+            "threat_model_excerpt": "",
+            "threat_model_phase_link": "",
+            "exploitation_post_excerpt": "",
+            "risk_matrix": {"variant": "matrix", "cells": [], "distribution": []},
+            "critical_vulns": [],
+        },
+        "recon_summary": {"summary_counts": {"high": 1}},
+        "owasp_compliance_rows": [],
+        "findings": [
+            {
+                "severity": "high",
+                "title": "H",
+                "description": "D",
+                "cwe": "CWE-89",
+                "cvss": 8.0,
+            }
+        ],
+        "exploitation": [],
+        "scan_artifacts": {"status": "skipped", "phase_blocks": []},
+        "ai_sections": {
+            "exploit_chains": "chain text",
+            "remediation_stages": "stage text",
+            "zero_day_potential": "zero text",
+            "prioritization_roadmap": "road",
+            "hardening_recommendations": "hard",
+        },
+    }
+    parsed = json.loads(generate_json(data, jinja_context=jctx).decode("utf-8"))
+    assert "valhalla_report" in parsed
+    vr = parsed["valhalla_report"]
+    assert vr["exploit_chains_text"] == "chain text"
+    assert vr["remediation_stages_text"] == "stage text"
+    assert vr["zero_day_text"] == "zero text"
+    assert "road" in vr["conclusion_text"] and "hard" in vr["conclusion_text"]
+    assert vr["title_meta"]["tier"] == "valhalla"
+    assert len(vr["findings"]) == 1
+
+
+def test_vhl005_valhalla_sections_csv_roundtrip() -> None:
+    data = ReportData(
+        report_id="r-csv",
+        target="https://csv.example",
+        summary=ReportSummary(
+            critical=0,
+            high=0,
+            medium=0,
+            low=0,
+            info=0,
+            technologies=[],
+            sslIssues=0,
+            headerIssues=0,
+            leaksFound=False,
+        ),
+        findings=[],
+        technologies=[],
+    )
+    jctx = {"tier": "valhalla", "valhalla_context": {}, "ai_sections": {}, "recon_summary": {}}
+    raw = generate_valhalla_sections_csv(data, jinja_context=jctx).decode("utf-8")
+    lines = [ln for ln in raw.strip().split("\n") if ln]
+    assert lines[0].startswith("section,")
+    assert "title_meta" in raw
+    payload = build_valhalla_report_payload(jctx, data)
+    assert set(payload.keys()) == set(
+        [
+            "title_meta",
+            "executive_summary_counts",
+            "owasp_compliance",
+            "robots_sitemap",
+            "tech_stack",
+            "outdated_components",
+            "emails",
+            "ssl_tls",
+            "headers",
+            "dependencies",
+            "risk_matrix",
+            "critical_vulns",
+            "threat_modeling_ref",
+            "findings",
+            "exploit_chains_text",
+            "remediation_stages_text",
+            "zero_day_text",
+            "conclusion_text",
+            "appendices",
+        ]
+    )
 
 
 @pytest.mark.weasyprint_pdf

@@ -20,6 +20,7 @@ from src.api.schemas import (
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Evidence as EvidenceModel
 from src.db.models import Finding as FindingModel
+from src.owasp_top10_2025 import parse_owasp_category
 from src.db.models import PhaseOutput, Report, ReportObject, ScanTimeline
 from src.db.models import Screenshot as ScreenshotModel
 from src.db.session import async_session_factory, set_session_tenant
@@ -30,11 +31,13 @@ from src.reports.generators import (
     ReportData,
     ScreenshotEntry,
     TimelineEntry,
+    VALHALLA_SECTIONS_CSV_FORMAT,
     build_report_data_from_db,
     generate_csv,
     generate_html,
     generate_json,
     generate_pdf,
+    generate_valhalla_sections_csv,
 )
 from src.reports.report_pipeline import _upsert_report_object
 from src.reports.storage import download as storage_download
@@ -59,12 +62,13 @@ def _hostname_from_target_string(value: str) -> str | None:
         return None
 
 
-VALID_FORMATS = {"pdf", "html", "json", "csv"}
+VALID_FORMATS = {"pdf", "html", "json", "csv", VALHALLA_SECTIONS_CSV_FORMAT}
 CONTENT_TYPES = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
+    VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
 
 
@@ -127,6 +131,8 @@ def _findings_to_schema(findings: list[FindingModel]) -> list[Finding]:
             description=f.description or "",
             cwe=f.cwe,
             cvss=f.cvss,
+            owasp_category=parse_owasp_category(f.owasp_category),
+            proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
         )
         for f in findings
     ]
@@ -297,7 +303,10 @@ async def _load_report_data(session, report: Report, findings: list[FindingModel
 @router.get("/{report_id}/download", response_model=None)
 async def download_report(
     report_id: str,
-    format: str = Query("pdf", description="pdf|html|json|csv"),
+    format: str = Query(
+        "pdf",
+        description="pdf|html|json|csv|valhalla_sections.csv (Valhalla tier only)",
+    ),
     regenerate: bool = Query(False, description="Force regeneration, skip cache"),
     redirect: bool = Query(False, description="Redirect to presigned URL instead of streaming"),
     tenant_id: str = Depends(get_current_tenant_id),
@@ -367,7 +376,14 @@ async def download_report(
         report_data = await _load_report_data(session, report, findings)
         tier_str = str(report.tier or "midgard")
         jctx = minimal_jinja_context_from_report_data(report_data, tier_str)
-        if fmt == "pdf":
+        if fmt == VALHALLA_SECTIONS_CSV_FORMAT:
+            if tier_str != "valhalla":
+                raise HTTPException(
+                    status_code=400,
+                    detail="valhalla_sections.csv is only available for valhalla tier reports",
+                )
+            content = generate_valhalla_sections_csv(report_data, jinja_context=jctx)
+        elif fmt == "pdf":
             content = generate_pdf(report_data, jinja_context=jctx, tier=tier_str)
         elif fmt == "html":
             content = generate_html(report_data, jinja_context=jctx, tier=tier_str)

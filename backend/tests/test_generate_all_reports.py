@@ -453,7 +453,10 @@ def test_normalize_generation_formats_requested_formats_string_scalar() -> None:
 
 @pytest.mark.asyncio
 async def test_enqueue_generate_all_bundle_creates_twelve_rows() -> None:
-    from src.reports.bundle_enqueue import enqueue_generate_all_bundle
+    """OWASP-006: 3 tiers × 4 formats = 12 Report rows (same as generate-all API default)."""
+    from src.reports.bundle_enqueue import GENERATE_ALL_REPORT_TIERS, enqueue_generate_all_bundle
+
+    assert len(GENERATE_ALL_REPORT_TIERS) * len(DEFAULT_GENERATE_ALL_API) == 12
 
     tenant_id = "00000000-0000-0000-0000-000000000001"
     scan_id = str(uuid.uuid4())
@@ -472,6 +475,24 @@ async def test_enqueue_generate_all_bundle_creates_twelve_rows() -> None:
     assert len(added) == 12
     assert {row.tier for row in added} == {"midgard", "asgard", "valhalla"}
     assert all(len(row.requested_formats or []) == 1 for row in added)
+    object_keys = [
+        build_report_object_key(
+            tenant_id,
+            scan_id,
+            row.tier,
+            row.id,
+            (row.requested_formats or ["json"])[0],
+        )
+        for row in added
+    ]
+    assert len(object_keys) == 12
+    assert len(set(object_keys)) == 12
+    for key in object_keys:
+        assert key.startswith(f"{tenant_id}/{scan_id}/reports/")
+        segs = key.split("/")
+        assert len(segs) == 5
+        assert segs[2] == "reports"
+        assert segs[3] in GENERATE_ALL_TIERS
 
 
 @pytest.mark.asyncio

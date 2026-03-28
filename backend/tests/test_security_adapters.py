@@ -6,6 +6,7 @@ import pytest
 
 from src.recon.adapters.security import (
     GitleaksAdapter,
+    SearchsploitAdapter,
     SemgrepAdapter,
     TrivyAdapter,
 )
@@ -36,6 +37,20 @@ async def test_trivy_run_with_raw_output():
 
 
 @pytest.mark.asyncio
+async def test_searchsploit_run_with_raw_json():
+    """Searchsploit parses JSON array and returns findings with CVE in data."""
+    adapter = SearchsploitAdapter()
+    raw = (
+        '[{"Title":"Test Apache","EDB-ID":"12345","Path":"linux/webapps/12345.txt",'
+        '"Codes":"CVE-2020-1234"}]'
+    )
+    findings = await adapter.run("apache", {"raw_output": raw})
+    assert len(findings) == 1
+    assert findings[0]["source_tool"] == "searchsploit"
+    assert "CVE-2020-1234" in (findings[0].get("data") or {}).get("cves", [])
+
+
+@pytest.mark.asyncio
 async def test_semgrep_run_with_raw_output():
     """Semgrep parses pre-collected JSON and returns VULNERABILITY findings."""
     adapter = SemgrepAdapter()
@@ -49,7 +64,7 @@ async def test_semgrep_run_with_raw_output():
 
 def test_is_available():
     """is_available returns bool (may be False if tool not installed)."""
-    for adapter_cls in (GitleaksAdapter, TrivyAdapter, SemgrepAdapter):
+    for adapter_cls in (GitleaksAdapter, TrivyAdapter, SemgrepAdapter, SearchsploitAdapter):
         adapter = adapter_cls()
         assert isinstance(adapter.is_available(), bool)
 

@@ -86,13 +86,18 @@ def test_rpt008_render_tier_smoke(tier: str) -> None:
     html = render_tier_report_html(tier, ctx)
     assert "<!DOCTYPE html>" in html
     assert "ARGUS Security Report" in html
-    assert "Recon summary" in html
-    assert "Findings" in html
-    assert "AI Conclusions" in html
     if tier == "valhalla":
-        assert "Exploitation" in html
-        assert "exploitation" in html.lower()
+        assert "Титульный лист" in html
+        assert "Резюме для руководства" in html
+        assert "Детализированное описание уязвимостей" in html
+        assert "id=\"exploitation\"" in html
+        assert "цепочек эксплуатации" in html.lower() or "exploit chain" in html.lower()
+        assert "Приложение А" in html
+        assert "Заключение" in html
     else:
+        assert "Recon summary" in html
+        assert "Findings" in html
+        assert "AI Conclusions" in html
         assert "id=\"exploitation\"" not in html
 
 

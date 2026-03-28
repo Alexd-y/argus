@@ -1,0 +1,52 @@
+{
+  "dalfox": {
+    "default_args": [],
+    "aggressive_args": [
+      "--custom-payload",
+      "PAYLOADS_DIR/xss_custom.txt",
+      "--only-discovery"
+    ]
+  },
+  "xsstrike": {
+    "default_args": [],
+    "aggressive_args": [
+      "--threads",
+      "5",
+      "--timeout",
+      "15"
+    ]
+  },
+  "ffuf": {
+    "default_args": [],
+    "aggressive_args": [
+      "-w",
+      "PAYLOADS_DIR/xss_custom.txt",
+      "-t",
+      "3",
+      "-rate",
+      "8"
+    ]
+  },
+  "nuclei": {
+    "default_args": [],
+    "aggressive_args": [
+      "-u",
+      "TARGET",
+      "-tags",
+      "xss,sqli,misconfig",
+      "-rate-limit",
+      "20"
+    ]
+  },
+  "sqlmap": {
+    "default_args": [],
+    "aggressive_args": [
+      "-u",
+      "TARGET",
+      "--level",
+      "3",
+      "--risk",
+      "2"
+    ]
+  }
+}

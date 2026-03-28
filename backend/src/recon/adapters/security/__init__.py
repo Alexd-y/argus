@@ -7,6 +7,7 @@ from src.recon.adapters.security.prowler_adapter import ProwlerAdapter
 from src.recon.adapters.security.scoutsuite_adapter import ScoutSuiteAdapter
 from src.recon.adapters.security.semgrep_adapter import SemgrepAdapter
 from src.recon.adapters.security.terrascan_adapter import TerrascanAdapter
+from src.recon.adapters.security.searchsploit_adapter import SearchsploitAdapter
 from src.recon.adapters.security.trivy_adapter import TrivyAdapter
 from src.recon.adapters.security.trufflehog_adapter import TruffleHogAdapter
 
@@ -14,6 +15,7 @@ __all__ = [
     "SecurityToolAdapter",
     "GitleaksAdapter",
     "TrivyAdapter",
+    "SearchsploitAdapter",
     "SemgrepAdapter",
     "TruffleHogAdapter",
     "ProwlerAdapter",

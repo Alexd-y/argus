@@ -33,10 +33,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 libffi8 shared-mime-info fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
+# Docker CLI only — VA active scan runs `docker exec` into argus-sandbox (host socket mounted).
+COPY --from=docker:26-cli /usr/local/bin/docker /usr/local/bin/docker
+
 # Copy application
 COPY main.py .
 COPY src/ ./src/
 COPY app/ ./app/
+COPY data/ ./data/
 COPY alembic.ini .
 COPY alembic/ ./alembic/
 

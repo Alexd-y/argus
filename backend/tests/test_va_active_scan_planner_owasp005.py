@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from dataclasses import replace
+
 from src.recon.vulnerability_analysis.active_scan.planner import (
+    ActiveScanPlanStep,
     DB_SQL_TOOL_SEQUENCE,
     DEFAULT_TOOL_SEQUENCE,
     artifact_slug_for_plan_step,
     build_va_active_scan_plan,
     plan_step_to_public_dict,
+)
+from src.recon.vulnerability_analysis.active_scan_planner import (
+    merge_base_plan_with_ai_steps,
 )
 from src.recon.vulnerability_analysis.xsstrike_targets import collect_xsstrike_scan_jobs
 
@@ -72,29 +78,34 @@ def test_build_va_active_scan_plan_public_dict_stable_json_keys() -> None:
 def test_php_stack_orders_sqlmap_first() -> None:
     plan = build_va_active_scan_plan(_fixed_bundle_php())
     assert plan
-    assert plan[0].tool_id == "sqlmap"
-    assert plan[0].extra_hints.get("tool_order_rationale") == "db_sql_surface"
+    # VDF-001: whatweb/nikto precede core DB/SQL tools per job
+    assert plan[0].tool_id == "whatweb"
+    assert plan[2].tool_id == "sqlmap"
+    assert plan[2].extra_hints.get("tool_order_rationale") == "db_sql_surface"
 
 
 def test_default_stack_orders_dalfox_first() -> None:
     plan = build_va_active_scan_plan(_fixed_bundle_no_tech())
     assert plan
-    assert plan[0].tool_id == "dalfox"
-    assert plan[0].extra_hints.get("tool_order_rationale") == "default_xss_then_fuzz"
+    assert plan[0].tool_id == "whatweb"
+    assert plan[2].tool_id == "dalfox"
+    assert plan[2].extra_hints.get("tool_order_rationale") == "default_xss_then_fuzz"
 
 
 def test_owasp002_default_sequence_includes_nuclei_gobuster_wfuzz_commix() -> None:
     plan = build_va_active_scan_plan(_fixed_bundle_no_tech())
     assert plan[0].extra_hints["tool_sequence"] == list(DEFAULT_TOOL_SEQUENCE)
-    tail = ("nuclei", "gobuster", "wfuzz", "commix")
-    assert DEFAULT_TOOL_SEQUENCE[-len(tail) :] == tail
+    assert DEFAULT_TOOL_SEQUENCE[:2] == ("whatweb", "nikto")
+    assert DEFAULT_TOOL_SEQUENCE[6:11] == ("nuclei", "gobuster", "feroxbuster", "wfuzz", "commix")
+    assert DEFAULT_TOOL_SEQUENCE[-3:] == ("wfuzz", "commix", "testssl")
 
 
 def test_owasp002_db_sequence_includes_tail_after_sql_core() -> None:
     plan = build_va_active_scan_plan(_fixed_bundle_php())
     assert plan[0].extra_hints["tool_sequence"] == list(DB_SQL_TOOL_SEQUENCE)
-    assert DB_SQL_TOOL_SEQUENCE[:3] == ("sqlmap", "dalfox", "ffuf")
-    assert DB_SQL_TOOL_SEQUENCE[-4:] == ("nuclei", "gobuster", "wfuzz", "commix")
+    assert DB_SQL_TOOL_SEQUENCE[:4] == ("whatweb", "nikto", "sqlmap", "dalfox")
+    assert DB_SQL_TOOL_SEQUENCE[4:9] == ("xsstrike", "ffuf", "nuclei", "gobuster", "feroxbuster")
+    assert DB_SQL_TOOL_SEQUENCE[-3:] == ("wfuzz", "commix", "testssl")
 
 
 def test_owasp002_plan_length_respects_jobs_cap_not_tool_count() -> None:
@@ -132,3 +143,38 @@ def test_sqlmap_step_gets_post_data_when_form_job() -> None:
     commix_steps = [s for s in plan if s.tool_id == "commix"]
     assert len(commix_steps) == 1
     assert commix_steps[0].post_data is not None
+
+
+def test_merge_ai_steps_drops_duplicate_tool_and_path() -> None:
+    base = [
+        ActiveScanPlanStep(
+            plan_index=0,
+            tool_id="dalfox",
+            url="https://dup.example.com/page?x=1",
+            post_data=None,
+            job_source="test",
+            job_index=0,
+            extra_hints={},
+            host_slug="dup",
+        )
+    ]
+    ai_dup = replace(
+        base[0],
+        plan_index=0,
+        job_source="ai",
+        argv_override=("dalfox", "url", "https://dup.example.com/page?y=2"),
+    )
+    ai_other = ActiveScanPlanStep(
+        plan_index=0,
+        tool_id="nuclei",
+        url="https://other.example.com/",
+        post_data=None,
+        job_source="ai",
+        job_index=0,
+        extra_hints={},
+        host_slug="other",
+    )
+    merged = merge_base_plan_with_ai_steps(base, [ai_dup, ai_other, ai_other])
+    assert len(merged) == 2
+    assert merged[0].tool_id == "dalfox"
+    assert merged[1].tool_id == "nuclei"

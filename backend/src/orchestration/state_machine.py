@@ -9,6 +9,7 @@ from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS, ReportSummary
+from src.owasp_top10_2025 import parse_owasp_category
 from src.core.observability import (
     record_phase_duration,
     record_tool_run,
@@ -26,6 +27,7 @@ from src.db.models import (
     ScanTimeline,
 )
 from src.orchestration.aggressive_exploit_tools import maybe_run_aggressive_exploit_tools
+from src.storage.s3 import upload_finding_poc_json
 from src.orchestration.handlers import (
     run_exploit_attempt,
     run_exploit_verify,
@@ -303,6 +305,10 @@ async def _persist_report_and_findings(
     await session.flush()
 
     for f in findings_raw:
+        poc_blob = f.get("proof_of_concept")
+        poc_db = poc_blob if isinstance(poc_blob, dict) and poc_blob else None
+        ow_raw = f.get("owasp_category")
+        owasp_val = parse_owasp_category(ow_raw.strip()) if isinstance(ow_raw, str) and ow_raw.strip() else None
         finding = Finding(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
@@ -313,8 +319,18 @@ async def _persist_report_and_findings(
             description=str(f.get("description", "")) if f.get("description") else None,
             cwe=str(f.get("cwe", ""))[:20] if f.get("cwe") else None,
             cvss=float(f["cvss"]) if isinstance(f.get("cvss"), (int, float)) else None,
+            owasp_category=owasp_val,
+            proof_of_concept=poc_db,
         )
         session.add(finding)
+        if poc_db:
+            await asyncio.to_thread(
+                upload_finding_poc_json,
+                tenant_id,
+                scan_id,
+                finding.id,
+                poc_db,
+            )
         await _record_event(
             session,
             tenant_id,
@@ -468,8 +484,16 @@ async def run_scan_state_machine(
                     record_tool_run("vuln_analysis")
                     tm = threat_out.threat_model if threat_out else {}
                     assets = recon_out.assets if recon_out else []
+                    # OWASP-003: pass target + tenant_id + scan_id so VA active scan and raw sinks work.
+                    # Active scan runs inside handlers.run_vuln_analysis when SANDBOX_ENABLED=true (do not call
+                    # run_va_active_scan_phase from state_machine).
                     vuln_out = await run_vuln_analysis(
-                        tm, assets, target=target, tenant_id=tenant_id, scan_id=scan_id
+                        tm,
+                        assets,
+                        target=target,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        scan_options=options,
                     )
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:

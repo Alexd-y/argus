@@ -1,0 +1,25 @@
+{# Моделирование угроз + детальные находки #}
+{% set vc = valhalla_context %}
+<section class="valhalla-threat panel" id="threat-modeling">
+    <h2>Моделирование угроз и сценарии атак</h2>
+    <p>На основе выявленных уязвимостей смоделированы вероятные сценарии атак злоумышленника.</p>
+    <h3>Сценарии (ИИ)</h3>
+    <div class="ai-slot-body">
+        {% set atk = ai_sections.get("attack_scenarios") if ai_sections is defined else "" %}
+        {% if atk and atk.strip() %}
+            {{ atk }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+    <h3>Выдержка из threat model (контекст скана)</h3>
+    {% if vc.threat_model_excerpt %}
+        <pre class="ai-slot-body">{{ vc.threat_model_excerpt | e }}</pre>
+    {% elif vc.threat_model and vc.threat_model.excerpt %}
+        <pre class="ai-slot-body">{{ vc.threat_model.excerpt | e }}</pre>
+    {% else %}
+        <p class="empty">Нет данных</p>
+    {% endif %}
+</section>
+
+{% include "partials/valhalla/findings_table.html.j2" %}

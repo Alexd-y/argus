@@ -38,6 +38,20 @@ def test_collect_jobs_from_params_legacy_csv_shape() -> None:
     assert jobs[0].post_data is None
 
 
+def test_collect_jobs_live_hosts_host_field_accepts_full_target_url() -> None:
+    """Handlers used to pass live_hosts=[{host: full URL}]; scope must still match job hostname."""
+    bundle = _minimal_bundle(
+        params_inventory=[
+            {"url": "https://alf.nu/alert1", "param": "world", "method": "GET"},
+        ],
+        live_hosts=[{"host": "https://alf.nu/alert1?world=alert&level=alert0"}],
+    )
+    jobs = collect_xsstrike_scan_jobs(bundle)
+    assert len(jobs) == 1
+    assert "alf.nu" in jobs[0].url
+    assert "world" in jobs[0].url
+
+
 def test_collect_jobs_scoped_by_live_hosts() -> None:
     bundle = _minimal_bundle(
         params_inventory=[

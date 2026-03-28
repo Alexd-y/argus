@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
+from src.core.config import settings
+from src.core.llm_config import has_any_llm_key
+from src.owasp_top10_2025 import OWASP_TOP10_2025_CATEGORY_TITLES
 from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
+)
+from src.reports.ai_text_generation import (
+    REPORT_AI_SKIPPED_GENERATION_FAILED,
+    REPORT_AI_SKIPPED_NO_LLM,
 )
 
 if TYPE_CHECKING:
@@ -20,6 +28,7 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     (e.g. API regenerate) without a second DB collect pass.
     """
     from src.reports import generators as gen
+    from src.reports.valhalla_report_context import ValhallaReportContext
     from src.services.reporting import (
         build_active_web_scan_section_context,
         normalize_report_tier,
@@ -27,7 +36,15 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     )
 
     tier_norm = normalize_report_tier(tier)
-    texts = _ai_text_slots_from_report_data(data, tier_norm)
+    texts: dict[str, str] = dict(_ai_text_slots_from_report_data(data, tier_norm))
+    for sk in report_tier_sections(tier_norm):
+        if (texts.get(sk) or "").strip():
+            continue
+        texts[sk] = (
+            REPORT_AI_SKIPPED_NO_LLM
+            if not has_any_llm_key()
+            else REPORT_AI_SKIPPED_GENERATION_FAILED
+        )
     jinja_tiers: dict[str, Any] = {}
     for name in ("midgard", "asgard", "valhalla"):
         keys = report_tier_sections(name)
@@ -72,9 +89,24 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     scan_artifacts_min = _build_scan_artifacts_from_raw(data.raw_artifacts)
     active_web = build_active_web_scan_section_context(tier_norm, scan_artifacts_min, texts)
 
-    return {
+    finding_dicts = [
+        gen._finding_to_dict(
+            f,
+            tenant_id=(data.tenant_id or None),
+            scan_id=(data.scan_id or None),
+        )
+        for f in data.findings
+    ]
+
+    valhalla_ctx: dict[str, Any] | None = None
+    if tier_norm == "valhalla":
+        valhalla_ctx = ValhallaReportContext().model_dump(mode="json")
+
+    out: dict[str, Any] = {
+        "embed_poc_screenshot_inline": settings.report_poc_embed_screenshot_inline,
         "tier": tier_norm,
-        "tenant_id": "",
+        "target": data.target or "",
+        "tenant_id": data.tenant_id or "",
         "scan_id": data.scan_id or "",
         "scan_artifacts": scan_artifacts_min,
         "active_web_scan": active_web,
@@ -84,7 +116,9 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         "timeline_count": len(data.timeline),
         "phase_inputs_count": 0,
         "phase_outputs_count": len(data.phase_outputs),
-        "findings": [gen._finding_to_dict(f) for f in data.findings],
+        "findings": finding_dicts,
+        "owasp_compliance_rows": gen.build_owasp_compliance_rows(finding_dicts),
+        "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
         "recon_summary": recon_summary,
         "exploitation": exploitation,
         "ai_sections": dict(texts),
@@ -99,6 +133,27 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
             },
         },
     }
+    if valhalla_ctx is not None:
+        out["valhalla_context"] = valhalla_ctx
+        out["report_executor_display_name"] = settings.report_executor_display_name
+        out["tool_runs"] = []
+        out["valhalla_appendix_nmap_excerpt"] = ""
+        out["valhalla_appendix_phase_inputs_excerpt"] = ""
+        tl_rows: list[dict[str, Any]] = []
+        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:32]:
+            snippet = ""
+            if t.entry is not None:
+                try:
+                    snippet = json.dumps(t.entry, ensure_ascii=False)[:800]
+                except (TypeError, ValueError):
+                    snippet = str(t.entry)[:800]
+            tl_rows.append({
+                "phase": t.phase or "",
+                "order_index": t.order_index,
+                "snippet": snippet,
+            })
+        out["valhalla_appendix_timeline_rows"] = tl_rows
+    return out
 
 
 _PHASE_LABELS: dict[str, str] = {

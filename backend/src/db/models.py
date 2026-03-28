@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -17,6 +18,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from src.owasp_top10_2025 import findings_owasp_category_check_sql
 
 # PK/FK ids: VARCHAR(36) per Alembic 001 — ORM must use String(36), not dialect UUID, or UPDATEs get
 # ::uuid binds and Postgres raises: operator does not exist (character varying = uuid).
@@ -259,11 +262,15 @@ class Finding(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     cwe: Mapped[str] = mapped_column(String(20), nullable=True)
     cvss: Mapped[float] = mapped_column(Float, nullable=True)
+    #: OWASP Top 10:2025 short id (``A01``…``A10``); see ``src/owasp_top10_2025.py``.
+    owasp_category: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    proof_of_concept: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_findings_scan_id", "scan_id"),
         Index("ix_findings_report_id", "report_id"),
+        CheckConstraint(findings_owasp_category_check_sql(), name="ck_findings_owasp_category"),
     )
 
 
@@ -447,7 +454,7 @@ class ReportObject(Base):
     report_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
     )
-    format: Mapped[str] = mapped_column(String(20), nullable=False)
+    format: Mapped[str] = mapped_column(String(48), nullable=False)
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

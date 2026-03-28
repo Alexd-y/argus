@@ -11,6 +11,8 @@ Path patterns (per backend-architecture.md):
 - reports:   {tenant_id}/{scan_id}/reports/{filename} (legacy flat filename)
 - report artifacts (RPT): {tenant_id}/{scan_id}/reports/{tier}/{report_id}.{fmt}
 - attachments: {tenant_id}/{scan_id}/attachments/{filename}
+- poc (finding PoC JSON, idempotent): {tenant_id}/{scan_id}/poc/{finding_id}.json — primary bucket (``settings.minio_bucket``), same as raw tooling artifacts (not reports bucket).
+- poc screenshots (PNG, idempotent): {tenant_id}/{scan_id}/poc/screenshots/{finding_id}.png — same bucket as PoC JSON.
 """
 
 import logging
@@ -37,6 +39,9 @@ OBJECT_TYPE_SCREENSHOTS = "screenshots"
 OBJECT_TYPE_EVIDENCE = "evidence"
 OBJECT_TYPE_REPORTS = "reports"
 OBJECT_TYPE_ATTACHMENTS = "attachments"
+OBJECT_TYPE_POC = "poc"
+# PoC screenshot objects live under .../poc/screenshots/ (not top-level object_type segment)
+POC_SCREENSHOTS_DIR = "screenshots"
 
 # Phase-scoped raw artifacts (MinIO key segment after scan_id)
 RAW_ARTIFACT_PHASES: frozenset[str] = frozenset(
@@ -264,6 +269,164 @@ def build_report_object_key(
     if _FORBIDDEN_PATTERN.search(filename):
         raise ValueError("Invalid report artifact filename")
     return f"{t}/{s}/{reports_seg}/{tier_c}/{filename}"
+
+
+def build_finding_poc_object_key(tenant_id: str, scan_id: str, finding_id: str) -> str:
+    """Stable key for idempotent PoC JSON: ``{tenant}/{scan}/poc/{finding_id}.json`` (primary MinIO bucket)."""
+    fid = _sanitize_path_component(finding_id, "finding_id")
+    if not fid.endswith(".json"):
+        fname = f"{fid}.json"
+    else:
+        fname = fid
+    return build_object_key(tenant_id, scan_id, OBJECT_TYPE_POC, fname)
+
+
+def build_finding_poc_screenshot_object_key(tenant_id: str, scan_id: str, finding_id: str) -> str:
+    """
+    Stable key for idempotent PoC screenshot PNG (same overwrite semantics as ``upload_finding_poc_json``):
+    ``{tenant_id}/{scan_id}/poc/screenshots/{finding_id}.png`` (primary MinIO bucket).
+    """
+    t = _sanitize_path_component(tenant_id, "tenant_id")
+    s = _sanitize_path_component(scan_id, "scan_id")
+    poc_seg = _sanitize_path_component(OBJECT_TYPE_POC, "object_type")
+    shots_seg = _sanitize_path_component(POC_SCREENSHOTS_DIR, "screenshots")
+    fid = _sanitize_path_component(finding_id, "finding_id")
+    base = fid[:-4] if fid.lower().endswith(".png") else fid
+    if not base:
+        raise ValueError("Invalid finding_id for PoC screenshot key")
+    fname = f"{base}.png"
+    if _FORBIDDEN_PATTERN.search(fname):
+        raise ValueError("Invalid PoC screenshot filename")
+    key = f"{t}/{s}/{poc_seg}/{shots_seg}/{fname}"
+    if not _validate_object_key(key):
+        raise ValueError("Invalid object key")
+    return key
+
+
+def _finding_poc_screenshots_prefix(tenant_id: str, scan_id: str) -> str | None:
+    """Validated prefix ``{tenant}/{scan}/poc/screenshots/`` for presign access checks."""
+    try:
+        t = _sanitize_path_component(tenant_id, "tenant_id")
+        s = _sanitize_path_component(scan_id, "scan_id")
+        poc_seg = _sanitize_path_component(OBJECT_TYPE_POC, "object_type")
+        shots_seg = _sanitize_path_component(POC_SCREENSHOTS_DIR, "screenshots")
+        return f"{t}/{s}/{poc_seg}/{shots_seg}/"
+    except ValueError:
+        return None
+
+
+def get_finding_poc_screenshot_presigned_url(
+    object_key: str,
+    tenant_id: str,
+    scan_id: str,
+    *,
+    expires_in: int = 3600,
+) -> str | None:
+    """
+    Presigned GET for a PoC screenshot key, only if ``object_key`` is under the given tenant/scan
+    ``.../poc/screenshots/*.png``. Reuses bucket resolution from ``get_presigned_url_by_key``.
+    """
+    if not isinstance(object_key, str) or not object_key.strip():
+        return None
+    key = object_key.strip()
+    if not _validate_object_key(key):
+        return None
+    prefix = _finding_poc_screenshots_prefix(tenant_id, scan_id)
+    if not prefix or not key.startswith(prefix):
+        return None
+    rest = key[len(prefix) :]
+    if not rest or "/" in rest or not rest.lower().endswith(".png"):
+        return None
+    return get_presigned_url_by_key(key, expires_in=expires_in)
+
+
+def upload_finding_poc_json(
+    tenant_id: str,
+    scan_id: str,
+    finding_id: str,
+    poc_dict: dict[str, Any],
+) -> str | None:
+    """
+    Upload canonical PoC JSON for a finding; overwrites same key (idempotent).
+    Uses ``settings.minio_bucket`` (not the reports bucket).
+    """
+    import json
+
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        key = build_finding_poc_object_key(tenant_id, scan_id, finding_id)
+    except ValueError:
+        logger.warning(
+            "Invalid finding PoC key parameters",
+            extra={"event": "finding_poc_upload_validation_failed"},
+        )
+        return None
+    try:
+        body = json.dumps(poc_dict, ensure_ascii=False, default=str).encode("utf-8")
+    except (TypeError, ValueError):
+        body = str(poc_dict).encode("utf-8", errors="replace")
+    bucket = settings.minio_bucket
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/json; charset=utf-8",
+        )
+        logger.info(
+            "Finding PoC JSON uploaded",
+            extra={"event": "finding_poc_uploaded", "size_bytes": len(body)},
+        )
+        return key
+    except Exception:
+        logger.warning("Finding PoC upload failed", extra={"event": "finding_poc_upload_failed"})
+        return None
+
+
+def upload_finding_poc_screenshot_png(
+    tenant_id: str,
+    scan_id: str,
+    finding_id: str,
+    data: bytes | BinaryIO,
+) -> str | None:
+    """
+    Upload PoC screenshot bytes (PNG). Overwrites the same key as ``upload_finding_poc_json`` (idempotent).
+    Uses ``settings.minio_bucket``. Returns object key on success, None on validation or upload failure.
+    """
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        key = build_finding_poc_screenshot_object_key(tenant_id, scan_id, finding_id)
+    except ValueError:
+        logger.warning(
+            "Invalid finding PoC screenshot key parameters",
+            extra={"event": "finding_poc_screenshot_upload_validation_failed"},
+        )
+        return None
+    bucket = settings.minio_bucket
+    try:
+        body = data if isinstance(data, (bytes, bytearray)) else data.read()
+        body_len = len(body)
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="image/png",
+        )
+        logger.info(
+            "Finding PoC screenshot uploaded",
+            extra={"event": "finding_poc_screenshot_uploaded", "size_bytes": body_len},
+        )
+        return key
+    except Exception:
+        logger.warning(
+            "Finding PoC screenshot upload failed",
+            extra={"event": "finding_poc_screenshot_upload_failed"},
+        )
+        return None
 
 
 def upload_report_artifact(

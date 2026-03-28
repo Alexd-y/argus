@@ -7,15 +7,18 @@ from src.reports.data_collector import (
     StageArtifactsBundle,
 )
 from src.reports.generators import (
+    VALHALLA_SECTIONS_CSV_FORMAT,
     ReportData,
     generate_csv,
     generate_html,
     generate_json,
     generate_pdf,
+    generate_valhalla_sections_csv,
 )
 from src.reports.storage import download, exists, upload
 
 __all__ = [
+    "VALHALLA_SECTIONS_CSV_FORMAT",
     "ReportData",
     "ReportDataCollector",
     "ScanReportData",
@@ -27,5 +30,6 @@ __all__ = [
     "generate_html",
     "generate_json",
     "generate_pdf",
+    "generate_valhalla_sections_csv",
     "upload",
 ]

@@ -75,12 +75,44 @@ class Settings(BaseSettings):
     active_scan_max_capture_bytes: int = 4 * 1024 * 1024
     # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
     sqlmap_va_enabled: bool = False
+    # Aggressive argv merge from ``data/tool_configs.json`` (extra flags / payload wordlists).
+    # Default false so unit tests and CI keep stable argv; set VA_AGGRESSIVE_SCAN=true in prod.
+    va_aggressive_scan: bool = False
+    # Worker-side reflected XSS probe (httpx); runs after VA active scan when sandbox + target.
+    va_custom_xss_poc_enabled: bool = True
+    # Optional Playwright PNG + response_snippet enrichment for XSS / open-redirect PoCs (POC-003).
+    # Requires ``playwright`` + browser install; off by default. Env: VA_POC_PLAYWRIGHT_SCREENSHOT_ENABLED.
+    va_poc_playwright_screenshot_enabled: bool = False
+    # POC-004 — embed PoC screenshot as <img> in tier HTML/PDF (inflates size); link-only by default.
+    # Env: REPORT_POC_EMBED_SCREENSHOT_INLINE
+    report_poc_embed_screenshot_inline: bool = False
+    # RPT / Valhalla — отображаемое имя исполнителя на титульном листе отчёта.
+    # Env: REPORT_EXECUTOR_DISPLAY_NAME
+    report_executor_display_name: str = "Svalbard Security Inc."
     # VA-007 — after vuln findings, exploitation phase may enqueue Celery sqlmap (policy + approval)
     va_exploit_aggressive_enabled: bool = False
     # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)
     va_ai_plan_enabled: bool = False
     va_active_scan_tool_timeout_sec: float = 120.0
+    # KAL-004 — recon hooks (whatweb / nikto / TLS probe); ssl probe needs headroom
+    va_whatweb_timeout_sec: float = 90.0
+    va_nikto_timeout_sec: float = 180.0
+    va_ssl_probe_timeout_sec: float = 300.0
     ffuf_va_wordlist_path: str = ""
+    # KAL-005 — feroxbuster (time cap + operator-chosen small wordlists in sandbox)
+    va_ferox_time_limit_sec: int = 90
+    va_ferox_wordlist_max_lines: int = 5000
+    # KAL-005 — recon DNS sandbox (max apex domains = 1 by default; max parsed subdomain intel lines)
+    kal_recon_dns_max_domains: int = 1
+    kal_recon_dns_max_lines: int = 200
+    # KAL-005 — tcpdump (allowlist interface names, comma-separated)
+    va_tcpdump_allowed_interfaces: str = "eth0,lo"
+    va_tcpdump_interface: str = "eth0"
+    va_tcpdump_max_packets: int = 200
+    va_tcpdump_timeout_sec: float = 45.0
+    va_mitmdump_listen_port: int = 8899
+    va_mitmdump_timeout_sec: float = 25.0
+    va_capture_max_upload_bytes: int = 5_000_000
     recon_artifact_bucket: str = "argus-recon"
     recon_default_dns_resolver: str = "8.8.8.8"
     recon_scope_strict: bool = True
@@ -98,8 +130,41 @@ class Settings(BaseSettings):
     # WEB-006 — destructive tools requiring explicit per-scan approval
     destructive_tool_names: str = "sqlmap,commix"
 
+    # KAL-002 — MCP password-audit tools (hydra/medusa): server-side gate in addition to request opt-in.
+    # Env: KAL_ALLOW_PASSWORD_AUDIT=true
+    kal_allow_password_audit: bool = False
+
+    # KAL-006 — searchsploit from recon service/version strings (bounded queries).
+    # Env: SEARCHSPLOIT_ENABLED, SEARCHSPLOIT_MAX_QUERIES
+    searchsploit_enabled: bool = True
+    searchsploit_max_queries: int = 8
+
+    # KAL-006 — optional Trivy filesystem scan when recon collected requirements.txt / package.json.
+    # Env: TRIVY_ENABLED
+    trivy_enabled: bool = False
+
+    # VDF-005 — theHarvester in VA sandbox (emails → masked Valhalla context). Env: HARVESTER_ENABLED
+    harvester_enabled: bool = False
+
+    # VDF-008 — optional gospider/parsero after robots/sitemap fetch. Env: VA_ROBOTS_EXTENDED_PIPELINE
+    va_robots_extended_pipeline: bool = False
+
+    # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
+    # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN
+    hibp_password_check_opt_in: bool = False
+
+    # KAL-003 — Multi-phase nmap recon (sandbox + KAL network_scanning policy).
+    nmap_recon_cycle: bool = True  # env NMAP_RECON_CYCLE
+    nmap_full_tcp: bool = False  # env NMAP_FULL_TCP
+    nmap_udp_top50: bool = False  # env NMAP_UDP_TOP50
+    nmap_recon_phase_timeout_sec: int = 600  # env NMAP_RECON_PHASE_TIMEOUT_SEC
+
     # RPT-004 — AI report section text cache (Redis)
     ai_text_cache_ttl_seconds: int = 604800
+
+    # OWASP-001 — Russian OWASP Top 10:2025 reference JSON for reports/templates. Env: OWASP_JSON_PATH
+    # Relative paths resolve from backend package root (directory containing ``src/``).
+    owasp_json_path: str = "data/owasp_top_10_2025_ru.json"
 
     @property
     def celery_broker(self) -> str:

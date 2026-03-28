@@ -2,11 +2,11 @@
 
 import logging
 import shlex
-import subprocess
 import time
 from typing import Any
 
 from src.core.config import settings
+from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
 from src.tools.guardrails.command_parser import ALLOWED_TOOLS, extract_tool_name
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ def execute_command(
     command: str,
     use_cache: bool = True,
     use_sandbox: bool = False,
+    timeout_sec: int | None = None,
 ) -> dict[str, Any]:
     """
     Execute a shell command via subprocess.
@@ -26,6 +27,7 @@ def execute_command(
         command: Full command string (e.g. "nmap -sV 192.168.1.1")
         use_cache: Ignored in MVP; reserved for future caching
         use_sandbox: If True, run via docker exec in sandbox container
+        timeout_sec: Subprocess timeout seconds; defaults to ``settings.recon_tools_timeout``.
 
     Returns:
         Dict with success, stdout, stderr, return_code, execution_time
@@ -47,34 +49,22 @@ def execute_command(
                 0.0,
             )
 
-        if use_sandbox and settings.sandbox_enabled:
-            run_parts = [
-                "docker",
-                "exec",
-                settings.sandbox_container_name,
-            ] + parts
-        else:
-            run_parts = parts
+        run_parts = build_sandbox_exec_argv(parts, use_sandbox=use_sandbox)
 
-        proc = subprocess.run(
-            run_parts,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            shell=False,
-        )
+        timeout = timeout_sec if timeout_sec is not None else settings.recon_tools_timeout
+        if timeout is not None and timeout <= 0:
+            timeout = 300
+
+        exec_out = run_argv_simple_sync(run_parts, timeout_sec=float(timeout))
         elapsed = time.perf_counter() - start
+        rc = exec_out.get("return_code")
         return _result(
-            proc.returncode == 0,
-            proc.stdout or "",
-            proc.stderr or "",
-            proc.returncode,
+            bool(exec_out.get("success")),
+            str(exec_out.get("stdout") or ""),
+            str(exec_out.get("stderr") or ""),
+            int(rc) if rc is not None else -1,
             elapsed,
         )
-    except subprocess.TimeoutExpired:
-        elapsed = time.perf_counter() - start
-        logger.warning("Command timed out: %s", command[:80])
-        return _result(False, "", "Command timed out", -1, elapsed)
     except Exception:
         elapsed = time.perf_counter() - start
         logger.exception("Command execution failed")

@@ -11,6 +11,7 @@ Field → report section mapping (downstream generators may subset this model):
 - ``stage2`` → threat model, AI TM hypotheses & flows, stage2 inputs (§ threat modeling).
 - ``stage3`` → VA normalized tasks, exploitation candidates, evidence gate artifacts (§ VA).
 - ``stage4`` → exploitation plan, results, shells, AI exploitation summary (§ exploitation).
+- ``valhalla_context`` → VHL-001 Valhalla template blocks (robots/sitemap, tech table, TLS, headers, deps, phases).
 
 Empty stages: lists default empty; ``scan`` is None only if the row is missing (invalid input).
 MinIO: each file is optional; failures set ``StageArtifactItem.error`` (``not_found`` vs
@@ -28,7 +29,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
+from src.owasp.owasp_loader import get_owasp_category_info
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
+    OWASP_TOP10_2025_CATEGORY_TITLES,
+    parse_owasp_category,
+)
 
 from src.db.models import Finding as FindingModel
 from src.db.models import PhaseInput as PhaseInputModel
@@ -36,6 +44,7 @@ from src.db.models import PhaseOutput as PhaseOutputModel
 from src.db.models import Report as ReportModel
 from src.db.models import Scan as ScanModel
 from src.db.models import ScanTimeline as ScanTimelineModel
+from src.db.models import ToolRun as ToolRunModel
 from src.recon.stage_object_download import StageObjectFetchError
 from src.recon.stage1_storage import STAGE1_ROOT_FILES, download_stage1_artifact
 from src.recon.stage2_storage import STAGE2_ROOT_FILES, download_stage2_artifact
@@ -45,6 +54,16 @@ from src.storage.s3 import (
     RAW_ARTIFACT_PHASES,
     get_presigned_url_by_key,
     list_scan_artifacts,
+)
+from src.reports.valhalla_report_context import (
+    OutdatedComponentRow,
+    RobotsSitemapMergedSummaryModel,
+    SecurityHeadersAnalysisModel,
+    SslTlsAnalysisModel,
+    TechStackStructuredModel,
+    ValhallaReportContext,
+    build_valhalla_report_context,
+    derive_exploit_available_flag,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,6 +128,84 @@ class PhaseOutputRow(BaseModel):
     created_at: Any = None
 
 
+class ToolRunRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    tool_name: str
+    status: str
+    started_at: Any = None
+    finished_at: Any = None
+
+
+def _first_sentence(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    for sep in ".!?":
+        idx = t.find(sep)
+        if idx > 0:
+            return t[: idx + 1].strip()
+    return t
+
+
+def _truncate_plain(text: str, max_len: int) -> str:
+    t = (text or "").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 1].rstrip() + "…"
+
+
+def _owasp_description_from_loader_info(info: dict[str, Any]) -> str:
+    ex = (info.get("example_attack") or "").strip()
+    if ex:
+        return ex
+    hf = (info.get("how_to_find") or "").strip()
+    return _first_sentence(hf) if hf else ""
+
+
+class OwaspCategorySummaryEntry(BaseModel):
+    """Per A01–A10 template payload (OWASP-002): RU title, short description, optional fix tooltip."""
+
+    category_id: str
+    has_findings: bool
+    title_ru: str
+    description: str
+    how_to_fix_short: str | None = None
+
+
+def owasp_counts_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:
+    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    for f in findings:
+        raw = f.owasp_category
+        cat = parse_owasp_category(raw.strip()) if isinstance(raw, str) and raw.strip() else None
+        if cat is not None:
+            counts[cat] = counts.get(cat, 0) + 1
+    return counts
+
+
+def build_owasp_summary_from_counts(counts: dict[str, int]) -> dict[str, OwaspCategorySummaryEntry]:
+    """Aggregate OWASP rows for templates from finding counts + RU JSON (OWASP-002)."""
+    out: dict[str, OwaspCategorySummaryEntry] = {}
+    for cid in OWASP_TOP10_2025_CATEGORY_IDS:
+        n = int(counts.get(cid, 0))
+        info = get_owasp_category_info(cid)
+        title_ru = (info.get("title_ru") or "").strip() or OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
+        desc = _owasp_description_from_loader_info(info)
+        if not desc:
+            desc = OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, "")
+        htf = (info.get("how_to_fix") or "").strip()
+        htf_short = _truncate_plain(htf, 200) if htf else None
+        out[cid] = OwaspCategorySummaryEntry(
+            category_id=cid,
+            has_findings=n > 0,
+            title_ru=title_ru,
+            description=desc,
+            how_to_fix_short=htf_short,
+        )
+    return out
+
+
 class FindingRow(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -121,6 +218,8 @@ class FindingRow(BaseModel):
     description: str | None = None
     cwe: str | None = None
     cvss: float | None = None
+    owasp_category: str | None = None
+    proof_of_concept: dict[str, Any] | None = None
     created_at: Any = None
 
 
@@ -171,6 +270,17 @@ class ScanReportData(BaseModel):
     stage2: StageArtifactsBundle = Field(default_factory=StageArtifactsBundle)
     stage3: StageArtifactsBundle = Field(default_factory=StageArtifactsBundle)
     stage4: StageArtifactsBundle = Field(default_factory=StageArtifactsBundle)
+    owasp_summary: dict[str, OwaspCategorySummaryEntry] = Field(default_factory=dict)
+    valhalla_context: ValhallaReportContext = Field(default_factory=ValhallaReportContext)
+    #: VHQ-001: WhatWeb JSON/NDJSON + recon/nmap → ``TechStackStructuredModel``; same object as ``valhalla_context.tech_stack_structured``.
+    tech_stack: TechStackStructuredModel | None = None
+    #: VDF — зеркала блоков Valhalla для экспорта / AI без повторного разбора артефактов.
+    ssl_tls_analysis: SslTlsAnalysisModel | None = None
+    security_headers_analysis: SecurityHeadersAnalysisModel | None = None
+    outdated_components_table: list[OutdatedComponentRow] = Field(default_factory=list)
+    leaked_emails_masked: list[str] = Field(default_factory=list)
+    robots_sitemap_analysis: RobotsSitemapMergedSummaryModel | None = None
+    tool_runs: list[ToolRunRow] = Field(default_factory=list)
 
 
 def _scan_row_from_orm(row: ScanModel) -> ScanRowData:
@@ -379,6 +489,26 @@ def list_raw_artifacts(
     return result
 
 
+def _stage1_json_dict(bundle: StageArtifactsBundle, filename: str) -> dict[str, Any] | None:
+    for it in bundle.items:
+        if it.filename != filename:
+            continue
+        jv = it.json_value
+        if isinstance(jv, dict):
+            return jv
+    return None
+
+
+def _stage1_json_list(bundle: StageArtifactsBundle, filename: str) -> list[dict[str, Any]] | None:
+    for it in bundle.items:
+        if it.filename != filename:
+            continue
+        jv = it.json_value
+        if isinstance(jv, list):
+            return [x for x in jv if isinstance(x, dict)]
+    return None
+
+
 class ReportDataCollector:
     """Loads PostgreSQL scan graph and optional stage 1–4 MinIO artifacts into ``ScanReportData``."""
 
@@ -410,7 +540,14 @@ class ReportDataCollector:
                     "scan_id": sid,
                 },
             )
-            return ScanReportData(scan_id=sid, tenant_id=tid, scan=None)
+            return ScanReportData(
+                scan_id=sid,
+                tenant_id=tid,
+                scan=None,
+                valhalla_context=ValhallaReportContext(),
+                tech_stack=None,
+                tool_runs=[],
+            )
 
         scan_data = _scan_row_from_orm(scan_orm)
 
@@ -470,6 +607,34 @@ class ReportDataCollector:
             for row in po_result.scalars().all()
         ]
 
+        tr_result = await session.execute(
+            select(ToolRunModel)
+            .where(
+                cast(ToolRunModel.scan_id, String) == sid,
+                cast(ToolRunModel.tenant_id, String) == tid,
+            )
+            .order_by(ToolRunModel.started_at.asc().nullsfirst(), ToolRunModel.id.asc())
+        )
+        tr_orm_rows = list(tr_result.scalars().all())
+        tool_runs = [
+            ToolRunRow(
+                id=row.id,
+                tool_name=row.tool_name or "",
+                status=row.status or "",
+                started_at=row.started_at,
+                finished_at=row.finished_at,
+            )
+            for row in tr_orm_rows
+        ]
+        tool_run_rows: list[tuple[str, dict[str, Any] | None]] = [
+            (
+                str(row.tool_name or "").strip(),
+                row.input_params if isinstance(row.input_params, dict) else None,
+            )
+            for row in tr_orm_rows
+            if str(row.tool_name or "").strip()
+        ]
+
         f_result = await session.execute(
             select(FindingModel).where(
                 cast(FindingModel.scan_id, String) == sid,
@@ -487,10 +652,16 @@ class ReportDataCollector:
                 description=row.description,
                 cwe=row.cwe,
                 cvss=row.cvss,
+                owasp_category=getattr(row, "owasp_category", None),
+                proof_of_concept=(
+                    row.proof_of_concept if isinstance(getattr(row, "proof_of_concept", None), dict) else None
+                ),
                 created_at=row.created_at,
             )
             for row in f_result.scalars().all()
         ]
+
+        owasp_summary = build_owasp_summary_from_counts(owasp_counts_from_finding_rows(findings))
 
         s1 = StageArtifactsBundle()
         s2 = StageArtifactsBundle()
@@ -509,6 +680,39 @@ class ReportDataCollector:
                 s4.items.append(_fetch_stage_file(sid, "stage4", fn, download_stage4_artifact))
             raw_arts = list_raw_artifacts(tid, sid)
 
+        recon_json = _stage1_json_dict(s1, "recon_results.json")
+        tech_profile_json = _stage1_json_list(s1, "tech_profile.json")
+        anomalies_json = _stage1_json_dict(s1, "anomalies_structured.json")
+        raw_key_tuples = [(a.key, a.phase) for a in raw_arts]
+        raw_artifact_type_list = [a.artifact_type for a in raw_arts if (a.artifact_type or "").strip()]
+        findings_payload: list[dict[str, Any]] = []
+        for f in findings:
+            row = f.model_dump(mode="json")
+            row["intel"] = {"exploit_available": derive_exploit_available_flag(row)}
+            findings_payload.append(row)
+        phase_out_tuples = [(r.phase or "", r.output_data) for r in phase_outputs]
+        phase_in_tuples = [(r.phase or "", r.input_data) for r in phase_inputs]
+        report_tech_list: list[str] | None = None
+        if report_slice and report_slice.technologies:
+            report_tech_list = [str(x) for x in report_slice.technologies]
+
+        valhalla_ctx = build_valhalla_report_context(
+            tenant_id=tid,
+            scan_id=sid,
+            recon_results=recon_json,
+            tech_profile=tech_profile_json,
+            anomalies_structured=anomalies_json,
+            raw_artifact_keys=raw_key_tuples,
+            phase_outputs=phase_out_tuples,
+            phase_inputs=phase_in_tuples,
+            findings=findings_payload,
+            report_technologies=report_tech_list,
+            fetch_raw_bodies=include_minio,
+            tool_runs=tool_run_rows,
+            raw_artifact_types=raw_artifact_type_list or None,
+            trivy_enabled=bool(settings.trivy_enabled),
+        )
+
         out = ScanReportData(
             scan_id=sid,
             tenant_id=tid,
@@ -523,6 +727,15 @@ class ReportDataCollector:
             stage2=s2,
             stage3=s3,
             stage4=s4,
+            owasp_summary=owasp_summary,
+            valhalla_context=valhalla_ctx,
+            tech_stack=valhalla_ctx.tech_stack_structured,
+            ssl_tls_analysis=valhalla_ctx.ssl_tls_analysis,
+            security_headers_analysis=valhalla_ctx.security_headers_analysis,
+            outdated_components_table=list(valhalla_ctx.outdated_components or []),
+            leaked_emails_masked=list(valhalla_ctx.leaked_emails or []),
+            robots_sitemap_analysis=valhalla_ctx.robots_sitemap_merged,
+            tool_runs=tool_runs,
         )
         logger.info(
             "report_data_collector_done",

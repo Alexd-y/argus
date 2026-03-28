@@ -1,0 +1,78 @@
+{# Титульный лист + резюме для руководства #}
+{% set target = recon_summary.target_url or (report.target if report else "") or (scan.target_url if scan else "") or "" %}
+{% set opts = scan.options if scan and scan.options is mapping else {} %}
+{% set cust_email = opts.get("customer_email") or opts.get("report_customer_email") or "" %}
+{% set work_start = (scan.created_at if scan else none) or (report.created_at if report else none) %}
+<section class="valhalla-title-page panel" id="valhalla-title">
+    <h2>Титульный лист</h2>
+    <p><strong>Название отчёта:</strong> Отчёт о тестировании на проникновение веб-ресурса {{ target or "Нет данных" }}</p>
+    <p><strong>Дата работ / время начала:</strong> {% if work_start %}{{ work_start }}{% else %}Нет данных{% endif %}</p>
+    <p><strong>Исполнитель:</strong> {{ report_executor_display_name | default("Svalbard Security Inc.") | e }}</p>
+    <p><strong>Заказчик:</strong> {{ target or "Нет данных" }}{% if cust_email %} — {{ cust_email | e }}{% endif %}</p>
+</section>
+
+<section class="valhalla-executive panel" id="executive-summary">
+    <h2>Резюме для руководства (Executive Summary)</h2>
+    <div class="ai-slot-body">
+        {% set exec_ai = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
+        {% if exec_ai and exec_ai.strip() %}
+            {{ exec_ai }}
+        {% else %}
+            <p class="empty">Нет данных</p>
+        {% endif %}
+    </div>
+
+    <h3>Количество уязвимостей по уровням критичности</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Уровень</th>
+                <th>Количество</th>
+                <th>Findings</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for level in ["critical", "high", "medium", "low", "info"] %}
+            <tr>
+                <td>{{ level | capitalize }}</td>
+                <td>{{ recon_summary.summary_counts.get(level, 0) if recon_summary.summary_counts else 0 }}</td>
+                <td>—</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if owasp_compliance_rows is defined %}
+        {% include "partials/owasp_compliance_table.html.j2" %}
+    {% endif %}
+
+    <h3>Обнаружение утечки данных (Data breach)</h3>
+    <div class="ai-slot-body">
+        {% set breach = ai_sections.get("compliance_check") if ai_sections is defined else "" %}
+        {% if breach and breach.strip() %}
+            {{ breach }}
+        {% else %}
+            <p>Нет данных</p>
+        {% endif %}
+    </div>
+
+    <h3>Основные бизнес-риски</h3>
+    <div class="ai-slot-body">
+        {% set br = ai_sections.get("business_risk") if ai_sections is defined else "" %}
+        {% if br and br.strip() %}
+            {{ br }}
+        {% else %}
+            <p>Нет данных</p>
+        {% endif %}
+    </div>
+
+    <h3>Приоритетные задачи (топ план)</h3>
+    <div class="ai-slot-body">
+        {% set pr = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
+        {% if pr and pr.strip() %}
+            {{ pr }}
+        {% else %}
+            <p>Нет данных</p>
+        {% endif %}
+    </div>
+</section>

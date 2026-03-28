@@ -5,9 +5,11 @@ import shlex
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.core.config import settings
+from src.recon.mcp.kal_executor import run_kal_mcp_tool
+from src.recon.mcp.policy import KAL_OPERATION_CATEGORIES
 from src.tools.executor import (
     build_gobuster_command,
     build_nikto_command,
@@ -159,6 +161,32 @@ class TrivyRequest(BaseModel):
     additional_args: str = Field(default="", max_length=512)
 
 
+class KalRunRequest(BaseModel):
+    """KAL-002 — MCP gated tool argv (category allowlist, hydra double opt-in)."""
+
+    category: str = Field(..., min_length=1, max_length=64)
+    argv: list[str] = Field(..., min_length=1, max_length=64)
+    target: str = Field(..., min_length=1, max_length=2048)
+    tenant_id: str = Field(default="", max_length=256)
+    scan_id: str = Field(default="", max_length=256)
+    password_audit_opt_in: bool = False
+
+    @field_validator("argv", mode="before")
+    @classmethod
+    def _coerce_argv(cls, v: object) -> list[str]:
+        if not isinstance(v, list):
+            raise ValueError("argv must be a list of strings")
+        return [str(x) for x in v]
+
+    @field_validator("argv")
+    @classmethod
+    def _argv_element_lengths(cls, v: list[str]) -> list[str]:
+        for a in v:
+            if len(a) > 4096:
+                raise ValueError("argv element too long")
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Generic execute (guardrails: allowlist, target validation, sandbox, rate limit)
 # ---------------------------------------------------------------------------
@@ -194,6 +222,32 @@ async def tools_execute(req: ExecuteRequest, request: Request) -> dict[str, Any]
         use_sandbox=settings.sandbox_enabled,
     )
     return result
+
+
+@router.post("/kal/run")
+async def tools_kal_run(req: KalRunRequest, request: Request) -> dict[str, Any]:
+    """KAL-002 — run allowlisted argv under category policy; optional MinIO raw upload."""
+    client_ip = request.client.host if request.client else "unknown"
+    rate_key = f"kal_run:{client_ip}"
+    allowed, reason = _execute_rate_limiter.is_allowed(rate_key)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=reason)
+
+    cat = str(req.category or "").strip().lower().replace("-", "_")
+    if cat not in KAL_OPERATION_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid category",
+        )
+
+    return run_kal_mcp_tool(
+        category=cat,
+        argv=list(req.argv),
+        target=req.target,
+        tenant_id=req.tenant_id.strip() or None,
+        scan_id=req.scan_id.strip() or None,
+        password_audit_opt_in=req.password_audit_opt_in,
+    )
 
 
 # ---------------------------------------------------------------------------

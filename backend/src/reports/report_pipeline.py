@@ -10,10 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Finding, Report, ReportObject
 from src.reports.generators import (
+    VALHALLA_SECTIONS_CSV_FORMAT,
     generate_csv,
     generate_html,
     generate_json,
     generate_pdf,
+    generate_valhalla_sections_csv,
 )
 from src.services.reporting import ReportGenerator
 
@@ -27,6 +29,7 @@ CONTENT_TYPES: dict[str, str] = {
     "html": "text/html; charset=utf-8",
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
+    VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
 
 
@@ -258,9 +261,38 @@ async def run_generate_report_pipeline(
                 size_bytes=len(content),
             )
             generated[fmt] = key
+            if fmt == "csv" and tier_str == "valhalla":
+                vhl_csv = generate_valhalla_sections_csv(
+                    report_data, jinja_context=built.template_context
+                )
+                vfmt = VALHALLA_SECTIONS_CSV_FORMAT
+                vkey = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    vfmt,
+                    vhl_csv,
+                    content_type=CONTENT_TYPES.get(vfmt, "text/csv; charset=utf-8"),
+                )
+                if not vkey:
+                    raise RuntimeError(f"Upload failed for format {vfmt}")
+                await _upsert_report_object(
+                    session,
+                    tenant_id=tenant_id,
+                    scan_id=scan_id,
+                    report_id=report_id,
+                    fmt=vfmt,
+                    object_key=vkey,
+                    size_bytes=len(vhl_csv),
+                )
+                generated[vfmt] = vkey
 
-        if set(generated.keys()) != set(fmt_list):
-            missing = set(fmt_list) - set(generated.keys())
+        expected_keys = set(fmt_list)
+        if tier_str == "valhalla" and "csv" in expected_keys:
+            expected_keys.add(VALHALLA_SECTIONS_CSV_FORMAT)
+        if set(generated.keys()) != expected_keys:
+            missing = expected_keys - set(generated.keys())
             raise RuntimeError(f"Missing outputs: {sorted(missing)}")
 
         await session.execute(

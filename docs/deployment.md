@@ -34,6 +34,8 @@ docker compose -f infra/docker-compose.yml up
 | sandbox | build: sandbox | — | Контейнер для выполнения инструментов (profile: tools) |
 | celery-worker | build: backend | — | Celery worker (profile: tools) |
 
+**Сборка образа sandbox:** время сильно зависит от зеркал Kali и CPU; первая сборка часто **десятки минут** (метапакеты `kali-tools-*`, nuclei templates, dalfox/xsstrike). Профиль **`SANDBOX_PROFILE=extended`** добавляет **`kali-tools-passwords`** и обычно увеличивает размер образа примерно на **1–3+ ГБ** относительно `standard` (см. комментарии в `sandbox/Dockerfile`). Повторные сборки ускоряются кэшем слоёв Docker.
+
 ### 2.2 Volumes
 
 | Volume | Сервис | Назначение |
@@ -68,6 +70,35 @@ docker compose -f infra/docker-compose.yml --profile tools up
 | MINIO_REPORTS_BUCKET | Bucket для экспортов отчётов (presigned/download) | `argus-reports` |
 | JWT_SECRET | Секрет для JWT | — (обязательно в prod) |
 | LOG_LEVEL | Уровень логирования | `INFO` |
+| VA_AGGRESSIVE_SCAN | Подмешивать `aggressive_args` из `backend/data/tool_configs.json` в argv dalfox/ffuf/xsstrike/sqlmap/nuclei; **дополнительно** расширяет worker `custom_xss_poc` (больше payloads, cap 80) для script-context / alf.nu-style целей | `false` (в prod для XSS/SQLi можно `true`) |
+| VA_CUSTOM_XSS_POC_ENABLED | После VA active scan запускать httpx reflected-XSS probe (встроенные script-context payloads + `data/payloads/xss_custom.txt` / `data/xss_payloads.txt` в образе; sandbox mirror `/opt/argus-payloads/`) | `true` |
+| KAL_ALLOW_PASSWORD_AUDIT | Разрешить на сервере **hydra/medusa** через `POST /api/v1/tools/kal/run` при `category=password_audit` и `password_audit_opt_in=true` в теле запроса (двойной opt-in) | `false` |
+| NMAP_RECON_CYCLE | Многофазный nmap в песочнице на recon (см. [scan-state-machine.md](./scan-state-machine.md)) при `SANDBOX_ENABLED=true` | `true` |
+| NMAP_FULL_TCP | Добавить фазу `-p- -sV -O` (долго) | `false` |
+| NMAP_UDP_TOP50 | Добавить UDP top-50 | `false` |
+| NMAP_RECON_PHASE_TIMEOUT_SEC | Таймаут одной фазы nmap-цикла (сек) | `600` |
+| SEARCHSPLOIT_ENABLED | Intel: searchsploit по строкам версий из recon | `true` |
+| SEARCHSPLOIT_MAX_QUERIES | Лимит запросов searchsploit за прогон | `8` |
+| TRIVY_ENABLED | Опциональный trivy fs-scan по собранным manifest'ам | `false` |
+| HIBP_PASSWORD_CHECK_OPT_IN | Отчётность: проверка паролей через k-anonymity HIBP Pwned Passwords (без логирования plaintext) | `false` |
+| VA_WHATWEB_TIMEOUT_SEC | Таймаут whatweb в VA active scan | `90` |
+| VA_NIKTO_TIMEOUT_SEC | Таймаут nikto в VA active scan | `180` |
+| VA_SSL_PROBE_TIMEOUT_SEC | Таймаут testssl/ssl probe в VA | `300` |
+| VA_FEROX_TIME_LIMIT_SEC | Лимит времени feroxbuster (сек) | `90` |
+| VA_FEROX_WORDLIST_MAX_LINES | Макс. строк словаря ferox в sandbox | `5000` |
+| KAL_RECON_DNS_MAX_DOMAINS | Сколько apex-доменов обрабатывать в DNS recon sandbox | `1` |
+| KAL_RECON_DNS_MAX_LINES | Верхняя граница строк subdomain-intel | `200` |
+
+### 3.1a Профиль образа sandbox (`SANDBOX_PROFILE`)
+
+Передаётся **build-arg** сервиса `sandbox` в `infra/docker-compose.yml` (по умолчанию `standard`).
+
+| Значение | Состав (обзор) |
+|----------|----------------|
+| **standard** | `kali-linux-headless` + `kali-tools-top10`, `kali-tools-web`, `kali-tools-information-gathering`, `kali-tools-vulnerability` + явный список пакетов (nmap, nuclei, feroxbuster, testssl.sh, …) — см. `sandbox/Dockerfile` |
+| **extended** | То же + метапакет **`kali-tools-passwords`** (тяжёлый граф зависимостей: john/hashcat и др.; больше размер образа и время сборки) |
+
+Переменная **`INSTALL_MSF`** (опционально `true`) — отдельно подтягивает Metasploit (~1.5 GB+).
 
 ### 3.2 PostgreSQL
 
@@ -103,6 +134,31 @@ docker compose -f infra/docker-compose.yml --profile tools up
 | GOOGLE_API_KEY | Gemini |
 | KIMI_API_KEY | Kimi |
 | PERPLEXITY_API_KEY | Perplexity |
+
+### 3.5a Чеклист: active scan + AI + отчёты (Compose)
+
+Используйте `infra/.env` (копия с `infra/.env.example`). **Backend** и **worker** в `infra/docker-compose.yml` должны получать одинаковые критичные переменные для VA/AI.
+
+**Active scan (песочница):**
+
+- [ ] `SANDBOX_ENABLED=true` — без этого активные инструменты VA не запускаются (`handlers.run_vuln_analysis`).
+- [ ] `VA_AI_PLAN_ENABLED` — при `true` нужен хотя бы один LLM-ключ для `plan_active_scan_with_ai`.
+- [ ] `SQLMAP_VA_ENABLED`, `VA_EXPLOIT_AGGRESSIVE_ENABLED` — включать осознанно (политика/approval).
+- [ ] `VA_AGGRESSIVE_SCAN`, `VA_CUSTOM_XSS_POC_ENABLED` — агрессивные argv и reflected XSS probe после active scan.
+- [ ] `ACTIVE_SCAN_MAX_CONCURRENT_JOBS`, `ACTIVE_SCAN_MAX_CAPTURE_BYTES`, `VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC` — лимиты нагрузки.
+- [ ] `SANDBOX_PROFILE` — `standard` vs `extended` (сборка образа sandbox); первая сборка может занять долго.
+- [ ] `NMAP_RECON_CYCLE`, `NMAP_FULL_TCP`, `NMAP_UDP_TOP50`, `NMAP_RECON_PHASE_TIMEOUT_SEC` — цикл nmap в recon.
+- [ ] `KAL_ALLOW_PASSWORD_AUDIT` — только если нужен серверный gate для hydra/medusa через KAL API/MCP.
+- [ ] `SEARCHSPLOIT_*`, `TRIVY_ENABLED`, `HIBP_PASSWORD_CHECK_OPT_IN` — intel и отчётность (см. § 3.1).
+
+**LLM (анализ, VA-план, RPT-004 текст отчёта):**
+
+- [ ] Хотя бы один из: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `KIMI_API_KEY`, `PERPLEXITY_API_KEY`, `GOOGLE_API_KEY`.
+- [ ] Без ключей отчётные секции получают запасной текст вида «AI generation skipped: no LLM provider available» (шаблоны остаются валидными).
+
+**Отчёты / MinIO:**
+
+- [ ] `MINIO_REPORTS_BUCKET`, `MINIO_*` — выгрузка отчётов; post-scan hook создаёт **12** строк отчёта (3 tier × 4 формата по умолчанию), объекты в `{tenant}/{scan}/reports/{tier}/{report_id}.{fmt}`.
 
 ### 3.6 Пример .env
 
@@ -143,6 +199,27 @@ MINIO_REPORTS_BUCKET=argus-reports
 | `VERCEL_FRONTEND_URL` | URL приложения на Vercel (без завершающего `/`), добавляется к списку CORS вместе с localhost для разработки |
 
 Бэкенд разрешает методы `GET`, `POST`, `OPTIONS` и заголовки `Content-Type`, `Authorization`; `allow_credentials=True` для совместимости с будущей cookie-сессией.
+
+### 3.8 Active web scanning & AI reports (чеклист)
+
+Перед включением активного VA по вебу и AI-плана отчётов проверьте:
+
+- **`SANDBOX_ENABLED=true`** — без песочницы активные инструменты (dalfox, xsstrike и др.) не выполняются в штатном pipeline.
+- **Celery worker и backend** получают **те же переменные окружения**, что и API-процесс (в том же `docker-compose` это обычно один и тот же env-файл / одинаковые `environment:` для `backend` и `worker`), в том числе **`SANDBOX_ENABLED`**.
+- **Ключи LLM** (например `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, см. § 3.5) — нужны для AI-фаз отчётов и опционально для AI-плана активного сканирования.
+- **`SQLMAP_VA_ENABLED`** — держите `false`, если не требуется sqlmap в фазе VA; включайте только осознанно (политика/approval).
+- **`VA_AI_PLAN_ENABLED`** — при `true` после детерминированного плана подмешиваются шаги от LLM (нужны LLM-ключи).
+
+Полный перечень переменных для compose: **[`infra/.env.example`](../infra/.env.example)** (скопируйте в `infra/.env` и заполните секреты).
+
+#### 3.8.1 Активное веб-сканирование (docker exec → sandbox)
+
+Фаза VA и задачи Celery (`scan_phase_task` и др.) вызывают инструменты через **`docker exec`** в контейнер песочницы (**имя по умолчанию: `argus-sandbox`**, задаётся `settings.sandbox_container_name`). Песочница должна быть в **том же compose-проекте**, что и worker/backend, чтобы DNS/имя контейнера совпадали.
+
+- **Worker и backend** должны иметь доступ к **Docker API хоста**: в `infra/docker-compose.yml` смонтирован сокет **`/var/run/docker.sock:/var/run/docker.sock:ro`**. Без сокета `docker exec` из контейнера worker не выполняется — активные сканеры не стартуют, артефактов dalfox/xsstrike не будет.
+- Переменная **`DOCKER_HOST`** на Linux обычно **не нужна** (используется дефолтный unix-socket). На **Windows + Docker Desktop** compose часто запускают из WSL или с Linux-VM; путь сокета в override должен соответствовать среде, где выполняется `docker compose` (см. документацию Docker Desktop для bind-mount сокета).
+- Убедитесь, что **`SANDBOX_ENABLED=true`** и для **worker**, и для **backend** (одинаковое значение в `environment` / `.env`).
+- После изменений в **`sandbox/Dockerfile`** пересоберите образ песочницы (`docker compose build sandbox` или полный rebuild стека с `--profile tools`), иначе в контейнере останутся старые бинарники (dalfox / xsstrike / ffuf и др.).
 
 ---
 
@@ -270,6 +347,8 @@ alembic upgrade head
 ---
 
 ## 9. See Also
+
+- **[mcp-server.md](./mcp-server.md)** — MCP-инструменты KAL и `POST /api/v1/tools/kal/run`.
 
 For complete startup instructions including all 3 deployment scenarios, environment setup, and API key placement, see **[RUNNING.md](./RUNNING.md)** — the definitive guide for:
 - Docker full stack setup

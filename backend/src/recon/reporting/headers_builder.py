@@ -36,6 +36,7 @@ KEY_HEADERS = [
     "Content-Security-Policy",
     "Referrer-Policy",
     "Permissions-Policy",
+    "X-XSS-Protection",
 ]
 
 

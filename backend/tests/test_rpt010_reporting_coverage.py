@@ -116,7 +116,7 @@ class TestFetchStageFile:
         with pytest.raises(ValueError, match="invalid"):
             dc._fetch_stage_file("sid", "st", "a.json", bad)
 
-    def test_valueerror_propagates(self) -> None:
+    def test_valueerror_propagates_caller_contract(self) -> None:
         def bad(_s, _f):
             raise ValueError("caller contract")
 
@@ -169,6 +169,7 @@ async def test_collect_async_full_no_minio() -> None:
         _FakeResult(rows=[tl]),
         _FakeResult(rows=[pi]),
         _FakeResult(rows=[po]),
+        _FakeResult(rows=[]),  # tool_runs (ToolRunModel)
         _FakeResult(rows=[fin]),
     ]
     session = MagicMock()
@@ -215,6 +216,7 @@ async def test_collect_async_with_report_id() -> None:
         _FakeResult(rows=[]),
         _FakeResult(rows=[]),
         _FakeResult(rows=[]),
+        _FakeResult(rows=[]),  # tool_runs
         _FakeResult(rows=[]),
     ]
     session = MagicMock()
@@ -382,6 +384,16 @@ def test_minimal_jinja_context_valhalla_executive() -> None:
     slots = ctx["jinja"]["valhalla"]["slots"]
     assert slots.get("executive_summary_valhalla") == "Exec"
     assert "exploitation" in ctx and len(ctx["exploitation"]) == 1
+    ai = ctx["ai_sections"]
+    for key in (
+        "attack_scenarios",
+        "exploit_chains",
+        "remediation_stages",
+        "zero_day_potential",
+    ):
+        assert key in ai and isinstance(ai[key], str)
+    assert "appendix_tools" in ctx["valhalla_context"]
+    assert ctx["tool_runs"] == []
 
 
 def test_build_report_data_from_scan_report_summary_branches() -> None:
@@ -564,6 +576,7 @@ async def test_collect_async_minio_all_not_found(monkeypatch: pytest.MonkeyPatch
         _FakeResult(rows=[]),
         _FakeResult(rows=[]),
         _FakeResult(rows=[]),
+        _FakeResult(rows=[]),  # tool_runs
         _FakeResult(rows=[]),
     ]
     session = MagicMock()

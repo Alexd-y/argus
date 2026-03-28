@@ -66,7 +66,51 @@ stateDiagram-v2
 **Events:** `phase_start`, `progress`, `phase_complete`, `tool_run`  
 **Failure:** Scan → `failed`, `scan_events` → `error`, re-raise
 
-**Tools:** nmap, subfinder, nikto, nuclei (read-only); guardrails: IP/domain validation.
+**Tools (baseline):** nmap, subfinder, nuclei и др.; guardrails: IP/domain validation. Ниже — расширения KAL (песочница + политики).
+
+#### KAL-003 — многофазный цикл nmap (recon)
+
+При **`SANDBOX_ENABLED=true`**, **`NMAP_RECON_CYCLE=true`** (по умолчанию) и разрешении KAL-политики категории `network_scanning` для базового argv выполняется **`run_nmap_recon_for_recon`** (`src/recon/nmap_recon_cycle.py`) вместо одного «legacy»-запуска `nmap -sV -sC` на хосте API.
+
+| Фаза (имя в structured) | Условие | Суть |
+|-------------------------|---------|------|
+| `discover_sn` | цель похожа на CIDR | `nmap -sn` (обнаружение хостов) |
+| `tcp_top1000` | всегда в цикле | SYN, top 1000 TCP, `-oX -` |
+| `tcp_full_sv_os` | `NMAP_FULL_TCP=true` или `scan.options.nmap_full_tcp` | `-p- -sV -O` (долго, тяжёлая фаза) |
+| `udp_top50` | `NMAP_UDP_TOP50=true` или `scan.options.nmap_udp_top50` | UDP top 50 портов |
+| `nse_default_safe` | есть открытые TCP (до 256 портов) | `-sV --script "default and safe"` на собранных портах |
+
+Таймаут фазы: **`NMAP_RECON_PHASE_TIMEOUT_SEC`** (см. [deployment.md](./deployment.md)). При отказе политики по baseline-argv цикл откатывается к legacy-режиму. Артефакты: `nmap_<phase>_stdout` (XML), stderr, JSON `nmap_recon_structured` в raw recon.
+
+#### KAL-005 — DNS recon в sandbox
+
+Опционально при **`recon_dns_enumeration_opt_in`** в `scan.options` / вложенном `kal` (см. `scan_kal_flags`): **dnsrecon** (`-t std`), **fierce**, **amass enum -passive** для одного apex-домена (`src/recon/recon_dns_sandbox.py`). Лимиты: **`KAL_RECON_DNS_MAX_DOMAINS`**, **`KAL_RECON_DNS_MAX_LINES`**. Вывод нормализуется в intel поддоменов.
+
+#### KAL-004 / KAL-005 — VA: whatweb, nikto, testssl, feroxbuster
+
+В **`run_va_active_scan_phase`** (фаза **vuln_analysis**, не отдельный шаг state machine) при политике VA могут выполняться:
+
+| Инструмент | Назначение | Таймауты (env) |
+|------------|------------|----------------|
+| **whatweb** | отпечаток веб-стека (KAL-004) | `VA_WHATWEB_TIMEOUT_SEC` |
+| **nikto** | сканер веб-уязвимостей (KAL-004) | `VA_NIKTO_TIMEOUT_SEC` |
+| **feroxbuster** | content discovery (KAL-005) | `VA_FEROX_TIME_LIMIT_SEC`, `VA_FEROX_WORDLIST_MAX_LINES` |
+| **testssl.sh** | проверка TLS (KAL-004; fallback **sslscan**) | `VA_SSL_PROBE_TIMEOUT_SEC` |
+
+Подробнее сетка VA — § 4.3a ниже.
+
+#### KAL-006 — searchsploit, Trivy, HIBP (флаги backend)
+
+| Переменная | По умолчанию | Назначение |
+|------------|--------------|------------|
+| `SEARCHSPLOIT_ENABLED` | `true` | Связка версий сервисов из recon с **searchsploit** (ограниченное число запросов) |
+| `SEARCHSPLOIT_MAX_QUERIES` | `8` | Верхняя граница запросов за прогон |
+| `TRIVY_ENABLED` | `false` | Опциональный **trivy** fs-scan при наличии собранных manifest'ов (requirements.txt / package.json и т.п.) |
+| `HIBP_PASSWORD_CHECK_OPT_IN` | `false` | Только отчётность: k-anonymity **Pwned Passwords** (HIBP); пароли в логи не писать |
+
+#### KAL MCP / HTTP API
+
+Категорийные обёртки и **`POST /api/v1/tools/kal/run`** описаны в **[mcp-server.md](./mcp-server.md)** (инструменты `run_network_scan`, `run_web_scan`, `run_ssl_test`, `run_dns_enum`, `run_bruteforce`, `run_tool`).
 
 **Raw Artifacts:** Phase persists raw artifacts to MinIO via `upload_raw_artifact` (handler in `state_machine/handlers`):
 - Path: `{tenant_id}/{scan_id}/recon/raw/`
@@ -102,23 +146,40 @@ stateDiagram-v2
 
 #### 4.3a — Active Web Scanning (OWASP)
 
-> **State Machine Bridge** (WEB-001, 2026-03-24): `run_vuln_analysis()` в `handlers.py` теперь вызывает
-> полный active-scan pipeline (`run_va_active_scan_phase`) напрямую из state machine, когда
-> `SANDBOX_ENABLED=true`. Ранее active-scan вызывался только из recon engagement flow.
+> **State Machine Bridge** (WEB-001, 2026-03-24): state machine вызывает только `run_vuln_analysis()` (импорт из `src.orchestration.handlers`). **Active scan не вызывается из `state_machine.py` напрямую:** при `SANDBOX_ENABLED=true` внутри `run_vuln_analysis` выполняется полный pipeline `run_va_active_scan_phase`. При `SANDBOX_ENABLED=false` остаётся LLM-only VA. Ранее active-scan был доступен в основном из recon engagement flow.
 >
 > **Порядок выполнения в state machine vuln_analysis:**
 > 1. Извлечение URL-параметров и HTML-форм из target URL (`_extract_url_params_and_forms`)
 > 2. Построение `VulnerabilityAnalysisInputBundle` с `params_inventory` и `forms_inventory`
 > 3. Запуск `run_va_active_scan_phase` (dalfox, xsstrike, ffuf, nuclei, gobuster, wfuzz, commix)
+> 3b. Нормализация intel (`finding_normalizer`); при `VA_CUSTOM_XSS_POC_ENABLED=true` — доп. reflected XSS probe (`run_custom_xss_poc`, httpx на worker, payloads из `backend/data/payloads/`)
 > 4. Запуск OWASP-эвристик (SSRF, CSRF, IDOR, open redirect) — `run_web_vuln_heuristics`
 > 5. Нормализация находок, назначение CVSS, генерация PoC
+> 5b. **PoC enrichment (additive):** адаптеры active scan заполняют опциональное поле `proof_of_concept` в intel (`poc_schema.build_proof_of_concept`: tool, payload, request/response с усечением `response` (1024) и `response_snippet` (500), curl, `javascript_code`, опционально `screenshot_key`). Dalfox: JSON + fallback stderr; Nuclei: `request`/`response` из JSONL при наличии; sqlmap/ffuf: эвристики stdout + curl из argv/FUZZ-URL; gobuster/wfuzz/commix/xsstrike — см. соответствующие `*_va_adapter`. При `VA_POC_PLAYWRIGHT_SCREENSHOT_ENABLED=true` (и не отключено `VA_POC_PLAYWRIGHT_SCREENSHOT`) — см. `poc_visual_enrichment.py` (Playwright PNG в MinIO + `response_snippet` вокруг payload).
 > 6. Передача контекста в LLM для финального анализа
 > 7. Мердж и дедупликация всех findings
 > 8. Пост-обработка CVSS (floor для XSS >= 7.0, SQLi >= 8.0)
 >
 > **Fallback:** Если `SANDBOX_ENABLED=false`, выполняется только LLM-анализ (прежнее поведение).
 >
+> **Сеть Docker:** активное сканирование требует **`SANDBOX_ENABLED=true`**; процессы **backend** и **celery-worker** должны быть в **той же Docker-сети**, что и сервис **sandbox**, чтобы вызовы инструментов доходили до контейнера песочницы (типовой случай — `docker compose --profile tools up` из `infra/` без изоляции сервисов по кастомным сетям).
+>
 > **VA_AI_PLAN_ENABLED** (`va_ai_plan_enabled`, env `VA_AI_PLAN_ENABLED`): при `true` и наличии LLM-ключей после детерминированного плана вызывается `plan_active_scan_with_ai` — дополнительные шаги `{tool, args}` мержатся в active-scan plan (см. `active_scan_planner.py`, промпты `ACTIVE_SCAN_PLANNING_*` в [prompt-registry.md](./prompt-registry.md)).
+
+#### OWASP Top 10:2025 Detection
+
+- **Базовые эвристики (код):** `src/recon/vulnerability_analysis/owasp_category_map.py` — `resolve_owasp_category(cwe=..., finding_type_key=..., source_tool=...)`. Порядок: (1) номер CWE из строки `CWE-…` по карте `_CWE_TO_OWASP` → `A01`…`A10`; (2) если CWE не сопоставлен — подстроки в объединённом тексте типа/template (`_TYPE_HINTS_ORDERED`, например `xss` → `A05`, `csrf` → `A01`); (3) нормализованный `source_tool` (`_TOOL_EXACT` / `_SOURCE_TOOL_HINTS_ORDERED`, например `sqlmap` → `A05`). Неизвестные входы → `None` (колонка может остаться пустой).
+- **Фаза VA:** при нормализации intel (`finding_normalizer`) для vulnerability-shaped записей вызывается `apply_owasp_category_to_intel_row`: если в строке уже задано валидное `owasp_category` (`parse_owasp_category`), оно не перезаписывается; иначе категория выводится из `data.cwe` / `data.type` / `template_id` и `source_tool`. В orchestration (`handlers`) перед персистом finding поле при необходимости уточняется тем же резолвером.
+- **Персистентность:** `findings.owasp_category` (nullable, `A01`…`A10`), CHECK через `findings_owasp_category_check_sql()` в `src/owasp_top10_2025.py`. HTML-отчёты Asgard/Valhalla включают сводную таблицу соответствия OWASP Top 10:2025 по этим кодам.
+
+#### Aggressive scan options
+
+| Env / setting | Default | Назначение |
+|---------------|---------|------------|
+| `VA_AGGRESSIVE_SCAN` / `va_aggressive_scan` | `false` | Подмешивает `aggressive_args` из `backend/data/tool_configs.json` в argv dalfox, ffuf, xsstrike, sqlmap, nuclei (дедуп флагов). В **backend**-образе wordlists: `/app/data/payloads/`; в **sandbox**: `/opt/argus-payloads/` (см. `sandbox/Dockerfile`). Для более «шумного» XSS/SQLi в проде выставить `true`. |
+| `VA_CUSTOM_XSS_POC_ENABLED` / `va_custom_xss_poc_enabled` | `true` | После active scan — reflected XSS check через httpx по curated payloads (`xss_custom.txt` / `xss_payloads.txt`). |
+
+**Script-context XSS (custom PoC):** `run_custom_xss_poc` всегда перебирает короткие встроенные payloads (`alert(1)`, `</script><script>…`, breakout из строки в JS). Эвристика помечает отражение внутри/рядом с `<script>` как **high / CVSS 7.2** (CWE-79) и добавляет `poc_curl` с `shlex.quote`. При `VA_AGGRESSIVE_SCAN=true` поднимается лимит комбинаций param×payload (до 80) и подмешиваются оба файла `xss_custom.txt` + `xss_payloads.txt`. Находки из stderr Dalfox («Reflected» без JSON) и custom PoC с тем же host+path+param нормализуются в одну **подтверждённую** XSS (см. `finding_normalizer._merge_dalfox_hypothesis_with_custom_xss`).
 
 **Запуск активного сканирования вебприложений с инструментами, ориентированными на OWASP Top 10:**
 
@@ -130,6 +191,10 @@ stateDiagram-v2
 | **xsstrike** | XSS (advanced), context-aware payload generation | Доступен | Leverages DOM context analysis, bypass techniques |
 | **nuclei** | Template-based VA (OWASP coverage, CWE mapping) | Read-only | Passive detection phase completion; integration in recon + vuln_analysis |
 | **gobuster** | DNS enumeration, virtual host discovery | Доступен | Recon companion (phase 1); filtered for active scan scope |
+| **feroxbuster** | Content discovery, recursive crawl | Доступен | Лимиты времени/словаря через `VA_FEROX_*` (KAL-005) |
+| **whatweb** | Fingerprint CMS/стек | Доступен | `VA_WHATWEB_TIMEOUT_SEC` (KAL-004) |
+| **nikto** | Веб-сканер известных проблем | Доступен | `VA_NIKTO_TIMEOUT_SEC` (KAL-004) |
+| **testssl.sh** | TLS/SSL оценка | Доступен | Fallback **sslscan**; `VA_SSL_PROBE_TIMEOUT_SEC` (KAL-004) |
 
 **Policy Integration** (`§ 7 Policy / Approval Gates`):
 - **sqlmap** запуски требуют одобрения при `policy.exploit_approval = true` (destructive database queries)
@@ -153,7 +218,7 @@ stateDiagram-v2
 **Related Documentation**:
 - [Policy gates](./deployment.md#policies-and-approval) — exploit approval workflow
 - [Sandbox](./deployment.md#sandbox-environment) — isolated environment controls
-- OWASP Top 10 mapping: XSS (A03), Injection (A03), Path Traversal (A01)
+- OWASP Top 10:2025 mapping в продукте: XSS/Injection → `A05`, path traversal / IDOR / CSRF → преимущественно `A01` (см. `owasp_category_map.py`)
 
 ---
 
@@ -299,3 +364,4 @@ All phases persist raw outputs to MinIO for audit trail, evidence preservation, 
 - [backend-architecture.md](./backend-architecture.md)
 - [erd.md](./erd.md)
 - [frontend-api-contract.md](./frontend-api-contract.md)
+- [mcp-server.md](./mcp-server.md) — MCP KAL tools и `POST /api/v1/tools/kal/run`

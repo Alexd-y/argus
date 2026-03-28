@@ -167,6 +167,25 @@ def test_normalize_intel_finding_xss_auto_cvss() -> None:
     assert result["cwe"] == "CWE-79"
 
 
+def test_normalize_intel_finding_reflected_xss_label_floors_cvss() -> None:
+    """OWASP-004: human-readable 'Reflected XSS' (alf.nu / dalfox) must floor CVSS at 7+."""
+    from src.orchestration.handlers import _normalize_intel_finding
+
+    raw = {
+        "finding_type": "vulnerability",
+        "data": {
+            "type": "Reflected XSS",
+            "name": "XSS",
+            "url": "https://alf.nu/alert1",
+            "severity": "medium",
+        },
+    }
+    result = _normalize_intel_finding(raw)
+    assert result["cvss"] is not None
+    assert result["cvss"] >= 7.0
+    assert result["cwe"] == "CWE-79"
+
+
 def test_normalize_intel_finding_generic() -> None:
     from src.orchestration.handlers import _normalize_intel_finding
 
@@ -182,6 +201,27 @@ def test_normalize_intel_finding_generic() -> None:
     result = _normalize_intel_finding(raw)
     assert result["severity"] == "medium"
     assert result["source"] == "active_scan"
+
+
+def test_normalize_intel_finding_cwe79_from_poc_xss_alert() -> None:
+    """OWASP-007: CWE-79 when PoC encodes XSS + alert(1) even if type label is not XSS-specific."""
+    from src.orchestration.handlers import _normalize_intel_finding
+
+    raw = {
+        "type": "xss",
+        "source": "xsstrike",
+        "data": {
+            "type": "suspicious_reflection",
+            "name": "Reflected input",
+            "severity": "medium",
+            "url": "https://example.test/search",
+            "poc": "https://example.test/search?q=%3Cscript%3Ealert(1)%3C/script%3E",
+        },
+    }
+    result = _normalize_intel_finding(raw)
+    assert result["cwe"] == "CWE-79"
+    assert result["cvss"] is not None
+    assert result["cvss"] >= 7.0
 
 
 # ---------------------------------------------------------------------------
@@ -270,15 +310,29 @@ async def test_run_vuln_analysis_active_scan_bridge() -> None:
             "source": "dalfox",
             "data": {
                 "type": "Reflected XSS",
-                "name": "XSS in world parameter",
+                "name": "XSS in world parameter (dalfox)",
                 "url": "https://alf.nu/alert1?world=%3Cscript%3Ealert(1)%3C/script%3E",
                 "param": "world",
                 "severity": "high",
                 "cwe": "CWE-79",
-                "cvss_score": 7.2,
+                "cvss_score": 7.5,
                 "poc": "https://alf.nu/alert1?world=%3Cscript%3Ealert(1)%3C/script%3E",
             },
-        }
+        },
+        {
+            "type": "xss",
+            "source": "xsstrike",
+            "data": {
+                "type": "Reflected XSS",
+                "name": "XSS in level parameter (xsstrike)",
+                "url": "https://alf.nu/alert1?level=%3Cscript%3Ealert(1)%3C/script%3E",
+                "param": "level",
+                "severity": "high",
+                "cwe": "CWE-79",
+                "cvss_score": 7.4,
+                "poc": "https://alf.nu/alert1?level=%3Cscript%3Ealert(1)%3C/script%3E",
+            },
+        },
     ]
 
     with (
@@ -290,6 +344,7 @@ async def test_run_vuln_analysis_active_scan_bridge() -> None:
         patch("src.orchestration.handlers.RawPhaseSink"),
     ):
         mock_settings.sandbox_enabled = True
+        mock_settings.va_custom_xss_poc_enabled = False
 
         result = await run_vuln_analysis(
             threat_model={},
@@ -308,6 +363,96 @@ async def test_run_vuln_analysis_active_scan_bridge() -> None:
     assert len(xss_findings) >= 1
     assert xss_findings[0]["cvss"] >= 7.0
     assert xss_findings[0]["source"] == "active_scan"
+    assert xss_findings[0].get("cwe") == "CWE-79"
+    assert any("alert(1)" in (f.get("description") or "").lower() for f in xss_findings)
+
+
+@pytest.mark.asyncio
+async def test_run_vuln_analysis_minio_sink_uploads_active_scan_intel() -> None:
+    """OWASP-007: RawPhaseSink (MinIO) stores normalized intel when VA phase returns dalfox/xsstrike rows."""
+    from src.orchestration.handlers import run_vuln_analysis
+    from src.orchestration.phases import VulnAnalysisOutput
+
+    mock_sink = MagicMock()
+    mock_sink_class = MagicMock(return_value=mock_sink)
+
+    mock_bundle_result = MagicMock()
+    mock_bundle_result.intel_findings = [
+        {
+            "type": "xss",
+            "source": "dalfox",
+            "data": {
+                "type": "Reflected XSS",
+                "name": "XSS (dalfox)",
+                "url": "https://alf.nu/alert1?world=test",
+                "param": "world",
+                "severity": "high",
+                "cwe": "CWE-79",
+                "cvss_score": 7.3,
+                "poc": "https://alf.nu/alert1?world=%3Cscript%3Ealert(1)%3C/script%3E",
+            },
+        },
+        {
+            "type": "xss",
+            "source": "xsstrike",
+            "data": {
+                "type": "Reflected XSS",
+                "name": "XSS (xsstrike)",
+                "url": "https://alf.nu/alert1?level=x",
+                "param": "level",
+                "severity": "high",
+                "cwe": "CWE-79",
+                "cvss_score": 7.6,
+                "poc": "https://alf.nu/alert1?level=%3Cscript%3Ealert(1)%3C/script%3E",
+            },
+        },
+    ]
+
+    with (
+        patch("src.orchestration.handlers.settings") as mock_settings,
+        patch(
+            "src.orchestration.handlers.run_va_active_scan_phase",
+            new_callable=AsyncMock,
+            return_value=mock_bundle_result,
+        ),
+        patch(
+            "src.orchestration.handlers.ai_vuln_analysis",
+            new_callable=AsyncMock,
+            return_value=VulnAnalysisOutput(findings=[]),
+        ),
+        patch(
+            "src.orchestration.handlers._extract_url_params_and_forms",
+            new_callable=AsyncMock,
+            return_value=([], []),
+        ),
+        patch("src.orchestration.handlers.run_web_vuln_heuristics", new_callable=AsyncMock, return_value=[]),
+        patch("src.orchestration.handlers.RawPhaseSink", mock_sink_class),
+    ):
+        mock_settings.sandbox_enabled = True
+        mock_settings.va_custom_xss_poc_enabled = False
+
+        await run_vuln_analysis(
+            threat_model={},
+            assets=["alf.nu"],
+            target=ALF_NU_TARGET,
+            tenant_id="tenant-owasp-007",
+            scan_id="scan-owasp-007",
+        )
+
+    mock_sink_class.assert_called_once_with("tenant-owasp-007", "scan-owasp-007", "vuln_analysis")
+    mock_sink.upload_json.assert_called_once()
+    args, _kwargs = mock_sink.upload_json.call_args
+    assert args[0] == "active_scan_findings"
+    payload = args[1]
+    assert payload["count"] == 2
+    assert len(payload["findings"]) == 2
+    for f in payload["findings"]:
+        assert f.get("cwe") == "CWE-79"
+        assert (f.get("cvss") or 0) >= 7.0
+        blob = f"{f.get('title', '')} {f.get('description', '')}".lower()
+        assert "alert(1)" in blob
+    assert any("dalfox" in (x.get("title") or "").lower() for x in payload["findings"])
+    assert any("xsstrike" in (x.get("title") or "").lower() for x in payload["findings"])
 
 
 @pytest.mark.asyncio

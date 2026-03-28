@@ -1,0 +1,54 @@
+{% set vc = valhalla_context %}
+<section class="valhalla-appendices panel" id="appendices">
+    <h2>Приложения</h2>
+
+    <h3>Приложение А. Список использованных инструментов и версий</h3>
+    {% if vc.appendix_tools %}
+        <ul>
+            {% for e in vc.appendix_tools %}
+            <li>{{ e.name | e }}{% if e.version %} — {{ e.version | e }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+    {% elif tool_runs %}
+        <ul>
+            {% for tr in tool_runs %}
+            <li><code>{{ tr.tool_name | e }}</code> (статус: {{ tr.status | e }})</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="empty">Не найдено</p>
+    {% endif %}
+
+    <h3>Приложение Б. Фрагменты конфигураций и вводов фаз</h3>
+    {% if valhalla_appendix_phase_inputs_excerpt %}
+        <pre class="ai-slot-body">{{ valhalla_appendix_phase_inputs_excerpt | e }}</pre>
+    {% else %}
+        <p class="empty">Нет данных</p>
+    {% endif %}
+
+    <h3>Приложение В. Выдержки из журнала событий / таймлайна ARGUS</h3>
+    {% if valhalla_appendix_timeline_rows %}
+        <ul class="timeline">
+            {% for row in valhalla_appendix_timeline_rows %}
+            <li><strong>{{ row.phase | e }}</strong> (#{{ row.order_index }}){% if row.snippet %}: {{ row.snippet | e }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="empty">Нет данных</p>
+    {% endif %}
+
+    <h3>Приложение Г. Выдержка из nmap / сетевого сканирования</h3>
+    {% if valhalla_appendix_nmap_excerpt %}
+        <pre class="ai-slot-body">{{ valhalla_appendix_nmap_excerpt | e }}</pre>
+    {% elif vc.exploitation_post_excerpt %}
+        <pre class="ai-slot-body">{{ vc.exploitation_post_excerpt | e }}</pre>
+    {% else %}
+        <p class="empty">Не найдено</p>
+    {% endif %}
+
+    <h3>Приложение Д. Признаки APT (если обнаружены)</h3>
+    <p class="empty">Плейсхолдер: индикаторы компрометации, тактики MITRE ATT&CK — при отдельном согласовании и данных обнаружения. Нет данных.</p>
+
+    <h3>Приложение Е. Результаты проверки утечек паролей (hashed, HIBP)</h3>
+    <p class="empty">Плейсхолдер: агрегированные сигналы HIBP Pwned Passwords при opt-in политики. Нет данных в теле отчёта.</p>
+</section>

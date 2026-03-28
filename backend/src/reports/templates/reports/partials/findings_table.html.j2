@@ -1,12 +1,21 @@
+{% set tier_low = (tier or "midgard") | lower %}
+{% set show_owasp_block = tier_low in ["asgard", "valhalla"] %}
+{% set labels = owasp_top10_labels if owasp_top10_labels is defined else {} %}
 <section class="findings" id="findings">
     <h2>Findings</h2>
-    <table>
+    {% if show_owasp_block and owasp_compliance_rows is defined %}
+        {% include "partials/owasp_compliance_table.html.j2" %}
+    {% endif %}
+    <table class="findings-main-table">
         <thead>
             <tr>
                 <th>Severity</th>
                 <th>Title</th>
                 <th>Description</th>
                 <th>CWE</th>
+                {% if show_owasp_block %}
+                <th>Категория OWASP</th>
+                {% endif %}
                 <th>CVSS</th>
             </tr>
         </thead>
@@ -17,11 +26,86 @@
                     <td>{{ row.title }}</td>
                     <td class="desc">{{ row.description or "" }}</td>
                     <td>{{ row.cwe or "—" }}</td>
+                    {% if show_owasp_block %}
+                    <td class="owasp-finding-cell">
+                        {% if row.owasp_category %}
+                            <span class="owasp-finding-id"><code>{{ row.owasp_category }}</code></span>
+                            {% if row.owasp_title_ru %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ row.owasp_title_ru }}</span>
+                            {% elif labels.get(row.owasp_category) %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) }}</span>
+                            {% endif %}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    {% endif %}
                     <td>{% if row.cvss is not none %}{{ row.cvss }}{% else %}—{% endif %}</td>
                 </tr>
+                {% if row.proof_of_concept %}
+                    {% set poc = row.proof_of_concept %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url %}
+                    {% set param_label = row.parameter or row.param or poc.parameter %}
+                    {% if tier_low in ["asgard", "valhalla"] %}
+                        <tr class="poc-row">
+                            <td colspan="{{ 6 if show_owasp_block else 5 }}">
+                                {% if has_detail %}
+                                <section class="finding-poc">
+                                    <h3 class="finding-poc-title">Proof of concept</h3>
+                                    {% if row.poc_screenshot_url %}
+                                        <p><strong>Screenshot</strong></p>
+                                        <p><a href="{{ row.poc_screenshot_url }}" target="_blank" rel="noopener noreferrer">Screenshot</a></p>
+                                        {% if embed_poc_screenshot_inline %}
+                                        <p class="finding-poc-screenshot-thumb"><img src="{{ row.poc_screenshot_url }}" alt="PoC screenshot" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
+                                        {% endif %}
+                                    {% endif %}
+                                    {% if param_label %}
+                                        <p><strong>Parameter</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ param_label }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.payload %}
+                                        <p><strong>Payload</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.payload }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.javascript_code %}
+                                        <p><strong>JavaScript</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.javascript_code }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.curl_command %}
+                                        <p><strong>cURL</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.curl_command }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.request %}
+                                        <p><strong>Request</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.request }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.response_snippet %}
+                                        <p><strong>Response snippet</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.response_snippet }}</code></pre>
+                                    {% endif %}
+                                    {% if poc.response %}
+                                        <p><strong>Response (excerpt)</strong></p>
+                                        <pre class="finding-poc-block"><code>{{ poc.response }}</code></pre>
+                                    {% endif %}
+                                </section>
+                                {% else %}
+                                <p class="finding-poc-empty">No PoC available</p>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% elif tier_low == "midgard" %}
+                        <tr class="poc-row poc-tier-midgard">
+                            <td colspan="{{ 6 if show_owasp_block else 5 }}">
+                                <p class="poc-stub">Подробности PoC доступны в отчётах Asgard / Valhalla.</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% endif %}
             {% else %}
                 <tr>
-                    <td colspan="5" class="empty">No findings in this report.</td>
+                    <td colspan="{{ 6 if show_owasp_block else 5 }}" class="empty">No findings in this report.</td>
                 </tr>
             {% endfor %}
         </tbody>

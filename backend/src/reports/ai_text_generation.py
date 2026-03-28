@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 _CACHE_KEY_PREFIX = "argus:ai_text:"
 
+# Template / Jinja-safe placeholders when LLM is unavailable (match REPORT_AI_SECTION_KEYS consumers).
+REPORT_AI_SKIPPED_NO_LLM = "AI generation skipped: no LLM provider available"
+REPORT_AI_SKIPPED_GENERATION_FAILED = "AI generation skipped: could not generate content"
+
 
 def canonical_payload_hash(input_payload: dict[str, Any]) -> str:
     """Deterministic SHA-256 over canonical JSON (sorted keys, compact separators)."""
@@ -88,6 +92,12 @@ def run_ai_text_generation(
     """
     Resolve report section text from cache or sync LLM call.
     ``llm_callable`` and ``redis_client`` are injectable for tests.
+
+    RPT-004 / OWASP-004 / VHL-003: ``input_payload`` is passed through unchanged into
+    ``get_report_ai_section_prompt`` (serialized as ``context_json``). All section keys receive the
+    same dict from ``ReportGenerator.build_ai_input_payload`` — including ``owasp_compliance_table``,
+    ``owasp_category_reference_ru``, and ``owasp_summary`` when present. Valhalla-tier runs also embed
+    compact ``valhalla_context`` and optional aggregate ``hibp_pwned_password_summary`` (no secrets).
     """
     if section_key not in REPORT_AI_SECTION_KEYS:
         _log_ai_text_event(
@@ -168,8 +178,9 @@ def run_ai_text_generation(
                 status="llm_unavailable",
             )
             return {
-                "status": "failed",
+                "status": "skipped_no_llm",
                 "error": "llm_unavailable",
+                "text": REPORT_AI_SKIPPED_NO_LLM,
                 "section_key": section_key,
                 "cache_hit": False,
                 "prompt_version": prompt_version,
@@ -189,8 +200,9 @@ def run_ai_text_generation(
                 status="llm_unavailable",
             )
             return {
-                "status": "failed",
+                "status": "skipped_no_llm",
                 "error": "llm_unavailable",
+                "text": REPORT_AI_SKIPPED_NO_LLM,
                 "section_key": section_key,
                 "cache_hit": False,
                 "prompt_version": prompt_version,
@@ -214,6 +226,28 @@ def run_ai_text_generation(
         return {
             "status": "failed",
             "error": "generation_failed",
+            "text": REPORT_AI_SKIPPED_GENERATION_FAILED,
+            "section_key": section_key,
+            "cache_hit": False,
+            "prompt_version": prompt_version,
+            "payload_sha256": payload_hash,
+        }
+
+    if not generated:
+        _log_ai_text_event(
+            cache_hit=False,
+            section_key=section_key,
+            tier=tier,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            payload_sha256=payload_hash,
+            prompt_version=prompt_version,
+            status="llm_empty_response",
+        )
+        return {
+            "status": "failed",
+            "error": "generation_failed",
+            "text": REPORT_AI_SKIPPED_GENERATION_FAILED,
             "section_key": section_key,
             "cache_hit": False,
             "prompt_version": prompt_version,

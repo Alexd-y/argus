@@ -1,0 +1,8 @@
+admin
+api
+v1
+test
+health
+robots.txt
+.svn
+.git

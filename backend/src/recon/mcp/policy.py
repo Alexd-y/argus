@@ -103,6 +103,21 @@ VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     # OWASP2-001: wfuzz (fuzzing), commix (command injection) — same executor scope rules as sqlmap/ffuf.
     "wfuzz",
     "commix",
+    # KAL-004 — recon / fingerprint hooks (sandbox + MinIO artifacts)
+    "whatweb",
+    "nikto",
+    "testssl",
+    "sslscan",
+    # KAL-005 — feroxbuster (content discovery); password-audit + capture tools (gated in runner)
+    "feroxbuster",
+    "hydra",
+    "medusa",
+    "mitmdump",
+    "tcpdump",
+    # VDF-005 / VDF-008 — optional OSINT / shallow crawl (gated by settings + runner)
+    "theharvester",
+    "gospider",
+    "parsero",
 })
 
 # VA-006 — MCP / internal enqueue operation ids (Celery task names mirror these with argus.va.*)
@@ -112,6 +127,9 @@ VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
     "run_ffuf",
     "run_sqlmap",
     "run_nuclei",
+    "run_whatweb",
+    "run_nikto",
+    "run_testssl",
 })
 
 
@@ -122,9 +140,15 @@ def is_va_active_scan_mcp_operation(operation: str) -> bool:
 
 
 def _normalize_va_active_scan_tool_identifier(raw: str) -> str:
-    """Normalize MCP/sandbox tool alias: case, underscores, hyphens (fail-closed match)."""
-    s = str(raw or "").strip().lower().replace("_", "").replace("-", "")
+    """Normalize MCP/sandbox tool alias: case, underscores, hyphens, dots (fail-closed match)."""
+    s = str(raw or "").strip().lower().replace("_", "").replace("-", "").replace(".", "")
     return s
+
+
+# testssl.sh binary normalizes to testsslsh → canonical testssl
+_VA_ACTIVE_SCAN_TOOL_ALIASES: dict[str, str] = {
+    "testsslsh": "testssl",
+}
 
 
 def resolve_va_active_scan_tool_canonical(tool_name: str) -> str | None:
@@ -132,6 +156,7 @@ def resolve_va_active_scan_tool_canonical(tool_name: str) -> str | None:
     normalized = _normalize_va_active_scan_tool_identifier(tool_name)
     if not normalized:
         return None
+    normalized = _VA_ACTIVE_SCAN_TOOL_ALIASES.get(normalized, normalized)
     if normalized in VA_ACTIVE_SCAN_ALLOWED_TOOLS:
         return normalized
     return None
@@ -623,4 +648,176 @@ def evaluate_exploitation_policy(
         allowed=True,
         reason="allowed",
         policy_id=EXPLOITATION_POLICY_ID,
+    )
+
+
+# ---------------------------------------------------------------------------
+# KAL-002 — MCP gated scanner categories (fail-closed argv allowlist per category)
+# ---------------------------------------------------------------------------
+
+KAL_MCP_POLICY_ID = "kal_mcp_gated_tools_v1"
+
+# KAL-006/007 — bounded Exploit-DB CLI from recon (argv policy via evaluate_kal_mcp_policy)
+KAL_CATEGORY_VULN_INTEL = "vuln_intel"
+
+KAL_OPERATION_CATEGORIES = frozenset({
+    "network_scanning",
+    "web_fingerprinting",
+    "api_testing",
+    "bruteforce_testing",
+    "ssl_analysis",
+    "dns_enumeration",
+    "password_audit",
+    KAL_CATEGORY_VULN_INTEL,
+})
+
+KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
+    "network_scanning": frozenset({"nmap", "rustscan", "masscan"}),
+    "web_fingerprinting": frozenset({"httpx", "whatweb", "wpscan", "nikto"}),
+    "api_testing": frozenset({"httpx", "nuclei", "curl"}),
+    "bruteforce_testing": frozenset({
+        "gobuster",
+        "feroxbuster",
+        "dirsearch",
+        "ffuf",
+        "wfuzz",
+        "dirb",
+    }),
+    "ssl_analysis": frozenset({"openssl", "testssl.sh"}),
+    "dns_enumeration": frozenset({
+        "dig",
+        "subfinder",
+        "amass",
+        "dnsx",
+        "host",
+        "nslookup",
+        "dnsrecon",
+        "fierce",
+    }),
+    "password_audit": frozenset({"hydra", "medusa"}),
+    KAL_CATEGORY_VULN_INTEL: frozenset({"searchsploit"}),
+}
+
+KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers"})
+
+# KAL-005 — amass: only vetted subcommands (fail-closed)
+KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum"})
+
+_KAL_ARGV_INJECTION_PATTERN = re.compile(
+    r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\("
+)
+
+
+def normalize_kal_binary(argv0: str) -> str:
+    """First argv segment basename, lowercase; testssl.sh kept distinct."""
+    raw = str(argv0 or "").strip()
+    if not raw:
+        return ""
+    base = raw.rsplit("/", 1)[-1].strip().lower()
+    if base == "testssl.sh" or base.startswith("testssl"):
+        return "testssl.sh"
+    return base
+
+
+def kal_argv_has_injection_risk(argv: list[str]) -> bool:
+    """True if any argument looks like shell metacharacters (list execution; no shell)."""
+    for a in argv:
+        s = str(a)
+        if _KAL_ARGV_INJECTION_PATTERN.search(s):
+            return True
+    return False
+
+
+def evaluate_kal_mcp_policy(
+    *,
+    category: str,
+    argv: list[str],
+    password_audit_opt_in: bool,
+    server_password_audit_enabled: bool,
+) -> McpPolicyDecision:
+    """Fail-closed: category must map to tool; hydra/medusa only for password_audit + double opt-in."""
+    cat = str(category or "").strip().lower().replace("-", "_")
+    if cat not in KAL_OPERATION_CATEGORIES:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="unknown_category",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+    if not argv or not isinstance(argv, list):
+        return McpPolicyDecision(
+            allowed=False,
+            reason="empty_argv",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+    if kal_argv_has_injection_risk(argv):
+        return McpPolicyDecision(
+            allowed=False,
+            reason="argv_injection_pattern",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+
+    binary = normalize_kal_binary(argv[0])
+    if not binary:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="missing_binary",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+
+    allowed_for_cat = KAL_CATEGORY_ALLOWED_BINARIES.get(cat, frozenset())
+    if binary not in allowed_for_cat:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="tool_not_allowed_for_category",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+
+    if binary in ("hydra", "medusa"):
+        if cat != "password_audit":
+            return McpPolicyDecision(
+                allowed=False,
+                reason="password_tools_only_in_password_audit_category",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if not password_audit_opt_in or not server_password_audit_enabled:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="password_audit_opt_in_required",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "openssl":
+        if len(argv) < 2:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="openssl_missing_subcommand",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        sub = str(argv[1]).strip().lower()
+        if sub not in KAL_OPENSSL_ALLOWED_SUBCOMMANDS:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="openssl_subcommand_not_allowed",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "amass":
+        if len(argv) < 2:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="amass_missing_subcommand",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        sub_amass = str(argv[1]).strip().lower()
+        if sub_amass not in KAL_AMASS_ALLOWED_SUBCOMMANDS:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="amass_subcommand_not_allowed",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    return McpPolicyDecision(
+        allowed=True,
+        reason="allowed",
+        policy_id=KAL_MCP_POLICY_ID,
     )

@@ -10,15 +10,17 @@ import shlex
 import socket
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
 
 from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.core.config import settings
 from src.data_sources.crtsh_client import CrtShClient
+from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.data_sources.nvd_client import NVDClient
 from src.data_sources.shodan_client import ShodanClient
+from src.recon.recon_dns_sandbox import run_recon_dns_sandbox_bundle
 from src.orchestration.ai_prompts import (
     ai_exploitation,
     ai_post_exploitation,
@@ -43,12 +45,18 @@ from src.orchestration.phases import (
     VulnAnalysisOutput,
 )
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
+from src.recon.exploitation.custom_xss_poc import run_custom_xss_poc
 from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
     run_va_active_scan_phase,
+)
+from src.recon.vulnerability_analysis.finding_normalizer import (
+    normalize_active_scan_intel_findings,
 )
 from src.recon.vulnerability_analysis.active_scan.web_vuln_heuristics import (
     run_web_vuln_heuristics,
 )
+from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
+from src.owasp_top10_2025 import parse_owasp_category
 from src.tools.executor import execute_command
 
 logger = logging.getLogger(__name__)
@@ -84,6 +92,39 @@ def _safe_json(obj: Any, max_len: int = 30000) -> str:
 _HTTP_CRAWL_TIMEOUT = 10.0
 _HTTP_CRAWL_MAX_REDIRECTS = 3
 _HTTP_CRAWL_USER_AGENT = "ARGUS-Scanner/1.0 (recon; +https://github.com/argus)"
+_MANIFEST_FETCH_MAX_BYTES = 256_000
+
+
+def _truncate_query_values_for_log(url: str, max_value_len: int = 80) -> str:
+    """Redact long query values in a URL for structured logs (secrets in query strings)."""
+    t = (url or "").strip()
+    if not t or max_value_len < 8:
+        return t[:500]
+    parsed = urlparse(t)
+    if not parsed.query:
+        return t[:500]
+    pairs: list[tuple[str, str]] = []
+    for k, v in parse_qsl(parsed.query, keep_blank_values=True):
+        if len(v) > max_value_len:
+            v = v[: max_value_len - 3] + "..."
+        pairs.append((k, v))
+    new_query = urlencode(pairs)
+    rebuilt = urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment),
+    )
+    return rebuilt[:500]
+
+
+def _log_va_url_surface_extracted(target: str, params: list[dict[str, Any]], forms: list[dict[str, Any]]) -> None:
+    logger.info(
+        "va_url_surface_extracted",
+        extra={
+            "event": "va_url_surface_extracted",
+            "extracted_url_params_count": len(params),
+            "extracted_forms_count": len(forms),
+            "target": _truncate_query_values_for_log(target, 80),
+        },
+    )
 
 
 class _FormHTMLParser(HTMLParser):
@@ -135,6 +176,18 @@ def _extract_url_query_params(target: str) -> list[dict[str, Any]]:
     return params_inventory
 
 
+def _live_host_row_for_target(target: str) -> dict[str, str]:
+    """Single live_hosts row with normalized hostname (full URL in `host` breaks active-scan scope)."""
+    t = (target or "").strip()
+    if not t:
+        return {"host": ""}
+    parsed = urlparse(t)
+    if parsed.scheme in ("http", "https") and parsed.hostname:
+        return {"host": parsed.hostname.strip().lower()}
+    host_part = t.split("/")[0].split("?")[0].strip().lower()
+    return {"host": host_part}
+
+
 def _parse_forms_from_html(html: str, page_url: str) -> list[dict[str, Any]]:
     """Parse HTML string and return forms_inventory rows (one per input)."""
     parser = _FormHTMLParser()
@@ -177,6 +230,7 @@ async def _extract_url_params_and_forms(
     parsed = urlparse(target)
     if not parsed.scheme or parsed.scheme not in ("http", "https"):
         logger.info("http_crawl_skipped", extra={"reason": "non_http_scheme"})
+        _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
         return params_inventory, forms_inventory
 
     try:
@@ -193,6 +247,7 @@ async def _extract_url_params_and_forms(
         content_type = response.headers.get("content-type", "")
         if "html" not in content_type.lower():
             logger.info("http_crawl_no_html", extra={"content_type": content_type})
+            _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
             return params_inventory, forms_inventory
 
         body = response.text[:500_000]
@@ -223,7 +278,68 @@ async def _extract_url_params_and_forms(
             "forms_count": len(forms_inventory),
         },
     )
+    _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
     return params_inventory, forms_inventory
+
+
+async def _try_fetch_and_upload_dependency_manifests(target: str, sink: RawPhaseSink) -> None:
+    """Best-effort fetch of /requirements.txt and /package.json into recon raw artifacts (KAL-006 / Trivy)."""
+    parsed = urlparse(target)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return
+    base_root = urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
+    specs: tuple[tuple[str, str, str], ...] = (
+        ("/requirements.txt", "dependency_requirements_txt", "txt"),
+        ("/package.json", "dependency_package_json", "json"),
+    )
+    for path, artifact_type, ext in specs:
+        url = urljoin(base_root, path)
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(8.0),
+                max_redirects=_HTTP_CRAWL_MAX_REDIRECTS,
+                follow_redirects=True,
+                verify=False,
+            ) as client:
+                response = await client.get(
+                    url,
+                    headers={"User-Agent": _HTTP_CRAWL_USER_AGENT},
+                )
+        except Exception:
+            logger.debug(
+                "dependency_manifest_fetch_failed",
+                extra={"reason": "http_error", "manifest": artifact_type},
+            )
+            continue
+        if response.status_code != 200:
+            continue
+        body = response.content
+        if not body or len(body) > _MANIFEST_FETCH_MAX_BYTES:
+            continue
+        if path.endswith("package.json"):
+            head = body[:12_000]
+            if not body.lstrip().startswith(b"{") or (
+                b"dependencies" not in head and b'"name"' not in head
+            ):
+                continue
+        else:
+            if not any(
+                line.strip() and not line.lstrip().startswith(b"#")
+                for line in body.splitlines()[:30]
+            ):
+                continue
+        try:
+            await asyncio.to_thread(sink.upload_bytes, artifact_type, ext, body)
+            logger.info(
+                "dependency_manifest_uploaded",
+                extra={"artifact_type": artifact_type, "bytes": len(body)},
+            )
+        except Exception:
+            logger.warning(
+                "dependency_manifest_upload_failed",
+                extra={"artifact_type": artifact_type},
+                exc_info=True,
+            )
 
 
 async def _upload_recon_tool_streams(sink: RawPhaseSink, tool_results: dict[str, Any]) -> None:
@@ -244,11 +360,18 @@ def _format_tool_results(results: dict[str, Any]) -> str:
     parts: list[str] = []
     for tool_name, result in results.items():
         parts.append(f"--- {tool_name.upper()} ---")
+        if tool_name == "kal_dns_intel" and isinstance(result, list):
+            parts.append(_safe_json({"kal_dns_intel": result}, 12000))
+            parts.append("")
+            continue
         if isinstance(result, dict):
             stdout = result.get("stdout", "")
             stderr = result.get("stderr", "")
             if stdout:
                 parts.append(stdout[:15000])
+            structured = result.get("structured")
+            if tool_name == "nmap" and isinstance(structured, dict) and structured.get("mode") == "sandbox_cycle":
+                parts.append(_safe_json(structured, 12000))
             if stderr and not result.get("success", True):
                 parts.append(f"[stderr] {stderr[:2000]}")
         elif isinstance(result, str):
@@ -276,11 +399,26 @@ def _log_recon_tool_done(tool: str, cmd: str, result: dict[str, Any]) -> None:
     )
 
 
-async def _run_nmap(target: str, ports: str = "1-1000") -> dict[str, Any]:
-    """Run nmap service/version scan. Tools installed in backend container."""
-    cmd = f"nmap -sV -sC -T4 --open -p {ports} {target}"
-    result = execute_command(cmd, use_sandbox=False)
-    _log_recon_tool_done("nmap", cmd, result)
+async def _run_nmap(
+    target: str,
+    ports: str = "1-1000",
+    *,
+    options: dict | None = None,
+    raw_sink: RawPhaseSink | None = None,
+) -> dict[str, Any]:
+    """Run nmap: multi-phase sandbox cycle (KAL-003) or legacy single -sV -sC scan."""
+    from src.recon.nmap_recon_cycle import run_nmap_recon_for_recon
+
+    result = await run_nmap_recon_for_recon(
+        target,
+        ports_option=ports,
+        scan_options=dict(options or {}),
+        raw_sink=raw_sink,
+        execute_command=execute_command,
+    )
+    mode = (result.get("structured") or {}).get("mode")
+    cmd_log = "nmap_sandbox_cycle" if mode == "sandbox_cycle" else "nmap_legacy_single"
+    _log_recon_tool_done("nmap", cmd_log, result)
     return result
 
 
@@ -351,7 +489,11 @@ async def run_recon(
     domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
     ports = options.get("ports", "1-1000")
 
-    nmap_task = _run_nmap(domain, ports)
+    raw_sink: RawPhaseSink | None = None
+    if tenant_id and scan_id:
+        raw_sink = RawPhaseSink(tenant_id, scan_id, "recon")
+
+    nmap_task = _run_nmap(domain, ports, options=options, raw_sink=raw_sink)
     dig_task = _run_dig(domain)
     whois_task = _run_whois(domain)
     crtsh_task = _query_crtsh(domain)
@@ -361,6 +503,13 @@ async def run_recon(
     results = await asyncio.gather(
         nmap_task, dig_task, whois_task, crtsh_task, shodan_task, http_crawl_task,
         return_exceptions=True,
+    )
+
+    dns_tool_results, dns_intel = await run_recon_dns_sandbox_bundle(
+        target,
+        options,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
     )
 
     http_crawl_result = results[-1]
@@ -403,14 +552,18 @@ async def run_recon(
             ),
         }
 
+    if dns_tool_results:
+        tool_results.update(dns_tool_results)
+    if dns_intel:
+        tool_results["kal_dns_intel"] = dns_intel
+
     tool_results_str = _format_tool_results(tool_results)
     logger.info("Recon tool results collected (%d chars), sending to LLM", len(tool_results_str))
 
-    raw_sink: RawPhaseSink | None = None
-    if tenant_id and scan_id:
-        raw_sink = RawPhaseSink(tenant_id, scan_id, "recon")
+    if raw_sink is not None:
         await _upload_recon_tool_streams(raw_sink, tool_results)
         await asyncio.to_thread(raw_sink.upload_text, "tool_results_llm_context", tool_results_str)
+        await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
 
     inp = ReconInput(target=target, options=options)
     return await ai_recon(inp, tool_results=tool_results_str, raw_sink=raw_sink)
@@ -501,6 +654,25 @@ _CWE_MAP: dict[str, str] = {
 }
 
 
+def _intel_data_suggests_xss_via_poc(data: dict[str, Any]) -> bool:
+    """True when PoC/URL text looks like a classic reflected XSS PoC (payload + alert(1))."""
+    poc = str(data.get("poc") or "")
+    url = str(data.get("url") or "")
+    blob = f"{poc}\n{url}".lower()
+    if "alert(1)" not in blob and "alert%281%29" not in blob:
+        return False
+    markers = (
+        "<script",
+        "%3cscript",
+        "javascript:",
+        "onerror=",
+        "onload=",
+        "<svg",
+        "%3csvg",
+    )
+    return any(m in blob for m in markers)
+
+
 def _generate_poc(finding_data: dict[str, Any]) -> str:
     """Generate a safe PoC curl command or URL string from finding data."""
     poc = str(finding_data.get("poc") or "").strip()
@@ -533,7 +705,19 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw_cvss, (int, float)):
         cvss = float(raw_cvss)
 
-    is_xss = vuln_type_lower in ("xss", "cross-site scripting", "reflected_xss", "stored_xss")
+    # Include human-readable labels (e.g. dalfox / alf.nu — "Reflected XSS") for CVSS ≥ 7 floor.
+    is_xss = vuln_type_lower in (
+        "xss",
+        "cross-site scripting",
+        "reflected_xss",
+        "stored_xss",
+        "reflected xss",
+        "dom xss",
+        "dom_xss",
+    )
+    if not is_xss and _intel_data_suggests_xss_via_poc(data):
+        is_xss = True
+
     if is_xss:
         default_cvss = _CVSS_DEFAULTS.get("xss", 7.2)
         cvss = max(cvss or 0.0, default_cvss)
@@ -559,8 +743,22 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
         description_parts.append(f"PoC: {poc_cmd}")
     if data.get("matched_at"):
         description_parts.append(f"Matched: {data['matched_at']}")
+    if data.get("poc_curl"):
+        description_parts.append(f"PoC (curl): {data['poc_curl']}")
     description = "; ".join(p for p in description_parts if p)
-    return {
+    st_raw = str(raw.get("source_tool") or "").strip() or None
+    pre_owasp = raw.get("owasp_category")
+    owasp_resolved: str | None = None
+    if isinstance(pre_owasp, str) and pre_owasp.strip():
+        owasp_resolved = parse_owasp_category(pre_owasp.strip())
+    if owasp_resolved is None:
+        owasp_resolved = resolve_owasp_category(
+            cwe=str(cwe)[:20] if cwe else None,
+            finding_type_key=vuln_type_lower or None,
+            source_tool=st_raw,
+        )
+
+    out: dict[str, Any] = {
         "title": title[:500],
         "severity": severity,
         "description": description[:5000],
@@ -568,6 +766,14 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
         "cvss": cvss,
         "source": "active_scan",
     }
+    if st_raw:
+        out["source_tool"] = st_raw
+    if owasp_resolved:
+        out["owasp_category"] = owasp_resolved
+    raw_poc = data.get("proof_of_concept")
+    if isinstance(raw_poc, dict) and raw_poc:
+        out["proof_of_concept"] = raw_poc
+    return out
 
 
 def _build_active_scan_context(findings: list[dict[str, Any]]) -> str:
@@ -583,6 +789,14 @@ def _build_active_scan_context(findings: list[dict[str, Any]]) -> str:
             parts.append(f"CVSS: {f['cvss']}")
         if f.get("description"):
             parts.append(f"Details: {f['description'][:300]}")
+        poc = f.get("proof_of_concept")
+        if isinstance(poc, dict):
+            curl = poc.get("curl_command")
+            if isinstance(curl, str) and curl.strip():
+                parts.append(f"PoC curl: {curl.strip()[:400]}")
+            js = poc.get("javascript_code")
+            if isinstance(js, str) and js.strip():
+                parts.append(f"PoC js: {js.strip()[:400]}")
         lines.append(" | ".join(parts))
     lines.append("")
     return "\n".join(lines) + "\n"
@@ -613,6 +827,24 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
             if cvss is None or cvss < _MIN_CONFIRMED_ACTIVE_CVSS:
                 f["cvss"] = _MIN_CONFIRMED_ACTIVE_CVSS
 
+        raw_oc = f.get("owasp_category")
+        oc = parse_owasp_category(raw_oc.strip()) if isinstance(raw_oc, str) and raw_oc.strip() else None
+        if oc is None:
+            cwe_s = str(f["cwe"]).strip() if f.get("cwe") else None
+            st = str(f.get("source_tool") or "").strip() or None
+            title_low = (f.get("title") or "").lower()
+            desc_low = (f.get("description") or "").lower()
+            blob = f"{title_low} {desc_low}".strip() or None
+            oc = resolve_owasp_category(
+                cwe=cwe_s,
+                finding_type_key=blob,
+                source_tool=st,
+            )
+        if oc:
+            f["owasp_category"] = oc
+        elif "owasp_category" in f:
+            del f["owasp_category"]
+
     findings.sort(key=lambda f: f.get("cvss") or 0.0, reverse=True)
     return findings
 
@@ -624,6 +856,7 @@ async def run_vuln_analysis(
     target: str = "",
     tenant_id: str | None = None,
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> VulnAnalysisOutput:
     """Production vuln analysis: optional active scan + LLM analysis.
 
@@ -637,8 +870,33 @@ async def run_vuln_analysis(
     params_inv: list[dict[str, Any]] = []
     forms_inv: list[dict[str, Any]] = []
 
+    target_present = bool((target or "").strip())
+    if not target_present:
+        logger.info(
+            "vuln_analysis_active_scan",
+            extra={
+                "event": "skipped",
+                "reason": "no_target",
+                "scan_id": scan_id,
+                "target_present": False,
+            },
+        )
+    elif not settings.sandbox_enabled:
+        logger.info(
+            "vuln_analysis_active_scan",
+            extra={
+                "event": "skipped",
+                "reason": "sandbox_disabled",
+                "scan_id": scan_id,
+                "target_present": True,
+            },
+        )
+
     if settings.sandbox_enabled and target:
         try:
+            from src.recon.scan_options_kal import scan_kal_flags
+
+            kal_flags = scan_kal_flags(scan_options)
             params_inv, forms_inv = await _extract_url_params_and_forms(target)
             bundle = VulnerabilityAnalysisInputBundle(
                 engagement_id=scan_id or "unknown",
@@ -648,8 +906,18 @@ async def run_vuln_analysis(
                 params_inventory=params_inv,
                 forms_inventory=forms_inv,
                 intel_findings=[],
-                live_hosts=[{"host": target}],
+                live_hosts=[_live_host_row_for_target(target)],
                 tech_profile=[],
+            )
+            logger.info(
+                "vuln_analysis_active_scan",
+                extra={
+                    "event": "triggered",
+                    "reason": "",
+                    "scan_id": scan_id,
+                    "target_present": True,
+                    "stage": "pre_va_active_scan_phase",
+                },
             )
             result_bundle = await run_va_active_scan_phase(
                 bundle,
@@ -657,10 +925,37 @@ async def run_vuln_analysis(
                 scan_id_raw=scan_id or "",
                 va_raw_log=lambda msg: logger.info(
                     "va_active_scan",
-                    extra={"message": msg, "scan_id": scan_id},
+                    extra={"va_message": msg, "scan_id": scan_id},
                 ),
+                password_audit_opt_in=bool(kal_flags["password_audit_opt_in"]),
+                va_network_capture_opt_in=bool(kal_flags["va_network_capture_opt_in"]),
             )
-            raw_intel = result_bundle.intel_findings or []
+            raw_intel = list(result_bundle.intel_findings or [])
+            raw_intel = normalize_active_scan_intel_findings(raw_intel)
+            if settings.va_custom_xss_poc_enabled:
+                try:
+                    custom_rows = await run_custom_xss_poc(
+                        target,
+                        params_inv,
+                        forms_inv,
+                        timeout=20.0,
+                        max_payloads=80 if settings.va_aggressive_scan else 50,
+                        max_total_requests=200,
+                        aggressive=settings.va_aggressive_scan,
+                    )
+                    if custom_rows:
+                        raw_intel.extend(custom_rows)
+                        raw_intel = normalize_active_scan_intel_findings(raw_intel)
+                        logger.info(
+                            "custom_xss_poc_merged",
+                            extra={"scan_id": scan_id, "count": len(custom_rows)},
+                        )
+                except Exception:
+                    logger.warning(
+                        "custom_xss_poc_failed",
+                        extra={"scan_id": scan_id},
+                        exc_info=True,
+                    )
             active_scan_findings = [_normalize_intel_finding(f) for f in raw_intel]
             active_scan_context = _build_active_scan_context(active_scan_findings)
 
@@ -677,6 +972,17 @@ async def run_vuln_analysis(
                 extra={
                     "scan_id": scan_id,
                     "findings_count": len(active_scan_findings),
+                },
+            )
+            logger.info(
+                "vuln_analysis_active_scan",
+                extra={
+                    "event": "triggered",
+                    "reason": "",
+                    "scan_id": scan_id,
+                    "target_present": True,
+                    "stage": "post_va_active_scan_phase",
+                    "active_scan_findings_count": len(active_scan_findings),
                 },
             )
 
@@ -710,6 +1016,37 @@ async def run_vuln_analysis(
         except Exception:
             logger.warning(
                 "web_vuln_heuristics_failed",
+                extra={"scan_id": scan_id},
+                exc_info=True,
+            )
+
+    try:
+        ssp_rows = await run_searchsploit_for_recon_assets(
+            assets, tenant_id=tenant_id, scan_id=scan_id
+        )
+        for raw_row in ssp_rows:
+            active_scan_findings.append(_normalize_intel_finding(raw_row))
+        if ssp_rows:
+            active_scan_context = _build_active_scan_context(active_scan_findings)
+    except Exception:
+        logger.warning(
+            "searchsploit_intel_failed",
+            extra={"scan_id": scan_id},
+            exc_info=True,
+        )
+
+    if tenant_id and scan_id:
+        try:
+            trivy_rows = await run_trivy_fs_on_recon_manifests(tenant_id, scan_id)
+            for tr in trivy_rows:
+                active_scan_findings.append(
+                    _normalize_intel_finding(_trivy_normalized_to_intel_row(tr))
+                )
+            if trivy_rows:
+                active_scan_context = _build_active_scan_context(active_scan_findings)
+        except Exception:
+            logger.warning(
+                "trivy_recon_manifest_failed",
                 extra={"scan_id": scan_id},
                 exc_info=True,
             )
@@ -792,6 +1129,15 @@ async def run_reporting(
     post_exploitation: PostExploitationOutput | None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
+    report_context: dict[str, Any] = {}
+    if exploitation is not None:
+        hibp_summary = await summarize_pwned_passwords_for_report(
+            exploitation.model_dump(),
+            max_checks=5,
+        )
+        if hibp_summary:
+            report_context["hibp_pwned_password_summary"] = hibp_summary
+
     inp = ReportingInput(
         target=target,
         recon=recon,
@@ -799,5 +1145,6 @@ async def run_reporting(
         vuln_analysis=vuln_analysis,
         exploitation=exploitation,
         post_exploitation=post_exploitation,
+        report_context=report_context,
     )
     return await ai_reporting(inp)

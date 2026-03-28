@@ -5,19 +5,57 @@ import io
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 logger = logging.getLogger(__name__)
 
+# VHL-005 — Valhalla JSON/CSV section keys (aligned with Report Valhalla / template context).
+VALHALLA_SECTIONS_CSV_FORMAT = "valhalla_sections.csv"
+_VHL_AI_EXPLOIT_CHAINS = "exploit_chains"
+_VHL_AI_REMEDIATION_STAGES = "remediation_stages"
+_VHL_AI_ZERO_DAY = "zero_day_potential"
+_VHL_AI_ROADMAP = "prioritization_roadmap"
+_VHL_AI_HARDENING = "hardening_recommendations"
+
+_VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
+    "title_meta",
+    "executive_summary_counts",
+    "owasp_compliance",
+    "robots_sitemap",
+    "tech_stack",
+    "outdated_components",
+    "emails",
+    "ssl_tls",
+    "headers",
+    "dependencies",
+    "risk_matrix",
+    "critical_vulns",
+    "threat_modeling_ref",
+    "findings",
+    "exploit_chains_text",
+    "remediation_stages_text",
+    "zero_day_text",
+    "conclusion_text",
+    "appendices",
+)
+
 from src.api.schemas import Finding, ReportSummary
 from src.db.models import Finding as FindingModel
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
+    OWASP_TOP10_2025_CATEGORY_TITLES,
+    parse_owasp_category,
+)
 from src.db.models import Report
 from src.reports.data_collector import (
     FindingRow,
+    OwaspCategorySummaryEntry,
     RawArtifactItem,
     ScanReportData,
     TimelineRow,
+    build_owasp_summary_from_counts,
 )
+from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 
 @dataclass
@@ -66,6 +104,7 @@ class ReportData:
     technologies: list[str]
     created_at: str | None = None
     scan_id: str | None = None
+    tenant_id: str | None = None
     ai_insights: str | list[str] = field(default_factory=list)
     timeline: list[TimelineEntry] = field(default_factory=list)
     phase_outputs: list[PhaseOutputEntry] = field(default_factory=list)
@@ -121,6 +160,8 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
         description=row.description or "",
         cwe=row.cwe,
         cvss=row.cvss,
+        owasp_category=parse_owasp_category(row.owasp_category),
+        proof_of_concept=row.proof_of_concept,
     )
 
 
@@ -210,6 +251,7 @@ def build_report_data_from_scan_report(
         technologies=technologies,
         created_at=created_at,
         scan_id=data.scan_id,
+        tenant_id=data.tenant_id,
         ai_insights=final_ai_list,
         timeline=timeline,
         phase_outputs=phase_outputs,
@@ -248,12 +290,21 @@ def build_report_data_from_db(
         target=report.target,
         summary=report_to_summary(report),
         findings=[
-            Finding(severity=f.severity, title=f.title, description=f.description or "", cwe=f.cwe, cvss=f.cvss)
+            Finding(
+                severity=f.severity,
+                title=f.title,
+                description=f.description or "",
+                cwe=f.cwe,
+                cvss=f.cvss,
+                owasp_category=parse_owasp_category(f.owasp_category),
+                proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
+            )
             for f in findings
         ],
         technologies=report.technologies or [],
         created_at=report.created_at.isoformat() if report.created_at else None,
         scan_id=report.scan_id,
+        tenant_id=report.tenant_id,
         ai_insights=ai_insights,
         timeline=timeline or [],
         phase_outputs=phase_outputs or [],
@@ -264,14 +315,86 @@ def build_report_data_from_db(
     )
 
 
-def _finding_to_dict(f: Finding) -> dict[str, Any]:
-    return {
+def _resolve_owasp_summary_for_rows(
+    counts: dict[str, int],
+    owasp_summary: Mapping[str, OwaspCategorySummaryEntry] | None,
+) -> dict[str, OwaspCategorySummaryEntry]:
+    if owasp_summary:
+        return dict(owasp_summary)
+    return build_owasp_summary_from_counts(counts)
+
+
+def build_owasp_compliance_rows(
+    findings: list[dict[str, Any]],
+    *,
+    owasp_summary: Mapping[str, OwaspCategorySummaryEntry] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    One row per A01..A10 with finding counts and a CSS hint class (0 → good, 1–2 → warn, 3+ → high).
+    Merges RU fields from ``owasp_summary`` or ``build_owasp_summary_from_counts`` (OWASP-002).
+    Backward compatible keys: ``category_id``, ``title``, ``count``, ``row_class``.
+    """
+    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    for row in findings:
+        oc = row.get("owasp_category")
+        if isinstance(oc, str) and oc in counts:
+            counts[oc] += 1
+    entries = _resolve_owasp_summary_for_rows(counts, owasp_summary)
+    out: list[dict[str, Any]] = []
+    for cid in OWASP_TOP10_2025_CATEGORY_IDS:
+        n = counts[cid]
+        if n == 0:
+            row_class = "owasp-compliance-0"
+        elif n <= 2:
+            row_class = "owasp-compliance-warn"
+        else:
+            row_class = "owasp-compliance-high"
+        ent = entries.get(cid)
+        title_ru = ent.title_ru if ent else OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
+        description = ent.description if ent else ""
+        how_short = ent.how_to_fix_short if ent else None
+        description_hover = (how_short or "").strip()
+        out.append({
+            "category_id": cid,
+            "title": OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid),
+            "title_ru": title_ru,
+            "description": description,
+            "description_hover": description_hover,
+            "has_findings": n > 0,
+            "findings_present_ru": "Да" if n > 0 else "Нет",
+            "count": n,
+            "row_class": row_class,
+        })
+    return out
+
+
+def _finding_to_dict(
+    f: Finding,
+    *,
+    tenant_id: str | None = None,
+    scan_id: str | None = None,
+) -> dict[str, Any]:
+    d: dict[str, Any] = {
         "severity": f.severity,
         "title": f.title,
         "description": f.description,
         "cwe": f.cwe,
         "cvss": f.cvss,
     }
+    oc = getattr(f, "owasp_category", None)
+    if oc is not None:
+        d["owasp_category"] = oc
+    poc = getattr(f, "proof_of_concept", None)
+    if isinstance(poc, dict) and poc:
+        d["proof_of_concept"] = poc
+        sk = poc.get("screenshot_key")
+        tid = (tenant_id or "").strip()
+        sid = (scan_id or "").strip()
+        if isinstance(sk, str) and sk.strip() and tid and sid:
+            url = get_finding_poc_screenshot_presigned_url(sk.strip(), tid, sid)
+            if url:
+                d["poc_screenshot_url"] = url
+    return d
 
 
 # RPT-009 — stable severity ordering for JSON/CSV (HTML/PDF keep template order)
@@ -346,6 +469,143 @@ def _jinja_active_web_scan(jinja_context: dict[str, Any] | None) -> dict[str, An
     return block if isinstance(block, dict) else {}
 
 
+def _tier_from_jinja(jinja_context: dict[str, Any] | None) -> str:
+    if not jinja_context:
+        return ""
+    return str(jinja_context.get("tier") or "").lower().strip()
+
+
+def build_valhalla_report_payload(
+    jinja_context: dict[str, Any] | None,
+    data: ReportData,
+) -> dict[str, Any]:
+    """
+    VHL-005 — mirror Valhalla report sections for JSON and ``valhalla_sections.csv``.
+    Safe with partial Jinja context (e.g. minimal API path): missing blocks default empty.
+    """
+    ctx = jinja_context or {}
+    vc = ctx.get("valhalla_context")
+    if not isinstance(vc, dict):
+        vc = {}
+    ai = ctx.get("ai_sections")
+    if not isinstance(ai, dict):
+        ai = {}
+    recon = ctx.get("recon_summary")
+    if not isinstance(recon, dict):
+        recon = {}
+    exec_counts_raw = recon.get("summary_counts")
+    exec_counts: dict[str, Any] = dict(exec_counts_raw) if isinstance(exec_counts_raw, dict) else {}
+    if not exec_counts:
+        s = data.summary
+        exec_counts = {
+            "critical": s.critical,
+            "high": s.high,
+            "medium": s.medium,
+            "low": s.low,
+            "info": s.info,
+        }
+    owasp = ctx.get("owasp_compliance_rows")
+    if not isinstance(owasp, list):
+        owasp = []
+    findings_rows = ctx.get("findings")
+    if not isinstance(findings_rows, list):
+        findings_rows = []
+    findings_canon = [
+        _canonical_json_nested(dict(fr)) for fr in findings_rows if isinstance(fr, dict)
+    ]
+    roadmap = (ai.get(_VHL_AI_ROADMAP) or "").strip()
+    hardening = (ai.get(_VHL_AI_HARDENING) or "").strip()
+    conclusion_text = "\n\n".join(p for p in (roadmap, hardening) if p)
+    exploit_chains_text = str(ai.get(_VHL_AI_EXPLOIT_CHAINS) or "").strip()
+    remediation_stages_text = str(ai.get(_VHL_AI_REMEDIATION_STAGES) or "").strip()
+    zero_day_text = str(ai.get(_VHL_AI_ZERO_DAY) or "").strip()
+    exploitation = ctx.get("exploitation")
+    if not isinstance(exploitation, list):
+        exploitation = []
+    appendices = _canonical_json_nested({
+        "recon_summary": recon,
+        "exploitation": exploitation,
+        "scan_artifacts": ctx.get("scan_artifacts"),
+        "raw_artifacts": data.raw_artifacts,
+        "ai_sections_supplemental": {
+            k: str(v or "")
+            for k, v in sorted(ai.items())
+            if k
+            not in {
+                _VHL_AI_EXPLOIT_CHAINS,
+                _VHL_AI_REMEDIATION_STAGES,
+                _VHL_AI_ZERO_DAY,
+                _VHL_AI_ROADMAP,
+                _VHL_AI_HARDENING,
+            }
+        },
+    })
+    title_meta = {
+        "report_id": data.report_id,
+        "target": (ctx.get("target") or data.target or ""),
+        "scan_id": (ctx.get("scan_id") or data.scan_id or ""),
+        "tenant_id": (ctx.get("tenant_id") or data.tenant_id or ""),
+        "created_at": data.created_at,
+        "tier": "valhalla",
+    }
+    robots_sitemap = {
+        "robots_txt_analysis": vc.get("robots_txt_analysis"),
+        "sitemap_analysis": vc.get("sitemap_analysis"),
+    }
+    threat_modeling_ref = {
+        "threat_model": vc.get("threat_model"),
+        "threat_model_excerpt": vc.get("threat_model_excerpt"),
+        "threat_model_phase_link": vc.get("threat_model_phase_link"),
+        "exploitation_post_excerpt": vc.get("exploitation_post_excerpt"),
+    }
+    return {
+        "title_meta": _canonical_json_nested(title_meta),
+        "executive_summary_counts": _canonical_json_nested(exec_counts),
+        "owasp_compliance": _canonical_json_nested(owasp),
+        "robots_sitemap": _canonical_json_nested(robots_sitemap),
+        "tech_stack": _canonical_json_nested(vc.get("tech_stack_table") or []),
+        "outdated_components": _canonical_json_nested(vc.get("outdated_components") or []),
+        "emails": _canonical_json_nested(vc.get("leaked_emails") or []),
+        "ssl_tls": _canonical_json_nested(vc.get("ssl_tls_analysis") or {}),
+        "headers": _canonical_json_nested(vc.get("security_headers_analysis") or {}),
+        "dependencies": _canonical_json_nested(vc.get("dependency_analysis") or []),
+        "risk_matrix": _canonical_json_nested(vc.get("risk_matrix") or {}),
+        "critical_vulns": _canonical_json_nested(vc.get("critical_vulns") or []),
+        "threat_modeling_ref": _canonical_json_nested(threat_modeling_ref),
+        "findings": findings_canon,
+        "exploit_chains_text": exploit_chains_text,
+        "remediation_stages_text": remediation_stages_text,
+        "zero_day_text": zero_day_text,
+        "conclusion_text": conclusion_text,
+        "appendices": appendices,
+    }
+
+
+def generate_valhalla_sections_csv(
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+) -> bytes:
+    """VHL-005 — one row per Valhalla section; text columns plain, structured cells JSON."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["section", "content_markdown_or_json"])
+    payload = build_valhalla_report_payload(jinja_context, data)
+    text_keys = frozenset({
+        "exploit_chains_text",
+        "remediation_stages_text",
+        "zero_day_text",
+        "conclusion_text",
+    })
+    for key in _VALHALLA_REPORT_SECTION_ORDER:
+        val = payload.get(key)
+        if key in text_keys:
+            writer.writerow([key, str(val or "")])
+        else:
+            writer.writerow([key, json.dumps(_canonical_json_nested(val), ensure_ascii=False)])
+    return buf.getvalue().encode("utf-8")
+
+
 def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
     """Generate JSON report — full schema with metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
     ai_list = (
@@ -415,7 +675,10 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
         "metadata": metadata,
         "executive_summary": data.executive_summary,
         "summary": _summary_ordered(data.summary),
-        "findings": [_finding_to_dict(f) for f in findings_ordered],
+        "findings": [
+            _finding_to_dict(f, tenant_id=data.tenant_id, scan_id=data.scan_id)
+            for f in findings_ordered
+        ],
         "technologies": tech_sorted,
         "timeline": timeline,
         "phase_outputs": phase_outputs,
@@ -428,6 +691,8 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
         "active_web_scan": _canonical_json_nested(active_web_scan),
         "raw_artifacts": data.raw_artifacts,
     }
+    if _tier_from_jinja(jinja_context) == "valhalla":
+        output["valhalla_report"] = build_valhalla_report_payload(jinja_context, data)
     return json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
 
 
@@ -482,7 +747,8 @@ def generate_pdf(
     tier: str | None = None,
 ) -> bytes:
     """
-    RPT-009 — PDF from the same tiered HTML as ``generate_html``, via WeasyPrint.
+    RPT-009 / VHL-006 — PDF from the same tiered HTML as ``generate_html`` (e.g. ``valhalla.html.j2``
+    extending ``base.html.j2``), rendered via ``render_tier_report_html`` then WeasyPrint.
     Requires native libs (Pango, Cairo); use Docker image or OS packages.
     """
     from src.reports.template_env import report_templates_directory

@@ -15,7 +15,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
-VaToolName = Literal["dalfox", "xsstrike", "ffuf", "sqlmap", "nuclei"]
+VaToolName = Literal[
+    "dalfox",
+    "xsstrike",
+    "ffuf",
+    "sqlmap",
+    "nuclei",
+    "whatweb",
+    "nikto",
+    "testssl",
+]
 
 _CELERY_NAME_BY_VA_TOOL: dict[str, str] = {
     "dalfox": "argus.va.run_dalfox",
@@ -23,6 +32,9 @@ _CELERY_NAME_BY_VA_TOOL: dict[str, str] = {
     "ffuf": "argus.va.run_ffuf",
     "sqlmap": "argus.va.run_sqlmap",
     "nuclei": "argus.va.run_nuclei",
+    "whatweb": "argus.va.run_whatweb",
+    "nikto": "argus.va.run_nikto",
+    "testssl": "argus.va.run_testssl",
 }
 
 

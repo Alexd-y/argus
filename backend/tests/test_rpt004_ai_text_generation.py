@@ -14,10 +14,13 @@ from src.orchestration.prompt_registry import (
     get_report_ai_section_prompt,
 )
 from src.reports.ai_text_generation import (
+    REPORT_AI_SKIPPED_GENERATION_FAILED,
+    REPORT_AI_SKIPPED_NO_LLM,
     build_ai_text_cache_key,
     canonical_payload_hash,
     run_ai_text_generation,
 )
+from src.services.reporting import ReportGenerator
 
 
 class TestRpt004PromptRegistry:
@@ -33,6 +36,10 @@ class TestRpt004PromptRegistry:
             "prioritization_roadmap",
             "hardening_recommendations",
             "executive_summary_valhalla",
+            "attack_scenarios",
+            "exploit_chains",
+            "remediation_stages",
+            "zero_day_potential",
         }
         assert REPORT_AI_SECTION_KEYS == expected
 
@@ -43,7 +50,7 @@ class TestRpt004PromptRegistry:
         )
         assert "penetration testing report" in system.lower()
         assert "finding" in user and "xss" in user
-        assert version.startswith("rpt004-")
+        assert version.startswith("vhq006-")
 
 
 class TestRpt004CacheKey:
@@ -100,6 +107,26 @@ class TestRpt004CacheSkipsLlm:
         llm.assert_not_called()
         mock_redis.get.assert_called_once()
 
+    def test_llm_empty_response_returns_generation_failed_placeholder(self) -> None:
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
+        llm = MagicMock(return_value="   ")
+
+        out = run_ai_text_generation(
+            "tenant-a",
+            "scan-b",
+            "midgard",
+            "executive_summary",
+            {"k": "v"},
+            redis_client=mock_redis,
+            llm_callable=llm,
+            cache_ttl_seconds=60,
+        )
+
+        assert out["status"] == "failed"
+        assert out.get("text") == REPORT_AI_SKIPPED_GENERATION_FAILED
+        mock_redis.set.assert_not_called()
+
     def test_cache_miss_calls_llm_and_sets_cache(self) -> None:
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
@@ -121,6 +148,46 @@ class TestRpt004CacheSkipsLlm:
         assert out["text"] == "fresh text"
         llm.assert_called_once()
         mock_redis.set.assert_called_once()
+
+
+class TestRpt004NoLlmPlaceholders:
+    def test_run_ai_text_generation_no_keys_returns_placeholder_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for k in (
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "OPENROUTER_API_KEY",
+            "GOOGLE_API_KEY",
+            "KIMI_API_KEY",
+            "PERPLEXITY_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        out = run_ai_text_generation(
+            "t1",
+            "s1",
+            "midgard",
+            "executive_summary",
+            {"finding_count": 0},
+            redis_client=None,
+            llm_callable=None,
+        )
+        assert out["status"] == "skipped_no_llm"
+        assert out.get("text") == REPORT_AI_SKIPPED_NO_LLM
+
+    def test_ai_results_to_text_map_includes_skipped_no_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for k in (
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+            "OPENROUTER_API_KEY",
+            "GOOGLE_API_KEY",
+            "KIMI_API_KEY",
+            "PERPLEXITY_API_KEY",
+        ):
+            monkeypatch.delenv(k, raising=False)
+        raw = run_ai_text_generation(
+            "t1", "s1", "midgard", "remediation_step", {"finding_count": 1}, redis_client=None
+        )
+        mapped = ReportGenerator.ai_results_to_text_map({"remediation_step": raw})
+        assert mapped["remediation_step"] == REPORT_AI_SKIPPED_NO_LLM
 
 
 class TestRpt004CeleryRegistration:

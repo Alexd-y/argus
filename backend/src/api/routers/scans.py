@@ -26,6 +26,7 @@ from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
+from src.owasp_top10_2025 import parse_owasp_category
 from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
@@ -133,6 +134,8 @@ def _finding_to_schema(f: FindingModel) -> Finding:
         description=f.description or "",
         cwe=f.cwe,
         cvss=f.cvss,
+        owasp_category=parse_owasp_category(f.owasp_category),
+        proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
     )
 
 

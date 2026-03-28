@@ -6,7 +6,18 @@ import json
 from typing import Any
 
 # Subset allowed for POST /api/v1/internal/va-tools/enqueue (VA-005)
-VA_SANDBOX_ENQUEUE_TOOLS = frozenset({"dalfox", "xsstrike", "ffuf", "sqlmap", "nuclei"})
+VA_SANDBOX_ENQUEUE_TOOLS = frozenset(
+    {
+        "dalfox",
+        "xsstrike",
+        "ffuf",
+        "sqlmap",
+        "nuclei",
+        "whatweb",
+        "nikto",
+        "testssl",
+    }
+)
 
 
 def normalize_va_tool_name(raw: str) -> str | None:

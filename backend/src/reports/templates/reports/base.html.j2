@@ -24,6 +24,25 @@
         .ai-slot-body { margin: 0.25rem 0 0.75rem; white-space: pre-wrap; word-break: break-word; }
         ul.timeline { margin: 0.35rem 0 0 1.25rem; }
         .empty { color: #777; font-style: italic; }
+        .owasp-compliance { margin: 1rem 0 1.25rem; }
+        .owasp-compliance-heading { font-size: 1rem; margin: 0 0 0.5rem; color: #333; border-bottom: none; }
+        .owasp-compliance-table { margin-top: 0.35rem; font-size: 0.9rem; }
+        .owasp-compliance-table th.owasp-compliance-count-col { text-align: center; width: 8rem; }
+        .owasp-compliance-table td.owasp-compliance-presence { text-align: center; font-weight: 600; }
+        tr.owasp-compliance-0 td.owasp-compliance-presence { background: #e8f5e9; color: #1b5e20; }
+        tr.owasp-compliance-warn td.owasp-compliance-presence { background: #fff8e1; color: #e65100; }
+        tr.owasp-compliance-high td.owasp-compliance-presence { background: #ffebee; color: #b71c1c; }
+        .owasp-finding-cell { font-size: 0.9rem; }
+        .owasp-finding-label { color: #444; }
+        /* Valhalla — wide findings table + PoC sub-rows (WeasyPrint) */
+        .valhalla-findings .findings-main-table { font-size: 0.8rem; table-layout: fixed; }
+        .valhalla-findings .findings-main-table th:nth-child(4),
+        .valhalla-findings .findings-main-table td.desc { word-break: break-word; overflow-wrap: anywhere; }
+        .valhalla-findings .findings-main-table code { font-size: 0.85em; word-break: break-all; }
+        .finding-poc { margin-top: 0.5rem; padding: 0.5rem 0; border-top: 1px solid #e8e8e8; }
+        .finding-poc-title { font-size: 0.9rem; margin: 0 0 0.35rem; }
+        .finding-poc-block { margin: 0.25rem 0; padding: 0.45rem 0.55rem; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+        .finding-poc-screenshot-thumb img { display: block; margin-top: 0.35rem; }
     </style>
 </head>
 <body>

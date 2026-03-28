@@ -1,4 +1,31 @@
 {% extends "base.html.j2" %}
+{# VHL-004 — порядок разделов по Report Valhalla.md #}
+{% block recon %}
+{% if tier == 'valhalla' %}
+    {% include "partials/valhalla/sections_01_02_title_executive.html.j2" %}
+    {% include "partials/valhalla/sections_03_05_objectives_methodology.html.j2" %}
+    {% include "partials/valhalla/section_06_results_overview.html.j2" %}
+{% endif %}
+{% endblock %}
+{% block findings %}
+{% if tier == 'valhalla' %}
+    {% include "partials/valhalla/sections_07_08_threat_findings.html.j2" %}
+{% endif %}
+{% endblock %}
+{% block active_web_scan %}{% endblock %}
+{% block artifacts %}{% endblock %}
 {% block exploitation %}
-    {% include "partials/exploitation.html.j2" %}
+{% if tier == 'valhalla' %}
+    {% include "partials/valhalla/section_09_exploit_chains.html.j2" %}
+{% endif %}
+{% endblock %}
+{% block ai %}
+{% if tier == 'valhalla' %}
+    {% include "partials/valhalla/sections_10_12_remediation_conclusion.html.j2" %}
+{% endif %}
+{% endblock %}
+{% block extra %}
+{% if tier == 'valhalla' %}
+    {% include "partials/valhalla/appendices.html.j2" %}
+{% endif %}
 {% endblock %}

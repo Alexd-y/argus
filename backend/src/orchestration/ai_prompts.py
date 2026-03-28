@@ -1,4 +1,8 @@
-"""AI prompt handlers — LLM is mandatory, no mock fallbacks."""
+"""AI prompt handlers — LLM is mandatory, no mock fallbacks.
+
+KAL-008: phase prompts embed Kali/MCP taxonomy, run_* vs pipeline guidance, and safety rules
+via ``src.orchestration.prompt_registry`` (see ``ORCHESTRATION_PROMPT_VERSION``).
+"""
 
 import asyncio
 import json
@@ -229,6 +233,9 @@ async def ai_reporting(inp: ReportingInput) -> ReportingOutput:
         "exploitation": inp.exploitation.model_dump() if inp.exploitation else None,
         "post_exploitation": inp.post_exploitation.model_dump() if inp.post_exploitation else None,
     }
+    rc = inp.report_context if isinstance(inp.report_context, dict) else {}
+    if rc:
+        summary["report_context"] = rc
     system, user = get_prompt(REPORTING, summary=summary)
     data = _require_json(
         await _call_llm_with_json_retry(REPORTING, user, system), REPORTING

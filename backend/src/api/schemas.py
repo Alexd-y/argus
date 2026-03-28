@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from src.owasp_top10_2025 import OwaspTop102025CategoryId
+
 # Target: URL or domain, 1-512 chars
 TARGET_PATTERN = r"^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$"
 
@@ -47,6 +49,16 @@ class ScanOptionsVulnerabilities(BaseModel):
     rce: bool = False
 
 
+class ScanOptionsKal(BaseModel):
+    """KAL sandbox gates (server env must also allow password audit when applicable)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    password_audit_opt_in: bool = False
+    recon_dns_enumeration_opt_in: bool = False
+    va_network_capture_opt_in: bool = False
+
+
 class ScanOptions(BaseModel):
     """Full scan options per api-contracts."""
 
@@ -61,6 +73,7 @@ class ScanOptions(BaseModel):
     authentication: ScanOptionsAuth = Field(default_factory=ScanOptionsAuth)
     scope: ScanOptionsScope = Field(default_factory=ScanOptionsScope)
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
+    kal: ScanOptionsKal = Field(default_factory=ScanOptionsKal)
 
 
 class ScanCreateRequest(BaseModel):
@@ -133,6 +146,8 @@ class Finding(BaseModel):
     description: str
     cwe: str | None = None
     cvss: float | None = None
+    owasp_category: OwaspTop102025CategoryId | None = None
+    proof_of_concept: dict[str, Any] | None = None
 
 
 class ReportListResponse(BaseModel):

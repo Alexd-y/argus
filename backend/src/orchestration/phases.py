@@ -138,6 +138,8 @@ class ReportingInput(BaseModel):
     vuln_analysis: VulnAnalysisOutput | None = None
     exploitation: ExploitationOutput | None = None
     post_exploitation: PostExploitationOutput | None = None
+    # Server-side enrichment (e.g. HIBP aggregate); no secrets — merged into LLM summary in ai_reporting.
+    report_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReportingOutput(BaseModel):
@@ -186,6 +188,7 @@ REPORTING_INPUT_SCHEMA: dict[str, Any] = {
         "vuln_analysis": {"type": "object"},
         "exploitation": {"type": "object"},
         "post_exploitation": {"type": "object"},
+        "report_context": {"type": "object"},
     },
 }
 

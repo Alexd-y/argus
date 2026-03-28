@@ -219,6 +219,7 @@ async def test_run_vuln_analysis_xss_pipeline_minio_sink_dalfox(tmp_path: Path) 
         mock_handlers_settings.ffuf_va_wordlist_path = str(wl)
         mock_handlers_settings.sqlmap_va_enabled = False
         mock_handlers_settings.va_ai_plan_enabled = False
+        mock_handlers_settings.va_custom_xss_poc_enabled = False
         mock_va_settings.sandbox_enabled = True
         mock_va_settings.va_active_scan_tool_timeout_sec = 30.0
         mock_va_settings.ffuf_va_wordlist_path = str(wl)

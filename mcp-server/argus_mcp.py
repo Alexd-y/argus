@@ -10,11 +10,13 @@ MCP-002: HTTP transport for Docker; stdio for local Cursor spawn.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shlex
 import sys
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 import requests
 from fastmcp import FastMCP
@@ -307,6 +309,42 @@ class ArgusClient:
             logger.error("enqueue_va_sandbox_tool failed: %s", e)
             return {"success": False, "error": str(e), "task_id": ""}
 
+    def kal_run(
+        self,
+        category: str,
+        argv: list[str],
+        target: str,
+        tenant_id: str = "",
+        scan_id: str = "",
+        password_audit_opt_in: bool = False,
+    ) -> dict[str, Any]:
+        """KAL-002 — POST /api/v1/tools/kal/run (category policy + optional MinIO upload)."""
+        url = f"{self.server_url}/api/v1/tools/kal/run"
+        tid = tenant_id.strip() or (self.tenant_id or "")
+        payload: dict[str, Any] = {
+            "category": category.strip().lower().replace("-", "_"),
+            "argv": argv,
+            "target": target.strip(),
+            "tenant_id": tid,
+            "scan_id": scan_id.strip(),
+            "password_audit_opt_in": password_audit_opt_in,
+        }
+        try:
+            r = self.session.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
+            r.raise_for_status()
+            return r.json()
+        except requests.exceptions.RequestException as e:
+            logger.error("kal_run failed: %s", e)
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": str(e),
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "request_failed",
+                "minio_keys": [],
+            }
+
 
 def _normalize_payload_for_endpoint(endpoint: str, args: dict[str, Any]) -> dict[str, Any]:
     """Map generic args to backend schema per endpoint."""
@@ -473,8 +511,234 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
 
     _register_kali_tools(mcp, client)
     _register_va_sandbox_enqueue_tools(mcp, client)
+    _register_kal_mcp_tools(mcp, client)
 
     return mcp
+
+
+def _register_kal_mcp_tools(mcp: FastMCP, client: ArgusClient) -> None:
+    """KAL-002 — category-gated argv tools (hydra only password_audit + server + client opt-in)."""
+
+    @mcp.tool()
+    def run_network_scan(
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        tool: str = "nmap",
+        extra_args: str = "-sV -Pn -T4",
+    ) -> dict[str, Any]:
+        """
+        Run an allowlisted network scanner (nmap, rustscan, masscan). Policy category: network_scanning.
+        extra_args: additional CLI tokens (shell-style split). target is used for guardrails and appended for nmap/rustscan.
+        """
+        t = tool.strip().lower()
+        extras = shlex.split(extra_args.strip()) if extra_args.strip() else []
+        if t == "nmap":
+            argv = ["nmap", *extras, target]
+        elif t == "rustscan":
+            argv = ["rustscan", "-a", target, *extras]
+        elif t == "masscan":
+            argv = ["masscan", target, *extras] if extras else ["masscan", target, "-p", "1-1000", "--rate", "1000"]
+        else:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "tool must be nmap, rustscan, or masscan",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_tool",
+                "minio_keys": [],
+            }
+        return client.kal_run("network_scanning", argv, target, tenant_id, scan_id, False)
+
+    @mcp.tool()
+    def run_web_scan(
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        tool: str = "httpx",
+        extra_args: str = "-silent",
+    ) -> dict[str, Any]:
+        """
+        Web fingerprint / probe (httpx, whatweb, wpscan, nikto). category: web_fingerprinting.
+        target: URL or host. For httpx, -u is set to target automatically when tool is httpx.
+        """
+        t = tool.strip().lower()
+        extras = shlex.split(extra_args.strip()) if extra_args.strip() else []
+        if t == "httpx":
+            base = ["httpx", "-u", target]
+            argv = [*base, *extras] if extras else [*base, "-silent"]
+        elif t == "whatweb":
+            argv = ["whatweb", target, *extras]
+        elif t == "wpscan":
+            argv = ["wpscan", "--url", target, *extras]
+        elif t == "nikto":
+            argv = ["nikto", "-h", target, *extras]
+        else:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "tool must be httpx, whatweb, wpscan, or nikto",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_tool",
+                "minio_keys": [],
+            }
+        return client.kal_run("web_fingerprinting", argv, target, tenant_id, scan_id, False)
+
+    @mcp.tool()
+    def run_ssl_test(
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        extra_args: str = "",
+    ) -> dict[str, Any]:
+        """
+        TLS probe via openssl s_client. category: ssl_analysis. target: host:port or https URL (host inferred).
+        """
+        host = target.strip()
+        port = "443"
+        if "://" in host:
+            p = urlparse(host if host.startswith("http") else f"https://{host}")
+            host = (p.hostname or "").strip()
+            if p.port:
+                port = str(p.port)
+        elif ":" in host:
+            host_part, _, p = host.rpartition(":")
+            host = host_part.strip() or host
+            if p.isdigit():
+                port = p
+        if not host:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "invalid target host",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_target",
+                "minio_keys": [],
+            }
+        connect = f"{host}:{port}"
+        extras = shlex.split(extra_args.strip()) if extra_args.strip() else []
+        argv = ["openssl", "s_client", "-connect", connect, "-servername", host, *extras]
+        return client.kal_run("ssl_analysis", argv, target, tenant_id, scan_id, False)
+
+    @mcp.tool()
+    def run_dns_enum(
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        tool: str = "dig",
+        extra_args: str = "",
+    ) -> dict[str, Any]:
+        """DNS enumeration (dig, subfinder, amass, dnsx, host, nslookup). category: dns_enumeration."""
+        t = tool.strip().lower()
+        extras = shlex.split(extra_args.strip()) if extra_args.strip() else []
+        if t == "dig":
+            argv = ["dig", "+short", target, *extras]
+        elif t == "subfinder":
+            argv = ["subfinder", "-d", target, *extras]
+        elif t == "amass":
+            argv = ["amass", "enum", "-d", target, *extras]
+        elif t == "dnsx":
+            argv = ["dnsx", "-d", target, *extras]
+        elif t == "host":
+            argv = ["host", target, *extras]
+        elif t == "nslookup":
+            argv = ["nslookup", target, *extras]
+        else:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "tool must be dig, subfinder, amass, dnsx, host, or nslookup",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_tool",
+                "minio_keys": [],
+            }
+        return client.kal_run("dns_enumeration", argv, target, tenant_id, scan_id, False)
+
+    @mcp.tool()
+    def run_bruteforce(
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        tool: str = "gobuster",
+        extra_args: str = "",
+    ) -> dict[str, Any]:
+        """
+        Content discovery / web bruteforce tools only (gobuster, ffuf, etc.). category: bruteforce_testing.
+        Hydra is denied here — use password_audit flow if enabled server-side.
+        """
+        t = tool.strip().lower()
+        extras = shlex.split(extra_args.strip()) if extra_args.strip() else []
+        if t == "gobuster":
+            argv = ["gobuster", "dir", "-u", target, "-w", "/usr/share/wordlists/dirb/common.txt", *extras]
+        elif t == "feroxbuster":
+            argv = ["feroxbuster", "-u", target, "-w", "/usr/share/wordlists/dirb/common.txt", *extras]
+        elif t == "dirsearch":
+            argv = ["dirsearch", "-u", target, "-w", "/usr/share/wordlists/dirb/common.txt", *extras]
+        elif t == "ffuf":
+            argv = ["ffuf", "-u", target, "-w", "/usr/share/wordlists/dirb/common.txt", *extras]
+        elif t == "wfuzz":
+            argv = ["wfuzz", "-u", target, "-w", "/usr/share/wordlists/dirb/common.txt", *extras]
+        elif t == "dirb":
+            argv = ["dirb", target, "/usr/share/wordlists/dirb/common.txt", *extras]
+        else:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "tool must be gobuster, feroxbuster, dirsearch, ffuf, wfuzz, or dirb",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_tool",
+                "minio_keys": [],
+            }
+        return client.kal_run("bruteforce_testing", argv, target, tenant_id, scan_id, False)
+
+    @mcp.tool()
+    def run_tool(
+        category: str,
+        tenant_id: str,
+        scan_id: str,
+        target: str,
+        argv_json: str,
+        password_audit_opt_in: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Generic KAL MCP runner: argv_json is a JSON array of CLI strings; category must match policy mapping.
+        For hydra/medusa use category=password_audit and set password_audit_opt_in=true (requires server KAL_ALLOW_PASSWORD_AUDIT).
+        """
+        try:
+            raw = json.loads(argv_json)
+        except json.JSONDecodeError as e:
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": f"invalid argv_json: {e}",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_argv_json",
+                "minio_keys": [],
+            }
+        if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": "argv_json must be a JSON array of strings",
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": "invalid_argv_json",
+                "minio_keys": [],
+            }
+        return client.kal_run(
+            category.strip().lower().replace("-", "_"),
+            raw,
+            target,
+            tenant_id,
+            scan_id,
+            password_audit_opt_in,
+        )
 
 
 def _register_va_sandbox_enqueue_tools(mcp: FastMCP, client: ArgusClient) -> None:

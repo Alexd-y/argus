@@ -2,33 +2,67 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
+from src.core.llm_config import has_any_llm_key
+from src.owasp.owasp_loader import get_owasp_category_info
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
+    OWASP_TOP10_2025_CATEGORY_TITLES,
+    parse_owasp_category,
+)
+from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.orchestration.prompt_registry import (
     EXPLOITATION,
+    REPORT_AI_SECTION_ATTACK_SCENARIOS,
     REPORT_AI_SECTION_BUSINESS_RISK,
     REPORT_AI_SECTION_COMPLIANCE_CHECK,
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
+    REPORT_AI_SECTION_EXPLOIT_CHAINS,
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
     REPORT_AI_SECTION_REMEDIATION_STEP,
+    REPORT_AI_SECTION_REMEDIATION_STAGES,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
     VULN_ANALYSIS,
 )
-from src.reports.ai_text_generation import run_ai_text_generation
-from src.reports.data_collector import ReportDataCollector, ScanReportData
-from src.reports.generators import ReportData, build_report_data_from_scan_report
+from src.reports.ai_text_generation import (
+    REPORT_AI_SKIPPED_GENERATION_FAILED,
+    REPORT_AI_SKIPPED_NO_LLM,
+    run_ai_text_generation,
+)
+from src.reports.data_collector import (
+    FindingRow,
+    OwaspCategorySummaryEntry,
+    PhaseInputRow,
+    PhaseOutputRow,
+    ReportDataCollector,
+    ScanReportData,
+    TimelineRow,
+)
+from src.reports.generators import (
+    ReportData,
+    build_owasp_compliance_rows,
+    build_report_data_from_scan_report,
+)
+from src.reports.valhalla_report_context import ValhallaReportContext, derive_exploit_available_flag
 from src.storage.s3 import (
     OBJECT_TYPE_RAW,
     RAW_ARTIFACT_PHASES,
+    get_finding_poc_screenshot_presigned_url,
     get_presigned_url_by_key,
     list_scan_artifacts,
 )
@@ -81,6 +115,19 @@ ACTIVE_WEB_SCAN_CURL_XSS_EXAMPLE = (
 )
 
 _ACTIVE_WEB_SCAN_AI_SUMMARY_MAX_LEN = 720
+
+# OWASP-004: per-field cap for RU reference embedded in RPT-004 AI context (token/size bound)
+_OWASP_AI_REFERENCE_FIELD_MAX_LEN = 400
+_VALHALLA_AI_EXCERPT_MAX = 900
+_VALHALLA_AI_TECH_ROWS = 28
+_VALHALLA_AI_DEP_ROWS = 24
+_VALHALLA_AI_OUTDATED_ROWS = 18
+_VALHALLA_AI_POC_MAX_LEN = 600
+_VALHALLA_AI_AFFECTED_URL_MAX = 1024
+_VALHALLA_AI_FINDING_DESC_MAX = 400
+_VALHALLA_AI_RISK_MATRIX_IDS_PER_CELL = 24
+_VALHALLA_AI_CRITICAL_VULNS_MAX = 48
+_CVE_IDS_FOR_AI_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
 
 _SCAN_ARTIFACT_PHASE_ORDER: tuple[str, ...] = (
     "recon",
@@ -198,18 +245,153 @@ def build_scan_artifacts_section_context(
 REPORT_TIERS: frozenset[str] = frozenset({"midgard", "asgard", "valhalla"})
 
 
+def _json_or_str(obj: Any, max_len: int) -> str:
+    try:
+        t = json.dumps(obj, ensure_ascii=False)
+    except (TypeError, ValueError):
+        t = str(obj)
+    t = (t or "").strip()
+    if len(t) > max_len:
+        return t[: max_len - 1].rstrip() + "…"
+    return t
+
+
+def valhalla_nmap_appendix_excerpt(phase_outputs: list[PhaseOutputRow]) -> str:
+    """Pick a bounded nmap-like excerpt from phase outputs for appendix Г."""
+    for row in phase_outputs:
+        od = row.output_data
+        if isinstance(od, dict):
+            text = _json_or_str(od, 500_000)
+        elif od is not None:
+            text = str(od)
+        else:
+            continue
+        low = text.lower()
+        if "nmap" not in low:
+            continue
+        idx = low.find("nmap scan report")
+        if idx >= 0:
+            return text[idx : idx + 4000]
+        if "/tcp" in text or "/udp" in text:
+            return text[:4000]
+    return ""
+
+
+def valhalla_phase_inputs_config_excerpt(
+    phase_inputs: list[PhaseInputRow],
+    *,
+    max_len: int = 4000,
+) -> str:
+    parts: list[str] = []
+    for row in phase_inputs[:20]:
+        if not row.input_data:
+            continue
+        parts.append(_json_or_str(row.input_data, 8000))
+    blob = "\n---\n".join(parts)
+    if len(blob) > max_len:
+        return blob[: max_len - 1].rstrip() + "…"
+    return blob
+
+
+def valhalla_timeline_appendix_rows(
+    timeline: list[TimelineRow],
+    *,
+    max_items: int = 32,
+) -> list[dict[str, Any]]:
+    rows: list[TimelineRow] = sorted(
+        timeline,
+        key=lambda x: (x.order_index, (x.phase or "")),
+    )[:max_items]
+    out: list[dict[str, Any]] = []
+    for t in rows:
+        ent = t.entry
+        if ent is not None:
+            snippet = _json_or_str(ent, 800)
+        else:
+            snippet = ""
+        out.append(
+            {
+                "phase": t.phase or "",
+                "order_index": t.order_index,
+                "snippet": snippet,
+            }
+        )
+    return out
+
+
+def _cve_from_proof_of_concept(poc: dict[str, Any] | None) -> str | None:
+    if not isinstance(poc, dict) or not poc:
+        return None
+    for key in ("cve", "cve_id", "CVE", "CVE_ID"):
+        v = poc.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()[:64]
+    return None
+
+
 def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
     """Serializable finding rows for RPT-008 templates (autoescaped at render)."""
-    return [
-        {
+    rows: list[dict[str, Any]] = []
+    for f in data.findings:
+        parsed_owasp = (
+            parse_owasp_category(f.owasp_category) if isinstance(f.owasp_category, str) else None
+        )
+        row: dict[str, Any] = {
+            "id": f.id or "",
             "severity": f.severity or "",
             "title": f.title or "",
             "description": f.description or "",
             "cwe": f.cwe,
             "cvss": f.cvss,
+            "owasp_category": parsed_owasp,
         }
-        for f in data.findings
-    ]
+        if parsed_owasp:
+            ru = (get_owasp_category_info(parsed_owasp).get("title_ru") or "").strip()
+            if ru:
+                row["owasp_title_ru"] = ru
+        poc: dict[str, Any] = {}
+        if isinstance(f.proof_of_concept, dict):
+            poc = dict(f.proof_of_concept)
+        row["proof_of_concept"] = poc
+        param_v = poc.get("parameter")
+        if isinstance(param_v, str) and param_v.strip():
+            row["parameter"] = param_v.strip()
+            row["param"] = row["parameter"]
+        sk = poc.get("screenshot_key")
+        if isinstance(sk, str) and sk.strip():
+            url = get_finding_poc_screenshot_presigned_url(
+                sk.strip(),
+                data.tenant_id,
+                data.scan_id,
+            )
+            if url:
+                row["poc_screenshot_url"] = url
+        row["cve"] = _cve_from_proof_of_concept(poc if poc else None)
+        rows.append(row)
+    return rows
+
+
+def render_findings_table_html(
+    tier: str,
+    findings_rows: list[dict[str, Any]],
+    *,
+    embed_poc_screenshot_inline: bool | None = None,
+    owasp_summary: Mapping[str, OwaspCategorySummaryEntry] | None = None,
+) -> str:
+    """Render ``partials/findings_table.html.j2`` with production Jinja env (RPT-008)."""
+    from src.reports.template_env import get_report_jinja_environment
+
+    embed = settings.report_poc_embed_screenshot_inline if embed_poc_screenshot_inline is None else embed_poc_screenshot_inline
+    tier_norm = normalize_report_tier(tier)
+    env = get_report_jinja_environment()
+    summary_arg = owasp_summary if owasp_summary else None
+    return env.get_template("partials/findings_table.html.j2").render(
+        tier=tier_norm,
+        findings=findings_rows,
+        embed_poc_screenshot_inline=bool(embed),
+        owasp_compliance_rows=build_owasp_compliance_rows(findings_rows, owasp_summary=summary_arg),
+        owasp_top10_labels=OWASP_TOP10_2025_CATEGORY_TITLES,
+    )
 
 
 def recon_summary_for_jinja(data: ScanReportData) -> dict[str, Any]:
@@ -274,11 +456,15 @@ _SECTIONS_ASGARD: tuple[str, ...] = (
 _SECTIONS_VALHALLA: tuple[str, ...] = (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
+    REPORT_AI_SECTION_ATTACK_SCENARIOS,
+    REPORT_AI_SECTION_EXPLOIT_CHAINS,
     REPORT_AI_SECTION_REMEDIATION_STEP,
+    REPORT_AI_SECTION_REMEDIATION_STAGES,
     REPORT_AI_SECTION_BUSINESS_RISK,
     REPORT_AI_SECTION_COMPLIANCE_CHECK,
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
 )
 
 
@@ -297,11 +483,377 @@ def normalize_report_tier(tier: str) -> str:
     return t if t in REPORT_TIERS else "midgard"
 
 
+def _owasp_summary_for_ai_payload(findings: list[FindingRow]) -> dict[str, Any] | None:
+    """
+    Aggregate OWASP Top 10:2025 counts for the AI report context.
+    Returns None when no finding has a valid category (backward compatible: key omitted).
+    """
+    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    classified = 0
+    for f in findings:
+        raw = getattr(f, "owasp_category", None)
+        cat = parse_owasp_category(raw.strip()) if isinstance(raw, str) and raw.strip() else None
+        if cat is None:
+            continue
+        classified += 1
+        counts[cat] = counts.get(cat, 0) + 1
+    if classified == 0:
+        return None
+    gap_categories = [cid for cid in OWASP_TOP10_2025_CATEGORY_IDS if counts.get(cid, 0) == 0]
+    unclassified = max(0, len(findings) - classified)
+    return {
+        "counts": dict(counts),
+        "gap_categories": gap_categories,
+        "classified_finding_count": classified,
+        "unclassified_finding_count": unclassified,
+    }
+
+
+def _compact_owasp_ru_fields(info: dict[str, Any]) -> dict[str, str]:
+    """Pick RU reference keys and truncate for LLM context (OWASP-004)."""
+    out: dict[str, str] = {}
+    for key in ("title_ru", "example_attack", "how_to_find", "how_to_fix"):
+        raw = info.get(key)
+        if isinstance(raw, str) and raw.strip():
+            out[key] = _truncate_report_text(raw, _OWASP_AI_REFERENCE_FIELD_MAX_LEN)
+    return out
+
+
+def _owasp_category_reference_ru_for_ai(
+    owasp_summary: dict[str, Any] | None,
+) -> dict[str, dict[str, str]] | None:
+    """
+    When the scan has OWASP-classified findings (``owasp_summary`` present), attach compact RU text
+    for each A01–A10 category that appears in the scan via findings (``counts[cid] > 0``) or that
+    is listed in ``gap_categories`` (zero mapped findings but category row present in Top-10 coverage).
+    Omits categories missing from the loaded JSON.
+    """
+    if owasp_summary is None:
+        return None
+    counts_raw = owasp_summary.get("counts")
+    counts: dict[str, int] = counts_raw if isinstance(counts_raw, dict) else {}
+    gaps_raw = owasp_summary.get("gap_categories")
+    gaps: set[str] = set(gaps_raw) if isinstance(gaps_raw, list) else set()
+    ref: dict[str, dict[str, str]] = {}
+    for cid in OWASP_TOP10_2025_CATEGORY_IDS:
+        n = int(counts.get(cid, 0) or 0)
+        if n <= 0 and cid not in gaps:
+            continue
+        info = get_owasp_category_info(cid)
+        if not info:
+            continue
+        compact = _compact_owasp_ru_fields(info)
+        if compact:
+            ref[cid] = compact
+    return ref or None
+
+
 def _truncate_report_text(text: str, max_len: int) -> str:
     t = (text or "").strip()
     if len(t) <= max_len:
         return t
     return t[: max_len - 1].rstrip() + "…"
+
+
+def _default_scan_target_for_ai(data: ScanReportData) -> str | None:
+    if data.scan and (data.scan.target_url or "").strip():
+        return data.scan.target_url.strip()
+    if data.report and (data.report.target or "").strip():
+        return data.report.target.strip()
+    return None
+
+
+def _asset_from_poc_or_url(poc: dict[str, Any], url: str | None) -> str | None:
+    a = poc.get("affected_asset")
+    if isinstance(a, str) and a.strip():
+        return _truncate_report_text(a.strip(), 512)
+    if url:
+        try:
+            p = urlparse(url)
+            if p.netloc:
+                return p.netloc[:512]
+        except Exception:
+            return None
+    return None
+
+
+def _finding_row_as_dict_for_exploit(f: FindingRow) -> dict[str, Any]:
+    """Shape accepted by ``derive_exploit_available_flag`` (VHQ-005)."""
+    return f.model_dump(mode="python")
+
+
+def _collect_cve_ids_for_ai_finding(
+    title: str,
+    description: str | None,
+    cwe: str | None,
+    poc: dict[str, Any],
+) -> list[str]:
+    """CVE tokens from title, description, CWE line, and PoC keys ``cve`` / ``cve_id`` / ``cve_ids``."""
+    parts: list[str] = [title]
+    if description:
+        parts.append(description)
+    if cwe:
+        parts.append(cwe)
+    blob = "\n".join(parts)
+    found: set[str] = {m.group(0).upper() for m in _CVE_IDS_FOR_AI_RE.finditer(blob)}
+    for key in ("cve", "cve_id", "cve_ids"):
+        raw = poc.get(key)
+        if isinstance(raw, str) and raw.strip():
+            found.update(m.group(0).upper() for m in _CVE_IDS_FOR_AI_RE.finditer(raw))
+        elif isinstance(raw, list):
+            for it in raw:
+                if isinstance(it, str):
+                    found.update(m.group(0).upper() for m in _CVE_IDS_FOR_AI_RE.finditer(it))
+    return sorted(found)
+
+
+def _affected_url_asset_for_ai_payload(
+    poc: dict[str, Any],
+    default_target: str | None,
+) -> tuple[str | None, str | None]:
+    for k in ("affected_url", "url", "target_url"):
+        v = poc.get(k)
+        if isinstance(v, str) and v.strip():
+            u = v.strip()
+            tu = _truncate_report_text(u, _VALHALLA_AI_AFFECTED_URL_MAX)
+            return tu, _asset_from_poc_or_url(poc, u)
+    if default_target and default_target.strip():
+        dt = default_target.strip()
+        tdt = _truncate_report_text(dt, _VALHALLA_AI_AFFECTED_URL_MAX)
+        return tdt, _asset_from_poc_or_url(poc, dt)
+    asset_only = _asset_from_poc_or_url(poc, None)
+    return None, asset_only
+
+
+def _valhalla_one_line_summary(vc: ValhallaReportContext) -> str:
+    parts: list[str] = []
+    if vc.robots_txt_analysis.found:
+        parts.append("robots.txt observed")
+    if vc.sitemap_analysis.found:
+        parts.append(f"sitemap_urls≈{vc.sitemap_analysis.url_count}")
+    parts.append(f"tech_rows={len(vc.tech_stack_table)}")
+    miss = vc.security_headers_analysis.missing_recommended
+    if miss:
+        parts.append(f"missing_recommended_headers={len(miss)}")
+    if vc.outdated_components:
+        parts.append(f"outdated_component_signals={len(vc.outdated_components)}")
+    if vc.dependency_analysis:
+        parts.append(f"dependency_rows={len(vc.dependency_analysis)}")
+    if (vc.threat_model_excerpt or "").strip():
+        parts.append("threat_model_excerpt_present")
+    if (vc.exploitation_post_excerpt or "").strip():
+        parts.append("exploitation_context_present")
+    if vc.leaked_emails:
+        parts.append(f"masked_email_indicators={len(vc.leaked_emails)}")
+    ssl = vc.ssl_tls_analysis
+    if ssl.weak_ciphers:
+        parts.append("tls_weak_cipher_signals")
+    if ssl.hsts:
+        parts.append("hsts_signal_present")
+    if ssl.protocols:
+        parts.append(f"tls_protocol_notes={len(ssl.protocols)}")
+    return "; ".join(parts) if parts else "minimal_surface_signal"
+
+
+def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any]:
+    """Token-bounded Valhalla block for LLM context (VHL-003)."""
+    rob = vc.robots_txt_analysis
+    sm = vc.sitemap_analysis
+    hdr = vc.security_headers_analysis
+    ssl = vc.ssl_tls_analysis
+    return {
+        "summary": _valhalla_one_line_summary(vc),
+        "robots_txt": {
+            "found": rob.found,
+            "disallowed_paths_sample": (rob.disallowed_paths_sample or [])[:12],
+            "sitemap_hints": (rob.sitemap_hints or [])[:8],
+            "raw_excerpt": _truncate_report_text(rob.raw_excerpt or "", 600) if rob.raw_excerpt else None,
+        },
+        "sitemap": {
+            "found": sm.found,
+            "url_count": sm.url_count,
+            "sample_urls": (sm.sample_urls or [])[:16],
+        },
+        "tech_stack_sample": [
+            {"category": r.category, "name": r.name, "detail": _truncate_report_text(r.detail, 200)}
+            for r in (vc.tech_stack_table or [])[:_VALHALLA_AI_TECH_ROWS]
+        ],
+        "outdated_components": [
+            {
+                "component": o.component,
+                "cves": (o.cves or [])[:8],
+                "support_status": o.support_status,
+                "exploit_available": bool(o.exploit_available),
+            }
+            for o in (vc.outdated_components or [])[:_VALHALLA_AI_OUTDATED_ROWS]
+        ],
+        "ssl_tls": {
+            "issuer": ssl.issuer,
+            "validity": ssl.validity,
+            "hsts": ssl.hsts,
+            "protocols": (ssl.protocols or [])[:16],
+            "weak_protocols": (ssl.weak_protocols or [])[:12],
+            "weak_ciphers": (ssl.weak_ciphers or [])[:12],
+        },
+        "security_headers": {
+            "summary": hdr.summary,
+            "missing_recommended": (hdr.missing_recommended or [])[:16],
+            "row_count": len(hdr.rows or []),
+            "rows_sample": [
+                {
+                    "host": _truncate_report_text(str(r.get("host") or ""), 120),
+                    "header": _truncate_report_text(str(r.get("header") or ""), 80),
+                    "present": bool(r.get("present")),
+                    "value_sample": _truncate_report_text(str(r.get("value_sample") or ""), 160),
+                }
+                for r in (hdr.rows or [])[:24]
+            ],
+        },
+        "robots_sitemap_analysis": {
+            "robots_found": vc.robots_sitemap_merged.robots_found,
+            "sitemap_found": vc.robots_sitemap_merged.sitemap_found,
+            "security_txt_reachable": vc.robots_sitemap_merged.security_txt_reachable,
+            "disallow_rule_count": vc.robots_sitemap_merged.disallow_rule_count,
+            "allow_rule_count": vc.robots_sitemap_merged.allow_rule_count,
+            "sitemap_url_count": vc.robots_sitemap_merged.sitemap_url_count,
+            "sensitive_path_hints": (vc.robots_sitemap_merged.sensitive_path_hints or [])[:16],
+            "notes_ru": _truncate_report_text(vc.robots_sitemap_merged.notes_ru or "", 400),
+        },
+        "dependency_sample": [
+            {
+                "package": d.package,
+                "version": d.version,
+                "severity": d.severity,
+                "detail": _truncate_report_text(d.detail or "", 240) if d.detail else None,
+            }
+            for d in (vc.dependency_analysis or [])[:_VALHALLA_AI_DEP_ROWS]
+        ],
+        "threat_model_excerpt": _truncate_report_text(vc.threat_model_excerpt, _VALHALLA_AI_EXCERPT_MAX),
+        "exploitation_post_excerpt": _truncate_report_text(
+            vc.exploitation_post_excerpt, _VALHALLA_AI_EXCERPT_MAX
+        ),
+        "threat_model_phase_link": (vc.threat_model_phase_link or "")[:512],
+        "leaked_emails_masked_n": len(vc.leaked_emails or []),
+        "leaked_emails_masked_sample": list((vc.leaked_emails or [])[:12]),
+        "appendix_tools": [
+            {"name": t.name, "version": t.version}
+            for t in (vc.appendix_tools or [])[:96]
+        ],
+        "tech_stack_structured": {
+            "web_server": _truncate_report_text(vc.tech_stack_structured.web_server or "", 240),
+            "os": _truncate_report_text(vc.tech_stack_structured.os or "", 200),
+            "cms": _truncate_report_text(vc.tech_stack_structured.cms or "", 240),
+            "frameworks": [
+                _truncate_report_text(x, 160)
+                for x in (vc.tech_stack_structured.frameworks or [])[:24]
+            ],
+            "js_libraries": [
+                _truncate_report_text(x, 160)
+                for x in (vc.tech_stack_structured.js_libraries or [])[:24]
+            ],
+            "ports_summary": _truncate_report_text(
+                vc.tech_stack_structured.ports_summary or "", 320
+            ),
+            "services_summary": _truncate_report_text(
+                vc.tech_stack_structured.services_summary or "", 500
+            ),
+            "entries": [
+                {
+                    "technology": _truncate_report_text(e.technology or "", 200),
+                    "version": (e.version or "")[:64] if e.version else None,
+                    "confidence": float(e.confidence) if e.confidence is not None else None,
+                }
+                for e in (vc.tech_stack_structured.entries or [])[:48]
+            ],
+        },
+        "risk_matrix": {
+            "variant": vc.risk_matrix.variant,
+            "cells": [
+                {
+                    "impact": c.impact,
+                    "likelihood": c.likelihood,
+                    "count": c.count,
+                    "finding_ids": (c.finding_ids or [])[:_VALHALLA_AI_RISK_MATRIX_IDS_PER_CELL],
+                }
+                for c in (vc.risk_matrix.cells or [])
+            ],
+        },
+        "critical_vulns": [
+            {
+                "vuln_id": v.vuln_id,
+                "title": _truncate_report_text(v.title or "", 500),
+                "cvss": float(v.cvss) if isinstance(v.cvss, (int, float)) else None,
+                "description": _truncate_report_text(v.description or "", _VALHALLA_AI_FINDING_DESC_MAX),
+                "exploit_available": bool(v.exploit_available),
+            }
+            for v in (vc.critical_vulns or [])[:_VALHALLA_AI_CRITICAL_VULNS_MAX]
+        ],
+    }
+
+
+def _owasp_compliance_table_for_ai(data: ScanReportData) -> list[dict[str, Any]]:
+    """OWASP Top 10:2025 rows aligned with HTML compliance table (compact)."""
+    rows = build_owasp_compliance_rows(
+        findings_rows_for_jinja(data),
+        owasp_summary=data.owasp_summary if data.owasp_summary else None,
+    )
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        out.append(
+            {
+                "category_id": r.get("category_id"),
+                "title_ru": _truncate_report_text(str(r.get("title_ru") or ""), 200),
+                "has_findings": bool(r.get("has_findings")),
+                "findings_present_ru": r.get("findings_present_ru"),
+                "count": int(r.get("count") or 0),
+                "row_class": r.get("row_class"),
+            }
+        )
+    return out
+
+
+def _hibp_pwned_summary_for_ai_payload(data: ScanReportData) -> dict[str, Any] | None:
+    """
+    Aggregate-only HIBP Pwned Passwords signal for Valhalla AI context when opt-in is enabled.
+    Skips when an asyncio loop is already running (avoid nested asyncio.run).
+    """
+    if not settings.hibp_password_check_opt_in:
+        return None
+    exploit_dump: dict[str, Any] | None = None
+    for row in data.phase_outputs:
+        if (row.phase or "").lower() == "exploitation" and isinstance(row.output_data, dict):
+            exploit_dump = row.output_data
+            break
+    if not exploit_dump:
+        return None
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        return None
+    try:
+        summary = asyncio.run(
+            summarize_pwned_passwords_for_report(exploit_dump, max_checks=5),
+        )
+    except RuntimeError:
+        return None
+    if not isinstance(summary, dict):
+        return None
+    pwned_n = int(summary.get("pwned_count") or 0)
+    checks = int(summary.get("checks_run") or 0)
+    out = dict(summary)
+    out["data_breach_password_exposure"] = "yes" if pwned_n > 0 else "no"
+    out["breach_signal_note"] = (
+        "At least one sampled credential string matched HIBP Pwned Passwords corpus."
+        if pwned_n > 0
+        else (
+            "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
+            if checks > 0
+            else "No password-like fields sampled from exploitation output for HIBP check."
+        )
+    )
+    return out
 
 
 def _collect_active_web_scan_tool_names(scan_artifacts: dict[str, Any]) -> list[str]:
@@ -347,9 +899,12 @@ def _active_web_scan_ai_summary_rows(
     ai_section_texts: dict[str, str],
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    skip_texts = frozenset({REPORT_AI_SKIPPED_NO_LLM, REPORT_AI_SKIPPED_GENERATION_FAILED})
     for key in _ACTIVE_WEB_SCAN_AI_KEYS_ORDERED:
         raw = ai_section_texts.get(key)
         if not isinstance(raw, str) or not raw.strip():
+            continue
+        if raw.strip() in skip_texts:
             continue
         label = _ACTIVE_WEB_SCAN_AI_LABELS_RU.get(key, key)
         rows.append(
@@ -426,16 +981,87 @@ class ReportGenerator:
         )
 
     @staticmethod
-    def build_ai_input_payload(data: ScanReportData) -> dict[str, Any]:
-        """Compact, log-safe context for RPT-004 prompts (no artifact bodies)."""
+    def build_ai_input_payload(data: ScanReportData, *, tier: str | None = None) -> dict[str, Any]:
+        """Compact, log-safe context for RPT-004 / VHL-003 prompts (no artifact bodies)."""
         severity_counts: dict[str, int] = {}
         for f in data.findings:
             sev = f.severity or "unknown"
             severity_counts[sev] = severity_counts.get(sev, 0) + 1
-        findings_short = [
-            {"severity": f.severity, "title": (f.title or "")[:240], "cwe": f.cwe}
-            for f in data.findings[:80]
-        ]
+        tier_norm = normalize_report_tier(
+            tier if tier is not None else ((data.report.tier if data.report else "") or "midgard")
+        )
+        default_target = _default_scan_target_for_ai(data)
+        findings_short: list[dict[str, Any]] = []
+        for f in data.findings[:80]:
+            item: dict[str, Any] = {
+                "severity": f.severity,
+                "title": (f.title or "")[:240],
+                "cwe": f.cwe,
+            }
+            ow_raw = f.owasp_category
+            ow_parsed = (
+                parse_owasp_category(ow_raw.strip())
+                if isinstance(ow_raw, str) and ow_raw.strip()
+                else None
+            )
+            if ow_parsed is not None:
+                item["owasp_category"] = ow_parsed
+            elif tier_norm == "valhalla" and isinstance(ow_raw, str) and ow_raw.strip():
+                item["owasp_category"] = ow_raw.strip()[:32]
+            poc = f.proof_of_concept
+            poc_d: dict[str, Any] = poc if isinstance(poc, dict) else {}
+            if tier_norm == "valhalla":
+                if f.id:
+                    item["finding_id"] = str(f.id)
+                desc_ai = f.description or ""
+                if desc_ai:
+                    item["description"] = _truncate_report_text(
+                        desc_ai, _VALHALLA_AI_FINDING_DESC_MAX
+                    )
+                item["cve_ids"] = _collect_cve_ids_for_ai_finding(
+                    f.title or "",
+                    f.description,
+                    f.cwe,
+                    poc_d,
+                )
+                item["exploit_available"] = derive_exploit_available_flag(
+                    _finding_row_as_dict_for_exploit(f)
+                )
+                cv = f.cvss
+                item["cvss"] = float(cv) if isinstance(cv, (int, float)) else None
+                au, aa = _affected_url_asset_for_ai_payload(poc_d, default_target)
+                if au:
+                    item["affected_url"] = au
+                if aa:
+                    item["affected_asset"] = aa
+                param_v = poc_d.get("parameter")
+                if isinstance(param_v, str) and param_v.strip():
+                    item["parameter"] = param_v.strip()[:512]
+                cc = poc_d.get("curl_command")
+                if isinstance(cc, str) and cc.strip():
+                    item["poc_curl"] = _truncate_report_text(cc.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                pl = poc_d.get("payload")
+                if isinstance(pl, str) and pl.strip():
+                    item["poc_payload"] = _truncate_report_text(pl.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                js = poc_d.get("javascript_code")
+                if isinstance(js, str) and js.strip():
+                    item["poc_javascript"] = _truncate_report_text(js.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                req = poc_d.get("request")
+                if isinstance(req, str) and req.strip():
+                    item["poc_request"] = _truncate_report_text(req.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                sk = poc_d.get("screenshot_key")
+                item["screenshot_present"] = bool(isinstance(sk, str) and sk.strip())
+            elif isinstance(poc, dict):
+                cc = poc.get("curl_command")
+                if isinstance(cc, str) and cc.strip():
+                    item["poc_curl"] = cc.strip()[:600]
+                js = poc.get("javascript_code")
+                if isinstance(js, str) and js.strip():
+                    item["poc_javascript"] = js.strip()[:600]
+                req = poc.get("request")
+                if isinstance(req, str) and req.strip():
+                    item["poc_request"] = req.strip()[:600]
+            findings_short.append(item)
         payload: dict[str, Any] = {
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
@@ -451,6 +1077,33 @@ class ReportGenerator:
         if data.report is not None:
             payload["report_tier"] = data.report.tier
             payload["report_target"] = data.report.target
+        owasp_summary = _owasp_summary_for_ai_payload(data.findings)
+        if owasp_summary is not None:
+            payload["owasp_summary"] = owasp_summary
+        owasp_ref = _owasp_category_reference_ru_for_ai(owasp_summary)
+        if owasp_ref is not None:
+            payload["owasp_category_reference_ru"] = owasp_ref
+        payload["owasp_compliance_table"] = _owasp_compliance_table_for_ai(data)
+        if tier_norm == "valhalla":
+            compact_vc = _compact_valhalla_context_for_ai(data.valhalla_context)
+            payload["valhalla_context"] = compact_vc
+            vc = data.valhalla_context
+            payload["tech_stack_structured"] = compact_vc.get("tech_stack_structured")
+            payload["ssl_tls_analysis"] = compact_vc.get("ssl_tls")
+            payload["security_headers_analysis"] = compact_vc.get("security_headers")
+            payload["outdated_components_table"] = compact_vc.get("outdated_components")
+            payload["robots_sitemap_analysis"] = compact_vc.get("robots_sitemap_analysis")
+            payload["valhalla_fallback_messages_ru"] = {
+                "tech_stack": vc.tech_stack_fallback_message,
+                "ssl_tls": vc.ssl_tls_fallback_message,
+                "security_headers": vc.security_headers_fallback_message,
+                "outdated_components": vc.outdated_components_fallback_message,
+                "robots_sitemap": vc.robots_sitemap_fallback_message,
+                "leaked_emails": vc.leaked_emails_fallback_message,
+            }
+            hibp_ai = _hibp_pwned_summary_for_ai_payload(data)
+            if hibp_ai is not None:
+                payload["hibp_pwned_password_summary"] = hibp_ai
         return payload
 
     def run_ai_sections_sync(
@@ -465,7 +1118,7 @@ class ReportGenerator:
     ) -> dict[str, dict[str, Any]]:
         """Invoke ``run_ai_text_generation`` for each tier section (same payload per section)."""
         tier_norm = normalize_report_tier(tier)
-        payload = self.build_ai_input_payload(data)
+        payload = self.build_ai_input_payload(data, tier=tier_norm)
         results: dict[str, dict[str, Any]] = {}
         for section_key in report_tier_sections(tier_norm):
             results[section_key] = run_ai_text_generation(
@@ -490,7 +1143,7 @@ class ReportGenerator:
         from src.tasks import ai_text_generation_task
 
         tier_norm = normalize_report_tier(tier)
-        payload = self.build_ai_input_payload(data)
+        payload = self.build_ai_input_payload(data, tier=tier_norm)
         ids: dict[str, str] = {}
         for section_key in report_tier_sections(tier_norm):
             async_result = ai_text_generation_task.delay(
@@ -517,8 +1170,15 @@ class ReportGenerator:
     def ai_results_to_text_map(ai_section_results: dict[str, dict[str, Any]]) -> dict[str, str]:
         out: dict[str, str] = {}
         for key, res in ai_section_results.items():
-            if res.get("status") == "ok" and isinstance(res.get("text"), str):
-                out[key] = res["text"]
+            text = res.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            st = res.get("status")
+            err = res.get("error")
+            if st == "ok" or st == "skipped_no_llm":
+                out[key] = text.strip()
+            elif err in ("llm_unavailable", "generation_failed"):
+                out[key] = text.strip()
         return out
 
     def prepare_template_context(
@@ -534,14 +1194,36 @@ class ReportGenerator:
         RPT-008 can extend ``jinja.*.slots`` or add partials under ``tier_stubs``.
         """
         tier_norm = normalize_report_tier(tier)
+        texts: dict[str, str] = dict(ai_section_texts)
+        for sk in report_tier_sections(tier_norm):
+            if (texts.get(sk) or "").strip():
+                continue
+            texts[sk] = (
+                REPORT_AI_SKIPPED_NO_LLM
+                if not has_any_llm_key()
+                else REPORT_AI_SKIPPED_GENERATION_FAILED
+            )
+        extra_merged: dict[str, Any] = dict(extra) if extra else {}
+        embed_key = "embed_poc_screenshot_inline"
+        embed_override = extra_merged.pop(embed_key, None)
+        if embed_override is not None:
+            embed_poc_screenshot_inline = bool(embed_override)
+        else:
+            embed_poc_screenshot_inline = (
+                True
+                if tier_norm == "valhalla"
+                else settings.report_poc_embed_screenshot_inline
+            )
         jinja_tiers: dict[str, Any] = {}
         for name in ("midgard", "asgard", "valhalla"):
             keys = report_tier_sections(name)
             jinja_tiers[name] = {
                 "active": name == tier_norm,
-                "slots": {k: ai_section_texts.get(k, "") for k in keys},
+                "slots": {k: texts.get(k, "") for k in keys},
             }
+        finding_rows = findings_rows_for_jinja(data)
         ctx: dict[str, Any] = {
+            "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
             "tenant_id": data.tenant_id,
             "scan_id": data.scan_id,
@@ -551,10 +1233,23 @@ class ReportGenerator:
             "timeline_count": len(data.timeline),
             "phase_inputs_count": len(data.phase_inputs),
             "phase_outputs_count": len(data.phase_outputs),
-            "findings": findings_rows_for_jinja(data),
+            "findings": finding_rows,
+            "owasp_compliance_rows": build_owasp_compliance_rows(
+                finding_rows,
+                owasp_summary=data.owasp_summary if data.owasp_summary else None,
+            ),
+            "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
             "recon_summary": recon_summary_for_jinja(data),
             "exploitation": exploitation_outputs_for_jinja(data),
-            "ai_sections": dict(ai_section_texts),
+            "valhalla_context": data.valhalla_context.model_dump(mode="json"),
+            "report_executor_display_name": settings.report_executor_display_name,
+            "tool_runs": [tr.model_dump(mode="json") for tr in data.tool_runs],
+            "valhalla_appendix_nmap_excerpt": valhalla_nmap_appendix_excerpt(data.phase_outputs),
+            "valhalla_appendix_phase_inputs_excerpt": valhalla_phase_inputs_config_excerpt(
+                data.phase_inputs
+            ),
+            "valhalla_appendix_timeline_rows": valhalla_timeline_appendix_rows(data.timeline),
+            "ai_sections": dict(texts),
             "jinja": jinja_tiers,
             "tier_stubs": {
                 "midgard": {"label": "Midgard", "focus": "summary", "active_web_scan": False},
@@ -566,14 +1261,14 @@ class ReportGenerator:
                 },
             },
         }
-        if extra:
-            ctx.update(extra)
+        if extra_merged:
+            ctx.update(extra_merged)
         if "scan_artifacts" not in ctx:
             ctx["scan_artifacts"] = {"status": "skipped", "phase_blocks": []}
         ctx["active_web_scan"] = build_active_web_scan_section_context(
             tier_norm,
             ctx["scan_artifacts"],
-            ai_section_texts,
+            texts,
         )
         return ctx
 

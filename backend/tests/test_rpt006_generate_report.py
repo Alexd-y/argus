@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.reports.generators import VALHALLA_SECTIONS_CSV_FORMAT
 from src.reports.report_pipeline import (
     normalize_generation_formats,
     run_generate_report_pipeline,
@@ -132,3 +133,68 @@ async def test_run_generate_report_not_found() -> None:
 
     assert out["status"] == "failed"
     assert out.get("error") == "Report not found"
+
+
+@pytest.mark.asyncio
+async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VHL-005: Valhalla tier + csv also uploads ``{report_id}.valhalla_sections.csv``."""
+    import src.reports.report_pipeline as rp
+    from src.reports.data_collector import ScanReportData
+    from src.services.reporting import ReportContextBuildResult
+
+    report = SimpleNamespace(
+        id="rep-v",
+        tenant_id="ten-v",
+        scan_id="scan-v",
+        tier="valhalla",
+        requested_formats=None,
+    )
+    built = ReportContextBuildResult(
+        scan_report_data=ScanReportData(scan_id="scan-v", tenant_id="ten-v", findings=[]),
+        template_context={"tier": "valhalla", "valhalla_context": {}, "ai_sections": {}, "recon_summary": {}},
+        ai_section_results={},
+    )
+
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+        return built
+
+    monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
+    monkeypatch.setattr(rp, "generate_csv", lambda *a, **k: b"a,b\n")
+
+    upload_calls: list[tuple[str, ...]] = []
+
+    def fake_upload(_tenant, _scan, _tier, rid, fmt, data, *, content_type) -> str:
+        upload_calls.append((rid, fmt, len(data)))
+        return f"ten-v/scan-v/reports/valhalla/{rid}.{fmt}"
+
+    exec_results = [
+        ExecScalar(report),
+        MagicMock(),
+        ExecScalar(None),
+        ExecScalar(None),
+        MagicMock(),
+    ]
+
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=exec_results)
+    session.commit = AsyncMock()
+
+    out = await run_generate_report_pipeline(
+        session,
+        report_id="rep-v",
+        tenant_id="ten-v",
+        scan_id_hint=None,
+        formats=["csv"],
+        upload_fn=fake_upload,
+        ensure_bucket_fn=lambda: True,
+        redis_client=MagicMock(),
+    )
+
+    assert out["status"] == "completed"
+    fmts = {c[1] for c in upload_calls}
+    assert "csv" in fmts
+    assert VALHALLA_SECTIONS_CSV_FORMAT in fmts
+    assert out["object_keys"]["csv"]
+    assert out["object_keys"][VALHALLA_SECTIONS_CSV_FORMAT]

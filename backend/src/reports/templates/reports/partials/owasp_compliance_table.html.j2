@@ -1,0 +1,26 @@
+{# OWASP Top 10:2025 — встраивается в Asgard/Valhalla (RPT-008). Требует owasp_compliance_rows. #}
+<section class="owasp-compliance" id="owasp-top10-compliance">
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 Compliance</h3>
+    <table class="owasp-compliance-table">
+        <thead>
+            <tr>
+                <th scope="col">Категория</th>
+                <th scope="col">Описание</th>
+                <th scope="col" class="owasp-compliance-count-col">Наличие находок</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cr in owasp_compliance_rows %}
+            <tr class="{{ cr.row_class }}">
+                <td class="owasp-compliance-category"{% if cr.description_hover %} title="{{ cr.description_hover|e }}"{% endif %}>
+                    <span class="owasp-compliance-code"><code>{{ cr.category_id }}</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title-ru">{{ cr.title_ru }}</span>
+                </td>
+                <td class="owasp-compliance-desc">{{ cr.description }}</td>
+                <td class="owasp-compliance-presence">{{ cr.findings_present_ru }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>

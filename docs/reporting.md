@@ -67,9 +67,127 @@ Defined in `src/services/reporting.py`: `REPORT_TIERS`, `report_tier_sections`, 
 |------|-------------------------------|--------|
 | **Midgard** | `executive_summary`, `vulnerability_description` | Short executive + vuln narrative. |
 | **Asgard** | Midgard + `remediation_step`, `business_risk`, `compliance_check` | Technical depth + risk/compliance. |
-| **Valhalla** | `executive_summary_valhalla` (replaces plain executive in tier map) + Asgard set + `prioritization_roadmap`, `hardening_recommendations` | Leadership + technical roadmap. |
+| **Valhalla** | 11 ключей AI — см. подраздел **Valhalla — полная структура** и таблицу промптов ниже | Эталонное оглавление `Report Valhalla.md` + `valhalla_context` + экспорт `valhalla_report` / `valhalla_sections.csv`. |
 
 `prepare_template_context` exposes `jinja.{tier}.slots` and `tier_stubs` (Valhalla: `focus: leadership_technical`).
+
+### Valhalla — полная структура (`Report Valhalla.md`)
+
+Эталонное оглавление заказчика: **`Report Valhalla.md`** в корне рабочей копии репозитория (рядом с каталогом `ARGUS/`). Ниже — логические разделы шаблона и как они закрываются в ARGUS.
+
+| № | Раздел эталона | Роль в ARGUS |
+|---|----------------|--------------|
+| 1 | Титульный лист | Метаданные скана / цель / шапка отчёта в tier-шаблоне (`valhalla.html.j2`). |
+| 2 | Резюме для руководства (Executive Summary) | AI `executive_summary_valhalla` + таблица критичностей из `recon_summary.summary_counts` / `ReportSummary`; блок **OWASP Top 10:2025** (Asgard/Valhalla) из `owasp_compliance_rows`. |
+| 3 | Объект, цели и задачи | Контекст цели/скоупа из данных скана и шаблона. |
+| 4 | Объём работ и ограничения | Текстовые/метаданные поля отчёта по мере заполнения контекста. |
+| 5 | Методология и стандарты | Статический блок методологии в шаблоне + фактические артефакты фаз. |
+| 6 | Обзор результатов и матрица рисков | `valhalla_context`: robots/sitemap, tech stack, устаревшие компоненты, email (маскирование), SSL/TLS, security headers, зависимости; **матрица рисков** `risk_matrix` и **critical_vulns** из находок (`valhalla_report_context.py`). |
+| 7 | Моделирование угроз и сценарии атак | AI `attack_scenarios` + ссылка/выдержка `threat_model` / `threat_model_excerpt` / `threat_model_phase_link`. |
+| 8 | Детализированное описание уязвимостей | Таблица находок (в т.ч. PoC, OWASP) как в Asgard/Valhalla. |
+| 9 | Анализ цепочек эксплуатации | AI `exploit_chains` → в JSON/CSV как `exploit_chains_text`. |
+| 10 | Рекомендации и приоритизация | AI `remediation_stages`, `prioritization_roadmap`, `hardening_recommendations`, `zero_day_potential`; этапы устранения → `remediation_stages_text`; заключение собирается из roadmap + hardening → `conclusion_text` в payload. |
+| 11 | Заключение | См. `conclusion_text` (объединение `prioritization_roadmap` + `hardening_recommendations`). |
+| 12 | Приложения | `appendices` в `valhalla_report`: сводки recon, exploitation, scan_artifacts, raw_artifacts, прочие AI-секции (`ai_sections_supplemental`); приложение А — список инструментов `appendix_tools` в `valhalla_context`; выдержки nmap/timeline — поля шаблона (`valhalla_appendix_*` в Jinja). |
+
+**Модули:** сбор контекста `build_valhalla_report_context` → `ValhallaReportContext` (`src/reports/valhalla_report_context.py`); в Jinja — `valhalla_context` (+ tier `valhalla`).
+
+#### Экспорт: объект `valhalla_report` (JSON)
+
+При генерации JSON для tier **`valhalla`** (`generate_json`, `src/reports/generators.py`) в корень документа добавляется ключ **`valhalla_report`** — зеркало секций для машинной обработки. Построение: `build_valhalla_report_payload(jinja_context, ReportData)`.
+
+Топ-уровневые ключи `valhalla_report` (порядок совпадает с CSV-строками ниже):
+
+| Ключ | Содержание |
+|------|------------|
+| `title_meta` | `report_id`, `target`, `scan_id`, `tenant_id`, `created_at`, `tier` (= `valhalla`). |
+| `executive_summary_counts` | Счётчики по severity (из `recon_summary.summary_counts` или fallback из `ReportSummary`). |
+| `owasp_compliance` | Строки таблицы OWASP Top 10:2025 из контекста. |
+| `robots_sitemap` | `robots_txt_analysis`, `sitemap_analysis` из `valhalla_context`. |
+| `tech_stack` | `tech_stack_table`. |
+| `outdated_components` | `outdated_components`. |
+| `emails` | `leaked_emails` (маскированные). |
+| `ssl_tls` | `ssl_tls_analysis`. |
+| `headers` | `security_headers_analysis`. |
+| `dependencies` | `dependency_analysis`. |
+| `risk_matrix` | `risk_matrix` (вариант `matrix` или `distribution`). |
+| `critical_vulns` | Критические/высокие находки (краткие ссылки). |
+| `threat_modeling_ref` | `threat_model`, `threat_model_excerpt`, `threat_model_phase_link`, `exploitation_post_excerpt`. |
+| `findings` | Канонизированные строки находок из Jinja-контекста. |
+| `exploit_chains_text` | Текст AI-секции `exploit_chains`. |
+| `remediation_stages_text` | Текст AI-секции `remediation_stages`. |
+| `zero_day_text` | Текст AI-секции `zero_day_potential`. |
+| `conclusion_text` | Склейка `prioritization_roadmap` + `hardening_recommendations`. |
+| `appendices` | JSON-объект: `recon_summary`, `exploitation`, `scan_artifacts`, `raw_artifacts`, `ai_sections_supplemental` (все прочие ключи `ai_sections`, кроме пяти, вынесенных в отдельные текстовые поля выше). |
+
+Остальная схема JSON-отчёта (findings, timeline, `ai_sections`, и т.д.) без изменений; `valhalla_report` — **дополнительный** агрегат для Valhalla.
+
+Пример сокращённого фрагмента (поля структурированных секций опущены или пусты):
+
+```json
+{
+  "valhalla_report": {
+    "title_meta": {
+      "report_id": "…",
+      "target": "https://example.com",
+      "scan_id": "…",
+      "tenant_id": "…",
+      "created_at": "2026-03-27T12:00:00Z",
+      "tier": "valhalla"
+    },
+    "executive_summary_counts": { "critical": 0, "high": 1, "medium": 0, "low": 0, "info": 0 },
+    "exploit_chains_text": "…",
+    "remediation_stages_text": "…",
+    "zero_day_text": "…",
+    "conclusion_text": "…"
+  }
+}
+```
+
+Полный набор ключей верхнего уровня `valhalla_report` — в таблице выше; тест-референс: `backend/tests/test_rpt009_pdf.py` (`test_vhl005_valhalla_json_includes_valhalla_report`, `test_vhl005_valhalla_sections_csv_roundtrip`).
+
+#### Экспорт: `valhalla_sections.csv` (VHL-005)
+
+Дополнительный артефакт **только для tier Valhalla**, если в пайплайне запрошен формат **`csv`**:
+
+- **Константа формата:** `valhalla_sections.csv` (`VALHALLA_SECTIONS_CSV_FORMAT` в `generators.py`).
+- **MinIO key:** `{tenant_id}/{scan_id}/reports/valhalla/{report_id}.valhalla_sections.csv` (тот же префикс, что и у `report_id.csv`; «расширение» файла — полная строка `valhalla_sections.csv`).
+- **Содержимое:** UTF-8 CSV с заголовком `section,content_markdown_or_json`.
+- **Порядок строк** (поле `section`):  
+  `title_meta`, `executive_summary_counts`, `owasp_compliance`, `robots_sitemap`, `tech_stack`, `outdated_components`, `emails`, `ssl_tls`, `headers`, `dependencies`, `risk_matrix`, `critical_vulns`, `threat_modeling_ref`, `findings`, `exploit_chains_text`, `remediation_stages_text`, `zero_day_text`, `conclusion_text`, `appendices`.
+- **Вторая колонка:** для `exploit_chains_text`, `remediation_stages_text`, `zero_day_text`, `conclusion_text` — **plain text**; для остальных секций — **одна ячейка JSON** (тот же объект, что в `valhalla_report`).
+
+**БД:** значение `report_objects.format` для этой строки длиннее 20 символов → см. миграцию **012** ниже.
+
+#### Миграция `012_report_objects_format_length`
+
+Alembic **`012_report_objects_format_length`**: колонка **`report_objects.format`** расширена с **`VARCHAR(20)`** до **`VARCHAR(48)`**, чтобы сохранять формат артефакта **`valhalla_sections.csv`** без усечения (VHL-005).
+
+### Proof of Concept (PoC) in findings
+
+- **DB:** nullable JSONB `findings.proof_of_concept` (Alembic `010_findings_proof_of_concept`) — структурированный словарь с ключами из `active_scan/poc_schema.py` (`tool`, `parameter`, `payload`, `request`, `response`, `response_snippet`, `curl_command`, `javascript_code`, `screenshot_key`). Поле **дополнительное**; публичные ключи ответа API без переименований. `build_proof_of_concept` усечёт `response` до 1024 и `response_snippet` до 500 символов; `merge_proof_of_concept` мержит два dict по известным ключам, для строк выбирая более длинное значение.
+- **MinIO (primary bucket):** идемпотентный объект `{tenant_id}/{scan_id}/poc/{finding_id}.json` — зеркало PoC при сохранении finding в фазе `reporting` (`upload_finding_poc_json` в `src/storage/s3.py`). Скриншоты PoC (Playwright, если включено в VA) — отдельные объекты под ключом `screenshot_key` в том же bucket; presigned ссылка в Jinja через `get_finding_poc_screenshot_presigned_url` (`findings_rows_for_jinja`). Отчётный bucket для PDF/HTML/JSON не используется. Таблица **`evidence`** не расширялась (`poc_data` не добавлялся): канонический JSON PoC — MinIO + колонка finding.
+- **HTML:** `partials/findings_table.html.j2` — блок `finding-poc` для **asgard** и **valhalla** (payload, JS, cURL, request/response, **Response snippet**, ссылка **Screenshot** при `screenshot_key`); **midgard** — одна строка-заглушка (полные детали только в старших tier). По умолчанию скриншот — ссылка `<a>`; при **`REPORT_POC_EMBED_SCREENSHOT_INLINE=true`** (`settings.report_poc_embed_screenshot_inline`) в шаблон передаётся `embed_poc_screenshot_inline` и рендерится миниатюра `<img>` (увеличивает размер HTML/PDF). Для tier **valhalla** `prepare_template_context` по умолчанию задаёт **`embed_poc_screenshot_inline=true`**, даже если глобальный env false; переопределение — поле **`embed_poc_screenshot_inline`** в аргументе `extra`.
+- **JSON отчёт:** `generate_json` включает `proof_of_concept` в каждом finding при наличии.
+- **AI (RPT-004):** `ReportGenerator.build_ai_input_payload` добавляет в срез findings поля `poc_curl`, `poc_javascript`, `poc_request` при наличии в PoC. Для **`tier=valhalla`** в каждый элемент findings дополнительно попадают **`finding_id`**, усечённое **`description`** (~400 символов), список **`cve_ids`** (из title/description/CWE/PoC-ключи `cve` / `cve_id` / `cve_ids`), флаг **`exploit_available`** (`derive_exploit_available_flag`); в компактном **`valhalla_context`** для LLM — **`risk_matrix`** (ячейки: impact, likelihood, count, finding_ids до 24 на ячейку) и **`critical_vulns`** (`vuln_id`, title, cvss, description, exploit_available). Дополнительно в payload Valhalla: плоские **`tech_stack_structured`**, **`ssl_tls_analysis`**, **`security_headers_analysis`**, **`outdated_components_table`**, **`robots_sitemap_analysis`** (срезы из компактного контекста) и объект **`valhalla_fallback_messages_ru`**: по ключам `tech_stack`, `ssl_tls`, `security_headers`, `outdated_components`, `robots_sitemap`, `leaked_emails` — краткие пояснения на русском, когда соответствующий блок в данных скана пуст или недоступен (см. `build_valhalla_report_context` в `valhalla_report_context.py`). Версия промптов отчёта: **`REPORT_AI_PROMPT_VERSIONS`** → сегмент **`vhq005-20250328`** (`prompt_registry.py`).
+
+### Valhalla: VA, fallback-тексты и recon robots/sitemap (VDF / datafill)
+
+- **WhatWeb / tech stack:** структурированный стек и таблица технологий в Valhalla собираются из выходов **whatweb** (VA active scan), `recon_results` и связанных сигналов. Если валидного отпечатка WhatWeb и достаточных рекон-сигналов нет, в контексте задаётся **`tech_stack_fallback_message`** (RU), а в AI payload то же значение попадает в **`valhalla_fallback_messages_ru.tech_stack`**.
+- **testssl / SSL-TLS:** приоритет — JSON **testssl.sh** из сырых артефактов (`_latest_tls_blob_from_raw` → `_ssl_from_testssl_json`); при отсутствии blob остаются данные из recon-сертификатов. Celery-обёртка **`testssl`** в `src/tasks/tools.py` использует **`_run_testssl_va_celery_with_sslscan_fallback`**: при сбое или пустом результате допускается fallback **sslscan** для TLS-зонда. Если поверхность TLS для отчёта пуста, **`ssl_tls_fallback_message`** и **`valhalla_fallback_messages_ru.ssl_tls`** объясняют отсутствие данных (HTTP-цель, нет testssl/sslscan в sandbox и т.п.).
+- **Security headers:** карта заголовков из `recon_results` и фаз recon/vuln_analysis; при пустой карте — **`security_headers_fallback_message`** / **`valhalla_fallback_messages_ru.security_headers`**.
+- **HARVESTER_ENABLED:** env → `settings.harvester_enabled`; при **`true`** в VA может планироваться **theHarvester** (OSINT email), stdout/артефакты участвуют в маскированных email для Valhalla. Если индикаторов нет, в fallback для email указана связь с этим флагом.
+- **VA_ROBOTS_EXTENDED_PIPELINE:** env → `settings.va_robots_extended_pipeline`; при **`true`** и **`SANDBOX_ENABLED`** после базового сбора robots/sitemap модуль **`src/recon/robots_sitemap_analyzer.py`** может запускать поверхностный **gospider** и **parsero** (best-effort, без тяжёлого fuzz по умолчанию).
+- **robots_sitemap_analyzer:** фаза recon — HTTP-загрузка `robots.txt`, `sitemap.xml`, `sitemap_index.xml`, `.well-known/security.txt`; парсинг правил и `<loc>`, слияние в сводку, запись сырых текстов и JSON **`recon_robots_sitemap_summary`** в MinIO. Юнит-тесты парсеров без сети: `backend/tests/test_robots_sitemap_analyzer.py`.
+
+### OWASP Top 10:2025 in HTML findings
+
+- **Колонка находки:** для Asgard/Valhalla в таблице находок выводится код категории (`A01`…`A10`) и русская подпись (`owasp_title_ru` из JSON при наличии, иначе краткий EN title из `owasp_top10_2025.py`); источник кода — `findings.owasp_category` (см. `owasp_category_map.py`, миграция `011_findings_owasp_category`).
+- **Сводка соответствия:** под таблицей находок (шаблон `partials/findings_table.html.j2`) секция **«OWASP Top 10:2025 Compliance»** с таблицей `owasp-compliance-table` (только Asgard/Valhalla; в **midgard** скрыта). Строки строит `build_owasp_compliance_rows` (`src/reports/generators.py`) из счётчиков находок и данных загрузчика `src/owasp/owasp_loader.py`.
+- **Данные RU:** файл JSON по пути **`OWASP_JSON_PATH`** → настройка `settings.owasp_json_path` (по умолчанию `data/owasp_top_10_2025_ru.json` относительно корня backend — каталог с `src/`). Ключи на категорию: `title_ru`, `example_attack`, `how_to_find`, `how_to_fix`. При отсутствии/битом файле используются безопасные fallback из кода (см. `owasp_loader.py`).
+- **Колонки таблицы соответствия (заголовки RU):** **Категория** — `<code>A0x</code>` + ` — ` + `title_ru`; **Описание** — краткий текст риска (из `example_attack`, иначе первое предложение `how_to_find`); **Наличие находок** — `Да` / `Нет`. Подсветка строк: `owasp-compliance-0` (нет находок), `owasp-compliance-warn` (1–2), `owasp-compliance-high` (3+).
+- **Подсказка (tooltip):** у ячейки категории атрибут `title` заполняется усечённым `how_to_fix` из JSON (поле `description_hover` в строке compliance), если текст есть.
+- **AI (RPT-004):** если в контексте есть сводка OWASP по находкам, `ReportGenerator.build_ai_input_payload` добавляет объект **`owasp_category_reference_ru`**: по категориям с ненулевым счётчиком или из `gap_categories` — компактные RU-поля `title_ru`, `example_attack`, `how_to_find`, `how_to_fix` (обрезка длины в `reporting.py`). Промпты в `prompt_registry.py` ссылаются на этот ключ для согласованности формулировок с отчётом.
 
 ---
 
@@ -77,16 +195,23 @@ Defined in `src/services/reporting.py`: `REPORT_TIERS`, `report_tier_sections`, 
 
 Constants in `src/orchestration/prompt_registry.py` (see also [prompt-registry.md](./prompt-registry.md)):
 
-| Section key | Typical constant prefix |
-|-------------|-------------------------|
-| `executive_summary` | `REPORT_AI_SECTION_EXECUTIVE_SUMMARY` |
-| `executive_summary_valhalla` | `REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA` |
-| `vulnerability_description` | `REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION` |
-| `remediation_step` | `REPORT_AI_SECTION_REMEDIATION_STEP` |
-| `business_risk` | `REPORT_AI_SECTION_BUSINESS_RISK` |
-| `compliance_check` | `REPORT_AI_SECTION_COMPLIANCE_CHECK` |
-| `prioritization_roadmap` | `REPORT_AI_SECTION_PRIORITIZATION_ROADMAP` |
-| `hardening_recommendations` | `REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS` |
+| Section key | Typical constant prefix | Tiers |
+|-------------|-------------------------|--------|
+| `executive_summary` | `REPORT_AI_SECTION_EXECUTIVE_SUMMARY` | Midgard, Asgard |
+| `executive_summary_valhalla` | `REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA` | Valhalla (вместо `executive_summary`) |
+| `vulnerability_description` | `REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION` | Все |
+| `attack_scenarios` | `REPORT_AI_SECTION_ATTACK_SCENARIOS` | **Valhalla only** |
+| `exploit_chains` | `REPORT_AI_SECTION_EXPLOIT_CHAINS` | **Valhalla only** |
+| `remediation_step` | `REPORT_AI_SECTION_REMEDIATION_STEP` | Asgard, Valhalla |
+| `remediation_stages` | `REPORT_AI_SECTION_REMEDIATION_STAGES` | **Valhalla only** |
+| `business_risk` | `REPORT_AI_SECTION_BUSINESS_RISK` | Asgard, Valhalla |
+| `compliance_check` | `REPORT_AI_SECTION_COMPLIANCE_CHECK` | Asgard, Valhalla |
+| `prioritization_roadmap` | `REPORT_AI_SECTION_PRIORITIZATION_ROADMAP` | Valhalla |
+| `hardening_recommendations` | `REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS` | Valhalla |
+| `zero_day_potential` | `REPORT_AI_SECTION_ZERO_DAY_POTENTIAL` | **Valhalla only** |
+
+Порядок вызова AI для Valhalla задаётся `report_tier_sections("valhalla")` в `src/services/reporting.py`:  
+`executive_summary_valhalla` → `vulnerability_description` → `attack_scenarios` → `exploit_chains` → `remediation_step` → `remediation_stages` → `business_risk` → `compliance_check` → `prioritization_roadmap` → `hardening_recommendations` → `zero_day_potential`.
 
 Prompt bodies and versions: `REPORT_AI_PROMPT_VERSIONS`, `get_prompt` / reporting helpers in the same registry. Runtime: `run_ai_text_generation` (`src/reports/ai_text_generation.py`) resolves by section key and caches in Redis under prefix **`argus:ai_text:`** (see `build_ai_text_cache_key`).
 
@@ -98,8 +223,9 @@ Prompt bodies and versions: `REPORT_AI_PROMPT_VERSIONS`, `get_prompt` / reportin
 |--------|--------------|--------|
 | `html` | `text/html; charset=utf-8` | Tiered Jinja (RPT-008), `template_env.render_tier_report_html`. |
 | `pdf` | `application/pdf` | WeasyPrint (RPT-009); HTML → PDF. |
-| `json` | `application/json; charset=utf-8` | Stable ordering in `generators.py`. |
-| `csv` | `text/csv; charset=utf-8` | Tabular export. |
+| `json` | `application/json; charset=utf-8` | Stable ordering in `generators.py`; для **valhalla** добавляется ключ **`valhalla_report`**. |
+| `csv` | `text/csv; charset=utf-8` | Табличный экспорт находок + приложение `ai_sections` / `scan_artifacts`. |
+| `valhalla_sections.csv` | `text/csv; charset=utf-8` | **Только Valhalla** и только при запросе `csv` в пайплайне: одна строка на логическую секцию эталона (см. выше). Скачивание: `GET .../download?format=valhalla_sections.csv` для Valhalla-отчёта. |
 
 Default when explicit/requested list is empty after validation: `html`, `json`, `csv`, `pdf` (`report_pipeline.DEFAULT_REPORT_FORMATS`).
 
@@ -138,8 +264,9 @@ Tenant: `X-Tenant-ID` / auth-derived tenant (`get_current_tenant_id`). See [fron
 
 - **Reports bucket:** `settings.minio_reports_bucket` — env **`MINIO_REPORTS_BUCKET`** (default `argus-reports`). Distinct from stage artifacts **`MINIO_BUCKET`** (e.g. `argus`).
 - **Object type:** `reports` → `OBJECT_TYPE_REPORTS` in `src/storage/s3.py`.
-- **Key layout:** `{tenant_id}/{scan_id}/reports/{tier}/{report_id}.{fmt}` where `tier` ∈ {`midgard`, `asgard`, `valhalla`} and `fmt` ∈ {`html`, `pdf`, `json`, `csv`}.
+- **Key layout:** `{tenant_id}/{scan_id}/reports/{tier}/{report_id}.{fmt}` where `tier` ∈ {`midgard`, `asgard`, `valhalla`} and `fmt` — обычно `html`, `pdf`, `json`, `csv`; для Valhalla при генерации CSV дополнительно загружается **`{report_id}.valhalla_sections.csv`** (см. `VALHALLA_SECTIONS_CSV_FORMAT`).
   - Example: `tenant-123/scan-456/reports/asgard/report-789.pdf`
+  - Valhalla + csv: `.../reports/valhalla/{report_id}.csv` и `.../reports/valhalla/{report_id}.valhalla_sections.csv`
   - Single-report key pattern (legacy/single generate): `{tenant_id}/{scan_id}/reports/{filename}` (e.g. `report.pdf`).
 - **Helpers:** `src/reports/storage.py` — re-exports `upload`, `download`, `exists`, `get_presigned_url`, `ensure_bucket()`.
 
@@ -152,6 +279,9 @@ Tenant: `X-Tenant-ID` / auth-derived tenant (`get_current_tenant_id`). See [fron
 | `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_SECURE` | S3-compatible client. |
 | `MINIO_BUCKET` | Default bucket for stage scan artifacts. |
 | **`MINIO_REPORTS_BUCKET`** | Bucket for generated report files. |
+| **`VA_POC_PLAYWRIGHT_SCREENSHOT_ENABLED`** (`settings.va_poc_playwright_screenshot_enabled`) | VA: опциональные PNG скриншоты + `response_snippet` вокруг payload (`poc_visual_enrichment.py`; нужны `playwright` + браузер). Принудительное отключение без смены settings: env **`VA_POC_PLAYWRIGHT_SCREENSHOT`** = `0` / `false` / `off` / `no`. |
+| **`REPORT_POC_EMBED_SCREENSHOT_INLINE`** (`settings.report_poc_embed_screenshot_inline`) | Отчёт HTML/PDF: встраивать presigned URL скриншота PoC как `<img>` вместо только ссылки (по умолчанию `false`). |
+| **`OWASP_JSON_PATH`** (`settings.owasp_json_path`) | Путь к JSON с русскими текстами OWASP Top 10:2025 для таблицы соответствия, tooltip и AI `owasp_category_reference_ru` (по умолчанию `data/owasp_top_10_2025_ru.json` относительно корня backend). |
 | **`AI_TEXT_CACHE_TTL_SECONDS`** (`settings.ai_text_cache_ttl_seconds`) | Redis TTL for AI section text cache. |
 | Redis URL (if configured) | Used by `run_ai_text_generation` for cache get/set. |
 | `ARGUS_SKIP_WEASYPRINT_PDF` | Skip heavy PDF tests when set. |
