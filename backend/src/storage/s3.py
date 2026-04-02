@@ -21,6 +21,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from typing import Any, BinaryIO
+from urllib.parse import urlparse, urlunparse
 
 from src.core.config import settings
 
@@ -661,11 +662,12 @@ def get_presigned_url(
     key = build_object_key(tenant_id, scan_id, object_type, filename)
     bucket = _bucket_for_object_type(object_type)
     try:
-        return client.generate_presigned_url(
+        url = client.generate_presigned_url(
             "get_object",
             Params={"Bucket": bucket, "Key": key},
             ExpiresIn=expires_in,
         )
+        return rewrite_minio_url_for_report(url)
     except Exception:
         return None
 
@@ -679,13 +681,32 @@ def get_presigned_url_by_key(object_key: str, expires_in: int = 3600) -> str | N
         return None
     bucket = _bucket_for_object_key(object_key)
     try:
-        return client.generate_presigned_url(
+        url = client.generate_presigned_url(
             "get_object",
             Params={"Bucket": bucket, "Key": object_key},
             ExpiresIn=expires_in,
         )
+        return rewrite_minio_url_for_report(url)
     except Exception:
         return None
+
+
+def rewrite_minio_url_for_report(presigned_url: str) -> str:
+    """Replace internal MinIO hostname with public-facing URL for report delivery.
+
+    Falls back to the original URL when ``settings.minio_public_url`` is unset
+    (development / same-network access).
+    """
+    public_base = settings.minio_public_url
+    if not public_base:
+        return presigned_url
+    parsed = urlparse(presigned_url)
+    public_parsed = urlparse(public_base)
+    rewritten = parsed._replace(
+        scheme=public_parsed.scheme,
+        netloc=public_parsed.netloc,
+    )
+    return urlunparse(rewritten)
 
 
 # Max pages × MaxKeys to cap list cost (DoS mitigation)

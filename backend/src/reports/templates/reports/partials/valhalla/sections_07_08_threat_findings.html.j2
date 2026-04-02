@@ -7,7 +7,7 @@
     <div class="ai-slot-body">
         {% set atk = ai_sections.get("attack_scenarios") if ai_sections is defined else "" %}
         {% if atk and atk.strip() %}
-            {{ atk }}
+            {{ atk | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}

@@ -36,6 +36,7 @@ from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_REMEDIATION_STAGES,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
+    REPORT_AI_SECTION_COST_SUMMARY,
     VULN_ANALYSIS,
 )
 from src.reports.ai_text_generation import (
@@ -591,6 +592,7 @@ _SECTIONS_VALHALLA: tuple[str, ...] = (
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
+    REPORT_AI_SECTION_COST_SUMMARY,
 )
 
 
@@ -1180,6 +1182,7 @@ class ReportGenerator:
         payload: dict[str, Any] = {
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
+            "report_language": settings.report_language,
             "finding_count": len(data.findings),
             "severity_counts": severity_counts,
             "executive_severity_totals": executive_severity_totals,
@@ -1190,6 +1193,7 @@ class ReportGenerator:
             payload["target_url"] = data.scan.target_url
             payload["scan_status"] = data.scan.status
             payload["scan_phase"] = data.scan.phase
+            payload["scan_mode"] = getattr(data.scan, "scan_mode", "standard")
         if data.report is not None:
             payload["report_tier"] = data.report.tier
             payload["report_target"] = data.report.target

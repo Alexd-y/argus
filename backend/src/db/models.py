@@ -121,6 +121,11 @@ class Scan(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
     phase: Mapped[str] = mapped_column(String(50), default="init")
     options: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: quick | standard | deep (Strix-style scan mode).
+    scan_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="standard", server_default=text("'standard'")
+    )
+    cost_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -280,6 +285,11 @@ class Finding(Base):
     )
     reproducible_steps: Mapped[str | None] = mapped_column(Text, nullable=True)
     applicability_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    adversarial_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
+    #: unique | duplicate | unchecked (Strix-style LLM dedup).
+    dedup_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, default="unchecked", server_default=text("'unchecked'")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

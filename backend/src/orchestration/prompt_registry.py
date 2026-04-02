@@ -423,6 +423,7 @@ REPORT_AI_SECTION_ATTACK_SCENARIOS = "attack_scenarios"
 REPORT_AI_SECTION_EXPLOIT_CHAINS = "exploit_chains"
 REPORT_AI_SECTION_REMEDIATION_STAGES = "remediation_stages"
 REPORT_AI_SECTION_ZERO_DAY_POTENTIAL = "zero_day_potential"
+REPORT_AI_SECTION_COST_SUMMARY = "cost_summary"
 
 REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
     {
@@ -438,23 +439,25 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
         REPORT_AI_SECTION_EXPLOIT_CHAINS,
         REPORT_AI_SECTION_REMEDIATION_STAGES,
         REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
+        REPORT_AI_SECTION_COST_SUMMARY,
     }
 )
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq009-20260331",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq009-20260331",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq009-20260331",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq009-20260331",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq009-20260331",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq009-20260331",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq009-20260331",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq009-20260331",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq009-20260331",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq009-20260331",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq009-20260331",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq009-20260331",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq011-20260402",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq011-20260402",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq011-20260402",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq011-20260402",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq011-20260402",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq011-20260402",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq011-20260402",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq010-20260402",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq010-20260402",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq011-20260402",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq010-20260402",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq010-20260402",
+    REPORT_AI_SECTION_COST_SUMMARY: "vhq011-20260402",
 }
 
 REPORT_AI_SYSTEM = (
@@ -493,10 +496,14 @@ REPORT_AI_SYSTEM = (
 
 REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY: (
+        "ROLE: You are a Chief Information Security Officer (CISO) summarizing assessment results for business stakeholders.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Write a concise executive summary (2–4 short paragraphs) for business stakeholders.\n"
         "Cover scope, overall risk posture, and top themes. Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: (
+        "ROLE: You are a senior application security engineer with deep knowledge of OWASP Top 10:2025 and CWE.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Describe the vulnerability in technical but readable language: root cause, affected component, "
         "and exploitation preconditions as supported by the context. "
         "Ground every sentence in fields present on the cited finding or in valhalla_context / PoC "
@@ -513,6 +520,8 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_REMEDIATION_STEP: (
+        "ROLE: You are a DevSecOps engineer providing actionable remediation guidance.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Provide actionable remediation steps ordered by practicality. Reference controls and verification "
         "where the context allows. "
         "If the context JSON includes ``owasp_category_reference_ru`` (OWASP Top 10:2025, RU), use it for "
@@ -527,6 +536,8 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_BUSINESS_RISK: (
+        "ROLE: You are a risk management consultant translating technical findings to business impact.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Explain business impact: operational, financial, and reputational angles grounded in the context. "
         "Avoid alarmism without evidence. "
         "When ``valhalla_context`` is present, tie material risks to its summary, ``risk_matrix``, "
@@ -542,6 +553,8 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_COMPLIANCE_CHECK: (
+        "ROLE: You are a GRC (Governance, Risk, Compliance) analyst mapping findings to compliance frameworks.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Map findings in the context to relevant compliance themes (e.g. confidentiality, integrity, "
         "availability, privacy). Only cite frameworks or controls implied or named in the context. "
         "If ``owasp_category_reference_ru`` is present, align category discussion with ``how_to_find`` / "
@@ -552,6 +565,8 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: (
+        "ROLE: You are a security program manager building a prioritized remediation roadmap.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Propose a prioritized remediation roadmap (near-term vs longer-term) using severity and "
         "dependencies evident in the context. "
         "When ``valhalla_context`` is present, align sequencing with ``risk_matrix``, ``critical_vulns``, "
@@ -566,6 +581,8 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: (
+        "ROLE: You are an infrastructure security architect providing defense-in-depth hardening guidance.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "List hardening and defense-in-depth recommendations aligned with the engagement context "
         "(configuration, monitoring, architecture). "
         "When ``valhalla_context.tech_stack_structured`` is present, tie recommendations to observed "
@@ -581,36 +598,48 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: (
-        "Write an executive summary in a direct, high-signal style suitable for a technical leadership "
-        "brief (Valhalla report variant): bullets for key risks, one paragraph for posture, no fluff. "
-        "GROUNDING: every bullet must map to a concrete signal in the JSON—``valhalla_context.summary``, "
-        "``risk_matrix`` cell counts, ``critical_vulns``, tech/TLS/header/dependency slices, or a specific "
-        "finding row. If a signal is missing, say data was not collected; do not fill gaps with guesses. "
-        "You MUST anchor bullets in ``valhalla_context.summary``, ``risk_matrix``, ``critical_vulns``, "
-        "and excerpts when those objects exist; if absent, use only scan findings and severity counts. "
-        "When discussing specific issues, cite ``finding_id`` + title + parameter/affected_url from "
-        "findings entries where present. "
-        "NUMBERS: use EXACT integers from ``executive_severity_totals`` (critical/high/medium/low/info) "
-        "and ``finding_count`` for total findings—do not estimate or contradict them; if you mention "
-        "counts, they must match those fields. ``severity_counts`` is a full histogram (may include aliases). "
-        "Open with the exact severity totals or finding_count when you state volume—copy integers verbatim. "
-        "When ``owasp_compliance_table`` exists, cite at most the top 3 categories by count plus any "
-        "critical/high-only themes—do not restate the full table. "
-        "When ``hibp_pwned_password_summary`` exists, add one bullet only if it changes posture "
-        "(e.g. checks_run and whether pwned_count > 0); omit if absent or inapplicable. "
-        "HIBP NUMBERS: if you mention sampled checks or pwned hits, they MUST match ``pwned_count`` and "
-        "``checks_run`` exactly—do not invent counts. "
+        "ROLE: You are a senior penetration tester writing an executive summary for a leadership-technical brief.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "FOCUS:\n"
+        "1. Overall security posture assessment — one clear verdict sentence.\n"
+        "2. The 2–3 most significant findings and their BUSINESS IMPACT (revenue, reputation, compliance risk) — do NOT list all findings.\n"
+        "3. What was NOT found or was within acceptable limits (scope confirmation, positive observations).\n"
+        "4. Immediate priority actions (max 3 bullet points).\n\n"
+        "NUMBERS: use EXACT integers from `executive_severity_totals` and `finding_count` — copy verbatim, never estimate.\n"
+        "When `owasp_compliance_table` exists, cite at most the top 2 categories by count.\n"
+        "When `hibp_pwned_password_summary` exists and pwned_count > 0, add one sentence on credential exposure.\n\n"
+        "CONSTRAINTS:\n"
+        "- Write 3–4 paragraphs of plain prose. No Markdown formatting. No bullet lists except for priority actions.\n"
+        "- SYNTHESIZE, do not enumerate — this is NOT a findings table. The reader already has the detailed findings.\n"
+        "- Do NOT repeat finding IDs, technical parameters, or affected URLs — keep it executive-level.\n"
+        "- Do NOT fabricate CVEs, systems, or test results not in the context.\n"
+        "- Ground every claim in `valhalla_context.summary`, `risk_matrix`, `critical_vulns`, or `executive_severity_totals`.\n\n"
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_ATTACK_SCENARIOS: (
-        "Describe plausible attack scenarios that chain the threat-model context with validated findings. "
-        "Use ``valhalla_context.threat_model_excerpt`` / ``exploitation_post_excerpt``, ``risk_matrix``, "
-        "``critical_vulns``, and the findings list; label assumptions clearly when evidence is partial. "
-        "Each scenario must reference concrete ``finding_id``, title, and parameter/affected_url when "
-        "those fields exist on the cited findings. "
-        "Do not describe live exploitation steps or weaponized payloads. Context JSON:\n{context_json}"
+        "ROLE: You are a threat modeling expert constructing realistic attack scenarios.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "FOCUS: Describe 2–3 realistic attack CHAINS — not individual vulnerabilities.\n"
+        "Each scenario MUST:\n"
+        "- Combine 2+ findings or weaknesses into a multi-step attack path\n"
+        "- Name a realistic attacker persona: opportunistic scanner / targeted attacker / insider threat\n"
+        "- Estimate likelihood (Low / Medium / High) with one-sentence reasoning\n"
+        "- Describe the concrete damage if the chain succeeds (data exfiltration, lateral movement, service disruption)\n"
+        "- Reference `finding_id`, title, parameter, and affected_url from the chained findings\n\n"
+        "GROUNDING:\n"
+        "- Use `valhalla_context.threat_model_excerpt`, `exploitation_post_excerpt`, `risk_matrix`, and `critical_vulns`\n"
+        "- When `xss_structured` is present, use concrete payload/reflection data for XSS chain steps\n"
+        "- Label assumptions clearly when evidence is partial\n\n"
+        "CONSTRAINTS:\n"
+        "- Do NOT summarize individual findings — the reader already has the findings table.\n"
+        "- Do NOT describe live exploitation steps or weaponized payloads.\n"
+        "- Do NOT repeat content from the Executive Summary — focus on attack CHAINS, not posture.\n"
+        "- If only 1–2 findings exist, describe one chain and honestly state limited chaining opportunity.\n\n"
+        "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_EXPLOIT_CHAINS: (
+        "ROLE: You are a red team operator constructing multi-step exploit chains from validated findings.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "Outline multi-step exploit chains (recon → initial access → impact) grounded strictly in "
         "findings, threat-model excerpts, and ``valhalla_context`` technical signals (stack, headers, TLS, "
         "dependencies, ``risk_matrix``, ``critical_vulns``). "
@@ -619,28 +648,63 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Theoretical only; no instructions for abuse. Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_REMEDIATION_STAGES: (
-        "Structure remediation in three horizons: (1) immediate (0–48h), (2) within ~2 weeks, "
-        "(3) long-term (architecture / SDLC). "
-        "GROUNDING: each horizon must name at least one concrete ``finding_id`` (and title) from the "
-        "findings list or from ``valhalla_context.critical_vulns`` / ``risk_matrix`` references—no "
-        "anonymous \"critical issue\" without an id when ids exist in context. "
-        "You MUST bucket items from ``valhalla_context.critical_vulns`` whose severity is critical or high "
-        "(or CVSS ≥ 7.0 when severity is absent) into these horizons with actionable steps: immediate "
-        "for confirmed/exploit-backed critical exposure; ~2 weeks for dependent fixes and validation; "
-        "long-term for structural controls and SDLC. "
-        "Also use severities, ``owasp_compliance_table``, ``valhalla_context`` dependency/TLS/header gaps, "
-        "``risk_matrix``, and ``hibp_pwned_password_summary`` (if present) to justify staging. "
-        "Reference ``finding_id`` + title + parameter/affected_url when tying steps to findings. "
-        "Do not invent CVEs, owners, or deadlines not supported by the JSON. "
-        "Plain prose with clear subheadings for each horizon. Context JSON:\n{context_json}"
+        "ROLE: You are a DevSecOps engineer writing a prioritized remediation plan.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "FOCUS: Structure remediation in exactly 3 tiers:\n\n"
+        "TIER 1 — Fix immediately (within 48 hours):\n"
+        "- Findings with confirmed exploit evidence OR CVSS >= 7.0 OR severity critical/high\n"
+        "- For each: WHAT to change, WHERE (file/config/service), and HOW to verify the fix\n\n"
+        "TIER 2 — Fix within 2 weeks:\n"
+        "- Medium-priority findings, dependency updates, configuration hardening\n"
+        "- For each: specific action and verification method\n\n"
+        "TIER 3 — Architectural / SDLC improvements:\n"
+        "- Structural issues: missing CSP, no WAF, weak SDLC practices\n"
+        "- Process improvements: security testing in CI/CD, dependency scanning, code review policies\n\n"
+        "GROUNDING:\n"
+        "- Reference `finding_id` + title + parameter/affected_url for each remediation item\n"
+        "- Use `valhalla_context.critical_vulns`, `risk_matrix`, `owasp_compliance_table` for prioritization\n"
+        "- Use `hibp_pwned_password_summary` if present and pwned_count > 0 for credential rotation in Tier 1\n"
+        "- When `owasp_category_reference_ru` is present, use `how_to_fix` for category-specific steps\n\n"
+        "CONSTRAINTS:\n"
+        "- Do NOT repeat executive summary or attack scenarios — this is ACTION-ORIENTED only.\n"
+        "- Do NOT invent CVEs, owners, or deadlines not supported by the JSON.\n"
+        "- Each tier MUST reference at least one concrete finding_id.\n"
+        "- Do NOT use generic advice like 'validate all input' without naming the specific parameter and fix.\n"
+        "- Plain prose with clear subheadings for each tier.\n\n"
+        "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: (
-        "Assess zero-day / n-day research exposure conservatively: outdated components, missing hardening, "
-        "and attack surface from ``valhalla_context`` (including ``critical_vulns``, ``risk_matrix``, stack) "
-        "and findings. "
-        "Tie discussion to concrete ``finding_id`` and titles where applicable. "
-        "Clearly separate known CVE-backed risk from speculative unknown-vulnerability risk; do not "
-        "claim active zero-days. Context JSON:\n{context_json}"
+        "ROLE: You are a vulnerability researcher assessing zero-day and novel exploitation potential.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "FOCUS — answer these specific questions:\n"
+        "1. Do any findings suggest non-standard attack surfaces that automated scanners typically miss?\n"
+        "2. Are there chaining opportunities that could ELEVATE low/medium-severity findings to critical impact?\n"
+        "3. Do outdated components (from `valhalla_context.tech_stack_structured` or `outdated_components_table`) have known n-day exposure windows?\n"
+        "4. What additional MANUAL testing would be highest-value given this attack surface?\n"
+        "5. Final zero-day potential rating: None / Low / Medium / High — with a one-sentence justification.\n\n"
+        "GROUNDING:\n"
+        "- Use `valhalla_context.critical_vulns`, `risk_matrix`, tech stack, TLS/header analysis, and findings\n"
+        "- Tie discussion to concrete `finding_id` and titles where applicable\n"
+        "- Clearly separate known CVE-backed risk from speculative unknown-vulnerability risk\n\n"
+        "CONSTRAINTS:\n"
+        "- Do NOT claim active zero-days exist without evidence.\n"
+        "- Do NOT repeat the findings list or executive summary — focus ONLY on research/novel potential.\n"
+        "- Be honest if findings are standard scanner output and zero-day potential is genuinely low.\n"
+        "- Do NOT invent CVEs, component versions, or attack techniques not supported by the context.\n"
+        "- Plain prose, 2–4 paragraphs. End with the rating line.\n\n"
+        "Context JSON:\n{context_json}"
+    ),
+    REPORT_AI_SECTION_COST_SUMMARY: (
+        "ROLE: You are a security program manager summarizing scan economics and resource utilization.\n"
+        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "FOCUS:\n"
+        "1. What was scanned, how many findings were discovered, and noise reduction from the validation pipeline.\n"
+        "2. LLM cost breakdown if cost_summary data is available: total cost, cost per confirmed finding, most expensive phase.\n\n"
+        "CONSTRAINTS:\n"
+        "- Keep it factual and brief (2 short paragraphs). This is metadata, not analysis.\n"
+        "- Use EXACT numbers from the context JSON — do not estimate.\n"
+        "- Do NOT repeat executive summary content.\n\n"
+        "Context JSON:\n{context_json}"
     ),
 }
 

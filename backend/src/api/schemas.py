@@ -89,6 +89,10 @@ class ScanCreateRequest(BaseModel):
     )
     email: str
     options: ScanOptions = Field(default_factory=ScanOptions)
+    scan_mode: Literal["quick", "standard", "deep"] = Field(
+        default="standard",
+        description="Scan depth: quick (high-impact only), standard (OWASP Top 10), deep (exhaustive)",
+    )
 
 
 class ScanCreateResponse(BaseModel):
@@ -163,6 +167,8 @@ class Finding(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
     applicability_notes: str | None = None
+    adversarial_score: float | None = None
+    dedup_status: str | None = None
 
 
 class ReportListResponse(BaseModel):

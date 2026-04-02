@@ -507,6 +507,24 @@ class ValhallaRobotsSitemapAnalysisBundleModel(BaseModel):
     merged: RobotsSitemapMergedSummaryModel = Field(default_factory=RobotsSitemapMergedSummaryModel)
 
 
+class ScanMetadataModel(BaseModel):
+    """ENH-V3 — Strix-style scan metadata for Valhalla report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scan_mode: str = "standard"
+    agents_spawned: int = 0
+    categories_tested: list[str] = Field(default_factory=list)
+    categories_not_tested: list[str] = Field(default_factory=list)
+    skills_used: list[str] = Field(default_factory=list)
+    noise_reduction_pct: float = 0.0
+    owasp_coverage_pct: float = 0.0
+    findings_total: int = 0
+    findings_validated: int = 0
+    findings_rejected: int = 0
+    findings_deduplicated: int = 0
+
+
 class ValhallaReportContext(BaseModel):
     """Nested context for Valhalla HTML/PDF templates (RPT / VHL-001)."""
 
@@ -548,6 +566,7 @@ class ValhallaReportContext(BaseModel):
     coverage: ValhallaCoverageModel = Field(default_factory=ValhallaCoverageModel)
     recon_pipeline_summary: dict[str, Any] = Field(default_factory=dict)
     xss_structured: list[ValhallaXssStructuredRowModel] = Field(default_factory=list)
+    scan_metadata: ScanMetadataModel = Field(default_factory=ScanMetadataModel)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (

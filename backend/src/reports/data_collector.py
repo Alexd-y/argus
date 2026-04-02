@@ -33,13 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
-from src.owasp.owasp_loader import get_owasp_category_info
-from src.owasp_top10_2025 import (
-    OWASP_TOP10_2025_CATEGORY_IDS,
-    OWASP_TOP10_2025_CATEGORY_TITLES,
-    parse_owasp_category,
-)
-
+from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.db.models import Finding as FindingModel
 from src.db.models import PhaseInput as PhaseInputModel
 from src.db.models import PhaseOutput as PhaseOutputModel
@@ -47,17 +41,20 @@ from src.db.models import Report as ReportModel
 from src.db.models import Scan as ScanModel
 from src.db.models import ScanTimeline as ScanTimelineModel
 from src.db.models import ToolRun as ToolRunModel
-from src.recon.stage_object_download import StageObjectFetchError
+from src.owasp.owasp_loader import get_owasp_category_info
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
+    OWASP_TOP10_2025_CATEGORY_TITLES,
+    parse_owasp_category,
+)
 from src.recon.stage1_storage import STAGE1_ROOT_FILES, download_stage1_artifact
 from src.recon.stage2_storage import STAGE2_ROOT_FILES, download_stage2_artifact
 from src.recon.stage3_storage import download_stage3_artifact, get_stage3_root_files
 from src.recon.stage4_storage import STAGE4_ROOT_FILES, download_stage4_artifact
-from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
-from src.storage.s3 import (
-    RAW_ARTIFACT_PHASES,
-    get_presigned_url_by_key,
-    list_scan_artifacts,
-)
+from src.recon.stage_object_download import StageObjectFetchError
+from src.reports.finding_dedup import deduplicate_findings
+from src.reports.finding_quality_filter import filter_valid_findings
+from src.reports.finding_severity_normalizer import normalize_findings_severity
 from src.reports.valhalla_report_context import (
     OutdatedComponentRow,
     RobotsSitemapMergedSummaryModel,
@@ -67,6 +64,11 @@ from src.reports.valhalla_report_context import (
     ValhallaReportContext,
     build_valhalla_report_context,
     derive_exploit_available_flag,
+)
+from src.storage.s3 import (
+    RAW_ARTIFACT_PHASES,
+    get_presigned_url_by_key,
+    list_scan_artifacts,
 )
 
 logger = logging.getLogger(__name__)
@@ -178,7 +180,7 @@ class OwaspCategorySummaryEntry(BaseModel):
 
 
 def owasp_counts_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:
-    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    counts: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
     for f in findings:
         raw = f.owasp_category
         cat = parse_owasp_category(raw.strip()) if isinstance(raw, str) and raw.strip() else None
@@ -202,7 +204,7 @@ def executive_severity_totals_from_severity_strings(
     severities: Iterable[str | None],
 ) -> dict[str, int]:
     """Top-5 buckets used in executive table and ``ReportSummary`` (``informational`` → ``info``)."""
-    totals = {k: 0 for k in ("critical", "high", "medium", "low", "info")}
+    totals = dict.fromkeys(("critical", "high", "medium", "low", "info"), 0)
     alias = {"informational": "info"}
     for raw in severities:
         s = (raw or "").strip().lower()
@@ -263,6 +265,7 @@ class FindingRow(BaseModel):
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
     applicability_notes: str | None = None
+    adversarial_score: float | None = None
     created_at: Any = None
 
 
@@ -714,6 +717,10 @@ class ReportDataCollector:
             )
             for row in f_result.scalars().all()
         ]
+
+        findings = deduplicate_findings(findings)
+        findings = filter_valid_findings(findings)
+        findings = normalize_findings_severity(findings)
 
         owasp_summary = build_owasp_summary_from_counts(owasp_counts_from_finding_rows(findings))
 

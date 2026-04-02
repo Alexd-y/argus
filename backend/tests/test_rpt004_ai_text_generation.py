@@ -50,7 +50,7 @@ class TestRpt004PromptRegistry:
         )
         assert "penetration testing report" in system.lower()
         assert "finding" in user and "xss" in user
-        assert version.startswith("vhq007-")
+        assert version.startswith("vhq009-")
 
 
 class TestRpt004CacheKey:

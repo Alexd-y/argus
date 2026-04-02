@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     google_api_key: str | None = None
     kimi_api_key: str | None = None
     perplexity_api_key: str | None = None
+    llm_primary_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("LLM_PRIMARY_PROVIDER", "llm_primary_provider"),
+    )
+    max_cost_per_scan_usd: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices("MAX_COST_PER_SCAN_USD", "max_cost_per_scan_usd"),
+    )
 
     # Data Sources (Phase 6) — optional
     censys_api_key: str | None = None
@@ -57,6 +65,9 @@ class Settings(BaseSettings):
     # Dedicated bucket for generated report files (presigned/download); stage artifacts stay in minio_bucket / stage buckets.
     minio_reports_bucket: str = "argus-reports"
     minio_secure: bool = False
+    # External URL for presigned links in reports (replaces internal Docker hostname).
+    # When unset, presigned URLs are returned as-is (dev mode).
+    minio_public_url: str | None = None
 
     # Redis & Celery (Phase 5)
     redis_url: str = "redis://localhost:6379/0"
@@ -191,6 +202,44 @@ class Settings(BaseSettings):
     recon_nuclei_tech_tags: str = "tech"
     recon_nuclei_tech_templates: str = ""
 
+    # ENH-V2 — Feature flags for new enrichment modules
+    shodan_enrichment_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SHODAN_ENRICHMENT_ENABLED", "shodan_enrichment_enabled"),
+    )
+    perplexity_intel_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("PERPLEXITY_INTEL_ENABLED", "perplexity_intel_enabled"),
+    )
+    adversarial_score_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("ADVERSARIAL_SCORE_ENABLED", "adversarial_score_enabled"),
+    )
+    exploitability_validation_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("EXPLOITABILITY_VALIDATION_ENABLED", "exploitability_validation_enabled"),
+    )
+    poc_generation_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("POC_GENERATION_ENABLED", "poc_generation_enabled"),
+    )
+
+    #: Scan mode: quick | standard | deep (Strix-style). Controls category scope and reasoning effort.
+    scan_mode: str = Field(
+        default="standard",
+        validation_alias=AliasChoices("SCAN_MODE", "scan_mode"),
+    )
+    #: LLM dedup during enrichment pipeline.
+    llm_dedup_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("LLM_DEDUP_ENABLED", "llm_dedup_enabled"),
+    )
+    #: Memory compression for long scans (>40 LLM calls).
+    memory_compression_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("MEMORY_COMPRESSION_ENABLED", "memory_compression_enabled"),
+    )
+
     @field_validator(
         "recon_rate_limit",
         "recon_passive_subdomain_timeout_sec",
@@ -267,6 +316,12 @@ class Settings(BaseSettings):
     nmap_full_tcp: bool = False  # env NMAP_FULL_TCP
     nmap_udp_top50: bool = False  # env NMAP_UDP_TOP50
     nmap_recon_phase_timeout_sec: int = 600  # env NMAP_RECON_PHASE_TIMEOUT_SEC
+
+    # RPT-004 — language for AI-generated report sections (ISO 639-1). Env: REPORT_LANGUAGE
+    report_language: str = Field(
+        default="ru",
+        validation_alias=AliasChoices("REPORT_LANGUAGE", "report_language"),
+    )
 
     # RPT-004 — AI report section text cache (Redis)
     ai_text_cache_ttl_seconds: int = 604800
@@ -357,6 +412,24 @@ def _sync_llm_api_keys_to_environ() -> None:
         if (os.environ.get(env_key) or "").strip():
             continue
         os.environ[env_key] = str(val).strip()
+
+    if settings.llm_primary_provider:
+        os.environ.setdefault("LLM_PRIMARY_PROVIDER", settings.llm_primary_provider)
+
+    flag_pairs = [
+        ("SHODAN_ENRICHMENT_ENABLED", str(settings.shodan_enrichment_enabled).lower()),
+        ("PERPLEXITY_INTEL_ENABLED", str(settings.perplexity_intel_enabled).lower()),
+        ("ADVERSARIAL_SCORE_ENABLED", str(settings.adversarial_score_enabled).lower()),
+        ("EXPLOITABILITY_VALIDATION_ENABLED", str(settings.exploitability_validation_enabled).lower()),
+        ("POC_GENERATION_ENABLED", str(settings.poc_generation_enabled).lower()),
+        ("SCAN_MODE", settings.scan_mode),
+        ("LLM_DEDUP_ENABLED", str(settings.llm_dedup_enabled).lower()),
+        ("MEMORY_COMPRESSION_ENABLED", str(settings.memory_compression_enabled).lower()),
+        ("LLM_PRIMARY_PROVIDER", settings.llm_primary_provider),
+    ]
+    for env_key, val in flag_pairs:
+        if val:
+            os.environ.setdefault(env_key, val)
 
 
 _sync_llm_api_keys_to_environ()

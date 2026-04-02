@@ -6,7 +6,7 @@
             {% if text %}
                 <section class="ai-slot" data-section="{{ key }}">
                     <h3>{{ key | replace("_", " ") | title }}</h3>
-                    <div class="ai-slot-body">{{ text }}</div>
+                    <div class="ai-slot-body">{{ text | md | safe }}</div>
                 </section>
             {% endif %}
         {% endfor %}

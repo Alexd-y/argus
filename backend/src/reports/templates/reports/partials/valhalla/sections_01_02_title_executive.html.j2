@@ -16,7 +16,7 @@
     <div class="ai-slot-body">
         {% set exec_ai = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
         {% if exec_ai and exec_ai.strip() %}
-            {{ exec_ai }}
+            {{ exec_ai | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -54,7 +54,7 @@
     <div class="ai-slot-body">
         {% set breach = ai_sections.get("compliance_check") if ai_sections is defined else "" %}
         {% if breach and breach.strip() %}
-            {{ breach }}
+            {{ breach | md | safe }}
         {% else %}
             <p>Нет данных</p>
         {% endif %}
@@ -64,7 +64,7 @@
     <div class="ai-slot-body">
         {% set br = ai_sections.get("business_risk") if ai_sections is defined else "" %}
         {% if br and br.strip() %}
-            {{ br }}
+            {{ br | md | safe }}
         {% else %}
             <p>Нет данных</p>
         {% endif %}
@@ -74,7 +74,7 @@
     <div class="ai-slot-body">
         {% set pr = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
         {% if pr and pr.strip() %}
-            {{ pr }}
+            {{ pr | md | safe }}
         {% else %}
             <p>Нет данных</p>
         {% endif %}

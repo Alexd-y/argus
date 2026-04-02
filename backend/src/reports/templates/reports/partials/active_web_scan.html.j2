@@ -24,7 +24,7 @@
         <h3>Краткий ИИ-контекст (разделы отчёта)</h3>
         {% for row in active_web_scan.ai_summary_rows %}
             <h4>{{ row.label | e }}</h4>
-            <p class="ai-slot-body">{{ row.text | e }}</p>
+            <div class="ai-slot-body">{{ row.text | md | safe }}</div>
         {% endfor %}
     {% elif stub.active_web_scan %}
         <p class="empty">Тексты ИИ для связанных разделов пока пусты или не сгенерированы.</p>

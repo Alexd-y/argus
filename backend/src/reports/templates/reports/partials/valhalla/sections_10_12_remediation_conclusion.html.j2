@@ -4,7 +4,7 @@
     <div class="ai-slot-body">
         {% set st = ai_sections.get("remediation_stages") if ai_sections is defined else "" %}
         {% if st and st.strip() %}
-            {{ st }}
+            {{ st | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -13,7 +13,7 @@
     <div class="ai-slot-body">
         {% set road = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
         {% if road and road.strip() %}
-            {{ road }}
+            {{ road | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -40,7 +40,7 @@
     <div class="ai-slot-body">
         {% set zd = ai_sections.get("zero_day_potential") if ai_sections is defined else "" %}
         {% if zd and zd.strip() %}
-            {{ zd }}
+            {{ zd | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -53,7 +53,7 @@
     <div class="ai-slot-body">
         {% set ex = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
         {% if ex and ex.strip() %}
-            {{ ex }}
+            {{ ex | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -62,7 +62,7 @@
     <div class="ai-slot-body">
         {% set hd = ai_sections.get("hardening_recommendations") if ai_sections is defined else "" %}
         {% if hd and hd.strip() %}
-            {{ hd }}
+            {{ hd | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -71,7 +71,7 @@
     <div class="ai-slot-body">
         {% set rs = ai_sections.get("remediation_step") if ai_sections is defined else "" %}
         {% if rs and rs.strip() %}
-            {{ rs }}
+            {{ rs | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
@@ -80,7 +80,7 @@
     <div class="ai-slot-body">
         {% set vd = ai_sections.get("vulnerability_description") if ai_sections is defined else "" %}
         {% if vd and vd.strip() %}
-            {{ vd }}
+            {{ vd | md | safe }}
         {% else %}
             <p class="empty">Нет данных</p>
         {% endif %}
