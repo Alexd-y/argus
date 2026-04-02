@@ -35,6 +35,7 @@ def run_kal_mcp_tool(
     tenant_id: str | None,
     scan_id: str | None,
     password_audit_opt_in: bool,
+    timeout_sec: float | None = None,
 ) -> dict[str, Any]:
     """Evaluate KAL policy, optional target guardrails, subprocess (or sandbox exec), MinIO upload."""
     start = time.perf_counter()
@@ -91,11 +92,12 @@ def run_kal_mcp_tool(
                 "minio_keys": [],
             }
 
-    timeout_sec = max(1, int(settings.recon_tools_timeout))
+    eff_timeout = timeout_sec if timeout_sec is not None else float(max(1, int(settings.recon_tools_timeout)))
+    eff_timeout = max(1.0, float(eff_timeout))
     run_parts = build_sandbox_exec_argv(argv, use_sandbox=settings.sandbox_enabled)
 
     minio_keys: list[str] = []
-    exec_out = run_argv_simple_sync(run_parts, timeout_sec=float(timeout_sec))
+    exec_out = run_argv_simple_sync(run_parts, timeout_sec=eff_timeout)
     stdout = str(exec_out.get("stdout") or "")
     stderr = str(exec_out.get("stderr") or "")
     rc_raw = exec_out.get("return_code")

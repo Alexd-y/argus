@@ -318,3 +318,54 @@ def test_build_risk_matrix_export() -> None:
     )
     assert len(m.cells) == 1
     assert m.cells[0].count == 1
+
+
+def test_mandatory_sections_coverage_and_harvester_flag() -> None:
+    ctx = build_valhalla_report_context(
+        tenant_id="t",
+        scan_id="s",
+        recon_results=None,
+        tech_profile=None,
+        anomalies_structured=None,
+        raw_artifact_keys=[],
+        phase_outputs=[("recon", {"ports": [80]})],
+        phase_inputs=[],
+        findings=[],
+        report_technologies=None,
+        fetch_raw_bodies=False,
+        harvester_enabled=False,
+        tool_run_summaries=[("nuclei", "failed")],
+    )
+    expected_keys = {
+        "tech_stack_structured",
+        "outdated_components",
+        "ssl_tls_analysis",
+        "security_headers_analysis",
+        "robots_sitemap_analysis",
+        "leaked_emails",
+    }
+    assert set(ctx.coverage.sections.keys()) == expected_keys
+    assert ctx.coverage.feature_flags["HARVESTER_ENABLED"] is False
+    assert ctx.coverage.feature_flags["INCLUDE_MINIO"] is False
+    assert "recon" in ctx.coverage.phases_executed
+    assert ctx.mandatory_sections.leaked_emails.status == "not_executed"
+    assert "HARVESTER_ENABLED=false" in ctx.mandatory_sections.leaked_emails.reason
+    assert ctx.robots_sitemap_analysis.robots_txt.found is False
+    assert ctx.robots_sitemap_analysis.merged.robots_found is False
+    assert ctx.coverage.tool_errors_summary
+    assert ctx.coverage.tool_errors_summary[0]["tool"] == "nuclei"
+
+
+def test_build_valhalla_minimal_context_patch_keys() -> None:
+    from src.reports.valhalla_report_context import build_valhalla_minimal_context_patch
+
+    patch = build_valhalla_minimal_context_patch(
+        phase_outputs=[("vuln_analysis", None)],
+        raw_artifact_keys=[],
+        fetch_raw_bodies=False,
+        harvester_enabled=False,
+        trivy_enabled=False,
+        tool_run_summaries=None,
+    )
+    assert "mandatory_sections" in patch and "coverage" in patch and "robots_sitemap_analysis" in patch
+    assert "vuln_analysis" in patch["coverage"]["phases_executed"]

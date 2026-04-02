@@ -16,6 +16,48 @@ from src.storage.s3 import download_by_key, list_scan_artifacts
 
 logger = logging.getLogger(__name__)
 
+
+def raw_trivy_vuln_to_intel_row(tr: dict[str, Any]) -> dict[str, Any]:
+    """Map raw Trivy vulnerability dict to intel row shape for ``handlers._normalize_intel_finding``."""
+    vid = str(tr.get("VulnerabilityID") or tr.get("ID") or "unknown").strip()
+    pkg = str(tr.get("PkgName") or tr.get("PackageName") or "").strip()
+    sev_in = str(tr.get("Severity") or "HIGH").lower()
+    if sev_in not in {"critical", "high", "medium", "low", "info"}:
+        sev_in = "high"
+    title = str(tr.get("Title") or f"{pkg} — {vid}").strip() or vid
+    target_t = str(tr.get("_target") or "").strip()
+    cvss_f: float | None = None
+    cvss_block = tr.get("CVSS")
+    if isinstance(cvss_block, dict):
+        for sub in cvss_block.values():
+            if not isinstance(sub, dict):
+                continue
+            for key in ("V3Score", "v3Score", "V2Score", "BaseScore"):
+                v = sub.get(key)
+                if isinstance(v, (int, float)):
+                    cvss_f = float(v)
+                    break
+            if cvss_f is not None:
+                break
+    cwe_first = ""
+    cwes = tr.get("CweIDs") or tr.get("CweID")
+    if isinstance(cwes, list) and cwes:
+        cwe_first = str(cwes[0] or "")
+    elif isinstance(cwes, str):
+        cwe_first = cwes
+    return {
+        "source_tool": "trivy",
+        "data": {
+            "type": "trivy_fs",
+            "name": title[:300],
+            "severity": sev_in,
+            "url": target_t,
+            "cvss_score": cvss_f,
+            "cwe": cwe_first[:20] if cwe_first else None,
+        },
+    }
+
+
 _REQ_MARKER = "dependency_requirements_txt"
 _PKG_MARKER = "dependency_package_json"
 

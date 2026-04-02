@@ -1,14 +1,19 @@
 {# Обзор результатов и матрица рисков #}
 {% set vc = valhalla_context %}
+{% from "partials/valhalla/section_status_macro.html.j2" import section_envelope %}
 {% set robots = vc.robots_txt_analysis %}
 {% set sm = vc.sitemap_analysis %}
 {% set ssl = vc.ssl_tls_analysis %}
 {% set hdrs = vc.security_headers_analysis %}
+{% set rsa = vc.robots_sitemap_analysis if vc.robots_sitemap_analysis is defined else none %}
 
 <section class="valhalla-results panel" id="results-overview">
     <h2>Обзор результатов и матрица рисков</h2>
 
+    {% include "partials/valhalla/section_data_coverage.html.j2" %}
+
     <h3>Анализ robots.txt и sitemap.xml</h3>
+    {{ section_envelope(vc, "robots_sitemap_analysis") }}
     {% if vc.robots_sitemap_fallback_message %}
         <p class="meta">{{ vc.robots_sitemap_fallback_message | e }}</p>
     {% endif %}
@@ -26,6 +31,9 @@
     {% endif %}
     {% if robots.sensitive_path_hints %}
         <p><strong>Чувствительные шаблоны путей (эвристика):</strong> {{ robots.sensitive_path_hints | join(", ") | e }}</p>
+    {% endif %}
+    {% if rsa and rsa.merged %}
+        <p class="meta"><small>Сводка (robots_sitemap_analysis.merged): robots={{ rsa.merged.robots_found | default(false) }}, sitemap={{ rsa.merged.sitemap_found | default(false) }}, security.txt={{ rsa.merged.security_txt_reachable | default(false) }}, URL в sitemap: {{ rsa.merged.sitemap_url_count | default(0) }}</small></p>
     {% endif %}
 
     <p><strong>sitemap.xml:</strong> {% if sm.found %}Найдено{% else %}Не найдено{% endif %}{% if sm.index_found %} (в т.ч. индекс){% endif %}</p>
@@ -55,6 +63,7 @@
     {% endif %}
 
     <h3>Технологический стек и компоненты</h3>
+    {{ section_envelope(vc, "tech_stack_structured") }}
     {% if vc.tech_stack_fallback_message %}
         <p class="meta">{{ vc.tech_stack_fallback_message | e }}</p>
     {% endif %}
@@ -128,6 +137,7 @@
     {% endif %}
 
     <h3>Устаревшие компоненты</h3>
+    {{ section_envelope(vc, "outdated_components") }}
     {% if vc.outdated_components_fallback_message %}
         <p class="meta">{{ vc.outdated_components_fallback_message | e }}</p>
     {% endif %}
@@ -163,6 +173,7 @@
     {% endif %}
 
     <h3>Обнаруженные email-адреса (маскированные)</h3>
+    {{ section_envelope(vc, "leaked_emails") }}
     {% if vc.leaked_emails_fallback_message and not vc.leaked_emails %}
         <p class="meta">{{ vc.leaked_emails_fallback_message | e }}</p>
     {% endif %}
@@ -177,6 +188,7 @@
     {% endif %}
 
     <h3>Результаты проверки SSL/TLS</h3>
+    {{ section_envelope(vc, "ssl_tls_analysis") }}
     {% if vc.ssl_tls_fallback_message %}
         <p class="meta">{{ vc.ssl_tls_fallback_message | e }}</p>
     {% endif %}
@@ -192,6 +204,7 @@
     </table>
 
     <h3>Анализ HTTP-заголовков безопасности</h3>
+    {{ section_envelope(vc, "security_headers_analysis") }}
     {% if vc.security_headers_fallback_message %}
         <p class="meta">{{ vc.security_headers_fallback_message | e }}</p>
     {% endif %}

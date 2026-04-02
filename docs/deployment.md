@@ -100,6 +100,33 @@ docker compose -f infra/docker-compose.yml --profile tools up
 
 Переменная **`INSTALL_MSF`** (опционально `true`) — отдельно подтягивает Metasploit (~1.5 GB+).
 
+### 3.1b Recon pipeline (`RECON_*`)
+
+Полный перечень с комментариями — **[`infra/.env.example`](../infra/.env.example)** (блок RECON-001 … RECON-008). Краткая таблица для Compose/backend/worker:
+
+| Переменная | Назначение | Типичное значение |
+|------------|------------|-------------------|
+| `RECON_MODE` | `passive` \| `active` \| `full` | `full` |
+| `RECON_PASSIVE_ONLY` | Принудительный passive | `false` |
+| `RECON_ACTIVE_DEPTH` | Зарезервировано (глубина active) | `1` |
+| `RECON_ENABLE_CONTENT_DISCOVERY` | gau / waybackurls / katana (только `full`) | `false` |
+| `RECON_JS_ANALYSIS` | Query params + JS / linkfinder / unfurl (только `full`) | `false` |
+| `RECON_SCREENSHOTS` | gowitness (только `full`) | `false` |
+| `RECON_DEEP_PORT_SCAN` | naabu + nmap -sV (только `full`) | `false` |
+| `RECON_ASNMAP_ENABLED` | asnmap apex ASN (только `full`) | `true` |
+| `RECON_TOOL_SELECTION` | Подмножество шагов (csv id) | пусто = все по режиму |
+| `RECON_WORDLIST_PATH` | Резерв под future dir busting | пусто |
+| `RECON_RATE_LIMIT` / `RECON_RATE_LIMIT_PER_SECOND` | RPS throttle пайплайна | вторичный / `10` |
+| `RECON_PASSIVE_SUBDOMAIN_TIMEOUT_SEC` | Таймаут passive subdomain bundle | fallback `RECON_TOOLS_TIMEOUT` |
+| `RECON_THEHARVESTER_*` | Источники / лимит / включение theHarvester | см. example |
+| `RECON_DNS_DEPTH_*`, `RECON_DNSX_*` | dnsx, dig, takeover hints | см. example |
+| `RECON_NUCLEI_TECH_*` | nuclei tech-only в http_surface | см. example |
+| `RECON_DEEP_*` | Лимиты deep port scan | см. example |
+| `RECON_JS_*` | Лимиты JS-анализа, linkfinder, unfurl | см. example |
+| `RECON_GOWITNESS_*` | Лимиты скриншотов | см. example |
+
+Поведение фаз и шагов: **[scan-state-machine.md](./scan-state-machine.md)** § 4.1 (recon pipeline). Операции: **[recon-guide.md](./recon-guide.md)**.
+
 ### 3.2 PostgreSQL
 
 | Переменная | По умолчанию |
@@ -148,6 +175,7 @@ docker compose -f infra/docker-compose.yml --profile tools up
 - [ ] `ACTIVE_SCAN_MAX_CONCURRENT_JOBS`, `ACTIVE_SCAN_MAX_CAPTURE_BYTES`, `VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC` — лимиты нагрузки.
 - [ ] `SANDBOX_PROFILE` — `standard` vs `extended` (сборка образа sandbox); первая сборка может занять долго.
 - [ ] `NMAP_RECON_CYCLE`, `NMAP_FULL_TCP`, `NMAP_UDP_TOP50`, `NMAP_RECON_PHASE_TIMEOUT_SEC` — цикл nmap в recon.
+- [ ] `RECON_MODE`, `RECON_PASSIVE_ONLY`, opt-in шаги (`RECON_ENABLE_CONTENT_DISCOVERY`, `RECON_JS_ANALYSIS`, `RECON_SCREENSHOTS`, `RECON_DEEP_PORT_SCAN`) и прочие **`RECON_*`** — см. § 3.1b и [`infra/.env.example`](../infra/.env.example).
 - [ ] `KAL_ALLOW_PASSWORD_AUDIT` — только если нужен серверный gate для hydra/medusa через KAL API/MCP.
 - [ ] `SEARCHSPLOIT_*`, `TRIVY_ENABLED`, `HIBP_PASSWORD_CHECK_OPT_IN` — intel и отчётность (см. § 3.1).
 

@@ -669,10 +669,17 @@ KAL_OPERATION_CATEGORIES = frozenset({
     "dns_enumeration",
     "password_audit",
     KAL_CATEGORY_VULN_INTEL,
+    # RECON-006 — passive URL history (gau, waybackurls) + katana crawl
+    "url_history",
+    # RECON-007 — JS analysis (linkfinder on local file; optional unfurl on URL)
+    "js_analysis",
+    # RECON-008 — asnmap (apex ASN) + gowitness screenshots
+    "asn_mapping",
+    "web_screenshots",
 })
 
 KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
-    "network_scanning": frozenset({"nmap", "rustscan", "masscan"}),
+    "network_scanning": frozenset({"nmap", "rustscan", "masscan", "naabu"}),
     "web_fingerprinting": frozenset({"httpx", "whatweb", "wpscan", "nikto"}),
     "api_testing": frozenset({"httpx", "nuclei", "curl"}),
     "bruteforce_testing": frozenset({
@@ -688,6 +695,9 @@ KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
         "dig",
         "subfinder",
         "amass",
+        "assetfinder",
+        "findomain",
+        "theharvester",
         "dnsx",
         "host",
         "nslookup",
@@ -696,12 +706,32 @@ KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
     }),
     "password_audit": frozenset({"hydra", "medusa"}),
     KAL_CATEGORY_VULN_INTEL: frozenset({"searchsploit"}),
+    "url_history": frozenset({"gau", "waybackurls", "katana"}),
+    "js_analysis": frozenset({"linkfinder", "unfurl"}),
+    "asn_mapping": frozenset({"asnmap"}),
+    "web_screenshots": frozenset({"gowitness"}),
 }
 
 KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers"})
 
 # KAL-005 — amass: only vetted subcommands (fail-closed)
 KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum"})
+
+# RECON-002 — theHarvester ``-b`` sources allowed in dns_enumeration (passive subdomain recon)
+THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset({
+    "anubis",
+    "bufferoverun",
+    "crtsh",
+    "hackertarget",
+    "omnisint",
+    "otx",
+    "pentesttools",
+    "projectdiscovery",
+    "rapiddns",
+    "sublist3r",
+    "threatminer",
+    "urlscan",
+})
 
 _KAL_ARGV_INJECTION_PATTERN = re.compile(
     r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\("
@@ -813,6 +843,89 @@ def evaluate_kal_mcp_policy(
             return McpPolicyDecision(
                 allowed=False,
                 reason="amass_subcommand_not_allowed",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "theharvester":
+        if "-d" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_domain_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        d_idx = argv.index("-d")
+        if d_idx + 1 >= len(argv) or not str(argv[d_idx + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_domain_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if "-b" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_sources_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        b_idx = argv.index("-b")
+        if b_idx + 1 >= len(argv):
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_sources_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        raw_b = str(argv[b_idx + 1])
+        for seg in raw_b.split(","):
+            s = seg.strip().lower()
+            if not s:
+                continue
+            if s not in THEHARVESTER_RECON_B_SOURCES_CAP:
+                return McpPolicyDecision(
+                    allowed=False,
+                    reason="theharvester_source_not_allowed",
+                    policy_id=KAL_MCP_POLICY_ID,
+                )
+
+    if binary == "findomain":
+        if "-t" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="findomain_missing_target_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        t_idx = argv.index("-t")
+        if t_idx + 1 >= len(argv) or not str(argv[t_idx + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="findomain_missing_target_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "assetfinder":
+        if "--subs-only" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="assetfinder_subs_only_required",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if len(argv) < 3:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="assetfinder_missing_domain",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "subfinder":
+        if "-d" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="subfinder_missing_domain_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        di = argv.index("-d")
+        if di + 1 >= len(argv) or not str(argv[di + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="subfinder_missing_domain_value",
                 policy_id=KAL_MCP_POLICY_ID,
             )
 

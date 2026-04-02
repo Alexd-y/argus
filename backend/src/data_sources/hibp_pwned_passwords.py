@@ -110,6 +110,133 @@ def collect_password_candidates_from_structure(
     return out
 
 
+def finalize_hibp_pwned_password_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """
+    Canonical shape for ``hibp_pwned_password_summary`` everywhere (orchestration, report pipeline,
+    Valhalla AI payload, Jinja, JSON). Aggregate-only; no secrets.
+
+    ``checks_run`` counts **completed** HIBP API responses (definitive int, including 0 occurrences).
+    Optional ``checks_attempted`` counts lookups tried; if omitted, treated equal to ``checks_run``
+    (backward compatible with callers that only pass completed counts).
+
+    Ensures integer counts, derived exposure flags, and a single narrative note so LLM/templates
+    do not contradict raw scan counts.
+    """
+    out = dict(summary)
+    try:
+        checks = max(0, int(out.get("checks_run") or 0))
+        pwned_n = max(0, int(out.get("pwned_count") or 0))
+        if "checks_attempted" in out and out["checks_attempted"] is not None:
+            attempted = max(0, int(out["checks_attempted"]))
+        else:
+            attempted = checks
+    except (TypeError, ValueError):
+        logger.warning(
+            "hibp_pwned_summary_coerce_failed",
+            extra={"event": "hibp_pwned_summary_coerce_failed"},
+        )
+        checks, pwned_n, attempted = 0, 0, 0
+    if attempted < checks:
+        logger.warning(
+            "hibp_pwned_summary_inconsistent",
+            extra={
+                "event": "hibp_pwned_summary_attempted_lt_completed",
+                "checks_run": checks,
+                "checks_attempted": attempted,
+            },
+        )
+        attempted = checks
+    if pwned_n > checks:
+        logger.warning(
+            "hibp_pwned_summary_inconsistent",
+            extra={
+                "event": "hibp_pwned_summary_inconsistent",
+                "pwned_count": pwned_n,
+                "checks_run": checks,
+            },
+        )
+        pwned_n = min(pwned_n, checks)
+    out["checks_run"] = checks
+    out["pwned_count"] = pwned_n
+    if attempted != checks:
+        out["checks_attempted"] = attempted
+    else:
+        out.pop("checks_attempted", None)
+
+    incomplete = attempted > checks
+    all_failed = attempted > 0 and checks == 0
+
+    if pwned_n > 0:
+        exposure = "yes"
+    elif checks > 0 and not incomplete:
+        exposure = "no"
+    elif attempted > 0 and (all_failed or incomplete):
+        exposure = "unknown"
+    else:
+        exposure = "no"
+
+    out["data_breach_password_exposure"] = exposure
+
+    if pwned_n > 0:
+        note = (
+            "At least one sampled credential string matched HIBP Pwned Passwords corpus."
+        )
+    elif all_failed:
+        note = (
+            "HIBP Pwned Passwords checks did not complete (network, HTTP, or parse error); "
+            "credential exposure relative to the Pwned Passwords corpus is unknown."
+        )
+    elif incomplete and checks > 0:
+        note = (
+            f"Partial HIBP Pwned Passwords results: {checks} of {attempted} sampled checks "
+            "returned a response; none of the completed checks matched the corpus."
+        )
+    elif checks > 0:
+        note = (
+            "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
+        )
+    else:
+        note = "No password-like fields sampled from exploitation output for HIBP check."
+    out["breach_signal_note"] = note
+    return out
+
+
+_HIBP_SUMMARY_CONTRACT_KEYS = frozenset(
+    {
+        "checks_run",
+        "pwned_count",
+        "data_breach_password_exposure",
+        "breach_signal_note",
+    },
+)
+
+
+def validate_hibp_pwned_password_summary_light(summary: dict[str, Any] | None) -> None:
+    """
+    Log-only guard when a non-empty summary bypasses ``finalize_hibp_pwned_password_summary``.
+    Full schema checks belong in report pipeline validation (separate task).
+    """
+    if summary is None:
+        return
+    if not isinstance(summary, dict):
+        logger.warning(
+            "hibp_pwned_summary_contract_type_mismatch",
+            extra={"event": "hibp_pwned_summary_contract_type_mismatch"},
+        )
+        return
+    if not summary.get("opt_in"):
+        return
+    missing = sorted(k for k in _HIBP_SUMMARY_CONTRACT_KEYS if k not in summary)
+    if missing:
+        logger.warning(
+            "hibp_pwned_summary_contract_incomplete",
+            extra={
+                "event": "hibp_pwned_summary_contract_incomplete",
+                "missing_keys": missing,
+            },
+        )
+
+
 async def summarize_pwned_passwords_for_report(
     exploitation_dump: dict[str, Any] | None,
     *,
@@ -131,29 +258,36 @@ async def summarize_pwned_passwords_for_report(
     )
 
     if not candidates:
-        return {
-            "opt_in": True,
-            "checks_run": 0,
-            "pwned_count": 0,
-            "note": "no_password_fields_found",
-        }
+        return finalize_hibp_pwned_password_summary(
+            {
+                "opt_in": True,
+                "checks_run": 0,
+                "pwned_count": 0,
+                "note": "no_password_fields_found",
+            }
+        )
 
     pwned = 0
-    checked = 0
+    attempted = 0
+    completed = 0
     for pwd in candidates[:max_checks]:
-        checked += 1
+        attempted += 1
         cnt = await pwned_password_usage_count(pwd)
         if cnt is None:
             continue
+        completed += 1
         if cnt > 0:
             pwned += 1
 
-    return {
-        "opt_in": True,
-        "checks_run": checked,
-        "pwned_count": pwned,
-        "note": (
-            "k-anonymity Pwned Passwords API; plaintext passwords are not logged "
-            "or stored by this hook."
-        ),
-    }
+    return finalize_hibp_pwned_password_summary(
+        {
+            "opt_in": True,
+            "checks_run": completed,
+            "checks_attempted": attempted,
+            "pwned_count": pwned,
+            "note": (
+                "k-anonymity Pwned Passwords API; plaintext passwords are not logged "
+                "or stored by this hook."
+            ),
+        }
+    )

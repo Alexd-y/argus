@@ -142,6 +142,7 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
     """VHL-005: Valhalla tier + csv also uploads ``{report_id}.valhalla_sections.csv``."""
     import src.reports.report_pipeline as rp
     from src.reports.data_collector import ScanReportData
+    from src.reports.valhalla_report_context import ValhallaReportContext
     from src.services.reporting import ReportContextBuildResult
 
     report = SimpleNamespace(
@@ -151,9 +152,16 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
         tier="valhalla",
         requested_formats=None,
     )
+    vctx = ValhallaReportContext().model_dump(mode="json")
     built = ReportContextBuildResult(
         scan_report_data=ScanReportData(scan_id="scan-v", tenant_id="ten-v", findings=[]),
-        template_context={"tier": "valhalla", "valhalla_context": {}, "ai_sections": {}, "recon_summary": {}},
+        template_context={
+            "tier": "valhalla",
+            "valhalla_context": vctx,
+            "scan_artifacts": {"status": "skipped", "phase_blocks": []},
+            "ai_sections": {},
+            "recon_summary": {},
+        },
         ai_section_results={},
     )
 
@@ -198,3 +206,67 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
     assert VALHALLA_SECTIONS_CSV_FORMAT in fmts
     assert out["object_keys"]["csv"]
     assert out["object_keys"][VALHALLA_SECTIONS_CSV_FORMAT]
+
+
+@pytest.mark.asyncio
+async def test_run_generate_report_pipeline_validation_failure_skips_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import src.reports.report_pipeline as rp
+    from src.reports.data_collector import ScanReportData
+    from src.reports.report_data_validation import ReportDataValidationResult
+    from src.services.reporting import ReportContextBuildResult
+
+    report = SimpleNamespace(
+        id="rep-val",
+        tenant_id="ten-a",
+        scan_id="scan-a",
+        tier="midgard",
+        requested_formats=None,
+    )
+    built = ReportContextBuildResult(
+        scan_report_data=ScanReportData(scan_id="scan-a", tenant_id="ten-a", findings=[]),
+        template_context={},
+        ai_section_results={"executive_summary": {"status": "ok", "text": "summary text"}},
+    )
+
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+        return built
+
+    monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
+    upload_called: list[bool] = []
+
+    def fake_upload(*_a, **_kw) -> str:
+        upload_called.append(True)
+        return "k"
+
+    monkeypatch.setattr(
+        rp,
+        "validate_report_data",
+        lambda *a, **k: ReportDataValidationResult(ok=False, reason_codes=["unit_test"]),
+    )
+
+    exec_results = [
+        ExecScalar(report),
+        MagicMock(),
+        ExecScalar(None),
+        MagicMock(),
+    ]
+    session = MagicMock()
+    session.execute = AsyncMock(side_effect=exec_results)
+    session.commit = AsyncMock()
+
+    out = await run_generate_report_pipeline(
+        session,
+        report_id="rep-val",
+        tenant_id="ten-a",
+        scan_id_hint=None,
+        formats=["html"],
+        upload_fn=fake_upload,
+        ensure_bucket_fn=lambda: True,
+        redis_client=MagicMock(),
+    )
+
+    assert out["status"] == "failed"
+    assert out.get("error") == "validation_failed"
+    assert upload_called == []

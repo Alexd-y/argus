@@ -68,6 +68,28 @@ stateDiagram-v2
 
 **Tools (baseline):** nmap, subfinder, nuclei и др.; guardrails: IP/domain validation. Ниже — расширения KAL (песочница + политики).
 
+#### Recon pipeline (RECON-001 … RECON-009) — режимы, шаги, сводка
+
+Оркестрация CLI-инструментов recon: `src/recon/pipeline.py` → `run_recon_planned_tool_gather`, план шагов — `plan_recon_steps` в `src/recon/step_registry.py` на основе `ReconRuntimeConfig` (env **`RECON_*`** + merge с `scan.options` / `options.recon`, см. `src/recon/recon_runtime.py`).
+
+| Режим (`RECON_MODE`) | Базовые логические шаги (`ReconStepId`) |
+|----------------------|----------------------------------------|
+| **passive** | `dig`, `dns_depth`, `whois`, `crtsh`, `subdomain_passive`, `shodan`, `kal_dns_bundle` (при opt-in KAL) |
+| **active** | passive + `nmap_port_scan`, `http_surface` (httpx / whatweb / nuclei tech-only и связанные артефакты), `dependency_manifests` |
+| **full** | active + опциональные шаги только при флагах: `content_discovery` (**RECON_ENABLE_CONTENT_DISCOVERY**), `js_analysis` (**RECON_JS_ANALYSIS**), `asn_map` (**RECON_ASNMAP_ENABLED**), `screenshots` (**RECON_SCREENSHOTS** / gowitness), `deep_port_scan` (**RECON_DEEP_PORT_SCAN** — naabu + nmap -sV, лимиты **`RECON_DEEP_*`**) |
+
+**Фильтр подмножества:** **`RECON_TOOL_SELECTION`** — список id шагов через запятую; алиасы `url_history` → `content_discovery`, `js_analysis`, `asnmap`, `screenshots`. **`RECON_PASSIVE_ONLY=true`** принудительно переводит план в passive независимо от `RECON_MODE`.
+
+**Итоговый JSON сводки (RECON-009):** после сбора `tool_results` handler добавляет **`recon_pipeline_summary`** = `build_recon_summary_document(...)` (`src/recon/summary_builder.py`): версия **`_schema_version`**, агрегаты subdomains, DNS, live hosts, ports, URLs, JS, parameters, masked emails, ASN, screenshots map, `technologies_combined`, security headers и т.д. (без секретов в логах).
+
+**Стабильный объект MinIO (primary bucket, обычно `MINIO_BUCKET`):**
+
+`{tenant_id}/{scan_id}/recon/raw/recon_summary.json`
+
+Перезаписывается на каждом успешном прогоне recon (`upload_recon_summary_json` / `RawPhaseSink.upload_recon_summary_stable`). Тот же документ попадает в **`tool_results["recon_pipeline_summary"]`** и далее в **stage1 `recon_results.json`**, если пайплайн персистит его в артефакты скана.
+
+Операторский чеклист: **[recon-guide.md](./recon-guide.md)**.
+
 #### KAL-003 — многофазный цикл nmap (recon)
 
 При **`SANDBOX_ENABLED=true`**, **`NMAP_RECON_CYCLE=true`** (по умолчанию) и разрешении KAL-политики категории `network_scanning` для базового argv выполняется **`run_nmap_recon_for_recon`** (`src/recon/nmap_recon_cycle.py`) вместо одного «legacy»-запуска `nmap -sV -sC` на хосте API.
@@ -153,6 +175,7 @@ stateDiagram-v2
 > 2. Построение `VulnerabilityAnalysisInputBundle` с `params_inventory` и `forms_inventory`
 > 3. Запуск `run_va_active_scan_phase` (dalfox, xsstrike, ffuf, nuclei, gobuster, wfuzz, commix)
 > 3b. Нормализация intel (`finding_normalizer`); при `VA_CUSTOM_XSS_POC_ENABLED=true` — доп. reflected XSS probe (`run_custom_xss_poc`, httpx на worker, payloads из `backend/data/payloads/`)
+> 3c. **XSS engine (обогащение):** [`_xss_engine_enrich`](../backend/src/recon/vulnerability_analysis/active_scan/va_active_scan_phase.py) — после строк XSS в intel: базовый ответ по **HTTP (httpx)** с canary для классификации контекста, подбор payloads ([`xss_payload_manager`](../backend/src/recon/vulnerability_analysis/xss_payload_manager.py), [`AdaptivePayloadGenerator`](../backend/src/recon/vulnerability_analysis/active_scan/payload_generator.py), [`detect_reflection_context`](../backend/src/recon/vulnerability_analysis/context_detector.py)), проверка отражения в теле ответа, опционально **верификация в headless Chromium (Playwright)** ([`xss_verifier`](../backend/src/recon/vulnerability_analysis/active_scan/xss_verifier.py)). Подробнее — подраздел **«XSS engine»** ниже в этом § 4.3a.
 > 4. Запуск OWASP-эвристик (SSRF, CSRF, IDOR, open redirect) — `run_web_vuln_heuristics`
 > 5. Нормализация находок, назначение CVSS, генерация PoC
 > 5b. **PoC enrichment (additive):** адаптеры active scan заполняют опциональное поле `proof_of_concept` в intel (`poc_schema.build_proof_of_concept`: tool, payload, request/response с усечением `response` (1024) и `response_snippet` (500), curl, `javascript_code`, опционально `screenshot_key`). Dalfox: JSON + fallback stderr; Nuclei: `request`/`response` из JSONL при наличии; sqlmap/ffuf: эвристики stdout + curl из argv/FUZZ-URL; gobuster/wfuzz/commix/xsstrike — см. соответствующие `*_va_adapter`. При `VA_POC_PLAYWRIGHT_SCREENSHOT_ENABLED=true` (и не отключено `VA_POC_PLAYWRIGHT_SCREENSHOT`) — см. `poc_visual_enrichment.py` (Playwright PNG в MinIO + `response_snippet` вокруг payload).
@@ -180,6 +203,40 @@ stateDiagram-v2
 | `VA_CUSTOM_XSS_POC_ENABLED` / `va_custom_xss_poc_enabled` | `true` | После active scan — reflected XSS check через httpx по curated payloads (`xss_custom.txt` / `xss_payloads.txt`). |
 
 **Script-context XSS (custom PoC):** `run_custom_xss_poc` всегда перебирает короткие встроенные payloads (`alert(1)`, `</script><script>…`, breakout из строки в JS). Эвристика помечает отражение внутри/рядом с `<script>` как **high / CVSS 7.2** (CWE-79) и добавляет `poc_curl` с `shlex.quote`. При `VA_AGGRESSIVE_SCAN=true` поднимается лимит комбинаций param×payload (до 80) и подмешиваются оба файла `xss_custom.txt` + `xss_payloads.txt`. Находки из stderr Dalfox («Reflected» без JSON) и custom PoC с тем же host+path+param нормализуются в одну **подтверждённую** XSS (см. `finding_normalizer._merge_dalfox_hypothesis_with_custom_xss`).
+
+#### XSS engine — фаза обогащения (HTTP + опционально браузер)
+
+Реализация: [`_xss_engine_enrich`](../backend/src/recon/vulnerability_analysis/active_scan/va_active_scan_phase.py) вызывается из [`run_va_active_scan_phase`](../backend/src/recon/vulnerability_analysis/active_scan/va_active_scan_phase.py) на смерженном intel **после** прогона dalfox/ffuf/nuclei и т.д. (не отдельная фаза state machine, а подшаг **vuln_analysis / active scan**).
+
+| Шаг | Модуль | Назначение |
+|-----|--------|------------|
+| **Контекст отражения** | [`context_detector.py`](../backend/src/recon/vulnerability_analysis/context_detector.py) | При включённом детекте: один запрос с canary-строкой, разбор тела ответа → `reflection_context` / тип контекста для генератора. |
+| **Payloads** | [`xss_payload_manager.py`](../backend/src/recon/vulnerability_analysis/xss_payload_manager.py) + [`payload_generator.py`](../backend/src/recon/vulnerability_analysis/active_scan/payload_generator.py) | Категории из данных образа + опциональное JSON-множество по URL; адаптация под контекст. |
+| **HTTP-рефлексия** | Тот же `_xss_engine_enrich` (httpx) | Перебор payloads с лимитом `XSS_MAX_PAYLOADS_PER_PARAM` / `settings.xss_max_payloads_per_param`; фиксация лучшего отражения, `curl_command`, `response_snippet`. |
+| **Верификация в браузере** | [`xss_verifier.py`](../backend/src/recon/vulnerability_analysis/active_scan/xss_verifier.py) | Только если `XSS_VERIFICATION_ENABLED=true`: `verify_xss_with_browser_async` — Chromium (Playwright), диалог `alert`/`confirm`/`prompt` как доказательство; таймаут навигации — `XSS_PLAYWRIGHT_TIMEOUT` или `XSS_PLAYWRIGHT_TIMEOUT_MS` → `settings.xss_playwright_timeout_ms`. Опционально PNG в MinIO через [`upload_finding_poc_screenshot_png`](../backend/src/storage/s3.py) (ключ вида `{tenant_id}/{scan_id}/poc/screenshots/xss_verify_<hash>.png`). |
+| **Запись в PoC** | [`poc_schema.build_proof_of_concept`](../backend/src/recon/vulnerability_analysis/active_scan/poc_schema.py) + `merge_proof_of_concept` | `tool=xss_engine`, `verification_method`, `verified_via_browser`, `browser_alert_text`, `payload_entered` / `payload_used`, `payload_reflected`, `reflection_context`, `curl_command` и др. |
+
+**Fallback на HTTP (без подтверждения диалогом):**
+
+- Если **`XSS_VERIFICATION_ENABLED=false`**, Playwright не вызывается: при успешном отражении в ответе выставляется `verification_method=http_reflection`, `verified_via_browser=false` (см. docstring `_xss_engine_enrich`).
+- Если верификация **включена**, но Playwright недоступен, таймаут, ошибка навигации или диалог не сработал — `verified_via_browser=false`; при наличии HTTP-отражения остаётся **`verification_method=http_reflection`**; структурированный лог `xss_enrich_verification` содержит `browser_error_bucket` без утечки стека.
+
+**Полное отключение подшага:** если выключены **и** `XSS_CONTEXT_DETECTION_ENABLED`, **и** `XSS_VERIFICATION_ENABLED`, `_xss_engine_enrich` возвращает intel без изменений (обратная совместимость).
+
+**Переменные окружения (`XSS_*`, см. [`config.py`](../backend/src/core/config.py) и `backend/.env.example`):**
+
+| Env | Назначение |
+|-----|------------|
+| `XSS_CONTEXT_DETECTION_ENABLED` | Анализ контекста отражения (canary + `detect_reflection_context`). |
+| `XSS_VERIFICATION_ENABLED` | Headless Playwright для подтверждения XSS по диалогу. |
+| `XSS_PLAYWRIGHT_TIMEOUT` / `XSS_PLAYWRIGHT_TIMEOUT_MS` | Таймаут навигации Playwright (мс). |
+| `XSS_PAYLOAD_COLLECTION_URL` | Один GET JSON-массива строк — доп. payloads во все корзины. |
+| `XSS_PAYLOAD_REPOS` | Доп. источники списков payloads (см. настройку в `Settings`). |
+| `XSS_VERIFICATION_HEADLESS_TIMEOUT` | Устаревший секундный потолок; для Playwright предпочтительны мс-настройки выше. |
+| `XSS_MAX_PAYLOADS_PER_PARAM` | Верхняя граница попыток на параметр в XSS engine. |
+| `XSS_BROWSER_VERIFICATION_ENABLED` | Устаревший флаг в `Settings`; канонично использовать `XSS_VERIFICATION_ENABLED`. |
+
+**Артефакты:** сырые логи active scan по-прежнему в `{tenant_id}/{scan_id}/vuln_analysis/raw/`; скриншоты верификатора — в **primary** bucket (`MINIO_BUCKET`), путь `.../poc/screenshots/`, см. [`s3.py`](../backend/src/storage/s3.py).
 
 **Запуск активного сканирования вебприложений с инструментами, ориентированными на OWASP Top 10:**
 
@@ -349,7 +406,7 @@ All phases persist raw outputs to MinIO for audit trail, evidence preservation, 
 
 | Phase | MinIO Path | Handler/Pipeline | Artifacts |
 |-------|-----------|-----------------|-----------|
-| **recon** | `{tenant_id}/{scan_id}/recon/raw/` | `state_machine/handlers` | Tool logs, nmap XML, nuclei JSON, subdomain lists |
+| **recon** | `{tenant_id}/{scan_id}/recon/raw/` | `state_machine/handlers` + recon pipeline | Tool logs, nmap XML, nuclei JSON, subdomain lists, **`recon_summary.json`** (агрегат пайплайна), `tool_*_stdout` / stderr по инструментам |
 | **threat_modeling** | `{tenant_id}/{scan_id}/threat_modeling/raw/` | `pipelines/threat_modeling` | Threat model JSON, LLM responses, analysis files |
 | **vuln_analysis** | `{tenant_id}/{scan_id}/vuln_analysis/raw/` | `pipelines/vulnerability_analysis` | Evidence bundles, contradiction analysis, confirmation matrices |
 | **exploitation** | `{tenant_id}/{scan_id}/exploitation/raw/` | `pipelines/exploitation` | Exploit attempts, PoC evidence, tool outputs, logs |
@@ -361,6 +418,7 @@ All phases persist raw outputs to MinIO for audit trail, evidence preservation, 
 
 ## 11. Related Documents
 
+- [recon-guide.md](./recon-guide.md) — режимы recon, MinIO, opt-in флаги
 - [backend-architecture.md](./backend-architecture.md)
 - [erd.md](./erd.md)
 - [frontend-api-contract.md](./frontend-api-contract.md)

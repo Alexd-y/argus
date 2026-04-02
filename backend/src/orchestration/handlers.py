@@ -13,14 +13,13 @@ from typing import Any
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
-
 from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+
 from src.core.config import settings
 from src.data_sources.crtsh_client import CrtShClient
 from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.data_sources.nvd_client import NVDClient
 from src.data_sources.shodan_client import ShodanClient
-from src.recon.recon_dns_sandbox import run_recon_dns_sandbox_bundle
 from src.orchestration.ai_prompts import (
     ai_exploitation,
     ai_post_exploitation,
@@ -29,6 +28,7 @@ from src.orchestration.ai_prompts import (
     ai_threat_modeling,
     ai_vuln_analysis,
 )
+from src.orchestration.cve_platform_mitigations import apply_platform_cve_mitigations
 from src.orchestration.exploit_verify import verify_exploit_poc
 from src.orchestration.phases import (
     ExploitationInput,
@@ -45,18 +45,24 @@ from src.orchestration.phases import (
     VulnAnalysisOutput,
 )
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
+from src.owasp_top10_2025 import parse_owasp_category
 from src.recon.exploitation.custom_xss_poc import run_custom_xss_poc
+from src.recon.pipeline import run_recon_planned_tool_gather
+from src.recon.recon_runtime import build_recon_runtime_config
+from src.recon.step_registry import ReconStepId, plan_recon_steps
+from src.recon.summary_builder import build_recon_summary_document
 from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
     run_va_active_scan_phase,
-)
-from src.recon.vulnerability_analysis.finding_normalizer import (
-    normalize_active_scan_intel_findings,
 )
 from src.recon.vulnerability_analysis.active_scan.web_vuln_heuristics import (
     run_web_vuln_heuristics,
 )
+from src.recon.vulnerability_analysis.finding_normalizer import (
+    normalize_active_scan_intel_findings,
+)
+from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
-from src.owasp_top10_2025 import parse_owasp_category
+from src.reports.finding_metadata import apply_default_finding_metadata
 from src.tools.executor import execute_command
 
 logger = logging.getLogger(__name__)
@@ -260,16 +266,29 @@ async def _extract_url_params_and_forms(
                 params_inventory.append(pp)
 
     except httpx.TooManyRedirects:
-        logger.warning("http_crawl_too_many_redirects", extra={"target": target[:200]})
+        logger.warning(
+            "http_crawl_too_many_redirects",
+            extra={"target": _truncate_query_values_for_log(target, 80)},
+        )
     except httpx.TimeoutException:
-        logger.warning("http_crawl_timeout", extra={"target": target[:200]})
+        logger.warning(
+            "http_crawl_timeout",
+            extra={"target": _truncate_query_values_for_log(target, 80)},
+        )
     except httpx.HTTPError as exc:
         logger.warning(
             "http_crawl_error",
-            extra={"target": target[:200], "exc_type": type(exc).__name__},
+            extra={
+                "target": _truncate_query_values_for_log(target, 80),
+                "exc_type": type(exc).__name__,
+            },
         )
     except Exception:
-        logger.warning("http_crawl_unexpected_error", extra={"target": target[:200]}, exc_info=True)
+        logger.warning(
+            "http_crawl_unexpected_error",
+            extra={"target": _truncate_query_values_for_log(target, 80)},
+            exc_info=True,
+        )
 
     logger.info(
         "http_crawl_complete",
@@ -345,6 +364,8 @@ async def _try_fetch_and_upload_dependency_manifests(target: str, sink: RawPhase
 async def _upload_recon_tool_streams(sink: RawPhaseSink, tool_results: dict[str, Any]) -> None:
     """Persist per-tool stdout/stderr as raw recon artifacts (best-effort)."""
     for name, result in tool_results.items():
+        if name == "recon_pipeline_summary":
+            continue
         if not isinstance(result, dict):
             continue
         stdout = result.get("stdout")
@@ -359,9 +380,23 @@ def _format_tool_results(results: dict[str, Any]) -> str:
     """Format tool results dict into a readable string for LLM."""
     parts: list[str] = []
     for tool_name, result in results.items():
+        if tool_name == "recon_pipeline_summary":
+            continue
         parts.append(f"--- {tool_name.upper()} ---")
         if tool_name == "kal_dns_intel" and isinstance(result, list):
             parts.append(_safe_json({"kal_dns_intel": result}, 12000))
+            parts.append("")
+            continue
+        if tool_name == "http_probe_tech_stack" and isinstance(result, dict):
+            parts.append(_safe_json({"http_probe_tech_stack": result}, 12000))
+            parts.append("")
+            continue
+        if tool_name == "deep_port_scan" and isinstance(result, dict):
+            parts.append(_safe_json(result.get("structured") or {}, 12000))
+            parts.append("")
+            continue
+        if tool_name == "recon_open_ports_merged" and isinstance(result, dict):
+            parts.append(str(result.get("stdout") or "")[:8000])
             parts.append("")
             continue
         if isinstance(result, dict):
@@ -438,21 +473,35 @@ async def _run_whois(domain: str) -> dict[str, Any]:
     return result
 
 
-async def _query_crtsh(domain: str) -> dict[str, Any]:
-    """Query crt.sh for certificate transparency subdomains."""
+async def _query_crtsh(domain: str, *, raw_sink: RawPhaseSink | None = None) -> dict[str, Any]:
+    """Query crt.sh JSON API for certificate transparency hostnames; optional raw JSON to MinIO."""
     try:
         client = CrtShClient()
-        data = await client.query(params={"q": f"%.{domain}"})
+        timeout_sec = float(max(5, int(getattr(settings, "recon_tools_timeout", 300) or 300)))
+        data = await client.query(params={"q": f"%.{domain}"}, timeout_sec=timeout_sec)
+        results = data.get("results", [])
+        if raw_sink is not None and isinstance(results, list) and results:
+            try:
+                await asyncio.to_thread(raw_sink.upload_json, "crtsh_api", results)
+            except Exception:
+                logger.warning(
+                    "crtsh_raw_upload_failed",
+                    extra={"event": "crtsh_raw_upload_failed"},
+                )
         subdomains: set[str] = set()
-        for entry in data.get("results", []):
+        for entry in results if isinstance(results, list) else []:
+            if not isinstance(entry, dict):
+                continue
             name = entry.get("name_value", "")
-            for line in name.split("\n"):
+            for line in str(name).split("\n"):
                 line = line.strip().lstrip("*.")
                 if line and "." in line:
                     subdomains.add(line)
-        return {"success": True, "stdout": json.dumps(sorted(subdomains))}
+        cap = max(1, int(getattr(settings, "recon_max_subdomains", 10000)))
+        sorted_subs = sorted(subdomains)[:cap]
+        return {"success": True, "stdout": json.dumps(sorted_subs)}
     except Exception:
-        logger.exception("crt.sh query failed")
+        logger.warning("crtsh_query_failed", extra={"event": "crtsh_query_failed"})
         return {"success": False, "stdout": "", "stderr": "crt.sh query failed"}
 
 
@@ -488,60 +537,23 @@ async def run_recon(
     """
     domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
     ports = options.get("ports", "1-1000")
+    recon_cfg = build_recon_runtime_config(options)
+    planned_steps = frozenset(plan_recon_steps(recon_cfg))
 
     raw_sink: RawPhaseSink | None = None
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "recon")
 
-    nmap_task = _run_nmap(domain, ports, options=options, raw_sink=raw_sink)
-    dig_task = _run_dig(domain)
-    whois_task = _run_whois(domain)
-    crtsh_task = _query_crtsh(domain)
-    shodan_task = _query_shodan(domain)
-    http_crawl_task = _extract_url_params_and_forms(target)
-
-    results = await asyncio.gather(
-        nmap_task, dig_task, whois_task, crtsh_task, shodan_task, http_crawl_task,
-        return_exceptions=True,
-    )
-
-    dns_tool_results, dns_intel = await run_recon_dns_sandbox_bundle(
+    tool_results, crawl_params, crawl_forms = await run_recon_planned_tool_gather(
         target,
+        domain,
+        ports,
         options,
+        recon_cfg,
+        raw_sink=raw_sink,
         tenant_id=tenant_id,
         scan_id=scan_id,
     )
-
-    http_crawl_result = results[-1]
-    results = results[:-1]
-
-    crawl_params: list[dict[str, Any]] = []
-    crawl_forms: list[dict[str, Any]] = []
-    if isinstance(http_crawl_result, tuple) and len(http_crawl_result) == 2:
-        crawl_params, crawl_forms = http_crawl_result
-    elif isinstance(http_crawl_result, Exception):
-        logger.warning(
-            "recon_http_crawl_failed",
-            extra={"exc_type": type(http_crawl_result).__name__},
-        )
-
-    tool_results: dict[str, Any] = {}
-    tool_names = ["nmap", "dig", "whois", "crtsh", "shodan"]
-    for name, result in zip(tool_names, results, strict=True):
-        if isinstance(result, Exception):
-            exc = result
-            errno = getattr(exc, "errno", None)
-            logger.warning(
-                "recon_tool_failed",
-                extra={
-                    "tool": name,
-                    "exc_type": type(exc).__name__,
-                    "errno": errno,
-                },
-            )
-            tool_results[name] = {"success": False, "stdout": "", "stderr": str(result)}
-        else:
-            tool_results[name] = result
 
     if crawl_params or crawl_forms:
         tool_results["http_crawl"] = {
@@ -552,18 +564,26 @@ async def run_recon(
             ),
         }
 
-    if dns_tool_results:
-        tool_results.update(dns_tool_results)
-    if dns_intel:
-        tool_results["kal_dns_intel"] = dns_intel
+    tool_results["recon_pipeline_summary"] = build_recon_summary_document(tool_results, target=target)
 
     tool_results_str = _format_tool_results(tool_results)
     logger.info("Recon tool results collected (%d chars), sending to LLM", len(tool_results_str))
 
     if raw_sink is not None:
+        try:
+            await asyncio.to_thread(
+                raw_sink.upload_recon_summary_stable,
+                tool_results.get("recon_pipeline_summary") or {},
+            )
+        except Exception:
+            logger.warning(
+                "recon_summary_stable_upload_failed",
+                extra={"event": "recon_summary_stable_upload_failed"},
+            )
         await _upload_recon_tool_streams(raw_sink, tool_results)
         await asyncio.to_thread(raw_sink.upload_text, "tool_results_llm_context", tool_results_str)
-        await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
+        if ReconStepId.DEPENDENCY_MANIFESTS in planned_steps:
+            await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
 
     inp = ReconInput(target=target, options=options)
     return await ai_recon(inp, tool_results=tool_results_str, raw_sink=raw_sink)
@@ -771,8 +791,16 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
     if owasp_resolved:
         out["owasp_category"] = owasp_resolved
     raw_poc = data.get("proof_of_concept")
-    if isinstance(raw_poc, dict) and raw_poc:
-        out["proof_of_concept"] = raw_poc
+    poc_m: dict[str, Any] = dict(raw_poc) if isinstance(raw_poc, dict) else {}
+    if data.get("url"):
+        poc_m.setdefault("url", str(data["url"])[:500])
+    if data.get("param"):
+        poc_m.setdefault("parameter", str(data["param"])[:256])
+    if poc_m:
+        out["proof_of_concept"] = poc_m
+    vt_key = str(data.get("type") or data.get("template_id") or "").strip().lower()[:128]
+    if vt_key:
+        out["vuln_type"] = vt_key
     return out
 
 
@@ -844,6 +872,8 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
             f["owasp_category"] = oc
         elif "owasp_category" in f:
             del f["owasp_category"]
+
+        apply_default_finding_metadata(f)
 
     findings.sort(key=lambda f: f.get("cvss") or 0.0, reverse=True)
     return findings
@@ -950,11 +980,14 @@ async def run_vuln_analysis(
                             "custom_xss_poc_merged",
                             extra={"scan_id": scan_id, "count": len(custom_rows)},
                         )
-                except Exception:
+                except Exception as e:
                     logger.warning(
                         "custom_xss_poc_failed",
-                        extra={"scan_id": scan_id},
-                        exc_info=True,
+                        extra={
+                            "event": "custom_xss_poc_failed",
+                            "scan_id": scan_id,
+                            "error_type": type(e).__name__,
+                        },
                     )
             active_scan_findings = [_normalize_intel_finding(f) for f in raw_intel]
             active_scan_context = _build_active_scan_context(active_scan_findings)
@@ -1021,6 +1054,8 @@ async def run_vuln_analysis(
             )
 
     try:
+        from src.recon.kal_searchsploit_intel import run_searchsploit_for_recon_assets
+
         ssp_rows = await run_searchsploit_for_recon_assets(
             assets, tenant_id=tenant_id, scan_id=scan_id
         )
@@ -1037,10 +1072,15 @@ async def run_vuln_analysis(
 
     if tenant_id and scan_id:
         try:
+            from src.recon.trivy_recon_manifest_scan import (
+                raw_trivy_vuln_to_intel_row,
+                run_trivy_fs_on_recon_manifests,
+            )
+
             trivy_rows = await run_trivy_fs_on_recon_manifests(tenant_id, scan_id)
             for tr in trivy_rows:
                 active_scan_findings.append(
-                    _normalize_intel_finding(_trivy_normalized_to_intel_row(tr))
+                    _normalize_intel_finding(raw_trivy_vuln_to_intel_row(tr))
                 )
             if trivy_rows:
                 active_scan_context = _build_active_scan_context(active_scan_findings)
@@ -1062,6 +1102,13 @@ async def run_vuln_analysis(
                 seen_titles.add(asf.get("title", "").lower())
 
     llm_output.findings = _postprocess_findings_cvss(llm_output.findings)
+    apply_platform_cve_mitigations(
+        llm_output.findings,
+        assets=assets,
+        target=target,
+        extra_context_blob=(active_scan_context or "")[:8000],
+    )
+    assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
     return llm_output
 
 

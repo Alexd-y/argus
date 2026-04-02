@@ -36,6 +36,9 @@ async def test_summarize_opt_in_no_passwords():
         out = await summarize_pwned_passwords_for_report({"exploits": [], "evidence": []})
         assert out is not None
         assert out.get("checks_run") == 0
+        assert out.get("pwned_count") == 0
+        assert out.get("data_breach_password_exposure") == "no"
+        assert "breach_signal_note" in out
 
 
 @pytest.mark.asyncio
@@ -54,4 +57,6 @@ async def test_summarize_pwned_count_with_mock():
     assert out is not None
     assert out.get("checks_run") == 1
     assert out.get("pwned_count") == 1
+    assert out.get("data_breach_password_exposure") == "yes"
+    assert "breach_signal_note" in out
     mock_pwned.assert_awaited()

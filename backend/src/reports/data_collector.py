@@ -12,6 +12,7 @@ Field → report section mapping (downstream generators may subset this model):
 - ``stage3`` → VA normalized tasks, exploitation candidates, evidence gate artifacts (§ VA).
 - ``stage4`` → exploitation plan, results, shells, AI exploitation summary (§ exploitation).
 - ``valhalla_context`` → VHL-001 Valhalla template blocks (robots/sitemap, tech table, TLS, headers, deps, phases).
+- ``hibp_pwned_password_summary`` → агрегат HIBP Pwned Passwords (opt-in), одна форма для AI/Jinja/JSON.
 
 Empty stages: lists default empty; ``scan`` is None only if the row is missing (invalid input).
 MinIO: each file is optional; failures set ``StageArtifactItem.error`` (``not_found`` vs
@@ -23,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -50,6 +52,7 @@ from src.recon.stage1_storage import STAGE1_ROOT_FILES, download_stage1_artifact
 from src.recon.stage2_storage import STAGE2_ROOT_FILES, download_stage2_artifact
 from src.recon.stage3_storage import download_stage3_artifact, get_stage3_root_files
 from src.recon.stage4_storage import STAGE4_ROOT_FILES, download_stage4_artifact
+from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.storage.s3 import (
     RAW_ARTIFACT_PHASES,
     get_presigned_url_by_key,
@@ -184,6 +187,41 @@ def owasp_counts_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]
     return counts
 
 
+def severity_histogram_from_severity_strings(severities: Iterable[str | None]) -> dict[str, int]:
+    """Histogram over raw severity labels (lowercased). Empty label → ``unknown`` (AI / diagnostics)."""
+    hist: dict[str, int] = {}
+    for raw in severities:
+        s = (raw or "").strip().lower()
+        if not s:
+            s = "unknown"
+        hist[s] = hist.get(s, 0) + 1
+    return hist
+
+
+def executive_severity_totals_from_severity_strings(
+    severities: Iterable[str | None],
+) -> dict[str, int]:
+    """Top-5 buckets used in executive table and ``ReportSummary`` (``informational`` → ``info``)."""
+    totals = {k: 0 for k in ("critical", "high", "medium", "low", "info")}
+    alias = {"informational": "info"}
+    for raw in severities:
+        s = (raw or "").strip().lower()
+        if not s:
+            continue
+        s = alias.get(s, s)
+        if s in totals:
+            totals[s] += 1
+    return totals
+
+
+def severity_histogram_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:
+    return severity_histogram_from_severity_strings(f.severity for f in findings)
+
+
+def executive_severity_totals_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:
+    return executive_severity_totals_from_severity_strings(f.severity for f in findings)
+
+
 def build_owasp_summary_from_counts(counts: dict[str, int]) -> dict[str, OwaspCategorySummaryEntry]:
     """Aggregate OWASP rows for templates from finding counts + RU JSON (OWASP-002)."""
     out: dict[str, OwaspCategorySummaryEntry] = {}
@@ -220,6 +258,11 @@ class FindingRow(BaseModel):
     cvss: float | None = None
     owasp_category: str | None = None
     proof_of_concept: dict[str, Any] | None = None
+    confidence: str = "likely"
+    evidence_type: str | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    reproducible_steps: str | None = None
+    applicability_notes: str | None = None
     created_at: Any = None
 
 
@@ -281,6 +324,8 @@ class ScanReportData(BaseModel):
     leaked_emails_masked: list[str] = Field(default_factory=list)
     robots_sitemap_analysis: RobotsSitemapMergedSummaryModel | None = None
     tool_runs: list[ToolRunRow] = Field(default_factory=list)
+    #: HIBP Pwned Passwords aggregate (opt-in); same dict as AI payload and Valhalla appendix.
+    hibp_pwned_password_summary: dict[str, Any] | None = None
 
 
 def _scan_row_from_orm(row: ScanModel) -> ScanRowData:
@@ -656,6 +701,15 @@ class ReportDataCollector:
                 proof_of_concept=(
                     row.proof_of_concept if isinstance(getattr(row, "proof_of_concept", None), dict) else None
                 ),
+                confidence=str(getattr(row, "confidence", None) or "likely")[:20],
+                evidence_type=getattr(row, "evidence_type", None),
+                evidence_refs=(
+                    [str(x)[:500] for x in getattr(row, "evidence_refs", [])[:64] if x is not None]
+                    if isinstance(getattr(row, "evidence_refs", None), list)
+                    else []
+                ),
+                reproducible_steps=getattr(row, "reproducible_steps", None),
+                applicability_notes=getattr(row, "applicability_notes", None),
                 created_at=row.created_at,
             )
             for row in f_result.scalars().all()
@@ -696,6 +750,11 @@ class ReportDataCollector:
         if report_slice and report_slice.technologies:
             report_tech_list = [str(x) for x in report_slice.technologies]
 
+        tool_run_status_tuples: list[tuple[str, str]] = [
+            (str(row.tool_name or "").strip(), str(row.status or "").strip())
+            for row in tr_orm_rows
+            if str(row.tool_name or "").strip()
+        ]
         valhalla_ctx = build_valhalla_report_context(
             tenant_id=tid,
             scan_id=sid,
@@ -711,7 +770,21 @@ class ReportDataCollector:
             tool_runs=tool_run_rows,
             raw_artifact_types=raw_artifact_type_list or None,
             trivy_enabled=bool(settings.trivy_enabled),
+            harvester_enabled=bool(settings.harvester_enabled),
+            tool_run_summaries=tool_run_status_tuples or None,
         )
+
+        exploit_dump: dict[str, Any] | None = None
+        for row in phase_outputs:
+            if (row.phase or "").lower() == "exploitation" and isinstance(row.output_data, dict):
+                exploit_dump = row.output_data
+                break
+        hibp_pwned_password_summary: dict[str, Any] | None = None
+        if exploit_dump is not None:
+            hibp_pwned_password_summary = await summarize_pwned_passwords_for_report(
+                exploit_dump,
+                max_checks=5,
+            )
 
         out = ScanReportData(
             scan_id=sid,
@@ -736,6 +809,7 @@ class ReportDataCollector:
             leaked_emails_masked=list(valhalla_ctx.leaked_emails or []),
             robots_sitemap_analysis=valhalla_ctx.robots_sitemap_merged,
             tool_runs=tool_runs,
+            hibp_pwned_password_summary=hibp_pwned_password_summary,
         )
         logger.info(
             "report_data_collector_done",

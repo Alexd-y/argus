@@ -12,8 +12,16 @@
     {% include "partials/valhalla/sections_07_08_threat_findings.html.j2" %}
 {% endif %}
 {% endblock %}
-{% block active_web_scan %}{% endblock %}
-{% block artifacts %}{% endblock %}
+{% block active_web_scan %}
+    {% include "partials/active_web_scan.html.j2" %}
+{% endblock %}
+{% block artifacts %}
+{# RPT-008: якорь #scan-artifacts для навигации; полные таблицы — в приложении Ж #}
+{% if tier == 'valhalla' %}
+    <h2 id="scan-artifacts">Артефакты этапов</h2>
+    <p class="meta">Перечень фазовых raw-объектов (presigned / API) приведён в <a href="#valhalla-appendix-scan-artifacts">приложении Ж</a>.</p>
+{% endif %}
+{% endblock %}
 {% block exploitation %}
 {% if tier == 'valhalla' %}
     {% include "partials/valhalla/section_09_exploit_chains.html.j2" %}

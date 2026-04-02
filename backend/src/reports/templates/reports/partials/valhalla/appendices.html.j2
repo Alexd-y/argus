@@ -50,5 +50,26 @@
     <p class="empty">Плейсхолдер: индикаторы компрометации, тактики MITRE ATT&CK — при отдельном согласовании и данных обнаружения. Нет данных.</p>
 
     <h3>Приложение Е. Результаты проверки утечек паролей (hashed, HIBP)</h3>
-    <p class="empty">Плейсхолдер: агрегированные сигналы HIBP Pwned Passwords при opt-in политики. Нет данных в теле отчёта.</p>
+    {% if hibp_pwned_password_summary is defined and hibp_pwned_password_summary %}
+        {% set hp = hibp_pwned_password_summary %}
+        <ul class="hibp-summary">
+            <li>Проверено выборочных значений (k-anonymity API): <strong>{{ hp.checks_run | default(0) | int }}</strong></li>
+            <li>Совпадений с корпусом Pwned Passwords: <strong>{{ hp.pwned_count | default(0) | int }}</strong></li>
+            <li>Агрегат утечки паролей (сигнал): <strong>{{ hp.data_breach_password_exposure | default("—") | e }}</strong></li>
+        </ul>
+        {% if hp.breach_signal_note %}
+            <p class="ai-slot-body">{{ hp.breach_signal_note | e }}</p>
+        {% endif %}
+        {% if hp.note %}
+            <p class="muted"><small>{{ hp.note | e }}</small></p>
+        {% endif %}
+    {% else %}
+        <p class="empty">Нет агрегированных данных HIBP (политика opt-in отключена, фаза эксплуатации без выборки или проверка не выполнялась).</p>
+    {% endif %}
+
+    <h3>Приложение Ж. Сырые артефакты по фазам (presigned / API)</h3>
+    <p class="meta"><small>Те же данные, что и блок «Артефакты этапов» в основном отчёте: <code>scan_artifacts</code> из <code>ScanReportData</code> / listing MinIO.</small></p>
+    <div class="valhalla-appendix-scan-artifacts" id="valhalla-appendix-scan-artifacts">
+        {% include "partials/scan_artifacts_inner.html.j2" %}
+    </div>
 </section>

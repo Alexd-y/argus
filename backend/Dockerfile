@@ -14,6 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 # WeasyPrint (RPT-009): Pango/Cairo/HarfBuzz + fonts for PDF text rendering
+# Optional: XSS-005 Playwright — same notes as ARGUS/infra/backend/Dockerfile if you run VA here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap dnsutils whois curl net-tools \
     libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \

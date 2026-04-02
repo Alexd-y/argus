@@ -27,6 +27,10 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Runtime deps: recon tools + WeasyPrint (RPT-009 PDF)
+# Optional XSS-005 / POC-003: Playwright verification runs in-process here and in the Celery worker
+# (same image). Base image does not install playwright by default; to enable browser verification,
+# add `playwright` to backend requirements, then e.g. `RUN pip install playwright && playwright install chromium`
+# plus OS deps (`playwright install-deps chromium` or Playwright Docker docs for Debian slim).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap dnsutils whois curl net-tools \
     libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \

@@ -353,7 +353,10 @@ def test_reporting_jinja_helpers() -> None:
     rows = findings_rows_for_jinja(data)
     assert rows[0]["severity"] == "high"
     rec = recon_summary_for_jinja(data)
-    assert rec["summary_counts"]["critical"] == 2
+    # T1: summary_counts follow live findings, not stale report.summary JSON
+    assert rec["summary_counts"]["critical"] == 0
+    assert rec["summary_counts"]["high"] == 1
+    assert rec["summary_counts"]["medium"] == rec["summary_counts"]["low"] == rec["summary_counts"]["info"] == 0
     assert rec["findings_count"] == 1
     assert len(rec["timeline_preview"][0]["snippet"]) <= 240
     ex = exploitation_outputs_for_jinja(data)

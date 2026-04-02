@@ -12,6 +12,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+ValhallaSectionCoverageStatus = Literal["completed", "partial", "not_executed", "no_data"]
+
+_MANDATORY_SECTION_IDS: tuple[str, ...] = (
+    "tech_stack_structured",
+    "outdated_components",
+    "ssl_tls_analysis",
+    "security_headers_analysis",
+    "robots_sitemap_analysis",
+    "leaked_emails",
+)
+
 from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
     _plugin_strings,
     merge_whatweb_json_roots,
@@ -206,6 +217,221 @@ class CriticalVulnRefModel(BaseModel):
     severity: str = ""
 
 
+class ValhallaXssStructuredRowModel(BaseModel):
+    """T6 — XSS PoC fields passed to LLM context (valhalla_context / compact AI block)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    title: str = ""
+    parameter: str | None = None
+    payload_entered: str | None = None
+    payload_reflected: str | None = None
+    payload_used: str | None = None
+    reflection_context: str | None = None
+    verification_method: str | None = None
+    verified_via_browser: bool | None = None
+    browser_alert_text: str | None = None
+    artifact_keys: list[str] = Field(default_factory=list)
+    artifact_urls: list[str] = Field(default_factory=list)
+
+
+_MAX_XSS_CONTEXT_ROWS = 48
+_MAX_XSS_FIELD_LEN = 600
+
+
+def _poc_as_dict(f: dict[str, Any]) -> dict[str, Any]:
+    poc = f.get("proof_of_concept")
+    return poc if isinstance(poc, dict) else {}
+
+
+def finding_qualifies_for_xss_structured_context(f: dict[str, Any]) -> bool:
+    """True when PoC / CWE / title suggests XSS and structured XSS context is useful for reports."""
+    poc = _poc_as_dict(f)
+    if not poc:
+        cwe = str(f.get("cwe") or "").upper()
+        return "79" in cwe
+    cwe = str(f.get("cwe") or "").upper()
+    if "79" in cwe:
+        return True
+    title_l = str(f.get("title") or "").lower()
+    if ("xss" in title_l or "cross-site scripting" in title_l) and poc:
+        return True
+    signal_keys = (
+        "reflection_context",
+        "verified_via_browser",
+        "verification_method",
+        "browser_alert_text",
+        "payload_entered",
+        "payload_used",
+        "screenshot_key",
+        "poc_screenshot_url",
+        "screenshot_url",
+    )
+    if any(k in poc and poc.get(k) is not None for k in signal_keys):
+        return True
+    param = poc.get("parameter")
+    if isinstance(param, str) and param.strip():
+        for k in ("payload", "javascript_code", "payload_entered", "payload_used"):
+            v = poc.get(k)
+            if isinstance(v, str) and v.strip():
+                return True
+    return False
+
+
+def _truncate_xss_field(val: str | None, max_len: int = _MAX_XSS_FIELD_LEN) -> str | None:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    return _truncate(s, max_len)
+
+
+def _normalize_payload_reflected_value(poc: dict[str, Any]) -> str | None:
+    v = poc.get("payload_reflected")
+    if isinstance(v, str) and v.strip():
+        return _truncate_xss_field(v.strip())
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return None
+
+
+def _collect_poc_artifact_keys(poc: dict[str, Any]) -> list[str]:
+    keys: list[str] = []
+    sk = poc.get("screenshot_key")
+    if isinstance(sk, str) and sk.strip():
+        keys.append(sk.strip()[:512])
+    for alt in ("screenshot_keys", "artifact_keys", "poc_screenshot_keys"):
+        raw = poc.get(alt)
+        if not isinstance(raw, list):
+            continue
+        for x in raw[:16]:
+            if isinstance(x, str) and x.strip():
+                keys.append(x.strip()[:512])
+    seen: set[str] = set()
+    out: list[str] = []
+    for k in keys:
+        low = k.lower()
+        if low not in seen:
+            seen.add(low)
+            out.append(k)
+        if len(out) >= 16:
+            break
+    return out
+
+
+def _is_likely_http_url(s: str) -> bool:
+    t = s.strip().lower()
+    return t.startswith("http://") or t.startswith("https://")
+
+
+def _collect_poc_artifact_urls(poc: dict[str, Any]) -> list[str]:
+    """Presigned or public artifact URLs when stored on PoC (distinct from object keys)."""
+    urls: list[str] = []
+    for k in ("poc_screenshot_url", "screenshot_url", "artifact_url"):
+        v = poc.get(k)
+        if isinstance(v, str) and v.strip() and _is_likely_http_url(v):
+            urls.append(v.strip()[:1024])
+    for alt in ("artifact_urls", "poc_screenshot_urls", "screenshot_urls"):
+        raw = poc.get(alt)
+        if not isinstance(raw, list):
+            continue
+        for x in raw[:8]:
+            if isinstance(x, str) and x.strip() and _is_likely_http_url(x):
+                urls.append(x.strip()[:1024])
+    seen: set[str] = set()
+    out: list[str] = []
+    for u in urls:
+        low = u.lower()
+        if low not in seen:
+            seen.add(low)
+            out.append(u)
+        if len(out) >= 8:
+            break
+    return out
+
+
+def _verified_via_browser_from_poc(poc: dict[str, Any]) -> bool | None:
+    raw = poc.get("verified_via_browser")
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        low = raw.strip().lower()
+        if low in ("true", "1", "yes"):
+            return True
+        if low in ("false", "0", "no"):
+            return False
+    return None
+
+
+def build_xss_structured_rows_from_findings(
+    findings: list[dict[str, Any]],
+    *,
+    max_rows: int = _MAX_XSS_CONTEXT_ROWS,
+) -> list[ValhallaXssStructuredRowModel]:
+    """Extract XSS-oriented PoC fields for Valhalla AI / compact context (no raw HTTP bodies)."""
+    out: list[ValhallaXssStructuredRowModel] = []
+    for i, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        if not finding_qualifies_for_xss_structured_context(f):
+            continue
+        poc = _poc_as_dict(f)
+        fid = _finding_id_for_risk(f, i)
+        title = _truncate_xss_field(str(f.get("title") or "").strip(), 300) or ""
+        param = poc.get("parameter")
+        param_s = _truncate_xss_field(param.strip() if isinstance(param, str) else None, 256)
+        pe = poc.get("payload_entered")
+        pu = poc.get("payload_used")
+        legacy_pl = poc.get("payload")
+        payload_entered = _truncate_xss_field(pe.strip() if isinstance(pe, str) else None)
+        payload_used = _truncate_xss_field(
+            pu.strip() if isinstance(pu, str) else (legacy_pl.strip() if isinstance(legacy_pl, str) else None)
+        )
+        pref = _normalize_payload_reflected_value(poc)
+        refl_ctx = poc.get("reflection_context") or poc.get("context")
+        reflection_context = _truncate_xss_field(
+            refl_ctx.strip() if isinstance(refl_ctx, str) else None, 400
+        )
+        vm = poc.get("verification_method")
+        verification_method = _truncate_xss_field(vm.strip() if isinstance(vm, str) else None, 128)
+        bat = poc.get("browser_alert_text")
+        browser_alert_text = _truncate_xss_field(bat.strip() if isinstance(bat, str) else None, 400)
+        out.append(
+            ValhallaXssStructuredRowModel(
+                finding_id=fid[:256],
+                title=title or "—",
+                parameter=param_s,
+                payload_entered=payload_entered,
+                payload_reflected=pref,
+                payload_used=payload_used,
+                reflection_context=reflection_context,
+                verification_method=verification_method,
+                verified_via_browser=_verified_via_browser_from_poc(poc),
+                browser_alert_text=browser_alert_text,
+                artifact_keys=_collect_poc_artifact_keys(poc),
+                artifact_urls=_collect_poc_artifact_urls(poc),
+            )
+        )
+        if len(out) >= max_rows:
+            break
+    return out
+
+
+def serialize_xss_structured_for_ai(rows: list[ValhallaXssStructuredRowModel]) -> str:
+    """One JSON object per row (newlines); for tests and optional prompt attachment."""
+    chunks: list[str] = []
+    for r in rows:
+        try:
+            chunks.append(json.dumps(r.model_dump(mode="json"), ensure_ascii=False))
+        except (TypeError, ValueError):
+            continue
+    return "\n".join(chunks)
+
+
 class AppendixToolEntryModel(BaseModel):
     """Appendix A — scanner/tool line (VHL-008); version omitted in templates when unset."""
 
@@ -213,6 +439,47 @@ class AppendixToolEntryModel(BaseModel):
 
     name: str
     version: str | None = None
+
+
+class ValhallaSectionEnvelopeModel(BaseModel):
+    """Structured status for a mandatory Valhalla block (scan data or explicit fallback reason)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: ValhallaSectionCoverageStatus = "no_data"
+    reason: str = ""
+
+
+class ValhallaMandatorySectionsModel(BaseModel):
+    """T6 — every mandatory section always has status + machine-readable reason when not completed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tech_stack_structured: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
+    outdated_components: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
+    ssl_tls_analysis: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+    security_headers_analysis: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
+    robots_sitemap_analysis: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
+    leaked_emails: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+
+
+class ValhallaCoverageModel(BaseModel):
+    """T7 — traceability: phases, flags, per-section status, tool error hints (no secrets)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phases_executed: list[str] = Field(default_factory=list)
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
+    sections: dict[str, dict[str, str]] = Field(default_factory=dict)
+    tool_errors_summary: list[dict[str, str]] = Field(default_factory=list)
 
 
 class RobotsSitemapMergedSummaryModel(BaseModel):
@@ -228,6 +495,16 @@ class RobotsSitemapMergedSummaryModel(BaseModel):
     sitemap_url_count: int = 0
     sensitive_path_hints: list[str] = Field(default_factory=list)
     notes_ru: str = ""
+
+
+class ValhallaRobotsSitemapAnalysisBundleModel(BaseModel):
+    """Single object for Jinja: robots + sitemap + merged summary (T6 naming)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    robots_txt: RobotsTxtAnalysisModel = Field(default_factory=RobotsTxtAnalysisModel)
+    sitemap: SitemapAnalysisModel = Field(default_factory=SitemapAnalysisModel)
+    merged: RobotsSitemapMergedSummaryModel = Field(default_factory=RobotsSitemapMergedSummaryModel)
 
 
 class ValhallaReportContext(BaseModel):
@@ -262,6 +539,15 @@ class ValhallaReportContext(BaseModel):
     risk_matrix: RiskMatrixModel = Field(default_factory=RiskMatrixModel)
     critical_vulns: list[CriticalVulnRefModel] = Field(default_factory=list)
     appendix_tools: list[AppendixToolEntryModel] = Field(default_factory=list)
+    mandatory_sections: ValhallaMandatorySectionsModel = Field(
+        default_factory=ValhallaMandatorySectionsModel
+    )
+    robots_sitemap_analysis: ValhallaRobotsSitemapAnalysisBundleModel = Field(
+        default_factory=ValhallaRobotsSitemapAnalysisBundleModel
+    )
+    coverage: ValhallaCoverageModel = Field(default_factory=ValhallaCoverageModel)
+    recon_pipeline_summary: dict[str, Any] = Field(default_factory=dict)
+    xss_structured: list[ValhallaXssStructuredRowModel] = Field(default_factory=list)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -735,6 +1021,28 @@ def _apply_recon_fallbacks_to_structured(
             m.js_libraries.append(t[:512])
 
     if isinstance(recon, dict):
+        rps = recon.get("recon_pipeline_summary")
+        if isinstance(rps, dict):
+            tc = rps.get("technologies_combined")
+            if isinstance(tc, dict):
+                tech_list = tc.get("technologies")
+                if isinstance(tech_list, list):
+                    for ent in tech_list:
+                        if not isinstance(ent, dict):
+                            continue
+                        val = str(ent.get("value") or ent.get("name") or "").strip()
+                        if not val:
+                            continue
+                        host = str(ent.get("host") or "").strip()
+                        detail = host
+                        name_l = val.lower()
+                        if any(x in name_l for x in ("nginx", "apache", "caddy", "iis", "openresty")) and not m.web_server:
+                            m.web_server = (val + (f" ({detail})" if detail else ""))[:1024]
+                        elif any(x in name_l for x in ("wordpress", "drupal", "joomla")) and not m.cms:
+                            m.cms = (val + (f" ({detail})" if detail else ""))[:1024]
+                        else:
+                            add_fw(val if not detail else f"{val} ({detail})")
+
         ts = recon.get("tech_stack")
         if isinstance(ts, list):
             for ent in ts:
@@ -1166,6 +1474,11 @@ def _http_headers_merged_from_recon_and_phases(
         root_h = recon_results.get("http_headers")
         if isinstance(root_h, dict) and root_h:
             blobs.append(root_h)
+        rps = recon_results.get("recon_pipeline_summary")
+        if isinstance(rps, dict):
+            sh = rps.get("security_headers")
+            if isinstance(sh, dict) and sh:
+                blobs.append(sh)
     for ph, od in phase_outputs:
         if not isinstance(od, dict):
             continue
@@ -1394,9 +1707,10 @@ def _score_to_axis_label(score: int) -> Literal["low", "medium", "high"]:
 
 
 def _finding_id_for_risk(f: dict[str, Any], fallback_idx: int) -> str:
-    fid = f.get("id")
-    if isinstance(fid, str) and fid.strip():
-        return fid.strip()
+    for key in ("finding_id", "id"):
+        v = f.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
     return f"finding-{fallback_idx}"
 
 
@@ -1892,6 +2206,305 @@ def _collect_leaked_emails(
     return _extract_emails_from_text("\n".join(chunks))
 
 
+def _phases_executed_from_outputs(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+) -> list[str]:
+    seen: list[str] = []
+    for ph, _ in phase_outputs:
+        p = (ph or "").strip()
+        if not p or p in seen:
+            continue
+        seen.append(p)
+    return seen
+
+
+def _raw_keys_hint_flags(raw_artifact_keys: list[tuple[str, str]]) -> dict[str, bool]:
+    keys_low = " ".join(k.lower() for k, _ in raw_artifact_keys)
+    return {
+        "has_whatweb": "whatweb" in keys_low,
+        "has_robots": any(_artifact_name_matches(k, _ROBOTS_KEY_HINTS) for k, _ in raw_artifact_keys),
+        "has_sitemap": any(_artifact_name_matches(k, _SITEMAP_KEY_HINTS) for k, _ in raw_artifact_keys),
+        "has_tls": any(_artifact_name_matches(k, _TLS_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
+        "has_harvester": "theharvester" in keys_low,
+    }
+
+
+def _tool_errors_summary_from_runs(
+    tool_run_summaries: list[tuple[str, str]] | None,
+    *,
+    max_items: int = 48,
+) -> list[dict[str, str]]:
+    if not tool_run_summaries:
+        return []
+    bad_status = frozenset({"failed", "error", "timeout", "cancelled", "canceled", "aborted"})
+    out: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for name, status in tool_run_summaries:
+        n = (name or "").strip()[:200]
+        st = (status or "").strip().lower()
+        if not n:
+            continue
+        if st not in bad_status:
+            continue
+        key = (n.lower(), st)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"tool": n, "status": st, "note": "tool_run_finished_non_success"})
+        if len(out) >= max_items:
+            break
+    return out
+
+
+def _envelope_completed() -> ValhallaSectionEnvelopeModel:
+    return ValhallaSectionEnvelopeModel(status="completed", reason="")
+
+
+def _envelope(
+    status: ValhallaSectionCoverageStatus,
+    reason: str,
+) -> ValhallaSectionEnvelopeModel:
+    return ValhallaSectionEnvelopeModel(status=status, reason=(reason or "").strip()[:2000])
+
+
+def _compute_mandatory_sections_and_coverage(
+    *,
+    structured: TechStackStructuredModel,
+    tech_table: list[TechStackTableRow],
+    outdated: list[OutdatedComponentRow],
+    ssl_out: SslTlsAnalysisModel,
+    sec_hdr: SecurityHeadersAnalysisModel,
+    robots: RobotsTxtAnalysisModel,
+    sitemap: SitemapAnalysisModel,
+    robots_sitemap_merged: RobotsSitemapMergedSummaryModel,
+    final_emails: list[str],
+    merged_http_headers: dict[str, dict[str, str]],
+    deps: list[DependencyAnalysisRow],
+    fetch_raw_bodies: bool,
+    harvester_enabled: bool,
+    trivy_enabled: bool,
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    raw_artifact_keys: list[tuple[str, str]],
+    raw_hints: dict[str, bool],
+    tool_run_summaries: list[tuple[str, str]] | None,
+    feature_flags: dict[str, bool],
+    fallback_messages: dict[str, str | None],
+) -> tuple[ValhallaMandatorySectionsModel, ValhallaCoverageModel]:
+    phases = _phases_executed_from_outputs(phase_outputs)
+    tool_errs = _tool_errors_summary_from_runs(tool_run_summaries)
+
+    # --- tech_stack_structured
+    tech_empty = _structured_stack_effectively_empty(structured) and not tech_table
+    if not tech_empty:
+        tech_env = _envelope_completed()
+    elif not fetch_raw_bodies and (raw_hints.get("has_whatweb") or phase_outputs):
+        tech_env = _envelope(
+            "partial",
+            "Not scanned: INCLUDE_MINIO=false — тела raw-артефактов WhatWeb не загружались; "
+            "реконструкция стека только из phase_outputs / recon_results.",
+        )
+    elif not phase_outputs and not fetch_raw_bodies:
+        tech_env = _envelope(
+            "not_executed",
+            "Нет выходов фаз и отключена загрузка raw; tech stack не собирался.",
+        )
+    else:
+        tech_env = _envelope(
+            "no_data",
+            (fallback_messages.get("tech_stack") or "Стек не определён: нет WhatWeb и недостаточно рекон-сигналов."),
+        )
+
+    # --- outdated_components
+    if outdated:
+        outd_env = _envelope_completed()
+    elif trivy_enabled and not any("trivy" in (d.source or "").lower() for d in deps):
+        outd_env = _envelope(
+            "partial",
+            "TRIVY_ENABLED=true, но строк Trivy в dependency_analysis нет; проверьте manifest-артефакты.",
+        )
+    elif not fetch_raw_bodies and any(
+        _artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+    ):
+        outd_env = _envelope(
+            "partial",
+            "Not scanned: INCLUDE_MINIO=false — JSON зависимостей из raw не загружался.",
+        )
+    else:
+        outd_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("outdated")
+                or "Нет сигналов устаревших компонентов (CVE/Trivy/searchsploit/версии)."
+            ),
+        )
+
+    ssl_from_recon_only = bool(
+        (ssl_out.issuer or ssl_out.validity)
+        and not ssl_out.protocols
+        and not ssl_out.weak_protocols
+        and not ssl_out.weak_ciphers
+        and not ssl_out.hsts
+    )
+    if not _ssl_surface_empty(ssl_out):
+        ssl_env = _envelope_completed() if not ssl_from_recon_only else _envelope(
+            "partial",
+            "Есть данные сертификата из recon; полный TLS-скан (testssl/sslscan) отсутствует или не распарсен.",
+        )
+    elif not fetch_raw_bodies and raw_hints.get("has_tls"):
+        ssl_env = _envelope(
+            "not_executed",
+            "Not scanned: INCLUDE_MINIO=false — TLS-артефакты есть в индексе, тела не загружались.",
+        )
+    else:
+        ssl_env = _envelope(
+            "no_data",
+            (fallback_messages.get("ssl_tls") or "SSL/TLS: нет testssl/sslscan и нет данных сертификата."),
+        )
+
+    if sec_hdr.rows:
+        sec_env = _envelope_completed()
+    elif merged_http_headers:
+        sec_env = _envelope(
+            "partial",
+            "Частичные заголовки в данных, но каноническая таблица security headers не построена.",
+        )
+    else:
+        sec_env = _envelope(
+            "no_data",
+            (
+                fallback_messages.get("security_headers")
+                or "Нет карты http_headers в recon и вложенных заголовков в фазах."
+            ),
+        )
+
+    rs_signal = (
+        robots_sitemap_merged.robots_found
+        or robots_sitemap_merged.sitemap_found
+        or robots.found
+        or sitemap.found
+        or (robots_sitemap_merged.notes_ru or "").strip()
+    )
+    if robots.found or sitemap.found:
+        rs_env = _envelope_completed()
+    elif rs_signal and (robots_sitemap_merged.notes_ru or "").strip():
+        rs_env = _envelope("partial", "Сводный JSON robots/sitemap; тела robots/sitemap могли быть не разобраны.")
+    elif rs_signal:
+        rs_env = _envelope_completed()
+    elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
+        rs_env = _envelope(
+            "not_executed",
+            "Not scanned: INCLUDE_MINIO=false — robots/sitemap ключи есть, тела не загружались.",
+        )
+    else:
+        rs_env = _envelope(
+            "no_data",
+            (fallback_messages.get("robots_sitemap") or "robots.txt и sitemap не получены."),
+        )
+
+    if final_emails:
+        em_env = _envelope_completed()
+    elif harvester_enabled:
+        em_env = _envelope(
+            "no_data",
+            (fallback_messages.get("leaked_emails") or "theHarvester включён, маскированных email в данных нет."),
+        )
+    else:
+        em_env = _envelope(
+            "not_executed",
+            "Not scanned: HARVESTER_ENABLED=false — целевой сбор email через theHarvester не выполнялся.",
+        )
+
+    mandatory = ValhallaMandatorySectionsModel(
+        tech_stack_structured=tech_env,
+        outdated_components=outd_env,
+        ssl_tls_analysis=ssl_env,
+        security_headers_analysis=sec_env,
+        robots_sitemap_analysis=rs_env,
+        leaked_emails=em_env,
+    )
+    sections_map: dict[str, dict[str, str]] = {}
+    for sid in _MANDATORY_SECTION_IDS:
+        env = getattr(mandatory, sid, None)
+        if env is None:
+            continue
+        sections_map[sid] = {"status": env.status, "reason": env.reason}
+
+    coverage = ValhallaCoverageModel(
+        phases_executed=phases,
+        feature_flags=dict(feature_flags),
+        sections=sections_map,
+        tool_errors_summary=tool_errs,
+    )
+    return mandatory, coverage
+
+
+def build_valhalla_minimal_context_patch(
+    *,
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    raw_artifact_keys: list[tuple[str, str]],
+    fetch_raw_bodies: bool,
+    harvester_enabled: bool,
+    trivy_enabled: bool,
+    tool_run_summaries: list[tuple[str, str]] | None,
+) -> dict[str, Any]:
+    """RPT-008 — fill mandatory_sections / coverage / robots_sitemap_analysis for HTML-only export."""
+    structured = TechStackStructuredModel()
+    tech_table: list[TechStackTableRow] = []
+    outdated: list[OutdatedComponentRow] = []
+    ssl_out = SslTlsAnalysisModel()
+    sec_hdr = SecurityHeadersAnalysisModel()
+    robots = RobotsTxtAnalysisModel()
+    sitemap = SitemapAnalysisModel()
+    merged_rs = RobotsSitemapMergedSummaryModel()
+    deps: list[DependencyAnalysisRow] = []
+    merged_http: dict[str, dict[str, str]] = {}
+    raw_hints = _raw_keys_hint_flags(raw_artifact_keys)
+    fb = {
+        "tech_stack": None,
+        "outdated": None,
+        "ssl_tls": None,
+        "security_headers": None,
+        "robots_sitemap": None,
+        "leaked_emails": None,
+    }
+    mandatory, coverage = _compute_mandatory_sections_and_coverage(
+        structured=structured,
+        tech_table=tech_table,
+        outdated=outdated,
+        ssl_out=ssl_out,
+        sec_hdr=sec_hdr,
+        robots=robots,
+        sitemap=sitemap,
+        robots_sitemap_merged=merged_rs,
+        final_emails=[],
+        merged_http_headers=merged_http,
+        deps=deps,
+        fetch_raw_bodies=fetch_raw_bodies,
+        harvester_enabled=harvester_enabled,
+        trivy_enabled=trivy_enabled,
+        phase_outputs=phase_outputs,
+        raw_artifact_keys=raw_artifact_keys,
+        raw_hints=raw_hints,
+        tool_run_summaries=tool_run_summaries,
+        feature_flags={
+            "HARVESTER_ENABLED": harvester_enabled,
+            "TRIVY_ENABLED": trivy_enabled,
+            "INCLUDE_MINIO": fetch_raw_bodies,
+        },
+        fallback_messages=fb,
+    )
+    rs_bundle = ValhallaRobotsSitemapAnalysisBundleModel(
+        robots_txt=robots,
+        sitemap=sitemap,
+        merged=merged_rs,
+    )
+    return {
+        "mandatory_sections": mandatory.model_dump(mode="json"),
+        "coverage": coverage.model_dump(mode="json"),
+        "robots_sitemap_analysis": rs_bundle.model_dump(mode="json"),
+    }
+
+
 def build_valhalla_report_context(
     *,
     tenant_id: str,
@@ -1908,10 +2521,19 @@ def build_valhalla_report_context(
     tool_runs: list[tuple[str, dict[str, Any] | None]] | None = None,
     raw_artifact_types: list[str] | None = None,
     trivy_enabled: bool = False,
+    harvester_enabled: bool = False,
+    tool_run_summaries: list[tuple[str, str]] | None = None,
+    extra_feature_flags: dict[str, bool] | None = None,
 ) -> ValhallaReportContext:
     """Assemble ValhallaReportContext from already-collected scan report inputs."""
     tid = (tenant_id or "").strip()
     sid = (scan_id or "").strip()
+
+    recon_pipeline_summary: dict[str, Any] = {}
+    if isinstance(recon_results, dict):
+        cand = recon_results.get("recon_pipeline_summary")
+        if isinstance(cand, dict):
+            recon_pipeline_summary = cand
 
     robots, sitemap = _collect_robots_sitemap_from_keys(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
     robots_sitemap_merged = _build_robots_sitemap_merged(
@@ -2107,6 +2729,50 @@ def build_valhalla_report_context(
             "добавляет сигналы из stdout-артефактов; иначе возможны только косвенные совпадения в recon."
         )
 
+    ff: dict[str, bool] = {
+        "HARVESTER_ENABLED": bool(harvester_enabled),
+        "TRIVY_ENABLED": bool(trivy_enabled),
+        "INCLUDE_MINIO": bool(fetch_raw_bodies),
+    }
+    if extra_feature_flags:
+        ff.update({str(k): bool(v) for k, v in extra_feature_flags.items()})
+
+    raw_hints = _raw_keys_hint_flags(raw_artifact_keys)
+    mandatory, coverage = _compute_mandatory_sections_and_coverage(
+        structured=structured,
+        tech_table=tech_table,
+        outdated=outdated,
+        ssl_out=ssl_out,
+        sec_hdr=sec_hdr,
+        robots=robots,
+        sitemap=sitemap,
+        robots_sitemap_merged=robots_sitemap_merged,
+        final_emails=final_emails,
+        merged_http_headers=merged_http_headers,
+        deps=deps,
+        fetch_raw_bodies=fetch_raw_bodies,
+        harvester_enabled=harvester_enabled,
+        trivy_enabled=trivy_enabled,
+        phase_outputs=phase_outputs,
+        raw_artifact_keys=raw_artifact_keys,
+        raw_hints=raw_hints,
+        tool_run_summaries=tool_run_summaries,
+        feature_flags=ff,
+        fallback_messages={
+            "tech_stack": tech_stack_fallback_message,
+            "outdated": outdated_components_fallback_message,
+            "ssl_tls": ssl_tls_fallback_message,
+            "security_headers": security_headers_fallback_message,
+            "robots_sitemap": robots_sitemap_fallback_message,
+            "leaked_emails": leaked_emails_fallback_message,
+        },
+    )
+    rs_analysis_bundle = ValhallaRobotsSitemapAnalysisBundleModel(
+        robots_txt=robots,
+        sitemap=sitemap,
+        merged=robots_sitemap_merged,
+    )
+
     return ValhallaReportContext(
         robots_txt_analysis=robots,
         sitemap_analysis=sitemap,
@@ -2131,4 +2797,9 @@ def build_valhalla_report_context(
         risk_matrix=risk_matrix,
         critical_vulns=critical_vulns,
         appendix_tools=appendix_tools,
+        mandatory_sections=mandatory,
+        robots_sitemap_analysis=rs_analysis_bundle,
+        coverage=coverage,
+        recon_pipeline_summary=recon_pipeline_summary,
+        xss_structured=build_xss_structured_rows_from_findings(findings),
     )

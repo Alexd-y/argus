@@ -50,7 +50,7 @@ class TestRpt004PromptRegistry:
         )
         assert "penetration testing report" in system.lower()
         assert "finding" in user and "xss" in user
-        assert version.startswith("vhq006-")
+        assert version.startswith("vhq007-")
 
 
 class TestRpt004CacheKey:
@@ -148,6 +148,63 @@ class TestRpt004CacheSkipsLlm:
         assert out["text"] == "fresh text"
         llm.assert_called_once()
         mock_redis.set.assert_called_once()
+
+
+class TestRpt004ExecutiveFactGate:
+    def test_mismatched_severity_replaced_when_config_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "src.reports.ai_text_generation.settings.ai_text_executive_fact_check_replace",
+            True,
+        )
+        out = run_ai_text_generation(
+            "t1",
+            "s1",
+            "valhalla",
+            "executive_summary",
+            {
+                "executive_severity_totals": {
+                    "critical": 0,
+                    "high": 1,
+                    "medium": 0,
+                    "low": 0,
+                    "info": 0,
+                },
+                "finding_count": 1,
+            },
+            redis_client=None,
+            llm_callable=lambda *a, **k: "There are 99 critical findings.",
+        )
+        assert out["status"] == "ok"
+        assert "99" not in out["text"]
+        assert "critical: 0" in out["text"]
+
+    def test_mismatched_keeps_llm_when_replace_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "src.reports.ai_text_generation.settings.ai_text_executive_fact_check_replace",
+            False,
+        )
+        out = run_ai_text_generation(
+            "t1",
+            "s1",
+            "valhalla",
+            "executive_summary",
+            {
+                "executive_severity_totals": {
+                    "critical": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0,
+                    "info": 0,
+                },
+                "finding_count": 0,
+            },
+            redis_client=None,
+            llm_callable=lambda *a, **k: "There are 99 critical findings.",
+        )
+        assert out["status"] == "ok"
+        assert "99" in out["text"]
 
 
 class TestRpt004NoLlmPlaceholders:

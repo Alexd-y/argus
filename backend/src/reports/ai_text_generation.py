@@ -14,6 +14,10 @@ from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_KEYS,
     get_report_ai_section_prompt,
 )
+from src.reports.report_data_validation import (
+    grounded_executive_summary_fallback_text,
+    validate_executive_ai_text_against_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +257,26 @@ def run_ai_text_generation(
             "prompt_version": prompt_version,
             "payload_sha256": payload_hash,
         }
+
+    fact_ok, fact_codes = validate_executive_ai_text_against_payload(
+        section_key, input_payload, generated
+    )
+    if not fact_ok:
+        logger.warning(
+            json.dumps(
+                {
+                    "event": "executive_ai_text_fact_mismatch",
+                    "section_key": section_key,
+                    "tier": tier,
+                    "tenant_id": tenant_id,
+                    "scan_id": scan_id,
+                    "reason_codes": fact_codes,
+                },
+                ensure_ascii=False,
+            )
+        )
+        if settings.ai_text_executive_fact_check_replace:
+            generated = grounded_executive_summary_fallback_text(input_payload)
 
     if r is not None and generated and ttl > 0:
         try:

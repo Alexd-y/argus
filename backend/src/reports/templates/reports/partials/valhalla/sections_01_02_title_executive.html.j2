@@ -21,6 +21,10 @@
             <p class="empty">Нет данных</p>
         {% endif %}
     </div>
+    {% set sev = severity_counts if severity_counts is defined else {} %}
+    {% if sev %}
+    <p class="meta severity-counts-attestation"><small>Сводка по находкам в отчёте (по данным таблицы): Critical {{ sev.get("critical", 0) }}, High {{ sev.get("high", 0) }}, Medium {{ sev.get("medium", 0) }}, Low {{ sev.get("low", 0) }}, Info {{ sev.get("info", 0) }}; всего {{ findings_count | default(0) }}.</small></p>
+    {% endif %}
 
     <h3>Количество уязвимостей по уровням критичности</h3>
     <table>
@@ -35,7 +39,7 @@
             {% for level in ["critical", "high", "medium", "low", "info"] %}
             <tr>
                 <td>{{ level | capitalize }}</td>
-                <td>{{ recon_summary.summary_counts.get(level, 0) if recon_summary.summary_counts else 0 }}</td>
+                <td>{{ sev.get(level, 0) if sev else (recon_summary.summary_counts.get(level, 0) if recon_summary.summary_counts else 0) }}</td>
                 <td>—</td>
             </tr>
             {% endfor %}

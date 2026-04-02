@@ -1,0 +1,83 @@
+{% if scan_artifacts.status == "skipped" %}
+    <p class="empty">Список сырых артефактов не загружался для этого отчёта. Через API (при валидном scan id):
+        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
+        (<code>phase</code>: recon, threat_modeling, vuln_analysis, exploitation, post_exploitation).</p>
+{% elif scan_artifacts.status == "unavailable" %}
+    <p class="empty">Объектное хранилище недоступно; список артефактов не получен.</p>
+    <p>Когда хранилище доступно, перечислите raw-объекты через
+        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>.</p>
+{% elif scan_artifacts.phase_blocks %}
+    <p>Фазовые raw-объекты (MinIO). Ссылки на скачивание — ограниченные по времени presigned URL, если генерация успешна.</p>
+    {% for block in scan_artifacts.phase_blocks %}
+        <h3>{{ block.phase_label }}</h3>
+        <p><small>API:
+            <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase={{ block.phase_query }}&amp;raw=true</code></small></p>
+        {% if block.tool_output_rows %}
+            <h4 id="raw-tool-outputs">Сырые выводы инструментов</h4>
+            <p class="meta"><small>Секция raw CLI / stdout MinIO (alias: «Сырые выводы», данные из <code>ScanReportData.raw_artifacts</code>).</small></p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Файл</th>
+                        <th>Размер (байт)</th>
+                        <th>Изменён (UTC)</th>
+                        <th>Скачать</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in block.tool_output_rows %}
+                        <tr>
+                            <td><code>{{ item.file_name | e }}</code></td>
+                            <td>{{ item.size }}</td>
+                            <td>{{ item.last_modified }}</td>
+                            <td>
+                                {% if item.download_url %}
+                                    <a href="{{ item.download_url }}">Presigned link</a>
+                                {% else %}
+                                    <span class="empty">Нет presigned URL — используйте API выше</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if block.tool_output_rows and block.other_rows %}
+            <h4>Прочие артефакты</h4>
+        {% endif %}
+        {% set main_items = block.other_rows if block.tool_output_rows else block.rows %}
+        {% if main_items %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Файл</th>
+                        <th>Размер (байт)</th>
+                        <th>Изменён (UTC)</th>
+                        <th>Скачать</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in main_items %}
+                        <tr>
+                            <td><code>{{ item.file_name | e }}</code></td>
+                            <td>{{ item.size }}</td>
+                            <td>{{ item.last_modified }}</td>
+                            <td>
+                                {% if item.download_url %}
+                                    <a href="{{ item.download_url }}">Presigned link</a>
+                                {% else %}
+                                    <span class="empty">Нет presigned URL — используйте API выше</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    {% endfor %}
+{% else %}
+    <p class="empty">Для этого скана raw-артефакты не найдены.</p>
+    <p>Список и скачивание:
+        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
+        (опционально <code>presigned=true</code> для прямых ссылок).</p>
+{% endif %}

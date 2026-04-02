@@ -17,7 +17,28 @@ services:
       - "6379:6379"
 
   backend:
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command:
+      - uvicorn
+      - main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+      - --reload-include
+      - "*.py"
+      - --reload-exclude
+      - "data/*"
+      - --reload-exclude
+      - "tests/*"
+      - --reload-exclude
+      - "alembic/*"
+      - --reload-exclude
+      - "__pycache__/*"
+      - --reload-exclude
+      - ".pytest_cache/*"
+      - --reload-delay
+      - "2.0"
     volumes:
       - ../backend:/app
     environment:

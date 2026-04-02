@@ -54,6 +54,11 @@ from src.recon.mcp.policy import (
         ("medusa", "medusa"),
         ("mitmdump", "mitmdump"),
         ("tcpdump", "tcpdump"),
+        ("theHarvester", "theharvester"),
+        ("THE_HARVESTER", "theharvester"),
+        ("gospider", "gospider"),
+        ("GoSpider", "gospider"),
+        ("parsero", "parsero"),
     ],
 )
 def test_resolve_canonical_normalizes_and_allowlists(raw: str, expected: str) -> None:
@@ -95,6 +100,9 @@ def test_allowed_tools_frozenset_matches_policy() -> None:
             "medusa",
             "mitmdump",
             "tcpdump",
+            "theharvester",
+            "gospider",
+            "parsero",
         }
     )
 
@@ -119,6 +127,9 @@ def test_allowed_tools_frozenset_matches_policy() -> None:
         "medusa",
         "mitmdump",
         "tcpdump",
+        "theharvester",
+        "gospider",
+        "parsero",
     ],
 )
 def test_evaluate_allowed_each_canonical(tool: str) -> None:

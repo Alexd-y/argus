@@ -21,6 +21,11 @@ from src.core.tenant import get_current_tenant_id
 from src.db.models import Evidence as EvidenceModel
 from src.db.models import Finding as FindingModel
 from src.owasp_top10_2025 import parse_owasp_category
+from src.reports.finding_metadata import (
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
+)
 from src.db.models import PhaseOutput, Report, ReportObject, ScanTimeline
 from src.db.models import Screenshot as ScreenshotModel
 from src.db.session import async_session_factory, set_session_tenant
@@ -133,6 +138,11 @@ def _findings_to_schema(findings: list[FindingModel]) -> list[Finding]:
             cvss=f.cvss,
             owasp_category=parse_owasp_category(f.owasp_category),
             proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
+            confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
+            evidence_type=normalize_evidence_type(getattr(f, "evidence_type", None)),
+            evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
+            reproducible_steps=getattr(f, "reproducible_steps", None),
+            applicability_notes=getattr(f, "applicability_notes", None),
         )
         for f in findings
     ]

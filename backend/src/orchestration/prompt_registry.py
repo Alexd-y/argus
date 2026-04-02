@@ -167,12 +167,19 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
             + '- "cvss": CVSS score (float)\n'
             + '- "description": detailed description\n'
             + '- "affected_asset": which asset is affected\n'
-            + '- "remediation": recommended fix\n\n'
+            + '- "remediation": recommended fix\n'
+            + '- "confidence": confirmed | likely | possible | advisory (match evidence strength)\n'
+            + '- "evidence_type": observed | tool_output | version_match | cve_correlation | threat_model_inference\n'
+            + '- "evidence_refs": array of short strings (tool ids, URLs, artifact keys, CVE ids)\n'
+            + '- "reproducible_steps": optional string (how to verify)\n'
+            + '- "applicability_notes": optional string (stack/hosting limits)\n\n'
             + "Only report vulnerabilities supported by evidence from the threat model.\n"
             + "If active scan findings are provided above, incorporate them into your analysis — "
             + "confirm, correlate, or augment them with additional context.\n"
             + 'Return JSON: {{"findings": [{{"severity": "string", "title": "string", "cwe": "string", '
-            + '"cvss": 0.0, "description": "string", "affected_asset": "string", "remediation": "string"}}]}}'
+            + '"cvss": 0.0, "description": "string", "affected_asset": "string", "remediation": "string", '
+            + '"confidence": "string", "evidence_type": "string", "evidence_refs": ["string"], '
+            + '"reproducible_steps": "string", "applicability_notes": "string"}}]}}'
         ),
     ),
     EXPLOITATION: (
@@ -293,6 +300,17 @@ VULN_ANALYSIS_SCHEMA: dict[str, Any] = {
                     "severity": {"type": "string"},
                     "title": {"type": "string"},
                     "cwe": {"type": "string"},
+                    "cvss": {"type": "number"},
+                    "description": {"type": "string"},
+                    "finding_id": {"type": "string"},
+                    "vuln_type": {"type": "string"},
+                    "affected_url": {"type": "string"},
+                    "parameter": {"type": "string"},
+                    "confidence": {"type": "string"},
+                    "evidence_type": {"type": "string"},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+                    "reproducible_steps": {"type": "string"},
+                    "applicability_notes": {"type": "string"},
                 },
             },
         },
@@ -425,18 +443,18 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq006-20250328",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq006-20250328",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq006-20250328",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq006-20250328",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq006-20250328",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq006-20250328",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq006-20250328",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq006-20250328",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq006-20250328",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq006-20250328",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq006-20250328",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq006-20250328",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq009-20260331",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq009-20260331",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq009-20260331",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq009-20260331",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq009-20260331",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq009-20260331",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq009-20260331",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq009-20260331",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq009-20260331",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq009-20260331",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq009-20260331",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq009-20260331",
 }
 
 REPORT_AI_SYSTEM = (
@@ -448,7 +466,8 @@ REPORT_AI_SYSTEM = (
     "When owasp_compliance_table is present, treat each row as category coverage (counts / presence), "
     "not as proof of absence of other issue types. "
     "When hibp_pwned_password_summary is present, state credential-breach exposure only as aggregate "
-    "facts there (e.g. pwned_count, checks_run)—never infer passwords or raw breach contents. "
+    "facts there: use EXACT integers from pwned_count and checks_run (and data_breach_password_exposure / "
+    "breach_signal_note when present)—never estimate, never infer passwords or raw breach contents. "
     "When valhalla_context is present, ground Valhalla-style narrative in that summary, risk_matrix, "
     "critical_vulns, tech_stack_structured, and excerpts only. "
     "When the JSON also includes top-level keys tech_stack_structured, ssl_tls_analysis, "
@@ -458,6 +477,17 @@ REPORT_AI_SYSTEM = (
     "do not invent tool output. "
     "When findings entries include finding_id, title, parameter, affected_url (or affected_asset), "
     "reference those concrete fields in technical sections—do not substitute generic placeholders. "
+    "When ``valhalla_context.xss_structured`` is non-empty, each row is authoritative XSS evidence: "
+    "use ``finding_id``, ``parameter``, ``payload_entered``, ``payload_used``, ``payload_reflected``, "
+    "``reflection_context``, ``verification_method``, ``verified_via_browser``, ``browser_alert_text``, "
+    "``artifact_keys`` (MinIO/object keys), and ``artifact_urls`` (presigned or direct screenshot URLs "
+    "when present) verbatim in narrative—quote or paraphrase only what appears there. Tie remediation to "
+    "that reflection context and verification path (e.g. browser vs HTTP reflection); do not replace with "
+    "generic advice like \"validate all user input\" or \"sanitize input\" without naming the concrete "
+    "parameter, sink context, and control implied by the data. "
+    "Never state vulnerability counts, severity histograms, or HIBP hit/check numbers unless they match "
+    "the exact integers in executive_severity_totals, severity_counts, finding_count, and "
+    "hibp_pwned_password_summary when those keys exist. "
     "Output plain prose suitable for embedding in a formal report (no JSON, no code fences unless quoting)."
 )
 
@@ -469,9 +499,15 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: (
         "Describe the vulnerability in technical but readable language: root cause, affected component, "
         "and exploitation preconditions as supported by the context. "
+        "Ground every sentence in fields present on the cited finding or in valhalla_context / PoC "
+        "snippets—do not invent CVE IDs, endpoints, parameters, or tool output not shown in the JSON. "
         "For each distinct issue you discuss, cite the concrete ``finding_id`` and ``title`` from the "
         "findings list; when ``parameter`` and ``affected_url`` (or ``affected_asset``) exist on that "
         "finding, mention them explicitly. "
+        "For XSS, if ``valhalla_context.xss_structured`` contains a row for that ``finding_id``, you MUST "
+        "weave in that row's ``parameter``, ``payload_entered`` / ``payload_used`` / ``payload_reflected``, "
+        "``reflection_context``, ``verification_method``, ``verified_via_browser``, ``browser_alert_text``, "
+        "``artifact_keys``, and ``artifact_urls`` (when non-empty)—do not hand-wave with generic validation wording. "
         "When ``valhalla_context.risk_matrix`` and ``valhalla_context.critical_vulns`` exist, align "
         "severity narrative with those structures without inventing extra findings. "
         "Context JSON:\n{context_json}"
@@ -483,6 +519,11 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "category-specific remediation: tie findings to the right A01–A10 keys and ground technical steps "
         "in the provided ``how_to_fix`` and checks in ``how_to_find`` (do not invent extra OWASP text). "
         "Reference ``finding_id`` + title + parameter/affected_url where those fields exist on findings. "
+        "For XSS rows in ``valhalla_context.xss_structured``, remediation must reflect ``reflection_context`` "
+        "(HTML attribute, body, JS sink, etc.) and how it was verified (``verification_method``, "
+        "``verified_via_browser``); cite ``artifact_keys`` and ``artifact_urls`` when listed. "
+        "Avoid one-line boilerplate such as \"validate input\" without tying controls to the named parameter "
+        "and context from the JSON. "
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_BUSINESS_RISK: (
@@ -534,19 +575,31 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "SQLi) without fabricating tool output. "
         "Reference ``finding_id`` + title + parameter/affected_url for findings that motivate each "
         "control when those fields exist. "
+        "When ``valhalla_context.xss_structured`` is present, align XSS hardening with each row's "
+        "``reflection_context``, verification facts, and listed ``artifact_keys`` / ``artifact_urls``—"
+        "not generic \"sanitize everything\" lists. "
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: (
         "Write an executive summary in a direct, high-signal style suitable for a technical leadership "
         "brief (Valhalla report variant): bullets for key risks, one paragraph for posture, no fluff. "
+        "GROUNDING: every bullet must map to a concrete signal in the JSON—``valhalla_context.summary``, "
+        "``risk_matrix`` cell counts, ``critical_vulns``, tech/TLS/header/dependency slices, or a specific "
+        "finding row. If a signal is missing, say data was not collected; do not fill gaps with guesses. "
         "You MUST anchor bullets in ``valhalla_context.summary``, ``risk_matrix``, ``critical_vulns``, "
         "and excerpts when those objects exist; if absent, use only scan findings and severity counts. "
         "When discussing specific issues, cite ``finding_id`` + title + parameter/affected_url from "
         "findings entries where present. "
+        "NUMBERS: use EXACT integers from ``executive_severity_totals`` (critical/high/medium/low/info) "
+        "and ``finding_count`` for total findings—do not estimate or contradict them; if you mention "
+        "counts, they must match those fields. ``severity_counts`` is a full histogram (may include aliases). "
+        "Open with the exact severity totals or finding_count when you state volume—copy integers verbatim. "
         "When ``owasp_compliance_table`` exists, cite at most the top 3 categories by count plus any "
         "critical/high-only themes—do not restate the full table. "
         "When ``hibp_pwned_password_summary`` exists, add one bullet only if it changes posture "
         "(e.g. checks_run and whether pwned_count > 0); omit if absent or inapplicable. "
+        "HIBP NUMBERS: if you mention sampled checks or pwned hits, they MUST match ``pwned_count`` and "
+        "``checks_run`` exactly—do not invent counts. "
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_ATTACK_SCENARIOS: (
@@ -568,6 +621,9 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_REMEDIATION_STAGES: (
         "Structure remediation in three horizons: (1) immediate (0–48h), (2) within ~2 weeks, "
         "(3) long-term (architecture / SDLC). "
+        "GROUNDING: each horizon must name at least one concrete ``finding_id`` (and title) from the "
+        "findings list or from ``valhalla_context.critical_vulns`` / ``risk_matrix`` references—no "
+        "anonymous \"critical issue\" without an id when ids exist in context. "
         "You MUST bucket items from ``valhalla_context.critical_vulns`` whose severity is critical or high "
         "(or CVSS ≥ 7.0 when severity is absent) into these horizons with actionable steps: immediate "
         "for confirmed/exploit-backed critical exposure; ~2 weeks for dependent fixes and validation; "
@@ -575,6 +631,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "Also use severities, ``owasp_compliance_table``, ``valhalla_context`` dependency/TLS/header gaps, "
         "``risk_matrix``, and ``hibp_pwned_password_summary`` (if present) to justify staging. "
         "Reference ``finding_id`` + title + parameter/affected_url when tying steps to findings. "
+        "Do not invent CVEs, owners, or deadlines not supported by the JSON. "
         "Plain prose with clear subheadings for each horizon. Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: (

@@ -138,6 +138,16 @@ class ReportSummary(BaseModel):
     leaksFound: bool = False
 
 
+FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"]
+FindingEvidenceTypeLiteral = Literal[
+    "observed",
+    "tool_output",
+    "version_match",
+    "cve_correlation",
+    "threat_model_inference",
+]
+
+
 class Finding(BaseModel):
     """Finding in report per api-contracts."""
 
@@ -148,6 +158,11 @@ class Finding(BaseModel):
     cvss: float | None = None
     owasp_category: OwaspTop102025CategoryId | None = None
     proof_of_concept: dict[str, Any] | None = None
+    confidence: FindingConfidenceLiteral = "likely"
+    evidence_type: FindingEvidenceTypeLiteral | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    reproducible_steps: str | None = None
+    applicability_notes: str | None = None
 
 
 class ReportListResponse(BaseModel):

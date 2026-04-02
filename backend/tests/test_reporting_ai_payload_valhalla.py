@@ -76,6 +76,9 @@ def test_build_ai_payload_valhalla_includes_risk_matrix_and_critical_vulns_compa
         valhalla_context=vc,
     )
     p = ReportGenerator.build_ai_input_payload(data, tier="valhalla")
+    assert p["finding_count"] == 1
+    assert p["severity_counts"].get("critical") == 1
+    assert p["executive_severity_totals"]["critical"] == 1
     for k in (
         "tech_stack_structured",
         "ssl_tls_analysis",
@@ -129,3 +132,22 @@ def test_compact_risk_matrix_finding_ids_capped_at_24() -> None:
     assert len(cell0["finding_ids"]) == 24
     assert cell0["finding_ids"][0] == "id-0"
     assert cell0["finding_ids"][-1] == "id-23"
+
+
+def test_build_ai_payload_valhalla_passes_hibp_from_scan_data() -> None:
+    hibp = {
+        "opt_in": True,
+        "checks_run": 2,
+        "pwned_count": 0,
+        "note": "k-anonymity Pwned Passwords API; plaintext passwords are not logged or stored by this hook.",
+        "data_breach_password_exposure": "no",
+        "breach_signal_note": "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked).",
+    }
+    data = ScanReportData(
+        scan_id="s-hibp",
+        tenant_id="t-hibp",
+        valhalla_context=ValhallaReportContext(),
+        hibp_pwned_password_summary=hibp,
+    )
+    p = ReportGenerator.build_ai_input_payload(data, tier="valhalla")
+    assert p.get("hibp_pwned_password_summary") == hibp

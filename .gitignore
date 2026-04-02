@@ -45,3 +45,6 @@ gunicorn.ctl
 
 # Archives (do not commit)
 *.rar
+
+# Local orchestration / scratch workspaces
+orch-*/

@@ -1,12 +1,15 @@
-{# Valhalla — детальная таблица находок: CVE, CVSS, PoC (только для tier valhalla). #}
+{# Valhalla — детальная таблица находок: confidence, evidence, applicability; advisory отдельно (T4/T5). #}
 {% set labels = owasp_top10_labels if owasp_top10_labels is defined else {} %}
-{% set col_count = 8 %}
+{% set col_count = 11 %}
 <section class="findings valhalla-findings" id="findings">
     <h2>Детализированное описание уязвимостей (Findings)</h2>
     <table class="findings-main-table">
         <thead>
             <tr>
                 <th>Критичность</th>
+                <th>Уверенность</th>
+                <th>Доказательства</th>
+                <th>Применимость</th>
                 <th>Vuln-ID</th>
                 <th>Название</th>
                 <th>Описание</th>
@@ -17,73 +20,81 @@
             </tr>
         </thead>
         <tbody>
+            {% set primary = namespace(any=false) %}
             {% for row in findings %}
+                {% if not (row.is_advisory | default(false)) %}
+                    {% set primary.any = true %}
                 <tr>
-                    <td><span class="sev-{{ (row.severity or "info") | lower }}">{{ row.severity }}</span></td>
-                    <td><code>{{ row.id or "—" }}</code></td>
-                    <td>{{ row.title }}</td>
-                    <td class="desc">{{ row.description or "" }}</td>
-                    <td>{{ row.cwe or "—" }}</td>
+                    <td><span class="sev-{{ (row.severity or "info") | lower | e }}">{{ (row.severity or "") | e }}</span></td>
+                    <td>{{ (row.confidence or "likely") | e }}</td>
+                    <td class="desc">{{ (row.evidence_summary or "—") | e }}</td>
+                    <td class="desc">{{ (row.applicability_notes or "—") | e }}</td>
+                    <td><code>{{ (row.id or "—") | e }}</code></td>
+                    <td>{{ (row.title or "") | e }}</td>
+                    <td class="desc">{{ (row.description or "") | e }}</td>
+                    <td>{{ (row.cwe or "—") | e }}</td>
                     <td class="owasp-finding-cell">
                         {% if row.owasp_category %}
-                            <span class="owasp-finding-id"><code>{{ row.owasp_category }}</code></span>
+                            <span class="owasp-finding-id"><code>{{ row.owasp_category | e }}</code></span>
                             {% if row.owasp_title_ru %}
                             <span class="owasp-finding-sep"> — </span>
-                            <span class="owasp-finding-label">{{ row.owasp_title_ru }}</span>
+                            <span class="owasp-finding-label">{{ row.owasp_title_ru | e }}</span>
                             {% elif labels.get(row.owasp_category) %}
                             <span class="owasp-finding-sep"> — </span>
-                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) }}</span>
+                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
                             {% endif %}
                         {% else %}
                             Не найдено
                         {% endif %}
                     </td>
-                    <td>{% if row.cve %}{{ row.cve }}{% else %}Не найдено{% endif %}</td>
-                    <td>{% if row.cvss is not none %}{{ row.cvss }}{% else %}—{% endif %}</td>
+                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}Не найдено{% endif %}</td>
+                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
                 </tr>
                 {% if row.proof_of_concept %}
                     {% set poc = row.proof_of_concept %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url %}
+                    {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
                             {% if has_detail %}
                             <section class="finding-poc">
                                 <h3 class="finding-poc-title">Доказательства (PoC)</h3>
+                                {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
                                 {% if row.poc_screenshot_url %}
                                     <p><strong>Скриншот</strong></p>
-                                    <p><a href="{{ row.poc_screenshot_url }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a></p>
+                                    <p><a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a></p>
                                     {% if embed_poc_screenshot_inline %}
-                                    <p class="finding-poc-screenshot-thumb"><img src="{{ row.poc_screenshot_url }}" alt="PoC" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
+                                    <p class="finding-poc-screenshot-thumb"><img src="{{ row.poc_screenshot_url | e }}" alt="PoC" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
                                     {% endif %}
                                 {% endif %}
                                 {% if param_label %}
                                     <p><strong>Параметр</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ param_label }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ param_label | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.payload %}
                                     <p><strong>Payload</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.payload }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.payload | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.javascript_code %}
                                     <p><strong>JavaScript</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.javascript_code }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.javascript_code | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.curl_command %}
                                     <p><strong>cURL</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.curl_command }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.request %}
                                     <p><strong>Запрос</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.request }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.request | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.response_snippet %}
                                     <p><strong>Фрагмент ответа</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.response_snippet }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.response_snippet | e }}</code></pre>
                                 {% endif %}
                                 {% if poc.response %}
                                     <p><strong>Ответ (выдержка)</strong></p>
-                                    <pre class="finding-poc-block"><code>{{ poc.response }}</code></pre>
+                                    <pre class="finding-poc-block"><code>{{ poc.response | e }}</code></pre>
                                 {% endif %}
                             </section>
                             {% else %}
@@ -92,11 +103,114 @@
                         </td>
                     </tr>
                 {% endif %}
-            {% else %}
+                {% if row.reproducible_steps %}
+                    <tr class="poc-row finding-repro-row">
+                        <td colspan="{{ col_count }}">
+                            <p><strong>Воспроизведение</strong></p>
+                            <pre class="finding-poc-block"><code>{{ row.reproducible_steps | e }}</code></pre>
+                        </td>
+                    </tr>
+                {% endif %}
+                {% endif %}
+            {% endfor %}
+            {% if not primary.any %}
                 <tr>
                     <td colspan="{{ col_count }}" class="empty">Нет данных</td>
                 </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <h3 class="valhalla-advisory-findings-heading">Рекомендательные / контекстные находки (advisory)</h3>
+    <table class="findings-main-table valhalla-advisory-findings-table">
+        <thead>
+            <tr>
+                <th>Критичность</th>
+                <th>Уверенность</th>
+                <th>Доказательства</th>
+                <th>Применимость</th>
+                <th>Vuln-ID</th>
+                <th>Название</th>
+                <th>Описание</th>
+                <th>CWE</th>
+                <th>OWASP</th>
+                <th>CVE</th>
+                <th>CVSS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set adv_ns = namespace(any=false) %}
+            {% for row in findings %}
+                {% if row.is_advisory | default(false) %}
+                    {% set adv_ns.any = true %}
+                <tr>
+                    <td><span class="sev-{{ (row.severity or "info") | lower | e }}">{{ (row.severity or "") | e }}</span></td>
+                    <td>{{ (row.confidence or "advisory") | e }}</td>
+                    <td class="desc">{{ (row.evidence_summary or "—") | e }}</td>
+                    <td class="desc">{{ (row.applicability_notes or "—") | e }}</td>
+                    <td><code>{{ (row.id or "—") | e }}</code></td>
+                    <td>{{ (row.title or "") | e }}</td>
+                    <td class="desc">{{ (row.description or "") | e }}</td>
+                    <td>{{ (row.cwe or "—") | e }}</td>
+                    <td class="owasp-finding-cell">
+                        {% if row.owasp_category %}
+                            <span class="owasp-finding-id"><code>{{ row.owasp_category | e }}</code></span>
+                            {% if row.owasp_title_ru %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ row.owasp_title_ru | e }}</span>
+                            {% elif labels.get(row.owasp_category) %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
+                            {% endif %}
+                        {% else %}
+                            Не найдено
+                        {% endif %}
+                    </td>
+                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}Не найдено{% endif %}</td>
+                    <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
+                </tr>
+                {% if row.proof_of_concept %}
+                    {% set poc = row.proof_of_concept %}
+                    {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail %}
+                    {% set param_label = row.parameter or row.param or poc.parameter %}
+                    <tr class="poc-row">
+                        <td colspan="{{ col_count }}">
+                            {% if has_detail %}
+                            <section class="finding-poc">
+                                <h3 class="finding-poc-title">Доказательства (PoC)</h3>
+                                {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
+                                {% if row.poc_screenshot_url %}
+                                    <p><a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a></p>
+                                {% endif %}
+                                {% if param_label %}
+                                    <pre class="finding-poc-block"><code>{{ param_label | e }}</code></pre>
+                                {% endif %}
+                                {% if poc.curl_command %}
+                                    <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
+                                {% endif %}
+                            </section>
+                            {% else %}
+                            <p class="finding-poc-empty">Нет данных</p>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endif %}
+                {% if row.reproducible_steps %}
+                    <tr class="poc-row finding-repro-row">
+                        <td colspan="{{ col_count }}">
+                            <p><strong>Воспроизведение</strong></p>
+                            <pre class="finding-poc-block"><code>{{ row.reproducible_steps | e }}</code></pre>
+                        </td>
+                    </tr>
+                {% endif %}
+                {% endif %}
             {% endfor %}
+            {% if not adv_ns.any %}
+                <tr>
+                    <td colspan="{{ col_count }}" class="empty">Нет advisory-находок</td>
+                </tr>
+            {% endif %}
         </tbody>
     </table>
 </section>

@@ -36,6 +36,7 @@ _VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
     "remediation_stages_text",
     "zero_day_text",
     "conclusion_text",
+    "hibp_pwned_password_summary",
     "appendices",
 )
 
@@ -54,6 +55,12 @@ from src.reports.data_collector import (
     ScanReportData,
     TimelineRow,
     build_owasp_summary_from_counts,
+    executive_severity_totals_from_severity_strings,
+)
+from src.reports.finding_metadata import (
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
 )
 from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
@@ -113,6 +120,7 @@ class ReportData:
     executive_summary: str | None = None
     remediation: str | list[str] = field(default_factory=list)
     raw_artifacts: list[dict[str, Any]] = field(default_factory=list)
+    hibp_pwned_password_summary: dict[str, Any] | None = None
 
 
 def summary_dict_to_report_summary(summary: dict[str, Any] | None) -> ReportSummary:
@@ -162,6 +170,11 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
         cvss=row.cvss,
         owasp_category=parse_owasp_category(row.owasp_category),
         proof_of_concept=row.proof_of_concept,
+        confidence=normalize_confidence(row.confidence, default="likely"),
+        evidence_type=normalize_evidence_type(row.evidence_type),
+        evidence_refs=normalize_evidence_refs(row.evidence_refs),
+        reproducible_steps=row.reproducible_steps,
+        applicability_notes=row.applicability_notes,
     )
 
 
@@ -190,6 +203,16 @@ def build_report_data_from_scan_report(
         target = data.scan.target_url
 
     summary = summary_dict_to_report_summary(data.report.summary if data.report else None)
+    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
+    summary = summary.model_copy(
+        update={
+            "critical": sev_totals["critical"],
+            "high": sev_totals["high"],
+            "medium": sev_totals["medium"],
+            "low": sev_totals["low"],
+            "info": sev_totals["info"],
+        }
+    )
     technologies: list[str] = []
     if data.report and data.report.technologies:
         technologies = [str(t) for t in data.report.technologies]
@@ -260,6 +283,7 @@ def build_report_data_from_scan_report(
         executive_summary=exec_s,
         remediation=rem,
         raw_artifacts=raw_artifacts_dicts,
+        hibp_pwned_password_summary=data.hibp_pwned_password_summary,
     )
 
 
@@ -285,10 +309,21 @@ def build_report_data_from_db(
         rem = [rem] if rem else []
     elif rem is None:
         rem = []
+    summary = report_to_summary(report)
+    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in findings)
+    summary = summary.model_copy(
+        update={
+            "critical": sev_totals["critical"],
+            "high": sev_totals["high"],
+            "medium": sev_totals["medium"],
+            "low": sev_totals["low"],
+            "info": sev_totals["info"],
+        }
+    )
     return ReportData(
         report_id=report.id,
         target=report.target,
-        summary=report_to_summary(report),
+        summary=summary,
         findings=[
             Finding(
                 severity=f.severity,
@@ -298,6 +333,11 @@ def build_report_data_from_db(
                 cvss=f.cvss,
                 owasp_category=parse_owasp_category(f.owasp_category),
                 proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
+                confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
+                evidence_type=normalize_evidence_type(getattr(f, "evidence_type", None)),
+                evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
+                reproducible_steps=getattr(f, "reproducible_steps", None),
+                applicability_notes=getattr(f, "applicability_notes", None),
             )
             for f in findings
         ],
@@ -493,17 +533,8 @@ def build_valhalla_report_payload(
     recon = ctx.get("recon_summary")
     if not isinstance(recon, dict):
         recon = {}
-    exec_counts_raw = recon.get("summary_counts")
-    exec_counts: dict[str, Any] = dict(exec_counts_raw) if isinstance(exec_counts_raw, dict) else {}
-    if not exec_counts:
-        s = data.summary
-        exec_counts = {
-            "critical": s.critical,
-            "high": s.high,
-            "medium": s.medium,
-            "low": s.low,
-            "info": s.info,
-        }
+    # Align with ``ReportData.findings`` (same list as JSON findings / pipeline), not stale report.summary.
+    exec_counts = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
     owasp = ctx.get("owasp_compliance_rows")
     if not isinstance(owasp, list):
         owasp = []
@@ -519,6 +550,12 @@ def build_valhalla_report_payload(
     exploit_chains_text = str(ai.get(_VHL_AI_EXPLOIT_CHAINS) or "").strip()
     remediation_stages_text = str(ai.get(_VHL_AI_REMEDIATION_STAGES) or "").strip()
     zero_day_text = str(ai.get(_VHL_AI_ZERO_DAY) or "").strip()
+    hibp_raw = ctx.get("hibp_pwned_password_summary")
+    hibp_pwned_password_summary: dict[str, Any] | None
+    if isinstance(hibp_raw, dict) and hibp_raw:
+        hibp_pwned_password_summary = _canonical_json_nested(hibp_raw)
+    else:
+        hibp_pwned_password_summary = None
     exploitation = ctx.get("exploitation")
     if not isinstance(exploitation, list):
         exploitation = []
@@ -577,6 +614,7 @@ def build_valhalla_report_payload(
         "remediation_stages_text": remediation_stages_text,
         "zero_day_text": zero_day_text,
         "conclusion_text": conclusion_text,
+        "hibp_pwned_password_summary": hibp_pwned_password_summary,
         "appendices": appendices,
     }
 

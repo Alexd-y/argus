@@ -129,6 +129,10 @@ RUN git clone --depth 1 https://github.com/s0md3v/XSStrike.git /opt/xsstrike \
 # VDF-009 — dirsearch CLI (not always packaged on rolling)
 RUN pip3 install --no-cache-dir --break-system-packages dirsearch || true
 
+# Playwright + Chromium (bundled browser). Kali/Debian may need extra libs if launch fails:
+# at build time (as root), `playwright install-deps chromium` pulls apt deps Playwright expects.
+# VA XSS-005 browser verification runs in backend/Celery Python (same codebase as worker), not in
+# this sandbox container — this install is for any tool/script executed inside argus-sandbox only.
 RUN pip install playwright && playwright install chromium
 
 RUN if [ "${INSTALL_MSF}" = "true" ]; then \

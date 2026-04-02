@@ -6,6 +6,7 @@ Path patterns (per backend-architecture.md):
 - raw:       {tenant_id}/{scan_id}/raw/{filename}
 - raw (phase): {tenant_id}/{scan_id}/{phase}/raw/{timestamp}_{artifact_type}.{ext}
   phase ∈ recon | threat_modeling | vuln_analysis | exploitation | post_exploitation
+- recon summary (stable, RECON-009): {tenant_id}/{scan_id}/recon/raw/recon_summary.json
 - screenshots: {tenant_id}/{scan_id}/screenshots/{filename}
 - evidence:  {tenant_id}/{scan_id}/evidence/{filename}
 - reports:   {tenant_id}/{scan_id}/reports/{filename} (legacy flat filename)
@@ -15,6 +16,7 @@ Path patterns (per backend-architecture.md):
 - poc screenshots (PNG, idempotent): {tenant_id}/{scan_id}/poc/screenshots/{finding_id}.png — same bucket as PoC JSON.
 """
 
+import json
 import logging
 import re
 from datetime import UTC, datetime
@@ -185,6 +187,59 @@ def build_raw_phase_object_key(
     if not _validate_object_key(key):
         raise ValueError("Invalid object key")
     return key
+
+
+def build_recon_summary_object_key(tenant_id: str, scan_id: str) -> str:
+    """
+    Stable idempotent key for unified recon summary JSON (RECON-009):
+    ``{tenant_id}/{scan_id}/recon/raw/recon_summary.json``
+    """
+    t = _sanitize_path_component(tenant_id, "tenant_id")
+    s = _sanitize_path_component(scan_id, "scan_id")
+    ph = _sanitize_path_component("recon", "phase")
+    raw_seg = _sanitize_path_component(OBJECT_TYPE_RAW, "object_type")
+    filename = "recon_summary.json"
+    if _FORBIDDEN_PATTERN.search(filename):
+        raise ValueError("Invalid recon summary filename")
+    key = f"{t}/{s}/{ph}/{raw_seg}/{filename}"
+    if not _validate_object_key(key):
+        raise ValueError("Invalid object key")
+    return key
+
+
+def upload_recon_summary_json(tenant_id: str, scan_id: str, obj: Any) -> str | None:
+    """Upload recon summary to stable MinIO key; returns key or None on failure."""
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        key = build_recon_summary_object_key(tenant_id, scan_id)
+    except ValueError:
+        logger.warning(
+            "recon_summary_key_invalid",
+            extra={"event": "recon_summary_upload_validation_failed"},
+        )
+        return None
+    try:
+        body = json.dumps(obj, default=str, ensure_ascii=False, indent=2).encode("utf-8")
+    except (TypeError, ValueError):
+        body = str(obj).encode("utf-8", errors="replace")
+    bucket = _bucket_for_object_key(key)
+    try:
+        client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/json",
+        )
+        logger.info(
+            "recon_summary_uploaded",
+            extra={"event": "recon_summary_uploaded", "size_bytes": len(body)},
+        )
+        return key
+    except Exception:
+        logger.warning("recon_summary_upload_failed", extra={"event": "recon_summary_upload_failed"})
+        return None
 
 
 def upload_raw_artifact(

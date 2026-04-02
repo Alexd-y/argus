@@ -7,7 +7,7 @@ import time
 import uuid
 from typing import Any
 
-from src.storage.s3 import upload_raw_artifact
+from src.storage.s3 import upload_raw_artifact, upload_recon_summary_json
 
 _MAX_TOOL_TEXT_CHARS = 750_000
 
@@ -54,3 +54,7 @@ class RawPhaseSink:
         except (TypeError, ValueError):
             body = str(obj).encode("utf-8", errors="replace")
         self.upload_bytes(artifact_type, "json", body)
+
+    def upload_recon_summary_stable(self, obj: Any) -> str | None:
+        """RECON-009 — overwrite ``recon/raw/recon_summary.json`` for this tenant/scan."""
+        return upload_recon_summary_json(self.tenant_id, self.scan_id, obj)

@@ -5,6 +5,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from src.reports.report_data_validation import (
+    log_report_validation_failure,
+    report_validation_failure_payload,
+    validate_report_data,
+)
+
 from sqlalchemy import cast, select, String, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -219,8 +225,33 @@ async def run_generate_report_pipeline(
             report_id=report_id,
         )
 
-        generated: dict[str, str] = {}
         tier_str = str(report.tier or "midgard")
+        validation = validate_report_data(
+            report_data,
+            tier=tier_str,
+            template_context=built.template_context,
+        )
+        if not validation.ok:
+            log_report_validation_failure(
+                report_validation_failure_payload(
+                    report_id=report_id,
+                    tenant_id=tenant_id,
+                    tier=tier_str,
+                    reason_codes=validation.reason_codes,
+                )
+            )
+            await session.execute(
+                update(Report)
+                .where(cast(Report.id, String) == report_id)
+                .values(
+                    generation_status="failed",
+                    last_error_message="Report data validation failed",
+                )
+            )
+            await session.commit()
+            return {"status": "failed", "report_id": report_id, "error": "validation_failed"}
+
+        generated: dict[str, str] = {}
         for fmt in fmt_list:
             if fmt == "html":
                 content = generate_html(

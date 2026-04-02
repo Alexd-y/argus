@@ -16,9 +16,11 @@ class CrtShClient:
 
     async def query(self, **kwargs: Any) -> dict[str, Any]:
         """Query crt.sh for certificates by domain. Returns empty dict on error."""
+        params_in = dict(kwargs.get("params", {}))
+        timeout_sec = float(kwargs.get("timeout_sec", 30.0))
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                params = dict(kwargs.get("params", {}))
+            async with httpx.AsyncClient(timeout=max(5.0, timeout_sec)) as client:
+                params = dict(params_in)
                 params.setdefault("output", "json")
                 resp = await client.get(
                     self._base_url,

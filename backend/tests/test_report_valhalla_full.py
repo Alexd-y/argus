@@ -313,6 +313,8 @@ def test_valhalla_json_and_payload_valhalla_report_key() -> None:
     direct = build_valhalla_report_payload(jctx, data)
     assert direct["exploit_chains_text"] == "x"
     assert parsed["valhalla_report"]["exploit_chains_text"] == direct["exploit_chains_text"]
+    assert direct.get("hibp_pwned_password_summary") is None
+    assert parsed["valhalla_report"].get("hibp_pwned_password_summary") is None
 
 
 def test_valhalla_sections_csv_non_empty_rows() -> None:

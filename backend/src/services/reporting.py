@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -14,6 +13,7 @@ from urllib.parse import urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.data_sources.hibp_pwned_passwords import validate_hibp_pwned_password_summary_light
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.llm_config import has_any_llm_key
 from src.owasp.owasp_loader import get_owasp_category_info
@@ -22,7 +22,6 @@ from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_TITLES,
     parse_owasp_category,
 )
-from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.orchestration.prompt_registry import (
     EXPLOITATION,
     REPORT_AI_SECTION_ATTACK_SCENARIOS,
@@ -52,13 +51,25 @@ from src.reports.data_collector import (
     ReportDataCollector,
     ScanReportData,
     TimelineRow,
+    executive_severity_totals_from_finding_rows,
+    severity_histogram_from_finding_rows,
+)
+from src.reports.finding_metadata import (
+    format_evidence_cell,
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
 )
 from src.reports.generators import (
     ReportData,
     build_owasp_compliance_rows,
     build_report_data_from_scan_report,
 )
-from src.reports.valhalla_report_context import ValhallaReportContext, derive_exploit_available_flag
+from src.reports.valhalla_report_context import (
+    ValhallaReportContext,
+    derive_exploit_available_flag,
+    finding_qualifies_for_xss_structured_context,
+)
 from src.storage.s3 import (
     OBJECT_TYPE_RAW,
     RAW_ARTIFACT_PHASES,
@@ -127,6 +138,7 @@ _VALHALLA_AI_AFFECTED_URL_MAX = 1024
 _VALHALLA_AI_FINDING_DESC_MAX = 400
 _VALHALLA_AI_RISK_MATRIX_IDS_PER_CELL = 24
 _VALHALLA_AI_CRITICAL_VULNS_MAX = 48
+_VALHALLA_AI_XSS_ROWS = 32
 _CVE_IDS_FOR_AI_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
 
 _SCAN_ARTIFACT_PHASE_ORDER: tuple[str, ...] = (
@@ -329,6 +341,108 @@ def _cve_from_proof_of_concept(poc: dict[str, Any] | None) -> str | None:
     return None
 
 
+def _poc_nonempty_str(val: Any) -> str | None:
+    if val is None:
+        return None
+    if isinstance(val, str):
+        s = val.strip()
+        return s or None
+    return None
+
+
+def _format_xss_payload_reflected_display(poc: dict[str, Any]) -> str | None:
+    pr = poc.get("payload_reflected")
+    if isinstance(pr, str) and pr.strip():
+        return pr.strip()
+    if isinstance(pr, bool):
+        return "yes" if pr else "no"
+    return None
+
+
+def _build_xss_verification_line(poc: dict[str, Any], row: dict[str, Any]) -> str | None:
+    tokens: list[str] = []
+    vm = _poc_nonempty_str(poc.get("verification_method"))
+    if vm:
+        vl = vm.lower()
+        if vl == "http_reflection":
+            tokens.append("verification_method: HTTP reflection")
+        elif vl == "http":
+            tokens.append("verification_method: HTTP")
+        else:
+            tokens.append(f"verification_method: {vm}")
+    vvb = poc.get("verified_via_browser")
+    if vvb is True:
+        tokens.append("verified_via_browser: yes")
+    elif vvb is False:
+        tokens.append("verified_via_browser: no")
+    if row.get("poc_screenshot_url") or _poc_nonempty_str(poc.get("poc_screenshot_url")):
+        tokens.append("poc_screenshot_url: present")
+    elif _poc_nonempty_str(poc.get("screenshot_key")):
+        tokens.append("screenshot_key: present")
+    if _poc_nonempty_str(poc.get("curl_command")):
+        joined = " ".join(tokens).lower()
+        if "curl" not in joined:
+            tokens.append("curl PoC present")
+    if not tokens:
+        return None
+    return "; ".join(tokens)
+
+
+def _xss_poc_narrative_for_report(poc: dict[str, Any], param: str | None) -> str | None:
+    for key in ("poc_narrative", "narrative", "poc_summary"):
+        v = _poc_nonempty_str(poc.get(key))
+        if v:
+            return v[:4000]
+    pe = _poc_nonempty_str(poc.get("payload_entered")) or _poc_nonempty_str(poc.get("payload"))
+    rc = _poc_nonempty_str(poc.get("reflection_context")) or _poc_nonempty_str(poc.get("context"))
+    p_label = param.strip() if isinstance(param, str) and param.strip() else "параметр"
+    if pe and rc:
+        return (
+            f"В параметре «{p_label}» передана полезная нагрузка; отражение зафиксировано в контексте «{rc}». "
+            "Способ подтверждения указан в поле Verification line."
+        )
+    if pe and isinstance(param, str) and param.strip():
+        return f"Полезная нагрузка была передана через параметр «{param.strip()}»."
+    return None
+
+
+def _build_xss_poc_detail_for_jinja(poc: dict[str, Any], row: dict[str, Any]) -> dict[str, str] | None:
+    """Non-empty XSS subsection fields for Valhalla HTML (VHL / T7); keys align with PoC JSON."""
+    param = row.get("parameter") or row.get("param") or _poc_nonempty_str(poc.get("parameter"))
+    param_s = param if isinstance(param, str) else None
+
+    payload_entered = _poc_nonempty_str(poc.get("payload_entered")) or _poc_nonempty_str(
+        poc.get("payload")
+    )
+    payload_reflected = _format_xss_payload_reflected_display(poc)
+    payload_used = _poc_nonempty_str(poc.get("payload_used"))
+    if payload_used and payload_used == (payload_entered or ""):
+        payload_used = None
+    reflection_context = _poc_nonempty_str(poc.get("reflection_context")) or _poc_nonempty_str(
+        poc.get("context")
+    )
+    verification_line = _build_xss_verification_line(poc, row)
+    narrative = _xss_poc_narrative_for_report(poc, param_s)
+    shot = row.get("poc_screenshot_url") or _poc_nonempty_str(poc.get("poc_screenshot_url"))
+
+    out: dict[str, str] = {}
+    if payload_entered:
+        out["payload_entered"] = payload_entered
+    if payload_reflected is not None:
+        out["payload_reflected"] = payload_reflected
+    if payload_used:
+        out["payload_used"] = payload_used
+    if reflection_context:
+        out["reflection_context"] = reflection_context
+    if verification_line:
+        out["verification_line"] = verification_line
+    if narrative:
+        out["poc_narrative"] = narrative
+    if shot:
+        out["poc_screenshot_url"] = shot
+    return out or None
+
+
 def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
     """Serializable finding rows for RPT-008 templates (autoescaped at render)."""
     rows: list[dict[str, Any]] = []
@@ -367,6 +481,21 @@ def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
             if url:
                 row["poc_screenshot_url"] = url
         row["cve"] = _cve_from_proof_of_concept(poc if poc else None)
+        conf = normalize_confidence(f.confidence, default="likely")
+        row["confidence"] = conf
+        row["is_advisory"] = conf == "advisory"
+        et = normalize_evidence_type(f.evidence_type)
+        refs = normalize_evidence_refs(f.evidence_refs)
+        row["evidence_type"] = et
+        row["evidence_refs"] = refs
+        row["evidence_summary"] = format_evidence_cell(et, refs)
+        row["applicability_notes"] = (f.applicability_notes or "").strip()
+        row["reproducible_steps"] = (f.reproducible_steps or "").strip()
+        f_qualifier = {"title": row["title"], "cwe": f.cwe, "proof_of_concept": poc}
+        if finding_qualifies_for_xss_structured_context(f_qualifier):
+            row["xss_poc_detail"] = _build_xss_poc_detail_for_jinja(poc, row)
+        else:
+            row["xss_poc_detail"] = None
         rows.append(row)
     return rows
 
@@ -404,12 +533,9 @@ def recon_summary_for_jinja(data: ScanReportData) -> dict[str, Any]:
     technologies: list[str] = []
     if data.report and data.report.technologies:
         technologies = [str(t) for t in data.report.technologies]
-    summary_counts: dict[str, Any] = {}
-    raw_summary = data.report.summary if data.report else None
-    if isinstance(raw_summary, dict):
-        for k in ("critical", "high", "medium", "low", "info"):
-            if k in raw_summary:
-                summary_counts[k] = raw_summary[k]
+    summary_counts: dict[str, Any] = dict(
+        executive_severity_totals_from_finding_rows(data.findings)
+    )
     timeline_preview: list[dict[str, Any]] = []
     for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:24]:
         snippet = ""
@@ -645,6 +771,8 @@ def _valhalla_one_line_summary(vc: ValhallaReportContext) -> str:
         parts.append("exploitation_context_present")
     if vc.leaked_emails:
         parts.append(f"masked_email_indicators={len(vc.leaked_emails)}")
+    if vc.xss_structured:
+        parts.append(f"xss_structured_rows={len(vc.xss_structured)}")
     ssl = vc.ssl_tls_analysis
     if ssl.weak_ciphers:
         parts.append("tls_weak_cipher_signals")
@@ -788,6 +916,39 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             }
             for v in (vc.critical_vulns or [])[:_VALHALLA_AI_CRITICAL_VULNS_MAX]
         ],
+        "xss_structured": [
+            {
+                "finding_id": _truncate_report_text(x.finding_id or "", 256),
+                "title": _truncate_report_text(x.title or "", 300),
+                "parameter": _truncate_report_text(x.parameter or "", 256) if x.parameter else None,
+                "payload_entered": _truncate_report_text(x.payload_entered or "", _VALHALLA_AI_POC_MAX_LEN)
+                if x.payload_entered
+                else None,
+                "payload_reflected": _truncate_report_text(x.payload_reflected or "", _VALHALLA_AI_POC_MAX_LEN)
+                if x.payload_reflected
+                else None,
+                "payload_used": _truncate_report_text(x.payload_used or "", _VALHALLA_AI_POC_MAX_LEN)
+                if x.payload_used
+                else None,
+                "reflection_context": _truncate_report_text(x.reflection_context or "", 400)
+                if x.reflection_context
+                else None,
+                "verification_method": _truncate_report_text(x.verification_method or "", 128)
+                if x.verification_method
+                else None,
+                "verified_via_browser": x.verified_via_browser,
+                "browser_alert_text": _truncate_report_text(x.browser_alert_text or "", 400)
+                if x.browser_alert_text
+                else None,
+                "artifact_keys": [
+                    _truncate_report_text(k, 512) for k in (x.artifact_keys or [])[:16] if k
+                ],
+                "artifact_urls": [
+                    _truncate_report_text(u, 1024) for u in (x.artifact_urls or [])[:8] if u
+                ],
+            }
+            for x in (vc.xss_structured or [])[:_VALHALLA_AI_XSS_ROWS]
+        ],
     }
 
 
@@ -809,50 +970,6 @@ def _owasp_compliance_table_for_ai(data: ScanReportData) -> list[dict[str, Any]]
                 "row_class": r.get("row_class"),
             }
         )
-    return out
-
-
-def _hibp_pwned_summary_for_ai_payload(data: ScanReportData) -> dict[str, Any] | None:
-    """
-    Aggregate-only HIBP Pwned Passwords signal for Valhalla AI context when opt-in is enabled.
-    Skips when an asyncio loop is already running (avoid nested asyncio.run).
-    """
-    if not settings.hibp_password_check_opt_in:
-        return None
-    exploit_dump: dict[str, Any] | None = None
-    for row in data.phase_outputs:
-        if (row.phase or "").lower() == "exploitation" and isinstance(row.output_data, dict):
-            exploit_dump = row.output_data
-            break
-    if not exploit_dump:
-        return None
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass
-    else:
-        return None
-    try:
-        summary = asyncio.run(
-            summarize_pwned_passwords_for_report(exploit_dump, max_checks=5),
-        )
-    except RuntimeError:
-        return None
-    if not isinstance(summary, dict):
-        return None
-    pwned_n = int(summary.get("pwned_count") or 0)
-    checks = int(summary.get("checks_run") or 0)
-    out = dict(summary)
-    out["data_breach_password_exposure"] = "yes" if pwned_n > 0 else "no"
-    out["breach_signal_note"] = (
-        "At least one sampled credential string matched HIBP Pwned Passwords corpus."
-        if pwned_n > 0
-        else (
-            "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
-            if checks > 0
-            else "No password-like fields sampled from exploitation output for HIBP check."
-        )
-    )
     return out
 
 
@@ -983,10 +1100,8 @@ class ReportGenerator:
     @staticmethod
     def build_ai_input_payload(data: ScanReportData, *, tier: str | None = None) -> dict[str, Any]:
         """Compact, log-safe context for RPT-004 / VHL-003 prompts (no artifact bodies)."""
-        severity_counts: dict[str, int] = {}
-        for f in data.findings:
-            sev = f.severity or "unknown"
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        severity_counts = severity_histogram_from_finding_rows(data.findings)
+        executive_severity_totals = executive_severity_totals_from_finding_rows(data.findings)
         tier_norm = normalize_report_tier(
             tier if tier is not None else ((data.report.tier if data.report else "") or "midgard")
         )
@@ -1067,6 +1182,7 @@ class ReportGenerator:
             "tenant_id": data.tenant_id,
             "finding_count": len(data.findings),
             "severity_counts": severity_counts,
+            "executive_severity_totals": executive_severity_totals,
             "findings": findings_short,
             "timeline_phases": [t.phase for t in data.timeline[:40]],
         }
@@ -1101,9 +1217,9 @@ class ReportGenerator:
                 "robots_sitemap": vc.robots_sitemap_fallback_message,
                 "leaked_emails": vc.leaked_emails_fallback_message,
             }
-            hibp_ai = _hibp_pwned_summary_for_ai_payload(data)
-            if hibp_ai is not None:
-                payload["hibp_pwned_password_summary"] = hibp_ai
+            hibp = data.hibp_pwned_password_summary
+            if isinstance(hibp, dict) and hibp:
+                payload["hibp_pwned_password_summary"] = hibp
         return payload
 
     def run_ai_sections_sync(
@@ -1222,11 +1338,13 @@ class ReportGenerator:
                 "slots": {k: texts.get(k, "") for k in keys},
             }
         finding_rows = findings_rows_for_jinja(data)
+        severity_counts_ctx = executive_severity_totals_from_finding_rows(data.findings)
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
             "tenant_id": data.tenant_id,
             "scan_id": data.scan_id,
+            "severity_counts": severity_counts_ctx,
             "scan": data.scan.model_dump(mode="json") if data.scan else None,
             "report": data.report.model_dump(mode="json") if data.report else None,
             "findings_count": len(data.findings),
@@ -1249,6 +1367,7 @@ class ReportGenerator:
                 data.phase_inputs
             ),
             "valhalla_appendix_timeline_rows": valhalla_timeline_appendix_rows(data.timeline),
+            "hibp_pwned_password_summary": data.hibp_pwned_password_summary,
             "ai_sections": dict(texts),
             "jinja": jinja_tiers,
             "tier_stubs": {
@@ -1270,6 +1389,8 @@ class ReportGenerator:
             ctx["scan_artifacts"],
             texts,
         )
+        if tier_norm == "valhalla":
+            validate_hibp_pwned_password_summary_light(data.hibp_pwned_password_summary)
         return ctx
 
     async def build_context(

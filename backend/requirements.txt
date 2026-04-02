@@ -36,3 +36,4 @@ tldextract>=5.1.0
 dnspython>=2.6.0
 netaddr>=1.0.0
 rich>=13.0.0
+beautifulsoup4>=4.12.0

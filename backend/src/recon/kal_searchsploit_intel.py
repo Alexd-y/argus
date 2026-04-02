@@ -8,7 +8,7 @@ from typing import Any
 
 from src.core.config import settings
 from src.recon.adapters.security.searchsploit_adapter import SearchsploitAdapter
-from src.recon.raw_artifact_sink import RawPhaseSink
+from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.recon.sandbox_tool_runner import SEARCHSPLOIT_INTEL_RAW_ARTIFACT_KEY
 from src.recon.service_version_queries import bounded_service_queries_from_assets
 

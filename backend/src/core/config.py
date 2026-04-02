@@ -2,7 +2,9 @@
 
 import os
 
-from pydantic import field_validator
+from typing import Literal
+
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -80,6 +82,26 @@ class Settings(BaseSettings):
     va_aggressive_scan: bool = False
     # Worker-side reflected XSS probe (httpx); runs after VA active scan when sandbox + target.
     va_custom_xss_poc_enabled: bool = True
+    # XSS-006 — dedicated XSS engine (payload repos, headless verification, caps). Env: XSS_*.
+    xss_payload_repos: str = ""
+    # Optional JSON array of payload strings (HTTP GET once, merged into all context buckets). Env: XSS_PAYLOAD_COLLECTION_URL
+    xss_payload_collection_url: str = ""
+    # Legacy seconds-based cap; prefer xss_playwright_timeout_ms for Playwright navigation.
+    xss_verification_headless_timeout: int = 15
+    xss_max_payloads_per_param: int = 50
+    # XSS_VERIFICATION_ENABLED — headless Playwright XSS verification (T3).
+    xss_verification_enabled: bool = True
+    # XSS_PLAYWRIGHT_TIMEOUT or XSS_PLAYWRIGHT_TIMEOUT_MS (milliseconds).
+    xss_playwright_timeout_ms: int = Field(
+        default=5000,
+        validation_alias=AliasChoices(
+            "XSS_PLAYWRIGHT_TIMEOUT",
+            "XSS_PLAYWRIGHT_TIMEOUT_MS",
+        ),
+    )
+    # Deprecated: use xss_verification_enabled. Kept for backward-compatible env parsing only.
+    xss_browser_verification_enabled: bool = False
+    xss_context_detection_enabled: bool = True
     # Optional Playwright PNG + response_snippet enrichment for XSS / open-redirect PoCs (POC-003).
     # Requires ``playwright`` + browser install; off by default. Env: VA_POC_PLAYWRIGHT_SCREENSHOT_ENABLED.
     va_poc_playwright_screenshot_enabled: bool = False
@@ -117,7 +139,94 @@ class Settings(BaseSettings):
     recon_default_dns_resolver: str = "8.8.8.8"
     recon_scope_strict: bool = True
     recon_rate_limit_per_second: int = 10
+    # RECON-001 — optional override for pipeline throttling (when unset, use recon_rate_limit_per_second).
+    recon_rate_limit: int | None = None
     recon_max_subdomains: int = 10000
+    # RECON-002 — optional cap for passive subdomain CLI bundle (falls back to RECON_TOOLS_TIMEOUT if unset)
+    recon_passive_subdomain_timeout_sec: int | None = None
+    # RECON-002 — theHarvester -b sources (comma-separated, subset of policy allowlist)
+    recon_theharvester_sources: str = "crtsh,anubis,urlscan"
+    recon_theharvester_recon_limit: int = 300
+    recon_theharvester_passive_enabled: bool = True
+    # RECON-001 — pipeline mode (passive / active / full). Default full preserves legacy behavior.
+    recon_mode: Literal["passive", "active", "full"] = "full"
+    # When true, forces passive mode regardless of recon_mode.
+    recon_passive_only: bool = False
+    recon_active_depth: int = 1
+    recon_enable_content_discovery: bool = False
+    recon_deep_port_scan: bool = False
+    # RECON-005 — optional naabu + nmap -sV deep scan (full mode + RECON_DEEP_PORT_SCAN only)
+    recon_deep_naabu_enabled: bool = True
+    recon_deep_naabu_top_ports: int = 500
+    recon_deep_max_hosts: int = 5
+    recon_deep_max_ports_per_host: int = 40
+    recon_deep_timeout_sec: int | None = None
+    recon_js_analysis: bool = False
+    # RECON-007 — JS / query-param harvest (caps + optional linkfinder / unfurl CLI)
+    recon_js_max_merged_urls: int = 20000
+    recon_js_max_js_urls: int = 200
+    recon_js_max_downloads: int = 15
+    recon_js_max_response_bytes: int = 1_048_576
+    recon_js_linkfinder_enabled: bool = True
+    recon_js_unfurl_enabled: bool = False
+    recon_js_unfurl_max_urls: int = 10
+    recon_screenshots: bool = False
+    # RECON-008 — asnmap (apex) + gowitness caps (full mode + flags; passive has no optional steps)
+    recon_asnmap_enabled: bool = True
+    recon_gowitness_max_urls: int = 25
+    recon_gowitness_timeout_sec: int | None = None
+    recon_gowitness_concurrency: int = 3
+    recon_tool_selection: str = ""
+    recon_wordlist_path: str = ""
+    # RECON-003 — dnsx multi-type probe, optional dig ANY, MinIO dns_records + raw; heuristic takeover hints
+    recon_dns_depth_enabled: bool = True
+    recon_dns_depth_dig_deep: bool = False
+    recon_dns_depth_takeover_hints: bool = True
+    recon_dnsx_record_types: str = "a,aaaa,cname,mx,txt,ns"
+    recon_dnsx_include_resp: bool = False
+    recon_dnsx_silent: bool = False
+    recon_dns_depth_timeout_sec: int | None = None
+    recon_dnsx_extra_flags: str = ""
+    # RECON-004 — httpx / whatweb / nuclei tech recon (nuclei: -tags or comma -t list from env)
+    recon_nuclei_tech_tags: str = "tech"
+    recon_nuclei_tech_templates: str = ""
+
+    @field_validator(
+        "recon_rate_limit",
+        "recon_passive_subdomain_timeout_sec",
+        "recon_deep_timeout_sec",
+        "recon_dns_depth_timeout_sec",
+        "recon_gowitness_timeout_sec",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none_int(cls, v: object) -> object:
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+
+    @field_validator("recon_mode", mode="before")
+    @classmethod
+    def normalize_recon_mode(cls, v: object) -> str:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return "full"
+        s = str(v).strip().lower()
+        if s in ("passive", "active", "full"):
+            return s
+        return "full"
+
+    @field_validator("recon_active_depth", mode="after")
+    @classmethod
+    def clamp_recon_active_depth(cls, v: int) -> int:
+        return max(0, int(v))
+
+    @field_validator("recon_rate_limit", mode="after")
+    @classmethod
+    def validate_recon_rate_limit(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        return max(1, int(v))
+
     recon_output_base_dir: str = "./recon_output"
     stage1_artifacts_bucket: str = "stage1-artifacts"
     stage2_artifacts_bucket: str = "stage2-artifacts"
@@ -161,6 +270,9 @@ class Settings(BaseSettings):
 
     # RPT-004 — AI report section text cache (Redis)
     ai_text_cache_ttl_seconds: int = 604800
+    # T9 — replace executive AI text with grounded fallback when prose disagrees with structured counts/HIBP.
+    # Env: AI_TEXT_EXECUTIVE_FACT_CHECK_REPLACE (default true)
+    ai_text_executive_fact_check_replace: bool = True
 
     # OWASP-001 — Russian OWASP Top 10:2025 reference JSON for reports/templates. Env: OWASP_JSON_PATH
     # Relative paths resolve from backend package root (directory containing ``src/``).

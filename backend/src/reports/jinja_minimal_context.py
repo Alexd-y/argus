@@ -17,6 +17,7 @@ from src.reports.ai_text_generation import (
     REPORT_AI_SKIPPED_GENERATION_FAILED,
     REPORT_AI_SKIPPED_NO_LLM,
 )
+from src.reports.data_collector import executive_severity_totals_from_severity_strings
 
 if TYPE_CHECKING:
     from src.reports.generators import ReportData
@@ -28,7 +29,10 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     (e.g. API regenerate) without a second DB collect pass.
     """
     from src.reports import generators as gen
-    from src.reports.valhalla_report_context import ValhallaReportContext
+    from src.reports.valhalla_report_context import (
+        ValhallaReportContext,
+        build_valhalla_minimal_context_patch,
+    )
     from src.services.reporting import (
         build_active_web_scan_section_context,
         normalize_report_tier,
@@ -69,21 +73,23 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         if (p.phase or "").lower() == phase_key
     ]
 
-    summary_dump = data.summary.model_dump()
+    aligned_counts = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
+    pipeline_summary: dict[str, Any] = {}
     recon_summary = {
         "target_url": data.target or "",
         "scan": None,
-        "summary_counts": {
-            k: summary_dump.get(k)
-            for k in ("critical", "high", "medium", "low", "info")
-            if k in summary_dump
-        },
+        "summary_counts": {k: aligned_counts[k] for k in ("critical", "high", "medium", "low", "info")},
         "technologies": list(data.technologies or []),
         "timeline_preview": timeline_preview,
         "phase_inputs_count": 0,
         "phase_outputs_count": len(data.phase_outputs),
         "timeline_count": len(data.timeline),
         "findings_count": len(data.findings),
+        "pipeline": pipeline_summary,
+        "pipeline_subdomains": pipeline_summary.get("subdomains") or [],
+        "pipeline_ports": pipeline_summary.get("ports") or [],
+        "pipeline_live_hosts": pipeline_summary.get("live_hosts") or [],
+        "pipeline_url_count": len(pipeline_summary.get("urls") or []),
     }
 
     scan_artifacts_min = _build_scan_artifacts_from_raw(data.raw_artifacts)
@@ -100,7 +106,29 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
 
     valhalla_ctx: dict[str, Any] | None = None
     if tier_norm == "valhalla":
+        raw_keys_min: list[tuple[str, str]] = []
+        for art in data.raw_artifacts or []:
+            if not isinstance(art, dict):
+                continue
+            k = str(art.get("key") or "").strip()
+            if not k:
+                continue
+            ph = str(art.get("phase") or "unknown").strip()
+            raw_keys_min.append((k, ph))
+        phase_out_min: list[tuple[str, dict[str, Any] | None]] = [
+            (str(getattr(p, "phase", "") or ""), None) for p in (data.phase_outputs or [])
+        ]
         valhalla_ctx = ValhallaReportContext().model_dump(mode="json")
+        valhalla_ctx.update(
+            build_valhalla_minimal_context_patch(
+                phase_outputs=phase_out_min,
+                raw_artifact_keys=raw_keys_min,
+                fetch_raw_bodies=False,
+                harvester_enabled=bool(settings.harvester_enabled),
+                trivy_enabled=bool(settings.trivy_enabled),
+                tool_run_summaries=None,
+            )
+        )
 
     out: dict[str, Any] = {
         "embed_poc_screenshot_inline": settings.report_poc_embed_screenshot_inline,
@@ -113,6 +141,7 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         "scan": None,
         "report": None,
         "findings_count": len(data.findings),
+        "severity_counts": dict(aligned_counts),
         "timeline_count": len(data.timeline),
         "phase_inputs_count": 0,
         "phase_outputs_count": len(data.phase_outputs),
@@ -153,6 +182,7 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
                 "snippet": snippet,
             })
         out["valhalla_appendix_timeline_rows"] = tl_rows
+        out["hibp_pwned_password_summary"] = data.hibp_pwned_password_summary
     return out
 
 

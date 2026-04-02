@@ -76,6 +76,11 @@ class FindingSchema(BaseModel):
     description: str
     cwe: Optional[str] = None
     cvss: Optional[float] = None
+    confidence: str = "likely"
+    evidence_type: Optional[str] = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    reproducible_steps: Optional[str] = None
+    applicability_notes: Optional[str] = None
 
 
 class ReportSchema(BaseModel):

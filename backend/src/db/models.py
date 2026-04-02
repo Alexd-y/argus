@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -265,6 +266,20 @@ class Finding(Base):
     #: OWASP Top 10:2025 short id (``A01``…``A10``); see ``src/owasp_top10_2025.py``.
     owasp_category: Mapped[str | None] = mapped_column(String(8), nullable=True)
     proof_of_concept: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: confirmed | likely | possible | advisory (T4).
+    confidence: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="likely",
+        server_default=text("'likely'"),
+    )
+    #: observed | tool_output | version_match | cve_correlation | threat_model_inference (T4).
+    evidence_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    evidence_refs: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    reproducible_steps: Mapped[str | None] = mapped_column(Text, nullable=True)
+    applicability_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

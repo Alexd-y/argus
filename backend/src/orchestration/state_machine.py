@@ -1,6 +1,7 @@
 """ScanStateMachine — transitions between phases, DB recording."""
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -10,6 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS, ReportSummary
 from src.owasp_top10_2025 import parse_owasp_category
+from src.reports.finding_metadata import (
+    clip_optional_text,
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
+)
 from src.core.observability import (
     record_phase_duration,
     record_tool_run,
@@ -25,6 +32,12 @@ from src.db.models import (
     ScanEvent,
     ScanStep,
     ScanTimeline,
+)
+from src.recon.recon_runtime import build_recon_runtime_config
+from src.recon.step_registry import plan_recon_steps
+from src.recon.vulnerability_analysis.finding_stable_id import (
+    assign_stable_finding_ids,
+    compute_stable_finding_id,
 )
 from src.orchestration.aggressive_exploit_tools import maybe_run_aggressive_exploit_tools
 from src.storage.s3 import upload_finding_poc_json
@@ -72,6 +85,84 @@ async def _upload_raw_phase_snapshot(
 
 class ExploitationApprovalRequiredError(Exception):
     """Raised when exploitation phase requires approval and scan is not approved."""
+
+
+_FID_PK_COLLISION_NS = uuid.UUID("018f4a2e-7c8b-7b4d-8e0e-6b6579317431")
+
+
+def _unique_finding_dicts(findings: list[dict]) -> list[dict]:
+    """Drop duplicate references to the same dict (avoids one row overwriting finding_id twice)."""
+    seen: set[int] = set()
+    out: list[dict] = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        oid = id(f)
+        if oid in seen:
+            continue
+        seen.add(oid)
+        out.append(f)
+    return out
+
+
+def _dedupe_finding_ids_after_assign(
+    findings: list[dict],
+    *,
+    scan_id: str | None = None,
+) -> None:
+    """Guarantee unique ``finding_id`` strings in-memory (avoids IntegrityError on bulk insert)."""
+    seen: set[str] = set()
+    for idx, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        raw = str(f.get("finding_id") or "").strip()
+        try:
+            pk = str(uuid.UUID(raw)) if raw else compute_stable_finding_id(f, scan_id=scan_id)
+        except (ValueError, TypeError, AttributeError):
+            pk = compute_stable_finding_id(f, scan_id=scan_id)
+        if pk in seen:
+            pk = str(
+                uuid.uuid5(
+                    _FID_PK_COLLISION_NS,
+                    f"finding-pk-list-dedup:{pk}:{idx}:v1",
+                )
+            )
+        f["finding_id"] = pk
+        seen.add(pk)
+
+
+def _resolve_unique_finding_pk(
+    proposed: str,
+    used: set[str],
+    *,
+    scan_id: str,
+    row_index: int,
+) -> str:
+    """Ensure primary key is unique within this persist batch (duplicate dicts / ID collisions)."""
+    pk = proposed
+    n = 0
+    while pk in used:
+        n += 1
+        pk = str(
+            uuid.uuid5(
+                _FID_PK_COLLISION_NS,
+                f"finding-pk-collision:{proposed}:{scan_id}:{row_index}:{n}",
+            )
+        )
+    if n:
+        logger.warning(
+            json.dumps(
+                {
+                    "event": "finding_pk_collision_resolved",
+                    "scan_id": scan_id,
+                    "row_index": row_index,
+                    "attempts": n,
+                },
+                ensure_ascii=False,
+            )
+        )
+    used.add(pk)
+    return pk
 
 
 def _scan_approval_flags_from_options(options: dict | None) -> dict[str, bool] | None:
@@ -270,7 +361,10 @@ async def _persist_report_and_findings(
 ) -> None:
     """Persist Report and Findings to DB after reporting phase."""
     report_id = str(uuid.uuid4())
-    findings_raw = vuln_out.findings if vuln_out else []
+    findings_raw = list(vuln_out.findings) if vuln_out and vuln_out.findings else []
+    findings_raw = _unique_finding_dicts(findings_raw)
+    assign_stable_finding_ids(findings_raw, scan_id=scan_id)
+    _dedupe_finding_ids_after_assign(findings_raw, scan_id=scan_id)
     report_dict = report_out.report or {}
 
     summary_dict = report_dict.get("summary") or {}
@@ -304,13 +398,33 @@ async def _persist_report_and_findings(
     session.add(report)
     await session.flush()
 
-    for f in findings_raw:
+    used_finding_pks: set[str] = set()
+    for row_index, f in enumerate(findings_raw):
         poc_blob = f.get("proof_of_concept")
         poc_db = poc_blob if isinstance(poc_blob, dict) and poc_blob else None
         ow_raw = f.get("owasp_category")
         owasp_val = parse_owasp_category(ow_raw.strip()) if isinstance(ow_raw, str) and ow_raw.strip() else None
+        conf = normalize_confidence(f.get("confidence"), default="likely")
+        ev_type = normalize_evidence_type(f.get("evidence_type"))
+        ev_refs = normalize_evidence_refs(f.get("evidence_refs"))
+        rep_steps = clip_optional_text(f.get("reproducible_steps"), 16_000)
+        app_notes = clip_optional_text(f.get("applicability_notes"), 8_000)
+        fid_raw = str(f.get("finding_id") or "").strip()
+        try:
+            finding_pk = (
+                str(uuid.UUID(fid_raw)) if fid_raw else compute_stable_finding_id(f, scan_id=scan_id)
+            )
+        except (ValueError, TypeError, AttributeError):
+            finding_pk = compute_stable_finding_id(f, scan_id=scan_id)
+        finding_pk = _resolve_unique_finding_pk(
+            finding_pk,
+            used_finding_pks,
+            scan_id=scan_id,
+            row_index=row_index,
+        )
+        f["finding_id"] = finding_pk
         finding = Finding(
-            id=str(uuid.uuid4()),
+            id=finding_pk,
             tenant_id=tenant_id,
             scan_id=scan_id,
             report_id=report_id,
@@ -321,6 +435,11 @@ async def _persist_report_and_findings(
             cvss=float(f["cvss"]) if isinstance(f.get("cvss"), (int, float)) else None,
             owasp_category=owasp_val,
             proof_of_concept=poc_db,
+            confidence=conf,
+            evidence_type=ev_type,
+            evidence_refs=ev_refs,
+            reproducible_steps=rep_steps,
+            applicability_notes=app_notes,
         )
         session.add(finding)
         if poc_db:
@@ -471,6 +590,16 @@ async def run_scan_state_machine(
             with trace_phase(scan_id, phase_str):
                 if phase == ScanPhase.RECON:
                     record_tool_run("recon")
+                    _recon_cfg = build_recon_runtime_config(options)
+                    logger.debug(
+                        "recon_step_registry_preview",
+                        extra={
+                            "event": "recon_step_registry_preview",
+                            "scan_id": scan_id,
+                            "mode": _recon_cfg.mode,
+                            "steps": [s.value for s in plan_recon_steps(_recon_cfg)],
+                        },
+                    )
                     recon_out = await run_recon(
                         target, options, tenant_id=tenant_id, scan_id=scan_id
                     )

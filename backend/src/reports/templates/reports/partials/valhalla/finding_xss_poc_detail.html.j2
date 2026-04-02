@@ -1,0 +1,36 @@
+{# T7 — XSS evidence; PoC keys: payload_entered, payload_reflected, payload_used, reflection_context, verification_line, poc_screenshot_url #}
+{% if row.xss_poc_detail %}
+<section class="finding-poc-xss valhalla-xss-poc-detail">
+    <h4 class="finding-poc-xss-title">XSS details</h4>
+    <dl class="finding-poc-xss-dl">
+        {% if row.xss_poc_detail.payload_entered %}
+        <dt>Payload entered</dt>
+        <dd><pre class="finding-poc-block"><code>{{ row.xss_poc_detail.payload_entered | e }}</code></pre></dd>
+        {% endif %}
+        {% if row.xss_poc_detail.payload_reflected is defined and row.xss_poc_detail.payload_reflected != '' %}
+        <dt>Payload reflected</dt>
+        <dd><pre class="finding-poc-block"><code>{{ row.xss_poc_detail.payload_reflected | e }}</code></pre></dd>
+        {% endif %}
+        {% if row.xss_poc_detail.payload_used %}
+        <dt>Payload used</dt>
+        <dd><pre class="finding-poc-block"><code>{{ row.xss_poc_detail.payload_used | e }}</code></pre></dd>
+        {% endif %}
+        {% if row.xss_poc_detail.reflection_context %}
+        <dt>Reflection context</dt>
+        <dd><pre class="finding-poc-block"><code>{{ row.xss_poc_detail.reflection_context | e }}</code></pre></dd>
+        {% endif %}
+        {% if row.xss_poc_detail.verification_line %}
+        <dt>Verification line</dt>
+        <dd><pre class="finding-poc-block"><code>{{ row.xss_poc_detail.verification_line | e }}</code></pre></dd>
+        {% endif %}
+        {% if row.xss_poc_detail.poc_narrative %}
+        <dt>PoC narrative</dt>
+        <dd class="finding-poc-xss-narrative">{{ row.xss_poc_detail.poc_narrative | e }}</dd>
+        {% endif %}
+        {% if row.xss_poc_detail.poc_screenshot_url %}
+        <dt>PoC screenshot</dt>
+        <dd><a class="finding-poc-xss-screenshot-link" href="{{ row.xss_poc_detail.poc_screenshot_url | e }}" rel="noopener noreferrer" target="_blank">Open screenshot</a></dd>
+        {% endif %}
+    </dl>
+</section>
+{% endif %}

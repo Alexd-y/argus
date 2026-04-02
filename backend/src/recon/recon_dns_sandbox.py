@@ -124,3 +124,23 @@ async def run_recon_dns_sandbox_bundle(
         if isinstance(r.get("stdout"), str) and r["stdout"].strip():
             intel.extend(_subdomain_intel_rows(name, r["stdout"], domain=domain))
     return tool_results, intel
+
+
+def dedupe_subdomain_intel_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop duplicate hostnames (case-insensitive), preserve first row per host."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        data = r.get("data")
+        h = ""
+        if isinstance(data, dict):
+            h = str(data.get("hostname") or "").strip().lower()
+        if not h:
+            continue
+        if h in seen:
+            continue
+        seen.add(h)
+        out.append(r)
+    return out
