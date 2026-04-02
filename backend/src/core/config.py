@@ -74,6 +74,25 @@ class Settings(BaseSettings):
     celery_broker_url: str | None = None  # Defaults to redis_url if unset
     sandbox_container_name: str = "argus-sandbox"
     sandbox_enabled: bool = False  # Enable docker exec into sandbox when True
+    # Dev-only: POST /sandbox/python. Not a security boundary. Env: ARGUS_SANDBOX_PYTHON_ENABLED (true/1).
+    argus_sandbox_python_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_SANDBOX_PYTHON_ENABLED",
+            "argus_sandbox_python_enabled",
+        ),
+    )
+
+    @field_validator("argus_sandbox_python_enabled", mode="before")
+    @classmethod
+    def coerce_argus_sandbox_python_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
     # Admin API — when set, admin endpoints require X-Admin-Key header
     admin_api_key: str | None = None

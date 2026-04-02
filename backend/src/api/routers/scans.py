@@ -4,11 +4,12 @@ import asyncio
 import json
 import time
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import String, cast, select
+from sqlalchemy import String, cast, desc, select, update
 from sse_starlette.sse import EventSourceResponse
 
 from src.api.schemas import (
@@ -18,9 +19,15 @@ from src.api.schemas import (
     ReportGenerateAllRequest,
     ReportGenerateRequest,
     ScanArtifactItem,
+    ScanCancelResponse,
+    ScanCostApiResponse,
     ScanCreateRequest,
     ScanCreateResponse,
     ScanDetailResponse,
+    ScanListItemResponse,
+    ScanOptions,
+    ScanSkillCreateRequest,
+    ScanSmartCreateRequest,
 )
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
@@ -30,6 +37,7 @@ from src.owasp_top10_2025 import parse_owasp_category
 from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
+from src.llm.cost_tracker import ScanCostTracker
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
 from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
 from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
@@ -39,6 +47,173 @@ SSE_POLL_INTERVAL_SEC = 1.5
 SSE_MAX_WAIT_SEC = 30 * 60
 
 router = APIRouter(prefix="/scans", tags=["scans"])
+
+_TERMINAL_SCAN_STATUSES = frozenset({"completed", "failed", "cancelled"})
+_REPORT_TIERS = frozenset({"midgard", "asgard", "valhalla"})
+
+
+def _effective_tenant_for_scan_create(body_tenant_id: str | None, tenant_id_header: str) -> str:
+    """Match list_scans: header is context; optional body tenant_id must equal it or 403."""
+    effective_tenant = tenant_id_header
+    if body_tenant_id and body_tenant_id.strip():
+        tid = body_tenant_id.strip()
+        if tid != tenant_id_header:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="tenant_id must match authenticated tenant context",
+            )
+        effective_tenant = tid
+    return effective_tenant
+
+
+def _map_max_phases_to_scan_mode(max_phases: int) -> Literal["quick", "standard", "deep"]:
+    if max_phases <= 2:
+        return "quick"
+    if max_phases <= 5:
+        return "standard"
+    return "deep"
+
+
+async def _persist_scan_start(
+    tenant_id: str,
+    target: str,
+    options_dict: dict[str, Any],
+    scan_mode: Literal["quick", "standard", "deep"],
+) -> str:
+    """Insert tenant/target/scan and return scan_id."""
+    scan_id = str(uuid.uuid4())
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Tenant).where(cast(Tenant.id, String) == tenant_id)
+        )
+        if not result.scalar_one_or_none():
+            session.add(Tenant(id=tenant_id, name="default"))
+            await session.flush()
+
+        target_row = Target(
+            id=str(uuid.uuid4()),
+            tenant_id=tenant_id,
+            url=target,
+        )
+        session.add(target_row)
+        await session.flush()
+
+        scan = Scan(
+            id=scan_id,
+            tenant_id=tenant_id,
+            target_id=target_row.id,
+            target_url=target,
+            status="queued",
+            progress=0,
+            phase="init",
+            options=options_dict,
+            scan_mode=scan_mode,
+        )
+        session.add(scan)
+        await session.commit()
+    return scan_id
+
+
+@router.get("", response_model=list[ScanListItemResponse])
+async def list_scans(
+    status_filter: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by scan status",
+    ),
+    limit: int = Query(50, ge=1, le=200),
+    tenant_id: str | None = Query(None, description="Must match X-Tenant-ID / default tenant"),
+    tenant_id_header: str = Depends(get_current_tenant_id),
+) -> list[ScanListItemResponse]:
+    """List scans for tenant with optional status filter (HexStrike v4)."""
+    effective_tenant = tenant_id_header
+    if tenant_id and tenant_id.strip():
+        tid = tenant_id.strip()
+        if tid != tenant_id_header:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="tenant_id must match authenticated tenant context",
+            )
+        effective_tenant = tid
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, effective_tenant)
+        q = (
+            select(Scan)
+            .where(cast(Scan.tenant_id, String) == effective_tenant)
+            .order_by(desc(Scan.created_at))
+            .limit(limit)
+        )
+        if status_filter and status_filter.strip():
+            q = q.where(Scan.status == status_filter.strip())
+        result = await session.execute(q)
+        scans = list(result.scalars().all())
+        return [
+            ScanListItemResponse(
+                id=s.id,
+                status=s.status,
+                progress=s.progress,
+                phase=s.phase,
+                target=s.target_url,
+                created_at=format_created_at_iso_z(s.created_at),
+                scan_mode=str(getattr(s, "scan_mode", None) or "standard"),
+            )
+            for s in scans
+        ]
+
+
+@router.post("/smart", response_model=ScanCreateResponse, status_code=201)
+async def create_smart_scan(
+    req: ScanSmartCreateRequest,
+    tenant_id_header: str = Depends(get_current_tenant_id),
+) -> ScanCreateResponse:
+    """Enqueue scan from objective + phase budget; maps max_phases → scan_mode (v4)."""
+    tenant_id = _effective_tenant_for_scan_create(req.tenant_id, tenant_id_header)
+    scan_mode = _map_max_phases_to_scan_mode(req.max_phases)
+    options_dict = ScanOptions().model_dump()
+    options_dict["smart_objective"] = req.objective
+    options_dict["max_phases"] = req.max_phases
+
+    scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    record_scan_started()
+    scan_phase_task.delay(
+        scan_id,
+        tenant_id,
+        req.target,
+        options_dict,
+    )
+    return ScanCreateResponse(
+        scan_id=scan_id,
+        status="queued",
+        message="Smart scan queued",
+    )
+
+
+@router.post("/skill", response_model=ScanCreateResponse, status_code=201)
+async def create_skill_scan(
+    req: ScanSkillCreateRequest,
+    tenant_id_header: str = Depends(get_current_tenant_id),
+) -> ScanCreateResponse:
+    """Enqueue scan focused on a named skill (stored in options; v4)."""
+    tenant_id = _effective_tenant_for_scan_create(req.tenant_id, tenant_id_header)
+    options_dict = ScanOptions().model_dump()
+    options_dict["skill_focus"] = req.skill
+    scan_mode: Literal["quick", "standard", "deep"] = "deep"
+
+    scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    record_scan_started()
+    scan_phase_task.delay(
+        scan_id,
+        tenant_id,
+        req.target,
+        options_dict,
+    )
+    return ScanCreateResponse(
+        scan_id=scan_id,
+        status="queued",
+        message="Skill scan queued",
+    )
 
 
 @router.post("", response_model=ScanCreateResponse, status_code=201)
@@ -78,6 +253,7 @@ async def create_scan(
             progress=0,
             phase="init",
             options=options_dict,
+            scan_mode=req.scan_mode,
         )
         session.add(scan)
         await session.commit()
@@ -126,8 +302,47 @@ async def get_scan(
         )
 
 
+@router.post("/{scan_id}/cancel", response_model=ScanCancelResponse)
+async def cancel_scan(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ScanCancelResponse:
+    """Mark scan cancelled in DB. Worker revocation is not wired (use status for UX)."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        if scan.status in _TERMINAL_SCAN_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scan already in terminal state",
+            )
+        await session.execute(
+            update(Scan)
+            .where(cast(Scan.id, String) == scan_id, cast(Scan.tenant_id, String) == tenant_id)
+            .values(status="cancelled", phase="cancelled")
+        )
+        await session.commit()
+    return ScanCancelResponse(
+        scan_id=scan_id,
+        status="cancelled",
+        message="Scan marked cancelled",
+    )
+
+
 def _finding_to_schema(f: FindingModel) -> Finding:
     """Convert DB finding to API schema."""
+    refs: list[str] = []
+    if f.evidence_refs is not None:
+        if isinstance(f.evidence_refs, list):
+            refs = [str(x) for x in f.evidence_refs]
     return Finding(
         severity=f.severity,
         title=f.title,
@@ -136,12 +351,48 @@ def _finding_to_schema(f: FindingModel) -> Finding:
         cvss=f.cvss,
         owasp_category=parse_owasp_category(f.owasp_category),
         proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
+        confidence=f.confidence or "likely",  # type: ignore[arg-type]
+        evidence_type=f.evidence_type,  # type: ignore[arg-type]
+        evidence_refs=refs,
+        reproducible_steps=f.reproducible_steps,
+        applicability_notes=f.applicability_notes,
+        adversarial_score=f.adversarial_score,
+        dedup_status=f.dedup_status,
     )
+
+
+@router.get("/{scan_id}/findings/top", response_model=list[Finding])
+async def get_scan_findings_top(
+    scan_id: str,
+    limit: int = Query(20, ge=1, le=100),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> list[Finding]:
+    """Top findings by adversarial_score (HexStrike v4)."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+        result = await session.execute(
+            select(FindingModel)
+            .where(cast(FindingModel.scan_id, String) == scan_id)
+            .order_by(desc(FindingModel.adversarial_score).nulls_last(), desc(FindingModel.created_at))
+            .limit(limit)
+        )
+        findings = list(result.scalars().all())
+        return [_finding_to_schema(f) for f in findings]
 
 
 @router.get("/{scan_id}/findings", response_model=list[Finding])
 async def get_scan_findings(
     scan_id: str,
+    severity: str | None = Query(None, description="Filter by severity label"),
+    validated_only: bool = Query(False, description="Only confidence=confirmed"),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> list[Finding]:
     """Get findings for a scan. Filtered by tenant (IDOR-safe)."""
@@ -156,9 +407,12 @@ async def get_scan_findings(
         )
         if not result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Scan not found")
-        result = await session.execute(
-            select(FindingModel).where(cast(FindingModel.scan_id, String) == scan_id)
-        )
+        fq = select(FindingModel).where(cast(FindingModel.scan_id, String) == scan_id)
+        if severity and severity.strip():
+            fq = fq.where(FindingModel.severity == severity.strip())
+        if validated_only:
+            fq = fq.where(FindingModel.confidence == "confirmed")
+        result = await session.execute(fq)
         findings = list(result.scalars().all())
         return [_finding_to_schema(f) for f in findings]
 
@@ -226,6 +480,128 @@ async def get_scan_artifacts(
             )
         )
     return out
+
+
+@router.get("/{scan_id}/report", response_model=None)
+async def get_scan_report(
+    scan_id: str,
+    fmt: str = Query(
+        "pdf",
+        alias="format",
+        description="pdf|html|json|csv|valhalla_sections.csv",
+    ),
+    tier: str = Query("midgard", description="midgard|asgard|valhalla"),
+    regenerate: bool = Query(False),
+    redirect: bool = Query(False),
+    tenant_id: str = Depends(get_current_tenant_id),
+):
+    """Scan-first report download (v4); reuses reports download pipeline."""
+    tier_norm = tier.lower().strip()
+    if tier_norm not in _REPORT_TIERS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid tier")
+
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        sr = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not sr.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        rr = await session.execute(
+            select(ReportModel)
+            .where(
+                cast(ReportModel.scan_id, String) == scan_id,
+                cast(ReportModel.tenant_id, String) == tenant_id,
+                ReportModel.tier == tier_norm,
+            )
+            .order_by(desc(ReportModel.created_at))
+            .limit(1)
+        )
+        report = rr.scalar_one_or_none()
+
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "feature": "scan_report_resolve",
+                "message": "No report row for this scan and tier; generate a report first",
+            },
+        )
+
+    from src.api.routers.reports import download_report
+
+    return await download_report(str(report.id), fmt, regenerate, redirect, tenant_id)
+
+
+@router.get("/{scan_id}/cost", response_model=ScanCostApiResponse)
+async def get_scan_cost(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ScanCostApiResponse:
+    """LLM cost summary: persisted cost_summary or empty ScanCostTracker breakdown."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        raw = scan.cost_summary
+
+    if isinstance(raw, dict) and raw.get("total_cost_usd") is not None:
+        by_phase = raw.get("by_phase")
+        return ScanCostApiResponse(
+            scan_id=scan_id,
+            total_cost_usd=float(raw.get("total_cost_usd", 0)),
+            total_tokens=int(raw.get("total_tokens", 0)),
+            total_calls=int(raw.get("total_calls", 0)),
+            by_phase=by_phase if isinstance(by_phase, dict) else {},
+            source="db_cost_summary",
+        )
+
+    bd = ScanCostTracker(scan_id).breakdown()
+    return ScanCostApiResponse(
+        scan_id=str(bd.get("scan_id") or scan_id),
+        total_cost_usd=float(bd.get("total_cost_usd", 0)),
+        total_tokens=int(bd.get("total_tokens", 0)),
+        total_calls=int(bd.get("total_calls", 0)),
+        by_phase=dict(bd.get("by_phase") or {}),
+        source="tracker_empty",
+    )
+
+
+@router.get("/{scan_id}/memory-summary")
+async def get_scan_memory_summary_stub(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> JSONResponse:
+    """HexStrike v4 MCP hook — compressed scan context (not yet implemented)."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "success": False,
+            "feature": "scan_memory_summary",
+            "detail": "Scan memory summary is not implemented yet.",
+        },
+    )
 
 
 @router.post(

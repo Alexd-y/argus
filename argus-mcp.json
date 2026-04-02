@@ -9,11 +9,25 @@
       ],
       "env": {
         "ARGUS_SERVER_URL": "http://127.0.0.1:8000",
-        "ARGUS_TENANT_ID": ""
+        "ARGUS_TENANT_ID": "",
+        "ARGUS_API_KEY": "",
+        "MCP_TRANSPORT": "stdio"
       },
-      "description": "ARGUS MCP — Security scan orchestration. Tools: create_scan, get_scan_status, list_findings, get_report.",
+      "description": "ARGUS MCP — security orchestration over /api/v1. Tools: create_scan, list_scans, get_scan_status, cancel_scan, list_findings, get_finding_detail, get_adversarial_top, get_poc_code, get_report, get_scan_cost, intelligence (analyze/CVE/OSINT/Shodan), intelligent_smart_scan, run_skill_scan, sandbox execute/python, validate_finding, generate_poc, skills/process stubs.",
       "timeout": 300,
-      "alwaysAllow": []
+      "alwaysAllow": [
+        "get_scan_status",
+        "list_scans",
+        "list_findings",
+        "get_finding_detail",
+        "get_adversarial_top",
+        "get_poc_code",
+        "get_report",
+        "get_scan_cost",
+        "get_available_skills",
+        "get_scan_memory_summary",
+        "get_process_list"
+      ]
     }
   }
 }

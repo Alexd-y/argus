@@ -15,10 +15,11 @@ import logging
 import os
 import shlex
 import sys
+import time
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-import requests
+import httpx
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
@@ -134,7 +135,7 @@ def _get_admin_headers() -> dict[str, str]:
 
 
 class ArgusClient:
-    """HTTP client for ARGUS backend API. Tenant filtering, auth placeholder."""
+    """HTTP client for ARGUS backend API (httpx). Tenant filtering, auth placeholder."""
 
     def __init__(
         self,
@@ -145,7 +146,10 @@ class ArgusClient:
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
         self.tenant_id = tenant_id or os.environ.get("ARGUS_TENANT_ID")
-        self.session = requests.Session()
+        self._client = httpx.Client(
+            base_url=self.server_url,
+            timeout=httpx.Timeout(float(timeout)),
+        )
         self._connect()
 
     def _headers(self) -> dict[str, str]:
@@ -154,82 +158,279 @@ class ArgusClient:
         h.update(_get_tenant_headers(self.tenant_id))
         return h
 
+    def _err_response(self, r: httpx.Response) -> dict[str, Any]:
+        try:
+            data = r.json()
+            if isinstance(data, dict):
+                out: dict[str, Any] = {"error": f"HTTP {r.status_code}"}
+                out.update(data)
+                return out
+        except Exception:
+            pass
+        return {"error": f"HTTP {r.status_code}", "detail": (r.text or "")[:500]}
+
+    def _get_json(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+        """
+        Idempotent GET: retry up to 3 attempts with exponential backoff (1s, 2s) only for
+        connection errors and 5xx responses. Do not retry 4xx.
+        """
+        last_exc: Optional[BaseException] = None
+        for attempt in range(3):
+            try:
+                r = self._client.get(path, params=params, headers=self._headers())
+                if r.status_code < 400:
+                    if not (r.content or b"").strip():
+                        return {}
+                    ct = (r.headers.get("content-type") or "").lower()
+                    if "application/json" in ct:
+                        return r.json()
+                    return {
+                        "note": "non_json_ok",
+                        "content_type": r.headers.get("content-type"),
+                        "text_preview": (r.text or "")[:8192],
+                    }
+                transient = r.status_code in (408, 429, 500, 502, 503, 504)
+                if r.status_code < 500 or not transient:
+                    return self._err_response(r)
+                if attempt < 2:
+                    time.sleep(2**attempt)
+                    continue
+                return self._err_response(r)
+            except httpx.RequestError as e:
+                last_exc = e
+                logger.warning("GET %s attempt %s failed: %s", path, attempt + 1, e)
+                if attempt < 2:
+                    time.sleep(2**attempt)
+                    continue
+        return {"error": str(last_exc) if last_exc else "request_failed"}
+
+    def _post_json(self, path: str, json_body: Optional[dict[str, Any]] = None) -> Any:
+        try:
+            r = self._client.post(path, json=json_body or {}, headers=self._headers())
+            if r.status_code < 400:
+                if not (r.content or b"").strip():
+                    return {}
+                ct = (r.headers.get("content-type") or "").lower()
+                if "application/json" in ct:
+                    return r.json()
+                return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
+            return self._err_response(r)
+        except httpx.RequestError as e:
+            logger.error("POST %s failed: %s", path, e)
+            return {"error": str(e)}
+
     def _connect(self) -> None:
         for i in range(MAX_RETRIES):
             try:
-                r = self.session.get(
-                    f"{self.server_url}/api/v1/health",
-                    headers=self._headers(),
-                    timeout=5,
-                )
-                r.raise_for_status()
-                logger.info("Connected to ARGUS backend at %s", self.server_url)
-                return
-            except requests.exceptions.RequestException as e:
+                r = self._client.get("/api/v1/health", headers=self._headers(), timeout=5.0)
+                if r.status_code < 400:
+                    logger.info("Connected to ARGUS backend at %s", self.server_url)
+                    return
+            except httpx.RequestError as e:
                 logger.warning("Connection attempt %d/%d failed: %s", i + 1, MAX_RETRIES, e)
-                if i < MAX_RETRIES - 1:
-                    import time
-                    time.sleep(2)
+            if i < MAX_RETRIES - 1:
+                time.sleep(2)
         logger.warning("Could not connect to ARGUS backend; tools may fail")
 
-    def create_scan(self, target: str, email: str = "mcp@argus.local", options: Optional[dict] = None) -> dict[str, Any]:
-        """POST /api/v1/scans."""
-        url = f"{self.server_url}/api/v1/scans"
-        payload = {"target": target, "email": email, "options": options or {}}
-        try:
-            r = self.session.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("create_scan failed: %s", e)
-            return {"error": str(e), "scan_id": "", "status": "error"}
+    def create_scan(
+        self,
+        target: str,
+        email: str = "mcp@argus.local",
+        scan_mode: str = "standard",
+        options: Optional[dict] = None,
+    ) -> dict[str, Any]:
+        """POST /api/v1/scans — scan_mode: quick | standard | deep."""
+        sm = scan_mode.strip().lower()
+        if sm not in ("quick", "standard", "deep"):
+            sm = "standard"
+        payload = {"target": target, "email": email, "scan_mode": sm, "options": options or {}}
+        data = self._post_json("/api/v1/scans", payload)
+        if isinstance(data, dict) and "error" in data:
+            data.setdefault("scan_id", "")
+            data.setdefault("status", "error")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
 
     def get_scan_status(self, scan_id: str) -> dict[str, Any]:
-        """GET /api/v1/scans/:id."""
-        url = f"{self.server_url}/api/v1/scans/{scan_id}"
-        try:
-            r = self.session.get(url, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("get_scan_status failed: %s", e)
-            return {"error": str(e), "id": scan_id, "status": "error"}
+        data = self._get_json(f"/api/v1/scans/{scan_id}")
+        if isinstance(data, dict) and data.get("error"):
+            data.setdefault("id", scan_id)
+            data.setdefault("status", "error")
+        return data if isinstance(data, dict) else {"error": "unexpected_response", "id": scan_id}
 
-    def list_findings(self, scan_id: str) -> dict[str, Any]:
-        """GET /api/v1/scans/:id/findings."""
-        url = f"{self.server_url}/api/v1/scans/{scan_id}/findings"
-        try:
-            r = self.session.get(url, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            findings = r.json()
-            return {"scan_id": scan_id, "findings": findings, "count": len(findings)}
-        except requests.exceptions.RequestException as e:
-            logger.error("list_findings failed: %s", e)
-            return {"error": str(e), "scan_id": scan_id, "findings": [], "count": 0}
+    def list_scans(self, status: str = "", limit: int = 50) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if status.strip():
+            params["status"] = status.strip()
+        data = self._get_json("/api/v1/scans", params)
+        if isinstance(data, dict) and data.get("error"):
+            return {**data, "scans": [], "count": 0}
+        if isinstance(data, list):
+            return {"scans": data, "count": len(data)}
+        return {"error": "unexpected_response", "scans": [], "count": 0}
+
+    def cancel_scan(self, scan_id: str) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/scans/{scan_id}/cancel", {})
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_findings(
+        self,
+        scan_id: str,
+        severity: str = "",
+        validated_only: bool = False,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if severity.strip():
+            params["severity"] = severity.strip()
+        if validated_only:
+            params["validated_only"] = True
+        data = self._get_json(f"/api/v1/scans/{scan_id}/findings", params)
+        if isinstance(data, dict) and data.get("error"):
+            return {**data, "scan_id": scan_id, "findings": [], "count": 0}
+        if isinstance(data, list):
+            return {"scan_id": scan_id, "findings": data, "count": len(data)}
+        return {"error": "unexpected_response", "scan_id": scan_id, "findings": [], "count": 0}
 
     def list_reports(self, target: Optional[str] = None) -> dict[str, Any]:
-        """GET /api/v1/reports?target=."""
-        url = f"{self.server_url}/api/v1/reports"
-        params = {} if not target else {"target": target}
-        try:
-            r = self.session.get(url, params=params, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            reports = r.json()
-            return {"reports": reports, "count": len(reports)}
-        except requests.exceptions.RequestException as e:
-            logger.error("list_reports failed: %s", e)
-            return {"error": str(e), "reports": [], "count": 0}
+        params: dict[str, Any] = {} if not target else {"target": target}
+        data = self._get_json("/api/v1/reports", params)
+        if isinstance(data, dict) and data.get("error"):
+            return {**data, "reports": [], "count": 0}
+        if isinstance(data, list):
+            return {"reports": data, "count": len(data)}
+        return {"error": "unexpected_response", "reports": [], "count": 0}
 
     def get_report(self, report_id: str) -> dict[str, Any]:
-        """GET /api/v1/reports/:id."""
-        url = f"{self.server_url}/api/v1/reports/{report_id}"
+        data = self._get_json(f"/api/v1/reports/{report_id}")
+        if isinstance(data, dict) and data.get("error"):
+            data.setdefault("report_id", report_id)
+        return data if isinstance(data, dict) else {"error": "unexpected_response", "report_id": report_id}
+
+    def get_finding_detail(self, finding_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/findings/{finding_id}")
+
+    def get_adversarial_top(self, scan_id: str, top_n: int = 5) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/scans/{scan_id}/findings/top", {"limit": top_n})
+        if isinstance(data, list):
+            return {"scan_id": scan_id, "findings": data, "count": len(data)}
+        if isinstance(data, dict):
+            return data
+        return {"error": "unexpected_response"}
+
+    def get_poc_code(self, finding_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/findings/{finding_id}/poc")
+
+    def get_scan_report_v4(self, scan_id: str, report_format: str = "html", tier: str = "valhalla") -> dict[str, Any]:
         try:
-            r = self.session.get(url, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("get_report failed: %s", e)
-            return {"error": str(e), "report_id": report_id}
+            r = self._client.get(
+                f"/api/v1/scans/{scan_id}/report",
+                params={"format": report_format, "tier": tier},
+                headers=self._headers(),
+            )
+            if r.status_code >= 400:
+                return self._err_response(r)
+            ct = (r.headers.get("content-type") or "").lower()
+            if "application/json" in ct:
+                return r.json()
+            return {
+                "scan_id": scan_id,
+                "format": report_format,
+                "tier": tier,
+                "content_type": r.headers.get("content-type"),
+                "text_preview": (r.text or "")[:8192],
+                "note": "non_json_or_binary_report_body_truncated",
+            }
+        except httpx.RequestError as e:
+            return {"error": str(e)}
+
+    def get_scan_cost(self, scan_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/scans/{scan_id}/cost")
+
+    def analyze_target_intelligence(self, target: str, analysis_type: str = "comprehensive") -> dict[str, Any]:
+        return self._post_json(
+            "/api/v1/intelligence/analyze-target",
+            {"target": target, "analysis_type": analysis_type},
+        )
+
+    def get_cve_intelligence(self, cve_id: str, product: str = "") -> dict[str, Any]:
+        body: dict[str, Any] = {"cve_id": cve_id}
+        if product.strip():
+            body["product"] = product.strip()
+        return self._post_json("/api/v1/intelligence/cve", body)
+
+    def osint_domain(self, domain: str) -> dict[str, Any]:
+        return self._post_json("/api/v1/intelligence/osint-domain", {"domain": domain})
+
+    def get_shodan_intel(self, target_ip: str) -> dict[str, Any]:
+        return self._get_json("/api/v1/intelligence/shodan", {"ip": target_ip})
+
+    def intelligent_smart_scan(
+        self,
+        target: str,
+        objective: str = "comprehensive",
+        max_phases: int = 5,
+    ) -> dict[str, Any]:
+        tid = (self.tenant_id or "").strip() or None
+        body: dict[str, Any] = {
+            "target": target,
+            "objective": objective,
+            "max_phases": max_phases,
+        }
+        if tid:
+            body["tenant_id"] = tid
+        return self._post_json("/api/v1/scans/smart", body)
+
+    def run_skill_scan(self, target: str, skill: str) -> dict[str, Any]:
+        tid = (self.tenant_id or "").strip() or None
+        body: dict[str, Any] = {"target": target, "skill": skill}
+        if tid:
+            body["tenant_id"] = tid
+        return self._post_json("/api/v1/scans/skill", body)
+
+    def execute_security_tool(
+        self,
+        tool: str,
+        target: str,
+        args_json: str = "{}",
+        timeout_sec: Optional[int] = None,
+    ) -> dict[str, Any]:
+        try:
+            extra = json.loads(args_json) if args_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid args_json: {e}"}
+        if not isinstance(extra, dict):
+            return {"error": "args_json must decode to a JSON object"}
+        cmd = _tool_to_shell_command(tool, target, extra)
+        if not cmd:
+            return {
+                "error": f"cannot build sandbox command for tool {tool!r} (allowlist / target)",
+                "success": False,
+            }
+        body: dict[str, Any] = {"command": cmd, "use_sandbox": False}
+        if timeout_sec is not None:
+            body["timeout_sec"] = timeout_sec
+        return self._post_json("/api/v1/sandbox/execute", body)
+
+    def execute_python_in_sandbox(self, script: str, timeout: int = 60) -> dict[str, Any]:
+        to = min(120, max(5, int(timeout)))
+        return self._post_json("/api/v1/sandbox/python", {"code": script, "timeout_sec": to})
+
+    def validate_finding(self, finding_id: str) -> dict[str, Any]:
+        return self._post_json(f"/api/v1/findings/{finding_id}/validate", {})
+
+    def generate_poc(self, finding_id: str) -> dict[str, Any]:
+        return self._post_json(f"/api/v1/findings/{finding_id}/poc/generate", {})
+
+    def get_available_skills(self) -> dict[str, Any]:
+        return self._get_json("/api/v1/skills")
+
+    def get_scan_memory_summary(self, scan_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/scans/{scan_id}/memory-summary")
+
+    def get_process_list(self) -> dict[str, Any]:
+        return self._get_json("/api/v1/sandbox/processes")
+
+    def kill_process(self, pid: int) -> dict[str, Any]:
+        return self._post_json(f"/api/v1/sandbox/processes/{int(pid)}/kill", {})
 
     def run_tool(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         """
@@ -237,9 +438,8 @@ class ArgusClient:
         otherwise POST /tools/execute with constructed command.
         """
         endpoint = tool_name.lower()
-        url = f"{self.server_url}/api/v1/tools/{endpoint}"
+        path = f"/api/v1/tools/{endpoint}"
 
-        # Backend endpoints with dedicated handlers (match backend router)
         dedicated = {
             "nmap", "nuclei", "gobuster", "nikto", "sqlmap", "dirb", "ffuf",
             "subfinder", "hydra", "wpscan", "httpx", "amass", "feroxbuster",
@@ -247,9 +447,8 @@ class ArgusClient:
         }
 
         if endpoint in dedicated:
-            return self._post_dedicated_tool(url, endpoint, args)
+            return self._post_dedicated_tool(path, endpoint, args)
 
-        # Fallback: build command and use /execute
         cmd = _build_command_for_tool(tool_name, args)
         if not cmd:
             return {
@@ -261,32 +460,30 @@ class ArgusClient:
             }
         return self._post_execute(cmd)
 
-    def _post_dedicated_tool(self, url: str, endpoint: str, args: dict[str, Any]) -> dict[str, Any]:
-        """POST to dedicated tool endpoint with normalized payload."""
+    def _post_dedicated_tool(self, path: str, endpoint: str, args: dict[str, Any]) -> dict[str, Any]:
         payload = _normalize_payload_for_endpoint(endpoint, args)
-        try:
-            r = self.session.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("run_tool %s failed: %s", endpoint, e)
-            return {"error": str(e), "success": False, "stdout": "", "stderr": str(e), "return_code": -1}
+        data = self._post_json(path, payload)
+        if isinstance(data, dict) and data.get("error"):
+            return {
+                **data,
+                "success": False,
+                "stdout": "",
+                "stderr": str(data.get("error", "")),
+                "return_code": -1,
+            }
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
 
     def _post_execute(self, command: str) -> dict[str, Any]:
-        """POST to generic /tools/execute endpoint."""
-        url = f"{self.server_url}/api/v1/tools/execute"
-        try:
-            r = self.session.post(
-                url,
-                json={"command": command, "use_cache": False},
-                headers=self._headers(),
-                timeout=self.timeout,
-            )
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("execute failed: %s", e)
-            return {"error": str(e), "success": False, "stdout": "", "stderr": str(e), "return_code": -1}
+        data = self._post_json("/api/v1/tools/execute", {"command": command, "use_cache": False})
+        if isinstance(data, dict) and data.get("error"):
+            return {
+                **data,
+                "success": False,
+                "stdout": "",
+                "stderr": str(data.get("error", "")),
+                "return_code": -1,
+            }
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
 
     def enqueue_va_sandbox_tool(
         self,
@@ -296,21 +493,27 @@ class ArgusClient:
         target: str,
         args_json: str = "",
     ) -> dict[str, Any]:
-        """
-        Queue VA sandbox scanner via backend Celery (mcp_runner in worker, MinIO sink).
-        Uses POST /api/v1/internal/va-tools/enqueue — requires ARGUS_ADMIN_KEY when backend enforces admin.
-        """
         payload, err = build_enqueue_payload(tool_name, tenant_id, scan_id, target, args_json)
         if err or not payload:
             return {"success": False, "error": err or "invalid_payload", "task_id": ""}
-        url = f"{self.server_url}/api/v1/internal/va-tools/enqueue"
+        hdrs = {**self._headers(), **_get_admin_headers()}
         try:
-            hdrs = {**self._headers(), **_get_admin_headers()}
-            r = self.session.post(url, json=payload, headers=hdrs, timeout=60)
-            r.raise_for_status()
-            data = r.json()
-            return {"success": True, **data}
-        except requests.exceptions.RequestException as e:
+            r = self._client.post(
+                "/api/v1/internal/va-tools/enqueue",
+                json=payload,
+                headers=hdrs,
+                timeout=60.0,
+            )
+            if r.status_code < 400:
+                data = r.json() if r.content else {}
+                return {"success": True, **(data if isinstance(data, dict) else {})}
+            err_body = self._err_response(r)
+            return {
+                "success": False,
+                "error": str(err_body.get("error", "request_failed")),
+                "task_id": "",
+            }
+        except httpx.RequestError as e:
             logger.error("enqueue_va_sandbox_tool failed: %s", e)
             return {"success": False, "error": str(e), "task_id": ""}
 
@@ -323,8 +526,6 @@ class ArgusClient:
         scan_id: str = "",
         password_audit_opt_in: bool = False,
     ) -> dict[str, Any]:
-        """KAL-002 — POST /api/v1/tools/kal/run (category policy + optional MinIO upload)."""
-        url = f"{self.server_url}/api/v1/tools/kal/run"
         tid = tenant_id.strip() or (self.tenant_id or "")
         payload: dict[str, Any] = {
             "category": category.strip().lower().replace("-", "_"),
@@ -334,21 +535,85 @@ class ArgusClient:
             "scan_id": scan_id.strip(),
             "password_audit_opt_in": password_audit_opt_in,
         }
-        try:
-            r = self.session.post(url, json=payload, headers=self._headers(), timeout=self.timeout)
-            r.raise_for_status()
-            return r.json()
-        except requests.exceptions.RequestException as e:
-            logger.error("kal_run failed: %s", e)
+        data = self._post_json("/api/v1/tools/kal/run", payload)
+        if isinstance(data, dict) and data.get("error"):
             return {
                 "success": False,
                 "stdout": "",
-                "stderr": str(e),
+                "stderr": str(data.get("error", "")),
                 "return_code": -1,
                 "execution_time": 0.0,
                 "policy_reason": "request_failed",
                 "minio_keys": [],
             }
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+
+def _tool_to_shell_command(tool: str, target: str, args: dict[str, Any]) -> Optional[str]:
+    """Build a single shell command string for POST /api/v1/sandbox/execute allowlist."""
+    t = tool.strip().lower()
+    a = dict(args)
+    if target:
+        a.setdefault("target", target)
+        a.setdefault("url", target)
+        a.setdefault("domain", target)
+        a.setdefault("targets", target)
+    direct = _build_command_for_tool(t, a)
+    if direct:
+        return direct
+    if t == "nuclei":
+        d = _normalize_payload_for_endpoint("nuclei", a)
+        u = str(d.get("target") or "").strip()
+        if not u:
+            return None
+        parts = ["nuclei", "-u", u]
+        if d.get("additional_args"):
+            parts.extend(shlex.split(str(d["additional_args"])))
+        return shlex.join(parts)
+    if t == "nmap":
+        d = _normalize_payload_for_endpoint("nmap", a)
+        parts = ["nmap", str(d.get("scan_type") or "-sV")]
+        if d.get("ports"):
+            parts.extend(["-p", str(d["ports"])])
+        parts.append(str(d.get("target") or ""))
+        if d.get("additional_args"):
+            parts.extend(shlex.split(str(d["additional_args"])))
+        return shlex.join(parts)
+    if t == "gobuster":
+        d = _normalize_payload_for_endpoint("gobuster", a)
+        u = str(d.get("url") or "").strip()
+        if not u:
+            return None
+        parts = [
+            "gobuster",
+            "dir",
+            "-u",
+            u,
+            "-w",
+            str(d.get("wordlist") or "/usr/share/wordlists/dirb/common.txt"),
+        ]
+        if d.get("additional_args"):
+            parts.extend(shlex.split(str(d["additional_args"])))
+        return shlex.join(parts)
+    if t == "nikto":
+        d = _normalize_payload_for_endpoint("nikto", a)
+        tg = str(d.get("target") or "").strip()
+        if not tg:
+            return None
+        parts = ["nikto", "-h", tg]
+        if d.get("additional_args"):
+            parts.extend(shlex.split(str(d["additional_args"])))
+        return shlex.join(parts)
+    if t == "sqlmap":
+        d = _normalize_payload_for_endpoint("sqlmap", a)
+        u = str(d.get("url") or "").strip()
+        if not u:
+            return None
+        parts = ["sqlmap", "-u", u, "--batch"]
+        if d.get("additional_args"):
+            parts.extend(shlex.split(str(d["additional_args"])))
+        return shlex.join(parts)
+    return None
 
 
 def _normalize_payload_for_endpoint(endpoint: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -440,6 +705,16 @@ def _q(s: str) -> str:
     return shlex.quote(s) if s else ""
 
 
+def _scan_mode_from_alias(scan_type: str) -> str:
+    """Map legacy scan_type labels to backend scan_mode (quick|standard|deep)."""
+    s = (scan_type or "standard").strip().lower()
+    if s in ("quick", "standard", "deep"):
+        return s
+    if s in ("light", "normal"):
+        return "standard"
+    return "standard"
+
+
 # ---------------------------------------------------------------------------
 # MCP Server Setup
 # ---------------------------------------------------------------------------
@@ -453,7 +728,7 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
     def create_scan(
         target: str,
         email: str = "mcp@argus.local",
-        scan_type: str = "quick",
+        scan_mode: str = "standard",
     ) -> dict[str, Any]:
         """
         Create a new security scan against a target.
@@ -461,58 +736,159 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         Args:
             target: URL or domain to scan (e.g. https://example.com)
             email: Contact email for the scan
-            scan_type: quick, light, or deep
+            scan_mode: quick | standard | deep (legacy: light → standard)
 
         Returns:
             scan_id, status, message
         """
-        options = {"scanType": scan_type}
-        return client.create_scan(target=target, email=email, options=options)
+        sm = _scan_mode_from_alias(scan_mode)
+        options: dict[str, Any] = {"scanType": scan_mode}
+        return client.create_scan(target=target, email=email, scan_mode=sm, options=options)
 
     @mcp.tool()
     def get_scan_status(scan_id: str) -> dict[str, Any]:
-        """
-        Get the status of a scan.
-
-        Args:
-            scan_id: UUID of the scan
-
-        Returns:
-            id, status, progress, phase, target, created_at
-        """
+        """Get scan status: id, status, progress, phase, target, created_at."""
         return client.get_scan_status(scan_id)
 
     @mcp.tool()
-    def list_findings(scan_id: str) -> dict[str, Any]:
-        """
-        List vulnerability findings for a scan.
+    def list_scans(status: str = "", limit: int = 50) -> dict[str, Any]:
+        """List scans for the current tenant; optional status filter."""
+        return client.list_scans(status=status, limit=limit)
 
-        Args:
-            scan_id: UUID of the scan
+    @mcp.tool()
+    def cancel_scan(scan_id: str) -> dict[str, Any]:
+        """Request cancellation of a scan."""
+        return client.cancel_scan(scan_id)
 
-        Returns:
-            scan_id, findings (severity, title, description, cwe, cvss), count
-        """
-        return client.list_findings(scan_id)
+    @mcp.tool()
+    def list_findings(
+        scan_id: str,
+        severity: str = "",
+        validated_only: bool = False,
+    ) -> dict[str, Any]:
+        """List findings for a scan; optional severity filter and validated_only."""
+        return client.list_findings(scan_id, severity=severity, validated_only=validated_only)
+
+    @mcp.tool()
+    def get_finding_detail(finding_id: str) -> dict[str, Any]:
+        """Finding detail including adversarial score and validation-related fields."""
+        return client.get_finding_detail(finding_id)
+
+    @mcp.tool()
+    def get_adversarial_top(scan_id: str, top_n: int = 5) -> dict[str, Any]:
+        """Top findings ordered by adversarial_score for a scan."""
+        return client.get_adversarial_top(scan_id, top_n=top_n)
+
+    @mcp.tool()
+    def get_poc_code(finding_id: str) -> dict[str, Any]:
+        """Stored PoC payload for a finding (if available)."""
+        return client.get_poc_code(finding_id)
 
     @mcp.tool()
     def get_report(
+        scan_id: Optional[str] = None,
         report_id: Optional[str] = None,
         target: Optional[str] = None,
+        report_format: str = "html",
+        tier: str = "valhalla",
     ) -> dict[str, Any]:
         """
-        Get a report by ID, or list reports filtered by target.
-
-        Args:
-            report_id: UUID of the report (if known)
-            target: Filter reports by target URL (when report_id not provided)
-
-        Returns:
-            report_id, target, summary, findings, technologies
+        Report by scan (download preview), by report UUID, or list reports when only target is set.
+        report_format: html | json | pdf | csv (backend-dependent).
+        tier: midgard | asgard | valhalla
         """
+        if scan_id:
+            return client.get_scan_report_v4(scan_id, report_format=report_format, tier=tier)
         if report_id:
             return client.get_report(report_id)
         return client.list_reports(target=target)
+
+    @mcp.tool()
+    def get_scan_cost(scan_id: str) -> dict[str, Any]:
+        """LLM / scan cost summary."""
+        return client.get_scan_cost(scan_id)
+
+    @mcp.tool()
+    def analyze_target_intelligence(target: str, analysis_type: str = "comprehensive") -> dict[str, Any]:
+        """LLM target analysis: attack surface, stack, recommended tools."""
+        return client.analyze_target_intelligence(target, analysis_type=analysis_type)
+
+    @mcp.tool()
+    def get_cve_intelligence(cve_id: str, product: str = "") -> dict[str, Any]:
+        """CVE enrichment (Perplexity-backed when configured)."""
+        return client.get_cve_intelligence(cve_id, product=product)
+
+    @mcp.tool()
+    def osint_domain(domain: str) -> dict[str, Any]:
+        """Domain OSINT summary (Perplexity + optional Shodan)."""
+        return client.osint_domain(domain)
+
+    @mcp.tool()
+    def get_shodan_intel(target_ip: str) -> dict[str, Any]:
+        """Shodan summary for an IPv4 address."""
+        return client.get_shodan_intel(target_ip)
+
+    @mcp.tool()
+    def intelligent_smart_scan(
+        target: str,
+        objective: str = "comprehensive",
+        max_phases: int = 5,
+    ) -> dict[str, Any]:
+        """Enqueue smart scan from objective + phase budget."""
+        return client.intelligent_smart_scan(target, objective=objective, max_phases=max_phases)
+
+    @mcp.tool()
+    def run_skill_scan(target: str, skill: str) -> dict[str, Any]:
+        """Enqueue scan focused on a named skill."""
+        return client.run_skill_scan(target, skill=skill)
+
+    @mcp.tool()
+    def execute_security_tool(
+        tool: str,
+        target: str,
+        args_json: str = "{}",
+        timeout_sec: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """
+        Run allowlisted CLI tool via POST /api/v1/sandbox/execute.
+        args_json: JSON object merged into tool args (e.g. additional_args, ports).
+        """
+        return client.execute_security_tool(tool, target, args_json=args_json, timeout_sec=timeout_sec)
+
+    @mcp.tool()
+    def execute_python_in_sandbox(script: str, timeout: int = 60) -> dict[str, Any]:
+        """Run constrained Python snippet when ARGUS_SANDBOX_PYTHON_ENABLED is true."""
+        return client.execute_python_in_sandbox(script, timeout=timeout)
+
+    @mcp.tool()
+    def validate_finding(finding_id: str) -> dict[str, Any]:
+        """Run exploitability validation pipeline for a finding."""
+        return client.validate_finding(finding_id)
+
+    @mcp.tool()
+    def generate_poc(finding_id: str) -> dict[str, Any]:
+        """Generate PoC payload for a finding (LLM-backed when available)."""
+        return client.generate_poc(finding_id)
+
+    @mcp.tool()
+    def get_available_skills() -> dict[str, Any]:
+        """List packaged skill markdown ids by category."""
+        return client.get_available_skills()
+
+    @mcp.tool()
+    def get_scan_memory_summary(scan_id: str) -> dict[str, Any]:
+        """Compressed scan context (stub 501 until implemented)."""
+        return client.get_scan_memory_summary(scan_id)
+
+    @mcp.tool()
+    def get_process_list() -> dict[str, Any]:
+        """Sandbox process list (stub 501 until implemented)."""
+        return client.get_process_list()
+
+    @mcp.tool()
+    def kill_process(pid: int) -> dict[str, Any]:
+        """Terminate sandbox worker PID (stub 501 until implemented)."""
+        return client.kill_process(pid)
 
     _register_kali_tools(mcp, client)
     _register_va_sandbox_enqueue_tools(mcp, client)
@@ -812,7 +1188,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    client = ArgusClient(args.server, args.timeout, tenant_id=args.tenant)
+    server_url = (os.environ.get("ARGUS_SERVER_URL") or args.server or DEFAULT_SERVER_URL).strip()
+    client = ArgusClient(server_url, args.timeout, tenant_id=args.tenant)
     mcp = setup_mcp_server(client)
 
     if args.transport == "http":

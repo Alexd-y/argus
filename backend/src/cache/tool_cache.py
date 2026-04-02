@@ -1,0 +1,134 @@
+"""Sandbox tool result cache — Redis optional; no-op when Redis is down.
+
+Cache key: SHA-256 of normalized command + sandbox flag + timeout (stable JSON).
+TTL: per-tool defaults (seconds); ttl==0 disables cache for that tool.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from typing import Any
+
+from src.core.config import settings
+from src.tools.guardrails.command_parser import extract_tool_name
+
+logger = logging.getLogger(__name__)
+
+# TTL (seconds) by tool name; 0 = never cache
+_TOOL_TTL_SEC: dict[str, int] = {
+    "nmap": 3600,
+    "nuclei": 1800,
+    "nikto": 1800,
+    "gobuster": 900,
+    "sqlmap": 600,
+    "dig": 86400,
+    "whois": 86400,
+    "host": 86400,
+    "curl": 300,
+    "gitleaks": 600,
+    "trivy": 3600,
+    "semgrep": 1800,
+    "trufflehog": 1800,
+    "prowler": 1800,
+    "scout": 1800,
+    "checkov": 1800,
+    "terrascan": 1800,
+    "searchsploit": 7200,
+}
+
+_DEFAULT_TTL_SEC = 300
+_CACHE_PREFIX = "argus:sandbox:exec:"
+
+
+def ttl_for_tool(tool_name: str | None) -> int:
+    if not tool_name:
+        return _DEFAULT_TTL_SEC
+    return int(_TOOL_TTL_SEC.get(tool_name.lower(), _DEFAULT_TTL_SEC))
+
+
+def cache_key_for_execute(command: str, use_sandbox: bool, timeout_sec: int | None) -> str:
+    payload = json.dumps(
+        {
+            "command": command.strip(),
+            "use_sandbox": use_sandbox,
+            "timeout_sec": timeout_sec,
+        },
+        sort_keys=True,
+        ensure_ascii=True,
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"{_CACHE_PREFIX}{digest}"
+
+
+class ToolResultCache:
+    """Redis-backed get/set; degraded mode when Redis unavailable."""
+
+    def __init__(self) -> None:
+        self._redis: Any = None
+        try:
+            import redis
+
+            r = redis.Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_connect_timeout=1.5,
+                socket_timeout=1.5,
+            )
+            r.ping()
+            self._redis = r
+        except Exception:
+            logger.warning(
+                "tool_cache_redis_unavailable",
+                extra={"event": "argus.tool_cache.redis_unavailable"},
+            )
+            self._redis = None
+
+    @property
+    def enabled(self) -> bool:
+        return self._redis is not None
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        if not self._redis:
+            return None
+        try:
+            raw = self._redis.get(key)
+            if not raw:
+                return None
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else None
+        except Exception:
+            logger.warning(
+                "tool_cache_get_failed",
+                extra={"event": "argus.tool_cache.get_failed"},
+            )
+            return None
+
+    def set(self, key: str, value: dict[str, Any], ttl_sec: int) -> None:
+        if not self._redis or ttl_sec <= 0:
+            return
+        try:
+            self._redis.setex(key, ttl_sec, json.dumps(value, ensure_ascii=True))
+        except Exception:
+            logger.warning(
+                "tool_cache_set_failed",
+                extra={"event": "argus.tool_cache.set_failed"},
+            )
+
+
+_singleton: ToolResultCache | None = None
+
+
+def get_tool_cache() -> ToolResultCache:
+    global _singleton
+    if _singleton is None:
+        _singleton = ToolResultCache()
+    return _singleton
+
+
+def recovery_info_stub(*, from_cache: bool) -> dict[str, Any] | None:
+    """Reserved for ToolRecoverySystem; stub metadata only."""
+    if from_cache:
+        return {"source": "cache", "recovery_tier": "none"}
+    return None

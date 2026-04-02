@@ -114,6 +114,95 @@ class ScanDetailResponse(BaseModel):
     created_at: str
 
 
+class ScanListItemResponse(BaseModel):
+    """GET /scans list item (HexStrike v4)."""
+
+    id: str
+    status: str
+    progress: int
+    phase: str
+    target: str
+    created_at: str
+    scan_mode: str = "standard"
+
+
+class ScanSmartCreateRequest(BaseModel):
+    """POST /scans/smart — intelligent scan enqueue."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=TARGET_PATTERN,
+    )
+    objective: str = Field(default="", max_length=2048)
+    max_phases: int = Field(default=5, ge=1, le=20)
+    tenant_id: str | None = Field(default=None, max_length=36)
+
+
+class ScanSkillCreateRequest(BaseModel):
+    """POST /scans/skill — skill-focused scan."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=TARGET_PATTERN,
+    )
+    skill: str = Field(..., min_length=1, max_length=256)
+    tenant_id: str | None = Field(default=None, max_length=36)
+
+
+class ScanCancelResponse(BaseModel):
+    """POST /scans/{id}/cancel."""
+
+    scan_id: str
+    status: str
+    message: str | None = None
+
+
+class ScanCostApiResponse(BaseModel):
+    """GET /scans/{scan_id}/cost — mirrors ScanCostTracker.breakdown subset."""
+
+    scan_id: str
+    total_cost_usd: float = 0.0
+    total_tokens: int = 0
+    total_calls: int = 0
+    by_phase: dict[str, Any] = Field(default_factory=dict)
+    source: str = Field(description="db_cost_summary | tracker_empty")
+
+
+class SandboxExecuteRequest(BaseModel):
+    """POST /sandbox/execute."""
+
+    command: str = Field(..., min_length=1, max_length=4096)
+    use_sandbox: bool = False
+    timeout_sec: int | None = Field(default=None, ge=5, le=600)
+
+
+class SandboxPythonRequest(BaseModel):
+    """POST /sandbox/python — constrained one-shot code run."""
+
+    code: str = Field(..., min_length=1, max_length=65536)
+    timeout_sec: int = Field(default=15, ge=5, le=120)
+
+
+class SandboxExecuteResponse(BaseModel):
+    success: bool
+    stdout: str = ""
+    stderr: str = ""
+    return_code: int = -1
+    execution_time: float = 0.0
+    truncated: bool = False
+    from_cache: bool = False
+    recovery_info: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional recovery / provenance metadata (stub until recovery system lands)",
+    )
+
+
 class ScanArtifactItem(BaseModel):
     """GET /scans/{scan_id}/artifacts — one object in tenant scan prefix (MinIO/S3)."""
 
@@ -169,6 +258,55 @@ class Finding(BaseModel):
     applicability_notes: str | None = None
     adversarial_score: float | None = None
     dedup_status: str | None = None
+
+
+class FindingDetailResponse(BaseModel):
+    """GET /findings/{id} — full finding row + scan context ids."""
+
+    id: str
+    scan_id: str
+    report_id: str | None = None
+    severity: str
+    title: str
+    description: str
+    cwe: str | None = None
+    cvss: float | None = None
+    owasp_category: OwaspTop102025CategoryId | None = None
+    proof_of_concept: dict[str, Any] | None = None
+    confidence: FindingConfidenceLiteral = "likely"
+    evidence_type: FindingEvidenceTypeLiteral | None = None
+    evidence_refs: list[str] = Field(default_factory=list)
+    reproducible_steps: str | None = None
+    applicability_notes: str | None = None
+    adversarial_score: float | None = None
+    dedup_status: str | None = None
+    created_at: str | None = None
+
+
+class FindingValidationApiResponse(BaseModel):
+    """POST /findings/{id}/validate."""
+
+    finding_id: str
+    status: str
+    confidence: str = "medium"
+    reasoning: str = ""
+    poc_command: str | None = None
+    actual_impact: str = ""
+    preconditions: list[str] = Field(default_factory=list)
+    reject_reason: str | None = None
+    exploit_public: bool = False
+    exploit_sources: list[str] = Field(default_factory=list)
+    stages_passed: list[str] = Field(default_factory=list)
+
+
+class FindingPocBodyResponse(BaseModel):
+    """GET /findings/{id}/poc or generate response body."""
+
+    finding_id: str
+    poc: dict[str, Any] | None = None
+    poc_code: str | None = None
+    playwright_script: str | None = None
+    generator_model: str | None = None
 
 
 class ReportListResponse(BaseModel):
@@ -344,3 +482,103 @@ class TokenPayload(BaseModel):
     exp: int
     iat: int
     type: str = "access"
+
+
+# --- Intelligence (/api/v1/intelligence/*) ---
+IntelligenceAnalysisType = Literal["comprehensive", "quick", "passive"]
+IntelligenceTestingPriority = Literal["high", "medium", "low"]
+
+
+class IntelligenceAnalyzeTargetRequest(BaseModel):
+    """POST /intelligence/analyze-target."""
+
+    target: str = Field(
+        ...,
+        min_length=1,
+        max_length=512,
+        description="URL, hostname, or IP to analyze",
+    )
+    analysis_type: IntelligenceAnalysisType = Field(
+        default="comprehensive",
+        description="Depth: comprehensive, quick, or passive",
+    )
+
+
+class IntelligenceAnalyzeTargetData(BaseModel):
+    """Structured target intelligence from LLM (validated subset; extra keys allowed in response)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    attack_surface: list[Any] = Field(default_factory=list)
+    tech_stack: dict[str, Any] = Field(default_factory=dict)
+    vuln_categories: list[Any] = Field(default_factory=list)
+    recommended_tools: list[Any] = Field(default_factory=list)
+    testing_priority: IntelligenceTestingPriority = "medium"
+    estimated_time_minutes: int = Field(default=60, ge=1, le=10080)
+
+
+class IntelligenceCveRequest(BaseModel):
+    """POST /intelligence/cve."""
+
+    cve_id: str = Field(
+        ...,
+        min_length=9,
+        max_length=32,
+        pattern=r"^CVE-\d{4}-\d+$",
+        description="CVE identifier, e.g. CVE-2024-1234",
+    )
+    product: str | None = Field(
+        default=None,
+        max_length=256,
+        description="Optional affected product name for context",
+    )
+
+
+class IntelligenceCveIntelBody(BaseModel):
+    """CVE enrichment payload (Perplexity-backed)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    cve_id: str
+    cvss_v3: float | None = None
+    severity: str | None = None
+    description: str = ""
+    exploit_available: bool = False
+    exploit_sources: list[str] = Field(default_factory=list)
+    patch_available: bool = False
+    patch_url: str | None = None
+    actively_exploited: bool = False
+    affected_versions: list[str] = Field(default_factory=list)
+    remediation: str = ""
+
+
+class IntelligenceOsintDomainRequest(BaseModel):
+    """POST /intelligence/osint-domain."""
+
+    domain: str = Field(..., min_length=1, max_length=253, description="Hostname or domain")
+
+
+class IntelligenceShodanServiceItem(BaseModel):
+    """One Shodan service entry."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    port: int
+    transport: str = "tcp"
+    product: str | None = None
+    version: str | None = None
+    cpe: list[str] = Field(default_factory=list)
+
+
+class IntelligenceShodanSummary(BaseModel):
+    """Reduced Shodan host summary for OSINT combine."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ip: str | None = None
+    hostnames: list[str] = Field(default_factory=list)
+    org: str | None = None
+    country: str | None = None
+    open_ports: list[int] = Field(default_factory=list)
+    vulns: list[str] = Field(default_factory=list)
+    services: list[IntelligenceShodanServiceItem] = Field(default_factory=list)
