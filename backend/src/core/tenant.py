@@ -1,6 +1,6 @@
 """Tenant context — current tenant for RLS and authorization.
 
-MVP: uses DEFAULT_TENANT_ID from env. Optional X-Tenant-ID header for MCP/API clients.
+Uses DEFAULT_TENANT_ID from env. Optional X-Tenant-ID header for MCP/API clients.
 When auth is implemented: extract from JWT/session.
 """
 

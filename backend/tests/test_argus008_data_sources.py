@@ -25,23 +25,36 @@ class TestCensysClient:
     def test_is_available_false_when_no_key(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("CENSYS_API_KEY", None)
+            os.environ.pop("CENSYS_API_SECRET", None)
             assert CensysClient().is_available() is False
 
-    def test_is_available_true_when_key_set(self) -> None:
-        with patch.dict(os.environ, {"CENSYS_API_KEY": "secret"}):
+    def test_is_available_false_when_only_api_id(self) -> None:
+        with patch.dict(os.environ, {"CENSYS_API_KEY": "id"}, clear=True):
+            os.environ.pop("CENSYS_API_SECRET", None)
+            assert CensysClient().is_available() is False
+
+    def test_is_available_true_when_id_and_secret_set(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": "secret"},
+        ):
             assert CensysClient().is_available() is True
 
     @pytest.mark.asyncio
     async def test_query_returns_empty_when_not_configured(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("CENSYS_API_KEY", None)
+            os.environ.pop("CENSYS_API_SECRET", None)
             result = await CensysClient().query()
-            assert result == {}
+            assert result == {"available": False, "source": "censys"}
 
     @pytest.mark.asyncio
-    async def test_query_returns_empty_on_timeout(self) -> None:
-        """Timeout from API returns empty dict, no exception propagated."""
-        with patch.dict(os.environ, {"CENSYS_API_KEY": "test-key"}):
+    async def test_query_returns_timeout_payload_on_timeout(self) -> None:
+        """Timeout — structured error, no exception propagated."""
+        with patch.dict(
+            os.environ,
+            {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+        ):
             with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
                 mock_client = AsyncMock()
                 mock_client.get = AsyncMock(
@@ -50,27 +63,34 @@ class TestCensysClient:
                 mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await CensysClient().query()
-                assert result == {}
+                result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
+                assert result == {
+                    "source": "censys",
+                    "available": True,
+                    "error": "timeout",
+                }
 
     @pytest.mark.asyncio
-    async def test_query_returns_empty_on_rate_limit_429(self) -> None:
-        """429 rate limit returns empty dict, no exception propagated."""
-        with patch.dict(os.environ, {"CENSYS_API_KEY": "test-key"}):
+    async def test_query_returns_rate_limited_on_429(self) -> None:
+        """429 — explicit rate_limited flag."""
+        with patch.dict(
+            os.environ,
+            {"CENSYS_API_KEY": "test-key", "CENSYS_API_SECRET": "test-secret"},
+        ):
             with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
                 mock_client = AsyncMock()
-                mock_client.get = AsyncMock(
-                    side_effect=httpx.HTTPStatusError(
-                        "429 Too Many Requests",
-                        request=httpx.Request("GET", "https://search.censys.io/api/v2/hosts"),
-                        response=httpx.Response(429),
-                    )
-                )
+                mock_resp = httpx.Response(429)
+                mock_client.get = AsyncMock(return_value=mock_resp)
                 mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await CensysClient().query()
-                assert result == {}
+                result = await CensysClient().query(query_type="hosts", ip="8.8.8.8")
+                assert result == {
+                    "source": "censys",
+                    "available": True,
+                    "rate_limited": True,
+                    "status_code": 429,
+                }
 
 
 class TestVirusTotalClient:
@@ -86,10 +106,10 @@ class TestVirusTotalClient:
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("VIRUSTOTAL_API_KEY", None)
             result = await VirusTotalClient().query()
-            assert result == {}
+            assert result == {"available": False, "source": "virustotal"}
 
     @pytest.mark.asyncio
-    async def test_query_returns_empty_on_timeout(self) -> None:
+    async def test_query_returns_timeout_payload_on_timeout(self) -> None:
         with patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}):
             with patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls:
                 mock_client = AsyncMock()
@@ -99,26 +119,30 @@ class TestVirusTotalClient:
                 mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await VirusTotalClient().query()
-                assert result == {}
+                result = await VirusTotalClient().query(domain="example.com")
+                assert result == {
+                    "source": "virustotal",
+                    "available": True,
+                    "error": "timeout",
+                }
 
     @pytest.mark.asyncio
-    async def test_query_returns_empty_on_rate_limit_429(self) -> None:
+    async def test_query_returns_rate_limited_on_429(self) -> None:
         with patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "vt-key"}):
             with patch("src.data_sources.virustotal_client.httpx.AsyncClient") as mock_cls:
                 mock_client = AsyncMock()
-                mock_client.get = AsyncMock(
-                    side_effect=httpx.HTTPStatusError(
-                        "429 Too Many Requests",
-                        request=httpx.Request("GET", "https://www.virustotal.com/api/v3/domains/x"),
-                        response=httpx.Response(429),
-                    )
-                )
+                mock_resp = httpx.Response(429)
+                mock_client.get = AsyncMock(return_value=mock_resp)
                 mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
-                result = await VirusTotalClient().query()
-                assert result == {}
+                result = await VirusTotalClient().query(domain="example.com")
+                assert result == {
+                    "source": "virustotal",
+                    "available": True,
+                    "rate_limited": True,
+                    "status_code": 429,
+                }
 
 
 class TestHIBPClient:
@@ -170,7 +194,7 @@ class TestNVDClient:
 
 
 class TestExploitDBClient:
-    """ExploitDBClient — stub."""
+    """ExploitDBClient — minimal initial client."""
 
     @pytest.mark.asyncio
     async def test_query_returns_empty(self) -> None:
@@ -248,7 +272,10 @@ class TestDataSourceSecurity:
     ) -> None:
         """Exception with key in message must not propagate; result is empty dict."""
         secret_key = "censys-secret-key-abc123"
-        with patch.dict(os.environ, {"CENSYS_API_KEY": secret_key}):
+        with patch.dict(
+            os.environ,
+            {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": secret_key},
+        ):
             with patch("src.data_sources.censys_client.httpx.AsyncClient") as mock_cls:
                 mock_client = AsyncMock()
                 mock_client.get = AsyncMock(
@@ -260,7 +287,7 @@ class TestDataSourceSecurity:
                 mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 with caplog.at_level(logging.DEBUG):
-                    result = await CensysClient().query()
+                    result = await CensysClient().query(query_type="hosts", ip="1.1.1.1")
 
         assert result == {}
         for record in caplog.records:

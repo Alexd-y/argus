@@ -1,8 +1,10 @@
 """JWT auth — access token validation, optional API key."""
 
+import os
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
@@ -37,9 +39,10 @@ def _decode_jwt(token: str) -> dict | None:
 
 
 async def get_optional_auth(
-    request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    api_key: str | None = Depends(api_key_header),
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
+    ],
+    api_key: Annotated[str | None, Depends(api_key_header)],
 ) -> AuthContext | None:
     """
     Optional auth — returns AuthContext if valid token/API key, else None.
@@ -54,12 +57,22 @@ async def get_optional_auth(
                 return AuthContext(user_id=sub, tenant_id=tenant_id, is_api_key=False)
 
     if api_key:
-        # API key validation — stub: check against env or DB in Phase 3+
-        # For now, accept any non-empty if JWT_SECRET is set (dev only)
-        if settings.jwt_secret and len(api_key) >= 16:
+        # API key validation — checks ARGUS_API_KEYS env or admin key
+        allowed = [
+            k.strip()
+            for k in (os.environ.get("ARGUS_API_KEYS") or "").split(",")
+            if k.strip()
+        ]
+        if api_key in allowed:
             return AuthContext(
                 user_id="api-key",
-                tenant_id="default",
+                tenant_id=settings.default_tenant_id,
+                is_api_key=True,
+            )
+        if settings.admin_api_key and api_key == settings.admin_api_key:
+            return AuthContext(
+                user_id="admin",
+                tenant_id=settings.default_tenant_id,
                 is_api_key=True,
             )
 
@@ -67,7 +80,7 @@ async def get_optional_auth(
 
 
 async def get_required_auth(
-    auth: AuthContext | None = Depends(get_optional_auth),
+    auth: Annotated[AuthContext | None, Depends(get_optional_auth)],
 ) -> AuthContext:
     """Required auth — 401 if not authenticated."""
     if auth is None:

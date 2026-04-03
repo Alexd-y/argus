@@ -85,11 +85,11 @@
 
 **Контекст:** Admin-frontend и CI/CD требуют аутентификации.
 
-**Решение:** JWT access token (15m) для admin-frontend. X-API-Key для programmatic access. Scans/Reports — публичные в MVP.
+**Решение:** JWT access token (15m) для admin-frontend. X-API-Key для programmatic access. Scans/Reports — публичные в текущей модели доступа.
 
 **Следствия:**
 - JWT_SECRET обязателен для auth endpoints
-- POST /auth/login — stub (любые credentials при JWT_SECRET)
+- POST /auth/login — упрощённый путь (любые credentials при JWT_SECRET в dev)
 - GET /auth/me — protected
 
 ---

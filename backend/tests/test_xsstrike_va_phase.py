@@ -87,20 +87,20 @@ async def test_run_xsstrike_va_phase_merges_intel_and_sinks_raw() -> None:
 
     stdout_types = [c["artifact_type"] for c in text_calls if "stdout" in c["artifact_type"]]
     stderr_types = [c["artifact_type"] for c in text_calls if "stderr" in c["artifact_type"]]
-    stub_types = [c["artifact_type"] for c in text_calls if "http_stub" in c["artifact_type"]]
-    assert len(stdout_types) == 2 and len(stderr_types) == 2 and len(stub_types) == 2
-    texts_by_kind: dict[str, list[str]] = {"stdout": [], "stderr": [], "stub": []}
+    audit_types = [c["artifact_type"] for c in text_calls if "http_audit" in c["artifact_type"]]
+    assert len(stdout_types) == 2 and len(stderr_types) == 2 and len(audit_types) == 2
+    texts_by_kind: dict[str, list[str]] = {"stdout": [], "stderr": [], "audit": []}
     for c in text_calls:
         at = c["artifact_type"]
         if "stdout" in at:
             texts_by_kind["stdout"].append(c["text"])
         elif "stderr" in at:
             texts_by_kind["stderr"].append(c["text"])
-        elif "http_stub" in at:
-            texts_by_kind["stub"].append(c["text"])
+        elif "http_audit" in at:
+            texts_by_kind["audit"].append(c["text"])
     assert set(texts_by_kind["stdout"]) == {"stdout_a", "stdout_b"}
     assert set(texts_by_kind["stderr"]) == {"stderr_a", "stderr_b"}
-    assert len(texts_by_kind["stub"]) == 2
+    assert len(texts_by_kind["audit"]) == 2
 
     merged_json_calls = [
         c
@@ -173,7 +173,7 @@ async def test_run_xsstrike_va_phase_adapter_error_still_sinks_and_merges_empty(
 
     for c in mock_sink_text.call_args_list:
         at = c.kwargs["artifact_type"]
-        if "http_stub" in at:
+        if "http_audit" in at:
             assert "curl" in c.kwargs["text"]
         else:
             assert c.kwargs["text"] == ""

@@ -121,7 +121,7 @@ MinIO/S3-совместимый объект-store для:
 - **Отсутствие shell=True:** все инструменты выполняются через allowlisted адаптеры (nmap, nuclei, nikto, gobuster, sqlmap и т.д.)
 - **Input validation:** все входные данные валидируются на уровне Pydantic models
 - **RLS:** database-level access control
-- **JWT auth:** stateless аутентификация (опционально для MVP)
+- **JWT auth:** stateless аутентификация (опционально на начальном этапе)
 - **No traceback leak:** все исключения логируются структурированно без утечки стека
 - **Path traversal protection:** нормализация и валидация путей в file operations
 - **Command injection protection:** никаких shell интерпретаций, только параметризованные вызовы
@@ -256,7 +256,7 @@ docker compose -f infra/docker-compose.yml --profile tools up
 ## Известные ограничения и будущие улучшения
 
 ### Текущие ограничения
-1. **Auth MVP:** скан и reports доступны без аутентификации (для MVP). Production требует JWT middleware.
+1. **Auth (начальная модель):** скан и reports доступны без аутентификации. Production требует JWT middleware.
 2. **Rate limiting:** нет явного rate limiting на API endpoints (рекомендуется использовать API gateway)
 3. **WebSocket:** используется SSE вместо WebSocket (SSE достаточно для polling + events)
 4. **Sandbox security:** sandbox контейнер (tools profile) требует дополнительной изоляции для production

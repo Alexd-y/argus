@@ -12,7 +12,7 @@ from src.recon.recon_runtime import ReconRuntimeConfig
 
 
 @pytest.mark.asyncio
-async def test_planned_gather_completes_when_plan_includes_stub_steps() -> None:
+async def test_planned_gather_completes_when_plan_includes_registry_deferred_steps() -> None:
     """Optional recon steps are mocked; gather returns the expected shape."""
     cfg = ReconRuntimeConfig(
         mode="full",

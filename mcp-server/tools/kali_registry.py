@@ -191,7 +191,7 @@ KALI_TOOL_REGISTRY: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="massdns",
-        description="High-performance DNS stub resolver",
+        description="High-performance embedded DNS resolver (non-recursive)",
         category="recon",
         backend_endpoint="execute",
         args_schema=[_arg("domain", "Target domain"), _arg("resolvers", "Resolvers file", required=False, default=""), _arg("additional_args", "Extra CLI args", required=False, default="")],

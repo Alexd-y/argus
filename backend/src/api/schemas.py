@@ -199,7 +199,7 @@ class SandboxExecuteResponse(BaseModel):
     from_cache: bool = False
     recovery_info: dict[str, Any] | None = Field(
         default=None,
-        description="Optional recovery / provenance metadata (stub until recovery system lands)",
+        description="Tool recovery metadata: original tool, alternatives tried, final result",
     )
 
 
@@ -309,6 +309,84 @@ class FindingPocBodyResponse(BaseModel):
     generator_model: str | None = None
     can_generate: bool = False
     hint: str | None = None
+
+
+class ScanTimelineEventItem(BaseModel):
+    """One ScanEvent row in chronological order with timing hints."""
+
+    id: str
+    event: str
+    phase: str | None = None
+    progress: int | None = None
+    message: str | None = None
+    created_at: str
+    duration_sec: float | None = None
+    gap_from_previous_sec: float | None = Field(
+        default=None,
+        description="Seconds since previous event; null for the first event",
+    )
+
+
+class ScanTimelineResponse(BaseModel):
+    """GET /scans/{scan_id}/timeline."""
+
+    scan_id: str
+    events: list[ScanTimelineEventItem] = Field(default_factory=list)
+    total_duration_sec: float = Field(
+        ge=0.0,
+        description="Wall time from first to last event timestamp",
+    )
+
+
+class FindingFalsePositiveRequest(BaseModel):
+    """POST /findings/{finding_id}/false-positive."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str = Field(..., min_length=1, max_length=8192)
+
+
+class FindingFalsePositiveResponse(BaseModel):
+    """Body after marking a finding as false positive."""
+
+    finding_id: str
+    false_positive: bool = True
+    false_positive_reason: str
+    dedup_status: str | None = None
+
+
+class FindingRemediationSection(BaseModel):
+    """Extracted markdown block from a packaged skill."""
+
+    skill_id: str
+    heading: str
+    body: str
+
+
+class FindingRemediationResponse(BaseModel):
+    """GET /findings/{finding_id}/remediation."""
+
+    finding_id: str
+    skills_considered: list[str] = Field(default_factory=list)
+    sections: list[FindingRemediationSection] = Field(default_factory=list)
+    source: Literal["skills", "skills+llm"] = "skills"
+    llm_summary: str | None = None
+
+
+class ScanFindingsStatisticsResponse(BaseModel):
+    """GET /scans/{scan_id}/findings/statistics."""
+
+    scan_id: str
+    by_severity: dict[str, int] = Field(default_factory=dict)
+    by_owasp: dict[str, int] = Field(default_factory=dict)
+    by_confidence: dict[str, int] = Field(default_factory=dict)
+    unique_cwes: list[str] = Field(default_factory=list)
+    validated: int = Field(ge=0, description="Count with confidence=confirmed")
+    false_positives: int = Field(ge=0)
+    risk_score: float = Field(
+        ge=0.0,
+        description="Weighted severity sum excluding false positives",
+    )
 
 
 class ReportListResponse(BaseModel):

@@ -7,6 +7,27 @@ import pytest
 from starlette.testclient import TestClient
 
 
+def _patch_login_db_no_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid real PostgreSQL when login queries users (dev bypass / 401 paths)."""
+
+    class _Sess:
+        async def execute(self, *_args, **_kwargs):
+            class _R:
+                def scalar_one_or_none(self):
+                    return None
+
+            return _R()
+
+    class _CM:
+        async def __aenter__(self):
+            return _Sess()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr("src.api.routers.auth.async_session_factory", lambda: _CM())
+
+
 class TestLoginEndpoint:
     """POST /api/v1/auth/login."""
 
@@ -29,11 +50,13 @@ class TestLoginEndpoint:
     def test_login_returns_200_and_token_when_configured(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Login returns 200 and access_token when JWT_SECRET is set."""
+        """Login returns 200 and access_token when JWT_SECRET is set (DEBUG dev bypass)."""
         monkeypatch.setattr(
             "src.core.config.settings.jwt_secret",
             "test-secret-key-min-32-chars-long-for-hs256",
         )
+        monkeypatch.setattr("src.core.config.settings.debug", True)
+        _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
         test_client = TestClient(app)
@@ -46,6 +69,7 @@ class TestLoginEndpoint:
         assert data["status"] == "success"
         assert "access_token" in data
         assert data["token_type"] == "bearer"
+        assert data.get("dev_mode") is True
 
     def test_login_missing_mail_returns_422(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -107,6 +131,8 @@ class TestProtectedRoute:
             "src.core.config.settings.jwt_secret",
             "test-secret-key-min-32-chars-long-for-hs256",
         )
+        monkeypatch.setattr("src.core.config.settings.debug", True)
+        _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
         test_client = TestClient(app)
@@ -122,7 +148,7 @@ class TestProtectedRoute:
         )
         assert me_resp.status_code == 200
         data = me_resp.json()
-        assert "user_id" in data
+        assert data["user_id"] == "dev-user"
         assert "tenant_id" in data
         assert "is_api_key" in data
         assert data["is_api_key"] is False
@@ -135,13 +161,15 @@ class TestProtectedRoute:
             "src.core.config.settings.jwt_secret",
             "test-secret-key-min-32-chars-long-for-hs256",
         )
+        monkeypatch.setenv("ARGUS_API_KEYS", "test-argus-api-key-one")
         from main import app
         from starlette.testclient import TestClient
         test_client = TestClient(app)
         response = test_client.get(
             "/api/v1/auth/me",
-            headers={"X-API-Key": "a" * 16},
+            headers={"X-API-Key": "test-argus-api-key-one"},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["is_api_key"] is True
+        assert data["user_id"] == "api-key"

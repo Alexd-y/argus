@@ -36,7 +36,7 @@ class TestCacheRouterAdminAuth:
         with patch.object(settings, "admin_api_key", "secret-admin-key"):
             response = client.get("/api/v1/cache/health")
         assert response.status_code == 401
-        assert response.json().get("detail") == "Admin access required"
+        assert response.json().get("detail") == "Invalid X-Admin-Key"
 
     def test_health_401_wrong_admin_key(self, client: TestClient) -> None:
         with patch.object(settings, "admin_api_key", "secret-admin-key"):

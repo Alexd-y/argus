@@ -9,7 +9,7 @@
 | ID | Статус | Суть |
 |----|--------|------|
 | **T01** | Завершена | `ScanKnowledgeBase` (Redis + fallback), интеграция в VA orchestrator, прогрев KB в lifespan приложения. |
-| **T02** | Завершена | `ToolRecoverySystem`, удаление `recovery_info_stub`, единая логика recovery в sandbox и executor. |
+| **T02** | Завершена | `ToolRecoverySystem`, удаление устаревшего `recovery_info_*` helper, единая логика recovery в sandbox и executor. |
 | **T03** | Завершена | Роутер Cache API (10 admin-защищённых эндпоинтов), регистрация в `main`. |
 | **T04** | Завершена | Sandbox: реальные ответы для processes / kill / python; при выключенном режиме — 403 вместо 501. |
 | **T05** | Завершена | Scans: `memory-summary` и путь к отчёту — структурированные ответы без 501. |

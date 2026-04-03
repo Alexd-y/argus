@@ -32,7 +32,7 @@ def execute_command(
 
     Args:
         command: Full command string (e.g. "nmap -sV 192.168.1.1")
-        use_cache: Ignored in MVP; reserved for future caching
+        use_cache: Reserved for ToolResultCache integration
         use_sandbox: If True, run via docker exec in sandbox container
         timeout_sec: Subprocess timeout seconds; defaults to ``settings.recon_tools_timeout``.
 

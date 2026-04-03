@@ -29,7 +29,7 @@ from src.orchestration.ai_prompts import (
     ai_vuln_analysis,
 )
 from src.orchestration.cve_platform_mitigations import apply_platform_cve_mitigations
-from src.orchestration.exploit_verify import verify_exploit_poc
+from src.orchestration.exploit_verify import verify_exploit_poc_async
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
@@ -1127,7 +1127,7 @@ async def run_exploit_verify(candidates_output: ExploitationOutput) -> Exploitat
     verified_finding_ids: set[str] = set()
 
     for candidate in candidates_output.exploits:
-        if verify_exploit_poc(candidate):
+        if await verify_exploit_poc_async(candidate):
             verified = {**candidate, "status": "verified"}
             verified_exploits.append(verified)
             verified_finding_ids.add(str(candidate.get("finding_id", "")))

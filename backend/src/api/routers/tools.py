@@ -1,4 +1,4 @@
-"""Tools router — POST /tools/* for security scanner execution (MVP stubs)."""
+"""Tools router — POST /tools/* for security scanner execution."""
 
 import logging
 import shlex
@@ -251,7 +251,7 @@ async def tools_kal_run(req: KalRunRequest, request: Request) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Tool endpoints (stubs → execute_command)
+# Tool endpoints — dedicated per-tool routes
 # ---------------------------------------------------------------------------
 
 

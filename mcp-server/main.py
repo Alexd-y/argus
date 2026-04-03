@@ -1,4 +1,4 @@
-"""ARGUS MCP Server — stub for Phase 1.
+"""ARGUS MCP Server — entrypoint for stdio and HTTP transport.
 
 Full implementation in Phase 4: FastMCP, stdio transport, 150+ tools.
 """

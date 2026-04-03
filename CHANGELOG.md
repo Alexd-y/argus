@@ -155,7 +155,7 @@ All notable changes to ARGUS platform are documented in this file.
 
 #### Reporting stage 5 / RPT-010 — docs, API contract, tests (2026-03-20)
 
-- **Docs:** `docs/reporting.md` — canonical RPT-010 architecture (`ReportDataCollector`, `ScanReportData`, `ReportGenerator`, `run_generate_report_pipeline`, Celery `argus.generate_report` / `argus.ai_text_generation`), tiers, prompt keys table, formats, `/api/v1` report routes, `MINIO_REPORTS_BUCKET`, env vars, Valhalla follow-up scan stub; `backend/docs/reporting.md` links to repo-root doc.
+- **Docs:** `docs/reporting.md` — canonical RPT-010 architecture (`ReportDataCollector`, `ScanReportData`, `ReportGenerator`, `run_generate_report_pipeline`, Celery `argus.generate_report` / `argus.ai_text_generation`), tiers, prompt keys table, formats, `/api/v1` report routes, `MINIO_REPORTS_BUCKET`, env vars, Valhalla follow-up scan scheduling (deferred); `backend/docs/reporting.md` links to repo-root doc.
 - **API:** `ReportListResponse` / `ReportDetailResponse` include `generation_status`, `tier`, `requested_formats` (from `Report.requested_formats` JSONB).
 - **Frontend contract:** `docs/frontend-api-contract.md` — `/api/v1` prefix, polling fields on list/detail, link to `reporting.md`; generate/list/download unchanged semantically.
 - **Tests:** `backend/tests/test_rpt010_reporting_coverage.py` and related — `data_collector`, `report_pipeline` branches, `reporting` / `jinja_minimal_context`, `storage`, `generators` coverage extensions.

@@ -41,7 +41,7 @@ await set_session_tenant(session, tenant_id)
 **Источник tenant_id:**
 
 - `X-Tenant-ID` header (если передан)
-- `DEFAULT_TENANT_ID` из env (MVP без auth)
+- `DEFAULT_TENANT_ID` из env при отсутствии JWT (начальная конфигурация без обязательного auth)
 
 При наличии JWT — tenant берётся из токена.
 
@@ -60,14 +60,14 @@ await set_session_tenant(session, tenant_id)
 ### 3.2 API Key
 
 - **Заголовок:** `X-API-Key`
-- **Валидация (MVP):** если задан `JWT_SECRET` и длина ключа ≥ 16 — принимается
+- **Валидация (начальная):** если задан `JWT_SECRET` и длина ключа ≥ 16 — принимается
 - **Контекст:** `AuthContext(user_id="api-key", tenant_id="default", is_api_key=True)`
 
-В Phase 3+ — проверка по БД или внешнему хранилищу.
+В последующих релизах — проверка по БД или внешнему хранилищу.
 
 ### 3.3 Эндпоинты
 
-- **Optional auth:** сканы, отчёты — работают с и без аутентификации (MVP)
+- **Optional auth:** сканы, отчёты — работают с и без аутентификации (текущая политика доступа)
 - **Required auth:** защищённые эндпоинты используют `get_required_auth` → 401 при отсутствии токена
 
 ---

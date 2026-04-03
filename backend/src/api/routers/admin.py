@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
-from sqlalchemy import cast, select, String, text
+from sqlalchemy import String, cast, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -27,16 +27,23 @@ admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 
 
 async def require_admin(
-    request: Request,
+    _request: Request,
     admin_key: str | None = Depends(admin_key_header),
 ) -> None:
-    """Require admin auth: X-Admin-Key when ADMIN_API_KEY is set, else allow (dev placeholder)."""
-    if settings.admin_api_key:
-        if not admin_key or admin_key != settings.admin_api_key:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Admin access required",
-            )
+    """Require admin auth. Secure by default: deny when ADMIN_API_KEY not set (except DEBUG)."""
+    expected = settings.admin_api_key
+    if not expected:
+        if settings.debug:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ADMIN_API_KEY not configured",
+        )
+    if not admin_key or admin_key != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid X-Admin-Key",
+        )
 
 
 # --- Schemas ---

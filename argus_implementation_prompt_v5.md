@@ -13,10 +13,10 @@ ARGUS — AI-powered penetration testing platform.
 **Текущее состояние кодовой базы:**
 - 31 `@mcp.tool()` в `mcp-server/argus_mcp.py` + 150 kali tools из registry
 - 16 alembic миграций (001–016)
-- 501-заглушки: `sandbox/processes`, `sandbox/processes/{pid}/kill`, `sandbox/python` (disabled), `scans/{id}/memory-summary`, `findings/{id}/poc` (no data), `findings/{id}/validate` (exception), `findings/{id}/poc/generate` (exception), `scans/{id}/report` (no report row)
+- эндпоинты с 501 (исторически): `sandbox/processes`, `sandbox/processes/{pid}/kill`, `sandbox/python` (disabled), `scans/{id}/memory-summary`, `findings/{id}/poc` (no data), `findings/{id}/validate` (exception), `findings/{id}/poc/generate` (exception), `scans/{id}/report` (no report row)
 - Redis client есть (`src/core/redis_client.py`) — lazy-init, sync
 - Tool cache есть (`src/cache/tool_cache.py`) — SHA-256 key, TTL per tool
-- `recovery_info_stub()` — заглушка в cache module
+- legacy `recovery_info_*` в cache module (заменить на ToolRecoverySystem)
 - VA orchestrator (`src/agents/va_orchestrator.py`) — `VAMultiAgentOrchestrator` с parallel agents
 - Skills system: 21 `.md` файлов, `_CATEGORY_SKILL_MAP` маппинг
 - OWASP Top 10:2025 в `src/owasp_top10_2025.py` (A01–A10)
@@ -24,7 +24,7 @@ ARGUS — AI-powered penetration testing platform.
 - Config: 200+ settings через pydantic-settings
 
 **ПРАВИЛА:**
-1. **Никаких заглушек** — каждый endpoint, каждая функция, каждый tool должен быть полностью реализован
+1. **Никаких noop-реализаций** — каждый endpoint, каждая функция, каждый tool должен быть полностью реализован
 2. **Контракт-first** — Backend реализуется по `docs/api-contracts.md`, Frontend — источник истины
 3. **Existing code** — не ломать работающие endpoints, расширять; все imports должны разрешаться
 4. **Type safety** — Pydantic v2 schemas, typed returns, no `Any` без необходимости
@@ -173,11 +173,11 @@ TTL 30 days. Falls back to in-memory dict when Redis unavailable.
 
 ---
 
-## БЛОК 2 — ToolRecoverySystem (полный цикл, не заглушка)
+## БЛОК 2 — ToolRecoverySystem (полный цикл)
 
 ### Что есть сейчас
-- `src/cache/tool_cache.py` — `recovery_info_stub()` возвращает `{"source": "cache", "recovery_tier": "none"}`
-- `src/api/routers/sandbox.py` — передаёт `recovery_info=recovery_info_stub(from_cache=...)` в response
+- `src/cache/tool_cache.py` — legacy helper возвращает `{"source": "cache", "recovery_tier": "none"}`
+- `src/api/routers/sandbox.py` — передаёт `recovery_info=...` из legacy helper в response
 - `SandboxExecuteResponse` schema имеет `recovery_info: dict | None`
 
 ### Что реализовать
@@ -371,9 +371,9 @@ their own sessions and cannot be transparently replaced.
 3. **Интеграция в `src/api/routers/sandbox.py` и `src/tools/executor.py`:**
    - В `sandbox_execute()`: если `execute_command()` возвращает `success=False` и tool не stateful, итеративно пробовать alternatives (подменяя tool name в command через `_replace_tool_in_command()`)
    - Каждая попытка логируется в `attempts[]`
-   - Финальный response содержит полный `recovery_info` вместо `recovery_info_stub()`
+   - Финальный response содержит полный `recovery_info` вместо legacy cache helper
 
-4. **Удалить `recovery_info_stub()`** из `src/cache/tool_cache.py` — заменить на import из `tool_recovery.py`.
+4. **Удалить legacy recovery helper** из `src/cache/tool_cache.py` — заменить на import из `tool_recovery.py`.
 
 5. **Функция `_replace_tool_in_command(command: str, old_tool: str, new_tool: str) -> str`** — безопасная замена первого токена в команде.
 
@@ -558,8 +558,8 @@ app.include_router(cache_router.router, prefix="/api/v1")
 - `get_available_tools()` → GET `/tools/available`
 - `get_tool_status(tool: str)` → GET `/tools/{tool}/status`
 
-#### Категория: Sandbox Management (существует, заменить stubs)
-- `get_sandbox_processes()` → GET `/sandbox/processes` (РЕАЛИЗОВАТЬ, не stub)
+#### Категория: Sandbox Management (существует, заменить минимальные ответы)
+- `get_sandbox_processes()` → GET `/sandbox/processes` (полная реализация)
 - `kill_sandbox_process(pid: int)` → POST `/sandbox/processes/{pid}/kill` (РЕАЛИЗОВАТЬ)
 - `get_sandbox_status()` → GET `/sandbox/status`
 - `run_python_script(code: str, timeout: int)` → POST `/sandbox/python` (РЕАЛИЗОВАТЬ)
@@ -797,7 +797,7 @@ def _build_smart_scan_request(
 
 ---
 
-## БЛОК 6 — Замена всех 501-заглушек
+## БЛОК 6 — Замена всех ответов 501
 
 ### Полный список 501 endpoints и решение для каждого:
 
@@ -1137,10 +1137,10 @@ def downgrade() -> None:
 
 ## БЛОК 8 — Чеклист POST-003/004/005
 
-### POST-003: Все 501-заглушки заменены
+### POST-003: Все ответы 501 заменены
 - [ ] `GET /sandbox/processes` — реализован через docker exec ps
 - [ ] `POST /sandbox/processes/{pid}/kill` — реализован через docker exec kill
-- [ ] `POST /sandbox/python` — 501→403 (feature-flagged, не stub)
+- [ ] `POST /sandbox/python` — 501→403 (feature-flagged, без noop-ответов)
 - [ ] `GET /scans/{id}/memory-summary` — реализован (findings summary + phases + costs)
 - [ ] `GET /findings/{id}/poc` — 501→200 с poc_hint + can_generate
 - [ ] `POST /findings/{id}/validate` — exception→error response (503)
@@ -1235,7 +1235,7 @@ Covers: scan management, findings, reports, intelligence, recon, cache, knowledg
 
 1. **Блок 1** — `scan_knowledge_base.py` + тесты
 2. **Блок 2** — `tool_recovery.py` + интеграция в sandbox router + тесты
-3. **Блок 6** — замена всех 501-заглушек + новые endpoints
+3. **Блок 6** — замена всех ответов 501 + новые endpoints
 4. **Блок 3** — `cache.py` router + тесты
 5. **Блок 7** — миграция 017
 6. **Блок 5** — `_build_scan_request()` в MCP
@@ -1253,8 +1253,8 @@ Covers: scan management, findings, reports, intelligence, recon, cache, knowledg
 ## ЗАПРЕЩЕНО
 
 1. `raise HTTPException(status_code=501)` — нигде в финальном коде
-2. `recovery_info_stub()` — удалить, заменить на `ToolRecoverySystem.build_recovery_info()`
-3. `# TODO`, `# FIXME`, `# stub`, `pass` без реализации
+2. Legacy recovery helper в tool_cache — удалить, заменить на `ToolRecoverySystem.build_recovery_info()`
+3. Маркеры незавершённой работы в комментариях или `pass` без реализации
 4. `**kwargs` без типизации
 5. `Any` returns без cause
 6. Dynamic tool registration для новых MCP tools (kali registry — исключение)

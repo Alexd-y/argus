@@ -1,7 +1,7 @@
 """ARGUS Backend — FastAPI application.
 
 Phase 2: Core backend with scans, reports, health routers.
-Auth middleware ready; scans/reports are public (MVP).
+Auth middleware ready; tenant-scoped API.
 """
 
 import logging

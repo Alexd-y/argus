@@ -103,7 +103,11 @@ class TestRunExploitation:
     async def test_returns_exploits_after_verify(self) -> None:
         with (
             patch("src.orchestration.handlers.ai_exploitation", new_callable=AsyncMock) as mock_ai,
-            patch("src.orchestration.handlers.verify_exploit_poc", return_value=True),
+            patch(
+                "src.orchestration.handlers.verify_exploit_poc_async",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             mock_ai.return_value = ExploitationOutput(
                 exploits=[{"finding_id": "f1", "status": "theoretical", "title": "test"}],

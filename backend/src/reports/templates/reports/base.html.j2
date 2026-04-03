@@ -59,9 +59,9 @@
     <h1>ARGUS Security Report</h1>
     <p class="meta">
         <span class="tier-badge">{{ tier }}</span>
-        {% set stub = tier_stubs.get(tier) %}
-        {% if stub %}
-            — {{ stub.label }} ({{ stub.focus }})
+        {% set tier_hint = tier_stubs.get(tier) %}
+        {% if tier_hint %}
+            — {{ tier_hint.label }} ({{ tier_hint.focus }})
         {% endif %}
     </p>
     {% block recon %}

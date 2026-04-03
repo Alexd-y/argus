@@ -298,7 +298,7 @@ def test_tool_selection_url_history_alias_selects_content_discovery() -> None:
     assert steps == [ReconStepId.DIG, ReconStepId.CONTENT_DISCOVERY]
 
 
-def test_tool_selection_on_full_filters_including_stub_steps() -> None:
+def test_tool_selection_on_full_filters_including_registry_deferred_steps() -> None:
     cfg = ReconRuntimeConfig(
         mode="full",
         active_depth=1,

@@ -688,6 +688,22 @@ class ArgusClient:
     def get_scan_memory_summary(self, scan_id: str) -> dict[str, Any]:
         return self._get_json(f"/api/v1/scans/{scan_id}/memory-summary")
 
+    def get_scan_timeline(self, scan_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/scans/{scan_id}/timeline")
+
+    def get_findings_statistics(self, scan_id: str) -> dict[str, Any]:
+        return self._get_json(f"/api/v1/scans/{scan_id}/findings/statistics")
+
+    def mark_finding_false_positive(self, finding_id: str, reason: str) -> dict[str, Any]:
+        body = {"reason": (reason or "").strip()}
+        if not body["reason"]:
+            return {"error": "reason_required", "finding_id": finding_id}
+        return self._post_json(f"/api/v1/findings/{finding_id}/false-positive", body)
+
+    def get_finding_remediation(self, finding_id: str, use_llm: bool = False) -> dict[str, Any]:
+        params: dict[str, Any] | None = {"use_llm": True} if use_llm else None
+        return self._get_json(f"/api/v1/findings/{finding_id}/remediation", params)
+
     def get_process_list(self) -> dict[str, Any]:
         return self._get_json("/api/v1/sandbox/processes")
 
@@ -1198,17 +1214,37 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
 
     @mcp.tool()
     def get_scan_memory_summary(scan_id: str) -> dict[str, Any]:
-        """Compressed scan context (stub 501 until implemented)."""
+        """Compressed scan context: findings summary, technologies, phases, costs."""
         return client.get_scan_memory_summary(scan_id)
 
     @mcp.tool()
+    def get_scan_timeline(scan_id: str) -> dict[str, Any]:
+        """Chronological ScanEvent list with gap_from_previous_sec and total_duration_sec."""
+        return client.get_scan_timeline(scan_id)
+
+    @mcp.tool()
+    def get_findings_statistics(scan_id: str) -> dict[str, Any]:
+        """Per-scan aggregates: severity, OWASP, confidence, CWEs, validated, false positives, risk_score."""
+        return client.get_findings_statistics(scan_id)
+
+    @mcp.tool()
+    def mark_finding_false_positive(finding_id: str, reason: str) -> dict[str, Any]:
+        """Mark a finding as false positive with operator reason (same auth as other finding APIs)."""
+        return client.mark_finding_false_positive(finding_id, reason)
+
+    @mcp.tool()
+    def get_finding_remediation(finding_id: str, use_llm: bool = False) -> dict[str, Any]:
+        """Remediation excerpts from ScanKnowledgeBase-mapped skills; optional short LLM summary."""
+        return client.get_finding_remediation(finding_id, use_llm=use_llm)
+
+    @mcp.tool()
     def get_process_list() -> dict[str, Any]:
-        """Sandbox process list (stub 501 until implemented)."""
+        """List running processes in the sandbox container."""
         return client.get_process_list()
 
     @mcp.tool()
     def kill_process(pid: int) -> dict[str, Any]:
-        """Terminate sandbox worker PID (stub 501 until implemented)."""
+        """Terminate a process in the sandbox container by PID."""
         return client.kill_process(pid)
 
     _register_kali_tools(mcp, client)

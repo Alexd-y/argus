@@ -7,7 +7,7 @@
 ## Задачи по порядку
 
 1. **T01** — `scan_knowledge_base.py`, VA orchestrator, `main.py` warm.  
-2. **T02** — `tool_recovery.py`, интеграция sandbox + executor, удаление stub.  
+2. **T02** — `tool_recovery.py`, интеграция sandbox + executor, удаление устаревшего recovery helper.  
 3. **T03** — `api/routers/cache.py`, 10 endpoints, `require_admin`.  
 4. **T04** — sandbox processes/kill/python.  
 5. **T05** — scans memory-summary + report UX без 501.  

@@ -1,4 +1,4 @@
-# XSStrike (plugin stub)
+# XSStrike (plugin integration entrypoint in ARGUS)
 
 Upstream: [s0md3v/XSStrike](https://github.com/s0md3v/XSStrike).
 

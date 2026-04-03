@@ -9,7 +9,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import String, cast, desc, func, select, update
+from sqlalchemy import String, asc, cast, desc, func, select, update
 from sse_starlette.sse import EventSourceResponse
 
 from src.api.schemas import (
@@ -24,20 +24,23 @@ from src.api.schemas import (
     ScanCreateRequest,
     ScanCreateResponse,
     ScanDetailResponse,
+    ScanFindingsStatisticsResponse,
     ScanListItemResponse,
     ScanOptions,
     ScanSkillCreateRequest,
     ScanSmartCreateRequest,
+    ScanTimelineEventItem,
+    ScanTimelineResponse,
 )
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
-from src.owasp_top10_2025 import parse_owasp_category
 from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.llm.cost_tracker import ScanCostTracker
+from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
 from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
 from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
@@ -50,6 +53,14 @@ router = APIRouter(prefix="/scans", tags=["scans"])
 
 _TERMINAL_SCAN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 _REPORT_TIERS = frozenset({"midgard", "asgard", "valhalla"})
+_SEVERITY_RISK_WEIGHTS: dict[str, float] = {
+    "critical": 10.0,
+    "high": 7.0,
+    "medium": 4.0,
+    "low": 2.0,
+    "info": 1.0,
+    "informational": 1.0,
+}
 
 
 def _effective_tenant_for_scan_create(body_tenant_id: str | None, tenant_id_header: str) -> str:
@@ -340,9 +351,8 @@ async def cancel_scan(
 def _finding_to_schema(f: FindingModel) -> Finding:
     """Convert DB finding to API schema."""
     refs: list[str] = []
-    if f.evidence_refs is not None:
-        if isinstance(f.evidence_refs, list):
-            refs = [str(x) for x in f.evidence_refs]
+    if f.evidence_refs is not None and isinstance(f.evidence_refs, list):
+        refs = [str(x) for x in f.evidence_refs]
     return Finding(
         severity=f.severity,
         title=f.title,
@@ -386,6 +396,111 @@ async def get_scan_findings_top(
         )
         findings = list(result.scalars().all())
         return [_finding_to_schema(f) for f in findings]
+
+
+@router.get("/{scan_id}/findings/statistics", response_model=ScanFindingsStatisticsResponse)
+async def get_scan_findings_statistics(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ScanFindingsStatisticsResponse:
+    """Aggregated finding counts, CWE inventory, and weighted risk (excludes false positives)."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        sr = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not sr.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        sev_rows = (
+            await session.execute(
+                select(FindingModel.severity, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.severity)
+            )
+        ).all()
+        by_severity = {str(row[0]): int(row[1]) for row in sev_rows if row[0]}
+
+        owasp_rows = (
+            await session.execute(
+                select(FindingModel.owasp_category, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.owasp_category)
+            )
+        ).all()
+        by_owasp = {str(row[0]): int(row[1]) for row in owasp_rows if row[0]}
+
+        conf_rows = (
+            await session.execute(
+                select(FindingModel.confidence, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.confidence)
+            )
+        ).all()
+        by_confidence = {str(row[0]): int(row[1]) for row in conf_rows if row[0]}
+
+        cwe_rows = await session.execute(
+            select(FindingModel.cwe)
+            .where(
+                cast(FindingModel.scan_id, String) == scan_id,
+                FindingModel.cwe.isnot(None),
+                FindingModel.cwe != "",
+            )
+            .distinct()
+        )
+        unique_cwes = sorted({str(r[0]) for r in cwe_rows.all() if r[0]})
+
+        val_r = await session.execute(
+            select(func.count())
+            .select_from(FindingModel)
+            .where(
+                cast(FindingModel.scan_id, String) == scan_id,
+                FindingModel.confidence == "confirmed",
+            )
+        )
+        validated = int(val_r.scalar_one() or 0)
+
+        fp_r = await session.execute(
+            select(func.count())
+            .select_from(FindingModel)
+            .where(
+                cast(FindingModel.scan_id, String) == scan_id,
+                FindingModel.false_positive.is_(True),
+            )
+        )
+        false_positives = int(fp_r.scalar_one() or 0)
+
+        risk_rows = (
+            await session.execute(
+                select(FindingModel.severity, func.count())
+                .where(
+                    cast(FindingModel.scan_id, String) == scan_id,
+                    FindingModel.false_positive.is_(False),
+                )
+                .group_by(FindingModel.severity)
+            )
+        ).all()
+        risk_score = 0.0
+        for row in risk_rows:
+            if not row[0]:
+                continue
+            label = str(row[0]).strip().lower()
+            w = _SEVERITY_RISK_WEIGHTS.get(label, 0.5)
+            risk_score += w * int(row[1])
+
+    return ScanFindingsStatisticsResponse(
+        scan_id=scan_id,
+        by_severity=by_severity,
+        by_owasp=by_owasp,
+        by_confidence=by_confidence,
+        unique_cwes=unique_cwes,
+        validated=validated,
+        false_positives=false_positives,
+        risk_score=round(risk_score, 4),
+    )
 
 
 @router.get("/{scan_id}/findings", response_model=list[Finding])
@@ -662,6 +777,65 @@ async def get_scan_memory_summary(
         "cost_summary": cost_summary,
         "technologies": technologies,
     }
+
+
+@router.get("/{scan_id}/timeline", response_model=ScanTimelineResponse)
+async def get_scan_timeline(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ScanTimelineResponse:
+    """Ordered ScanEvent rows with per-step gap and overall wall duration."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        sr = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        if not sr.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        er = await session.execute(
+            select(ScanEvent)
+            .where(cast(ScanEvent.scan_id, String) == scan_id)
+            .order_by(asc(ScanEvent.created_at), asc(ScanEvent.id))
+        )
+        raw_events = list(er.scalars().all())
+
+    items: list[ScanTimelineEventItem] = []
+    prev_ts = None
+    for ev in raw_events:
+        gap = None
+        if prev_ts is not None and ev.created_at is not None:
+            gap = (ev.created_at - prev_ts).total_seconds()
+        if ev.created_at is not None:
+            prev_ts = ev.created_at
+        items.append(
+            ScanTimelineEventItem(
+                id=str(ev.id),
+                event=ev.event,
+                phase=ev.phase,
+                progress=ev.progress,
+                message=ev.message,
+                created_at=format_created_at_iso_z(ev.created_at),
+                duration_sec=float(ev.duration_sec) if ev.duration_sec is not None else None,
+                gap_from_previous_sec=gap,
+            )
+        )
+
+    total_duration = 0.0
+    if len(raw_events) >= 2:
+        first_at = raw_events[0].created_at
+        last_at = raw_events[-1].created_at
+        if first_at is not None and last_at is not None:
+            total_duration = max(0.0, (last_at - first_at).total_seconds())
+
+    return ScanTimelineResponse(
+        scan_id=scan_id,
+        events=items,
+        total_duration_sec=total_duration,
+    )
 
 
 @router.post(

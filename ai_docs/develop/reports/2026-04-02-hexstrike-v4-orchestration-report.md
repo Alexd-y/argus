@@ -42,7 +42,7 @@ HexStrike v4 orchestration completed — MCP httpx tools, intelligence hardening
 ## Deferred from plan
 
 - **ScanKnowledgeBase** (and related `va_orchestrator` hooks) — not implemented in this pass.
-- **Full CLI parsers** (full `TOOL_MAP` / CLI output parsers) — partial or stubbed; deferred.
+- **Full CLI parsers** (full `TOOL_MAP` / CLI output parsers) — partial or minimal; deferred.
 - **Cache stats admin** — no admin/metrics surface for cache statistics in this iteration.
 - *(Also noted in mirror plan:* `.cursor/rules/argus-mcp.md` *— out of scope here.)*
 

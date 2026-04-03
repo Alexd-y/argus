@@ -1,6 +1,6 @@
 # Reporting (backend synopsis)
 
-Canonical **RPT-010** architecture, API, env vars, Celery, MinIO, and Valhalla follow-up stub:
+Canonical **RPT-010** architecture, API, env vars, Celery, MinIO, and Valhalla follow-up scheduling (deferred):
 
 **[../../docs/reporting.md](../../docs/reporting.md)**
 

@@ -1049,8 +1049,10 @@ def build_active_web_scan_section_context(
     ai_rows = _active_web_scan_ai_summary_rows(ai_section_texts)
     has_artifact_signal = _active_web_scan_artifact_rows_exist(scan_artifacts)
     has_signals = bool(tools_run) or bool(ai_rows) or has_artifact_signal
-    stub = {"midgard": False, "asgard": True, "valhalla": True}.get(tier_norm, False)
-    visible = stub or has_signals
+    placeholder_visible = {"midgard": False, "asgard": True, "valhalla": True}.get(
+        tier_norm, False
+    )
+    visible = placeholder_visible or has_signals
     return {
         "visible": visible,
         "tier": tier_norm,

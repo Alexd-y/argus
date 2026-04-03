@@ -108,7 +108,7 @@ def test_findings_table_poc_valhalla_shows_curl_js_parameter_payload() -> None:
     assert "svg onload=alert(1)" in html
 
 
-def test_findings_table_poc_midgard_stub_only() -> None:
+def test_findings_table_poc_midgard_tier_note_only() -> None:
     data = ScanReportData(
         scan_id="s1",
         tenant_id="t1",

@@ -1,4 +1,4 @@
-"""Recon logical steps: mode → planned steps; optional tool_selection filter; stubs log via pipeline."""
+"""Recon logical steps: mode → planned steps; optional tool_selection filter; deferred steps log via pipeline."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ class ReconStepId(str, Enum):
     DEEP_PORT_SCAN = "deep_port_scan"
 
 
+# Registry slice: steps that only emit audit-trail records when planned (empty by default).
 STUB_STEPS: frozenset[ReconStepId] = frozenset()
 
 
@@ -74,7 +75,7 @@ def _optional_full_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
 
 
 def plan_recon_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
-    """Ordered plan: base mode steps + optional full-only stubs/flags; then tool_selection filter."""
+    """Ordered plan: base mode steps + optional full-only extras/flags; then tool_selection filter."""
     steps = _base_steps_for_mode(cfg.mode)
     steps = list(dict.fromkeys(steps))  # stable dedup
     for extra in _optional_full_steps(cfg):
