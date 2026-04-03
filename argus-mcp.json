@@ -11,9 +11,10 @@
         "ARGUS_SERVER_URL": "http://127.0.0.1:8000",
         "ARGUS_TENANT_ID": "",
         "ARGUS_API_KEY": "",
+        "ARGUS_ADMIN_KEY": "",
         "MCP_TRANSPORT": "stdio"
       },
-      "description": "ARGUS MCP — security orchestration over /api/v1. Tools: create_scan, list_scans, get_scan_status, cancel_scan, list_findings, get_finding_detail, get_adversarial_top, get_poc_code, get_report, get_scan_cost, intelligence (analyze/CVE/OSINT/Shodan), intelligent_smart_scan, run_skill_scan, sandbox execute/python, validate_finding, generate_poc, skills/process stubs.",
+      "description": "ARGUS MCP — HTTP-клиент к backend /api/v1: create_scan (ScanCreateRequest: target, email, scan_mode, nested options), intelligent_smart_scan (ScanSmartCreateRequest), skill scan, findings/reports/intelligence/sandbox, Kali registry + KAL runners. Admin: GET /cache/stats, GET /cache/health, POST /cache/warm, DELETE /cache (flush_cache, confirm + argus: patterns) через ARGUS_ADMIN_KEY. Knowledge: GET /api/v1/knowledge/strategy (get_knowledge_strategy).",
       "timeout": 300,
       "alwaysAllow": [
         "get_scan_status",
@@ -26,7 +27,11 @@
         "get_scan_cost",
         "get_available_skills",
         "get_scan_memory_summary",
-        "get_process_list"
+        "get_process_list",
+        "get_cache_stats",
+        "get_cache_health",
+        "warm_cache",
+        "get_knowledge_strategy"
       ]
     }
   }

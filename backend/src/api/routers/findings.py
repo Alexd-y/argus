@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import String, cast, select
 
 from src.api.schemas import (
@@ -126,14 +127,18 @@ async def get_finding_poc(
     finding, _ = loaded
     poc = finding.proof_of_concept if isinstance(finding.proof_of_concept, dict) else None
     if not poc:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={"feature": "finding_poc_materialize", "message": "No PoC payload stored for this finding"},
+        conf = (finding.confidence or "").lower()
+        can_gen = conf in ("confirmed", "high")
+        return FindingPocBodyResponse(
+            finding_id=finding_id,
+            poc=None,
+            can_generate=can_gen,
+            hint=f"No PoC stored; use POST /findings/{finding_id}/poc/generate when eligible and LLM is configured.",
         )
-    return FindingPocBodyResponse(finding_id=finding_id, poc=poc)
+    return FindingPocBodyResponse(finding_id=finding_id, poc=poc, can_generate=True)
 
 
-@router.post("/{finding_id}/validate", response_model=FindingValidationApiResponse)
+@router.post("/{finding_id}/validate", response_model=None)
 async def post_validate_finding(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
@@ -150,10 +155,14 @@ async def post_validate_finding(
             "finding_validate_failed",
             extra={"event": "argus.finding_validate_failed", "finding_id": finding_id},
         )
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={"feature": "finding_validate_llm", "message": "Validation pipeline unavailable"},
-        ) from None
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error": "llm_unavailable",
+                "message": "Validation pipeline unavailable.",
+                "finding_id": finding_id,
+            },
+        )
     return FindingValidationApiResponse(
         finding_id=result.finding_id,
         status=result.status,
@@ -169,7 +178,7 @@ async def post_validate_finding(
     )
 
 
-@router.post("/{finding_id}/poc/generate", response_model=FindingPocBodyResponse)
+@router.post("/{finding_id}/poc/generate", response_model=None)
 async def post_generate_poc(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
@@ -186,16 +195,21 @@ async def post_generate_poc(
             "finding_poc_generate_failed",
             extra={"event": "argus.finding_poc_generate_failed", "finding_id": finding_id},
         )
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={"feature": "finding_poc_generate_llm", "message": "PoC generation unavailable"},
-        ) from None
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error": "llm_unavailable",
+                "message": "PoC generation pipeline unavailable.",
+                "finding_id": finding_id,
+            },
+        )
     if poc_res is None:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "feature": "finding_poc_generate_gating",
-                "message": "PoC generation disabled or finding not eligible (e.g. confidence)",
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "error": "poc_not_eligible",
+                "message": "PoC generation is disabled or this finding is not eligible (e.g. confidence).",
+                "finding_id": finding_id,
             },
         )
     return FindingPocBodyResponse(
@@ -203,4 +217,5 @@ async def post_generate_poc(
         poc_code=poc_res.poc_code,
         playwright_script=poc_res.playwright_script,
         generator_model=poc_res.generator_model or None,
+        can_generate=True,
     )

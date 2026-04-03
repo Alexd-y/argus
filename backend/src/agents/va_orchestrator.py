@@ -13,13 +13,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
+import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 
+from src.cache.scan_knowledge_base import get_knowledge_base
 from src.llm.task_router import LLMTask, LLMTaskResponse, call_llm_for_task
-from src.skills import build_skills_prompt_block, get_skills_for_category, load_skills
+from src.skills import build_skills_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,20 @@ CATEGORY_SKILL_MAP: dict[str, list[str]] = {
 
 _QUICK_CATEGORIES = {"sqli", "xss", "auth", "idor"}
 _STANDARD_CATEGORIES = _QUICK_CATEGORIES | {"ssrf", "rce", "race", "csrf"}
+
+# OWASP Top 10:2025 id → ARGUS VA category keys (for KB tool hints).
+OWASP_TO_ARGUS_CATEGORIES: dict[str, list[str]] = {
+    "A01": ["idor", "auth"],
+    "A02": ["info_disclosure"],
+    "A03": [],
+    "A04": ["auth"],
+    "A05": ["sqli", "xss", "rce"],
+    "A06": ["race", "auth"],
+    "A07": ["auth"],
+    "A08": ["file_upload", "mass_assignment"],
+    "A09": ["info_disclosure"],
+    "A10": ["ssrf", "xxe"],
+}
 
 TOOLS_BY_CATEGORY: dict[str, list[str]] = {
     "sqli": ["sqlmap", "nuclei"],
@@ -164,15 +179,192 @@ class VAMultiAgentOrchestrator:
         self.scan_mode = ScanMode(mode)
         self.temperature = REASONING_EFFORT.get(mode, 0.2)
         self.stats = OrchestratorStats()
+        self._kb_enrichment: dict[str, object] | None = None
+        self._category_extra_tools: dict[str, list[str]] = {}
 
-    def determine_categories(self) -> dict[str, list[str]]:
-        """Select vuln categories to test based on scan mode."""
+    @staticmethod
+    def enrich_from_recon(recon_findings: list[dict]) -> dict[str, object]:
+        """
+        Parse OWASP/CWE hints from recon-style dicts (flexible keys) and merge KB strategy.
+
+        Recognizes common shapes: top-level cwe/owasp fields, nested metadata, string tags.
+        """
+        owasp_ids: set[str] = set()
+        cwe_ids: set[str] = set()
+
+        def add_owasp(raw: str | None) -> None:
+            if not raw or not isinstance(raw, str):
+                return
+            s = raw.strip().upper()
+            m = re.search(r"A(0[1-9]|10)\b", s)
+            if m:
+                owasp_ids.add(f"A{m.group(1)}")
+
+        def add_cwe(raw: str | None) -> None:
+            if raw is None:
+                return
+            if isinstance(raw, int):
+                cwe_ids.add(f"CWE-{raw}")
+                return
+            if not isinstance(raw, str):
+                return
+            m = re.search(r"(?:CWE-)?(\d+)", raw.strip(), re.I)
+            if m:
+                cwe_ids.add(f"CWE-{m.group(1)}")
+
+        owasp_keys = (
+            "owasp",
+            "owasp_id",
+            "owaspId",
+            "owasp_category",
+            "owasp_top10",
+            "owaspTop10",
+            "category_owasp",
+            "owaspCategory",
+        )
+        cwe_keys = (
+            "cwe",
+            "cwe_id",
+            "cweId",
+            "CWE",
+            "vulnerability_cwe",
+            "vulnerabilityCwe",
+            "cwe_list",
+            "cwes",
+        )
+
+        max_walk_depth = 8
+        max_walk_nodes = 2000
+        walk_nodes = 0
+
+        def walk(obj: object, depth: int = 0) -> None:
+            nonlocal walk_nodes
+            if depth > max_walk_depth or walk_nodes >= max_walk_nodes:
+                return
+            walk_nodes += 1
+            if isinstance(obj, dict):
+                for k, val in obj.items():
+                    lk = str(k).lower()
+                    if lk in {x.lower() for x in owasp_keys} or (
+                        "owasp" in lk and "top" in lk
+                    ):
+                        if isinstance(val, list):
+                            for x in val:
+                                if isinstance(x, str):
+                                    add_owasp(x)
+                                elif isinstance(x, dict):
+                                    walk(x, depth + 1)
+                        elif isinstance(val, str):
+                            add_owasp(val)
+                    if lk in {x.lower() for x in cwe_keys} or lk == "cwe":
+                        if isinstance(val, list):
+                            for x in val:
+                                if isinstance(x, (str, int)):
+                                    add_cwe(str(x) if isinstance(x, str) else x)
+                                elif isinstance(x, dict):
+                                    walk(x, depth + 1)
+                        else:
+                            add_cwe(val if isinstance(val, (str, int)) else None)
+                    walk(val, depth + 1)
+            elif isinstance(obj, list):
+                for item in obj:
+                    walk(item, depth + 1)
+            elif isinstance(obj, str):
+                for m in re.finditer(r"\bA(0[1-9]|10)\b", obj, re.I):
+                    owasp_ids.add(f"A{m.group(1).upper()}")
+                for m in re.finditer(r"CWE-?\s*(\d+)", obj, re.I):
+                    cwe_ids.add(f"CWE-{m.group(1)}")
+
+        for finding in recon_findings:
+            if isinstance(finding, dict):
+                walk_nodes = 0
+                walk(finding)
+
+        kb = get_knowledge_base()
+        o_sorted = sorted(owasp_ids)
+        c_sorted = sorted(cwe_ids)
+        strategy = kb.get_scan_strategy(o_sorted, c_sorted)
+        skills = strategy.get("skills", [])
+        tools = strategy.get("tools", [])
+        return {
+            "owasp_ids": o_sorted,
+            "cwe_ids": c_sorted,
+            "strategy": strategy,
+            "skills": skills if isinstance(skills, list) else [],
+            "tools": tools if isinstance(tools, list) else [],
+        }
+
+    def determine_categories(self, recon_findings: list[dict] | None = None) -> dict[str, list[str]]:
+        """Select vuln categories to test based on scan mode; optional recon OWASP/CWE enrichment via KB."""
         if self.scan_mode == ScanMode.QUICK:
-            cats = {k: v for k, v in CATEGORY_SKILL_MAP.items() if k in _QUICK_CATEGORIES}
+            cats = {k: list(v) for k, v in CATEGORY_SKILL_MAP.items() if k in _QUICK_CATEGORIES}
         elif self.scan_mode == ScanMode.STANDARD:
-            cats = {k: v for k, v in CATEGORY_SKILL_MAP.items() if k in _STANDARD_CATEGORIES}
+            cats = {k: list(v) for k, v in CATEGORY_SKILL_MAP.items() if k in _STANDARD_CATEGORIES}
         else:
-            cats = dict(CATEGORY_SKILL_MAP)
+            cats = {k: list(v) for k, v in CATEGORY_SKILL_MAP.items()}
+
+        self._kb_enrichment = None
+        self._category_extra_tools = {}
+
+        if recon_findings:
+            enriched = self.enrich_from_recon(recon_findings)
+            oids = enriched.get("owasp_ids", [])
+            cids = enriched.get("cwe_ids", [])
+            if (isinstance(oids, list) and oids) or (isinstance(cids, list) and cids):
+                self._kb_enrichment = enriched
+                strategy = enriched.get("strategy", {})
+                kb_skills: set[str] = set()
+                if isinstance(strategy, dict):
+                    sk = strategy.get("skills", [])
+                    if isinstance(sk, list):
+                        kb_skills = {x for x in sk if isinstance(x, str)}
+
+                skill_to_categories: dict[str, set[str]] = {}
+                for cat, sl in CATEGORY_SKILL_MAP.items():
+                    for s in sl:
+                        skill_to_categories.setdefault(s, set()).add(cat)
+
+                def merge_category(cat: str) -> None:
+                    skill_list = CATEGORY_SKILL_MAP.get(cat)
+                    if not skill_list:
+                        return
+                    allowed = set(skill_list)
+                    prev = set(cats.get(cat, list(skill_list)))
+                    merged = prev | (kb_skills & allowed)
+                    cats[cat] = sorted(merged)
+
+                for cat in list(cats.keys()):
+                    merge_category(cat)
+
+                kb_derived_cats: set[str] = set()
+                for s in kb_skills:
+                    kb_derived_cats |= skill_to_categories.get(s, set())
+                for cat in kb_derived_cats:
+                    merge_category(cat)
+
+                if isinstance(oids, list):
+                    for oid in oids:
+                        if not isinstance(oid, str):
+                            continue
+                        for va_cat in OWASP_TO_ARGUS_CATEGORIES.get(oid.strip().upper(), []):
+                            if va_cat:
+                                merge_category(va_cat)
+
+                kb = get_knowledge_base()
+                extra_tools: dict[str, list[str]] = {}
+                if isinstance(oids, list):
+                    for oid in oids:
+                        if not isinstance(oid, str):
+                            continue
+                        tools = kb.get_tools_for_owasp(oid)
+                        for va_cat in OWASP_TO_ARGUS_CATEGORIES.get(oid.upper(), []):
+                            if va_cat not in cats:
+                                continue
+                            bucket = extra_tools.setdefault(va_cat, [])
+                            for t in tools:
+                                if t not in bucket:
+                                    bucket.append(t)
+                self._category_extra_tools = extra_tools
 
         self.stats.categories_tested = list(cats.keys())
         return cats
@@ -181,6 +373,7 @@ class VAMultiAgentOrchestrator:
         self,
         target_url: str,
         scan_id: str,
+        recon_findings: list[dict] | None = None,
     ) -> list[dict]:
         """
         Run parallel discovery agents and return merged findings.
@@ -191,7 +384,7 @@ class VAMultiAgentOrchestrator:
         - Temperature based on scan mode
         """
         t0 = time.monotonic()
-        categories = self.determine_categories()
+        categories = self.determine_categories(recon_findings)
 
         sem = asyncio.Semaphore(self.MAX_CONCURRENT_AGENTS)
         tasks = [
@@ -228,7 +421,7 @@ class VAMultiAgentOrchestrator:
         target_url: str,
         category: str,
         skill_names: list[str],
-        scan_id: str,
+        _scan_id: str,
         semaphore: asyncio.Semaphore,
     ) -> DiscoveryResult:
         """Run a single category-specific discovery agent."""
@@ -239,7 +432,9 @@ class VAMultiAgentOrchestrator:
             if skills_block:
                 system_prompt += "\n\n" + skills_block
 
-            tools = TOOLS_BY_CATEGORY.get(category, [])
+            base_tools = TOOLS_BY_CATEGORY.get(category, [])
+            extra = self._category_extra_tools.get(category, [])
+            tools = list(dict.fromkeys([*base_tools, *extra]))
             user_prompt = (
                 f"Target: {target_url}\n"
                 f"Category: {category}\n"
@@ -272,7 +467,7 @@ class VAMultiAgentOrchestrator:
                     duration_sec=round(time.monotonic() - t0, 2),
                 )
 
-    def _parse_findings(self, text: str, category: str, target_url: str) -> list[dict]:
+    def _parse_findings(self, text: str, category: str, _target_url: str) -> list[dict]:
         """Parse LLM response into finding dicts. Best-effort JSON extraction."""
         text = text.strip()
         if text.startswith("```"):
@@ -289,7 +484,6 @@ class VAMultiAgentOrchestrator:
         except json.JSONDecodeError:
             pass
 
-        import re
         match = re.search(r"\[.*\]", text, re.DOTALL)
         if match:
             try:

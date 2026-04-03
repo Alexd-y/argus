@@ -21,17 +21,57 @@ class TestSandboxExecute:
         assert body["return_code"] == 1
         assert "whitelist" in (body.get("stderr") or "").lower()
 
+    def test_execute_includes_recovery_info_when_executor_returns_it(
+        self, client: TestClient
+    ) -> None:
+        sample_recovery = {
+            "original_tool": "curl",
+            "final_tool": "curl",
+            "recovery_used": False,
+            "attempts": [
+                {
+                    "tool": "curl",
+                    "exit_code": 0,
+                    "error_type": "success",
+                    "duration_sec": 0.02,
+                },
+            ],
+            "total_attempts": 1,
+            "is_stateful": False,
+            "from_cache": False,
+            "alternatives_available": ["httpx", "wget"],
+        }
+        mock_result = {
+            "success": True,
+            "stdout": "ok",
+            "stderr": "",
+            "return_code": 0,
+            "execution_time": 0.05,
+        }
+        with patch(
+            "src.api.routers.sandbox.execute_command_with_recovery",
+            return_value=(mock_result, sample_recovery),
+        ):
+            response = client.post(
+                "/api/v1/sandbox/execute",
+                json={"command": "curl -s http://127.0.0.1", "use_sandbox": False},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["recovery_info"] == sample_recovery
+
 
 class TestSandboxPython:
     """POST /api/v1/sandbox/python — disabled by default; policy when enabled."""
 
-    def test_python_disabled_returns_501(self, client: TestClient) -> None:
+    def test_python_disabled_returns_403(self, client: TestClient) -> None:
         with patch.object(settings, "argus_sandbox_python_enabled", False):
             response = client.post(
                 "/api/v1/sandbox/python",
                 json={"code": "print(1)", "timeout_sec": 10},
             )
-        assert response.status_code == 501
+        assert response.status_code == 403
         body = response.json()
         assert body.get("success") is False
         assert body.get("feature") == "sandbox_python"

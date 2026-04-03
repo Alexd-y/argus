@@ -307,6 +307,8 @@ class FindingPocBodyResponse(BaseModel):
     poc_code: str | None = None
     playwright_script: str | None = None
     generator_model: str | None = None
+    can_generate: bool = False
+    hint: str | None = None
 
 
 class ReportListResponse(BaseModel):

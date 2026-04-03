@@ -175,6 +175,7 @@ class ScanEvent(Base):
     progress: Mapped[int] = mapped_column(Integer, nullable=True)
     message: Mapped[str] = mapped_column(Text, nullable=True)
     data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    duration_sec: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_scan_events_scan_created", "scan_id", "created_at"),)
@@ -290,6 +291,10 @@ class Finding(Base):
     dedup_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True, default="unchecked", server_default=text("'unchecked'")
     )
+    false_positive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    false_positive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -297,6 +302,25 @@ class Finding(Base):
         Index("ix_findings_report_id", "report_id"),
         CheckConstraint(findings_owasp_category_check_sql(), name="ck_findings_owasp_category"),
     )
+
+
+class FindingNote(Base):
+    """Operator note attached to a finding (tenant-scoped)."""
+
+    __tablename__ = "finding_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    finding_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    author: Mapped[str] = mapped_column(String(255), nullable=False, default="system")
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_finding_notes_finding_id", "finding_id"),)
 
 
 class ToolRun(Base):

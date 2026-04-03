@@ -9,7 +9,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import String, cast, desc, select, update
+from sqlalchemy import String, cast, desc, func, select, update
 from sse_starlette.sse import EventSourceResponse
 
 from src.api.schemas import (
@@ -524,11 +524,18 @@ async def get_scan_report(
         report = rr.scalar_one_or_none()
 
     if not report:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail={
-                "feature": "scan_report_resolve",
-                "message": "No report row for this scan and tier; generate a report first",
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "error": "report_not_found",
+                "message": "No report row for this scan and tier; generate a report first.",
+                "scan_id": scan_id,
+                "tier": tier_norm,
+                "generate": {
+                    "method": "POST",
+                    "path": f"/api/v1/scans/{scan_id}/reports/generate",
+                    "alternate": f"/api/v1/scans/{scan_id}/reports/generate-all",
+                },
             },
         )
 
@@ -579,11 +586,11 @@ async def get_scan_cost(
 
 
 @router.get("/{scan_id}/memory-summary")
-async def get_scan_memory_summary_stub(
+async def get_scan_memory_summary(
     scan_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-) -> JSONResponse:
-    """HexStrike v4 MCP hook — compressed scan context (not yet implemented)."""
+) -> dict[str, Any]:
+    """Aggregated scan context: findings, events, cost, technologies (from persisted fields)."""
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         result = await session.execute(
@@ -592,16 +599,69 @@ async def get_scan_memory_summary_stub(
                 cast(Scan.tenant_id, String) == tenant_id,
             )
         )
-        if not result.scalar_one_or_none():
+        scan = result.scalar_one_or_none()
+        if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
-    return JSONResponse(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        content={
-            "success": False,
-            "feature": "scan_memory_summary",
-            "detail": "Scan memory summary is not implemented yet.",
-        },
-    )
+
+        sev_rows = (
+            await session.execute(
+                select(FindingModel.severity, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.severity)
+            )
+        ).all()
+        by_severity = {str(row[0]): int(row[1]) for row in sev_rows if row[0]}
+
+        owasp_rows = (
+            await session.execute(
+                select(FindingModel.owasp_category, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.owasp_category)
+            )
+        ).all()
+        by_owasp = {str(row[0]): int(row[1]) for row in owasp_rows if row[0]}
+
+        cwe_rows = (
+            await session.execute(
+                select(FindingModel.cwe, func.count())
+                .where(cast(FindingModel.scan_id, String) == scan_id)
+                .group_by(FindingModel.cwe)
+            )
+        ).all()
+        by_cwe = {str(row[0]): int(row[1]) for row in cwe_rows if row[0]}
+
+        ev_rows = (
+            await session.execute(
+                select(ScanEvent.event, func.count())
+                .where(cast(ScanEvent.scan_id, String) == scan_id)
+                .group_by(ScanEvent.event)
+            )
+        ).all()
+        by_event = {str(row[0]): int(row[1]) for row in ev_rows if row[0]}
+
+    technologies: list[str] = []
+    if isinstance(scan.options, dict):
+        raw_tech = scan.options.get("technologies") or scan.options.get("technologies_detected")
+        if isinstance(raw_tech, list):
+            technologies = [str(x) for x in raw_tech]
+
+    cost_summary: dict[str, Any] = scan.cost_summary if isinstance(scan.cost_summary, dict) else {}
+
+    findings_total = sum(by_severity.values())
+
+    return {
+        "scan_id": scan_id,
+        "status": scan.status,
+        "phase": scan.phase,
+        "progress": scan.progress,
+        "target": scan.target_url,
+        "findings": {"total": findings_total, "by_severity": by_severity},
+        "by_owasp_category": by_owasp,
+        "by_cwe": by_cwe,
+        "events": by_event,
+        "cost_summary": cost_summary,
+        "technologies": technologies,
+    }
 
 
 @router.post(

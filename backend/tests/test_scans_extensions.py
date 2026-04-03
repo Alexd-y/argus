@@ -1,4 +1,4 @@
-"""API tests for scan extensions (T03–T06): list, smart/skill enqueue, report 501, cancel."""
+"""API tests for scan extensions (T03–T06): list, smart/skill enqueue, report 404 contract, cancel."""
 
 import uuid
 from contextlib import asynccontextmanager
@@ -199,10 +199,10 @@ class TestPostSmartSkillScans:
         uuid.UUID(body["scan_id"])
 
 
-class TestGetScanReportNotImplemented:
-    """GET /scans/{id}/report returns 501 when no report row (facade not ready)."""
+class TestGetScanReportNotFound:
+    """GET /scans/{id}/report returns 404 JSON when scan exists but no report row."""
 
-    def test_get_scan_report_no_report_returns_501(self, client: TestClient) -> None:
+    def test_get_scan_report_no_report_returns_404_contract(self, client: TestClient) -> None:
         scan_id = str(uuid.uuid4())
         mock_scan = MagicMock()
 
@@ -226,10 +226,24 @@ class TestGetScanReportNotImplemented:
 
         with patch("src.api.routers.scans.async_session_factory", factory):
             response = client.get(f"/api/v1/scans/{scan_id}/report")
-        assert response.status_code == 501
+        assert response.status_code == 404
         body = response.json()
-        err = (body.get("error") or body.get("detail") or "").lower()
-        assert "report" in err
+        assert set(body.keys()) == {
+            "error",
+            "message",
+            "scan_id",
+            "tier",
+            "generate",
+        }
+        assert body["error"] == "report_not_found"
+        assert body["scan_id"] == scan_id
+        assert body["tier"] == "midgard"
+        gen = body["generate"]
+        assert set(gen.keys()) == {"method", "path", "alternate"}
+        assert gen["method"] == "POST"
+        assert gen["path"] == f"/api/v1/scans/{scan_id}/reports/generate"
+        assert gen["alternate"] == f"/api/v1/scans/{scan_id}/reports/generate-all"
+        assert "report" in body["message"].lower()
 
 
 class TestCancelScanExtensions:

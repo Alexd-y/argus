@@ -10,18 +10,19 @@ MCP-002: HTTP transport for Docker; stdio for local Cursor spawn.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import os
 import shlex
 import sys
 import time
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 
 import httpx
 from fastmcp import FastMCP
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from tools.kali_registry import KALI_TOOL_REGISTRY, ToolDefinition
 from tools.va_sandbox_tools import build_enqueue_payload
@@ -41,13 +42,101 @@ logger = logging.getLogger(__name__)
 # Typed Schemas (SSEEventPayload-compatible, API contracts)
 # ---------------------------------------------------------------------------
 
+# Mirror backend ``src/api/schemas.py`` — ScanCreateRequest / ScanSmartCreateRequest / ScanOptions.
+TARGET_PATTERN = r"^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$"
 
-class CreateScanRequest(BaseModel):
-    """POST /scans request schema."""
 
-    target: str = Field(..., description="URL or domain to scan")
-    email: str = Field(default="mcp@argus.local", description="Contact email")
-    options: Optional[dict[str, Any]] = Field(default_factory=dict)
+class MCPScanOptionsAuth(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = False
+    type: str = "basic"
+    username: str = ""
+    password: str = ""
+    token: str = ""
+
+
+class MCPScanOptionsScope(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    maxDepth: int = Field(default=3, ge=1, le=10)
+    includeSubs: bool = False
+    excludePatterns: str = ""
+
+
+class MCPScanOptionsAdvanced(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    timeout: int = Field(default=30, ge=5, le=120)
+    userAgent: str = "chrome"
+    proxy: str = ""
+    customHeaders: str = ""
+
+
+class MCPScanOptionsVulnerabilities(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    xss: bool = True
+    sqli: bool = True
+    csrf: bool = True
+    ssrf: bool = False
+    lfi: bool = False
+    rce: bool = False
+
+
+class MCPScanOptionsKal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    password_audit_opt_in: bool = False
+    recon_dns_enumeration_opt_in: bool = False
+    va_network_capture_opt_in: bool = False
+
+
+class MCPScanOptions(BaseModel):
+    """Aligned with backend ``ScanOptions``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    scanType: str = "quick"
+    reportFormat: str = "pdf"
+    rateLimit: str = "normal"
+    ports: str = "80,443,8080,8443"
+    followRedirects: bool = True
+    vulnerabilities: MCPScanOptionsVulnerabilities = Field(default_factory=MCPScanOptionsVulnerabilities)
+    authentication: MCPScanOptionsAuth = Field(default_factory=MCPScanOptionsAuth)
+    scope: MCPScanOptionsScope = Field(default_factory=MCPScanOptionsScope)
+    advanced: MCPScanOptionsAdvanced = Field(default_factory=MCPScanOptionsAdvanced)
+    kal: MCPScanOptionsKal = Field(default_factory=MCPScanOptionsKal)
+
+
+class MCPScanCreateRequest(BaseModel):
+    """Aligned with backend ``ScanCreateRequest`` (POST /api/v1/scans)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target: str = Field(
+        min_length=1,
+        max_length=512,
+        pattern=TARGET_PATTERN,
+        description="URL or domain to scan",
+    )
+    email: str
+    options: MCPScanOptions = Field(default_factory=MCPScanOptions)
+    scan_mode: Literal["quick", "standard", "deep"] = Field(
+        default="standard",
+        description="Scan depth: quick | standard | deep",
+    )
+
+
+class MCPScanSmartCreateRequest(BaseModel):
+    """Aligned with backend ``ScanSmartCreateRequest`` (POST /api/v1/scans/smart)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    target: str = Field(min_length=1, max_length=512, pattern=TARGET_PATTERN)
+    objective: str = Field(default="", max_length=2048)
+    max_phases: int = Field(default=5, ge=1, le=20)
+    tenant_id: str | None = Field(default=None, max_length=36)
 
 
 class CreateScanResponse(BaseModel):
@@ -129,6 +218,104 @@ def _get_admin_headers() -> dict[str, str]:
     return {}
 
 
+# Defaults aligned with backend ``ScanOptions`` (``src/api/schemas.py``); keep in sync on schema changes.
+_DEFAULT_SCAN_OPTIONS: dict[str, Any] = {
+    "scanType": "quick",
+    "reportFormat": "pdf",
+    "rateLimit": "normal",
+    "ports": "80,443,8080,8443",
+    "followRedirects": True,
+    "vulnerabilities": {
+        "xss": True,
+        "sqli": True,
+        "csrf": True,
+        "ssrf": False,
+        "lfi": False,
+        "rce": False,
+    },
+    "authentication": {
+        "enabled": False,
+        "type": "basic",
+        "username": "",
+        "password": "",
+        "token": "",
+    },
+    "scope": {"maxDepth": 3, "includeSubs": False, "excludePatterns": ""},
+    "advanced": {"timeout": 30, "userAgent": "chrome", "proxy": "", "customHeaders": ""},
+    "kal": {
+        "password_audit_opt_in": False,
+        "recon_dns_enumeration_opt_in": False,
+        "va_network_capture_opt_in": False,
+    },
+}
+
+
+def _deep_merge_option_dict(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(base)
+    for k, v in overrides.items():
+        if k in out and isinstance(out[k], dict) and isinstance(v, dict):
+            out[k] = _deep_merge_option_dict(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
+def _normalize_scan_mode(raw: str) -> str:
+    s = (raw or "standard").strip().lower()
+    if s in ("quick", "standard", "deep"):
+        return s
+    if s in ("light", "normal"):
+        return "standard"
+    return "standard"
+
+
+def _build_scan_request(
+    target: str,
+    email: str,
+    scan_mode: str,
+    *,
+    options_overrides: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Build and validate JSON body for ``ScanCreateRequest`` (backend ``src/api/schemas.py``)."""
+    sm = _normalize_scan_mode(scan_mode)
+    ov = options_overrides or {}
+    merged = _deep_merge_option_dict(_DEFAULT_SCAN_OPTIONS, ov)
+    if "scanType" not in ov:
+        merged["scanType"] = sm
+    raw = {
+        "target": (target or "").strip(),
+        "email": (email or "mcp@argus.local").strip(),
+        "scan_mode": sm,
+        "options": merged,
+    }
+    validated = MCPScanCreateRequest.model_validate(raw)
+    return validated.model_dump(mode="json")
+
+
+def _build_smart_scan_request(
+    target: str,
+    objective: str = "",
+    max_phases: int = 5,
+    tenant_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Build and validate JSON body for ``ScanSmartCreateRequest``."""
+    try:
+        mp = int(max_phases)
+    except (TypeError, ValueError):
+        mp = 5
+    mp = max(1, min(20, mp))
+    body: dict[str, Any] = {
+        "target": (target or "").strip(),
+        "objective": (objective or "").strip()[:2048],
+        "max_phases": mp,
+    }
+    tid = (tenant_id or "").strip() or None
+    if tid:
+        body["tenant_id"] = tid
+    validated = MCPScanSmartCreateRequest.model_validate(body)
+    return validated.model_dump(mode="json", exclude_none=True)
+
+
 # ---------------------------------------------------------------------------
 # ArgusClient — backend API
 # ---------------------------------------------------------------------------
@@ -158,6 +345,9 @@ class ArgusClient:
         h.update(_get_tenant_headers(self.tenant_id))
         return h
 
+    def _headers_with_admin(self) -> dict[str, str]:
+        return {**self._headers(), **_get_admin_headers()}
+
     def _err_response(self, r: httpx.Response) -> dict[str, Any]:
         try:
             data = r.json()
@@ -169,15 +359,22 @@ class ArgusClient:
             pass
         return {"error": f"HTTP {r.status_code}", "detail": (r.text or "")[:500]}
 
-    def _get_json(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+    def _get_json(
+        self,
+        path: str,
+        params: Optional[Any] = None,
+        *,
+        admin: bool = False,
+    ) -> Any:
         """
         Idempotent GET: retry up to 3 attempts with exponential backoff (1s, 2s) only for
         connection errors and 5xx responses. Do not retry 4xx.
         """
+        hdrs = self._headers_with_admin() if admin else self._headers()
         last_exc: Optional[BaseException] = None
         for attempt in range(3):
             try:
-                r = self._client.get(path, params=params, headers=self._headers())
+                r = self._client.get(path, params=params, headers=hdrs)
                 if r.status_code < 400:
                     if not (r.content or b"").strip():
                         return {}
@@ -204,9 +401,16 @@ class ArgusClient:
                     continue
         return {"error": str(last_exc) if last_exc else "request_failed"}
 
-    def _post_json(self, path: str, json_body: Optional[dict[str, Any]] = None) -> Any:
+    def _post_json(
+        self,
+        path: str,
+        json_body: Optional[dict[str, Any]] = None,
+        *,
+        admin: bool = False,
+    ) -> Any:
         try:
-            r = self._client.post(path, json=json_body or {}, headers=self._headers())
+            hdrs = self._headers_with_admin() if admin else self._headers()
+            r = self._client.post(path, json=json_body or {}, headers=hdrs)
             if r.status_code < 400:
                 if not (r.content or b"").strip():
                     return {}
@@ -217,6 +421,28 @@ class ArgusClient:
             return self._err_response(r)
         except httpx.RequestError as e:
             logger.error("POST %s failed: %s", path, e)
+            return {"error": str(e)}
+
+    def _delete_json(
+        self,
+        path: str,
+        json_body: Optional[dict[str, Any]] = None,
+        *,
+        admin: bool = False,
+    ) -> Any:
+        try:
+            hdrs = self._headers_with_admin() if admin else self._headers()
+            r = self._client.request("DELETE", path, json=json_body or {}, headers=hdrs)
+            if r.status_code < 400:
+                if not (r.content or b"").strip():
+                    return {}
+                ct = (r.headers.get("content-type") or "").lower()
+                if "application/json" in ct:
+                    return r.json()
+                return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
+            return self._err_response(r)
+        except httpx.RequestError as e:
+            logger.error("DELETE %s failed: %s", path, e)
             return {"error": str(e)}
 
     def _connect(self) -> None:
@@ -239,11 +465,16 @@ class ArgusClient:
         scan_mode: str = "standard",
         options: Optional[dict] = None,
     ) -> dict[str, Any]:
-        """POST /api/v1/scans — scan_mode: quick | standard | deep."""
-        sm = scan_mode.strip().lower()
-        if sm not in ("quick", "standard", "deep"):
-            sm = "standard"
-        payload = {"target": target, "email": email, "scan_mode": sm, "options": options or {}}
+        """POST /api/v1/scans — nested ``options`` + ``scan_mode`` (quick | standard | deep)."""
+        try:
+            payload = _build_scan_request(target, email, scan_mode, options_overrides=options)
+        except ValidationError as e:
+            return {
+                "error": "validation_failed",
+                "scan_id": "",
+                "status": "error",
+                "details": e.errors(),
+            }
         data = self._post_json("/api/v1/scans", payload)
         if isinstance(data, dict) and "error" in data:
             data.setdefault("scan_id", "")
@@ -370,14 +601,45 @@ class ArgusClient:
         max_phases: int = 5,
     ) -> dict[str, Any]:
         tid = (self.tenant_id or "").strip() or None
-        body: dict[str, Any] = {
-            "target": target,
-            "objective": objective,
-            "max_phases": max_phases,
-        }
-        if tid:
-            body["tenant_id"] = tid
+        try:
+            body = _build_smart_scan_request(
+                target, objective=objective, max_phases=max_phases, tenant_id=tid
+            )
+        except ValidationError as e:
+            return {"error": "validation_failed", "details": e.errors()}
         return self._post_json("/api/v1/scans/smart", body)
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        return self._get_json("/api/v1/cache/stats", admin=True)
+
+    def get_cache_health(self) -> dict[str, Any]:
+        return self._get_json("/api/v1/cache/health", admin=True)
+
+    def warm_tool_cache(self) -> dict[str, Any]:
+        """POST /api/v1/cache/warm — preload ScanKnowledgeBase keys (requires ARGUS_ADMIN_KEY)."""
+        return self._post_json("/api/v1/cache/warm", {}, admin=True)
+
+    def flush_tool_cache(self, patterns: list[str], confirm: bool = True) -> dict[str, Any]:
+        """DELETE /api/v1/cache — patterns must start with ``argus:``; confirm must be true."""
+        body = {"patterns": list(patterns), "confirm": bool(confirm)}
+        return self._delete_json("/api/v1/cache", body, admin=True)
+
+    def get_knowledge_strategy(
+        self,
+        owasp_ids: Optional[list[str]] = None,
+        cwe_ids: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        pairs: list[tuple[str, str]] = []
+        for o in owasp_ids or []:
+            s = str(o).strip()
+            if s:
+                pairs.append(("owasp_ids", s))
+        for c in cwe_ids or []:
+            s = str(c).strip()
+            if s:
+                pairs.append(("cwe_ids", s))
+        data = self._get_json("/api/v1/knowledge/strategy", pairs if pairs else None)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
 
     def run_skill_scan(self, target: str, skill: str) -> dict[str, Any]:
         tid = (self.tenant_id or "").strip() or None
@@ -729,6 +991,7 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         target: str,
         email: str = "mcp@argus.local",
         scan_mode: str = "standard",
+        options_json: str = "{}",
     ) -> dict[str, Any]:
         """
         Create a new security scan against a target.
@@ -736,14 +999,21 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         Args:
             target: URL or domain to scan (e.g. https://example.com)
             email: Contact email for the scan
-            scan_mode: quick | standard | deep (legacy: light → standard)
+            scan_mode: quick | standard | deep (aliases: light, normal → standard)
+            options_json: JSON object merged into ScanOptions (scanType, reportFormat,
+                vulnerabilities, scope, advanced, kal, …) — matches backend ScanCreateRequest.options
 
         Returns:
             scan_id, status, message
         """
+        try:
+            extra = json.loads(options_json) if options_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid options_json: {e}", "scan_id": "", "status": "error"}
+        if not isinstance(extra, dict):
+            return {"error": "options_json must be a JSON object", "scan_id": "", "status": "error"}
         sm = _scan_mode_from_alias(scan_mode)
-        options: dict[str, Any] = {"scanType": scan_mode}
-        return client.create_scan(target=target, email=email, scan_mode=sm, options=options)
+        return client.create_scan(target=target, email=email, scan_mode=sm, options=extra)
 
     @mcp.tool()
     def get_scan_status(scan_id: str) -> dict[str, Any]:
@@ -874,6 +1144,57 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
     def get_available_skills() -> dict[str, Any]:
         """List packaged skill markdown ids by category."""
         return client.get_available_skills()
+
+    @mcp.tool()
+    def get_cache_stats() -> dict[str, Any]:
+        """Redis/tool-cache stats (requires ARGUS_ADMIN_KEY)."""
+        return client.get_cache_stats()
+
+    @mcp.tool()
+    def get_cache_health() -> dict[str, Any]:
+        """Redis connectivity and memory summary (requires ARGUS_ADMIN_KEY)."""
+        return client.get_cache_health()
+
+    @mcp.tool()
+    def warm_cache() -> dict[str, Any]:
+        """Warm ScanKnowledgeBase Redis keys via POST /api/v1/cache/warm (requires ARGUS_ADMIN_KEY)."""
+        return client.warm_tool_cache()
+
+    @mcp.tool()
+    def flush_cache(patterns_json: str, confirm: bool = False) -> dict[str, Any]:
+        """
+        Flush cache keys matching patterns (DELETE /api/v1/cache). Each pattern must start with argus:.
+        patterns_json: JSON array of strings, e.g. [\"argus:tool:*\"]. confirm must be true.
+        """
+        try:
+            raw = json.loads(patterns_json) if patterns_json.strip() else []
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid patterns_json: {e}"}
+        if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+            return {"error": "patterns_json must be a JSON array of strings"}
+        return client.flush_tool_cache(raw, confirm=confirm)
+
+    @mcp.tool()
+    def get_knowledge_strategy(
+        owasp_ids_json: str = "[]",
+        cwe_ids_json: str = "[]",
+    ) -> dict[str, Any]:
+        """
+        GET /api/v1/knowledge/strategy — skills/tools/priority from OWASP ids (e.g. A01) and CWE ids.
+        Pass JSON arrays, e.g. owasp_ids_json: [\"A01\",\"A05\"], cwe_ids_json: [\"CWE-79\"].
+        """
+        try:
+            o = json.loads(owasp_ids_json) if owasp_ids_json.strip() else []
+            c = json.loads(cwe_ids_json) if cwe_ids_json.strip() else []
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid JSON: {e}"}
+        if not isinstance(o, list):
+            return {"error": "owasp_ids_json must be a JSON array"}
+        if not isinstance(c, list):
+            return {"error": "cwe_ids_json must be a JSON array"}
+        o_list = [str(x) for x in o]
+        c_list = [str(x) for x in c]
+        return client.get_knowledge_strategy(owasp_ids=o_list, cwe_ids=c_list)
 
     @mcp.tool()
     def get_scan_memory_summary(scan_id: str) -> dict[str, Any]:

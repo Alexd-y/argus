@@ -14,10 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.routers import (
     admin,
     auth,
+    cache,
     findings,
     health,
     intelligence,
     internal_va,
+    knowledge,
     metrics,
     reports,
     sandbox,
@@ -26,6 +28,7 @@ from src.api.routers import (
     tools,
 )
 from src.api.routers.recon import recon_router
+from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
@@ -41,6 +44,13 @@ async def lifespan(app: FastAPI):
         logger.info("Alembic migrations applied successfully")
     except Exception as e:
         logger.warning("Startup migrations skipped: %s", type(e).__name__, exc_info=False)
+    try:
+        get_knowledge_base().warm_cache()
+    except Exception as e:
+        logger.warning(
+            "kb_warm_skipped",
+            extra={"event": "kb_warm_skipped", "error_type": type(e).__name__},
+        )
     yield
 
 
@@ -72,10 +82,12 @@ app.include_router(reports.router, prefix="/api/v1")
 app.include_router(sandbox.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(cache.router, prefix="/api/v1")
 app.include_router(internal_va.router, prefix="/api/v1")
 app.include_router(recon_router, prefix="/api/v1")
 app.include_router(intelligence.router, prefix="/api/v1")
 app.include_router(skills_public.router, prefix="/api/v1")
+app.include_router(knowledge.router, prefix="/api/v1")
 
 
 @app.get("/")

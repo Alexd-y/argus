@@ -5,6 +5,13 @@ import shlex
 import time
 from typing import Any
 
+from src.cache.tool_recovery import (
+    MAX_RECOVERY_ATTEMPTS,
+    _replace_tool_in_command,
+    classify_error,
+    get_tool_recovery_system,
+    log_recovery_attempt,
+)
 from src.core.config import settings
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
 from src.tools.guardrails.command_parser import ALLOWED_TOOLS, extract_tool_name
@@ -69,6 +76,79 @@ def execute_command(
         elapsed = time.perf_counter() - start
         logger.exception("Command execution failed")
         return _result(False, "", "Command execution failed", -1, elapsed)
+
+
+def execute_command_with_recovery(
+    command: str,
+    *,
+    use_cache: bool = True,
+    use_sandbox: bool = False,
+    timeout_sec: int | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Run *command*; on failure, retry with up to ``MAX_RECOVERY_ATTEMPTS`` allowlisted alternatives.
+
+    Single subprocess execution path remains ``execute_command`` per attempt.
+    """
+    recovery = get_tool_recovery_system()
+    original_tool = extract_tool_name(command) or ""
+    attempts: list[dict[str, Any]] = []
+
+    def _append_attempt(tool_label: str, res: dict[str, Any]) -> None:
+        stderr = str(res.get("stderr") or "")
+        rc = int(res.get("return_code") if res.get("return_code") is not None else -1)
+        et = classify_error(stderr, rc)
+        attempts.append(
+            {
+                "tool": tool_label,
+                "exit_code": rc,
+                "error_type": et,
+                "duration_sec": float(res.get("execution_time") or 0.0),
+            }
+        )
+        if not res.get("success"):
+            log_recovery_attempt(
+                original_tool=original_tool,
+                attempted_tool=tool_label,
+                command_preview=command[:200],
+                return_code=rc,
+                error_type=et,
+                duration_sec=float(res.get("execution_time") or 0.0),
+            )
+
+    result = execute_command(
+        command,
+        use_cache=use_cache,
+        use_sandbox=use_sandbox,
+        timeout_sec=timeout_sec,
+    )
+    _append_attempt(original_tool, result)
+
+    if result.get("success") or not original_tool or recovery.is_stateful(original_tool):
+        info = recovery.build_recovery_info(original_tool, original_tool, attempts, from_cache=False)
+        return result, info
+
+    allowed_alts = [a for a in recovery.get_alternatives(original_tool) if a in ALLOWED_TOOLS][
+        :MAX_RECOVERY_ATTEMPTS
+    ]
+    final_tool = original_tool
+    for alt in allowed_alts:
+        new_cmd = _replace_tool_in_command(command, original_tool, alt)
+        if new_cmd == command:
+            continue
+        result = execute_command(
+            new_cmd,
+            use_cache=use_cache,
+            use_sandbox=use_sandbox,
+            timeout_sec=timeout_sec,
+        )
+        final_tool = alt
+        _append_attempt(alt, result)
+        if result.get("success"):
+            break
+
+    info = recovery.build_recovery_info(original_tool, final_tool, attempts, from_cache=False)
+    return result, info
 
 
 def _result(success: bool, stdout: str, stderr: str, return_code: int, execution_time: float) -> dict[str, Any]:

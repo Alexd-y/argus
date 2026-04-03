@@ -12,7 +12,6 @@ import logging
 from typing import Any
 
 from src.core.config import settings
-from src.tools.guardrails.command_parser import extract_tool_name
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +39,43 @@ _TOOL_TTL_SEC: dict[str, int] = {
 
 _DEFAULT_TTL_SEC = 300
 _CACHE_PREFIX = "argus:sandbox:exec:"
+# Public alias for routers / admin cache API
+SANDBOX_EXEC_CACHE_PREFIX: str = _CACHE_PREFIX
+
+# Runtime overrides from PUT /cache/tool-ttls (not persisted across restarts).
+_tool_ttl_overrides: dict[str, int] = {}
 
 
 def ttl_for_tool(tool_name: str | None) -> int:
     if not tool_name:
         return _DEFAULT_TTL_SEC
-    return int(_TOOL_TTL_SEC.get(tool_name.lower(), _DEFAULT_TTL_SEC))
+    tl = tool_name.lower()
+    if tl in _tool_ttl_overrides:
+        return int(_tool_ttl_overrides[tl])
+    return int(_TOOL_TTL_SEC.get(tl, _DEFAULT_TTL_SEC))
+
+
+def get_default_ttl_sec() -> int:
+    return _DEFAULT_TTL_SEC
+
+
+def get_base_tool_ttl_map() -> dict[str, int]:
+    return dict(_TOOL_TTL_SEC)
+
+
+def get_all_tool_ttls() -> dict[str, int]:
+    merged = dict(_TOOL_TTL_SEC)
+    merged.update(_tool_ttl_overrides)
+    return merged
+
+
+def set_tool_ttl_runtime(tool: str, ttl_sec: int) -> tuple[int, int]:
+    """Return (old_effective_ttl, new_ttl)."""
+    t = tool.strip().lower()
+    old = ttl_for_tool(t) if t else _DEFAULT_TTL_SEC
+    if t:
+        _tool_ttl_overrides[t] = int(ttl_sec)
+    return old, int(ttl_sec)
 
 
 def cache_key_for_execute(command: str, use_sandbox: bool, timeout_sec: int | None) -> str:
@@ -125,10 +155,3 @@ def get_tool_cache() -> ToolResultCache:
     if _singleton is None:
         _singleton = ToolResultCache()
     return _singleton
-
-
-def recovery_info_stub(*, from_cache: bool) -> dict[str, Any] | None:
-    """Reserved for ToolRecoverySystem; stub metadata only."""
-    if from_cache:
-        return {"source": "cache", "recovery_tier": "none"}
-    return None
