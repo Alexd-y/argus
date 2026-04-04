@@ -165,7 +165,7 @@ class VAMultiAgentOrchestrator:
     Orchestrate multi-agent VA workflow (Strix pattern):
       Phase 1: Determine categories based on scan_mode
       Phase 2: Spawn parallel discovery agents per category
-      Phase 3: Collect and merge findings
+      Step 3: Collect and merge findings
 
     Validation, dedup, and scoring are handled by the enrichment pipeline.
     """

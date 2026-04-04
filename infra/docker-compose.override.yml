@@ -5,7 +5,9 @@
 services:
   postgres:
     ports:
-      - "5432:5432"
+      # Host port from .env (default 5432). On Windows, if bind fails with
+      # "forbidden by its access permissions", set POSTGRES_PORT=5433 in .env.
+      - "${POSTGRES_PORT:-5432}:5432"
 
   minio:
     ports:

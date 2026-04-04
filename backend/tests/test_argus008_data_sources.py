@@ -194,12 +194,13 @@ class TestNVDClient:
 
 
 class TestExploitDBClient:
-    """ExploitDBClient — minimal initial client."""
+    """ExploitDBClient — public search."""
 
     @pytest.mark.asyncio
-    async def test_query_returns_empty(self) -> None:
+    async def test_query_without_keyword_returns_error(self) -> None:
         result = await ExploitDBClient().query()
-        assert result == {}
+        assert result.get("results") == []
+        assert result.get("error") == "No keyword provided"
 
 
 class TestShodanClient:
