@@ -147,10 +147,20 @@ async def ai_recon(
     )
 
 
-async def ai_threat_modeling(inp: ThreatModelInput, nvd_data: str = "") -> ThreatModelOutput:
-    """Build threat model from real assets and NVD CVEs via LLM. Raises on failure."""
+async def ai_threat_modeling(
+    inp: ThreatModelInput,
+    nvd_data: str = "",
+    *,
+    recon_context: str = "",
+) -> ThreatModelOutput:
+    """Build threat model from real assets, NVD CVEs, and enriched recon context via LLM."""
     _require_llm()
-    system, user = get_prompt(THREAT_MODELING, assets=inp.assets, nvd_data=nvd_data)
+    system, user = get_prompt(
+        THREAT_MODELING,
+        assets=inp.assets,
+        nvd_data=nvd_data,
+        recon_context=recon_context,
+    )
     data = _require_json(
         await _call_llm_with_json_retry(THREAT_MODELING, user, system),
         THREAT_MODELING,

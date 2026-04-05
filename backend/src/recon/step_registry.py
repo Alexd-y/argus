@@ -27,6 +27,8 @@ class ReconStepId(str, Enum):
     # RECON-008 — ProjectDiscovery asnmap (apex ASN summary)
     ASN_MAP = "asn_map"
     DEEP_PORT_SCAN = "deep_port_scan"
+    # ARGUS-002 — HTTP security headers collector
+    SECURITY_HEADERS = "security_headers"
 
 
 # Registry slice: steps that only emit audit-trail records when planned (empty by default).
@@ -47,6 +49,7 @@ def _base_steps_for_mode(mode: str) -> list[ReconStepId]:
         *passive,
         ReconStepId.NMAP_PORT_SCAN,
         ReconStepId.HTTP_SURFACE,
+        ReconStepId.SECURITY_HEADERS,
         ReconStepId.DEPENDENCY_MANIFESTS,
     ]
     if mode == "passive":
@@ -92,6 +95,8 @@ def plan_recon_steps(cfg: ReconRuntimeConfig) -> list[ReconStepId]:
             sel.add(ReconStepId.ASN_MAP.value)
         if "screenshots" in sel:
             sel.add(ReconStepId.SCREENSHOTS.value)
+        if "security_headers" in sel:
+            sel.add(ReconStepId.SECURITY_HEADERS.value)
         steps = [s for s in steps if s.value in sel]
 
     return steps

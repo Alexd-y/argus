@@ -8,8 +8,10 @@ paths stay in one place.
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from src.core.config import settings
@@ -18,6 +20,87 @@ logger = logging.getLogger(__name__)
 
 # Raw artifact logical keys (align with kal_searchsploit_intel / RawPhaseSink usage)
 SEARCHSPLOIT_INTEL_RAW_ARTIFACT_KEY = "searchsploit_intel_raw"
+
+_TOOL_AVAILABILITY_CACHE: dict[str, bool] = {}
+
+_AVAILABILITY_CHECK_TIMEOUT = 5.0
+
+
+def clear_tool_availability_cache() -> None:
+    """Reset the per-scan availability cache (call at scan start/end)."""
+    _TOOL_AVAILABILITY_CACHE.clear()
+
+
+def check_tool_available(
+    tool_binary: str,
+    *,
+    use_sandbox: bool = True,
+) -> bool:
+    """Check if *tool_binary* is reachable in the sandbox container (or locally).
+
+    Results are cached for the lifetime of the scan to avoid repeated ``which`` calls.
+    """
+    cache_key = f"{'sandbox' if (use_sandbox and settings.sandbox_enabled) else 'local'}:{tool_binary}"
+    cached = _TOOL_AVAILABILITY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    available = False
+    if use_sandbox and settings.sandbox_enabled:
+        try:
+            proc = subprocess.run(
+                ["docker", "exec", settings.sandbox_container_name, "which", tool_binary],
+                capture_output=True,
+                text=True,
+                timeout=_AVAILABILITY_CHECK_TIMEOUT,
+                shell=False,
+            )
+            available = proc.returncode == 0 and bool(proc.stdout.strip())
+        except (subprocess.TimeoutExpired, OSError):
+            logger.warning(
+                "tool_availability_check_failed",
+                extra={
+                    "event": "tool_availability_check_failed",
+                    "binary": tool_binary,
+                    "method": "sandbox",
+                },
+            )
+    else:
+        available = shutil.which(tool_binary) is not None
+
+    _TOOL_AVAILABILITY_CACHE[cache_key] = available
+
+    if not available:
+        method = "sandbox" if (use_sandbox and settings.sandbox_enabled) else "local"
+        logger.warning(
+            "tool_not_found",
+            extra={
+                "event": "tool_not_found",
+                "binary": tool_binary,
+                "method": method,
+            },
+        )
+
+    return available
+
+
+def check_tool_available_with_fallback(
+    tool_binary: str,
+    *,
+    use_sandbox: bool = True,
+) -> dict[str, Any]:
+    """Check tool availability and return a structured result dict.
+
+    Keys: ``available``, ``binary``, ``checked_at``, ``method``.
+    """
+    method = "sandbox" if (use_sandbox and settings.sandbox_enabled) else "local"
+    available = check_tool_available(tool_binary, use_sandbox=use_sandbox)
+    return {
+        "available": available,
+        "binary": tool_binary,
+        "checked_at": datetime.now(UTC).isoformat(),
+        "method": method,
+    }
 
 
 def build_sandbox_exec_argv(

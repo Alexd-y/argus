@@ -10,6 +10,7 @@ MCP-002: HTTP transport for Docker; stdio for local Cursor spawn.
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import json
 import logging
@@ -17,13 +18,12 @@ import os
 import shlex
 import sys
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
 from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-
 from tools.kali_registry import KALI_TOOL_REGISTRY, ToolDefinition
 from tools.va_sandbox_tools import build_enqueue_payload
 
@@ -144,7 +144,7 @@ class CreateScanResponse(BaseModel):
 
     scan_id: str
     status: str
-    message: Optional[str] = None
+    message: str | None = None
 
 
 class ScanStatusResponse(BaseModel):
@@ -164,13 +164,13 @@ class FindingSchema(BaseModel):
     severity: str
     title: str
     description: str
-    cwe: Optional[str] = None
-    cvss: Optional[float] = None
+    cwe: str | None = None
+    cvss: float | None = None
     confidence: str = "likely"
-    evidence_type: Optional[str] = None
+    evidence_type: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
-    reproducible_steps: Optional[str] = None
-    applicability_notes: Optional[str] = None
+    reproducible_steps: str | None = None
+    applicability_notes: str | None = None
 
 
 class ReportSchema(BaseModel):
@@ -181,8 +181,8 @@ class ReportSchema(BaseModel):
     summary: dict[str, Any]
     findings: list[FindingSchema] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
-    created_at: Optional[str] = None
-    scan_id: Optional[str] = None
+    created_at: str | None = None
+    scan_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +192,8 @@ class ReportSchema(BaseModel):
 DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
 DEFAULT_TIMEOUT = 300
 MAX_RETRIES = 3
+# Cap base64 payload size for MCP responses (report / artifact downloads).
+_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 
 
 def _get_auth_headers() -> dict[str, str]:
@@ -202,7 +204,7 @@ def _get_auth_headers() -> dict[str, str]:
     return {}
 
 
-def _get_tenant_headers(tenant_id: Optional[str]) -> dict[str, str]:
+def _get_tenant_headers(tenant_id: str | None) -> dict[str, str]:
     """Tenant awareness: X-Tenant-ID header for scan/report filtering."""
     tid = tenant_id or os.environ.get("ARGUS_TENANT_ID")
     if tid:
@@ -274,7 +276,7 @@ def _build_scan_request(
     email: str,
     scan_mode: str,
     *,
-    options_overrides: Optional[dict[str, Any]] = None,
+    options_overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build and validate JSON body for ``ScanCreateRequest`` (backend ``src/api/schemas.py``)."""
     sm = _normalize_scan_mode(scan_mode)
@@ -296,7 +298,7 @@ def _build_smart_scan_request(
     target: str,
     objective: str = "",
     max_phases: int = 5,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Build and validate JSON body for ``ScanSmartCreateRequest``."""
     try:
@@ -328,7 +330,7 @@ class ArgusClient:
         self,
         server_url: str,
         timeout: int = DEFAULT_TIMEOUT,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> None:
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
@@ -362,7 +364,7 @@ class ArgusClient:
     def _get_json(
         self,
         path: str,
-        params: Optional[Any] = None,
+        params: Any | None = None,
         *,
         admin: bool = False,
     ) -> Any:
@@ -371,7 +373,7 @@ class ArgusClient:
         connection errors and 5xx responses. Do not retry 4xx.
         """
         hdrs = self._headers_with_admin() if admin else self._headers()
-        last_exc: Optional[BaseException] = None
+        last_exc: BaseException | None = None
         for attempt in range(3):
             try:
                 r = self._client.get(path, params=params, headers=hdrs)
@@ -404,7 +406,7 @@ class ArgusClient:
     def _post_json(
         self,
         path: str,
-        json_body: Optional[dict[str, Any]] = None,
+        json_body: dict[str, Any] | None = None,
         *,
         admin: bool = False,
     ) -> Any:
@@ -426,7 +428,7 @@ class ArgusClient:
     def _delete_json(
         self,
         path: str,
-        json_body: Optional[dict[str, Any]] = None,
+        json_body: dict[str, Any] | None = None,
         *,
         admin: bool = False,
     ) -> Any:
@@ -443,6 +445,80 @@ class ArgusClient:
             return self._err_response(r)
         except httpx.RequestError as e:
             logger.error("DELETE %s failed: %s", path, e)
+            return {"error": str(e)}
+
+    def _patch_json(
+        self,
+        path: str,
+        json_body: dict[str, Any] | None = None,
+        *,
+        admin: bool = False,
+    ) -> Any:
+        try:
+            hdrs = self._headers_with_admin() if admin else self._headers()
+            r = self._client.patch(path, json=json_body or {}, headers=hdrs)
+            if r.status_code < 400:
+                if not (r.content or b"").strip():
+                    return {}
+                ct = (r.headers.get("content-type") or "").lower()
+                if "application/json" in ct:
+                    return r.json()
+                return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
+            return self._err_response(r)
+        except httpx.RequestError as e:
+            logger.error("PATCH %s failed: %s", path, e)
+            return {"error": str(e)}
+
+    def _get_download_response(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        admin: bool = False,
+        follow_redirects: bool = False,
+    ) -> dict[str, Any]:
+        """GET that may return redirect, JSON, or binary (base64 for MCP)."""
+        hdrs = self._headers_with_admin() if admin else self._headers()
+        try:
+            r = self._client.get(
+                path,
+                params=params,
+                headers=hdrs,
+                follow_redirects=follow_redirects,
+            )
+            if r.status_code in (301, 302, 303, 307, 308):
+                loc = r.headers.get("location") or ""
+                return {
+                    "status_code": r.status_code,
+                    "redirect_url": loc,
+                    "note": "redirect_response",
+                }
+            if r.status_code >= 400:
+                return self._err_response(r)
+            data = r.content or b""
+            ct = (r.headers.get("content-type") or "").lower()
+            cd = r.headers.get("content-disposition") or ""
+            if "application/json" in ct:
+                try:
+                    parsed = r.json()
+                    return parsed if isinstance(parsed, dict) else {"data": parsed}
+                except Exception:
+                    return {"note": "json_parse_failed", "text_preview": (r.text or "")[:8192]}
+            if len(data) > _MAX_DOWNLOAD_BYTES:
+                return {
+                    "error": "response_too_large",
+                    "detail": "Use redirect=true or a smaller export; body exceeds MCP size cap.",
+                    "content_type": r.headers.get("content-type"),
+                }
+            return {
+                "content_base64": base64.standard_b64encode(data).decode("ascii"),
+                "content_type": r.headers.get("content-type"),
+                "content_disposition": cd,
+                "size_bytes": len(data),
+                "note": "binary_body_base64",
+            }
+        except httpx.RequestError as e:
+            logger.error("GET download %s failed: %s", path, e)
             return {"error": str(e)}
 
     def _connect(self) -> None:
@@ -463,7 +539,7 @@ class ArgusClient:
         target: str,
         email: str = "mcp@argus.local",
         scan_mode: str = "standard",
-        options: Optional[dict] = None,
+        options: dict | None = None,
     ) -> dict[str, Any]:
         """POST /api/v1/scans — nested ``options`` + ``scan_mode`` (quick | standard | deep)."""
         try:
@@ -521,7 +597,7 @@ class ArgusClient:
             return {"scan_id": scan_id, "findings": data, "count": len(data)}
         return {"error": "unexpected_response", "scan_id": scan_id, "findings": [], "count": 0}
 
-    def list_reports(self, target: Optional[str] = None) -> dict[str, Any]:
+    def list_reports(self, target: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {} if not target else {"target": target}
         data = self._get_json("/api/v1/reports", params)
         if isinstance(data, dict) and data.get("error"):
@@ -626,8 +702,8 @@ class ArgusClient:
 
     def get_knowledge_strategy(
         self,
-        owasp_ids: Optional[list[str]] = None,
-        cwe_ids: Optional[list[str]] = None,
+        owasp_ids: list[str] | None = None,
+        cwe_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         pairs: list[tuple[str, str]] = []
         for o in owasp_ids or []:
@@ -653,7 +729,7 @@ class ArgusClient:
         tool: str,
         target: str,
         args_json: str = "{}",
-        timeout_sec: Optional[int] = None,
+        timeout_sec: int | None = None,
     ) -> dict[str, Any]:
         try:
             extra = json.loads(args_json) if args_json.strip() else {}
@@ -826,8 +902,469 @@ class ArgusClient:
             }
         return data if isinstance(data, dict) else {"error": "unexpected_response"}
 
+    # --- Recon API (paths match ``src/api/routers/recon/*.py``, prefix /api/v1) ---
 
-def _tool_to_shell_command(tool: str, target: str, args: dict[str, Any]) -> Optional[str]:
+    def list_engagements(
+        self,
+        status: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """GET /api/v1/recon/engagements — query: status, offset, limit (not target)."""
+        params: dict[str, Any] = {"offset": max(0, int(offset)), "limit": max(1, min(100, int(limit)))}
+        if status and str(status).strip():
+            params["status"] = str(status).strip()
+        data = self._get_json("/api/v1/recon/engagements", params)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def create_engagement(self, body: dict[str, Any]) -> dict[str, Any]:
+        """POST /api/v1/recon/engagements — EngagementCreate JSON."""
+        data = self._post_json("/api/v1/recon/engagements", body)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_engagement(self, engagement_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def patch_engagement(self, engagement_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        data = self._patch_json(f"/api/v1/recon/engagements/{engagement_id}", body)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def activate_engagement(self, engagement_id: str) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/recon/engagements/{engagement_id}/activate", {})
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def complete_engagement(self, engagement_id: str) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/recon/engagements/{engagement_id}/complete", {})
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def create_engagement_target(self, engagement_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/recon/engagements/{engagement_id}/targets", body)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_engagement_targets(self, engagement_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}/targets")
+        if isinstance(data, list):
+            return {"items": data, "count": len(data)}
+        if isinstance(data, dict) and data.get("error"):
+            return {**data, "items": [], "count": 0}
+        return {"error": "unexpected_response", "items": [], "count": 0}
+
+    def get_recon_target(self, target_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/targets/{target_id}")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def delete_recon_target(self, target_id: str) -> dict[str, Any]:
+        data = self._delete_json(f"/api/v1/recon/targets/{target_id}", {})
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def create_engagement_job(self, engagement_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/recon/engagements/{engagement_id}/jobs", body)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_engagement_jobs(
+        self,
+        engagement_id: str,
+        target_id: str | None = None,
+        stage: int | None = None,
+        status: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if target_id and str(target_id).strip():
+            params["target_id"] = str(target_id).strip()
+        if stage is not None:
+            params["stage"] = stage
+        if status and str(status).strip():
+            params["status"] = str(status).strip()
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}/jobs", params or None)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_recon_job(self, job_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/jobs/{job_id}")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def cancel_recon_job(self, job_id: str) -> dict[str, Any]:
+        data = self._post_json(f"/api/v1/recon/jobs/{job_id}/cancel", {})
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_engagement_artifacts(
+        self,
+        engagement_id: str,
+        artifact_type: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if artifact_type and str(artifact_type).strip():
+            params["artifact_type"] = str(artifact_type).strip()
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/artifacts",
+            params or None,
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_recon_artifact_metadata(self, artifact_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/artifacts/{artifact_id}")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_recon_artifact_download_url(self, artifact_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/artifacts/{artifact_id}/download")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_normalized_findings(
+        self,
+        engagement_id: str,
+        finding_type: str | None = None,
+        is_verified: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "offset": max(0, int(offset)),
+            "limit": max(1, min(200, int(limit))),
+        }
+        if finding_type and str(finding_type).strip():
+            params["finding_type"] = str(finding_type).strip()
+        if is_verified is not None:
+            params["is_verified"] = bool(is_verified)
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}/findings", params)
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_normalized_finding(self, finding_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/findings/{finding_id}")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def create_threat_model_run(
+        self,
+        engagement_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def execute_threat_model_run(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs/{run_id}/execute",
+            {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def trigger_threat_modeling(
+        self,
+        engagement_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/trigger",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_threat_model_input_bundle(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs/{run_id}/input-bundle",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_threat_model_ai_traces(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs/{run_id}/ai-traces",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_threat_model_mcp_traces(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs/{run_id}/mcp-traces",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def download_threat_model_run_artifact(
+        self,
+        engagement_id: str,
+        run_id: str,
+        artifact_type: str,
+    ) -> dict[str, Any]:
+        return self._get_download_response(
+            f"/api/v1/recon/engagements/{engagement_id}/threat-modeling/runs/{run_id}/artifacts/{artifact_type}/download",
+            follow_redirects=False,
+        )
+
+    def trigger_vulnerability_analysis(
+        self,
+        engagement_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/trigger",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def create_vulnerability_analysis_run(
+        self,
+        engagement_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def execute_vulnerability_analysis_run(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/execute",
+            {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_va_next_phase_gate(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/next-phase-gate",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_va_evidence_bundles(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/evidence-bundles",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_va_evidence_sufficiency(self, engagement_id: str, run_id: str) -> dict[str, Any]:
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/evidence-sufficiency",
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def download_va_finding_confirmation_matrix(
+        self,
+        engagement_id: str,
+        run_id: str,
+    ) -> dict[str, Any]:
+        return self._get_download_response(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/finding-confirmation-matrix",
+            follow_redirects=False,
+        )
+
+    def get_va_confirmed_findings(
+        self,
+        engagement_id: str,
+        run_id: str,
+        download_zip: bool = False,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"download": True} if download_zip else {}
+        return self._get_download_response(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/confirmed-findings",
+            params if params else None,
+            follow_redirects=False,
+        )
+
+    def download_va_run_artifact(
+        self,
+        engagement_id: str,
+        run_id: str,
+        artifact_type: str,
+    ) -> dict[str, Any]:
+        return self._get_download_response(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/runs/{run_id}/artifacts/{artifact_type}/download",
+            follow_redirects=False,
+        )
+
+    def get_vulnerability_analysis_readiness(
+        self,
+        engagement_id: str,
+        target_id: str | None = None,
+        recon_dir: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if target_id and str(target_id).strip():
+            params["target_id"] = str(target_id).strip()
+        if recon_dir and str(recon_dir).strip():
+            params["recon_dir"] = str(recon_dir).strip()
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/vulnerability-analysis/readiness",
+            params or None,
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def start_exploitation_run(
+        self,
+        engagement_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/exploitation/run",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_exploitation_status(self, engagement_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}/exploitation/status")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def get_exploitation_results(self, engagement_id: str) -> dict[str, Any]:
+        data = self._get_json(f"/api/v1/recon/engagements/{engagement_id}/exploitation/results")
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def list_exploitation_approvals(
+        self,
+        engagement_id: str,
+        status_filter: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if status_filter and str(status_filter).strip():
+            params["status_filter"] = str(status_filter).strip()
+        data = self._get_json(
+            f"/api/v1/recon/engagements/{engagement_id}/exploitation/approvals",
+            params or None,
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def approve_exploitation_approval(
+        self,
+        engagement_id: str,
+        approval_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/exploitation/approvals/{approval_id}/approve",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def reject_exploitation_approval(
+        self,
+        engagement_id: str,
+        approval_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        data = self._post_json(
+            f"/api/v1/recon/engagements/{engagement_id}/exploitation/approvals/{approval_id}/reject",
+            body or {},
+        )
+        return data if isinstance(data, dict) else {"error": "unexpected_response"}
+
+    def download_exploitation_artifact(
+        self,
+        engagement_id: str,
+        artifact_type: str,
+    ) -> dict[str, Any]:
+        return self._get_download_response(
+            f"/api/v1/recon/engagements/{engagement_id}/exploitation/artifacts/{artifact_type}",
+            follow_redirects=False,
+        )
+
+    def download_report(
+        self,
+        report_id: str,
+        format: str = "pdf",
+        regenerate: bool = False,
+        redirect: bool = False,
+    ) -> dict[str, Any]:
+        """GET /api/v1/reports/{id}/download — pdf|html|json|csv|valhalla_sections.csv."""
+        return self._get_download_response(
+            f"/api/v1/reports/{report_id}/download",
+            {
+                "format": format,
+                "regenerate": bool(regenerate),
+                "redirect": bool(redirect),
+            },
+            follow_redirects=False,
+        )
+
+    # --- Admin API (X-Admin-Key via ARGUS_ADMIN_KEY); 11 routes as in admin.py ---
+
+    def admin_list_tenants(self, limit: int = 50, offset: int = 0) -> Any:
+        return self._get_json(
+            "/api/v1/admin/tenants",
+            {"limit": limit, "offset": offset},
+            admin=True,
+        )
+
+    def admin_create_tenant(self, name: str) -> Any:
+        return self._post_json("/api/v1/admin/tenants", {"name": name.strip()}, admin=True)
+
+    def admin_get_tenant(self, tenant_id: str) -> Any:
+        return self._get_json(f"/api/v1/admin/tenants/{tenant_id}", admin=True)
+
+    def admin_list_users(
+        self,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        return self._get_json("/api/v1/admin/users", p, admin=True)
+
+    def admin_list_subscriptions(
+        self,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        return self._get_json("/api/v1/admin/subscriptions", p, admin=True)
+
+    def admin_list_providers(
+        self,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        return self._get_json("/api/v1/admin/providers", p, admin=True)
+
+    def admin_patch_provider(self, provider_id: str, body: dict[str, Any]) -> Any:
+        return self._patch_json(f"/api/v1/admin/providers/{provider_id}", body, admin=True)
+
+    def admin_list_policies(
+        self,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        return self._get_json("/api/v1/admin/policies", p, admin=True)
+
+    def admin_list_audit_logs(
+        self,
+        tenant_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        return self._get_json("/api/v1/admin/audit-logs", p, admin=True)
+
+    def admin_list_usage(
+        self,
+        tenant_id: str | None = None,
+        metric_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        p: dict[str, Any] = {"limit": limit, "offset": offset}
+        if tenant_id and str(tenant_id).strip():
+            p["tenant_id"] = str(tenant_id).strip()
+        if metric_type and str(metric_type).strip():
+            p["metric_type"] = str(metric_type).strip()
+        return self._get_json("/api/v1/admin/usage", p, admin=True)
+
+    def admin_health_dashboard(self) -> Any:
+        return self._get_json("/api/v1/admin/health/dashboard", admin=True)
+
+
+def _tool_to_shell_command(tool: str, target: str, args: dict[str, Any]) -> str | None:
     """Build a single shell command string for POST /api/v1/sandbox/execute allowlist."""
     t = tool.strip().lower()
     a = dict(args)
@@ -934,7 +1471,7 @@ def _normalize_payload_for_endpoint(endpoint: str, args: dict[str, Any]) -> dict
     return out
 
 
-def _arg_alias(key: str, endpoint: str) -> str:
+def _arg_alias(key: str, _endpoint: str) -> str:
     """Map generic 'target' to endpoint-specific key."""
     if key == "target":
         return "target"
@@ -1072,9 +1609,9 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
 
     @mcp.tool()
     def get_report(
-        scan_id: Optional[str] = None,
-        report_id: Optional[str] = None,
-        target: Optional[str] = None,
+        scan_id: str | None = None,
+        report_id: str | None = None,
+        target: str | None = None,
         report_format: str = "html",
         tier: str = "valhalla",
     ) -> dict[str, Any]:
@@ -1133,7 +1670,7 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         tool: str,
         target: str,
         args_json: str = "{}",
-        timeout_sec: Optional[int] = None,
+        timeout_sec: int | None = None,
     ) -> dict[str, Any]:
         """
         Run allowlisted CLI tool via POST /api/v1/sandbox/execute.
@@ -1247,11 +1784,493 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         """Terminate a process in the sandbox container by PID."""
         return client.kill_process(pid)
 
+    _register_argus_api_extended_tools(mcp, client)
     _register_kali_tools(mcp, client)
     _register_va_sandbox_enqueue_tools(mcp, client)
     _register_kal_mcp_tools(mcp, client)
 
     return mcp
+
+
+def _register_argus_api_extended_tools(mcp: FastMCP, client: ArgusClient) -> None:
+    """Recon, admin, and report-download tools — real /api/v1 paths; admin uses ARGUS_ADMIN_KEY."""
+
+    @mcp.tool()
+    def list_engagements(
+        status: str = "",
+        offset: int = 0,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """List recon engagements (GET /api/v1/recon/engagements). Filters: status, offset, limit — not target."""
+        return client.list_engagements(
+            status=status or None,
+            offset=offset,
+            limit=limit,
+        )
+
+    @mcp.tool()
+    def create_engagement(body_json: str) -> dict[str, Any]:
+        """Create engagement (POST /api/v1/recon/engagements). body_json: EngagementCreate (name, scope_config, …)."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.create_engagement(body)
+
+    @mcp.tool()
+    def get_engagement(engagement_id: str) -> dict[str, Any]:
+        """Get one engagement with stats (GET /api/v1/recon/engagements/{id})."""
+        return client.get_engagement(engagement_id)
+
+    @mcp.tool()
+    def patch_engagement(engagement_id: str, body_json: str) -> dict[str, Any]:
+        """Partial update (PATCH /api/v1/recon/engagements/{id}). body_json: EngagementUpdate fields."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.patch_engagement(engagement_id, body)
+
+    @mcp.tool()
+    def activate_engagement(engagement_id: str) -> dict[str, Any]:
+        """Activate engagement (POST .../activate)."""
+        return client.activate_engagement(engagement_id)
+
+    @mcp.tool()
+    def complete_engagement(engagement_id: str) -> dict[str, Any]:
+        """Mark completed (POST .../complete)."""
+        return client.complete_engagement(engagement_id)
+
+    @mcp.tool()
+    def create_engagement_target(engagement_id: str, body_json: str) -> dict[str, Any]:
+        """Add target (POST /api/v1/recon/engagements/{id}/targets). body_json: domain, target_type, extra_data."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.create_engagement_target(engagement_id, body)
+
+    @mcp.tool()
+    def list_engagement_targets(engagement_id: str) -> dict[str, Any]:
+        """List targets for engagement (GET .../engagements/{id}/targets)."""
+        return client.list_engagement_targets(engagement_id)
+
+    @mcp.tool()
+    def get_recon_target(target_id: str) -> dict[str, Any]:
+        """Target by id (GET /api/v1/recon/targets/{target_id})."""
+        return client.get_recon_target(target_id)
+
+    @mcp.tool()
+    def delete_recon_target(target_id: str) -> dict[str, Any]:
+        """Delete target (DELETE /api/v1/recon/targets/{target_id})."""
+        return client.delete_recon_target(target_id)
+
+    @mcp.tool()
+    def create_engagement_job(engagement_id: str, body_json: str) -> dict[str, Any]:
+        """Create job (POST .../engagements/{id}/jobs). body_json: target_id, stage, tool_name, config, operator."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.create_engagement_job(engagement_id, body)
+
+    @mcp.tool()
+    def list_engagement_jobs(
+        engagement_id: str,
+        target_id: str = "",
+        stage: int | None = None,
+        status: str = "",
+    ) -> dict[str, Any]:
+        """List jobs (GET .../engagements/{id}/jobs) with optional target_id, stage, status query."""
+        return client.list_engagement_jobs(
+            engagement_id,
+            target_id=target_id or None,
+            stage=stage,
+            status=status or None,
+        )
+
+    @mcp.tool()
+    def get_recon_job(job_id: str) -> dict[str, Any]:
+        """Job detail (GET /api/v1/recon/jobs/{job_id})."""
+        return client.get_recon_job(job_id)
+
+    @mcp.tool()
+    def cancel_recon_job(job_id: str) -> dict[str, Any]:
+        """Cancel job (POST /api/v1/recon/jobs/{job_id}/cancel)."""
+        return client.cancel_recon_job(job_id)
+
+    @mcp.tool()
+    def list_engagement_artifacts(
+        engagement_id: str,
+        artifact_type: str = "",
+    ) -> dict[str, Any]:
+        """List artifacts (GET .../engagements/{id}/artifacts). Optional artifact_type filter."""
+        return client.list_engagement_artifacts(
+            engagement_id,
+            artifact_type=artifact_type or None,
+        )
+
+    @mcp.tool()
+    def get_recon_artifact_metadata(artifact_id: str) -> dict[str, Any]:
+        """Artifact metadata (GET /api/v1/recon/artifacts/{artifact_id})."""
+        return client.get_recon_artifact_metadata(artifact_id)
+
+    @mcp.tool()
+    def get_recon_artifact_download_url(artifact_id: str) -> dict[str, Any]:
+        """Presigned download URL (GET .../artifacts/{id}/download)."""
+        return client.get_recon_artifact_download_url(artifact_id)
+
+    @mcp.tool()
+    def list_normalized_findings(
+        engagement_id: str,
+        finding_type: str = "",
+        is_verified: bool | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Normalized recon findings (GET .../engagements/{id}/findings), not scan /findings."""
+        return client.list_normalized_findings(
+            engagement_id,
+            finding_type=finding_type or None,
+            is_verified=is_verified,
+            offset=offset,
+            limit=limit,
+        )
+
+    @mcp.tool()
+    def get_normalized_finding(finding_id: str) -> dict[str, Any]:
+        """Single normalized finding (GET /api/v1/recon/findings/{finding_id})."""
+        return client.get_normalized_finding(finding_id)
+
+    @mcp.tool()
+    def create_threat_model_run(engagement_id: str, body_json: str = "{}") -> dict[str, Any]:
+        """POST .../threat-modeling/runs — optional target_id, job_id in body_json."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.create_threat_model_run(engagement_id, body)
+
+    @mcp.tool()
+    def execute_threat_model_run(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """POST .../threat-modeling/runs/{run_id}/execute."""
+        return client.execute_threat_model_run(engagement_id, run_id)
+
+    @mcp.tool()
+    def trigger_threat_modeling(engagement_id: str, body_json: str = "{}") -> dict[str, Any]:
+        """POST .../threat-modeling/trigger — create+execute; optional target_id, job_id, recon_dir."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.trigger_threat_modeling(engagement_id, body)
+
+    @mcp.tool()
+    def get_threat_model_input_bundle(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../threat-modeling/runs/{run_id}/input-bundle."""
+        return client.get_threat_model_input_bundle(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_threat_model_ai_traces(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../ai-traces."""
+        return client.get_threat_model_ai_traces(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_threat_model_mcp_traces(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../mcp-traces."""
+        return client.get_threat_model_mcp_traces(engagement_id, run_id)
+
+    @mcp.tool()
+    def download_threat_model_run_artifact(
+        engagement_id: str,
+        run_id: str,
+        artifact_type: str,
+    ) -> dict[str, Any]:
+        """Download TM artifact by type (GET .../artifacts/{artifact_type}/download); response base64 or error."""
+        return client.download_threat_model_run_artifact(engagement_id, run_id, artifact_type)
+
+    @mcp.tool()
+    def trigger_vulnerability_analysis(engagement_id: str, body_json: str = "{}") -> dict[str, Any]:
+        """POST .../vulnerability-analysis/trigger."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.trigger_vulnerability_analysis(engagement_id, body)
+
+    @mcp.tool()
+    def create_vulnerability_analysis_run(engagement_id: str, body_json: str = "{}") -> dict[str, Any]:
+        """POST .../vulnerability-analysis/runs."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.create_vulnerability_analysis_run(engagement_id, body)
+
+    @mcp.tool()
+    def execute_vulnerability_analysis_run(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """POST .../vulnerability-analysis/runs/{run_id}/execute."""
+        return client.execute_vulnerability_analysis_run(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_va_next_phase_gate(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../next-phase-gate."""
+        return client.get_va_next_phase_gate(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_va_evidence_bundles(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../evidence-bundles."""
+        return client.get_va_evidence_bundles(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_va_evidence_sufficiency(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../evidence-sufficiency."""
+        return client.get_va_evidence_sufficiency(engagement_id, run_id)
+
+    @mcp.tool()
+    def download_va_finding_confirmation_matrix(engagement_id: str, run_id: str) -> dict[str, Any]:
+        """GET .../finding-confirmation-matrix (CSV, base64 in response)."""
+        return client.download_va_finding_confirmation_matrix(engagement_id, run_id)
+
+    @mcp.tool()
+    def get_va_confirmed_findings(
+        engagement_id: str,
+        run_id: str,
+        download_zip: bool = False,
+    ) -> dict[str, Any]:
+        """GET .../confirmed-findings — JSON or zip (download_zip=true, base64)."""
+        return client.get_va_confirmed_findings(engagement_id, run_id, download_zip=download_zip)
+
+    @mcp.tool()
+    def download_va_run_artifact(
+        engagement_id: str,
+        run_id: str,
+        artifact_type: str,
+    ) -> dict[str, Any]:
+        """GET .../vulnerability-analysis/runs/{run_id}/artifacts/{artifact_type}/download."""
+        return client.download_va_run_artifact(engagement_id, run_id, artifact_type)
+
+    @mcp.tool()
+    def get_vulnerability_analysis_readiness(
+        engagement_id: str,
+        target_id: str = "",
+        recon_dir: str = "",
+    ) -> dict[str, Any]:
+        """GET .../vulnerability-analysis/readiness — optional target_id, recon_dir."""
+        return client.get_vulnerability_analysis_readiness(
+            engagement_id,
+            target_id=target_id or None,
+            recon_dir=recon_dir or None,
+        )
+
+    @mcp.tool()
+    def start_exploitation_run(engagement_id: str, body_json: str = "{}") -> dict[str, Any]:
+        """POST .../exploitation/run (202). body_json: ExploitationRunRequest fields."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.start_exploitation_run(engagement_id, body)
+
+    @mcp.tool()
+    def get_exploitation_status(engagement_id: str) -> dict[str, Any]:
+        """GET .../exploitation/status — latest run."""
+        return client.get_exploitation_status(engagement_id)
+
+    @mcp.tool()
+    def get_exploitation_results(engagement_id: str) -> dict[str, Any]:
+        """GET .../exploitation/results."""
+        return client.get_exploitation_results(engagement_id)
+
+    @mcp.tool()
+    def list_exploitation_approvals(
+        engagement_id: str,
+        status_filter: str = "",
+    ) -> dict[str, Any]:
+        """GET .../exploitation/approvals — optional status_filter query."""
+        return client.list_exploitation_approvals(
+            engagement_id,
+            status_filter=status_filter or None,
+        )
+
+    @mcp.tool()
+    def approve_exploitation_approval(
+        engagement_id: str,
+        approval_id: str,
+        body_json: str = "{}",
+    ) -> dict[str, Any]:
+        """POST .../approvals/{id}/approve — optional ApprovalActionRequest JSON."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.approve_exploitation_approval(engagement_id, approval_id, body)
+
+    @mcp.tool()
+    def reject_exploitation_approval(
+        engagement_id: str,
+        approval_id: str,
+        body_json: str = "{}",
+    ) -> dict[str, Any]:
+        """POST .../approvals/{id}/reject."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.reject_exploitation_approval(engagement_id, approval_id, body)
+
+    @mcp.tool()
+    def download_exploitation_artifact(engagement_id: str, artifact_type: str) -> dict[str, Any]:
+        """GET .../exploitation/artifacts/{artifact_type} — latest run artifact."""
+        return client.download_exploitation_artifact(engagement_id, artifact_type)
+
+    @mcp.tool()
+    def download_report(
+        report_id: str,
+        report_format: str = "pdf",
+        regenerate: bool = False,
+        redirect: bool = False,
+    ) -> dict[str, Any]:
+        """GET /api/v1/reports/{report_id}/download — report_format pdf|html|json|csv|valhalla_sections.csv; base64 or redirect_url."""
+        return client.download_report(
+            report_id,
+            format=report_format,
+            regenerate=regenerate,
+            redirect=redirect,
+        )
+
+    @mcp.tool()
+    def admin_list_tenants(limit: int = 50, offset: int = 0) -> Any:
+        """Admin: GET /api/v1/admin/tenants (requires ARGUS_ADMIN_KEY as X-Admin-Key)."""
+        return client.admin_list_tenants(limit=limit, offset=offset)
+
+    @mcp.tool()
+    def admin_create_tenant(name: str) -> Any:
+        """Admin: POST /api/v1/admin/tenants."""
+        return client.admin_create_tenant(name)
+
+    @mcp.tool()
+    def admin_get_tenant(tenant_id: str) -> Any:
+        """Admin: GET /api/v1/admin/tenants/{tenant_id}."""
+        return client.admin_get_tenant(tenant_id)
+
+    @mcp.tool()
+    def admin_list_users(
+        tenant_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/users."""
+        return client.admin_list_users(
+            tenant_id=tenant_id or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_list_subscriptions(
+        tenant_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/subscriptions."""
+        return client.admin_list_subscriptions(
+            tenant_id=tenant_id or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_list_providers(
+        tenant_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/providers."""
+        return client.admin_list_providers(
+            tenant_id=tenant_id or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_patch_provider(provider_id: str, body_json: str) -> Any:
+        """Admin: PATCH /api/v1/admin/providers/{provider_id} — enabled, config in body_json."""
+        try:
+            body = json.loads(body_json) if body_json.strip() else {}
+        except json.JSONDecodeError as e:
+            return {"error": f"invalid body_json: {e}"}
+        if not isinstance(body, dict):
+            return {"error": "body_json must be a JSON object"}
+        return client.admin_patch_provider(provider_id, body)
+
+    @mcp.tool()
+    def admin_list_policies(
+        tenant_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/policies."""
+        return client.admin_list_policies(
+            tenant_id=tenant_id or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_list_audit_logs(
+        tenant_id: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/audit-logs."""
+        return client.admin_list_audit_logs(
+            tenant_id=tenant_id or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_list_usage(
+        tenant_id: str = "",
+        metric_type: str = "",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Any:
+        """Admin: GET /api/v1/admin/usage."""
+        return client.admin_list_usage(
+            tenant_id=tenant_id or None,
+            metric_type=metric_type or None,
+            limit=limit,
+            offset=offset,
+        )
+
+    @mcp.tool()
+    def admin_health_dashboard() -> Any:
+        """Admin: GET /api/v1/admin/health/dashboard — DB, Redis, storage."""
+        return client.admin_health_dashboard()
 
 
 def _register_kal_mcp_tools(mcp: FastMCP, client: ArgusClient) -> None:

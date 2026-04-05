@@ -1,0 +1,43 @@
+{% if wstg_coverage %}
+<div class="wstg-coverage">
+    <h3>OWASP WSTG v4.2 Test Coverage</h3>
+    <div class="coverage-summary">
+        <span class="coverage-score">{{ wstg_coverage.coverage_percentage|round(1) }}%</span>
+        <span>Covered: {{ wstg_coverage.covered }} / {{ wstg_coverage.total_tests }}</span>
+        {% if wstg_coverage.partial > 0 %}
+            <span class="meta">(Partial: {{ wstg_coverage.partial }})</span>
+        {% endif %}
+    </div>
+    <table class="wstg-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Covered</th>
+                <th>Partial</th>
+                <th>Not Covered</th>
+                <th>Coverage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat_name, cat_data in wstg_coverage.by_category.items() %}
+            <tr>
+                <td>{{ cat_name | e }}</td>
+                <td>{{ cat_data.covered }}</td>
+                <td>{{ cat_data.partial }}</td>
+                <td>{{ cat_data.not_covered }}</td>
+                <td>
+                    <div class="progress-bar">
+                        <div class="progress-fill
+                            {%- if cat_data.percentage >= 70 %} progress-high
+                            {%- elif cat_data.percentage >= 30 %} progress-medium
+                            {%- else %} progress-low{% endif %}"
+                             style="width: {{ cat_data.percentage|round(1) }}%"></div>
+                    </div>
+                    {{ cat_data.percentage|round(1) }}%
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

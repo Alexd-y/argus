@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -26,6 +27,121 @@ _CACHE_KEY_PREFIX = "argus:ai_text:"
 # Template / Jinja-safe placeholders when LLM is unavailable (match REPORT_AI_SECTION_KEYS consumers).
 REPORT_AI_SKIPPED_NO_LLM = "AI generation skipped: no LLM provider available"
 REPORT_AI_SKIPPED_GENERATION_FAILED = "AI generation skipped: could not generate content"
+
+
+class AITextDeduplicator:
+    """Remove duplicate content across AI-generated report sections using n-gram similarity.
+
+    Deterministic, no AI/embedding dependencies. Operates on character-level n-grams
+    and Jaccard similarity. Duplicate sentences in later sections are replaced with
+    cross-references to the earlier section that contains the original.
+    """
+
+    SIMILARITY_THRESHOLD = 0.70
+    MIN_SENTENCE_WORDS = 5
+
+    _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\u0410-\u042f\u0401])")
+
+    def deduplicate_sections(self, sections: dict[str, str]) -> dict[str, str]:
+        """Remove duplicate sentences across sections, keeping first occurrence.
+
+        Returns a new dict with the same keys. Sections with duplicated sentences
+        get those sentences replaced by a cross-reference to the originating section.
+        """
+        if len(sections) < 2:
+            return dict(sections)
+
+        ordered_keys = list(sections.keys())
+        section_sentences: dict[str, list[str]] = {
+            key: self._extract_sentences(text) for key, text in sections.items()
+        }
+
+        dup_map: dict[str, dict[int, str]] = {k: {} for k in ordered_keys}
+
+        for i, key_a in enumerate(ordered_keys):
+            sents_a = section_sentences[key_a]
+            for j in range(i + 1, len(ordered_keys)):
+                key_b = ordered_keys[j]
+                sents_b = section_sentences[key_b]
+                for idx_b, sent_b in enumerate(sents_b):
+                    if idx_b in dup_map[key_b]:
+                        continue
+                    if len(sent_b.split()) < self.MIN_SENTENCE_WORDS:
+                        continue
+                    for sent_a in sents_a:
+                        if len(sent_a.split()) < self.MIN_SENTENCE_WORDS:
+                            continue
+                        if self._ngram_similarity(sent_a, sent_b) > self.SIMILARITY_THRESHOLD:
+                            dup_map[key_b][idx_b] = key_a
+                            break
+
+        result: dict[str, str] = {}
+        for key in ordered_keys:
+            duplicates = dup_map[key]
+            if not duplicates:
+                result[key] = sections[key]
+                continue
+
+            sents = section_sentences[key]
+            cleaned: list[str] = []
+            cross_ref_targets: set[str] = set()
+            for idx, sent in enumerate(sents):
+                origin = duplicates.get(idx)
+                if origin is not None:
+                    cross_ref_targets.add(origin)
+                else:
+                    cleaned.append(sent)
+
+            if cross_ref_targets:
+                refs = " ".join(
+                    self._generate_cross_reference(t) for t in sorted(cross_ref_targets)
+                )
+                cleaned.append(refs)
+
+            result[key] = " ".join(cleaned)
+
+            removed = len(duplicates)
+            logger.info(
+                "ai_text_deduplication",
+                extra={
+                    "event": "ai_text_deduplication",
+                    "section_key": key,
+                    "sentences_removed": removed,
+                    "cross_ref_targets": sorted(cross_ref_targets),
+                },
+            )
+
+        return result
+
+    def _extract_sentences(self, text: str) -> list[str]:
+        """Split text into sentences using punctuation + uppercase heuristic."""
+        if not text or not text.strip():
+            return []
+        normalized = " ".join(text.split())
+        sentences = self._SENTENCE_SPLIT_RE.split(normalized)
+        return [s.strip() for s in sentences if s.strip()]
+
+    def _ngram_similarity(self, s1: str, s2: str, n: int = 3) -> float:
+        """Calculate character n-gram Jaccard similarity between two strings."""
+        if not s1 or not s2:
+            return 0.0
+        s1_lower = s1.lower()
+        s2_lower = s2.lower()
+        if len(s1_lower) < n or len(s2_lower) < n:
+            return 1.0 if s1_lower == s2_lower else 0.0
+        ngrams1 = {s1_lower[i : i + n] for i in range(len(s1_lower) - n + 1)}
+        ngrams2 = {s2_lower[i : i + n] for i in range(len(s2_lower) - n + 1)}
+        if not ngrams1 or not ngrams2:
+            return 0.0
+        intersection = ngrams1 & ngrams2
+        union = ngrams1 | ngrams2
+        return len(intersection) / len(union)
+
+    @staticmethod
+    def _generate_cross_reference(section_name: str) -> str:
+        """Generate a human-readable cross-reference string for the given section."""
+        readable = section_name.replace("_", " ").title()
+        return f"(See \u00ab{readable}\u00bb section for additional details.)"
 
 
 def canonical_payload_hash(input_payload: dict[str, Any]) -> str:
@@ -92,10 +208,14 @@ def run_ai_text_generation(
     redis_client: Any | None = None,
     llm_callable: Callable[[str, dict], str] | None = None,
     cache_ttl_seconds: int | None = None,
+    other_sections_summary: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Resolve report section text from cache or sync LLM call.
     ``llm_callable`` and ``redis_client`` are injectable for tests.
+
+    ``other_sections_summary`` (ARGUS-008): maps section_key → short summary of already-generated
+    sections. Forwarded to ``get_report_ai_section_prompt`` to build the deduplication preamble.
 
     RPT-004 / OWASP-004 / VHL-003: ``input_payload`` is passed through unchanged into
     ``get_report_ai_section_prompt`` (serialized as ``context_json``). All section keys receive the
@@ -122,7 +242,7 @@ def run_ai_text_generation(
         }
 
     system_prompt, user_prompt, prompt_version = get_report_ai_section_prompt(
-        section_key, input_payload
+        section_key, input_payload, other_sections_summary=other_sections_summary
     )
     payload_hash = canonical_payload_hash(input_payload)
     cache_key = build_ai_text_cache_key(

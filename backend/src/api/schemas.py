@@ -93,6 +93,12 @@ class ScanCreateRequest(BaseModel):
         default="standard",
         description="Scan depth: quick (high-impact only), standard (OWASP Top 10), deep (exhaustive)",
     )
+    report_language: str = Field(
+        default="en",
+        min_length=2,
+        max_length=5,
+        description="Report language (ISO 639-1), e.g. en, ru",
+    )
 
 
 class ScanCreateResponse(BaseModel):

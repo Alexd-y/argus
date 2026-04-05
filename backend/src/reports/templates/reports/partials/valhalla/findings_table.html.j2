@@ -22,7 +22,7 @@
         <tbody>
             {% set primary = namespace(any=false) %}
             {% for row in findings %}
-                {% if not (row.is_advisory | default(false)) %}
+                    {% if not (row.is_advisory | default(false)) %}
                     {% set primary.any = true %}
                 <tr>
                     <td><span class="sev-{{ (row.severity or "info") | lower | e }}">{{ (row.severity or "") | e }}</span></td>
@@ -50,10 +50,11 @@
                     <td>{% if row.cve %}{{ row.cve | e }}{% else %}Не найдено{% endif %}</td>
                     <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept %}
-                    {% set poc = row.proof_of_concept %}
+                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) %}
+                    {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail %}
+                    {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
@@ -61,7 +62,8 @@
                             <section class="finding-poc">
                                 <h3 class="finding-poc-title">Доказательства (PoC)</h3>
                                 {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
-                                {% if row.poc_screenshot_url %}
+                                {% include "partials/valhalla/finding_evidence_block.html.j2" %}
+                                {% if row.poc_screenshot_url and not (row.http_evidence is defined and row.http_evidence) %}
                                     <p><strong>Скриншот</strong></p>
                                     <p><a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a></p>
                                     {% if embed_poc_screenshot_inline %}
@@ -80,7 +82,7 @@
                                     <p><strong>JavaScript</strong></p>
                                     <pre class="finding-poc-block"><code>{{ poc.javascript_code | e }}</code></pre>
                                 {% endif %}
-                                {% if poc.curl_command %}
+                                {% if poc.curl_command and not (row.http_evidence is defined and row.http_evidence) %}
                                     <p><strong>cURL</strong></p>
                                     <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
                                 {% endif %}
@@ -169,10 +171,11 @@
                     <td>{% if row.cve %}{{ row.cve | e }}{% else %}Не найдено{% endif %}</td>
                     <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept %}
-                    {% set poc = row.proof_of_concept %}
+                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) %}
+                    {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail %}
+                    {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
@@ -180,13 +183,14 @@
                             <section class="finding-poc">
                                 <h3 class="finding-poc-title">Доказательства (PoC)</h3>
                                 {% include "partials/valhalla/finding_xss_poc_detail.html.j2" %}
-                                {% if row.poc_screenshot_url %}
+                                {% include "partials/valhalla/finding_evidence_block.html.j2" %}
+                                {% if row.poc_screenshot_url and not (row.http_evidence is defined and row.http_evidence) %}
                                     <p><a href="{{ row.poc_screenshot_url | e }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a></p>
                                 {% endif %}
                                 {% if param_label %}
                                     <pre class="finding-poc-block"><code>{{ param_label | e }}</code></pre>
                                 {% endif %}
-                                {% if poc.curl_command %}
+                                {% if poc.curl_command and not (row.http_evidence is defined and row.http_evidence) %}
                                     <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
                                 {% endif %}
                             </section>

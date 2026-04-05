@@ -5,6 +5,7 @@ Safe defaults: empty lists / false / None. No secrets in logs; raw excerpts are 
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -213,6 +214,7 @@ class CriticalVulnRefModel(BaseModel):
     title: str
     description: str = ""
     cvss: float | None = None
+    cvss_vector: str | None = None
     exploit_available: bool = False
     severity: str = ""
 
@@ -567,6 +569,8 @@ class ValhallaReportContext(BaseModel):
     recon_pipeline_summary: dict[str, Any] = Field(default_factory=dict)
     xss_structured: list[ValhallaXssStructuredRowModel] = Field(default_factory=list)
     scan_metadata: ScanMetadataModel = Field(default_factory=ScanMetadataModel)
+    wstg_coverage: dict[str, Any] | None = None
+    test_limitations: list[dict[str, str]] | None = None
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -1411,6 +1415,83 @@ def _json_dict_from_tls_artifact_text(text: str) -> dict[str, Any] | None:
     return None
 
 
+_TESTSSL_PROTOCOL_RE = re.compile(
+    r"(SSLv[23]|TLS\s*1\.[0-3])\s+(offered|not offered)",
+    re.IGNORECASE,
+)
+_TESTSSL_WEAK_PROTOS = frozenset({"sslv2", "sslv3", "tls 1.0", "tls 1.1", "tls1.0", "tls1.1"})
+_TESTSSL_VULN_MARKERS = (
+    "BEAST", "POODLE", "Heartbleed", "ROBOT", "DROWN",
+    "LOGJAM", "FREAK", "SWEET32", "Lucky13",
+)
+_TESTSSL_CIPHER_RE = re.compile(
+    r"(TLS_\w+|ECDHE-\w+|DHE-\w+|AES\w+|RC4-\w+)",
+    re.IGNORECASE,
+)
+_TESTSSL_WEAK_CIPHER_TOKENS = ("rc4", "des", "null", "export")
+
+
+def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
+    """Parse testssl text stdout when JSON output is unavailable."""
+    protocols: list[str] = []
+    weak_protocols: list[str] = []
+    weak_ciphers: list[str] = []
+    issuer: str | None = None
+    validity: str | None = None
+    hsts: str | None = None
+
+    for m in _TESTSSL_PROTOCOL_RE.finditer(stdout):
+        proto = m.group(1).strip()
+        status = m.group(2).strip().lower()
+        if status == "offered":
+            protocols.append(proto)
+            if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or proto.lower() in _TESTSSL_WEAK_PROTOS:
+                weak_protocols.append(proto)
+
+    cn_match = re.search(r"CN\s*=\s*([^\s,]+)", stdout)
+    if cn_match:
+        issuer = cn_match.group(1).strip()[:512]
+
+    issuer_match = re.search(r"Issuer\s*:?\s*(.+)", stdout)
+    if issuer_match:
+        issuer = issuer_match.group(1).strip()[:512]
+
+    not_after = re.search(r"Not After\s*:\s*(.+)", stdout)
+    if not_after:
+        validity = not_after.group(1).strip()[:256]
+
+    hsts_match = re.search(r"Strict.Transport.Security[:\s]+(.+)", stdout, re.IGNORECASE)
+    if hsts_match:
+        hsts = _truncate(hsts_match.group(1).strip(), 500)
+
+    vuln_ciphers_seen: set[str] = set()
+    for vuln in _TESTSSL_VULN_MARKERS:
+        vuln_re = re.compile(rf"{vuln}\s*[\(:]?\s*(VULNERABLE|not vulnerable|OK)", re.IGNORECASE)
+        vm = vuln_re.search(stdout)
+        if vm and vm.group(1).strip().lower() == "vulnerable":
+            vuln_ciphers_seen.add(vuln)
+
+    cipher_set: set[str] = set()
+    for cm in _TESTSSL_CIPHER_RE.finditer(stdout):
+        cipher = cm.group(1)
+        cipher_set.add(cipher)
+        if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
+            weak_ciphers.append(cipher)
+
+    if vuln_ciphers_seen:
+        for v in sorted(vuln_ciphers_seen):
+            weak_ciphers.append(f"VULN:{v}")
+
+    return SslTlsAnalysisModel(
+        issuer=issuer,
+        validity=validity,
+        protocols=protocols[:32],
+        weak_protocols=weak_protocols[:32],
+        weak_ciphers=weak_ciphers[:48],
+        hsts=hsts,
+    )
+
+
 def _latest_tls_blob_from_raw(
     raw_keys: list[tuple[str, str]],
     *,
@@ -1433,6 +1514,35 @@ def _latest_tls_blob_from_raw(
         parsed = _json_dict_from_tls_artifact_text(text)
         if parsed:
             return parsed
+    return None
+
+
+def _ssl_from_testssl_text_artifacts(
+    raw_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> SslTlsAnalysisModel | None:
+    """B1 fallback: parse testssl plain-text stdout when JSON is unavailable."""
+    if not fetch_bodies:
+        return None
+    for key, _p in raw_keys:
+        if not _artifact_name_matches(key, _TLS_ARTIFACT_HINTS):
+            continue
+        blob = _safe_download_raw(key)
+        if not blob:
+            continue
+        text = _text_from_raw_bytes(blob)
+        if not text or not text.strip():
+            continue
+        if _json_dict_from_tls_artifact_text(text) is not None:
+            continue
+        result = _parse_testssl_text_output(text)
+        if not _ssl_surface_empty(result):
+            logger.info(
+                "ssl_tls_text_fallback_used",
+                extra={"event": "ssl_tls_text_fallback_used", "key_suffix": key[-64:]},
+            )
+            return result
     return None
 
 
@@ -1565,6 +1675,170 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
         missing_recommended=miss_sorted[:24],
         summary=summary,
     )
+
+
+_SEC_HDR_NAMES_CANONICAL = (
+    "content-security-policy",
+    "x-frame-options",
+    "x-content-type-options",
+    "strict-transport-security",
+    "referrer-policy",
+    "x-xss-protection",
+    "permissions-policy",
+)
+
+_NIKTO_MISSING_HDR_RE = re.compile(
+    r"(?:Missing|absent|not set)[^:]*:\s*([\w-]+)",
+    re.IGNORECASE,
+)
+_NIKTO_HDR_PRESENT_RE = re.compile(
+    r"(X-Frame-Options|X-Content-Type-Options|Content-Security-Policy"
+    r"|Strict-Transport-Security|Referrer-Policy|X-XSS-Protection"
+    r"|Permissions-Policy)\s*(?:header\s+(?:is\s+)?(?:set|present|found))",
+    re.IGNORECASE,
+)
+
+
+def _security_headers_from_security_headers_result(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    recon: dict[str, Any] | None,
+) -> dict[str, dict[str, str]]:
+    """B3-primary: extract http headers map from ARGUS-002 SecurityHeadersResult stored in recon/phases."""
+    header_maps: dict[str, dict[str, str]] = {}
+
+    def _try_extract(obj: Any) -> None:
+        if not isinstance(obj, dict):
+            return
+        for key in ("security_headers", "security_headers_result"):
+            shr = obj.get(key)
+            if not isinstance(shr, dict):
+                continue
+            host = str(shr.get("target") or "unknown")[:256]
+            found = shr.get("headers_found")
+            if isinstance(found, dict) and found:
+                inner: dict[str, str] = {}
+                for hname, hval in found.items():
+                    inner[str(hname).strip().lower()] = str(hval).strip()
+                if inner:
+                    header_maps[host] = inner
+            all_resp = shr.get("all_response_headers")
+            if isinstance(all_resp, dict) and all_resp and host not in header_maps:
+                inner2: dict[str, str] = {}
+                for hname, hval in all_resp.items():
+                    inner2[str(hname).strip().lower()] = str(hval).strip()
+                if inner2:
+                    header_maps[host] = inner2
+
+    if isinstance(recon, dict):
+        _try_extract(recon)
+        rps = recon.get("recon_pipeline_summary")
+        if isinstance(rps, dict):
+            _try_extract(rps)
+    for _ph, od in phase_outputs:
+        if isinstance(od, dict):
+            _try_extract(od)
+    return header_maps
+
+
+def _security_headers_from_nikto_stdout(
+    raw_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> dict[str, dict[str, str]]:
+    """B3-fallback1: extract header presence/absence from nikto text stdout."""
+    if not fetch_bodies:
+        return {}
+    for key, _p in raw_keys:
+        lowk = key.lower()
+        if "nikto" not in lowk:
+            continue
+        blob = _safe_download_raw(key)
+        if not blob:
+            continue
+        text = _text_from_raw_bytes(blob)
+        if not text:
+            continue
+        hdrs: dict[str, str] = {}
+        for m in _NIKTO_MISSING_HDR_RE.finditer(text):
+            hname = m.group(1).strip().lower()
+            if any(c in hname for c in _SEC_HDR_NAMES_CANONICAL):
+                hdrs[hname] = ""
+        for m in _NIKTO_HDR_PRESENT_RE.finditer(text):
+            hname = m.group(1).strip().lower()
+            hdrs[hname] = "present (nikto)"
+        if hdrs:
+            logger.info(
+                "sec_headers_nikto_fallback_used",
+                extra={"event": "sec_headers_nikto_fallback_used", "key_suffix": key[-64:]},
+            )
+            return {"nikto_target": hdrs}
+    return {}
+
+
+def _security_headers_from_whatweb_stdout(
+    ww_merged: dict[str, Any] | None,
+) -> dict[str, dict[str, str]]:
+    """B3-fallback2: extract header hints from whatweb merged plugins."""
+    if not isinstance(ww_merged, dict):
+        return {}
+    plugs = ww_merged.get("plugins")
+    if not isinstance(plugs, dict):
+        return {}
+    hdrs: dict[str, str] = {}
+    header_plugin_map = {
+        "Strict-Transport-Security": "strict-transport-security",
+        "X-Frame-Options": "x-frame-options",
+        "X-XSS-Protection": "x-xss-protection",
+        "X-Content-Type-Options": "x-content-type-options",
+    }
+    for pname, low_name in header_plugin_map.items():
+        pd = plugs.get(pname)
+        if isinstance(pd, dict):
+            strs = _plugin_strings(pd)
+            hdrs[low_name] = strs[0] if strs else "present (whatweb)"
+        elif isinstance(pd, str) and pd.strip():
+            hdrs[low_name] = pd.strip()
+    if hdrs:
+        logger.info(
+            "sec_headers_whatweb_fallback_used",
+            extra={"event": "sec_headers_whatweb_fallback_used"},
+        )
+        return {"whatweb_target": hdrs}
+    return {}
+
+
+def _security_headers_from_raw_http_responses(
+    raw_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> dict[str, dict[str, str]]:
+    """B3-fallback3: extract headers from raw HTTP response dumps in artifacts."""
+    if not fetch_bodies:
+        return {}
+    http_header_re = re.compile(r"^([\w-]+):\s*(.+)$", re.MULTILINE)
+    for key, _p in raw_keys:
+        lowk = key.lower()
+        if not any(tok in lowk for tok in ("response", "headers", "http_resp")):
+            continue
+        blob = _safe_download_raw(key)
+        if not blob:
+            continue
+        text = _text_from_raw_bytes(blob)
+        if not text:
+            continue
+        hdrs: dict[str, str] = {}
+        for m in http_header_re.finditer(text[:8192]):
+            hname = m.group(1).strip().lower()
+            hval = m.group(2).strip()
+            if hname in _SEC_HDR_NAMES_CANONICAL:
+                hdrs[hname] = hval[:500]
+        if hdrs:
+            logger.info(
+                "sec_headers_raw_http_fallback_used",
+                extra={"event": "sec_headers_raw_http_fallback_used", "key_suffix": key[-64:]},
+            )
+            return {"raw_http_target": hdrs}
+    return {}
 
 
 def _dependency_rows_from_artifact_json(val: Any, source_key: str) -> list[DependencyAnalysisRow]:
@@ -1814,12 +2088,14 @@ def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[Critic
         desc = str(f.get("description") or "").strip()
         short = _truncate(desc, 280) if desc else ""
         sev = _normalize_severity_label(f.get("severity"))
+        cvss_vec = _cvss_vector_string(f)
         out.append(
             CriticalVulnRefModel(
                 vuln_id=fid,
                 title=title[:500],
                 description=short,
                 cvss=cvss,
+                cvss_vector=cvss_vec,
                 exploit_available=derive_exploit_available_flag(f),
                 severity=sev,
             )
@@ -2186,6 +2462,63 @@ def _masked_emails_from_theharvester_raw(
     return acc[:64]
 
 
+_HARVESTER_NOISE_LOCALS = frozenset({
+    "noreply", "no-reply", "admin", "example", "test", "info",
+    "support", "postmaster", "hostmaster", "webmaster", "abuse",
+})
+
+
+def _parse_harvester_emails(stdout: str) -> list[str]:
+    """Extract and mask email addresses from theHarvester text stdout."""
+    found: set[str] = set()
+    for m in _EMAIL_RE.finditer(stdout):
+        email = m.group(0).lower()
+        local = email.split("@")[0]
+        if local in _HARVESTER_NOISE_LOCALS:
+            continue
+        found.add(email)
+    return [_mask_email(e) for e in sorted(found)][:64]
+
+
+def _emails_from_harvester_phase_outputs(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+) -> list[str]:
+    """B4 fallback: walk phase outputs for theHarvester tool results with stdout text."""
+    acc: list[str] = []
+    for _ph, od in phase_outputs:
+        if not isinstance(od, dict):
+            continue
+        _walk_extract_harvester_emails(od, acc)
+        if len(acc) >= 64:
+            break
+    return acc[:64]
+
+
+def _walk_extract_harvester_emails(obj: Any, acc: list[str]) -> None:
+    if isinstance(obj, dict):
+        tool = str(obj.get("tool") or "").lower()
+        if "harvester" in tool or "theharvester" in tool:
+            for key in ("stdout", "raw_out", "output", "result"):
+                text = obj.get(key)
+                if isinstance(text, str) and text.strip():
+                    acc.extend(_parse_harvester_emails(text))
+                    return
+        em_list = obj.get("emails") or obj.get("emails_masked")
+        if isinstance(em_list, list):
+            for item in em_list[:64]:
+                if isinstance(item, str) and item.strip() and "@" in item:
+                    acc.append(_mask_email(item.strip()))
+        for v in obj.values():
+            _walk_extract_harvester_emails(v, acc)
+            if len(acc) >= 64:
+                return
+    elif isinstance(obj, list):
+        for it in obj[:200]:
+            _walk_extract_harvester_emails(it, acc)
+            if len(acc) >= 64:
+                return
+
+
 def _ssl_surface_empty(s: SslTlsAnalysisModel) -> bool:
     return not any(
         [
@@ -2524,6 +2857,13 @@ def build_valhalla_minimal_context_patch(
     }
 
 
+def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
+    """Convert a dataclass instance to a plain dict (JSON-safe)."""
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return dataclasses.asdict(obj)
+    return dict(obj) if isinstance(obj, dict) else {}
+
+
 def build_valhalla_report_context(
     *,
     tenant_id: str,
@@ -2576,6 +2916,28 @@ def build_valhalla_report_context(
         fetch_bodies=fetch_raw_bodies,
     )
     ww_merged = merge_whatweb_json_roots(what_candidates)
+
+    if not ww_merged and fetch_raw_bodies:
+        for key, _ph in raw_artifact_keys:
+            lowk = key.lower()
+            if "whatweb" not in lowk:
+                continue
+            if "stdout" in lowk or "output" in lowk or _artifact_name_matches(key, _WHATWEB_KEY_HINTS):
+                blob = _safe_download_raw(key)
+                if not blob:
+                    continue
+                text = _text_from_raw_bytes(blob)
+                if not text or not text.strip():
+                    continue
+                parsed = parse_whatweb_text_fallback(text.strip())
+                if parsed:
+                    ww_merged = parsed
+                    logger.info(
+                        "whatweb_text_fallback_used",
+                        extra={"event": "whatweb_text_fallback_used", "key_suffix": key[-64:]},
+                    )
+                    break
+
     base_tech: dict[str, Any]
     if ww_merged:
         base_tech = parse_whatweb_to_tech_stack(ww_merged)
@@ -2620,8 +2982,37 @@ def build_valhalla_report_context(
     else:
         ssl_out = ssl_part
 
+    if _ssl_surface_empty(ssl_out):
+        text_ssl = _ssl_from_testssl_text_artifacts(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+        if text_ssl and not _ssl_surface_empty(text_ssl):
+            ssl_out = SslTlsAnalysisModel(
+                issuer=text_ssl.issuer or ssl_out.issuer,
+                validity=text_ssl.validity or ssl_out.validity,
+                protocols=text_ssl.protocols or ssl_out.protocols,
+                weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,
+                weak_ciphers=text_ssl.weak_ciphers or ssl_out.weak_ciphers,
+                hsts=text_ssl.hsts or ssl_out.hsts,
+            )
+
     merged_http_headers = _http_headers_merged_from_recon_and_phases(recon_results, phase_outputs)
     sec_hdr = _security_headers_from_host_map(merged_http_headers)
+
+    if not sec_hdr.rows:
+        fallback_header_sources: list[dict[str, dict[str, str]]] = [
+            _security_headers_from_security_headers_result(phase_outputs, recon_results),
+            _security_headers_from_nikto_stdout(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
+            _security_headers_from_whatweb_stdout(ww_merged),
+            _security_headers_from_raw_http_responses(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
+        ]
+        for fb_map in fallback_header_sources:
+            if fb_map:
+                for host, hdrs in fb_map.items():
+                    cur = merged_http_headers.get(host, {})
+                    merged_http_headers[host] = {**cur, **hdrs}
+                sec_hdr = _security_headers_from_host_map(merged_http_headers)
+                if sec_hdr.rows:
+                    break
+
     deps = _collect_dependency_rows(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
     outdated = _assemble_outdated_components(
         findings=findings,
@@ -2682,6 +3073,35 @@ def build_valhalla_report_context(
                 emails.extend(_extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000]))
             except (TypeError, ValueError):
                 pass
+
+    if not emails:
+        harvester_phase_emails = _emails_from_harvester_phase_outputs(phase_outputs)
+        if harvester_phase_emails:
+            emails.extend(harvester_phase_emails)
+            logger.info(
+                "emails_harvester_phase_fallback_used",
+                extra={"event": "emails_harvester_phase_fallback_used", "count": len(harvester_phase_emails)},
+            )
+    if not emails and fetch_raw_bodies:
+        for key, _p in raw_artifact_keys:
+            lowk = key.lower()
+            if not any(tok in lowk for tok in ("harvester", "theharvester", "email")):
+                continue
+            blob = _safe_download_raw(key)
+            if not blob:
+                continue
+            text = _text_from_raw_bytes(blob)
+            if not text:
+                continue
+            parsed_emails = _parse_harvester_emails(text)
+            if parsed_emails:
+                emails.extend(parsed_emails)
+                logger.info(
+                    "emails_raw_artifact_fallback_used",
+                    extra={"event": "emails_raw_artifact_fallback_used", "key_suffix": key[-64:]},
+                )
+            if len(emails) >= 64:
+                break
 
     seen_m: set[str] = set()
     final_emails: list[str] = []
@@ -2792,6 +3212,35 @@ def build_valhalla_report_context(
         merged=robots_sitemap_merged,
     )
 
+    from src.reports.wstg_coverage import (
+        build_test_limitations as _build_test_limitations,
+    )
+    from src.reports.wstg_coverage import (
+        build_wstg_coverage as _build_wstg_coverage,
+    )
+
+    tools_executed_names = [at.name for at in appendix_tools if at.name]
+    finding_dicts = [f if isinstance(f, dict) else {} for f in findings]
+    wstg_result = _build_wstg_coverage(tools_executed_names, finding_dicts)
+
+    scan_config_for_lim: dict[str, Any] = {}
+    for _ph, inp in phase_inputs:
+        if isinstance(inp, dict):
+            scan_config_for_lim.update(inp)
+            break
+
+    scan_results_for_lim: dict[str, Any] = {}
+    for _ph, od in phase_outputs:
+        if isinstance(od, dict):
+            if od.get("waf_detected") or od.get("wafw00f"):
+                scan_results_for_lim["waf_detected"] = True
+            if od.get("rate_limited") or od.get("rate_limiting_detected"):
+                scan_results_for_lim["rate_limited"] = True
+            if od.get("ssl_errors") or od.get("tls_errors"):
+                scan_results_for_lim["ssl_errors"] = True
+
+    test_lim = _build_test_limitations(scan_config_for_lim, scan_results_for_lim)
+
     return ValhallaReportContext(
         robots_txt_analysis=robots,
         sitemap_analysis=sitemap,
@@ -2821,4 +3270,6 @@ def build_valhalla_report_context(
         coverage=coverage,
         recon_pipeline_summary=recon_pipeline_summary,
         xss_structured=build_xss_structured_rows_from_findings(findings),
+        wstg_coverage=_dataclass_to_dict(wstg_result),
+        test_limitations=test_lim,
     )

@@ -607,7 +607,12 @@ async def run_scan_state_machine(
                 elif phase == ScanPhase.THREAT_MODELING:
                     record_tool_run("threat_modeling")
                     assets = recon_out.assets if recon_out else []
-                    threat_out = await run_threat_modeling(assets)
+                    threat_out = await run_threat_modeling(
+                        assets,
+                        subdomains=recon_out.subdomains if recon_out else None,
+                        ports=recon_out.ports if recon_out else None,
+                        target=target,
+                    )
                     output_data = threat_out.model_dump()
                 elif phase == ScanPhase.VULN_ANALYSIS:
                     record_tool_run("vuln_analysis")
@@ -695,7 +700,7 @@ async def run_scan_state_machine(
                     output_data = report_out.model_dump()
                 else:
                     output_data = {}
-        except Exception:
+        except Exception as exc:
             await session.execute(
                 update(ScanStep)
                 .where(cast(ScanStep.id, String) == step.id)
@@ -705,6 +710,13 @@ async def run_scan_state_machine(
                 "Phase handler failed",
                 extra={"event_type": "phase_error", "phase": phase_str, "scan_id": scan_id},
             )
+            err_message = "Phase failed"
+            err_data: dict[str, str] = {"code": "phase_error"}
+            if isinstance(exc, RuntimeError):
+                etext = str(exc)
+                if etext.startswith("LLM provider required"):
+                    err_message = etext
+                    err_data = {"code": "llm_required"}
             await _record_event(
                 session,
                 tenant_id,
@@ -712,8 +724,8 @@ async def run_scan_state_machine(
                 "error",
                 phase_str,
                 progress,
-                message="Phase failed",
-                data={"code": "phase_error"},
+                message=err_message,
+                data=err_data,
             )
             await _update_scan_phase_status(
                 session, scan_id, phase_str, "failed", progress

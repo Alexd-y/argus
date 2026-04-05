@@ -335,8 +335,29 @@ def build_recon_summary_document(
         "asn": tr.get("asn_summary") if isinstance(tr.get("asn_summary"), dict) else {},
         "screenshots": _screenshots_map(tr),
         "technologies_combined": _technologies_combined(tr),
-        "security_headers": _extract_security_headers_from_httpx_stdout(hx_stdout),
+        "security_headers": _merge_security_headers(tr, hx_stdout),
         "ssl_info": [],
         "outdated_components": [],
     }
     return doc
+
+
+def _merge_security_headers(
+    tr: dict[str, Any],
+    hx_stdout: str,
+) -> dict[str, Any]:
+    """Prefer ARGUS-002 dedicated collector; fall back to httpx extraction."""
+    sh = tr.get("security_headers")
+    if isinstance(sh, dict) and not sh.get("error"):
+        return {
+            "source": "recon_http_headers",
+            "score": sh.get("score", 0),
+            "findings_count": len(sh.get("findings") or []),
+            "headers_found": sh.get("headers_found") or {},
+            "server": sh.get("server"),
+            "x_powered_by": sh.get("x_powered_by"),
+        }
+    httpx_map = _extract_security_headers_from_httpx_stdout(hx_stdout)
+    if httpx_map:
+        return {"source": "httpx", **httpx_map}
+    return {}

@@ -15,6 +15,8 @@ from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+CACHE_TTL_SECONDS: int = 86400  # 24 hours — global max TTL for cached scan results
+
 # TTL (seconds) by tool name; 0 = never cache
 _TOOL_TTL_SEC: dict[str, int] = {
     "nmap": 3600,
@@ -138,8 +140,9 @@ class ToolResultCache:
     def set(self, key: str, value: dict[str, Any], ttl_sec: int) -> None:
         if not self._redis or ttl_sec <= 0:
             return
+        effective_ttl = min(ttl_sec, CACHE_TTL_SECONDS)
         try:
-            self._redis.setex(key, ttl_sec, json.dumps(value, ensure_ascii=True))
+            self._redis.setex(key, effective_ttl, json.dumps(value, ensure_ascii=True))
         except Exception:
             logger.warning(
                 "tool_cache_set_failed",
@@ -155,3 +158,80 @@ def get_tool_cache() -> ToolResultCache:
     if _singleton is None:
         _singleton = ToolResultCache()
     return _singleton
+
+
+def invalidate_scan_cache(scan_id: str) -> int:
+    """Invalidate all cached results for a scan. Returns number of keys deleted."""
+    cache = get_tool_cache()
+    if not cache._redis:
+        logger.warning(
+            "cache_invalidation_skipped_redis_unavailable",
+            extra={"event": "argus.tool_cache.invalidate_scan_skip", "scan_id": scan_id},
+        )
+        return 0
+    try:
+        pattern = f"argus:*:{scan_id}:*"
+        deleted = 0
+        cursor = 0
+        while True:
+            cursor, keys = cache._redis.scan(cursor=cursor, match=pattern, count=200)
+            if keys:
+                deleted += cache._redis.delete(*keys)
+            if cursor == 0:
+                break
+        if deleted:
+            logger.info(
+                "cache_invalidation_scan",
+                extra={
+                    "event": "argus.tool_cache.invalidate_scan",
+                    "scan_id": scan_id,
+                    "deleted": deleted,
+                },
+            )
+        return deleted
+    except Exception:
+        logger.warning(
+            "cache_invalidation_scan_failed",
+            extra={"event": "argus.tool_cache.invalidate_scan_failed", "scan_id": scan_id},
+        )
+        return 0
+
+
+def invalidate_target_cache(target: str) -> int:
+    """Invalidate all cached results for a target domain/URL."""
+    cache = get_tool_cache()
+    if not cache._redis:
+        logger.warning(
+            "cache_invalidation_skipped_redis_unavailable",
+            extra={"event": "argus.tool_cache.invalidate_target_skip", "target": target[:128]},
+        )
+        return 0
+    try:
+        pattern = f"argus:*:*{target}*"
+        deleted = 0
+        cursor = 0
+        while True:
+            cursor, keys = cache._redis.scan(cursor=cursor, match=pattern, count=200)
+            if keys:
+                deleted += cache._redis.delete(*keys)
+            if cursor == 0:
+                break
+        if deleted:
+            logger.info(
+                "cache_invalidation_target",
+                extra={
+                    "event": "argus.tool_cache.invalidate_target",
+                    "target": target[:128],
+                    "deleted": deleted,
+                },
+            )
+        return deleted
+    except Exception:
+        logger.warning(
+            "cache_invalidation_target_failed",
+            extra={
+                "event": "argus.tool_cache.invalidate_target_failed",
+                "target": target[:128],
+            },
+        )
+        return 0

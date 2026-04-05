@@ -13,7 +13,11 @@ from src.cache.tool_recovery import (
     log_recovery_attempt,
 )
 from src.core.config import settings
-from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
+from src.recon.sandbox_tool_runner import (
+    build_sandbox_exec_argv,
+    check_tool_available,
+    run_argv_simple_sync,
+)
 from src.tools.guardrails.command_parser import ALLOWED_TOOLS, extract_tool_name
 
 logger = logging.getLogger(__name__)
@@ -53,6 +57,23 @@ def execute_command(
                 "",
                 f"Tool not allowed. Allowed: {', '.join(sorted(ALLOWED_TOOLS))}",
                 1,
+                0.0,
+            )
+
+        if not check_tool_available(tool_name, use_sandbox=use_sandbox):
+            logger.warning(
+                "tool_not_installed",
+                extra={
+                    "event": "tool_not_installed",
+                    "tool": tool_name,
+                    "use_sandbox": use_sandbox,
+                },
+            )
+            return _result(
+                False,
+                "",
+                f"{tool_name} not installed in {'sandbox' if use_sandbox else 'local environment'}",
+                127,
                 0.0,
             )
 

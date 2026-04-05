@@ -1,0 +1,23 @@
+{% if test_limitations %}
+<div class="nist-limitations">
+    <h3>Test Limitations (NIST SP 800-115)</h3>
+    <table class="limitations-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Limitation</th>
+                <th>Impact</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lim in test_limitations %}
+            <tr>
+                <td class="lim-{{ lim.category | e }}">{{ lim.category | capitalize }}</td>
+                <td>{{ lim.description | e }}</td>
+                <td class="impact-{{ lim.impact | e }}">{{ lim.impact | capitalize }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

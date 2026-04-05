@@ -7,15 +7,16 @@ import logging
 from typing import Any
 
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
+from src.recon.recon_asn_screenshots import run_recon_asnmap_bundle, run_recon_gowitness_bundle
 from src.recon.recon_deep_port_scan import run_recon_deep_port_scan_bundle
 from src.recon.recon_dns_depth import run_recon_dns_depth_bundle
 from src.recon.recon_dns_sandbox import dedupe_subdomain_intel_rows, run_recon_dns_sandbox_bundle
-from src.recon.recon_runtime import ReconRuntimeConfig
+from src.recon.recon_http_headers import collect_security_headers, security_headers_result_to_dict
 from src.recon.recon_http_probe import run_recon_http_probe_bundle
+from src.recon.recon_js_analysis import run_recon_js_analysis_bundle
+from src.recon.recon_runtime import ReconRuntimeConfig
 from src.recon.recon_subdomain_inventory import merge_subdomain_hosts_into_tool_results
 from src.recon.recon_subdomain_passive import run_passive_subdomain_sandbox_bundle
-from src.recon.recon_asn_screenshots import run_recon_asnmap_bundle, run_recon_gowitness_bundle
-from src.recon.recon_js_analysis import run_recon_js_analysis_bundle
 from src.recon.recon_url_history import run_recon_url_history_bundle
 from src.recon.step_registry import STUB_STEPS, ReconStepId, plan_recon_steps
 
@@ -142,6 +143,35 @@ async def run_recon_planned_tool_gather(
             logger.warning(
                 "recon_http_probe_pipeline_failed",
                 extra={"event": "recon_http_probe_pipeline_failed", "exc_type": type(ex).__name__},
+                exc_info=True,
+            )
+
+    if ReconStepId.SECURITY_HEADERS in step_set:
+        try:
+            sh_result = await collect_security_headers(target)
+            sh_dict = security_headers_result_to_dict(sh_result)
+            tool_results["security_headers"] = sh_dict
+            if raw_sink is not None:
+                try:
+                    await asyncio.to_thread(raw_sink.upload_json, "security_headers", sh_dict)
+                except Exception:
+                    logger.warning(
+                        "security_headers_upload_failed",
+                        extra={"event": "security_headers_upload_failed"},
+                    )
+            logger.info(
+                "recon_security_headers_done",
+                extra={
+                    "event": "recon_security_headers_done",
+                    "score": sh_result.score,
+                    "findings_count": len(sh_result.findings),
+                    "error": sh_result.error,
+                },
+            )
+        except Exception as ex:
+            logger.warning(
+                "recon_security_headers_pipeline_failed",
+                extra={"event": "recon_security_headers_pipeline_failed", "exc_type": type(ex).__name__},
                 exc_info=True,
             )
 

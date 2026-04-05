@@ -48,5 +48,843 @@
       "--risk",
       "2"
     ]
+  },
+  "categories": {
+    "subdomain_enumeration": {
+      "subfinder": {
+        "binary": "subfinder",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "quick": "subfinder -d {target} -silent",
+          "standard": "subfinder -d {target} -all -silent",
+          "deep": "subfinder -d {target} -all -recursive -silent"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 180, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "amass": {
+        "binary": "amass",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "quick": "amass enum -passive -d {target}",
+          "standard": "amass enum -d {target}",
+          "deep": "amass enum -active -brute -d {target}"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      },
+      "assetfinder": {
+        "binary": "assetfinder",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "quick": "assetfinder --subs-only {target}",
+          "standard": "assetfinder --subs-only {target}",
+          "deep": "assetfinder {target}"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 60, "deep": 120 },
+        "parser": "stdout_lines"
+      },
+      "findomain": {
+        "binary": "findomain",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "quick": "findomain -t {target} -q",
+          "standard": "findomain -t {target}",
+          "deep": "findomain -t {target} --resolvers"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 90, "deep": 300 },
+        "parser": "stdout_lines"
+      },
+      "crt_sh": {
+        "binary": "curl",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "all": "curl -s 'https://crt.sh/?q=%25.{target}&output=json'"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 30 },
+        "parser": "json_file"
+      },
+      "shuffledns": {
+        "binary": "shuffledns",
+        "category": "subdomain_enumeration",
+        "commands": {
+          "quick": "shuffledns -d {target} -w /opt/wordlists/subdomains-top1mil-5000.txt -r /opt/wordlists/resolvers.txt -silent",
+          "standard": "shuffledns -d {target} -w /opt/wordlists/subdomains-top1mil-20000.txt -r /opt/wordlists/resolvers.txt -silent",
+          "deep": "shuffledns -d {target} -w /opt/wordlists/subdomains-top1mil-110000.txt -r /opt/wordlists/resolvers.txt -silent"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      }
+    },
+    "port_scanning": {
+      "nmap": {
+        "binary": "nmap",
+        "category": "port_scanning",
+        "commands": {
+          "quick": "nmap -T4 --top-ports 100 {target}",
+          "standard": "nmap -sV -sC -T3 -p- {target}",
+          "deep": "nmap -sV -sC -A -T4 -p- --script=vuln {target}"
+        },
+        "output_format": "xml",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "xml_file"
+      },
+      "rustscan": {
+        "binary": "rustscan",
+        "category": "port_scanning",
+        "commands": {
+          "quick": "rustscan -a {target} --top --ulimit 5000",
+          "standard": "rustscan -a {target} -r 1-65535 --ulimit 5000",
+          "deep": "rustscan -a {target} -r 1-65535 --ulimit 5000 -- -sV -sC"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "masscan": {
+        "binary": "masscan",
+        "category": "port_scanning",
+        "commands": {
+          "quick": "masscan {target} --top-ports 100 --rate=1000",
+          "standard": "masscan {target} -p1-65535 --rate=1000",
+          "deep": "masscan {target} -p1-65535 --rate=10000 --banners"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      },
+      "naabu": {
+        "binary": "naabu",
+        "category": "port_scanning",
+        "commands": {
+          "quick": "naabu -host {target} -top-ports 100 -silent",
+          "standard": "naabu -host {target} -p - -silent",
+          "deep": "naabu -host {target} -p - -nmap-cli 'nmap -sV' -silent"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      }
+    },
+    "web_fingerprinting": {
+      "whatweb": {
+        "binary": "whatweb",
+        "category": "web_fingerprinting",
+        "commands": {
+          "quick": "whatweb -a 1 {target}",
+          "standard": "whatweb -a 3 {target}",
+          "deep": "whatweb -a 4 -v {target}"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 90, "deep": 300 },
+        "parser": "json_file"
+      },
+      "httpx": {
+        "binary": "httpx",
+        "category": "web_fingerprinting",
+        "commands": {
+          "quick": "httpx -u {target} -silent -status-code -title",
+          "standard": "httpx -u {target} -silent -status-code -title -tech-detect -follow-redirects",
+          "deep": "httpx -u {target} -silent -status-code -title -tech-detect -follow-redirects -json"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 60, "deep": 120 },
+        "parser": "json_file"
+      },
+      "wappalyzer": {
+        "binary": "wappalyzer",
+        "category": "web_fingerprinting",
+        "commands": {
+          "all": "wappalyzer {target}"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 60 },
+        "parser": "json_file"
+      }
+    },
+    "vulnerability_scanning": {
+      "nuclei": {
+        "binary": "nuclei",
+        "category": "vulnerability_scanning",
+        "commands": {
+          "quick": "nuclei -u {target} -severity critical,high -silent",
+          "standard": "nuclei -u {target} -severity critical,high,medium -silent",
+          "deep": "nuclei -u {target} -severity critical,high,medium,low -silent -headless"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "json_file"
+      },
+      "nikto": {
+        "binary": "nikto",
+        "category": "vulnerability_scanning",
+        "commands": {
+          "quick": "nikto -h {target} -Tuning 1 -maxtime 120s",
+          "standard": "nikto -h {target} -Tuning 123bde",
+          "deep": "nikto -h {target} -Tuning x -C all"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      }
+    },
+    "xss_testing": {
+      "dalfox": {
+        "binary": "dalfox",
+        "category": "xss_testing",
+        "commands": {
+          "quick": "dalfox url {target} --silence --only-discovery",
+          "standard": "dalfox url {target} --skip-bav --worker 5",
+          "deep": "dalfox url {target} --deep-domxss --worker 10 --follow-redirects"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      },
+      "xsstrike": {
+        "binary": "xsstrike",
+        "category": "xss_testing",
+        "commands": {
+          "quick": "xsstrike -u {target} --skip",
+          "standard": "xsstrike -u {target} --crawl",
+          "deep": "xsstrike -u {target} --crawl --fuzzer --blind"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "kxss": {
+        "binary": "kxss",
+        "category": "xss_testing",
+        "commands": {
+          "all": "echo {target} | kxss"
+        },
+        "requires_shell": true,
+        "output_format": "text",
+        "timeout_seconds": { "all": 60 },
+        "parser": "stdout_lines"
+      }
+    },
+    "sqli_testing": {
+      "sqlmap": {
+        "binary": "sqlmap",
+        "category": "sqli_testing",
+        "commands": {
+          "quick": "sqlmap -u {target} --batch --smart --level 1 --risk 1",
+          "standard": "sqlmap -u {target} --batch --level 3 --risk 2 --random-agent",
+          "deep": "sqlmap -u {target} --batch --level 5 --risk 3 --random-agent --tamper=space2comment"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      },
+      "ghauri": {
+        "binary": "ghauri",
+        "category": "sqli_testing",
+        "commands": {
+          "quick": "ghauri -u {target} --batch --level 1",
+          "standard": "ghauri -u {target} --batch --level 3",
+          "deep": "ghauri -u {target} --batch --level 5 --risk 3"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      }
+    },
+    "ssrf_testing": {
+      "ssrfmap": {
+        "binary": "ssrfmap",
+        "category": "ssrf_testing",
+        "commands": {
+          "quick": "ssrfmap -r request.txt -p url --lhost {target}",
+          "standard": "ssrfmap -r request.txt -p url --lhost {target} --level 3",
+          "deep": "ssrfmap -r request.txt -p url --lhost {target} --level 5 --all"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "interactsh": {
+        "binary": "interactsh-client",
+        "category": "ssrf_testing",
+        "commands": {
+          "all": "interactsh-client -v"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 120 },
+        "parser": "json_file"
+      }
+    },
+    "lfi_testing": {
+      "lfi_suite": {
+        "binary": "python3",
+        "category": "lfi_testing",
+        "commands": {
+          "quick": "python3 /opt/tools/lfi-suite/lfi-suite.py -u {target} --quick",
+          "standard": "python3 /opt/tools/lfi-suite/lfi-suite.py -u {target}",
+          "deep": "python3 /opt/tools/lfi-suite/lfi-suite.py -u {target} --all"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "ffuf_lfi": {
+        "binary": "ffuf",
+        "category": "lfi_testing",
+        "commands": {
+          "quick": "ffuf -u {target}/FUZZ -w /opt/wordlists/lfi-small.txt -mc 200 -fs 0 -t 5",
+          "standard": "ffuf -u {target}/FUZZ -w /opt/wordlists/lfi-medium.txt -mc 200 -fs 0 -t 10",
+          "deep": "ffuf -u {target}/FUZZ -w /opt/wordlists/lfi-full.txt -mc 200 -fs 0 -t 20 -recursion -recursion-depth 3"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      }
+    },
+    "directory_bruteforce": {
+      "gobuster": {
+        "binary": "gobuster",
+        "category": "directory_bruteforce",
+        "commands": {
+          "quick": "gobuster dir -u {target} -w /opt/wordlists/common.txt -t 10 -q",
+          "standard": "gobuster dir -u {target} -w /opt/wordlists/directory-list-2.3-medium.txt -t 20 -q",
+          "deep": "gobuster dir -u {target} -w /opt/wordlists/directory-list-2.3-big.txt -t 30 -x php,html,js,txt -q"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "stdout_lines"
+      },
+      "feroxbuster": {
+        "binary": "feroxbuster",
+        "category": "directory_bruteforce",
+        "commands": {
+          "quick": "feroxbuster -u {target} -w /opt/wordlists/common.txt -t 10 --silent",
+          "standard": "feroxbuster -u {target} -w /opt/wordlists/directory-list-2.3-medium.txt -t 20 --silent",
+          "deep": "feroxbuster -u {target} -w /opt/wordlists/directory-list-2.3-big.txt -t 30 -x php,html,js,txt --extract-links --silent"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "json_file"
+      },
+      "dirsearch": {
+        "binary": "dirsearch",
+        "category": "directory_bruteforce",
+        "commands": {
+          "quick": "dirsearch -u {target} -e php,html -t 10 --simple-report=-",
+          "standard": "dirsearch -u {target} -e php,html,js,txt -t 20 --simple-report=-",
+          "deep": "dirsearch -u {target} -e php,html,js,txt,asp,aspx,jsp -t 30 -r --simple-report=-"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "ffuf": {
+        "binary": "ffuf",
+        "category": "directory_bruteforce",
+        "commands": {
+          "quick": "ffuf -u {target}/FUZZ -w /opt/wordlists/common.txt -mc 200,301,302 -t 10 -s",
+          "standard": "ffuf -u {target}/FUZZ -w /opt/wordlists/directory-list-2.3-medium.txt -mc 200,301,302,403 -t 20 -s",
+          "deep": "ffuf -u {target}/FUZZ -w /opt/wordlists/directory-list-2.3-big.txt -mc all -fc 404 -t 30 -recursion -recursion-depth 2 -s"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      }
+    },
+    "parameter_discovery": {
+      "arjun": {
+        "binary": "arjun",
+        "category": "parameter_discovery",
+        "commands": {
+          "quick": "arjun -u {target} -t 5 -q",
+          "standard": "arjun -u {target} -t 10",
+          "deep": "arjun -u {target} -t 20 --stable"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      },
+      "paramspider": {
+        "binary": "paramspider",
+        "category": "parameter_discovery",
+        "commands": {
+          "quick": "paramspider -d {target} --level low",
+          "standard": "paramspider -d {target}",
+          "deep": "paramspider -d {target} --level high"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 180, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "x8": {
+        "binary": "x8",
+        "category": "parameter_discovery",
+        "commands": {
+          "quick": "x8 -u {target} -w /opt/wordlists/params-small.txt",
+          "standard": "x8 -u {target} -w /opt/wordlists/params-medium.txt",
+          "deep": "x8 -u {target} -w /opt/wordlists/params-large.txt --verify"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      }
+    },
+    "cors_testing": {
+      "corscanner": {
+        "binary": "cors",
+        "category": "cors_testing",
+        "commands": {
+          "quick": "python3 /opt/tools/CORScanner/cors_scan.py -u {target}",
+          "standard": "python3 /opt/tools/CORScanner/cors_scan.py -u {target} -t 10",
+          "deep": "python3 /opt/tools/CORScanner/cors_scan.py -i targets.txt -t 20"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "json_file"
+      },
+      "curl_cors": {
+        "binary": "curl",
+        "category": "cors_testing",
+        "commands": {
+          "all": "curl -s -I -H 'Origin: https://evil.com' {target}"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "all": 15 },
+        "parser": "regex"
+      }
+    },
+    "subdomain_takeover": {
+      "subjack": {
+        "binary": "subjack",
+        "category": "subdomain_takeover",
+        "commands": {
+          "quick": "subjack -w subdomains.txt -t 10 -timeout 30 -ssl -c /opt/tools/subjack/fingerprints.json",
+          "standard": "subjack -w subdomains.txt -t 20 -timeout 60 -ssl -c /opt/tools/subjack/fingerprints.json -a",
+          "deep": "subjack -w subdomains.txt -t 30 -timeout 120 -ssl -c /opt/tools/subjack/fingerprints.json -a -m"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "nuclei_takeover": {
+        "binary": "nuclei",
+        "category": "subdomain_takeover",
+        "commands": {
+          "all": "nuclei -l subdomains.txt -t /opt/nuclei-templates/takeovers/ -silent"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 300 },
+        "parser": "json_file"
+      },
+      "can_i_take_over_xyz": {
+        "binary": "python3",
+        "category": "subdomain_takeover",
+        "commands": {
+          "all": "python3 /opt/tools/can-i-take-over-xyz/check.py -d {target}"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "all": 120 },
+        "parser": "stdout_lines"
+      }
+    },
+    "ssl_tls_testing": {
+      "testssl": {
+        "binary": "testssl.sh",
+        "category": "ssl_tls_testing",
+        "commands": {
+          "quick": "testssl.sh --fast {target}",
+          "standard": "testssl.sh {target}",
+          "deep": "testssl.sh --full {target}"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      },
+      "sslyze": {
+        "binary": "sslyze",
+        "category": "ssl_tls_testing",
+        "commands": {
+          "quick": "sslyze --regular {target}",
+          "standard": "sslyze --regular --certinfo {target}",
+          "deep": "sslyze --regular --certinfo --robot --heartbleed {target}"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 300 },
+        "parser": "json_file"
+      },
+      "tlsx": {
+        "binary": "tlsx",
+        "category": "ssl_tls_testing",
+        "commands": {
+          "quick": "tlsx -host {target} -silent",
+          "standard": "tlsx -host {target} -silent -json -san -cn",
+          "deep": "tlsx -host {target} -silent -json -san -cn -cipher -tls-version -expired -revoked"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 15, "standard": 30, "deep": 60 },
+        "parser": "json_file"
+      }
+    },
+    "git_exposure": {
+      "gittools": {
+        "binary": "python3",
+        "category": "git_exposure",
+        "commands": {
+          "quick": "python3 /opt/tools/GitTools/Finder/gitfinder.py -i {target}",
+          "standard": "python3 /opt/tools/GitTools/Dumper/gitdumper.sh {target}/.git/ /tmp/gitdump",
+          "deep": "python3 /opt/tools/GitTools/Extractor/extractor.sh /tmp/gitdump /tmp/gitextracted"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "gitleaks": {
+        "binary": "gitleaks",
+        "category": "git_exposure",
+        "commands": {
+          "quick": "gitleaks detect --source . --no-git --report-format json --quiet",
+          "standard": "gitleaks detect --source . --report-format json",
+          "deep": "gitleaks detect --source . --report-format json --verbose"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "json_file"
+      },
+      "trufflehog": {
+        "binary": "trufflehog",
+        "category": "git_exposure",
+        "commands": {
+          "quick": "trufflehog filesystem --directory . --json --concurrency 5",
+          "standard": "trufflehog git {target} --json --concurrency 5",
+          "deep": "trufflehog git {target} --json --concurrency 10 --entropy"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 180, "deep": 600 },
+        "parser": "json_file"
+      }
+    },
+    "open_redirect": {
+      "oralyzer": {
+        "binary": "python3",
+        "category": "open_redirect",
+        "commands": {
+          "quick": "python3 /opt/tools/Oralyzer/oralyzer.py -u {target}",
+          "standard": "python3 /opt/tools/Oralyzer/oralyzer.py -u {target} -p /opt/wordlists/redirect-payloads.txt",
+          "deep": "python3 /opt/tools/Oralyzer/oralyzer.py -l urls.txt -p /opt/wordlists/redirect-payloads-full.txt"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "nuclei_redirect": {
+        "binary": "nuclei",
+        "category": "open_redirect",
+        "commands": {
+          "all": "nuclei -u {target} -t /opt/nuclei-templates/vulnerabilities/open-redirect/ -silent"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 120 },
+        "parser": "json_file"
+      }
+    },
+    "xxe_testing": {
+      "xxeinjector": {
+        "binary": "ruby",
+        "category": "xxe_testing",
+        "commands": {
+          "quick": "ruby /opt/tools/XXEinjector/XXEinjector.rb --host={target} --httpport=8080",
+          "standard": "ruby /opt/tools/XXEinjector/XXEinjector.rb --host={target} --httpport=8080 --oob=http --phpfilter",
+          "deep": "ruby /opt/tools/XXEinjector/XXEinjector.rb --host={target} --httpport=8080 --oob=http --phpfilter --enumports=all"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      }
+    },
+    "ssti_testing": {
+      "tplmap": {
+        "binary": "python3",
+        "category": "ssti_testing",
+        "commands": {
+          "quick": "python3 /opt/tools/tplmap/tplmap.py -u {target}",
+          "standard": "python3 /opt/tools/tplmap/tplmap.py -u {target} --level 3",
+          "deep": "python3 /opt/tools/tplmap/tplmap.py -u {target} --level 5 --os-shell"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "stdout_lines"
+      },
+      "nuclei_ssti": {
+        "binary": "nuclei",
+        "category": "ssti_testing",
+        "commands": {
+          "all": "nuclei -u {target} -t /opt/nuclei-templates/vulnerabilities/ssti/ -silent"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 120 },
+        "parser": "json_file"
+      }
+    },
+    "jwt_testing": {
+      "jwt_tool": {
+        "binary": "python3",
+        "category": "jwt_testing",
+        "commands": {
+          "quick": "python3 /opt/tools/jwt_tool/jwt_tool.py {target} -M at",
+          "standard": "python3 /opt/tools/jwt_tool/jwt_tool.py {target} -M pb -cv",
+          "deep": "python3 /opt/tools/jwt_tool/jwt_tool.py {target} -M at -C -d /opt/wordlists/jwt-secrets.txt"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "jwt_cracker": {
+        "binary": "jwt-cracker",
+        "category": "jwt_testing",
+        "commands": {
+          "quick": "jwt-cracker -t {target} --maxLength 6",
+          "standard": "jwt-cracker -t {target} --maxLength 8",
+          "deep": "jwt-cracker -t {target} --maxLength 12 -a"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 1800 },
+        "parser": "stdout_lines"
+      }
+    },
+    "graphql_testing": {
+      "graphw00f": {
+        "binary": "python3",
+        "category": "graphql_testing",
+        "commands": {
+          "all": "python3 /opt/tools/graphw00f/main.py -t {target}"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "all": 30 },
+        "parser": "stdout_lines"
+      },
+      "inql": {
+        "binary": "inql",
+        "category": "graphql_testing",
+        "commands": {
+          "quick": "inql -t {target}",
+          "standard": "inql -t {target} --generate-html",
+          "deep": "inql -t {target} --generate-html --generate-schema"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 60, "deep": 180 },
+        "parser": "stdout_lines"
+      },
+      "clairvoyance": {
+        "binary": "python3",
+        "category": "graphql_testing",
+        "commands": {
+          "quick": "python3 -m clairvoyance -o schema.json {target}",
+          "standard": "python3 -m clairvoyance -o schema.json -w /opt/wordlists/graphql.txt {target}",
+          "deep": "python3 -m clairvoyance -o schema.json -w /opt/wordlists/graphql-full.txt -d {target}"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "json_file"
+      }
+    },
+    "waf_detection": {
+      "wafw00f": {
+        "binary": "wafw00f",
+        "category": "waf_detection",
+        "commands": {
+          "quick": "wafw00f {target}",
+          "standard": "wafw00f {target} -a",
+          "deep": "wafw00f {target} -a -v"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 15, "standard": 30, "deep": 60 },
+        "parser": "stdout_lines"
+      },
+      "whatwaf": {
+        "binary": "whatwaf",
+        "category": "waf_detection",
+        "commands": {
+          "quick": "whatwaf -u {target}",
+          "standard": "whatwaf -u {target} --ra --throttle 3",
+          "deep": "whatwaf -u {target} --ra --throttle 1 --force-ssl --tampers all"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 300 },
+        "parser": "json_file"
+      }
+    },
+    "wordpress_testing": {
+      "wpscan": {
+        "binary": "wpscan",
+        "category": "wordpress_testing",
+        "commands": {
+          "quick": "wpscan --url {target} --no-banner --format json",
+          "standard": "wpscan --url {target} --no-banner --enumerate vp,vt,u --format json",
+          "deep": "wpscan --url {target} --no-banner --enumerate vp,vt,u,m --plugins-detection aggressive --format json"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      }
+    },
+    "api_testing": {
+      "kiterunner": {
+        "binary": "kr",
+        "category": "api_testing",
+        "commands": {
+          "quick": "kr scan {target} -w /opt/wordlists/routes-small.kite -x 5",
+          "standard": "kr scan {target} -w /opt/wordlists/routes-large.kite -x 10",
+          "deep": "kr brute {target} -w /opt/wordlists/routes-large.kite -x 20 -A=apiroutes-210228"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 60, "standard": 300, "deep": 900 },
+        "parser": "json_file"
+      },
+      "restler": {
+        "binary": "restler",
+        "category": "api_testing",
+        "commands": {
+          "quick": "restler compile --api_spec {target}",
+          "standard": "restler test --grammar_file grammar.py --dictionary_file dict.json --no_ssl",
+          "deep": "restler fuzz-lean --grammar_file grammar.py --dictionary_file dict.json --time_budget 3600"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 60, "standard": 600, "deep": 3600 },
+        "parser": "stdout_lines"
+      }
+    },
+    "cloud_testing": {
+      "s3scanner": {
+        "binary": "s3scanner",
+        "category": "cloud_testing",
+        "commands": {
+          "quick": "s3scanner -bucket-file buckets.txt",
+          "standard": "s3scanner -bucket-file buckets.txt -enumerate",
+          "deep": "s3scanner -bucket-file buckets.txt -enumerate -dump"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 600 },
+        "parser": "stdout_lines"
+      },
+      "cloudsplaining": {
+        "binary": "cloudsplaining",
+        "category": "cloud_testing",
+        "commands": {
+          "quick": "cloudsplaining scan --input-file credentials.json",
+          "standard": "cloudsplaining scan --input-file credentials.json --all",
+          "deep": "cloudsplaining download && cloudsplaining scan --input-file credentials.json --all"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 300 },
+        "parser": "json_file"
+      }
+    },
+    "race_condition": {
+      "turbo_intruder": {
+        "binary": "python3",
+        "category": "race_condition",
+        "commands": {
+          "quick": "python3 /opt/tools/turbo-intruder/turbo-intruder.py {target} /opt/tools/turbo-intruder/race.py 5",
+          "standard": "python3 /opt/tools/turbo-intruder/turbo-intruder.py {target} /opt/tools/turbo-intruder/race.py 20",
+          "deep": "python3 /opt/tools/turbo-intruder/turbo-intruder.py {target} /opt/tools/turbo-intruder/race.py 50"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 30, "standard": 120, "deep": 300 },
+        "parser": "stdout_lines"
+      },
+      "curl_race": {
+        "binary": "curl",
+        "category": "race_condition",
+        "commands": {
+          "all": "seq 1 10 | xargs -P 10 -I {} curl -s -o /dev/null -w '%{http_code}' {target}"
+        },
+        "requires_shell": true,
+        "output_format": "text",
+        "timeout_seconds": { "all": 30 },
+        "parser": "stdout_lines"
+      }
+    },
+    "shodan_osint": {
+      "shodan": {
+        "binary": "shodan",
+        "category": "shodan_osint",
+        "commands": {
+          "quick": "shodan host {target}",
+          "standard": "shodan search hostname:{target}",
+          "deep": "shodan search hostname:{target} --fields ip_str,port,org,os,vulns"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 15, "standard": 30, "deep": 60 },
+        "parser": "json_file"
+      },
+      "shodan_search": {
+        "binary": "shodan",
+        "category": "shodan_osint",
+        "commands": {
+          "all": "shodan search {target} --fields ip_str,port,org,hostnames"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "all": 30 },
+        "parser": "json_file"
+      }
+    },
+    "cve_scanning": {
+      "nuclei_cves": {
+        "binary": "nuclei",
+        "category": "cve_scanning",
+        "commands": {
+          "quick": "nuclei -u {target} -t /opt/nuclei-templates/cves/ -severity critical -silent",
+          "standard": "nuclei -u {target} -t /opt/nuclei-templates/cves/ -severity critical,high -silent",
+          "deep": "nuclei -u {target} -t /opt/nuclei-templates/cves/ -severity critical,high,medium -silent"
+        },
+        "output_format": "json",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "json_file"
+      },
+      "nmap_vulners": {
+        "binary": "nmap",
+        "category": "cve_scanning",
+        "commands": {
+          "quick": "nmap -sV --script vulners --top-ports 100 {target}",
+          "standard": "nmap -sV --script vulners -p- {target}",
+          "deep": "nmap -sV --script vulners,vulscan -p- -A {target}"
+        },
+        "output_format": "xml",
+        "timeout_seconds": { "quick": 120, "standard": 600, "deep": 1800 },
+        "parser": "xml_file"
+      }
+    },
+    "websocket_testing": {
+      "wscat": {
+        "binary": "wscat",
+        "category": "websocket_testing",
+        "commands": {
+          "quick": "wscat -c {target} -x '{\"type\":\"ping\"}'",
+          "standard": "wscat -c {target} -w 5",
+          "deep": "wscat -c {target} -w 30"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 10, "standard": 30, "deep": 60 },
+        "parser": "stdout_lines"
+      },
+      "ws_harness": {
+        "binary": "python3",
+        "category": "websocket_testing",
+        "commands": {
+          "quick": "python3 /opt/tools/ws-harness/ws-harness.py -u {target}",
+          "standard": "python3 /opt/tools/ws-harness/ws-harness.py -u {target} -m message",
+          "deep": "python3 /opt/tools/ws-harness/ws-harness.py -u {target} -m message -f /opt/wordlists/ws-payloads.txt"
+        },
+        "output_format": "text",
+        "timeout_seconds": { "quick": 15, "standard": 60, "deep": 300 },
+        "parser": "stdout_lines"
+      }
+    }
   }
 }

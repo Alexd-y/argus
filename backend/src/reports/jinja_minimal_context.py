@@ -164,6 +164,8 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     }
     if valhalla_ctx is not None:
         out["valhalla_context"] = valhalla_ctx
+        out["wstg_coverage"] = valhalla_ctx.get("wstg_coverage")
+        out["test_limitations"] = valhalla_ctx.get("test_limitations")
         out["report_executor_display_name"] = settings.report_executor_display_name
         out["tool_runs"] = []
         out["valhalla_appendix_nmap_excerpt"] = ""

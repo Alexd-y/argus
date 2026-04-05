@@ -391,6 +391,10 @@ def _format_tool_results(results: dict[str, Any]) -> str:
             parts.append(_safe_json({"http_probe_tech_stack": result}, 12000))
             parts.append("")
             continue
+        if tool_name == "security_headers" and isinstance(result, dict):
+            parts.append(_safe_json(result, 12000))
+            parts.append("")
+            continue
         if tool_name == "deep_port_scan" and isinstance(result, dict):
             parts.append(_safe_json(result.get("structured") or {}, 12000))
             parts.append("")
@@ -637,13 +641,67 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
     return _safe_json(all_cves, 20000) if all_cves else "No CVE data available"
 
 
-async def run_threat_modeling(assets: list[str]) -> ThreatModelOutput:
-    """Production threat modeling: NVD CVE lookup + LLM analysis."""
+async def run_threat_modeling(
+    assets: list[str],
+    *,
+    subdomains: list[str] | None = None,
+    ports: list[int] | None = None,
+    target: str = "",
+    recon_summary: dict[str, Any] | None = None,
+) -> ThreatModelOutput:
+    """Production threat modeling: enriched recon context + NVD CVE lookup + LLM STRIDE analysis."""
+    from src.orchestration.threat_model_enrichment import (
+        build_recon_context,
+        format_recon_context_for_prompt,
+        merge_threat_model_result_into_output,
+        parse_threat_model_result,
+    )
+
+    recon_ctx = build_recon_context(
+        assets=assets,
+        subdomains=subdomains,
+        ports=ports,
+        target=target,
+        recon_summary=recon_summary,
+    )
+    recon_context_str = format_recon_context_for_prompt(recon_ctx)
+    logger.info(
+        "threat_model_recon_context_built",
+        extra={
+            "event": "threat_model_recon_context_built",
+            "technologies_count": len(recon_ctx.get("technologies", [])),
+            "ports_count": len(recon_ctx.get("open_ports", [])),
+            "endpoints_count": len(recon_ctx.get("endpoints", [])),
+            "entry_points_count": len(recon_ctx.get("entry_points", [])),
+        },
+    )
+
     nvd_data = await _query_nvd_for_technologies(assets)
     logger.info("NVD data collected (%d chars), sending to LLM for threat modeling", len(nvd_data))
 
     inp = ThreatModelInput(assets=assets)
-    return await ai_threat_modeling(inp, nvd_data=nvd_data)
+    raw_output = await ai_threat_modeling(
+        inp, nvd_data=nvd_data, recon_context=recon_context_str
+    )
+
+    parsed = parse_threat_model_result(raw_output.threat_model)
+    if parsed.threats or parsed.attack_surface or parsed.cves:
+        merged = merge_threat_model_result_into_output(
+            {"threat_model": raw_output.threat_model}, parsed
+        )
+        raw_output = ThreatModelOutput(threat_model=merged["threat_model"])
+        logger.info(
+            "threat_model_enriched",
+            extra={
+                "event": "threat_model_enriched",
+                "threats_count": len(parsed.threats),
+                "attack_surface_count": len(parsed.attack_surface),
+                "cves_count": len(parsed.cves),
+                "mitigations_count": len(parsed.mitigations),
+            },
+        )
+
+    return raw_output
 
 
 # CVSS v3.1 defaults / floors for confirmed vulnerabilities by type.

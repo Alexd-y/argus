@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Literal
+
+from pydantic import BaseModel
 
 FindingConfidence = Literal["confirmed", "likely", "possible", "advisory"]
 FindingEvidenceType = Literal[
@@ -28,6 +31,102 @@ _EVIDENCE_TYPE_SET: frozenset[str] = frozenset(
 )
 
 _CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
+_CWE_PREFIX_RE = re.compile(r"^CWE-?", re.IGNORECASE)
+
+logger = logging.getLogger(__name__)
+
+
+class CvssVector(BaseModel):
+    """CVSS:3.1 vector string with computed base score and severity."""
+
+    vector_string: str
+    base_score: float
+    severity: str
+    cwe_id: str
+
+
+_CWE_CVSS_MAP: dict[str, tuple[str, float, str]] = {
+    "79": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", 6.1, "medium"),
+    "79-stored": ("CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N", 5.4, "medium"),
+    "89": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "918": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N", 8.2, "high"),
+    "22": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", 7.5, "high"),
+    "352": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:N", 6.5, "medium"),
+    "611": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", 7.5, "high"),
+    "94": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "78": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "502": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "200": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", 5.3, "medium"),
+    "16": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N", 5.3, "medium"),
+    "693": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N", 5.3, "medium"),
+    "295": ("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N", 7.4, "high"),
+    "326": ("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N", 5.9, "medium"),
+    "601": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", 6.1, "medium"),
+    "434": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "287": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "639": ("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N", 8.1, "high"),
+    "1021": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N", 4.3, "medium"),
+    "319": ("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:N/A:N", 5.9, "medium"),
+    "532": ("CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N", 5.5, "medium"),
+    "798": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+    "307": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N", 7.5, "high"),
+    "863": ("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N", 8.1, "high"),
+    "943": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H", 9.8, "critical"),
+}
+
+
+def _apply_context_adjustments(vector: str, context: dict[str, Any]) -> str:
+    """Adjust CVSS vector components based on finding context."""
+    if context.get("authenticated"):
+        vector = vector.replace("/PR:N/", "/PR:L/")
+    if context.get("local"):
+        vector = vector.replace("/AV:N/", "/AV:L/")
+    return vector
+
+
+def estimate_cvss_vector(
+    cwe_id: int | str,
+    context: dict[str, Any] | None = None,
+) -> CvssVector | None:
+    """Estimate CVSS:3.1 vector string from CWE ID.
+
+    Context-aware adjustments:
+    - ``authenticated``: True → modify PR from N to L
+    - ``local``: True → modify AV from N to L
+    - ``xss_type``: "stored" → use stored XSS variant for CWE-79
+    """
+    raw = str(cwe_id).strip()
+    normalized = _CWE_PREFIX_RE.sub("", raw)
+    if not normalized:
+        return None
+
+    ctx = context or {}
+
+    lookup_key = normalized
+    if normalized == "79" and str(ctx.get("xss_type") or "").lower() == "stored":
+        lookup_key = "79-stored"
+
+    entry = _CWE_CVSS_MAP.get(lookup_key)
+    if entry is None:
+        return None
+
+    vector_string, base_score, severity = entry
+    if ctx:
+        vector_string = _apply_context_adjustments(vector_string, ctx)
+
+    cwe_label = f"CWE-{normalized}"
+
+    logger.debug(
+        "cvss_vector_estimated",
+        extra={"cwe_id": cwe_label, "vector": vector_string, "score": base_score},
+    )
+
+    return CvssVector(
+        vector_string=vector_string,
+        base_score=base_score,
+        severity=severity,
+        cwe_id=cwe_label,
+    )
 
 
 def normalize_confidence(raw: Any, *, default: FindingConfidence = "likely") -> FindingConfidence:
@@ -107,6 +206,23 @@ def format_evidence_cell(evidence_type: str | None, evidence_refs: list[str]) ->
     return f"{et}: {refs}"
 
 
+def _has_real_poc_evidence(poc: Any) -> bool:
+    """Check if PoC dict contains real evidence beyond just a tool name."""
+    if not isinstance(poc, dict):
+        return False
+    if poc.get("verified_via_browser") is True:
+        return True
+    vm = str(poc.get("verification_method") or "").strip()
+    if vm in ("browser", "http_reflection"):
+        return True
+    if poc.get("screenshot_key"):
+        return True
+    snippet = str(poc.get("response_snippet") or "").strip()
+    if len(snippet) > 20:
+        return True
+    return bool(poc.get("request") and poc.get("response"))
+
+
 def apply_default_finding_metadata(f: dict[str, Any]) -> None:
     """Fill confidence / evidence_type / evidence_refs when absent (in-place)."""
     src = f.get("source")
@@ -114,7 +230,13 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
 
     if f.get("confidence") is None or not str(f.get("confidence") or "").strip():
         if src == "active_scan":
-            f["confidence"] = "confirmed"
+            poc = f.get("proof_of_concept")
+            if _has_real_poc_evidence(poc):
+                f["confidence"] = "confirmed"
+            else:
+                f["confidence"] = "likely"
+        elif src == "threat_model":
+            f["confidence"] = "possible"
         else:
             f["confidence"] = "likely"
     else:
@@ -149,3 +271,16 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
         f["applicability_notes"] = an
     elif "applicability_notes" in f and not str(f.get("applicability_notes") or "").strip():
         del f["applicability_notes"]
+
+    if f.get("cvss_vector") is None:
+        cwe = f.get("cwe_id") or f.get("cwe")
+        if cwe:
+            ctx: dict[str, Any] = {"xss_type": f.get("xss_type")}
+            if f.get("requires_auth"):
+                ctx["authenticated"] = True
+            cv = estimate_cvss_vector(cwe, context=ctx)
+            if cv:
+                f["cvss_vector"] = cv.vector_string
+                f["cvss_base_score"] = cv.base_score
+                if f.get("cvss_score") is None:
+                    f["cvss_score"] = cv.base_score

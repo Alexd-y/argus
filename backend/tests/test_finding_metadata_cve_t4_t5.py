@@ -38,12 +38,39 @@ def test_extract_cve_ids_from_finding() -> None:
     assert "CVE-2024-51479" in extract_cve_ids_from_finding(f)
 
 
-def test_apply_default_finding_metadata_active_scan() -> None:
+def test_apply_default_finding_metadata_active_scan_no_poc() -> None:
+    """Active scan WITHOUT real PoC evidence → confidence='likely' (ARGUS-004)."""
     f: dict = {"source": "active_scan", "source_tool": "nuclei", "title": "t", "severity": "high"}
+    apply_default_finding_metadata(f)
+    assert f["confidence"] == "likely"
+    assert f["evidence_type"] == "observed"
+    assert any(x.startswith("tool:nuclei") for x in f["evidence_refs"])
+
+
+def test_apply_default_finding_metadata_active_scan_with_poc() -> None:
+    """Active scan WITH real PoC evidence → confidence='confirmed' (ARGUS-004)."""
+    f: dict = {
+        "source": "active_scan",
+        "source_tool": "nuclei",
+        "title": "t",
+        "severity": "high",
+        "proof_of_concept": {
+            "request": "GET /vuln HTTP/1.1\nHost: target.com",
+            "response": "HTTP/1.1 200 OK\n\n<script>alert(1)</script>",
+        },
+    }
     apply_default_finding_metadata(f)
     assert f["confidence"] == "confirmed"
     assert f["evidence_type"] == "observed"
     assert any(x.startswith("tool:nuclei") for x in f["evidence_refs"])
+
+
+def test_apply_default_finding_metadata_threat_model() -> None:
+    """Threat model source → confidence='possible' (ARGUS-004)."""
+    f: dict = {"source": "threat_model", "title": "Potential IDOR", "severity": "medium"}
+    apply_default_finding_metadata(f)
+    assert f["confidence"] == "possible"
+    assert f["evidence_type"] == "threat_model_inference"
 
 
 def test_postprocess_applies_default_metadata() -> None:
@@ -59,7 +86,7 @@ def test_postprocess_applies_default_metadata() -> None:
         }
     ]
     out = _postprocess_findings_cvss(findings)
-    assert out[0]["confidence"] == "confirmed"
+    assert out[0]["confidence"] == "likely"
     assert out[0]["evidence_type"] == "observed"
 
 

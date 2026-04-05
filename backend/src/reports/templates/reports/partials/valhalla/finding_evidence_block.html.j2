@@ -1,0 +1,45 @@
+{# ARGUS-009 — Reusable evidence block for findings with HTTP req/resp and screenshots.         #}
+{# Renders only when http_evidence is present; otherwise parent template handles PoC display.   #}
+{# Usage: {% include "partials/valhalla/finding_evidence_block.html.j2" %} inside a finding row.#}
+{# Expects `row` in scope with optional: http_evidence, screenshot_url, proof_of_concept.      #}
+
+{% set ev = row.http_evidence if row.http_evidence is defined else none %}
+
+{% if ev %}
+{% set poc = row.proof_of_concept if row.proof_of_concept is defined else none %}
+{% set screenshot = row.screenshot_url if row.screenshot_url is defined else (row.poc_screenshot_url if row.poc_screenshot_url is defined else none) %}
+
+<div class="evidence-block">
+    <h4>HTTP-доказательства (Evidence)</h4>
+
+    {% if poc and poc.curl_command %}
+    <div class="evidence-curl">
+        <h5>Команда воспроизведения</h5>
+        <pre class="code-block"><code>{{ poc.curl_command | e }}</code></pre>
+    </div>
+    {% endif %}
+
+    <div class="evidence-http">
+        <h5>HTTP-запрос</h5>
+        <pre class="code-block request">{{ (ev.request_method or "GET") | e }} {{ (ev.request_url or "") | e }}
+{% if ev.request_headers %}{% for k, v in ev.request_headers.items() %}{{ k | e }}: {{ v | e }}
+{% endfor %}{% endif %}{% if ev.request_body %}
+{{ ev.request_body | e }}{% endif %}</pre>
+
+        <h5>HTTP-ответ</h5>
+        <pre class="code-block response">HTTP/1.1 {{ (ev.response_status or "") | e }}
+{% if ev.response_headers %}{% for k, v in ev.response_headers.items() %}{{ k | e }}: {{ v | e }}
+{% endfor %}{% endif %}{% if ev.response_body_snippet %}{{ ev.response_body_snippet[:2048] | e }}{% endif %}</pre>
+    </div>
+
+    {% if screenshot %}
+    <div class="evidence-screenshot">
+        <h5>Визуальное подтверждение</h5>
+        <a href="{{ screenshot | e }}" target="_blank" rel="noopener noreferrer">Открыть скриншот</a>
+        {% if embed_poc_screenshot_inline is defined and embed_poc_screenshot_inline %}
+        <p class="evidence-screenshot-thumb"><img src="{{ screenshot | e }}" alt="PoC" loading="lazy" style="max-width:100%;max-height:240px;height:auto;" width="320" /></p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}

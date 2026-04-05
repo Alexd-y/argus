@@ -408,6 +408,46 @@ def build_owasp_compliance_rows(
     return out
 
 
+def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
+    """Extract structured HTTP evidence from PoC data when request/response info is present."""
+    http_ev: dict[str, Any] = {}
+    if poc.get("request_method") or poc.get("request_url"):
+        http_ev["request_method"] = str(poc.get("request_method") or "GET")[:16]
+        http_ev["request_url"] = str(poc.get("request_url") or poc.get("url") or "")[:2048]
+        if poc.get("request_headers") and isinstance(poc["request_headers"], dict):
+            http_ev["request_headers"] = {
+                str(k)[:256]: str(v)[:4096]
+                for k, v in list(poc["request_headers"].items())[:30]
+            }
+        if poc.get("request_body"):
+            http_ev["request_body"] = str(poc["request_body"])[:4096]
+        http_ev["response_status"] = str(poc.get("response_status") or poc.get("status_code") or "")[:16]
+        if poc.get("response_headers") and isinstance(poc["response_headers"], dict):
+            http_ev["response_headers"] = {
+                str(k)[:256]: str(v)[:4096]
+                for k, v in list(poc["response_headers"].items())[:30]
+            }
+        resp_body = poc.get("response_body_snippet") or poc.get("response_snippet") or poc.get("response")
+        if resp_body:
+            http_ev["response_body_snippet"] = str(resp_body)[:2048]
+    elif poc.get("request") and poc.get("response"):
+        raw_req = str(poc["request"])[:4096]
+        raw_resp = str(poc["response"])[:4096]
+        req_lines = raw_req.split("\n", 1)
+        method_line = req_lines[0].strip() if req_lines else ""
+        parts = method_line.split(" ", 2)
+        http_ev["request_method"] = parts[0][:16] if parts else "GET"
+        http_ev["request_url"] = parts[1][:2048] if len(parts) > 1 else str(poc.get("url") or "")[:2048]
+        http_ev["request_body"] = raw_req
+        resp_lines = raw_resp.split("\n", 1)
+        status_line = resp_lines[0].strip() if resp_lines else ""
+        status_parts = status_line.split(" ", 2)
+        http_ev["response_status"] = " ".join(status_parts[1:])[:64] if len(status_parts) > 1 else ""
+        http_ev["response_body_snippet"] = raw_resp[:2048]
+
+    return http_ev if http_ev else None
+
+
 def _finding_to_dict(
     f: Finding,
     *,
@@ -434,6 +474,10 @@ def _finding_to_dict(
             url = get_finding_poc_screenshot_presigned_url(sk.strip(), tid, sid)
             if url:
                 d["poc_screenshot_url"] = url
+                d["screenshot_url"] = url
+        http_ev = _extract_http_evidence(poc)
+        if http_ev:
+            d["http_evidence"] = http_ev
     return d
 
 

@@ -140,14 +140,38 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     ),
     THREAT_MODELING: (
         SYSTEM_PROMPT_BASE,
-        "Build a threat model for the following real assets discovered during recon.\n\n"
+        "Build a STRIDE-based threat model for the following target using real recon data.\n\n"
         "Assets: {assets}\n\n"
+        "=== ENRICHED RECON CONTEXT ===\n{recon_context}\n=== END RECON CONTEXT ===\n\n"
         "=== NVD CVE DATA ===\n{nvd_data}\n=== END NVD DATA ===\n\n"
-        "Based on the real assets and known CVEs above, return a JSON threat model:\n"
-        '- "threat_model.threats": array of specific, actionable threats referencing real CVEs\n'
-        '- "threat_model.attack_surface": array of exposed services/endpoints\n'
-        '- "threat_model.cves": array of relevant CVE IDs\n\n'
-        'Return JSON: {{"threat_model": {{"threats": ["string"], "attack_surface": ["string"], "cves": ["CVE-XXXX-XXXX"]}}}}',
+        "Instructions:\n"
+        "1. For EACH detected technology with a version, look up relevant CVEs from the NVD data above. "
+        "If a CVE matches a detected version range, include it with severity and description.\n"
+        "2. For EACH identified entry point (login form, API endpoint, file upload, admin panel), "
+        "perform STRIDE analysis and produce specific attack vectors.\n"
+        "3. Map every threat to the concrete component it affects.\n"
+        "4. Provide specific, actionable mitigations per threat — not generic advice.\n\n"
+        "Return a JSON object with this structure:\n"
+        '{{"threat_model": {{\n'
+        '  "attack_surface": [\n'
+        '    {{"component": "string", "type": "web_form|api_endpoint|file_upload|admin_panel|service", '
+        '"exposure_level": "external|internal|authenticated", "url": "string"}}\n'
+        "  ],\n"
+        '  "threats": [\n'
+        '    {{"category": "S|T|R|I|D|E", "description": "string", '
+        '"component": "string", "likelihood": "high|medium|low", "impact": "high|medium|low"}}\n'
+        "  ],\n"
+        '  "cves": [\n'
+        '    {{"cve_id": "CVE-XXXX-XXXX", "technology": "string", '
+        '"severity": "critical|high|medium|low", "description": "string"}}\n'
+        "  ],\n"
+        '  "mitigations": [\n'
+        '    {{"threat_ref": "string", "recommendation": "string", "priority": "high|medium|low"}}\n'
+        "  ]\n"
+        "}}}}\n\n"
+        "STRIDE categories: S=Spoofing, T=Tampering, R=Repudiation, I=Information Disclosure, "
+        "D=Denial of Service, E=Elevation of Privilege.\n"
+        "Extract ONLY real data. Do NOT invent technologies, endpoints, or CVEs not present in the input.",
     ),
     VULN_ANALYSIS: (
         SYSTEM_PROMPT_BASE,
@@ -214,6 +238,7 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     ),
     REPORTING: (
         SYSTEM_PROMPT_BASE,
+        "Generate all text in {report_language}. Keep technical terms (CVE, CVSS, CWE, OWASP) in English.\n\n"
         "Generate a comprehensive penetration test report from the following real data.\n\n"
         "=== FULL PENTEST SUMMARY ===\n{summary}\n=== END SUMMARY ===\n\n"
         "The report must include:\n"
@@ -235,6 +260,8 @@ _TEMPLATE_DEFAULTS: dict[str, Any] = {
     "tool_results": "",
     "nvd_data": "No CVE data available",
     "active_scan_context": "",
+    "recon_context": "No enriched recon context available.",
+    "report_language": "en",
 }
 
 
@@ -281,8 +308,54 @@ THREAT_MODEL_SCHEMA: dict[str, Any] = {
         "threat_model": {
             "type": "object",
             "properties": {
-                "threats": {"type": "array", "items": {"type": "string"}},
-                "attack_surface": {"type": "array", "items": {"type": "string"}},
+                "attack_surface": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "component": {"type": "string"},
+                            "type": {"type": "string"},
+                            "exposure_level": {"type": "string"},
+                            "url": {"type": "string"},
+                        },
+                    },
+                },
+                "threats": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "category": {"type": "string"},
+                            "description": {"type": "string"},
+                            "component": {"type": "string"},
+                            "likelihood": {"type": "string"},
+                            "impact": {"type": "string"},
+                        },
+                    },
+                },
+                "cves": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "cve_id": {"type": "string"},
+                            "technology": {"type": "string"},
+                            "severity": {"type": "string"},
+                            "description": {"type": "string"},
+                        },
+                    },
+                },
+                "mitigations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "threat_ref": {"type": "string"},
+                            "recommendation": {"type": "string"},
+                            "priority": {"type": "string"},
+                        },
+                    },
+                },
             },
         },
     },
@@ -445,19 +518,19 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq011-20260402",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq011-20260402",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq011-20260402",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq011-20260402",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq011-20260402",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq011-20260402",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq011-20260402",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq010-20260402",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq010-20260402",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq011-20260402",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq010-20260402",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq010-20260402",
-    REPORT_AI_SECTION_COST_SUMMARY: "vhq011-20260402",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq012-20260405",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq012-20260405",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq012-20260405",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq012-20260405",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq012-20260405",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq012-20260405",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq012-20260405",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq012-20260405",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq012-20260405",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq012-20260405",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq012-20260405",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq012-20260405",
+    REPORT_AI_SECTION_COST_SUMMARY: "vhq012-20260405",
 }
 
 REPORT_AI_SYSTEM = (
@@ -492,14 +565,46 @@ REPORT_AI_SYSTEM = (
     "the exact integers in executive_severity_totals, severity_counts, finding_count, and "
     "hibp_pwned_password_summary when those keys exist. "
     "Output plain prose suitable for embedding in a formal report (no JSON, no code fences unless quoting)."
+    "\n\n"
+    "STRICT RULES FOR ALL REPORT SECTIONS:\n"
+    "1. NEVER claim critical findings exist if severity_counts shows 0 critical findings. "
+    "Always use the EXACT severity distribution from the data.\n"
+    "2. Each AI section MUST contain UNIQUE content. No sentence or paragraph may appear in more than "
+    "one section. Cross-reference other sections instead of repeating.\n"
+    "3. When tech_stack_structured has data, ALL code examples MUST be tailored to the detected "
+    "technology stack (e.g., Next.js \u2192 middleware code, Nginx \u2192 config directives).\n"
+    "4. Include CVSS:3.1 vector string (e.g., CVSS:3.1/AV:N/AC:L/...) alongside severity score for "
+    "EVERY referenced finding when cvss_vector is available in the context.\n"
+    "5. For each finding reference, include: finding name (title), CWE ID, CVSS score, and affected URL.\n"
+    "6. Remediation MUST include CONCRETE code examples specific to the detected stack, not generic advice.\n"
+    "7. NEVER use phrases like 'the assessment revealed' or 'it was found that' without specifying "
+    "WHICH finding (by title and finding_id) and WHERE (affected_url).\n"
+    "8. Use the ACTUAL severity distribution from severity_counts and executive_severity_totals in the "
+    "context JSON \u2014 reference these exact integers.\n"
+    "9. Each section has a section_id provided in the SECTION CONTEXT preamble. Content for this "
+    "section_id MUST NOT duplicate content from sections listed in ALREADY WRITTEN SECTIONS."
 )
 
 REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY: (
         "ROLE: You are a Chief Information Security Officer (CISO) summarizing assessment results for business stakeholders.\n"
         "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
-        "Write a concise executive summary (2–4 short paragraphs) for business stakeholders.\n"
-        "Cover scope, overall risk posture, and top themes. Context JSON:\n{context_json}"
+        "Write a concise executive summary (2\u20134 short paragraphs) for business stakeholders.\n\n"
+        "REQUIREMENTS:\n"
+        "1. SEVERITY DISTRIBUTION: Start with the EXACT severity breakdown from severity_counts and "
+        "executive_severity_totals \u2014 state the precise number of critical, high, medium, low, and info "
+        "findings. Never approximate.\n"
+        "2. BUSINESS IMPACT BY FINDING: Tie business impact to SPECIFIC findings by title (from the "
+        "findings list). Do not use generic statements like 'several vulnerabilities were found'.\n"
+        "3. QUANTIFIED RISK METRICS: Include concrete quantification where possible (e.g., '3 of 5 tested "
+        "endpoints are vulnerable to XSS', '2 critical findings affect the authentication flow', "
+        "'60%% of findings are in OWASP A03 category').\n"
+        "4. Cover scope (target_url, finding_count), overall risk posture, and top risk themes grounded "
+        "in the actual data.\n"
+        "5. When owasp_compliance_table exists, reference top categories by finding count.\n"
+        "6. When hibp_pwned_password_summary exists and pwned_count > 0, add one sentence on "
+        "credential exposure using exact pwned_count and checks_run integers.\n\n"
+        "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: (
         "ROLE: You are a senior application security engineer with deep knowledge of OWASP Top 10:2025 and CWE.\n"
@@ -522,17 +627,32 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_REMEDIATION_STEP: (
         "ROLE: You are a DevSecOps engineer providing actionable remediation guidance.\n"
         "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
-        "Provide actionable remediation steps ordered by practicality. Reference controls and verification "
-        "where the context allows. "
+        "Provide actionable remediation steps strictly PRIORITIZED BY CVSS SCORE (highest first). "
+        "For each finding, structure the remediation as follows:\n\n"
+        "STRUCTURE PER FINDING:\n"
+        "- Finding reference: finding_id, title, CWE, CVSS score (and cvss_vector when available), affected_url\n"
+        "- EFFORT ESTIMATE: tag each fix as [Quick Fix] (< 1 hour, config change or one-liner), "
+        "[Moderate] (1\u20138 hours, code changes in limited scope), or [Complex Refactor] (> 8 hours, "
+        "architectural or multi-component change)\n"
+        "- CODE EXAMPLE: provide a concrete code snippet tailored to the technology stack detected in "
+        "tech_stack_structured. If Next.js detected \u2192 middleware/API route code. If Nginx detected \u2192 "
+        "config directives. If Express \u2192 middleware setup. If Django \u2192 view/middleware code. "
+        "When tech_stack_structured is empty, provide framework-agnostic examples with adaptation notes.\n"
+        "- VERIFICATION COMMAND: include a curl or similar command to verify the fix is applied "
+        "(e.g., ``curl -sS -D- https://target/path | grep 'X-Content-Type-Options'``). "
+        "Use the actual affected_url from the finding when available.\n\n"
+        "GROUNDING RULES:\n"
         "If the context JSON includes ``owasp_category_reference_ru`` (OWASP Top 10:2025, RU), use it for "
-        "category-specific remediation: tie findings to the right A01–A10 keys and ground technical steps "
+        "category-specific remediation: tie findings to the right A01\u2013A10 keys and ground technical steps "
         "in the provided ``how_to_fix`` and checks in ``how_to_find`` (do not invent extra OWASP text). "
         "Reference ``finding_id`` + title + parameter/affected_url where those fields exist on findings. "
         "For XSS rows in ``valhalla_context.xss_structured``, remediation must reflect ``reflection_context`` "
         "(HTML attribute, body, JS sink, etc.) and how it was verified (``verification_method``, "
         "``verified_via_browser``); cite ``artifact_keys`` and ``artifact_urls`` when listed. "
-        "Avoid one-line boilerplate such as \"validate input\" without tying controls to the named parameter "
-        "and context from the JSON. "
+        "When ``tools_executed`` is present, mention which tool originally detected the issue.\n\n"
+        "CONSTRAINTS:\n"
+        "Avoid one-line boilerplate such as 'validate input' without tying controls to the named parameter "
+        "and context from the JSON. Every remediation item MUST have a code example or concrete config change. "
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_BUSINESS_RISK: (
@@ -601,17 +721,22 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "ROLE: You are a senior penetration tester writing an executive summary for a leadership-technical brief.\n"
         "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "FOCUS:\n"
-        "1. Overall security posture assessment — one clear verdict sentence.\n"
-        "2. The 2–3 most significant findings and their BUSINESS IMPACT (revenue, reputation, compliance risk) — do NOT list all findings.\n"
-        "3. What was NOT found or was within acceptable limits (scope confirmation, positive observations).\n"
-        "4. Immediate priority actions (max 3 bullet points).\n\n"
-        "NUMBERS: use EXACT integers from `executive_severity_totals` and `finding_count` — copy verbatim, never estimate.\n"
+        "1. Overall security posture assessment \u2014 one clear verdict sentence.\n"
+        "2. SEVERITY DISTRIBUTION: state the EXACT breakdown from executive_severity_totals (critical, "
+        "high, medium, low, info counts) in the opening paragraph.\n"
+        "3. The 2\u20133 most significant findings by title and their BUSINESS IMPACT (revenue, reputation, "
+        "compliance risk) \u2014 do NOT list all findings.\n"
+        "4. QUANTIFIED RISK METRICS: include concrete ratios where the data supports them (e.g., "
+        "'N of M endpoints vulnerable to XSS', 'X%% of findings map to OWASP A03').\n"
+        "5. What was NOT found or was within acceptable limits (scope confirmation, positive observations).\n"
+        "6. Immediate priority actions (max 3 bullet points).\n\n"
+        "NUMBERS: use EXACT integers from `executive_severity_totals` and `finding_count` \u2014 copy verbatim, never estimate.\n"
         "When `owasp_compliance_table` exists, cite at most the top 2 categories by count.\n"
         "When `hibp_pwned_password_summary` exists and pwned_count > 0, add one sentence on credential exposure.\n\n"
         "CONSTRAINTS:\n"
-        "- Write 3–4 paragraphs of plain prose. No Markdown formatting. No bullet lists except for priority actions.\n"
-        "- SYNTHESIZE, do not enumerate — this is NOT a findings table. The reader already has the detailed findings.\n"
-        "- Do NOT repeat finding IDs, technical parameters, or affected URLs — keep it executive-level.\n"
+        "- Write 3\u20134 paragraphs of plain prose. No Markdown formatting. No bullet lists except for priority actions.\n"
+        "- SYNTHESIZE, do not enumerate \u2014 this is NOT a findings table. The reader already has the detailed findings.\n"
+        "- Do NOT repeat finding IDs, technical parameters, or affected URLs \u2014 keep it executive-level.\n"
         "- Do NOT fabricate CVEs, systems, or test results not in the context.\n"
         "- Ground every claim in `valhalla_context.summary`, `risk_matrix`, `critical_vulns`, or `executive_severity_totals`.\n\n"
         "Context JSON:\n{context_json}"
@@ -651,15 +776,20 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "ROLE: You are a DevSecOps engineer writing a prioritized remediation plan.\n"
         "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
         "FOCUS: Structure remediation in exactly 3 tiers:\n\n"
-        "TIER 1 — Fix immediately (within 48 hours):\n"
+        "TIER 1 \u2014 Fix immediately (within 48 hours):\n"
         "- Findings with confirmed exploit evidence OR CVSS >= 7.0 OR severity critical/high\n"
-        "- For each: WHAT to change, WHERE (file/config/service), and HOW to verify the fix\n\n"
-        "TIER 2 — Fix within 2 weeks:\n"
+        "- For each: WHAT to change, WHERE (file/config/service), HOW to verify the fix, "
+        "and a CODE EXAMPLE tailored to tech_stack_structured\n"
+        "- Tag each fix: [Quick Fix] / [Moderate] / [Complex Refactor]\n"
+        "- Include a verification command (curl or tool command) for each fix\n\n"
+        "TIER 2 \u2014 Fix within 2 weeks:\n"
         "- Medium-priority findings, dependency updates, configuration hardening\n"
-        "- For each: specific action and verification method\n\n"
-        "TIER 3 — Architectural / SDLC improvements:\n"
+        "- For each: specific action, code example for the detected stack, and verification method\n"
+        "- Tag each fix: [Quick Fix] / [Moderate] / [Complex Refactor]\n\n"
+        "TIER 3 \u2014 Architectural / SDLC improvements:\n"
         "- Structural issues: missing CSP, no WAF, weak SDLC practices\n"
-        "- Process improvements: security testing in CI/CD, dependency scanning, code review policies\n\n"
+        "- Process improvements: security testing in CI/CD, dependency scanning, code review policies\n"
+        "- Include concrete configuration examples for the detected stack where applicable\n\n"
         "GROUNDING:\n"
         "- Reference `finding_id` + title + parameter/affected_url for each remediation item\n"
         "- Use `valhalla_context.critical_vulns`, `risk_matrix`, `owasp_compliance_table` for prioritization\n"
@@ -754,14 +884,33 @@ ACTIVE_SCAN_PLANNING_JSON_ARRAY_FIXER_USER = (
 
 
 def get_report_ai_section_prompt(
-    section_key: str, input_payload: dict[str, Any]
+    section_key: str,
+    input_payload: dict[str, Any],
+    *,
+    other_sections_summary: dict[str, str] | None = None,
 ) -> tuple[str, str, str]:
-    """Return (system_prompt, user_prompt, prompt_version) for a registered report AI section."""
+    """Return (system_prompt, user_prompt, prompt_version) for a registered report AI section.
+
+    ``other_sections_summary`` maps section_key → short summary of already-generated sections.
+    When provided, a preamble is prepended instructing the LLM to avoid duplicating that content.
+    """
     if section_key not in REPORT_AI_SECTION_KEYS:
         raise ValueError(f"Unknown report AI section: {section_key}")
     version = REPORT_AI_PROMPT_VERSIONS[section_key]
     template = REPORT_AI_USER_TEMPLATES[section_key]
     raw_json = json.dumps(input_payload, sort_keys=True, separators=(",", ":"), default=str)
     context_json = _sanitize_for_prompt(raw_json, MAX_PROMPT_OBJECT_LENGTH)
-    user = template.format(context_json=context_json)
+
+    section_preamble = f"--- SECTION CONTEXT ---\nSECTION_ID: {section_key}\n"
+    if other_sections_summary:
+        section_preamble += (
+            "ALREADY WRITTEN SECTIONS (do NOT repeat their content, "
+            "cross-reference by section name instead):\n"
+        )
+        for sk, summary in other_sections_summary.items():
+            safe_summary = _sanitize_for_prompt(summary, 300)
+            section_preamble += f"  [{sk}]: {safe_summary}\n"
+    section_preamble += "--- END SECTION CONTEXT ---\n\n"
+
+    user = section_preamble + template.format(context_json=context_json)
     return REPORT_AI_SYSTEM, user, version

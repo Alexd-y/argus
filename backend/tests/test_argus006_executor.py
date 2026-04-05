@@ -6,7 +6,7 @@ build_*_command: proper shlex quoting.
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
@@ -27,12 +27,17 @@ class TestExecuteCommand:
 
     def test_execute_valid_command_returns_success(self) -> None:
         """Valid command returns success, stdout, stderr, return_code, execution_time."""
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0,
-                stdout="output",
-                stderr="",
-            )
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {
+                "success": True,
+                "stdout": "output",
+                "stderr": "",
+                "return_code": 0,
+                "execution_time": 0.1,
+            }
             result = execute_command("nmap -sV 8.8.8.8", use_cache=True)
         assert result["success"] is True
         assert result["stdout"] == "output"
@@ -42,17 +47,22 @@ class TestExecuteCommand:
         assert result["execution_time"] >= 0
         mock_run.assert_called_once()
         call_args = mock_run.call_args
-        assert call_args[1]["shell"] is False
-        assert call_args[1]["timeout"] == 300
+        assert call_args[0][0] == ["nmap", "-sV", "8.8.8.8"]
+        assert call_args[1]["timeout_sec"] == 300.0
 
     def test_execute_nonzero_return_code_returns_failure(self) -> None:
         """Command with non-zero exit returns success=False."""
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=1,
-                stdout="",
-                stderr="error",
-            )
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {
+                "success": False,
+                "stdout": "",
+                "stderr": "error",
+                "return_code": 1,
+                "execution_time": 0.1,
+            }
             result = execute_command("nmap -sV invalid-target-xyz", use_cache=False)
         assert result["success"] is False
         assert result["return_code"] == 1
@@ -72,12 +82,17 @@ class TestExecuteCommand:
         assert result["return_code"] == 1
 
     def test_execute_uses_list_form_no_shell(self) -> None:
-        """subprocess.run called with shell=False (no shell injection)."""
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        """Command is passed as list form (run_argv_simple_sync enforces shell=False)."""
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {
+                "success": True, "stdout": "", "stderr": "",
+                "return_code": 0, "execution_time": 0.0,
+            }
             execute_command("nmap -sV 8.8.8.8")
         call_args = mock_run.call_args
-        assert call_args[1]["shell"] is False
         assert isinstance(call_args[0][0], list)
         assert call_args[0][0] == ["nmap", "-sV", "8.8.8.8"]
 
@@ -89,23 +104,37 @@ class TestExecuteCommand:
 
     def test_execute_shell_injection_attempt_safe(self) -> None:
         """Command with injection-like string is passed as single arg, not executed."""
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {
+                "success": True, "stdout": "", "stderr": "",
+                "return_code": 0, "execution_time": 0.0,
+            }
             execute_command('nmap -sV "8.8.8.8; rm -rf /"')
         call_args = mock_run.call_args
         args_list = call_args[0][0]
         assert "nmap" in args_list
-        assert call_args[1]["shell"] is False
+        assert isinstance(args_list, list)
 
     def test_execute_timeout_returns_error(self) -> None:
-        """TimeoutExpired returns success=False, return_code=-1."""
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            import subprocess
-            mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
+        """Timeout returns success=False, return_code=-1."""
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {
+                "success": False,
+                "stdout": "",
+                "stderr": "Command timed out",
+                "return_code": -1,
+                "execution_time": 300.0,
+            }
             result = execute_command("nmap -sV 8.8.8.8")
         assert result["success"] is False
         assert result["return_code"] == -1
-        assert "timeout" in result["stderr"].lower() or "timed out" in result["stderr"].lower()
+        assert "timed out" in result["stderr"].lower()
 
 
 class TestBuildCommands:

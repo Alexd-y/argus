@@ -5,11 +5,10 @@ Auth middleware ready; tenant-scoped API.
 """
 
 import logging
+import subprocess
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-
-logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 from src.api.routers import (
     admin,
@@ -34,11 +33,13 @@ from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
 from src.core.security_headers import SecurityHeadersMiddleware
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Lifespan — startup/shutdown."""
     configure_logging()
-    import subprocess
     try:
         subprocess.run(["alembic", "upgrade", "head"], check=True, timeout=60)
         logger.info("Alembic migrations applied successfully")
@@ -69,7 +70,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_cors_origins_list(),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
 

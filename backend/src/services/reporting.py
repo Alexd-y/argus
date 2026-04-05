@@ -40,6 +40,7 @@ from src.orchestration.prompt_registry import (
     VULN_ANALYSIS,
 )
 from src.reports.ai_text_generation import (
+    AITextDeduplicator,
     REPORT_AI_SKIPPED_GENERATION_FAILED,
     REPORT_AI_SKIPPED_NO_LLM,
     run_ai_text_generation,
@@ -56,11 +57,13 @@ from src.reports.data_collector import (
     severity_histogram_from_finding_rows,
 )
 from src.reports.finding_metadata import (
+    estimate_cvss_vector,
     format_evidence_cell,
     normalize_confidence,
     normalize_evidence_refs,
     normalize_evidence_type,
 )
+from src.reports.i18n import get_translations
 from src.reports.generators import (
     ReportData,
     build_owasp_compliance_rows,
@@ -683,6 +686,21 @@ def _truncate_report_text(text: str, max_len: int) -> str:
     return t[: max_len - 1].rstrip() + "…"
 
 
+_FIRST_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\u0410-\u042f\u0401])")
+
+
+def _first_n_sentences(text: str, n: int = 2, max_len: int = 300) -> str:
+    """Extract first N sentences as a compact summary for cross-section dedup context."""
+    if not text or not text.strip():
+        return ""
+    normalized = " ".join(text.split())
+    sentences = _FIRST_SENTENCE_RE.split(normalized)
+    result = " ".join(sentences[:n]).strip()
+    if len(result) > max_len:
+        return result[: max_len - 1].rstrip() + "\u2026"
+    return result
+
+
 def _default_scan_target_for_ai(data: ScanReportData) -> str | None:
     if data.scan and (data.scan.target_url or "").strip():
         return data.scan.target_url.strip()
@@ -1148,6 +1166,13 @@ class ReportGenerator:
                 )
                 cv = f.cvss
                 item["cvss"] = float(cv) if isinstance(cv, (int, float)) else None
+                cvss_vec = poc_d.get("cvss_vector")
+                if not cvss_vec and f.cwe:
+                    estimated = estimate_cvss_vector(f.cwe)
+                    if estimated:
+                        cvss_vec = estimated.vector_string
+                if isinstance(cvss_vec, str) and cvss_vec.strip():
+                    item["cvss_vector"] = cvss_vec.strip()[:128]
                 au, aa = _affected_url_asset_for_ai_payload(poc_d, default_target)
                 if au:
                     item["affected_url"] = au
@@ -1181,6 +1206,12 @@ class ReportGenerator:
                 if isinstance(req, str) and req.strip():
                     item["poc_request"] = req.strip()[:600]
             findings_short.append(item)
+        cwe_ids_found = sorted(
+            {f.cwe for f in data.findings if isinstance(f.cwe, str) and f.cwe.strip()}
+        )
+        tools_executed = sorted(
+            {tr.tool_name for tr in data.tool_runs if tr.tool_name and tr.tool_name.strip()}
+        )
         payload: dict[str, Any] = {
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
@@ -1190,6 +1221,8 @@ class ReportGenerator:
             "executive_severity_totals": executive_severity_totals,
             "findings": findings_short,
             "timeline_phases": [t.phase for t in data.timeline[:40]],
+            "cwe_ids_found": cwe_ids_found,
+            "tools_executed": tools_executed,
         }
         if data.scan is not None:
             payload["target_url"] = data.scan.target_url
@@ -1238,10 +1271,17 @@ class ReportGenerator:
         redis_client: Any | None = None,
         llm_callable: Callable[[str, dict], str] | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """Invoke ``run_ai_text_generation`` for each tier section (same payload per section)."""
+        """Invoke ``run_ai_text_generation`` for each tier section with cross-section dedup.
+
+        ARGUS-008: each subsequent section receives a summary of previously generated sections
+        so the LLM avoids duplication. After all sections are generated, ``AITextDeduplicator``
+        removes any remaining duplicate sentences across sections.
+        """
         tier_norm = normalize_report_tier(tier)
         payload = self.build_ai_input_payload(data, tier=tier_norm)
         results: dict[str, dict[str, Any]] = {}
+        generated_summaries: dict[str, str] = {}
+
         for section_key in report_tier_sections(tier_norm):
             results[section_key] = run_ai_text_generation(
                 tenant_id,
@@ -1251,7 +1291,20 @@ class ReportGenerator:
                 payload,
                 redis_client=redis_client,
                 llm_callable=llm_callable,
+                other_sections_summary=generated_summaries if generated_summaries else None,
             )
+            text = results[section_key].get("text", "")
+            if isinstance(text, str) and text.strip() and results[section_key].get("status") == "ok":
+                generated_summaries[section_key] = _first_n_sentences(text, 2)
+
+        text_map = self.ai_results_to_text_map(results)
+        if len(text_map) > 1:
+            deduplicator = AITextDeduplicator()
+            deduped = deduplicator.deduplicate_sections(text_map)
+            for key, deduped_text in deduped.items():
+                if key in results and results[key].get("text") != deduped_text:
+                    results[key]["text"] = deduped_text
+
         return results
 
     def schedule_ai_sections_celery(
@@ -1345,11 +1398,14 @@ class ReportGenerator:
             }
         finding_rows = findings_rows_for_jinja(data)
         severity_counts_ctx = executive_severity_totals_from_finding_rows(data.findings)
+        report_language = settings.report_language
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
             "tenant_id": data.tenant_id,
             "scan_id": data.scan_id,
+            "i18n": get_translations(report_language),
+            "report_language": report_language,
             "severity_counts": severity_counts_ctx,
             "scan": data.scan.model_dump(mode="json") if data.scan else None,
             "report": data.report.model_dump(mode="json") if data.report else None,
@@ -1366,6 +1422,8 @@ class ReportGenerator:
             "recon_summary": recon_summary_for_jinja(data),
             "exploitation": exploitation_outputs_for_jinja(data),
             "valhalla_context": data.valhalla_context.model_dump(mode="json"),
+            "wstg_coverage": data.valhalla_context.wstg_coverage,
+            "test_limitations": data.valhalla_context.test_limitations,
             "report_executor_display_name": settings.report_executor_display_name,
             "tool_runs": [tr.model_dump(mode="json") for tr in data.tool_runs],
             "valhalla_appendix_nmap_excerpt": valhalla_nmap_appendix_excerpt(data.phase_outputs),
