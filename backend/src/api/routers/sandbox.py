@@ -295,7 +295,8 @@ async def sandbox_execute(body: SandboxExecuteRequest) -> SandboxExecuteResponse
 
     cache = get_tool_cache()
     ttl = ttl_for_tool(tool)
-    cache_key = cache_key_for_execute(body.command, body.use_sandbox, timeout)
+    sid = (body.scan_id or "").strip() or None
+    cache_key = cache_key_for_execute(body.command, body.use_sandbox, timeout, scan_id=sid)
     if ttl > 0 and cache.enabled:
         cached = cache.get(cache_key)
         if cached and cached.get("success") is True:

@@ -47,6 +47,29 @@ def test_cache_key_differs_when_inputs_differ() -> None:
     assert tc.cache_key_for_execute("ls", True, 30) != tc.cache_key_for_execute("ls", False, 30)
 
 
+def test_cache_key_scan_id_suffix_differs_from_global() -> None:
+    g = tc.cache_key_for_execute("nmap -sV example.com", True, 60)
+    s = tc.cache_key_for_execute("nmap -sV example.com", True, 60, scan_id="a" * 36)
+    assert g != s
+    assert s.startswith("argus:sandbox:exec:")
+    parts_g = g.split(":")
+    parts_s = s.split(":")
+    assert len(parts_g) == 4 and len(parts_g[-1]) == 64
+    assert len(parts_s) == 5 and len(parts_s[-1]) == 64
+
+
+def test_cache_key_same_scan_id_stable() -> None:
+    k1 = tc.cache_key_for_execute("dig example.com", False, 30, scan_id="scan-uuid-0001")
+    k2 = tc.cache_key_for_execute("  dig example.com  ", False, 30, scan_id="scan-uuid-0001")
+    assert k1 == k2
+
+
+def test_invalidate_scan_cache_matches_scoped_key_pattern() -> None:
+    scan_id = "11111111-1111-1111-1111-111111111111"
+    key = tc.cache_key_for_execute("host x", True, 30, scan_id=scan_id)
+    assert f":{scan_id}:" in key
+
+
 def test_get_miss_returns_none() -> None:
     r = MagicMock()
     r.get.return_value = None

@@ -1,6 +1,13 @@
 """Sandbox tool result cache — Redis optional; no-op when Redis is down.
 
-Cache key: SHA-256 of normalized command + sandbox flag + timeout (stable JSON).
+Cache key (legacy / ad-hoc): ``argus:sandbox:exec:`` + SHA-256 hex of canonical JSON
+``{command, use_sandbox, timeout_sec}`` — shared across callers until TTL.
+
+When ``scan_id`` is passed to ``cache_key_for_execute``, the key becomes
+``argus:sandbox:exec:{scan_id}:{same_digest}`` so a new scan UUID naturally misses
+cache from prior runs; ``invalidate_scan_cache(scan_id)`` matches ``argus:*:{scan_id}:*``.
+
+``invalidate_target_cache`` does not apply to sandbox exec keys (target is not part of the key).
 TTL: per-tool defaults (seconds); ttl==0 disables cache for that tool.
 """
 
@@ -80,7 +87,18 @@ def set_tool_ttl_runtime(tool: str, ttl_sec: int) -> tuple[int, int]:
     return old, int(ttl_sec)
 
 
-def cache_key_for_execute(command: str, use_sandbox: bool, timeout_sec: int | None) -> str:
+def cache_key_for_execute(
+    command: str,
+    use_sandbox: bool,
+    timeout_sec: int | None,
+    scan_id: str | None = None,
+) -> str:
+    """Redis key for cached stdout/stderr of a successful allowlisted exec.
+
+    Empty ``scan_id`` preserves cross-request cache sharing (e.g. manual /sandbox/execute).
+    Non-empty ``scan_id`` scopes entries to that scan so re-scans with a new id are not
+    served stale tool output from Redis.
+    """
     payload = json.dumps(
         {
             "command": command.strip(),
@@ -91,6 +109,9 @@ def cache_key_for_execute(command: str, use_sandbox: bool, timeout_sec: int | No
         ensure_ascii=True,
     )
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    sid = (scan_id or "").strip()
+    if sid:
+        return f"{_CACHE_PREFIX}{sid}:{digest}"
     return f"{_CACHE_PREFIX}{digest}"
 
 
@@ -161,7 +182,7 @@ def get_tool_cache() -> ToolResultCache:
 
 
 def invalidate_scan_cache(scan_id: str) -> int:
-    """Invalidate all cached results for a scan. Returns number of keys deleted."""
+    """Delete Redis keys matching ``argus:*:{scan_id}:*`` (e.g. scoped sandbox exec cache)."""
     cache = get_tool_cache()
     if not cache._redis:
         logger.warning(
@@ -198,7 +219,12 @@ def invalidate_scan_cache(scan_id: str) -> int:
 
 
 def invalidate_target_cache(target: str) -> int:
-    """Invalidate all cached results for a target domain/URL."""
+    """Best-effort delete for keys matching ``argus:*:*{target}*`` (glob).
+
+    Sandbox exec entries use ``argus:sandbox:exec:…`` without embedding the target string,
+    so this helper does not clear tool result cache for typical execute keys; use
+    scan-scoped keys (``cache_key_for_execute(..., scan_id=…)``) or TTL expiry instead.
+    """
     cache = get_tool_cache()
     if not cache._redis:
         logger.warning(

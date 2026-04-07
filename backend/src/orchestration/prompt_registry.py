@@ -238,7 +238,7 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     ),
     REPORTING: (
         SYSTEM_PROMPT_BASE,
-        "Generate all text in {report_language}. Keep technical terms (CVE, CVSS, CWE, OWASP) in English.\n\n"
+        "Generate all text in English. Keep technical terms (CVE, CVSS, CWE, OWASP) in English.\n\n"
         "Generate a comprehensive penetration test report from the following real data.\n\n"
         "=== FULL PENTEST SUMMARY ===\n{summary}\n=== END SUMMARY ===\n\n"
         "The report must include:\n"
@@ -261,7 +261,6 @@ _TEMPLATE_DEFAULTS: dict[str, Any] = {
     "nvd_data": "No CVE data available",
     "active_scan_context": "",
     "recon_context": "No enriched recon context available.",
-    "report_language": "en",
 }
 
 
@@ -588,7 +587,7 @@ REPORT_AI_SYSTEM = (
 REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY: (
         "ROLE: You are a Chief Information Security Officer (CISO) summarizing assessment results for business stakeholders.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Write a concise executive summary (2\u20134 short paragraphs) for business stakeholders.\n\n"
         "REQUIREMENTS:\n"
         "1. SEVERITY DISTRIBUTION: Start with the EXACT severity breakdown from severity_counts and "
@@ -608,7 +607,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: (
         "ROLE: You are a senior application security engineer with deep knowledge of OWASP Top 10:2025 and CWE.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Describe the vulnerability in technical but readable language: root cause, affected component, "
         "and exploitation preconditions as supported by the context. "
         "Ground every sentence in fields present on the cited finding or in valhalla_context / PoC "
@@ -626,7 +625,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_REMEDIATION_STEP: (
         "ROLE: You are a DevSecOps engineer providing actionable remediation guidance.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Provide actionable remediation steps strictly PRIORITIZED BY CVSS SCORE (highest first). "
         "For each finding, structure the remediation as follows:\n\n"
         "STRUCTURE PER FINDING:\n"
@@ -657,7 +656,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_BUSINESS_RISK: (
         "ROLE: You are a risk management consultant translating technical findings to business impact.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Explain business impact: operational, financial, and reputational angles grounded in the context. "
         "Avoid alarmism without evidence. "
         "When ``valhalla_context`` is present, tie material risks to its summary, ``risk_matrix``, "
@@ -674,7 +673,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_COMPLIANCE_CHECK: (
         "ROLE: You are a GRC (Governance, Risk, Compliance) analyst mapping findings to compliance frameworks.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Map findings in the context to relevant compliance themes (e.g. confidentiality, integrity, "
         "availability, privacy). Only cite frameworks or controls implied or named in the context. "
         "If ``owasp_category_reference_ru`` is present, align category discussion with ``how_to_find`` / "
@@ -686,7 +685,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: (
         "ROLE: You are a security program manager building a prioritized remediation roadmap.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Propose a prioritized remediation roadmap (near-term vs longer-term) using severity and "
         "dependencies evident in the context. "
         "When ``valhalla_context`` is present, align sequencing with ``risk_matrix``, ``critical_vulns``, "
@@ -702,7 +701,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: (
         "ROLE: You are an infrastructure security architect providing defense-in-depth hardening guidance.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "List hardening and defense-in-depth recommendations aligned with the engagement context "
         "(configuration, monitoring, architecture). "
         "When ``valhalla_context.tech_stack_structured`` is present, tie recommendations to observed "
@@ -719,7 +718,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: (
         "ROLE: You are a senior penetration tester writing an executive summary for a leadership-technical brief.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "FOCUS:\n"
         "1. Overall security posture assessment \u2014 one clear verdict sentence.\n"
         "2. SEVERITY DISTRIBUTION: state the EXACT breakdown from executive_severity_totals (critical, "
@@ -743,7 +742,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_ATTACK_SCENARIOS: (
         "ROLE: You are a threat modeling expert constructing realistic attack scenarios.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "FOCUS: Describe 2–3 realistic attack CHAINS — not individual vulnerabilities.\n"
         "Each scenario MUST:\n"
         "- Combine 2+ findings or weaknesses into a multi-step attack path\n"
@@ -764,7 +763,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_EXPLOIT_CHAINS: (
         "ROLE: You are a red team operator constructing multi-step exploit chains from validated findings.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "Outline multi-step exploit chains (recon → initial access → impact) grounded strictly in "
         "findings, threat-model excerpts, and ``valhalla_context`` technical signals (stack, headers, TLS, "
         "dependencies, ``risk_matrix``, ``critical_vulns``). "
@@ -774,7 +773,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_REMEDIATION_STAGES: (
         "ROLE: You are a DevSecOps engineer writing a prioritized remediation plan.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "FOCUS: Structure remediation in exactly 3 tiers:\n\n"
         "TIER 1 \u2014 Fix immediately (within 48 hours):\n"
         "- Findings with confirmed exploit evidence OR CVSS >= 7.0 OR severity critical/high\n"
@@ -805,7 +804,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: (
         "ROLE: You are a vulnerability researcher assessing zero-day and novel exploitation potential.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "FOCUS — answer these specific questions:\n"
         "1. Do any findings suggest non-standard attack surfaces that automated scanners typically miss?\n"
         "2. Are there chaining opportunities that could ELEVATE low/medium-severity findings to critical impact?\n"
@@ -826,7 +825,7 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     ),
     REPORT_AI_SECTION_COST_SUMMARY: (
         "ROLE: You are a security program manager summarizing scan economics and resource utilization.\n"
-        "LANGUAGE: Write in the same language as the `report_language` field in the context JSON (default: English).\n\n"
+        "LANGUAGE: Write in English.\n\n"
         "FOCUS:\n"
         "1. What was scanned, how many findings were discovered, and noise reduction from the validation pipeline.\n"
         "2. LLM cost breakdown if cost_summary data is available: total cost, cost per confirmed finding, most expensive phase.\n\n"

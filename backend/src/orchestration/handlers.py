@@ -1007,6 +1007,11 @@ async def run_vuln_analysis(
                     "stage": "pre_va_active_scan_phase",
                 },
             )
+            _effective_scan_mode = (
+                (scan_options or {}).get("scanType")
+                or (scan_options or {}).get("scan_mode")
+                or "standard"
+            )
             result_bundle = await run_va_active_scan_phase(
                 bundle,
                 tenant_id_raw=tenant_id,
@@ -1017,6 +1022,8 @@ async def run_vuln_analysis(
                 ),
                 password_audit_opt_in=bool(kal_flags["password_audit_opt_in"]),
                 va_network_capture_opt_in=bool(kal_flags["va_network_capture_opt_in"]),
+                scan_mode=_effective_scan_mode,
+                scan_options=scan_options,
             )
             raw_intel = list(result_bundle.intel_findings or [])
             raw_intel = normalize_active_scan_intel_findings(raw_intel)

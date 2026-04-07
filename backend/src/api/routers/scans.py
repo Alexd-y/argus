@@ -42,7 +42,6 @@ from src.db.session import async_session_factory, set_session_tenant
 from src.llm.cost_tracker import ScanCostTracker
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
-from src.cache.tool_cache import invalidate_target_cache
 from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
 from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
 
@@ -270,7 +269,9 @@ async def create_scan(
         session.add(scan)
         await session.commit()
 
-    invalidate_target_cache(req.target)
+    # Sandbox tool cache is keyed by command hash; optional per-scan scope is via
+    # POST /sandbox/execute ``scan_id`` (see cache_key_for_execute). Target-based
+    # invalidation does not match exec keys. AI report text cache includes scan_id.
 
     record_scan_started()
     scan_phase_task.delay(

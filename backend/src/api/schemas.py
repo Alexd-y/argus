@@ -97,7 +97,8 @@ class ScanCreateRequest(BaseModel):
         default="en",
         min_length=2,
         max_length=5,
-        description="Report language (ISO 639-1), e.g. en, ru",
+        pattern="^en$",
+        description="Report language — English only",
     )
 
 
@@ -186,6 +187,8 @@ class SandboxExecuteRequest(BaseModel):
     command: str = Field(..., min_length=1, max_length=4096)
     use_sandbox: bool = False
     timeout_sec: int | None = Field(default=None, ge=5, le=600)
+    #: When set, tool-result cache is namespaced by scan (avoids stale hits on re-scan).
+    scan_id: str = Field(default="", max_length=36)
 
 
 class SandboxPythonRequest(BaseModel):

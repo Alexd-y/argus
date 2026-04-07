@@ -158,7 +158,11 @@ def build_ai_text_cache_key(
     payload_hash: str,
     prompt_version: str,
 ) -> str:
-    """Redis cache key: SHA-256 over canonical JSON of components (colon-safe, no collisions)."""
+    """Redis cache key: SHA-256 over canonical JSON of components (colon-safe, no collisions).
+
+    ``scan_id`` is part of the hashed payload, so each new scan gets distinct AI text cache
+    entries without explicit invalidation on re-scan.
+    """
     components = {
         "tenant_id": tenant_id,
         "scan_id": scan_id,

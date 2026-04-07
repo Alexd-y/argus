@@ -48,3 +48,9 @@ gunicorn.ctl
 
 # Local orchestration / scratch workspaces
 orch-*/
+
+# AI/Cursor prompt files (workspace artifacts, not source code)
+*_cursor_prompt*.md
+cursor_prompt_*.md
+strix_argus_*.md
+hexstrike_argus_*.md

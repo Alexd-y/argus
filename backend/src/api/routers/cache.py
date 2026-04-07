@@ -370,7 +370,8 @@ async def cache_scan_scope(
             to_int = int(to)
         except (TypeError, ValueError):
             to_int = int(settings.recon_tools_timeout or 300)
-        key = cache_key_for_execute(cmd, use_sb, to_int)
+        sid = str(row.scan_id) if row.scan_id is not None else ""
+        key = cache_key_for_execute(cmd, use_sb, to_int, scan_id=sid.strip() or None)
         try:
             raw = r.get(key)
         except Exception:

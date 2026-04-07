@@ -730,6 +730,7 @@ class ArgusClient:
         target: str,
         args_json: str = "{}",
         timeout_sec: int | None = None,
+        scan_id: str = "",
     ) -> dict[str, Any]:
         try:
             extra = json.loads(args_json) if args_json.strip() else {}
@@ -746,6 +747,9 @@ class ArgusClient:
         body: dict[str, Any] = {"command": cmd, "use_sandbox": False}
         if timeout_sec is not None:
             body["timeout_sec"] = timeout_sec
+        sid = (scan_id or "").strip()
+        if sid:
+            body["scan_id"] = sid[:36]
         return self._post_json("/api/v1/sandbox/execute", body)
 
     def execute_python_in_sandbox(self, script: str, timeout: int = 60) -> dict[str, Any]:
@@ -1671,12 +1675,20 @@ def setup_mcp_server(client: ArgusClient) -> FastMCP:
         target: str,
         args_json: str = "{}",
         timeout_sec: int | None = None,
+        scan_id: str = "",
     ) -> dict[str, Any]:
         """
         Run allowlisted CLI tool via POST /api/v1/sandbox/execute.
         args_json: JSON object merged into tool args (e.g. additional_args, ports).
+        scan_id: When set, Redis tool cache is scoped to this scan (fresh output on re-scan).
         """
-        return client.execute_security_tool(tool, target, args_json=args_json, timeout_sec=timeout_sec)
+        return client.execute_security_tool(
+            tool,
+            target,
+            args_json=args_json,
+            timeout_sec=timeout_sec,
+            scan_id=scan_id,
+        )
 
     @mcp.tool()
     def execute_python_in_sandbox(script: str, timeout: int = 60) -> dict[str, Any]:

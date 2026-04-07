@@ -336,9 +336,9 @@ class Settings(BaseSettings):
     nmap_udp_top50: bool = False  # env NMAP_UDP_TOP50
     nmap_recon_phase_timeout_sec: int = 600  # env NMAP_RECON_PHASE_TIMEOUT_SEC
 
-    # RPT-004 — language for AI-generated report sections (ISO 639-1). Env: REPORT_LANGUAGE
+    # RPT-004 — language for AI-generated report sections. English-only.
     report_language: str = Field(
-        default="ru",
+        default="en",
         validation_alias=AliasChoices("REPORT_LANGUAGE", "report_language"),
     )
 

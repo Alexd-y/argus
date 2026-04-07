@@ -13,36 +13,36 @@ from urllib.parse import urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.data_sources.hibp_pwned_passwords import validate_hibp_pwned_password_summary_light
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.llm_config import has_any_llm_key
+from src.data_sources.hibp_pwned_passwords import validate_hibp_pwned_password_summary_light
+from src.orchestration.prompt_registry import (
+    EXPLOITATION,
+    REPORT_AI_SECTION_ATTACK_SCENARIOS,
+    REPORT_AI_SECTION_BUSINESS_RISK,
+    REPORT_AI_SECTION_COMPLIANCE_CHECK,
+    REPORT_AI_SECTION_COST_SUMMARY,
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
+    REPORT_AI_SECTION_EXPLOIT_CHAINS,
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
+    REPORT_AI_SECTION_REMEDIATION_STAGES,
+    REPORT_AI_SECTION_REMEDIATION_STEP,
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
+    VULN_ANALYSIS,
+)
 from src.owasp.owasp_loader import get_owasp_category_info
 from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_IDS,
     OWASP_TOP10_2025_CATEGORY_TITLES,
     parse_owasp_category,
 )
-from src.orchestration.prompt_registry import (
-    EXPLOITATION,
-    REPORT_AI_SECTION_ATTACK_SCENARIOS,
-    REPORT_AI_SECTION_BUSINESS_RISK,
-    REPORT_AI_SECTION_COMPLIANCE_CHECK,
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
-    REPORT_AI_SECTION_EXPLOIT_CHAINS,
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
-    REPORT_AI_SECTION_REMEDIATION_STEP,
-    REPORT_AI_SECTION_REMEDIATION_STAGES,
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
-    REPORT_AI_SECTION_COST_SUMMARY,
-    VULN_ANALYSIS,
-)
 from src.reports.ai_text_generation import (
-    AITextDeduplicator,
     REPORT_AI_SKIPPED_GENERATION_FAILED,
     REPORT_AI_SKIPPED_NO_LLM,
+    AITextDeduplicator,
     run_ai_text_generation,
 )
 from src.reports.data_collector import (
@@ -63,12 +63,12 @@ from src.reports.finding_metadata import (
     normalize_evidence_refs,
     normalize_evidence_type,
 )
-from src.reports.i18n import get_translations
 from src.reports.generators import (
     ReportData,
     build_owasp_compliance_rows,
     build_report_data_from_scan_report,
 )
+from src.reports.i18n import get_translations
 from src.reports.valhalla_report_context import (
     ValhallaReportContext,
     derive_exploit_available_flag,
@@ -619,7 +619,7 @@ def _owasp_summary_for_ai_payload(findings: list[FindingRow]) -> dict[str, Any] 
     Aggregate OWASP Top 10:2025 counts for the AI report context.
     Returns None when no finding has a valid category (backward compatible: key omitted).
     """
-    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    counts: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
     classified = 0
     for f in findings:
         raw = getattr(f, "owasp_category", None)
@@ -1215,7 +1215,7 @@ class ReportGenerator:
         payload: dict[str, Any] = {
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
-            "report_language": settings.report_language,
+            "report_language": "en",
             "finding_count": len(data.findings),
             "severity_counts": severity_counts,
             "executive_severity_totals": executive_severity_totals,
@@ -1350,11 +1350,67 @@ class ReportGenerator:
                 continue
             st = res.get("status")
             err = res.get("error")
-            if st == "ok" or st == "skipped_no_llm":
-                out[key] = text.strip()
-            elif err in ("llm_unavailable", "generation_failed"):
+            if st == "ok" or st == "skipped_no_llm" or err in ("llm_unavailable", "generation_failed"):
                 out[key] = text.strip()
         return out
+
+    def resolve_celery_ai_results(
+        self,
+        celery_task_ids: dict[str, str],
+        *,
+        timeout: float = 300.0,
+    ) -> dict[str, dict[str, Any]]:
+        """Resolve Celery AI section tasks and apply cross-section dedup.
+
+        Mirrors the dedup logic in ``run_ai_sections_sync`` for parity.
+        Defensive: if any task fails or dedup errors, the report still generates.
+        """
+        from celery.result import AsyncResult
+
+        results: dict[str, dict[str, Any]] = {}
+        for section_key, task_id in celery_task_ids.items():
+            try:
+                res = AsyncResult(task_id)
+                result = res.get(timeout=timeout)
+                if isinstance(result, dict):
+                    results[section_key] = result
+                else:
+                    results[section_key] = {
+                        "text": str(result) if result else "",
+                        "status": "ok",
+                    }
+            except Exception:
+                logger.warning(
+                    "celery_ai_task_resolve_failed",
+                    extra={
+                        "event": "celery_ai_task_resolve_failed",
+                        "section_key": section_key,
+                        "task_id": task_id,
+                    },
+                    exc_info=True,
+                )
+                results[section_key] = {
+                    "text": REPORT_AI_SKIPPED_GENERATION_FAILED,
+                    "status": "error",
+                    "error": "celery_task_failed",
+                }
+
+        text_map = self.ai_results_to_text_map(results)
+        if len(text_map) > 1:
+            try:
+                deduplicator = AITextDeduplicator()
+                deduped = deduplicator.deduplicate_sections(text_map)
+                for key, deduped_text in deduped.items():
+                    if key in results and results[key].get("text") != deduped_text:
+                        results[key]["text"] = deduped_text
+            except Exception:
+                logger.warning(
+                    "ai_text_dedup_celery_failed",
+                    extra={"event": "ai_text_dedup_celery_failed"},
+                    exc_info=True,
+                )
+
+        return results
 
     def prepare_template_context(
         self,
@@ -1367,9 +1423,22 @@ class ReportGenerator:
         """
         Pure Jinja context: scan/report snapshots, per-tier slot maps, and shared ``ai_sections``.
         RPT-008 can extend ``jinja.*.slots`` or add partials under ``tier_stubs``.
+
+        Applies ``AITextDeduplicator`` as a safety net before fallback filling, ensuring
+        dedup runs regardless of how AI texts were produced (sync or Celery).
         """
         tier_norm = normalize_report_tier(tier)
         texts: dict[str, str] = dict(ai_section_texts)
+        if len(texts) > 1:
+            try:
+                deduplicator = AITextDeduplicator()
+                texts = deduplicator.deduplicate_sections(texts)
+            except Exception:
+                logger.warning(
+                    "ai_text_dedup_context_failed",
+                    extra={"event": "ai_text_dedup_context_failed"},
+                    exc_info=True,
+                )
         for sk in report_tier_sections(tier_norm):
             if (texts.get(sk) or "").strip():
                 continue
@@ -1398,14 +1467,13 @@ class ReportGenerator:
             }
         finding_rows = findings_rows_for_jinja(data)
         severity_counts_ctx = executive_severity_totals_from_finding_rows(data.findings)
-        report_language = settings.report_language
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
             "tenant_id": data.tenant_id,
             "scan_id": data.scan_id,
-            "i18n": get_translations(report_language),
-            "report_language": report_language,
+            "i18n": get_translations(),
+            "report_language": "en",
             "severity_counts": severity_counts_ctx,
             "scan": data.scan.model_dump(mode="json") if data.scan else None,
             "report": data.report.model_dump(mode="json") if data.report else None,

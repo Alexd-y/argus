@@ -780,6 +780,7 @@
           "standard": "cloudsplaining scan --input-file credentials.json --all",
           "deep": "cloudsplaining download && cloudsplaining scan --input-file credentials.json --all"
         },
+        "requires_shell": true,
         "output_format": "json",
         "timeout_seconds": { "quick": 30, "standard": 120, "deep": 300 },
         "parser": "json_file"
