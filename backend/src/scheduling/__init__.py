@@ -33,15 +33,25 @@ from src.scheduling.cron_parser import (
     normalize_to_utc,
     validate_cron,
 )
+from src.scheduling.redbeat_loader import (
+    SCAN_TRIGGER_TASK_NAME,
+    remove_one,
+    sync_all_from_db,
+    sync_one,
+)
 
 __all__ = [
     "MAX_CRON_FIELDS",
     "MIN_INTERVAL_SECONDS",
+    "SCAN_TRIGGER_TASK_NAME",
     "CronParserError",
     "CronValidationError",
     "ParsedCron",
     "is_in_maintenance_window",
     "next_fire_time",
     "normalize_to_utc",
+    "remove_one",
+    "sync_all_from_db",
+    "sync_one",
     "validate_cron",
 ]

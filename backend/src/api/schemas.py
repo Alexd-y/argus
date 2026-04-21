@@ -552,6 +552,146 @@ class EmergencyAuditTrailResponse(BaseModel):
     has_more: bool
 
 
+# --- Scan schedules CRUD (T33, ARG-056) ---
+
+ScanScheduleMode = Literal["standard", "deep"]
+SCAN_SCHEDULE_NAME_MAX: int = 255
+SCAN_SCHEDULE_CRON_MAX: int = 64
+SCAN_SCHEDULE_TARGET_MAX: int = 2048
+SCAN_SCHEDULE_RUN_NOW_REASON_MIN: int = 10
+SCAN_SCHEDULE_RUN_NOW_REASON_MAX: int = 500
+
+
+class ScanScheduleCreateRequest(BaseModel):
+    """POST /admin/scan-schedules — create a recurring scheduled scan.
+
+    All fields are required. The ``maintenance_window_cron`` field is
+    optional and defaults to ``None`` (no window — fires whenever the
+    primary cron ticks). ``cron_expression`` is validated by
+    :func:`src.scheduling.cron_parser.validate_cron` at the API layer with
+    the project DOS-guard floor (5 minutes); ``maintenance_window_cron``
+    uses a relaxed 60-minute floor because operators usually set windows
+    on hourly granularity.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_id: UUID = Field(
+        ..., description="Owning tenant; admin must equal own tenant, super-admin any."
+    )
+    name: str = Field(..., min_length=1, max_length=SCAN_SCHEDULE_NAME_MAX)
+    cron_expression: str = Field(..., min_length=1, max_length=SCAN_SCHEDULE_CRON_MAX)
+    target_url: str = Field(
+        ...,
+        min_length=1,
+        max_length=SCAN_SCHEDULE_TARGET_MAX,
+        pattern=TARGET_PATTERN,
+    )
+    scan_mode: ScanScheduleMode = "standard"
+    enabled: bool = True
+    maintenance_window_cron: str | None = Field(
+        default=None, max_length=SCAN_SCHEDULE_CRON_MAX
+    )
+
+
+class ScanScheduleUpdateRequest(BaseModel):
+    """PATCH /admin/scan-schedules/{id} — partial update.
+
+    PATCH semantics:
+      * Any field set to ``None`` (omitted) is treated as "no change".
+      * To CLEAR ``maintenance_window_cron`` the client currently cannot
+        send ``null`` distinguishable from omission — this is a documented
+        v1 deferment. Operators who need to remove the window must
+        recreate the schedule. A future iteration may switch to a
+        sentinel-based clear semantic.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(
+        default=None, min_length=1, max_length=SCAN_SCHEDULE_NAME_MAX
+    )
+    cron_expression: str | None = Field(
+        default=None, min_length=1, max_length=SCAN_SCHEDULE_CRON_MAX
+    )
+    target_url: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=SCAN_SCHEDULE_TARGET_MAX,
+        pattern=TARGET_PATTERN,
+    )
+    scan_mode: ScanScheduleMode | None = None
+    enabled: bool | None = None
+    maintenance_window_cron: str | None = Field(
+        default=None, max_length=SCAN_SCHEDULE_CRON_MAX
+    )
+
+
+class ScanScheduleResponse(BaseModel):
+    """One row of ``scan_schedules`` projected for the operator console."""
+
+    id: UUID
+    tenant_id: UUID
+    name: str
+    cron_expression: str
+    target_url: str
+    scan_mode: str
+    enabled: bool
+    maintenance_window_cron: str | None
+    last_run_at: datetime | None
+    next_run_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScanSchedulesListResponse(BaseModel):
+    """GET /admin/scan-schedules — paginated list."""
+
+    items: list[ScanScheduleResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    offset: int = Field(ge=0)
+
+
+class ScanScheduleRunNowRequest(BaseModel):
+    """POST /admin/scan-schedules/{id}/run-now — manual override.
+
+    ``bypass_maintenance_window`` defaults to False so the operator must
+    explicitly opt into firing during a declared maintenance window.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bypass_maintenance_window: bool = False
+    reason: str = Field(
+        ...,
+        min_length=SCAN_SCHEDULE_RUN_NOW_REASON_MIN,
+        max_length=SCAN_SCHEDULE_RUN_NOW_REASON_MAX,
+        description="Free-text justification recorded in the audit trail.",
+    )
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_reason_strip(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < SCAN_SCHEDULE_RUN_NOW_REASON_MIN:
+            raise ValueError(
+                f"reason must contain at least {SCAN_SCHEDULE_RUN_NOW_REASON_MIN} "
+                "non-whitespace characters"
+            )
+        return normalized
+
+
+class ScanScheduleRunNowResponse(BaseModel):
+    """202 — schedule fired manually; returns Celery task id and audit id."""
+
+    schedule_id: UUID
+    enqueued_task_id: str
+    bypassed_maintenance_window: bool
+    enqueued_at: datetime
+    audit_id: str
+
+
 class ScanCostApiResponse(BaseModel):
     """GET /scans/{scan_id}/cost — mirrors ScanCostTracker.breakdown subset."""
 

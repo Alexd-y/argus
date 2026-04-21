@@ -29,6 +29,9 @@ app = Celery(
         "src.recon.jobs.runner",
         # ARG-044 — daily EPSS / KEV intelligence refresh.
         "src.celery.tasks.intel_refresh",
+        # T33 — operator-managed scan_schedules; the trigger task is
+        # scheduled dynamically via celery-redbeat (see redbeat block below).
+        "src.scheduling.scan_trigger",
     ],
 )
 
@@ -63,9 +66,52 @@ app.conf.update(
         # so they cannot starve scan / report queues during a scheduled run.
         "argus.intel.epss_refresh": {"queue": "argus.intel"},
         "argus.intel.kev_refresh": {"queue": "argus.intel"},
+        # T33 — scheduled scans fire onto the same queue as ad-hoc scans
+        # so the existing worker pool drains them with no extra config.
+        "argus.scheduling.run_scheduled_scan": {"queue": "argus.scans"},
     },
     task_default_queue="argus.default",
 )
+
+
+# T33 — celery-redbeat dynamic scheduler.
+#
+# RedBeat persists schedule entries in Redis under ``redbeat:<key>``, which
+# lets the API layer add/remove ``scan_schedules`` at runtime without
+# restarting Celery beat. We point it at the same Redis instance used as
+# broker / backend so a single Redis is sufficient for dev + small prod
+# deployments. Operators who want to isolate beat state from broker state
+# can override ``REDBEAT_REDIS_URL`` in the environment (Celery picks it
+# up from ``app.conf`` directly).
+#
+# The import is wrapped in a try/except: if celery-redbeat is not
+# installed (for example in a slim test image) Celery falls back to its
+# default in-memory ``PersistentScheduler`` and the API endpoints will
+# log a warning when ``redbeat_loader.sync_one`` is called. The CRUD
+# layer still functions; only the dynamic beat sync is downgraded.
+try:
+    import redbeat  # type: ignore[import-untyped]  # noqa: F401
+
+    _REDBEAT_AVAILABLE = True
+except ImportError:  # pragma: no cover — redbeat is a runtime dependency in prod
+    _REDBEAT_AVAILABLE = False
+    _logger.warning(
+        "celery.redbeat.unavailable",
+        extra={"event": "celery.redbeat.unavailable"},
+    )
+
+if _REDBEAT_AVAILABLE:
+    app.conf.update(
+        beat_scheduler="redbeat.RedBeatScheduler",
+        redbeat_redis_url=settings.redis_url,
+        # Lock timeout (seconds) protects against split-brain when two
+        # beat processes race for the lock. 60s is the upstream default;
+        # we keep it explicit so ops can tune it without code changes.
+        redbeat_lock_timeout=60,
+        # Key prefix isolates ARGUS schedules from any other Celery app
+        # that might share this Redis instance.
+        redbeat_key_prefix="argus:redbeat:",
+    )
 
 
 # ARG-044 — beat schedule (daily EPSS / KEV refresh). The merge helper is

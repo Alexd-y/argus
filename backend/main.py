@@ -34,6 +34,7 @@ import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bu
 import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / throttle (T31)
 import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
 import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
+import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
 
 from src.api.routers.recon import recon_router
 from src.cache.scan_knowledge_base import get_knowledge_base
