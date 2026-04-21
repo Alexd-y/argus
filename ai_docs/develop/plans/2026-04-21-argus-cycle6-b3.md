@@ -123,16 +123,16 @@ Wave 4 (parallel after T20–T23, день 4):
 
 ## 8. Прогресс (обновляется оркестратором)
 
-- ⏳ T20: Global finding triage UI — Pending
-- ⏳ T21: Bulk findings actions — Pending
-- ✅ T22: Audit log viewer UI с chain verify — Completed (84 vitest cases в 6 файлах; suite 297/297; ESLint+tsc clean)
+- ✅ T20: Global finding triage UI — Completed (213 vitest; commits `a27c07bf` + `ccf83c8`; ISS-S0-1 server-action fix; ISS-T20-001..014 deferred)
+- ✅ T21: Bulk findings actions — Completed (55 vitest; commit `be396d4`; ISS-T21-001..002 deferred)
+- ✅ T22: Audit log viewer UI с chain verify — Completed (84 vitest cases в 6 файлах; suite 297/297; ESLint+tsc clean; commit `a3900be`)
 - ✅ T23: SARIF / JUnit toggle UI — Completed (commit `dc7b256`; 24 tests; suite 123/123)
-- ✅ T24: Backend cross-tenant finding query API — Completed (commits `1e002e58` + `9678a86`; 47 tests)
-- ✅ T25: Backend chain integrity verify API — Completed (commits `a35a6b41` + `e4ab4e0`; 30 tests; deferred ISS-T25-001..005)
-- ⏳ T26: Vitest ≥30 + axe-core CI gate — Pending
-- ⏳ T27: Playwright E2E ≥10 scenarios — Pending
+- ✅ T24: Backend cross-tenant finding query API — Completed (commits `1e002e58` + `9678a86`; 47 tests; ISS-T24-001..005 deferred)
+- ✅ T25: Backend chain integrity verify API — Completed (commits `a35a6b41` + `e4ab4e0`; 30 tests; ISS-T25-001..005 deferred)
+- ✅ T26: Vitest ≥30 + axe-core CI gate — Completed (7 a11y E2E scenarios; commit `495dc06`; ISS-T26-001 deferred)
+- ✅ T27: Playwright E2E ≥10 scenarios — Completed (11 functional E2E; commit `da9c632`)
 
-**Всего:** 4 / 8 completed.
+**Всего:** 8 / 8 completed ✅ — **Batch 3 delivered on 2026-04-21**
 
 ## 9. Открытые вопросы / blockers (для пользователя перед стартом)
 

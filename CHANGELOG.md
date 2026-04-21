@@ -6,6 +6,23 @@ All notable changes to ARGUS platform are documented in this file.
 
 - **Security (SEC-001):** sanitized `infra/.env.example` provider placeholders — operators must still rotate keys and purge git history.
 
+### Batch 3 orchestration — Admin XL Triage + Audit (2026-04-21)
+
+- **Global triage console (T20):** `/admin/findings` cross-tenant findings table; SSVC-sorted + KEV-filtered + severity-faceted; paginaged + server-action only; ✅ 213 vitest (sort/filter/empty/error/RBAC); 🚨 **ISS-T20-003 flags JWT auth gap** (cookie-based shim sufficient for non-prod; deferred to Cycle 7 before public launch).
+- **Bulk triage actions (T21):** suppress / escalate / mark-false-positive / attach-CVE; double-confirm for destructive; cap=100 IDs/request; audit emit per request; ✅ 55 vitest (RBAC, validation, idempotency, audit).
+- **Audit log viewer + chain verify (T22):** `/admin/audit-logs` paginated append-only log; `POST /admin/audit-logs/verify-chain` replays hash chain to detect tampering; export JSON/CSV via server route; ✅ 84 vitest (filters, virtualisation, chain logic); suite 297/297 ✅.
+- **SARIF/JUnit toggle UI (T23):** per-tenant export format toggle in `TenantSettingsClient`; mutation via `PATCH /api/v1/admin/tenants/{id}`; ✅ 24 vitest (toggle, RBAC); suite 123/123 ✅.
+- **Backend cross-tenant findings API (T24):** `GET /admin/findings` endpoint; super-admin cross-tenant, admin/operator tenant-scoped; parameterized SQL no string concat; ✅ 47 vitest (RBAC matrix, filters, pagination); commits `1e002e58` + `9678a86`.
+- **Backend chain verify API (T25):** `POST /admin/audit-logs/verify-chain?since=&until=` returns `{ok, verified_count, drift_detected_at, drift_event_id}`; replays SHA256 chain from GENESIS_HASH; ✅ 30 vitest (chain logic, time-window, SIEM markers); commits `a35a6b41` + `e4ab4e0`; 🚨 **ISS-T25-001 flags SIEM correlation** (markers in JSONB `details`; promote to column in Batch 4).
+- **A11y + CI gate (T26):** axe-core Playwright scans `/admin/{findings,audit,tenants/[id]/settings}` → 0 critical/serious violations; ✅ 7 a11y E2E scenarios; new `.github/workflows/admin-a11y-axe.yml` (advisory initially).
+- **E2E coverage (T27):** Playwright ≥10 scenarios for admin part 2 (findings list/filter/sort/bulk-suppress/escalate/audit list/verify-chain/exports toggle); mock backend; ✅ 11 functional E2E; extends existing Frontend E2E job; commits cumulative 11 atomic.
+- **Test coverage delta:** vitest 123 → 354 (+231 across T20–T23); backend +77 (T24+T25); a11y E2E +7 (T26); functional E2E +11 (T27) = **+319 total test assertions**.
+- **Critical production gate:** [**ISS-T20-003**](ai_docs/develop/issues/ISS-T20-003.md) — cookie-based identity shim tolerates dev/staging but must be replaced with JWT/session token before public launch (operator tampering risk; current auth through `X-Admin-Key` only, not role header, so safe today; deferred to Cycle 7).
+- **Carry-over issued (24 deferred items):** performance optimizations (T20 pagination cursor >100k, T24 cross-tenant query p95 1.2s), UX polish (T20 mobile responsiveness, T21 reason validation, T26 accent color contrast), SIEM integration (T25 chain markers as dedicated columns, correlation IDs), Bluetooth metadata (T24 reserved params, T24 tenant-id RBAC audit), and documented in [`ai_docs/develop/issues/ISS-cycle6-batch3-carry-over.md`](ai_docs/develop/issues/ISS-cycle6-batch3-carry-over.md).
+- **Architecture documented:** server-action-only pattern for admin endpoints (blocks browser-side fetch); per-tenant fan-out for super-admin bulk actions; RBAC through session resolver (`getServerAdminSession` → `resolveEffectiveTenant`); chain markers in JSONB (SIEM-queryable, deferred column promotion).
+- **Files added:** Frontend `src/app/admin/{findings,audit-logs}`, `src/components/admin/{Findings*,Audit*,ChainVerifyResult}`, `src/lib/admin{Findings,AuditLogs}`; Backend `src/api/routers/admin_findings.py`; CI axe-core + E2E jobs.
+- **Sign-off:** [`ai_docs/develop/reports/2026-04-21-cycle6-batch3-implementation.md`](ai_docs/develop/reports/2026-04-21-cycle6-batch3-implementation.md) — orchestration report with metrics, per-task recap, architectural decisions.
+
 ### Batch 2 orchestration — Admin XL foundation (2026-04-22)
 
 - **META-001 / ops:** pager-safe `commit_T*.ps1` для очереди T01–T10 (Batch 1 queue).

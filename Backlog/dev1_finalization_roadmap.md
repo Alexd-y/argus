@@ -65,7 +65,7 @@ Roadmap разбит на **6 batches × ~9 tasks = 53 tasks**. Estimated wall-t
 
 ---
 
-### Batch 3 — Admin Frontend XL — Triage + Audit (ARG-051b) (8 tasks, ~4d wall-time)
+### Batch 3 — Admin Frontend XL — Triage + Audit (ARG-051b) (8 tasks, ~4d wall-time) **✅ DELIVERED 2026-04-21**
 
 **Theme:** Global finding triage + audit log viewer + chain integrity verification + SARIF/JUnit toggle UI.
 
