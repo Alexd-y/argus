@@ -373,7 +373,14 @@ def is_in_maintenance_window(
     at_in_zone = _ensure_aware(at, default_tz=UTC).astimezone(zone)
     # croniter.match treats `at` as a fire if it lies on a cron tick (at
     # minute granularity), so the window-opening edge is included.
-    if cast(bool, croniter.match(window_cron, at_in_zone)):
+    # Wrapped in try/except because `croniter.match` does NOT route through
+    # `_build_croniter` and would otherwise leak `CroniterError` subclasses
+    # (and the raw expression text) past the closed-taxonomy boundary.
+    try:
+        matched = cast(bool, croniter.match(window_cron, at_in_zone))
+    except CroniterError as exc:
+        raise CronValidationError("invalid cron syntax") from exc
+    if matched:
         return True
     iterator = _build_croniter(window_cron, at_in_zone)
     try:

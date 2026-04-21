@@ -303,6 +303,26 @@ class TestIsInMaintenanceWindow:
                 at=datetime(2026, 4, 22, 12, 0, tzinfo=UTC),
             )
 
+    def test_in_maintenance_window_malformed_window_cron_raises(self) -> None:
+        """Malformed ``window_cron`` reaches ``croniter.match`` first (before
+        ``_build_croniter`` runs) — that path MUST also remap to our
+        taxonomy, otherwise raw ``CroniterError`` subclasses (and the
+        operator's raw expression embedded in their message) leak past the
+        closed-taxonomy boundary.
+        """
+        operator_input = "abc def ghi jkl mno"
+        with pytest.raises(
+            CronValidationError, match="invalid cron syntax"
+        ) as exc_info:
+            is_in_maintenance_window(
+                operator_input,
+                at=datetime(2026, 4, 22, 12, 0, tzinfo=UTC),
+                window_duration_minutes=60,
+            )
+        # PII / log-safety: operator input MUST NOT appear in error args.
+        assert operator_input not in str(exc_info.value)
+        assert operator_input not in repr(exc_info.value)
+
 
 # ---------------------------------------------------------------------------
 # normalize_to_utc
