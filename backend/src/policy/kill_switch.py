@@ -287,14 +287,13 @@ class KillSwitchService:
         Raises :class:`EmergencyAlreadyActiveError` when a global flag is
         already active so the API layer can map to HTTP 409 instead of
         silently overwriting prior operator context.
+
+        Atomicity: uses ``SET NX`` so two concurrent super-admin callers cannot
+        both observe an empty key, both write, and both emit a stale audit row
+        (TOCTOU). Redis returns falsy on NX-collision; the loser raises and
+        the API surface returns 409 with no audit attribution drift.
         """
         client = self._require_redis()
-        existing = self.get_global()
-        if existing is not None:
-            raise EmergencyAlreadyActiveError(
-                "global emergency already active; resume first"
-            )
-
         normalized_reason = _normalize_reason(reason)
         ts = _ensure_aware(activated_at) or _utcnow()
         operator_subject_hash = user_id_hash(operator_subject)
@@ -303,7 +302,10 @@ class KillSwitchService:
             "operator_subject_hash": operator_subject_hash,
             "activated_at": ts.isoformat(),
         }
-        client.set(_global_key(), _serialize(payload))
+        if not client.set(_global_key(), _serialize(payload), nx=True):
+            raise EmergencyAlreadyActiveError(
+                "global emergency already active; resume first"
+            )
         logger.info(
             "kill_switch.global.set",
             extra={
@@ -384,6 +386,10 @@ class KillSwitchService:
         Re-issuing for the same tenant is allowed (it overwrites the prior
         entry and resets the TTL); the API layer treats this as an explicit
         operator action and emits a fresh audit row.
+
+        Note: tenant throttle is overwritable by design — re-throttling with a
+        different duration is legitimate admin behaviour, so we deliberately
+        do NOT use ``SET NX`` here (unlike :meth:`set_global`).
         """
         client = self._require_redis()
         if duration_seconds <= 0:

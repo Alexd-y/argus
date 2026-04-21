@@ -52,7 +52,17 @@ class _FakeRedis:
     def get(self, key: str) -> str | None:
         return self._data.get(key)
 
-    def set(self, key: str, value: str, *, ex: int | None = None) -> bool:
+    def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool:
+        # Mirror redis-py SET NX semantics for KillSwitchService.set_global.
+        if nx and key in self._data:
+            return False
         self._data[key] = value
         if ex is not None:
             self._ttls[key] = int(ex)
@@ -138,15 +148,26 @@ def _resume_all_body(reason: str = "Incident resolved — resume normal ops") ->
 
 
 def _make_stop_session(*, cancelled: int = 5, tenants: int = 3) -> AsyncMock:
-    """Mock async session for the cross-tenant cancel + audit pipeline."""
-    count_row = MagicMock()
-    count_row.one.return_value = (cancelled, tenants)
+    """Mock async session for the cross-tenant cancel + audit pipeline.
+
+    ``_cancel_all_active_scans`` now uses ONE ``UPDATE ... RETURNING`` round-
+    trip (no separate ``SELECT count(...)``); this mock yields a result whose
+    ``.all()`` returns ``cancelled`` rows distributed across ``tenants``
+    distinct ``tenant_id`` values so the bulk-cancel helper computes accurate
+    counters from a single execute call.
+    """
+    rows: list[MagicMock] = []
+    if cancelled > 0:
+        per_tenant_ids = [f"tenant-{i}" for i in range(max(tenants, 1))]
+        for idx in range(cancelled):
+            row = MagicMock()
+            row.id = f"scan-{idx}"
+            row.tenant_id = per_tenant_ids[idx % len(per_tenant_ids)]
+            rows.append(row)
     update_result = MagicMock()
+    update_result.all.return_value = rows
     session = AsyncMock()
-    if cancelled == 0:
-        session.execute = AsyncMock(side_effect=[count_row])
-    else:
-        session.execute = AsyncMock(side_effect=[count_row, update_result])
+    session.execute = AsyncMock(return_value=update_result)
     session.add = MagicMock()
     session.commit = AsyncMock()
     return session

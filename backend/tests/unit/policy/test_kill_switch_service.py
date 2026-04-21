@@ -53,7 +53,18 @@ class _FakeRedis:
     def get(self, key: str) -> str | None:
         return self._data.get(key)
 
-    def set(self, key: str, value: str, *, ex: int | None = None) -> bool:
+    def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool:
+        # Mirror redis-py SET NX semantics: when nx=True and the key exists,
+        # return False (key not written); otherwise write and return True.
+        if nx and key in self._data:
+            return False
         self._data[key] = value
         if ex is not None:
             self._ttls[key] = int(ex)
@@ -148,6 +159,41 @@ class TestGlobalStop:
             service.set_global(
                 reason="second attempt while still active",
                 operator_subject=operator_subject,
+            )
+
+    def test_set_global_setnx_blocks_concurrent_writer(
+        self, operator_subject: str
+    ) -> None:
+        """Two concurrent super-admins MUST NOT both observe an empty key,
+        both write, and both emit a stale audit row (TOCTOU). With ``SET NX``
+        the second writer's redis-py call returns falsy, the service raises
+        :class:`EmergencyAlreadyActiveError`, the API surface returns 409, and
+        the persisted payload remains the FIRST winner — not silently
+        overwritten by the loser.
+        """
+        client: Any = MagicMock()
+        # First call: NX succeeds (truthy). Second call: NX collides (falsy).
+        client.set.side_effect = [True, None]
+        svc = KillSwitchService(client)
+
+        first = svc.set_global(
+            reason="initial halt — first writer",
+            operator_subject=operator_subject,
+        )
+        assert first.reason == "initial halt — first writer"
+
+        with pytest.raises(EmergencyAlreadyActiveError):
+            svc.set_global(
+                reason="losing concurrent writer — must 409",
+                operator_subject=operator_subject,
+            )
+
+        # Both calls MUST have used nx=True; otherwise the second would have
+        # silently overwritten the first.
+        assert client.set.call_count == 2
+        for call in client.set.call_args_list:
+            assert call.kwargs.get("nx") is True, (
+                "set_global must use SET NX for atomic write-or-fail"
             )
 
     def test_set_global_strips_and_caps_reason(

@@ -400,10 +400,7 @@ EmergencyAuditEventType = Literal[
     "emergency.stop_all",
     "emergency.resume_all",
     "emergency.throttle",
-    "emergency.tenant_resume",
 ]
-
-EmergencyReasonTaxonomy = Literal["global", "tenant"]
 
 
 class _EmergencyReasonBase(BaseModel):

@@ -217,26 +217,32 @@ async def _cancel_all_active_scans(db: AsyncSession) -> tuple[int, int, int]:
     """Cancel every non-terminal scan across every tenant. SQL-level update.
 
     Returns ``(cancelled_count, skipped_terminal_count, tenants_affected)``.
-    Performs ONE bulk UPDATE per call (no per-row loop) so the operation
-    completes in milliseconds even on 10⁴-scan datasets. RLS is intentionally
-    NOT engaged: this is a global super-admin action and the policy must
-    span every tenant.
+
+    Performs ONE bulk ``UPDATE ... RETURNING`` per call (no per-row loop, no
+    separate ``SELECT count()``). The single-statement design eliminates the
+    count-then-update race where a scan inserted between the two queries gets
+    cancelled but is not counted, causing ``audit_logs.details.cancelled_count``
+    to drift below the real cancellation cardinality. ``cancelled_count`` and
+    ``tenants_affected`` are now derived from the actual returned row set in
+    one round-trip.
+
+    ``skipped_terminal_count`` is always 0 — the bulk-update path filters
+    terminal scans in the WHERE clause, so they are never touched and no
+    distinction is recorded between "would have skipped" vs "not selected".
+
+    RLS is intentionally NOT engaged: this is a global super-admin action and
+    the policy must span every tenant.
     """
-    pending_count_stmt = select(
-        func.count(Scan.id), func.count(func.distinct(Scan.tenant_id))
-    ).where(Scan.status.notin_(_TERMINAL_SCAN_STATUSES))
-    pending_row = (await db.execute(pending_count_stmt)).one()
-    cancelled_count = int(pending_row[0])
-    tenants_affected = int(pending_row[1])
-
-    if cancelled_count == 0:
-        return 0, 0, 0
-
-    await db.execute(
+    stmt = (
         update(Scan)
         .where(Scan.status.notin_(_TERMINAL_SCAN_STATUSES))
         .values(status="cancelled", phase="cancelled")
+        .returning(Scan.id, Scan.tenant_id)
     )
+    rows = (await db.execute(stmt)).all()
+    cancelled_count = len(rows)
+    tenants_affected = len({row.tenant_id for row in rows})
+    # always 0 — bulk update path does not distinguish terminal vs non-terminal.
     return cancelled_count, 0, tenants_affected
 
 
@@ -543,7 +549,7 @@ async def emergency_throttle(
         "admin.emergency.throttle",
         extra={
             "event": "argus.admin.emergency.throttle",
-            "tenant_hash": tenant_hash(target_tenant),
+            "tenant_id_hash": tenant_hash(target_tenant),
             "user_id_hash": user_id_hash(operator_subject),
             "audit_id": audit_id,
             "duration_minutes": int(body.duration_minutes),
@@ -625,7 +631,7 @@ async def emergency_status(
             "event": "argus.admin.emergency.status",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_hash": (
+            "tenant_id_hash": (
                 tenant_hash(effective_tenant) if effective_tenant else None
             ),
             "global_active": global_out.active,
@@ -724,7 +730,7 @@ async def emergency_audit_trail(
             "event": "argus.admin.emergency.audit_trail",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_hash": (
+            "tenant_id_hash": (
                 tenant_hash(effective_tenant) if effective_tenant else None
             ),
             "result_count": len(items),

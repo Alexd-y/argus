@@ -43,7 +43,18 @@ class _FakeRedis:
     def get(self, key: str) -> str | None:
         return self._data.get(key)
 
-    def set(self, key: str, value: str, *, ex: int | None = None) -> bool:
+    def set(
+        self,
+        key: str,
+        value: str,
+        *,
+        ex: int | None = None,
+        nx: bool = False,
+    ) -> bool:
+        # Mirror redis-py SET NX semantics; throttle does not currently use
+        # nx, but the stub stays in lock-step with the kill_switch test stub.
+        if nx and key in self._data:
+            return False
         self._data[key] = value
         if ex is not None:
             self._ttls[key] = int(ex)
