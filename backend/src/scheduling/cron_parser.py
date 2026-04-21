@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
-from typing import Final
+from typing import Final, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import CroniterError, croniter  # type: ignore[import-untyped]
@@ -193,7 +193,8 @@ def _enforce_frequency_guard(iterator: croniter, *, max_freq_seconds: int) -> in
     """
     try:
         fires: list[datetime] = [
-            iterator.get_next(datetime) for _ in range(_FREQ_GUARD_SAMPLE)
+            cast(datetime, iterator.get_next(datetime))
+            for _ in range(_FREQ_GUARD_SAMPLE)
         ]
     except CroniterError as exc:  # e.g. CroniterBadDateError on impossible patterns
         raise CronValidationError("invalid cron syntax") from exc
@@ -293,7 +294,7 @@ def next_fire_time(
     after_in_zone = _ensure_aware(after, default_tz=UTC).astimezone(zone)
     iterator = _build_croniter(expression, after_in_zone)
     try:
-        candidate = iterator.get_next(datetime)
+        candidate = cast(datetime, iterator.get_next(datetime))
     except CroniterError as exc:
         raise CronValidationError("invalid cron syntax") from exc
     if _is_dst_fallback_duplicate(candidate, of=after_in_zone):
@@ -301,7 +302,7 @@ def next_fire_time(
         # call cannot realistically raise; we re-wrap solely to keep the
         # closed taxonomy if croniter ever changes its mind.
         try:
-            candidate = iterator.get_next(datetime)
+            candidate = cast(datetime, iterator.get_next(datetime))
         except CroniterError as exc:  # pragma: no cover — defensive only
             raise CronValidationError("invalid cron syntax") from exc
     return candidate.astimezone(UTC)
@@ -372,11 +373,11 @@ def is_in_maintenance_window(
     at_in_zone = _ensure_aware(at, default_tz=UTC).astimezone(zone)
     # croniter.match treats `at` as a fire if it lies on a cron tick (at
     # minute granularity), so the window-opening edge is included.
-    if croniter.match(window_cron, at_in_zone):
+    if cast(bool, croniter.match(window_cron, at_in_zone)):
         return True
     iterator = _build_croniter(window_cron, at_in_zone)
     try:
-        previous_fire = iterator.get_prev(datetime)
+        previous_fire = cast(datetime, iterator.get_prev(datetime))
     except CroniterError as exc:
         raise CronValidationError("invalid cron syntax") from exc
     elapsed = at_in_zone - previous_fire
