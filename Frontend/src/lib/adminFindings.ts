@@ -1,5 +1,13 @@
 /**
- * Admin findings — typed client for the cross-tenant triage console (T20).
+ * Admin findings — typed contract + closed-taxonomy errors for the
+ * cross-tenant triage console (T20).
+ *
+ * This module is **transport-free** — both server actions
+ * (`Frontend/src/app/admin/findings/actions.ts`) and React components import
+ * from here. The previous browser-side fetch helper was removed once we
+ * routed all admin reads through the `"use server"` proxy: the browser must
+ * never see `X-Admin-Key` and must not be able to inject `X-Admin-Role` /
+ * `X-Admin-Tenant` directly into FastAPI (S0-1 / T20).
  *
  * Backend contract is the Phase-1 projection shipped by T24:
  *   GET /api/v1/admin/findings
@@ -11,15 +19,10 @@
  * them as optional / nullable so the UI degrades to "Unknown" / "—" today and
  * starts surfacing the values automatically the moment intel-table joins land.
  *
- * Closed-taxonomy errors only — every transport / validation failure maps to a
+ * Error taxonomy is closed — every transport / validation failure maps to a
  * `AdminFindingsErrorCode`, never a stack trace, so the UI can render a fixed
  * RU sentence without leaking server internals (matches T23 pattern in
  * `findingsExport.ts`).
- *
- * Browser-side fetch goes through the Next.js rewrite (`/api/v1/* → BACKEND`),
- * so callers don't deal with CORS or absolute URLs. The admin key NEVER leaves
- * the server — admin auth headers (`X-Admin-Role`, `X-Admin-Tenant`) are
- * surfaced separately so the SSR proxy can attach them.
  */
 
 import { z } from "zod";
@@ -57,6 +60,32 @@ export function isFindingStatus(value: unknown): value is FindingStatus {
 
 export function isSsvcAction(value: unknown): value is SsvcAction {
   return typeof value === "string" && SSVC_SET.has(value);
+}
+
+/**
+ * Status-mode tri-state used by the filter bar / URL. Maps to the backend's
+ * `false_positive` query parameter:
+ *   - "all" → omit (default backend behaviour, includes both)
+ *   - "open" → false_positive=false
+ *   - "false_positive" → false_positive=true
+ *
+ * The other Phase-2 statuses (fixed, wontfix, …) are intentionally not
+ * exposed yet — the backend has no column for them (see T24's schema
+ * deviation note) and silently ignoring user-visible chips would mislead
+ * operators. They will reappear once a triage workflow lands (ISS-T20-005).
+ */
+export type FindingStatusMode = "all" | "open" | "false_positive";
+
+const STATUS_MODE_VALUES: ReadonlyArray<FindingStatusMode> = [
+  "all",
+  "open",
+  "false_positive",
+];
+
+const STATUS_MODE_SET = new Set<string>(STATUS_MODE_VALUES);
+
+export function isFindingStatusMode(value: unknown): value is FindingStatusMode {
+  return typeof value === "string" && STATUS_MODE_SET.has(value);
 }
 
 /**
@@ -171,6 +200,13 @@ export type AdminFindingItem = z.infer<typeof AdminFindingItemSchema>;
  * (T24 ships) and the planned `items` key (Phase-2 cursor pagination); the
  * cursor field is mapped to a stable `next_cursor` regardless of source so
  * `useInfiniteQuery` can always read the same shape.
+ *
+ * The envelope MUST carry at least one of `items` / `findings` — without that
+ * the body cannot be distinguished from arbitrary JSON (e.g. an HTML error
+ * page returned with `Content-Type: application/json`), and silently treating
+ * such a payload as "empty list" hides server contract drift from the
+ * operator. The action layer translates a refinement failure into a closed
+ * `server_error` so the browser never sees Zod issue paths.
  */
 export const AdminFindingsListResponseSchema = z
   .object({
@@ -184,6 +220,10 @@ export const AdminFindingsListResponseSchema = z
     limit: z.number().int().nonnegative().optional(),
     offset: z.number().int().nonnegative().optional(),
     has_more: z.boolean().optional(),
+  })
+  .refine((raw) => raw.items !== undefined || raw.findings !== undefined, {
+    message: "missing items/findings array",
+    path: ["items"],
   })
   .transform((raw) => {
     const items = raw.items ?? raw.findings ?? [];
@@ -248,7 +288,11 @@ export function adminFindingsErrorMessage(err: unknown): string {
   return ERROR_MESSAGES_RU.server_error;
 }
 
-function statusToCode(status: number): AdminFindingsErrorCode {
+/**
+ * HTTP-status → closed-taxonomy code. Exported so the server action and any
+ * future read paths share a single mapping.
+ */
+export function statusToAdminFindingsCode(status: number): AdminFindingsErrorCode {
   if (status === 401) return "unauthorized";
   if (status === 403) return "forbidden";
   if (status === 429) return "rate_limited";
@@ -256,139 +300,39 @@ function statusToCode(status: number): AdminFindingsErrorCode {
   return "server_error";
 }
 
+/**
+ * Wire-level parameter bag accepted by the server action. The shape mirrors
+ * the public REST endpoint (`GET /admin/findings`) so the action stays a thin
+ * pass-through with explicit, server-trusted defaults.
+ *
+ * Notes:
+ *   - `target` maps to backend `q` (free-text title/host/url substring).
+ *   - `statusMode` maps to backend `false_positive` ternary.
+ *   - `kevListed` / `ssvcAction` are reserved Phase-2 toggles; the backend
+ *     accepts them but currently no-ops them until intel JOIN lands.
+ */
 export type ListAdminFindingsParams = {
   readonly tenantId?: string | null;
   readonly severity?: ReadonlyArray<FindingSeverity>;
-  readonly status?: ReadonlyArray<FindingStatus>;
+  readonly statusMode?: FindingStatusMode;
   readonly target?: string | null;
   readonly since?: string | null;
   readonly until?: string | null;
   readonly cursor?: string | null;
   readonly limit?: number;
-  /** Reserved Phase-2 KEV filter; sent only when explicitly enabled. */
   readonly kevListed?: boolean | null;
-  /** Reserved Phase-2 SSVC filter; sent only when explicitly set. */
   readonly ssvcAction?: SsvcAction | null;
 };
-
-export type ListAdminFindingsOptions = {
-  readonly signal?: AbortSignal;
-  readonly fetchImpl?: typeof fetch;
-  readonly operatorRole?: string | null;
-  readonly operatorTenantId?: string | null;
-  readonly operatorSubject?: string | null;
-};
-
-const FINDINGS_PATH = "/api/v1/admin/findings";
-
-/**
- * Build the query string from a typed parameter bag. Reserved Phase-2 params
- * are omitted unless the caller explicitly opts in (avoids a no-op header that
- * would still trip backend audit warnings).
- */
-export function buildAdminFindingsUrl(params: ListAdminFindingsParams): string {
-  const sp = new URLSearchParams();
-  if (params.tenantId && params.tenantId.trim()) {
-    sp.set("tenant_id", params.tenantId.trim());
-  }
-  for (const sev of params.severity ?? []) {
-    sp.append("severity", sev);
-  }
-  for (const st of params.status ?? []) {
-    sp.append("status", st);
-  }
-  if (params.target && params.target.trim()) {
-    sp.set("target", params.target.trim());
-  }
-  if (params.since) sp.set("since", params.since);
-  if (params.until) sp.set("until", params.until);
-  if (params.cursor) sp.set("cursor", params.cursor);
-  if (params.limit != null) sp.set("limit", String(params.limit));
-  if (params.kevListed === true) sp.set("kev_listed", "true");
-  if (params.kevListed === false) sp.set("kev_listed", "false");
-  if (params.ssvcAction) sp.set("ssvc_action", params.ssvcAction);
-  const qs = sp.toString();
-  return qs ? `${FINDINGS_PATH}?${qs}` : FINDINGS_PATH;
-}
-
-function buildHeaders(opts: ListAdminFindingsOptions): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-  };
-  if (opts.operatorRole && opts.operatorRole.trim()) {
-    headers["X-Operator-Role"] = opts.operatorRole.trim();
-    headers["X-Admin-Role"] = opts.operatorRole.trim();
-  }
-  if (opts.operatorTenantId && opts.operatorTenantId.trim()) {
-    headers["X-Tenant-ID"] = opts.operatorTenantId.trim();
-    headers["X-Admin-Tenant"] = opts.operatorTenantId.trim();
-  }
-  if (opts.operatorSubject && opts.operatorSubject.trim()) {
-    headers["X-Operator-Subject"] = opts.operatorSubject.trim();
-  }
-  return headers;
-}
-
-/**
- * Fetch a single page of admin findings. The function:
- *   - validates the response with Zod and throws `AdminFindingsError` on
- *     schema mismatch (closed-taxonomy `server_error`);
- *   - propagates `AbortError` untouched so React Query can cancel races;
- *   - never throws the underlying transport error string — only the closed
- *     taxonomy reaches the UI.
- *
- * Pagination: if the backend returns offset/limit, we synthesise a `next_cursor`
- * as the next offset so the UI can use a single cursor-driven flow.
- */
-export async function listAdminFindings(
-  params: ListAdminFindingsParams = {},
-  options: ListAdminFindingsOptions = {},
-): Promise<AdminFindingsListResponse> {
-  const url = buildAdminFindingsUrl(params);
-  const fetchFn = options.fetchImpl ?? globalThis.fetch;
-
-  let response: Response;
-  try {
-    response = await fetchFn(url, {
-      method: "GET",
-      headers: buildHeaders(options),
-      signal: options.signal,
-      cache: "no-store",
-      credentials: "same-origin",
-    });
-  } catch (err) {
-    // Re-throw aborts so React Query can distinguish cancellation.
-    if (
-      err instanceof DOMException &&
-      (err.name === "AbortError" || err.code === DOMException.ABORT_ERR)
-    ) {
-      throw err;
-    }
-    throw new AdminFindingsError("network_error");
-  }
-
-  if (!response.ok) {
-    throw new AdminFindingsError(statusToCode(response.status), response.status);
-  }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new AdminFindingsError("server_error", response.status);
-  }
-
-  const parsed = AdminFindingsListResponseSchema.safeParse(body);
-  if (!parsed.success) {
-    throw new AdminFindingsError("server_error", response.status);
-  }
-
-  return parsed.data;
-}
 
 /**
  * Stable client-side comparator: SSVC desc → severity desc → CVSS desc →
  * EPSS desc → updated_at desc. Nulls always sink to the bottom.
+ *
+ * NaN-safety: a malformed `updated_at` (e.g. "tomorrow") would parse to
+ * `NaN` and propagate `NaN` through the subtraction, breaking
+ * `Array.prototype.sort`'s strict-weak-ordering contract and producing a
+ * non-deterministic order. We collapse any unparsable timestamp to `0` so
+ * the comparator is total even on bad data.
  */
 export function compareFindings(a: AdminFindingItem, b: AdminFindingItem): number {
   const ssvcA = a.ssvc_action ? SSVC_RANK[a.ssvc_action] : -1;
@@ -407,9 +351,15 @@ export function compareFindings(a: AdminFindingItem, b: AdminFindingItem): numbe
   const epssB = b.epss_score ?? -1;
   if (epssA !== epssB) return epssB - epssA;
 
-  const tsA = a.updated_at ? Date.parse(a.updated_at) : 0;
-  const tsB = b.updated_at ? Date.parse(b.updated_at) : 0;
+  const tsA = safeTimestamp(a.updated_at);
+  const tsB = safeTimestamp(b.updated_at);
   return tsB - tsA;
+}
+
+function safeTimestamp(iso: string | null): number {
+  if (!iso) return 0;
+  const ts = Date.parse(iso);
+  return Number.isFinite(ts) ? ts : 0;
 }
 
 export function sortFindings(items: ReadonlyArray<AdminFindingItem>): AdminFindingItem[] {

@@ -18,10 +18,19 @@
  *   - Severity is encoded as colour AND short text + a leading icon (●/◆/■/▲)
  *     so the cue survives colour-blind palettes.
  *
- * Drawer:
- *   - Lightweight inline overlay (no portal) — keeps the test surface simple
- *     and matches the `AdminScansClient` drawer style. T21 will replace the
- *     placeholder content with a richer detail view.
+ * Drawer (S2-1 focus management):
+ *   - On open, focus moves to the close button so AT users land on a known
+ *     anchor and the next Tab cycles inside the dialog.
+ *   - Tab / Shift-Tab cycle through the focusable controls inside the drawer
+ *     so focus is trapped while the modal is open (light-weight focus trap;
+ *     no portal).
+ *   - On close, the previously-focused element regains focus (or the row
+ *     that opened the drawer, whichever is more useful for AT users).
+ *
+ * Export (S1-5):
+ *   - Export is per-finding and lives inside the drawer. The previous global
+ *     button silently exported the scan of an arbitrary visible finding,
+ *     which mis-scoped the artefact when results came from multiple scans.
  */
 
 import {
@@ -34,11 +43,16 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import { ExportFormatToggle } from "@/components/admin/ExportFormatToggle";
 import {
   type AdminFindingItem,
   type FindingSeverity,
   sortFindings,
 } from "@/lib/adminFindings";
+import {
+  downloadFindingsExport,
+  type ExportFormat,
+} from "@/lib/findingsExport";
 
 const ROW_HEIGHT_PX = 44;
 const OVERSCAN = 8;
@@ -100,6 +114,20 @@ function formatSsvc(ssvc: AdminFindingItem["ssvc_action"]): string {
   return ssvc.charAt(0).toUpperCase() + ssvc.slice(1);
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getFocusable(container: HTMLElement | null): HTMLElement[] {
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+  ).filter(
+    (el) =>
+      !el.hasAttribute("disabled") &&
+      el.getAttribute("aria-hidden") !== "true",
+  );
+}
+
 export type FindingsTableProps = {
   readonly items: ReadonlyArray<AdminFindingItem>;
   readonly loading: boolean;
@@ -111,6 +139,12 @@ export type FindingsTableProps = {
   readonly showTenantColumn: boolean;
   /** Container height in px. Defaults to a sensible value if not provided. */
   readonly heightPx?: number;
+  /**
+   * Tenant the operator is currently scoped to (super-admin URL choice or
+   * server-resolved binding). Forwarded to the per-row export so the
+   * `X-Tenant-ID` header matches the row's actual scope.
+   */
+  readonly effectiveTenantId?: string | null;
 };
 
 const COLUMNS_BASE = 7;
@@ -125,10 +159,16 @@ export function FindingsTable({
   hasMore,
   showTenantColumn,
   heightPx = 560,
+  effectiveTenantId = null,
 }: FindingsTableProps): React.ReactElement {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [drawerItem, setDrawerItem] = useState<AdminFindingItem | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const sorted = useMemo(() => sortFindings(items), [items]);
 
@@ -176,6 +216,11 @@ export function FindingsTable({
 
   const openDrawer = useCallback(
     (item: AdminFindingItem) => {
+      previouslyFocusedRef.current =
+        (typeof document !== "undefined"
+          ? (document.activeElement as HTMLElement | null)
+          : null) ?? null;
+      setExportError(null);
       setDrawerItem(item);
       onRowOpen?.(item);
     },
@@ -184,7 +229,51 @@ export function FindingsTable({
 
   const closeDrawer = useCallback(() => {
     setDrawerItem(null);
+    setExportError(null);
+    setIsExporting(false);
+    // Restore focus to the element that triggered the open (typically the
+    // row), giving keyboard users a stable anchor to keep navigating.
+    const restoreTo = previouslyFocusedRef.current;
+    previouslyFocusedRef.current = null;
+    if (
+      restoreTo &&
+      typeof restoreTo.focus === "function" &&
+      typeof document !== "undefined" &&
+      document.contains(restoreTo)
+    ) {
+      restoreTo.focus();
+    }
   }, []);
+
+  // Auto-focus the close button when the drawer mounts, so screen readers
+  // and keyboard users land on a known control.
+  useEffect(() => {
+    if (drawerItem == null) return;
+    const id = window.setTimeout(() => {
+      drawerCloseRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [drawerItem]);
+
+  const handleExport = useCallback(
+    async (format: ExportFormat) => {
+      if (!drawerItem) return;
+      setExportError(null);
+      setIsExporting(true);
+      try {
+        await downloadFindingsExport(drawerItem.scan_id, format, {
+          tenantId: effectiveTenantId ?? drawerItem.tenant_id,
+        });
+      } catch {
+        setExportError(
+          "Не удалось скачать экспорт. Повторите попытку.",
+        );
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [drawerItem, effectiveTenantId],
+  );
 
   const handleTableKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (totalRows === 0) return;
@@ -216,6 +305,31 @@ export function FindingsTable({
     if (e.key === "Escape") {
       e.preventDefault();
       closeDrawer();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    // Focus trap: keep Tab cycling inside the dialog while it's open.
+    const focusables = getFocusable(drawerRef.current);
+    if (focusables.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active =
+      typeof document !== "undefined"
+        ? (document.activeElement as HTMLElement | null)
+        : null;
+    if (e.shiftKey) {
+      if (active === first || !drawerRef.current?.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   };
 
@@ -457,10 +571,12 @@ export function FindingsTable({
           data-testid="findings-drawer-backdrop"
         >
           <div
+            ref={drawerRef}
             className="h-full w-full max-w-lg overflow-y-auto border-l border-[var(--border)] bg-[var(--bg-primary)] p-4 shadow-xl"
             role="dialog"
             aria-modal="true"
             aria-label={`Finding ${drawerItem.title}`}
+            aria-labelledby="findings-drawer-title"
             data-testid="findings-drawer"
             tabIndex={-1}
             onKeyDown={handleDrawerKeyDown}
@@ -474,6 +590,7 @@ export function FindingsTable({
                 {drawerItem.title}
               </h2>
               <button
+                ref={drawerCloseRef}
                 type="button"
                 onClick={closeDrawer}
                 className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
@@ -514,9 +631,36 @@ export function FindingsTable({
               <dt className="text-[var(--text-muted)]">Updated</dt>
               <dd>{formatDt(drawerItem.updated_at)}</dd>
             </dl>
+            <section
+              className="mt-5 border-t border-[var(--border)] pt-3"
+              aria-label="Экспорт scan"
+              data-testid="findings-drawer-export"
+            >
+              <h3 className="mb-1 text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                Экспорт scan
+              </h3>
+              <p className="mb-2 text-[11px] text-[var(--text-muted)]">
+                Скачивает SARIF / JUnit XML для scan этого finding
+                (scan_id <code className="font-mono">{drawerItem.scan_id}</code>).
+              </p>
+              <ExportFormatToggle
+                scanId={drawerItem.scan_id}
+                onDownload={handleExport}
+                disabled={isExporting}
+              />
+              {exportError ? (
+                <p
+                  role="alert"
+                  className="mt-2 text-xs text-red-400"
+                  data-testid="findings-drawer-export-error"
+                >
+                  {exportError}
+                </p>
+              ) : null}
+            </section>
             <p className="mt-4 text-xs text-[var(--text-muted)]">
               Расширенная карточка finding появится в T21 — здесь будут детали
-              артефактов, экспорт и комментарии.
+              артефактов и комментарии.
             </p>
           </div>
         </div>

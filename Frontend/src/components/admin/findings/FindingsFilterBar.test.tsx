@@ -53,28 +53,45 @@ describe("FindingsFilterBar", () => {
     });
   });
 
-  it("status multi-select toggles independently of severity", async () => {
+  it("status tri-state defaults to 'all' and emits 'open' / 'false_positive' on click", async () => {
     const user = userEvent.setup();
-    const { onChange } = renderBar({
-      value: { ...EMPTY_FILTER_VALUES, severity: ["critical"] },
-    });
+    const { onChange } = renderBar();
+
+    expect(screen.getByTestId("filter-status-all")).toBeChecked();
 
     await user.click(screen.getByTestId("filter-status-open"));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ statusMode: "open" }),
+    );
 
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        severity: ["critical"],
-        status: ["open"],
-      }),
+    await user.click(screen.getByTestId("filter-status-false_positive"));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ statusMode: "false_positive" }),
     );
   });
 
-  it("target input updates value and is announced via a real <label>", async () => {
+  it("does NOT render unsupported status chips (fixed / wontfix / risk_accepted / under_investigation)", () => {
+    renderBar();
+    expect(screen.queryByTestId("filter-status-fixed")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("filter-status-wontfix")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("filter-status-risk_accepted"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("filter-status-under_investigation"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("target input updates value and exposes a 'q'-style placeholder hint (S1-1)", async () => {
     const user = userEvent.setup();
     const { onChange } = renderBar();
 
     const target = screen.getByTestId("filter-target");
     expect(target).toHaveAttribute("type", "search");
+    expect(target).toHaveAttribute(
+      "placeholder",
+      expect.stringContaining("title"),
+    );
 
     await user.type(target, "x");
     expect(onChange).toHaveBeenLastCalledWith(
@@ -130,17 +147,31 @@ describe("FindingsFilterBar", () => {
 });
 
 describe("sanitizeFilterValues", () => {
-  it("drops unknown severity / status values from URL", () => {
+  it("drops unknown severity values from URL", () => {
     const out = sanitizeFilterValues({
       severity: ["critical", "rm-rf"],
-      status: ["open", "exploit"],
       kevListed: "true",
       ssvcAction: "act",
     });
     expect(out.severity).toEqual(["critical"]);
-    expect(out.status).toEqual(["open"]);
     expect(out.kevListed).toBe(true);
     expect(out.ssvcAction).toBe("act");
+  });
+
+  it("defaults statusMode to 'all' when absent or unknown", () => {
+    expect(sanitizeFilterValues({}).statusMode).toBe("all");
+    expect(
+      sanitizeFilterValues({ statusMode: "fixed" }).statusMode,
+    ).toBe("all");
+  });
+
+  it("accepts valid statusMode values from URL", () => {
+    expect(
+      sanitizeFilterValues({ statusMode: "open" }).statusMode,
+    ).toBe("open");
+    expect(
+      sanitizeFilterValues({ statusMode: "false_positive" }).statusMode,
+    ).toBe("false_positive");
   });
 
   it("keeps unknown ssvcAction null and treats unknown kevListed as null", () => {

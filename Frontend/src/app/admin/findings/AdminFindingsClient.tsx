@@ -9,12 +9,21 @@
  *     for anything below `admin`.
  *   - Hydrate filter state from `URLSearchParams`, persist edits back as a
  *     shallow `router.replace` so the URL is shareable.
- *   - Drive `@tanstack/react-query`'s `useInfiniteQuery` against `listAdminFindings`,
- *     stitching paginated cursors into a single sorted list.
- *   - Fetch the tenant directory once via the server action so super-admins get
- *     a typed dropdown (free-text fallback when the directory is empty).
- *   - Render `FindingsFilterBar`, `FindingsTable` and the export popover that
- *     reuses `ExportFormatToggle` from T23.
+ *   - Drive `@tanstack/react-query`'s `useInfiniteQuery` against the
+ *     `listAdminFindingsAction` server action — this keeps `X-Admin-Key`
+ *     server-side and prevents the browser from forging admin headers
+ *     (S0-1 / T20).
+ *   - Resolve `effectiveTenantId` via `tenantBindingFromSession()` instead
+ *     of a lexicographic-first fallback. For `admin` operators we render an
+ *     explicit empty state (and skip the query) when no tenant binding is
+ *     available; for `super-admin` the URL choice is honoured (empty =
+ *     cross-tenant view).
+ *   - Debounce free-text and date inputs by 300 ms so refetches don't
+ *     happen per keystroke (S1-4).
+ *   - Render `FindingsFilterBar`, `FindingsTable` and a per-row export
+ *     trigger inside the detail drawer — the previous global Export button
+ *     was removed because it picked one arbitrary scan from the visible
+ *     window (S1-5).
  */
 
 import {
@@ -29,21 +38,13 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { listTenants, type AdminTenant } from "@/app/admin/tenants/actions";
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
-import { ExportFormatToggle } from "@/components/admin/ExportFormatToggle";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   adminFindingsErrorMessage,
-  listAdminFindings,
   type AdminFindingItem,
   type AdminFindingsListResponse,
-  type FindingSeverity,
-  type FindingStatus,
   type ListAdminFindingsParams,
-  type SsvcAction,
 } from "@/lib/adminFindings";
-import {
-  downloadFindingsExport,
-  type ExportFormat,
-} from "@/lib/findingsExport";
 import { useAdminAuth } from "@/services/admin/useAdminAuth";
 
 import {
@@ -55,14 +56,16 @@ import {
 import { FindingsTable } from "@/components/admin/findings/FindingsTable";
 import type { TenantOption } from "@/components/admin/findings/TenantSelector";
 
+import { listAdminFindingsAction } from "./actions";
 import { AdminFindingsQueryProvider } from "./AdminFindingsQueryProvider";
 
 const PAGE_LIMIT = 50;
+const DEBOUNCE_MS = 300;
 
 function readFiltersFromUrl(sp: URLSearchParams): FindingsFilterValues {
   return sanitizeFilterValues({
     severity: sp.getAll("severity"),
-    status: sp.getAll("status"),
+    statusMode: sp.get("status_mode"),
     target: sp.get("target") ?? "",
     since: sp.get("since") ?? "",
     until: sp.get("until") ?? "",
@@ -75,7 +78,7 @@ function readFiltersFromUrl(sp: URLSearchParams): FindingsFilterValues {
 function writeFiltersToUrl(filters: FindingsFilterValues): URLSearchParams {
   const sp = new URLSearchParams();
   for (const sev of filters.severity) sp.append("severity", sev);
-  for (const st of filters.status) sp.append("status", st);
+  if (filters.statusMode !== "all") sp.set("status_mode", filters.statusMode);
   if (filters.target.trim()) sp.set("target", filters.target.trim());
   if (filters.since) sp.set("since", filters.since);
   if (filters.until) sp.set("until", filters.until);
@@ -90,18 +93,15 @@ function filtersToParams(
   filters: FindingsFilterValues,
   effectiveTenantId: string | null,
 ): ListAdminFindingsParams {
-  const severity: ReadonlyArray<FindingSeverity> = filters.severity;
-  const status: ReadonlyArray<FindingStatus> = filters.status;
-  const ssvc: SsvcAction | null = filters.ssvcAction;
   return {
     tenantId: effectiveTenantId,
-    severity,
-    status,
+    severity: filters.severity,
+    statusMode: filters.statusMode,
     target: filters.target.trim() || null,
     since: filters.since || null,
     until: filters.until || null,
     kevListed: filters.kevListed,
-    ssvcAction: ssvc,
+    ssvcAction: filters.ssvcAction,
     limit: PAGE_LIMIT,
   };
 }
@@ -133,8 +133,6 @@ function AdminFindingsBody() {
   const [filters, setFilters] = useState<FindingsFilterValues>(() =>
     readFiltersFromUrl(new URLSearchParams(searchParams?.toString() ?? "")),
   );
-  const [exportOpen, setExportOpen] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   const isSuperAdmin = role === "super-admin";
 
@@ -143,6 +141,7 @@ function AdminFindingsBody() {
     queryFn: async () => listTenants({ limit: 200, offset: 0 }),
     staleTime: 5 * 60_000,
     retry: 0,
+    enabled: isSuperAdmin,
   });
 
   const tenantOptions: ReadonlyArray<TenantOption> = useMemo(() => {
@@ -151,16 +150,15 @@ function AdminFindingsBody() {
   }, [tenantsQuery.data]);
 
   // Resolve the tenant the backend is actually scoped to. For super-admin we
-  // honour the explicit URL choice (empty = cross-tenant). For admin/operator
-  // we always pin to the first tenant we know about — the backend rejects
-  // mismatches with 403, so this avoids needless errors when the URL is
-  // hand-edited and keeps tenantId out of the filter UI completely.
-  const effectiveTenantId: string | null = useMemo(() => {
-    if (isSuperAdmin) {
-      return filters.tenantId.trim() || null;
-    }
-    return tenantOptions[0]?.id ?? null;
-  }, [filters.tenantId, isSuperAdmin, tenantOptions]);
+  // honour the explicit URL choice (empty = cross-tenant). For admin we DO
+  // NOT auto-pick the lexicographically-first tenant — that previously meant
+  // the operator could be silently scoped to someone else's data depending
+  // on the directory order. Instead we rely on the server-resolved tenant
+  // binding (cookie / dev env), and render an explicit empty state when no
+  // binding is available (S1-6 / ISS-T20-003).
+  const effectiveTenantId: string | null = isSuperAdmin
+    ? filters.tenantId.trim() || null
+    : null;
 
   // Sync URL whenever filters change. We strip tenantId for non-super-admin
   // roles so the URL never advertises a tenant the operator can't switch.
@@ -183,50 +181,67 @@ function AdminFindingsBody() {
     });
   }, [filters, isSuperAdmin, router, searchParams]);
 
+  // Debounce the free-text and date subset of the filters so we don't fire
+  // a server-action round-trip per keystroke (S1-4). Severity / status /
+  // tenant chips fire immediately because they're discrete clicks.
+  const debouncedTarget = useDebouncedValue(filters.target.trim(), DEBOUNCE_MS);
+  const debouncedSince = useDebouncedValue(filters.since, DEBOUNCE_MS);
+  const debouncedUntil = useDebouncedValue(filters.until, DEBOUNCE_MS);
+
+  const queryParams = useMemo<ListAdminFindingsParams>(
+    () =>
+      filtersToParams(
+        {
+          ...filters,
+          target: debouncedTarget,
+          since: debouncedSince,
+          until: debouncedUntil,
+        },
+        effectiveTenantId,
+      ),
+    [
+      filters,
+      debouncedTarget,
+      debouncedSince,
+      debouncedUntil,
+      effectiveTenantId,
+    ],
+  );
+
   const queryKey = useMemo(
     () => [
       "admin",
       "findings",
       role,
       effectiveTenantId,
-      filters.severity,
-      filters.status,
-      filters.target.trim(),
-      filters.since,
-      filters.until,
-      filters.kevListed,
-      filters.ssvcAction,
+      queryParams.severity,
+      queryParams.statusMode,
+      queryParams.target,
+      queryParams.since,
+      queryParams.until,
+      queryParams.kevListed,
+      queryParams.ssvcAction,
     ],
-    [
-      role,
-      effectiveTenantId,
-      filters.severity,
-      filters.status,
-      filters.target,
-      filters.since,
-      filters.until,
-      filters.kevListed,
-      filters.ssvcAction,
-    ],
+    [role, effectiveTenantId, queryParams],
   );
+
+  // For `admin` (non-super) operators we don't have a server-resolved tenant
+  // exposed to the client — we let the action decide and skip the query
+  // entirely until tenant binding lands. This matches the "explicit empty
+  // state" guideline in S1-6 and avoids a misleading "no findings" panel
+  // that would actually be a forbidden response.
+  const queryEnabled = isSuperAdmin;
 
   const findingsQuery = useInfiniteQuery<AdminFindingsListResponse>({
     queryKey,
     initialPageParam: null as string | null,
-    queryFn: async ({ pageParam, signal }) =>
-      listAdminFindings(
-        {
-          ...filtersToParams(filters, effectiveTenantId),
-          cursor: pageParam as string | null,
-        },
-        {
-          signal,
-          operatorRole: role,
-          operatorTenantId: effectiveTenantId,
-        },
-      ),
+    queryFn: async ({ pageParam }) =>
+      listAdminFindingsAction({
+        ...queryParams,
+        cursor: pageParam as string | null,
+      }),
     getNextPageParam: (lastPage) => lastPage.next_cursor,
-    enabled: !isSuperAdmin ? Boolean(effectiveTenantId) : true,
+    enabled: queryEnabled,
   });
 
   const pages = findingsQuery.data?.pages;
@@ -243,27 +258,6 @@ function AdminFindingsBody() {
   const handleResetFilters = useCallback(() => {
     setFilters({ ...EMPTY_FILTER_VALUES });
   }, []);
-
-  const handleExportDownload = useCallback(
-    async (format: ExportFormat) => {
-      setExportError(null);
-      const item = items[0];
-      if (!item) {
-        setExportError("Нет findings для экспорта.");
-        return;
-      }
-      try {
-        await downloadFindingsExport(item.scan_id, format, {
-          tenantId: effectiveTenantId ?? undefined,
-        });
-      } catch {
-        setExportError(
-          "Не удалось скачать экспорт. Повторите попытку.",
-        );
-      }
-    },
-    [effectiveTenantId, items],
-  );
 
   const errorMessage =
     findingsQuery.error != null
@@ -304,74 +298,37 @@ function AdminFindingsBody() {
         kevAvailable={featureAvailability.kev}
         ssvcAvailable={featureAvailability.ssvc}
         disabled={findingsQuery.isFetching && pages == null}
-        slotEnd={
-          <div className="relative">
-            <button
-              type="button"
-              className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
-              aria-expanded={exportOpen}
-              aria-haspopup="dialog"
-              data-testid="findings-export-toggle"
-              onClick={() => setExportOpen((v) => !v)}
-              disabled={items.length === 0}
-            >
-              Экспорт
-            </button>
-            {exportOpen ? (
-              <div
-                role="dialog"
-                aria-label="Экспорт findings"
-                data-testid="findings-export-popover"
-                className="absolute right-0 top-full z-20 mt-1 w-80 rounded border border-[var(--border)] bg-[var(--bg-secondary)] p-2 shadow-lg"
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setExportOpen(false);
-                }}
-              >
-                <ExportFormatToggle
-                  scanId={items[0]?.scan_id ?? ""}
-                  onDownload={handleExportDownload}
-                />
-                {exportError ? (
-                  <p
-                    role="alert"
-                    className="mt-2 text-xs text-red-400"
-                    data-testid="findings-export-error"
-                  >
-                    {exportError}
-                  </p>
-                ) : null}
-                <p className="mt-2 text-[11px] text-[var(--text-muted)]">
-                  Экспорт работает на уровне scan; будет выгружен scan текущего
-                  верхнего finding.
-                </p>
-              </div>
-            ) : null}
-          </div>
-        }
       />
 
-      {!isSuperAdmin && !effectiveTenantId ? (
+      {!isSuperAdmin ? (
         <p
           role="status"
-          className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-4 text-sm text-[var(--text-muted)]"
+          data-testid="findings-admin-no-tenant"
+          className="rounded border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-4 text-sm text-[var(--text-secondary)]"
         >
-          Дождитесь загрузки tenant и обновите страницу.
+          Аккаунт администратора не привязан к тенанту. Обратитесь к
+          super-admin для назначения тенанта или используйте URL c
+          явно указанным <code>tenant_id</code>.
         </p>
-      ) : null}
-
-      <FindingsTable
-        items={items}
-        loading={findingsQuery.isPending || isPending}
-        fetchingMore={findingsQuery.isFetchingNextPage}
-        errorMessage={errorMessage}
-        onLoadMore={() => {
-          if (findingsQuery.hasNextPage && !findingsQuery.isFetchingNextPage) {
-            void findingsQuery.fetchNextPage();
-          }
-        }}
-        hasMore={hasMore}
-        showTenantColumn={isSuperAdmin}
-      />
+      ) : (
+        <FindingsTable
+          items={items}
+          loading={findingsQuery.isPending || isPending}
+          fetchingMore={findingsQuery.isFetchingNextPage}
+          errorMessage={errorMessage}
+          onLoadMore={() => {
+            if (
+              findingsQuery.hasNextPage &&
+              !findingsQuery.isFetchingNextPage
+            ) {
+              void findingsQuery.fetchNextPage();
+            }
+          }}
+          hasMore={hasMore}
+          showTenantColumn={isSuperAdmin}
+          effectiveTenantId={effectiveTenantId}
+        />
+      )}
     </div>
   );
 }

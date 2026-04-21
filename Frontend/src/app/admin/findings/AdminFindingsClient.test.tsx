@@ -7,7 +7,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const routerReplace = vi.fn();
@@ -49,16 +49,11 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => cachedReadonlyParams,
 }));
 
-const listAdminFindings = vi.fn();
-vi.mock("@/lib/adminFindings", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/lib/adminFindings")
-  >("@/lib/adminFindings");
-  return {
-    ...actual,
-    listAdminFindings: (...args: unknown[]) => listAdminFindings(...args),
-  };
-});
+const listAdminFindingsAction = vi.fn();
+vi.mock("./actions", () => ({
+  listAdminFindingsAction: (...args: unknown[]) =>
+    listAdminFindingsAction(...args),
+}));
 
 const listTenants = vi.fn();
 vi.mock("@/app/admin/tenants/actions", () => ({
@@ -81,6 +76,7 @@ import {
   AdminFindingsError,
   type AdminFindingItem,
   type AdminFindingsListResponse,
+  type ListAdminFindingsParams,
 } from "@/lib/adminFindings";
 import { AdminAuthProvider } from "@/services/admin/AdminAuthContext";
 import type { AdminRole } from "@/services/admin/adminRoles";
@@ -194,7 +190,12 @@ beforeEach(() => {
     setSearchParams(qIdx >= 0 ? url.slice(qIdx + 1) : "");
   });
   window.sessionStorage.clear();
-  listAdminFindings.mockReset();
+  // Wipe any role cookie left behind by AdminAuthProvider.
+  if (typeof document !== "undefined") {
+    document.cookie =
+      "argus.admin.role=; path=/; max-age=0; SameSite=Strict";
+  }
+  listAdminFindingsAction.mockReset();
   listTenants.mockReset();
   downloadFindingsExport.mockReset();
   listTenants.mockResolvedValue([]);
@@ -204,10 +205,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("AdminFindingsClient", () => {
-  it("hydrates findings for super-admin and renders the Tenant column", async () => {
+describe("AdminFindingsClient — super-admin", () => {
+  it("hydrates findings via the server action and renders the Tenant column", async () => {
     setRole("super-admin");
-    listAdminFindings.mockResolvedValue(
+    listAdminFindingsAction.mockResolvedValue(
       pageOf([
         makeItem({ id: "f-1", title: "RCE in api", severity: "critical" }),
       ]),
@@ -221,72 +222,38 @@ describe("AdminFindingsClient", () => {
       screen.getByRole("columnheader", { name: "Tenant" }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("findings-counter")).toHaveTextContent("1 / 1");
-    expect(listAdminFindings).toHaveBeenCalled();
+    expect(listAdminFindingsAction).toHaveBeenCalled();
   });
 
-  it("hides the Tenant column for plain admin role", async () => {
-    setRole("admin");
-    listTenants.mockResolvedValue([
-      {
-        id: "00000000-0000-0000-0000-000000000001",
-        name: "Acme",
-        exports_sarif_junit_enabled: true,
-        rate_limit_rpm: null,
-        scope_blacklist: null,
-        retention_days: null,
-        created_at: "2026-04-01T00:00:00Z",
-        updated_at: "2026-04-01T00:00:00Z",
-      },
-    ]);
-    listAdminFindings.mockResolvedValue(
-      pageOf([makeItem({ id: "f-only", title: "Single finding" })]),
-    );
-    renderClient();
-
-    await waitFor(() => {
-      expect(listAdminFindings).toHaveBeenCalled();
-    });
-    expect(screen.queryByText("Tenant")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("tenant-selector")).not.toBeInTheDocument();
-  });
-
-  it("re-issues fetch with the new severity filter and updates the URL", async () => {
+  it("re-issues the action with the new severity filter and updates the URL", async () => {
     setRole("super-admin");
-    listAdminFindings.mockResolvedValue(pageOf([]));
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
     const user = userEvent.setup();
     renderClient();
 
-    await waitFor(() => {
-      expect(listAdminFindings).toHaveBeenCalled();
-    });
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
 
-    listAdminFindings.mockClear();
+    listAdminFindingsAction.mockClear();
     routerReplace.mockClear();
-    listAdminFindings.mockResolvedValue(
+    listAdminFindingsAction.mockResolvedValue(
       pageOf([makeItem({ id: "f-crit", severity: "critical", title: "Critical" })]),
     );
 
     await user.click(screen.getByTestId("filter-severity-critical"));
 
-    await waitFor(() => {
-      expect(listAdminFindings).toHaveBeenCalled();
-    });
-    const params = listAdminFindings.mock.calls[0][0] as {
-      severity: ReadonlyArray<string>;
-    };
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+    const params = listAdminFindingsAction.mock
+      .calls[0][0] as ListAdminFindingsParams;
     expect(params.severity).toEqual(["critical"]);
 
-    await waitFor(() => {
-      expect(routerReplace).toHaveBeenCalled();
-    });
-    const target = routerReplace.mock.calls[0][0] as string;
-    expect(target).toContain("severity=critical");
+    await waitFor(() => expect(routerReplace).toHaveBeenCalled());
+    expect(routerReplace.mock.calls[0][0] as string).toContain(
+      "severity=critical",
+    );
   });
 
   it("paginates via fetchNextPage when next_cursor is set (cursor forwarded)", async () => {
     setRole("super-admin");
-    // Use a tiny page so the auto-load trigger fires once everything is
-    // rendered (lastVisibleIndex >= totalRows - 5).
     const firstPage = pageOf(
       Array.from({ length: 3 }, (_, i) =>
         makeItem({ id: `f-${i}`, title: `Finding ${i}` }),
@@ -306,7 +273,7 @@ describe("AdminFindingsClient", () => {
       },
     );
 
-    listAdminFindings
+    listAdminFindingsAction
       .mockResolvedValueOnce(firstPage)
       .mockResolvedValueOnce(secondPage);
 
@@ -319,83 +286,183 @@ describe("AdminFindingsClient", () => {
     });
 
     await waitFor(
-      () => {
-        expect(listAdminFindings).toHaveBeenCalledTimes(2);
-      },
+      () => expect(listAdminFindingsAction).toHaveBeenCalledTimes(2),
       { timeout: 5000 },
     );
-    const secondCallArgs = listAdminFindings.mock.calls[1][0] as {
+    const secondCallArgs = listAdminFindingsAction.mock.calls[1][0] as {
       cursor: string | null;
     };
     expect(secondCallArgs.cursor).toBe("cursor-page-2");
   });
 
-  it("renders a closed-taxonomy error message when the network fails (no PII)", async () => {
+  it("renders a closed-taxonomy error message when the network fails (no stack/PII)", async () => {
     setRole("super-admin");
-    listAdminFindings.mockRejectedValue(
+    listAdminFindingsAction.mockRejectedValue(
       new AdminFindingsError("network_error"),
     );
     renderClient();
 
     // network_error retries once with the default 1s exponential delay.
-    const err = await screen.findByTestId("findings-error", {}, { timeout: 5000 });
+    const err = await screen.findByTestId(
+      "findings-error",
+      {},
+      { timeout: 5000 },
+    );
     expect(err).toHaveAttribute("role", "alert");
     expect(err.textContent ?? "").toMatch(/Сеть недоступна/);
     expect(err.textContent ?? "").not.toMatch(/at .+\.ts:|stack/i);
   });
 
-  it("does not retry when the API replies 401/403 (closed taxonomy)", async () => {
+  it("does NOT retry when the server action throws 403 (closed taxonomy)", async () => {
     setRole("super-admin");
-    listAdminFindings.mockRejectedValue(new AdminFindingsError("forbidden", 403));
+    listAdminFindingsAction.mockRejectedValue(
+      new AdminFindingsError("forbidden", 403),
+    );
     renderClient();
 
     const err = await screen.findByTestId("findings-error");
     expect(err.textContent ?? "").toMatch(/Недостаточно прав/);
-    // No retry — exactly one call.
-    expect(listAdminFindings).toHaveBeenCalledTimes(1);
+    expect(listAdminFindingsAction).toHaveBeenCalledTimes(1);
   });
+});
 
-  it("shows the export popover with ExportFormatToggle when items are present", async () => {
-    setRole("super-admin");
-    listAdminFindings.mockResolvedValue(
-      pageOf([makeItem({ id: "f", scan_id: "scan-42", title: "row" })]),
-    );
-    const user = userEvent.setup();
-    renderClient();
-
-    await screen.findByText("row");
-    const toggle = screen.getByTestId("findings-export-toggle");
-    expect(toggle).not.toBeDisabled();
-
-    await user.click(toggle);
-    const popover = await screen.findByTestId("findings-export-popover");
-    expect(popover).toHaveAttribute("role", "dialog");
-    expect(within(popover).getByTestId("export-format-sarif")).toBeInTheDocument();
-  });
-
-  it("hydrates filters from URL search params on initial mount", async () => {
+describe("AdminFindingsClient — URL hydration & filter params", () => {
+  it("hydrates filters from URL search params on initial mount (severity + status_mode + target)", async () => {
     setRole("super-admin");
     setSearchParams(
-      "severity=critical&severity=high&status=open&target=example.com",
+      "severity=critical&severity=high&status_mode=open&target=example.com",
     );
-    listAdminFindings.mockResolvedValue(pageOf([]));
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
     renderClient();
 
-    await waitFor(() => {
-      expect(listAdminFindings).toHaveBeenCalled();
-    });
-    const params = listAdminFindings.mock.calls[0][0] as {
-      severity: ReadonlyArray<string>;
-      status: ReadonlyArray<string>;
-      target: string | null;
-    };
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+    const params = listAdminFindingsAction.mock
+      .calls[0][0] as ListAdminFindingsParams;
     expect(params.severity).toEqual(["critical", "high"]);
-    expect(params.status).toEqual(["open"]);
+    expect(params.statusMode).toBe("open");
     expect(params.target).toBe("example.com");
 
     expect(screen.getByTestId("filter-severity-critical")).toBeChecked();
     expect(screen.getByTestId("filter-severity-high")).toBeChecked();
     expect(screen.getByTestId("filter-status-open")).toBeChecked();
     expect(screen.getByTestId("filter-target")).toHaveValue("example.com");
+  });
+
+  it("propagates statusMode='false_positive' to the server action when chosen (S1-2)", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
+    const user = userEvent.setup();
+    renderClient();
+
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+
+    listAdminFindingsAction.mockClear();
+    await user.click(screen.getByTestId("filter-status-false_positive"));
+
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+    const params = listAdminFindingsAction.mock
+      .calls.at(-1)?.[0] as ListAdminFindingsParams;
+    expect(params.statusMode).toBe("false_positive");
+  });
+
+  it("defaults statusMode to 'all' (no false_positive override) on first mount", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
+    renderClient();
+
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+    const params = listAdminFindingsAction.mock
+      .calls[0][0] as ListAdminFindingsParams;
+    expect(params.statusMode).toBe("all");
+  });
+
+  it("forwards the trimmed target text in the action params (mapping to backend `q` is server-side, S1-1)", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
+    setSearchParams("target=  trim-me  ");
+    renderClient();
+
+    await waitFor(() => expect(listAdminFindingsAction).toHaveBeenCalled());
+    const params = listAdminFindingsAction.mock
+      .calls[0][0] as ListAdminFindingsParams;
+    expect(params.target).toBe("trim-me");
+  });
+});
+
+describe("AdminFindingsClient — admin (non-super) tenant binding (S1-6)", () => {
+  it("renders the explicit no-tenant empty state and does NOT fire the action", async () => {
+    setRole("admin");
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
+    renderClient();
+
+    expect(
+      await screen.findByTestId("findings-admin-no-tenant"),
+    ).toBeInTheDocument();
+    // Give React Query a chance to fire if it was going to.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listAdminFindingsAction).not.toHaveBeenCalled();
+  });
+
+  it("hides the Tenant column AND the tenant selector for admin role", async () => {
+    setRole("admin");
+    renderClient();
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("tenant-selector")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("columnheader", { name: "Tenant" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("AdminFindingsClient — debouncing (S1-4)", () => {
+  it("does NOT fire the action on every keystroke (debounced 300ms)", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(pageOf([]));
+    const user = userEvent.setup();
+    renderClient();
+
+    await waitFor(() =>
+      expect(listAdminFindingsAction).toHaveBeenCalledTimes(1),
+    );
+
+    listAdminFindingsAction.mockClear();
+    const input = screen.getByTestId("filter-target");
+    await user.click(input);
+
+    // 5 keystrokes back-to-back; without debouncing this would queue 5 fetches.
+    await user.keyboard("hello");
+
+    // Wait long enough for the debounced effect to flush (debounce is 300ms).
+    // Wrap in act() so React commits the state update from the debounced setter.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 600));
+    });
+
+    await waitFor(() =>
+      expect(listAdminFindingsAction).toHaveBeenCalledTimes(1),
+    );
+    const params = listAdminFindingsAction.mock
+      .calls.at(-1)?.[0] as ListAdminFindingsParams;
+    expect(params.target).toBe("hello");
+  }, 10_000);
+});
+
+describe("AdminFindingsClient — export surface (S1-5)", () => {
+  it("does NOT render a global export popover (per-row export only lives in the drawer)", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([makeItem({ id: "f", scan_id: "scan-42", title: "row" })]),
+    );
+    renderClient();
+
+    await screen.findByText("row");
+    expect(
+      screen.queryByTestId("findings-export-toggle"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("findings-export-popover"),
+    ).not.toBeInTheDocument();
   });
 });

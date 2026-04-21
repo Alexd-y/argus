@@ -10,6 +10,26 @@
  *   readers, keyboard users and high-contrast modes the right semantics for
  *   free.
  *
+ * Status filter (S1-2):
+ *   The backend currently exposes `false_positive: bool|undefined`, not the
+ *   full multi-select status taxonomy. The bar therefore renders a single
+ *   tri-state segmented control ("Все" / "Открытые" / "False positive")
+ *   that maps straight to the backend's wire param. The unsupported
+ *   `fixed`, `wontfix`, `risk_accepted`, `under_investigation` chips were
+ *   removed — silently no-op'd UI was the original review failure
+ *   (ISS-T20-005 tracks restoring them when the triage workflow lands).
+ *
+ * Target field (S1-1):
+ *   Free-text search maps to backend `q` (title/url/host substring), not the
+ *   nominal `target` column — the placeholder reflects this so operators
+ *   know they can search for either.
+ *
+ * Debouncing (S1-4):
+ *   The bar emits `onChange` immediately on every keystroke for instant
+ *   visual feedback; the parent (`AdminFindingsClient`) debounces the
+ *   text/date subset before passing it to React Query so we don't fire a
+ *   server action per character.
+ *
  * KEV / SSVC chips:
  *   The backend currently returns `kev_listed: null` and `ssvc_action: null`
  *   for every row (Phase-1 state — no intel-table JOIN yet). When the parent
@@ -22,14 +42,13 @@ import { useId, type ChangeEvent } from "react";
 
 import {
   FINDING_SEVERITIES,
-  FINDING_STATUSES,
   SSVC_ACTIONS,
-  type FindingSeverity,
-  type FindingStatus,
-  type SsvcAction,
   isFindingSeverity,
-  isFindingStatus,
+  isFindingStatusMode,
   isSsvcAction,
+  type FindingSeverity,
+  type FindingStatusMode,
+  type SsvcAction,
 } from "@/lib/adminFindings";
 import type { AdminRole } from "@/services/admin/adminRoles";
 
@@ -43,14 +62,23 @@ const SEVERITY_LABEL: Readonly<Record<FindingSeverity, string>> = {
   info: "Info",
 };
 
-const STATUS_LABEL: Readonly<Record<FindingStatus, string>> = {
-  open: "Open",
-  fixed: "Fixed",
-  wontfix: "Won't fix",
-  risk_accepted: "Risk accepted",
+const STATUS_MODE_LABEL: Readonly<Record<FindingStatusMode, string>> = {
+  all: "Все",
+  open: "Открытые",
   false_positive: "False positive",
-  under_investigation: "Under investigation",
 };
+
+const STATUS_MODE_HINT: Readonly<Record<FindingStatusMode, string>> = {
+  all: "Показать findings обоих видов",
+  open: "Скрыть findings, помеченные как false positive",
+  false_positive: "Только findings, помеченные как false positive",
+};
+
+const STATUS_MODE_VALUES: ReadonlyArray<FindingStatusMode> = [
+  "all",
+  "open",
+  "false_positive",
+];
 
 const SSVC_LABEL: Readonly<Record<SsvcAction, string>> = {
   act: "Act",
@@ -61,7 +89,7 @@ const SSVC_LABEL: Readonly<Record<SsvcAction, string>> = {
 
 export type FindingsFilterValues = {
   readonly severity: ReadonlyArray<FindingSeverity>;
-  readonly status: ReadonlyArray<FindingStatus>;
+  readonly statusMode: FindingStatusMode;
   readonly target: string;
   readonly since: string;
   readonly until: string;
@@ -72,7 +100,7 @@ export type FindingsFilterValues = {
 
 export const EMPTY_FILTER_VALUES: FindingsFilterValues = {
   severity: [],
-  status: [],
+  statusMode: "all",
   target: "",
   since: "",
   until: "",
@@ -128,11 +156,8 @@ export function FindingsFilterBar({
     });
   };
 
-  const handleStatusToggle = (st: FindingStatus) => {
-    onChange({
-      ...value,
-      status: toggleArrayValue<FindingStatus>(value.status, st),
-    });
+  const handleStatusModeChange = (next: FindingStatusMode) => {
+    onChange({ ...value, statusMode: next });
   };
 
   const handleTargetChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -224,31 +249,34 @@ export function FindingsFilterBar({
             Status
           </span>
           <div
-            role="group"
+            role="radiogroup"
             aria-labelledby={`${groupId}-status-label`}
-            className="flex flex-wrap gap-1"
+            className="inline-flex overflow-hidden rounded border border-[var(--border)]"
           >
-            {FINDING_STATUSES.map((st) => {
-              const checked = value.status.includes(st);
+            {STATUS_MODE_VALUES.map((mode) => {
+              const checked = value.statusMode === mode;
               return (
                 <label
-                  key={st}
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition focus-within:ring-2 focus-within:ring-[var(--accent)] ${
+                  key={mode}
+                  className={`inline-flex cursor-pointer items-center gap-1 border-l border-[var(--border)] px-2 py-1 text-xs transition first:border-l-0 focus-within:ring-2 focus-within:ring-[var(--accent)] ${
                     checked
-                      ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg-primary)]"
-                      : "border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
+                      ? "bg-[var(--accent)] text-[var(--bg-primary)]"
+                      : "bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
+                  title={STATUS_MODE_HINT[mode]}
                 >
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name={`${groupId}-status`}
+                    value={mode}
                     className="sr-only"
                     checked={checked}
                     aria-checked={checked}
                     disabled={disabled}
-                    onChange={() => handleStatusToggle(st)}
-                    data-testid={`filter-status-${st}`}
+                    onChange={() => handleStatusModeChange(mode)}
+                    data-testid={`filter-status-${mode}`}
                   />
-                  <span>{STATUS_LABEL[st]}</span>
+                  <span>{STATUS_MODE_LABEL[mode]}</span>
                 </label>
               );
             })}
@@ -262,7 +290,7 @@ export function FindingsFilterBar({
             htmlFor={targetId}
             className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]"
           >
-            Target
+            Target / поиск
           </label>
           <input
             id={targetId}
@@ -270,10 +298,17 @@ export function FindingsFilterBar({
             value={value.target}
             onChange={handleTargetChange}
             disabled={disabled}
-            placeholder="host or URL substring"
+            placeholder="Поиск по title, host или URL"
+            aria-describedby={`${groupId}-target-hint`}
             className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             data-testid="filter-target"
           />
+          <span
+            id={`${groupId}-target-hint`}
+            className="text-[10px] text-[var(--text-muted)]"
+          >
+            Substring-поиск по полям заголовка и адреса (backend `q`).
+          </span>
         </div>
         <div className="flex flex-col gap-1">
           <label
@@ -394,7 +429,7 @@ export function FindingsFilterBar({
  */
 export function sanitizeFilterValues(raw: {
   readonly severity?: ReadonlyArray<string>;
-  readonly status?: ReadonlyArray<string>;
+  readonly statusMode?: string | null;
   readonly target?: string;
   readonly since?: string;
   readonly until?: string;
@@ -403,14 +438,15 @@ export function sanitizeFilterValues(raw: {
   readonly ssvcAction?: string | null;
 }): FindingsFilterValues {
   const severity = (raw.severity ?? []).filter(isFindingSeverity);
-  const status = (raw.status ?? []).filter(isFindingStatus);
-  const ssvcAction = raw.ssvcAction && isSsvcAction(raw.ssvcAction) ? raw.ssvcAction : null;
+  const statusMode = isFindingStatusMode(raw.statusMode) ? raw.statusMode : "all";
+  const ssvcAction =
+    raw.ssvcAction && isSsvcAction(raw.ssvcAction) ? raw.ssvcAction : null;
   let kevListed: boolean | null = null;
   if (raw.kevListed === "true") kevListed = true;
   else if (raw.kevListed === "false") kevListed = false;
   return {
     severity,
-    status,
+    statusMode,
     target: raw.target ?? "",
     since: raw.since ?? "",
     until: raw.until ?? "",

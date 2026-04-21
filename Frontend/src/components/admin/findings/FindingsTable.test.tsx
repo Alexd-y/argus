@@ -1,9 +1,24 @@
-import { beforeAll, describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { FindingsTable } from "./FindingsTable";
 import type { AdminFindingItem } from "@/lib/adminFindings";
+
+vi.mock("@/lib/findingsExport", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/findingsExport")>(
+      "@/lib/findingsExport",
+    );
+  return {
+    ...actual,
+    downloadFindingsExport: vi.fn(async () => undefined),
+  };
+});
+
+import { downloadFindingsExport } from "@/lib/findingsExport";
+
+const mockedDownload = vi.mocked(downloadFindingsExport);
 
 beforeAll(() => {
   if (typeof Element !== "undefined") {
@@ -88,6 +103,7 @@ function renderTable(props: {
   showTenantColumn?: boolean;
   onLoadMore?: () => void;
   heightPx?: number;
+  effectiveTenantId?: string | null;
 } = {}) {
   return render(
     <FindingsTable
@@ -99,9 +115,15 @@ function renderTable(props: {
       showTenantColumn={props.showTenantColumn ?? false}
       onLoadMore={props.onLoadMore}
       heightPx={props.heightPx ?? 400}
+      effectiveTenantId={props.effectiveTenantId ?? null}
     />,
   );
 }
+
+beforeEach(() => {
+  mockedDownload.mockReset();
+  mockedDownload.mockResolvedValue(undefined);
+});
 
 describe("FindingsTable", () => {
   it("renders the empty state when no items and not loading", () => {
@@ -244,5 +266,160 @@ describe("FindingsTable", () => {
     expect(screen.queryByTestId("kev-unknown-no")).not.toBeInTheDocument();
     expect(screen.queryByTestId("kev-badge-no")).not.toBeInTheDocument();
     expect(screen.getByTestId("kev-badge-yes")).toBeInTheDocument();
+  });
+});
+
+describe("FindingsTable — drawer focus management (S2-1)", () => {
+  it("auto-focuses the close button when the drawer opens", async () => {
+    const user = userEvent.setup();
+    renderTable({ items: [makeItem({ id: "f1", title: "Focus me" })] });
+
+    await user.click(screen.getByTestId("findings-row-f1"));
+
+    const close = await screen.findByTestId("findings-drawer-close");
+    await waitFor(() => expect(close).toHaveFocus());
+  });
+
+  it("restores focus to the previously-focused element after closing the drawer", async () => {
+    const user = userEvent.setup();
+    renderTable({ items: [makeItem({ id: "f-restore", title: "T" })] });
+
+    const row = screen.getByTestId("findings-row-f-restore");
+    row.setAttribute("tabindex", "0");
+    row.focus();
+    expect(row).toHaveFocus();
+
+    await user.click(row);
+    const close = await screen.findByTestId("findings-drawer-close");
+    await waitFor(() => expect(close).toHaveFocus());
+
+    await user.click(close);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("findings-drawer")).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(row).toHaveFocus());
+  });
+
+  it("closes the drawer when Escape is pressed", async () => {
+    const user = userEvent.setup();
+    renderTable({ items: [makeItem({ id: "esc", title: "Esc" })] });
+
+    await user.click(screen.getByTestId("findings-row-esc"));
+    expect(screen.getByTestId("findings-drawer")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() =>
+      expect(screen.queryByTestId("findings-drawer")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("traps Tab focus inside the drawer (Shift+Tab from first wraps to last)", async () => {
+    const user = userEvent.setup();
+    renderTable({ items: [makeItem({ id: "trap", title: "Trap" })] });
+
+    await user.click(screen.getByTestId("findings-row-trap"));
+    const close = await screen.findByTestId("findings-drawer-close");
+    await waitFor(() => expect(close).toHaveFocus());
+
+    await user.tab({ shift: true });
+    await waitFor(() => expect(document.activeElement).not.toBe(close));
+    expect(screen.getByTestId("findings-drawer")).toContainElement(
+      document.activeElement as HTMLElement,
+    );
+  });
+});
+
+describe("FindingsTable — per-row export (S1-5)", () => {
+  it("does NOT render a global export button on the table itself", () => {
+    renderTable({ items: [makeItem({ id: "x" })] });
+    expect(
+      screen.queryByTestId("export-format-toggle"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("export-format-download"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the export toggle inside the drawer scoped to the opened finding's scan_id", async () => {
+    const user = userEvent.setup();
+    renderTable({
+      items: [
+        makeItem({ id: "row-a", scan_id: "scan-a" }),
+        makeItem({ id: "row-b", scan_id: "scan-b" }),
+      ],
+    });
+
+    await user.click(screen.getByTestId("findings-row-row-b"));
+    const drawer = await screen.findByTestId("findings-drawer");
+    const toggle = within(drawer).getByTestId("export-format-toggle");
+    expect(toggle).toBeInTheDocument();
+    // The drawer's export section shows the scan_id at least twice
+    // (Scan field + the explanatory <code>). Both must point at scan-b
+    // and never at scan-a.
+    const scanRefs = within(drawer).getAllByText(/scan-b/);
+    expect(scanRefs.length).toBeGreaterThanOrEqual(1);
+    expect(within(drawer).queryAllByText(/scan-a/)).toHaveLength(0);
+  });
+
+  it("forwards the drawer item's scan_id and the effectiveTenantId to downloadFindingsExport", async () => {
+    const user = userEvent.setup();
+    renderTable({
+      items: [makeItem({ id: "exp", scan_id: "scan-exp", tenant_id: "row-tenant" })],
+      effectiveTenantId: "scope-tenant",
+    });
+
+    await user.click(screen.getByTestId("findings-row-exp"));
+    const drawer = await screen.findByTestId("findings-drawer");
+    await user.click(within(drawer).getByTestId("export-format-download"));
+
+    await waitFor(() => expect(mockedDownload).toHaveBeenCalledTimes(1));
+    const [scanId, format, opts] = mockedDownload.mock.calls[0];
+    expect(scanId).toBe("scan-exp");
+    expect(format).toBe("sarif");
+    expect(opts).toMatchObject({ tenantId: "scope-tenant" });
+  });
+
+  it("falls back to the row's tenant_id when no effective tenant is provided", async () => {
+    const user = userEvent.setup();
+    renderTable({
+      items: [makeItem({ id: "exp", scan_id: "scan-exp", tenant_id: "row-tenant" })],
+      effectiveTenantId: null,
+    });
+
+    await user.click(screen.getByTestId("findings-row-exp"));
+    const drawer = await screen.findByTestId("findings-drawer");
+    await user.click(within(drawer).getByTestId("export-format-download"));
+
+    await waitFor(() => expect(mockedDownload).toHaveBeenCalledTimes(1));
+    expect(mockedDownload.mock.calls[0][2]).toMatchObject({
+      tenantId: "row-tenant",
+    });
+  });
+
+  it("renders a closed-taxonomy alert when the export call rejects", async () => {
+    mockedDownload.mockRejectedValueOnce(new Error("ECONNRESET 127.0.0.1"));
+    const user = userEvent.setup();
+    renderTable({
+      items: [makeItem({ id: "fail", scan_id: "scan-fail" })],
+    });
+
+    await user.click(screen.getByTestId("findings-row-fail"));
+    const drawer = await screen.findByTestId("findings-drawer");
+    await user.click(within(drawer).getByTestId("export-format-download"));
+
+    // The drawer-level alert (rendered under data-testid="findings-drawer-export-error")
+    // OR the toggle's own (data-testid="export-format-error") MUST surface — and
+    // neither may leak the underlying error string.
+    await waitFor(() => {
+      const drawerErr = screen.queryByTestId("findings-drawer-export-error");
+      const toggleErr = screen.queryByTestId("export-format-error");
+      expect(drawerErr || toggleErr).toBeTruthy();
+    });
+    const drawerErr = screen.queryByTestId("findings-drawer-export-error");
+    const toggleErr = screen.queryByTestId("export-format-error");
+    const text = `${drawerErr?.textContent ?? ""}${toggleErr?.textContent ?? ""}`;
+    expect(text).not.toMatch(/ECONNRESET|127\.0\.0\.1|stack/i);
+    expect(text.length).toBeGreaterThan(0);
   });
 });
