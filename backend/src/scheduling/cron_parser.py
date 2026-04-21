@@ -43,7 +43,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
-from typing import Final, cast
+from typing import Final, NoReturn, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from croniter import CroniterError, croniter  # type: ignore[import-untyped]
@@ -125,6 +125,27 @@ class ParsedCron:
 # ---------------------------------------------------------------------------
 
 
+def _raise_validation_error(message: str, *, cause: BaseException) -> NoReturn:
+    """Raise :class:`CronValidationError` without chaining the upstream cause.
+
+    The closed-taxonomy contract forbids leaking operator-supplied input
+    through ANY visible exception channel — including ``__cause__``,
+    which ``traceback.format_exception`` renders verbatim and which
+    structured-logging pipelines (``logger.exception``) routinely
+    serialise into audit / SIEM stores. ``croniter`` and ``zoneinfo``
+    embed the raw expression / timezone string in their messages, so
+    chaining them defeats the PII guarantee of the public API.
+
+    We suppress the chain with ``raise ... from None`` and preserve the
+    debugging hint via :meth:`Exception.add_note` (Python 3.11+), which
+    only sees the upstream class NAME — never its message — and is fully
+    under our control.
+    """
+    err = CronValidationError(message)
+    err.add_note(f"upstream: {type(cause).__name__}")
+    raise err from None
+
+
 def _resolve_zone(name: str) -> ZoneInfo:
     """Return a :class:`ZoneInfo` for ``name`` or raise CronValidationError.
 
@@ -135,7 +156,7 @@ def _resolve_zone(name: str) -> ZoneInfo:
     try:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
-        raise CronValidationError("unknown timezone") from exc
+        _raise_validation_error("unknown timezone", cause=exc)
 
 
 def _ensure_aware(dt: datetime, *, default_tz: tzinfo) -> datetime:
@@ -180,7 +201,7 @@ def _build_croniter(expression: str, anchor: datetime) -> croniter:
     try:
         return croniter(expression, anchor)
     except CroniterError as exc:
-        raise CronValidationError("invalid cron syntax") from exc
+        _raise_validation_error("invalid cron syntax", cause=exc)
 
 
 def _enforce_frequency_guard(iterator: croniter, *, max_freq_seconds: int) -> int:
@@ -197,7 +218,7 @@ def _enforce_frequency_guard(iterator: croniter, *, max_freq_seconds: int) -> in
             for _ in range(_FREQ_GUARD_SAMPLE)
         ]
     except CroniterError as exc:  # e.g. CroniterBadDateError on impossible patterns
-        raise CronValidationError("invalid cron syntax") from exc
+        _raise_validation_error("invalid cron syntax", cause=exc)
     gap_seconds = int((fires[1] - fires[0]).total_seconds())
     if gap_seconds < max_freq_seconds:
         raise CronValidationError("cron expression fires too frequently")
@@ -235,7 +256,13 @@ def validate_cron(
             ``"unknown timezone"``,
             ``"invalid cron syntax"``,
             ``"cron expression fires too frequently"``.
+        ValueError: For non-positive ``max_freq_minutes``. Programmer
+            error (not operator input), so we keep the stdlib type —
+            symmetric with :func:`is_in_maintenance_window`'s guard for
+            ``window_duration_minutes``.
     """
+    if max_freq_minutes <= 0:
+        raise ValueError("max_freq_minutes must be > 0")
     canonical, fields = _canonicalize_expression(expression)
     _validate_field_count(fields)
     zone = _resolve_zone(timezone)
@@ -266,9 +293,13 @@ def next_fire_time(
             scheduler tick) while still failing closed if the expression
             is malformed (``croniter`` errors are remapped to
             :class:`CronValidationError`).
-        after: Reference instant. ``after`` may be naive (interpreted in
-            ``timezone``) or tz-aware (used as-is, then translated into
-            ``timezone`` for the cron computation).
+        after: Reference instant. ``after`` may be naive (treated as
+            UTC) or tz-aware (used as-is). The instant is then converted
+            into ``timezone`` for the cron computation. Note that this
+            naive-as-UTC interpretation differs from
+            :func:`normalize_to_utc`, which interprets naive in
+            ``assume_timezone``; here we anchor naive to UTC so the
+            scheduler tick path stays explicit and zone-agnostic.
         timezone: IANA timezone the cron expression is interpreted in.
 
     Returns:
@@ -296,7 +327,7 @@ def next_fire_time(
     try:
         candidate = cast(datetime, iterator.get_next(datetime))
     except CroniterError as exc:
-        raise CronValidationError("invalid cron syntax") from exc
+        _raise_validation_error("invalid cron syntax", cause=exc)
     if _is_dst_fallback_duplicate(candidate, of=after_in_zone):
         # Defence-in-depth: the iterator just produced a fire so this second
         # call cannot realistically raise; we re-wrap solely to keep the
@@ -304,7 +335,7 @@ def next_fire_time(
         try:
             candidate = cast(datetime, iterator.get_next(datetime))
         except CroniterError as exc:  # pragma: no cover — defensive only
-            raise CronValidationError("invalid cron syntax") from exc
+            _raise_validation_error("invalid cron syntax", cause=exc)
     return candidate.astimezone(UTC)
 
 
@@ -355,8 +386,9 @@ def is_in_maintenance_window(
     Args:
         window_cron: Cron expression. NOT re-validated — call
             :func:`validate_cron` first when accepting operator input.
-        at: Reference instant. Naive datetimes are interpreted in
-            ``timezone``.
+        at: Reference instant. Naive datetimes are treated as UTC;
+            tz-aware datetimes are preserved. Either way ``at`` is then
+            converted into ``timezone`` for the cron comparison.
         window_duration_minutes: Window length in minutes; must be > 0.
         timezone: IANA timezone the cron expression is interpreted in.
 
@@ -379,14 +411,14 @@ def is_in_maintenance_window(
     try:
         matched = cast(bool, croniter.match(window_cron, at_in_zone))
     except CroniterError as exc:
-        raise CronValidationError("invalid cron syntax") from exc
+        _raise_validation_error("invalid cron syntax", cause=exc)
     if matched:
         return True
     iterator = _build_croniter(window_cron, at_in_zone)
     try:
         previous_fire = cast(datetime, iterator.get_prev(datetime))
     except CroniterError as exc:
-        raise CronValidationError("invalid cron syntax") from exc
+        _raise_validation_error("invalid cron syntax", cause=exc)
     elapsed = at_in_zone - previous_fire
     return elapsed <= timedelta(minutes=window_duration_minutes)
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import traceback
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -119,6 +120,48 @@ class TestValidateCron:
         assert operator_input not in str(exc_info.value)
         assert operator_input not in repr(exc_info.value)
 
+    def test_validate_cron_traceback_does_not_leak_expression(self) -> None:
+        """PII / log-safety: ``traceback.format_exception`` must not surface
+        the operator's raw cron expression through ``__cause__``.
+
+        ``croniter`` embeds the expression verbatim in its own error
+        messages; chaining via ``raise ... from exc`` would leak that
+        text into ``logger.exception`` output and any traceback-rendering
+        middleware. The fix uses ``raise ... from None`` plus
+        :meth:`Exception.add_note` (class name only — never the raw
+        message) so the chain is suppressed.
+
+        The expression has 5 fields so it passes the field-count guard
+        and actually reaches ``croniter`` (where the leak channel lives).
+        """
+        leaky_token = "leaky-token-must-not-leak"
+        operator_input = f"abc def ghi jkl {leaky_token}"
+        try:
+            validate_cron(operator_input)
+        except CronValidationError as exc:
+            formatted = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
+        else:  # pragma: no cover — the call MUST raise on garbage input
+            pytest.fail("validate_cron should have raised CronValidationError")
+        assert leaky_token not in formatted, (
+            f"operator input leaked through traceback: {formatted!r}"
+        )
+        # Sanity: the class-name note (our explicit, controlled hint) is
+        # still present so debuggers retain the upstream taxonomy.
+        assert "upstream:" in formatted
+
+    def test_validate_cron_rejects_non_positive_max_freq_minutes(self) -> None:
+        """Programmer error → stdlib :class:`ValueError`, symmetric with
+        :func:`is_in_maintenance_window`'s guard for ``window_duration_minutes``.
+        Using ``CronValidationError`` would imply the operator input is at
+        fault, which is misleading for a configuration mistake.
+        """
+        with pytest.raises(ValueError, match="max_freq_minutes"):
+            validate_cron("*/5 * * * *", max_freq_minutes=0)
+        with pytest.raises(ValueError, match="max_freq_minutes"):
+            validate_cron("*/5 * * * *", max_freq_minutes=-1)
+
 
 # ---------------------------------------------------------------------------
 # next_fire_time
@@ -139,6 +182,26 @@ class TestNextFireTime:
         assert next_fire_time("0 0 * * *", after=naive) == next_fire_time(
             "0 0 * * *", after=aware
         )
+
+    def test_next_fire_time_naive_after_is_utc_not_local(self) -> None:
+        """Locks the contract: naive ``after`` is treated as UTC even when
+        ``timezone`` is non-UTC. The cron expression itself is interpreted
+        in ``timezone``, but the reference instant is anchored to UTC.
+
+        Concretely: with naive ``10:00`` and ``timezone="Europe/Moscow"``
+        (UTC+3, no DST), the reference is 10:00 UTC = 13:00 Moscow on
+        2026-04-22. Cron ``"0 12 * * *"`` next fires at 12:00 Moscow on
+        2026-04-23 = 09:00 UTC.
+
+        If naive were (wrongly) treated as local Moscow time, the
+        reference would be 10:00 Moscow = 07:00 UTC and the next fire
+        would be SAME-DAY noon Moscow = 09:00 UTC on 2026-04-22 — a
+        24-hour delta from the documented behaviour.
+        """
+        naive_after = datetime(2026, 4, 22, 10, 0)
+        fire = next_fire_time("0 12 * * *", after=naive_after, timezone="Europe/Moscow")
+        assert fire.tzinfo is UTC
+        assert fire == datetime(2026, 4, 23, 9, 0, tzinfo=UTC)
 
     def test_next_fire_time_returns_utc_tzinfo(self) -> None:
         """Result MUST carry ``tzinfo=UTC`` regardless of source timezone."""
@@ -322,6 +385,41 @@ class TestIsInMaintenanceWindow:
         # PII / log-safety: operator input MUST NOT appear in error args.
         assert operator_input not in str(exc_info.value)
         assert operator_input not in repr(exc_info.value)
+
+    def test_in_maintenance_window_traceback_does_not_leak_expression(self) -> None:
+        """PII / log-safety: ``traceback.format_exception`` MUST NOT surface
+        the operator's raw window cron through ``__cause__``.
+
+        ``is_in_maintenance_window`` does NOT pre-validate field count,
+        so a 5-token garbage expression goes straight to
+        ``croniter.match`` (the first leak channel). The
+        ``raise ... from None`` rewrite plus controlled ``add_note``
+        suppresses ``__cause__`` so the operator's tokens never reach a
+        formatted traceback.
+
+        Symmetric guarantee with
+        :meth:`TestValidateCron.test_validate_cron_traceback_does_not_leak_expression`.
+        """
+        leaky_token = "leaky-window-token-secret"
+        operator_input = f"abc def ghi jkl {leaky_token}"
+        try:
+            is_in_maintenance_window(
+                operator_input,
+                at=datetime(2026, 4, 22, 12, 0, tzinfo=UTC),
+                window_duration_minutes=60,
+            )
+        except CronValidationError as exc:
+            formatted = "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
+        else:  # pragma: no cover — call MUST raise on garbage input
+            pytest.fail(
+                "is_in_maintenance_window should have raised CronValidationError"
+            )
+        assert leaky_token not in formatted, (
+            f"operator window expression leaked through traceback: {formatted!r}"
+        )
+        assert "upstream:" in formatted
 
 
 # ---------------------------------------------------------------------------
