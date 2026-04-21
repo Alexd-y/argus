@@ -354,6 +354,56 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # T27 (Cycle 6 Batch 7): functional Playwright gate for the admin
+  # console pages introduced in Batch 3 (T20 findings, T21 bulk actions,
+  # T22 audit log + chain verify, T23 SARIF/JUnit export). Reuses the
+  # T26 mock backend (no real PostgreSQL, Redis, or FastAPI) so the
+  # job stays fast and never depends on production secrets.
+  #
+  # Coverage:
+  #   * tests/e2e/admin-findings.spec.ts        (5 scenarios)
+  #   * tests/e2e/admin-audit.spec.ts           (3 scenarios)
+  #   * tests/e2e/admin-export-toggle.spec.ts   (2 scenarios)
+  #   * tests/e2e/admin-rbac.spec.ts            (1 scenario)
+  frontend-e2e-functional:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend deps
+        run: npm ci
+
+      - name: Install Playwright Chromium with OS deps
+        run: npx playwright install --with-deps chromium
+
+      - name: Run functional admin E2E
+        run: npm run test:e2e:functional
+        env:
+          # Same conventions as the a11y job — mock backend port + dev
+          # server env are wired through `playwright.mock.config.ts`.
+          NEXT_TELEMETRY_DISABLED: "1"
+          CI: "true"
+
+      - name: Upload Playwright functional report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-functional-report
+          path: |
+            Frontend/playwright-report/
+            Frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   build:
     runs-on: ubuntu-latest
     needs:
@@ -366,6 +416,7 @@ jobs:
       - helm-lint
       - migrations-smoke
       - frontend-a11y
+      - frontend-e2e-functional
     steps:
       - uses: actions/checkout@v4
 

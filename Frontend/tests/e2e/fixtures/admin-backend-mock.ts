@@ -1,12 +1,24 @@
 /**
  * Stand-alone mock of the FastAPI `/api/v1/admin/*` surface used by the
- * Playwright accessibility suite (T26).
+ * Playwright accessibility (T26) and functional (T27) E2E suites.
  *
  * Why a real HTTP server, not `page.route()`:
  *   The admin pages call FastAPI from Next.js Server Actions running on the
  *   Node side, NOT from the browser. `page.route()` would never see those
  *   requests. Instead we point the dev server's `BACKEND_URL` env at this
  *   mock and let the actions hit a real (loopback) HTTP listener.
+ *
+ * Test-control query parameters (only honoured by this mock; the real
+ * FastAPI router rejects unknown query keys):
+ *   - `?_test_drift=true` on `POST /admin/audit-logs/verify-chain` flips
+ *     the verdict to `ok: false` and points `drift_event_id` at a known
+ *     entry so T27's drift scenarios can assert the red-banner UX.
+ *   - `?_test_partial=true` on `POST /admin/findings/bulk-suppress`
+ *     marks ~half of the requested ids as `not_found` so the partial-
+ *     failure banner branch is reachable from a deterministic test.
+ *   - `?_test_export_disabled=true` on `GET /admin/scans` returns the
+ *     scan with `exports_sarif_junit_enabled: false` to assert the
+ *     toggle's disabled state (T23 RBAC variant).
  *
  * Security boundary:
  *   The mock NEVER returns tenant secrets, real tokens, or PII. Every
@@ -22,6 +34,7 @@ import { AddressInfo } from "net";
 const MOCK_TENANT_ID = "00000000-0000-0000-0000-000000000aaa";
 const MOCK_SECONDARY_TENANT_ID = "00000000-0000-0000-0000-000000000bbb";
 const MOCK_SCAN_ID = "11111111-2222-3333-4444-555555555555";
+const MOCK_SCAN_SECONDARY_ID = "22222222-3333-4444-5555-666666666666";
 const MOCK_AUDIT_DRIFT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 type JsonValue =
@@ -55,6 +68,13 @@ const TENANTS: JsonValue[] = [
   },
 ];
 
+/**
+ * Synthetic findings spanning both mock tenants and all five severity buckets
+ * so T27 can exercise pagination, severity filters, and cross-tenant rendering
+ * deterministically. Eight rows total: 4 in the primary tenant (1 critical +
+ * 1 high + 1 medium + 1 low) and 4 in the secondary tenant (1 critical + 1
+ * high + 1 medium + 1 info).
+ */
 const FINDINGS: JsonValue[] = [
   {
     id: "f0000001-0000-0000-0000-000000000001",
@@ -95,7 +115,7 @@ const FINDINGS: JsonValue[] = [
   {
     id: "f0000003-0000-0000-0000-000000000003",
     tenant_id: MOCK_SECONDARY_TENANT_ID,
-    scan_id: MOCK_SCAN_ID,
+    scan_id: MOCK_SCAN_SECONDARY_ID,
     severity: "medium",
     title: "Missing security headers",
     status: "open",
@@ -110,8 +130,106 @@ const FINDINGS: JsonValue[] = [
     updated_at: "2026-04-17T09:00:00Z",
     created_at: "2026-04-17T09:00:00Z",
   },
+  {
+    id: "f0000004-0000-0000-0000-000000000004",
+    tenant_id: MOCK_TENANT_ID,
+    scan_id: MOCK_SCAN_ID,
+    severity: "medium",
+    title: "Cookie missing Secure flag on session",
+    status: "open",
+    target: "https://app.example.com/login",
+    cve_ids: [],
+    cvss: 4.2,
+    cvss_score: 4.2,
+    epss_score: 0.05,
+    kev_listed: false,
+    ssvc_action: "track",
+    discovered_at: "2026-04-17T11:00:00Z",
+    updated_at: "2026-04-17T11:00:00Z",
+    created_at: "2026-04-17T11:00:00Z",
+  },
+  {
+    id: "f0000005-0000-0000-0000-000000000005",
+    tenant_id: MOCK_TENANT_ID,
+    scan_id: MOCK_SCAN_ID,
+    severity: "low",
+    title: "Verbose error page leaks framework version",
+    status: "open",
+    target: "https://api.example.com/status",
+    cve_ids: [],
+    cvss: 2.5,
+    cvss_score: 2.5,
+    epss_score: 0.01,
+    kev_listed: false,
+    ssvc_action: "track",
+    discovered_at: "2026-04-17T13:30:00Z",
+    updated_at: "2026-04-17T13:30:00Z",
+    created_at: "2026-04-17T13:30:00Z",
+  },
+  {
+    id: "f0000006-0000-0000-0000-000000000006",
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    scan_id: MOCK_SCAN_SECONDARY_ID,
+    severity: "critical",
+    title: "Default admin credentials accepted on /admin",
+    status: "open",
+    target: "https://internal.example.com/admin",
+    cve_ids: ["CVE-2025-00001"],
+    cvss: 9.8,
+    cvss_score: 9.8,
+    epss_score: 0.65,
+    kev_listed: true,
+    ssvc_action: "act",
+    discovered_at: "2026-04-18T08:00:00Z",
+    updated_at: "2026-04-18T08:00:00Z",
+    created_at: "2026-04-18T08:00:00Z",
+  },
+  {
+    id: "f0000007-0000-0000-0000-000000000007",
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    scan_id: MOCK_SCAN_SECONDARY_ID,
+    severity: "high",
+    title: "SQL injection on /api/products",
+    status: "open",
+    target: "https://api.example.com/products",
+    cve_ids: [],
+    cvss: 8.1,
+    cvss_score: 8.1,
+    epss_score: 0.32,
+    kev_listed: false,
+    ssvc_action: "attend",
+    discovered_at: "2026-04-18T09:15:00Z",
+    updated_at: "2026-04-18T09:15:00Z",
+    created_at: "2026-04-18T09:15:00Z",
+  },
+  {
+    id: "f0000008-0000-0000-0000-000000000008",
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    scan_id: MOCK_SCAN_SECONDARY_ID,
+    severity: "info",
+    title: "Server header discloses Apache 2.4",
+    status: "open",
+    target: "https://web.example.com",
+    cve_ids: [],
+    cvss: 0,
+    cvss_score: 0,
+    epss_score: 0,
+    kev_listed: false,
+    ssvc_action: "track",
+    discovered_at: "2026-04-18T10:00:00Z",
+    updated_at: "2026-04-18T10:00:00Z",
+    created_at: "2026-04-18T10:00:00Z",
+  },
 ];
 
+/**
+ * Audit-log entries. Each row carries chain markers (`_event_hash` /
+ * `_prev_event_hash`) inside `details` so the AuditLogsTable renders
+ * the chain badge — that is the cue T27's chain-aware tests look for.
+ * The drift scenario points at `MOCK_AUDIT_DRIFT_ID` which is also in
+ * this list, so the "scroll to drift record" affordance has a real row
+ * to anchor to.
+ */
 const AUDIT_LOGS: JsonValue[] = [
   {
     id: "ev0000001-0000-0000-0000-000000000001",
@@ -123,7 +241,13 @@ const AUDIT_LOGS: JsonValue[] = [
     tenant_id: MOCK_TENANT_ID,
     resource_type: "scan",
     resource_id: MOCK_SCAN_ID,
-    details: { source: "admin-console", scan_mode: "fast" },
+    details: {
+      source: "admin-console",
+      scan_mode: "fast",
+      _event_hash:
+        "11111111111111111111111111111111111111111111111111111111aaaaaaaa",
+      _prev_event_hash: null,
+    },
     severity: "info",
   },
   {
@@ -136,7 +260,14 @@ const AUDIT_LOGS: JsonValue[] = [
     tenant_id: MOCK_TENANT_ID,
     resource_type: "finding",
     resource_id: "f0000002-0000-0000-0000-000000000002",
-    details: { reason: "duplicate", count: 1 },
+    details: {
+      reason: "duplicate",
+      count: 1,
+      _event_hash:
+        "22222222222222222222222222222222222222222222222222222222bbbbbbbb",
+      _prev_event_hash:
+        "11111111111111111111111111111111111111111111111111111111aaaaaaaa",
+    },
     severity: "warning",
   },
   {
@@ -149,7 +280,32 @@ const AUDIT_LOGS: JsonValue[] = [
     tenant_id: MOCK_TENANT_ID,
     resource_type: "audit_log",
     resource_id: null,
-    details: { window: "2026-04-19/2026-04-20" },
+    details: {
+      window: "2026-04-19/2026-04-20",
+      _event_hash:
+        "33333333333333333333333333333333333333333333333333333333cccccccc",
+      _prev_event_hash:
+        "22222222222222222222222222222222222222222222222222222222bbbbbbbb",
+    },
+    severity: "info",
+  },
+  {
+    id: "ev0000004-0000-0000-0000-000000000004",
+    created_at: "2026-04-20T09:00:00Z",
+    event_type: "tenant.updated",
+    action: "tenant.updated",
+    actor_subject: "admin_console:super-admin",
+    user_id: null,
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    resource_type: "tenant",
+    resource_id: MOCK_SECONDARY_TENANT_ID,
+    details: {
+      field: "rate_limit_rpm",
+      _event_hash:
+        "44444444444444444444444444444444444444444444444444444444dddddddd",
+      _prev_event_hash:
+        "33333333333333333333333333333333333333333333333333333333cccccccc",
+    },
     severity: "info",
   },
 ];
@@ -157,6 +313,7 @@ const AUDIT_LOGS: JsonValue[] = [
 const SCANS: JsonValue[] = [
   {
     id: MOCK_SCAN_ID,
+    tenant_id: MOCK_TENANT_ID,
     status: "completed",
     progress: 100,
     phase: "done",
@@ -166,7 +323,8 @@ const SCANS: JsonValue[] = [
     scan_mode: "fast",
   },
   {
-    id: "22222222-3333-4444-5555-666666666666",
+    id: MOCK_SCAN_SECONDARY_ID,
+    tenant_id: MOCK_TENANT_ID,
     status: "running",
     progress: 42,
     phase: "exploit",
@@ -205,6 +363,39 @@ const SCAN_DETAIL: JsonValue = {
   error_summary: [],
 };
 
+/**
+ * Minimal SARIF 2.1.0 envelope returned by the mock export endpoint.
+ * Keeps the body small so axe / Playwright never has to parse a giant
+ * binary blob; the contract under test is "the format toggle drives the
+ * URL we hit and the file download triggers", not SARIF correctness.
+ */
+const SARIF_BODY: JsonValue = {
+  $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+  version: "2.1.0",
+  runs: [
+    {
+      tool: { driver: { name: "argus", version: "test" } },
+      results: [
+        {
+          ruleId: "T27-MOCK-001",
+          message: { text: "Mocked SARIF result" },
+          level: "warning",
+        },
+      ],
+    },
+  ],
+};
+
+const JUNIT_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="argus-mock">
+  <testsuite name="findings" tests="1" failures="1">
+    <testcase classname="argus" name="T27-MOCK-001">
+      <failure message="Mocked JUnit failure" type="WARN"/>
+    </testcase>
+  </testsuite>
+</testsuites>
+`;
+
 function writeJson(res: ServerResponse, status: number, body: JsonValue): void {
   const text = JSON.stringify(body);
   res.writeHead(status, {
@@ -212,6 +403,19 @@ function writeJson(res: ServerResponse, status: number, body: JsonValue): void {
     "Content-Length": Buffer.byteLength(text).toString(),
   });
   res.end(text);
+}
+
+function writeText(
+  res: ServerResponse,
+  status: number,
+  contentType: string,
+  body: string,
+): void {
+  res.writeHead(status, {
+    "Content-Type": contentType,
+    "Content-Length": Buffer.byteLength(body).toString(),
+  });
+  res.end(body);
 }
 
 function writeNotFound(res: ServerResponse): void {
@@ -237,23 +441,37 @@ function parseUrl(req: IncomingMessage): URL {
   return new URL(raw, "http://localhost");
 }
 
+function asRecord(value: JsonValue): Record<string, JsonValue> {
+  // FINDINGS / AUDIT_LOGS are object literals in the source — narrowing
+  // through `Record<string, JsonValue>` keeps the rest of the dispatcher
+  // free of `as any` casts.
+  return value as Record<string, JsonValue>;
+}
+
 function handleFindings(url: URL, res: ServerResponse): void {
   const tenantFilter = url.searchParams.get("tenant_id");
   const severityFilter = url.searchParams.getAll("severity");
   const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
   const limit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50;
+  const q = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
 
   let items = FINDINGS.slice();
   if (tenantFilter) {
     items = items.filter(
-      (item) => (item as Record<string, JsonValue>)["tenant_id"] === tenantFilter,
+      (item) => asRecord(item)["tenant_id"] === tenantFilter,
     );
   }
   if (severityFilter.length > 0) {
     const allowed = new Set(severityFilter);
-    items = items.filter((item) =>
-      allowed.has(String((item as Record<string, JsonValue>)["severity"])),
-    );
+    items = items.filter((item) => allowed.has(String(asRecord(item)["severity"])));
+  }
+  if (q) {
+    items = items.filter((item) => {
+      const r = asRecord(item);
+      const title = String(r["title"] ?? "").toLowerCase();
+      const target = String(r["target"] ?? "").toLowerCase();
+      return title.includes(q) || target.includes(q);
+    });
   }
 
   const total = items.length;
@@ -269,7 +487,16 @@ function handleFindings(url: URL, res: ServerResponse): void {
   });
 }
 
-function handleBulkSuppress(body: string, res: ServerResponse): void {
+/**
+ * Bulk-suppress mock. Honours `?_test_partial=true` to mark the second
+ * half of the requested ids as `not_found` so T27 can deterministically
+ * exercise the partial-failure banner branch in `AdminFindingsClient`.
+ */
+function handleBulkSuppress(
+  url: URL,
+  body: string,
+  res: ServerResponse,
+): void {
   let parsed: { tenant_id?: string; finding_ids?: string[]; reason?: string };
   try {
     parsed = JSON.parse(body);
@@ -278,9 +505,35 @@ function handleBulkSuppress(body: string, res: ServerResponse): void {
     return;
   }
   const ids = Array.isArray(parsed.finding_ids) ? parsed.finding_ids : [];
+  const partial = url.searchParams.get("_test_partial") === "true";
+
+  if (partial && ids.length > 0) {
+    const half = Math.max(1, Math.floor(ids.length / 2));
+    const suppressedIds = ids.slice(0, half);
+    const notFoundIds = ids.slice(half);
+    writeJson(res, 200, {
+      suppressed_count: suppressedIds.length,
+      skipped_already_suppressed_count: 0,
+      not_found_count: notFoundIds.length,
+      audit_id: "ev_bulk_suppress_partial",
+      results: [
+        ...suppressedIds.map((id) => ({
+          finding_id: id,
+          status: "suppressed",
+        })),
+        ...notFoundIds.map((id) => ({
+          finding_id: id,
+          status: "not_found",
+        })),
+      ],
+    });
+    return;
+  }
+
   writeJson(res, 200, {
     suppressed_count: ids.length,
     skipped_already_suppressed_count: 0,
+    not_found_count: 0,
     audit_id: "ev_bulk_suppress_test",
     results: ids.map((id) => ({ finding_id: id, status: "suppressed" })),
   });
@@ -289,25 +542,71 @@ function handleBulkSuppress(body: string, res: ServerResponse): void {
 function handleAuditLogs(url: URL, res: ServerResponse): void {
   const tenantFilter = url.searchParams.get("tenant_id");
   const eventType = url.searchParams.get("event_type");
+  const q = url.searchParams.get("q")?.trim().toLowerCase() ?? "";
   const limit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50;
   const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
 
   let items = AUDIT_LOGS.slice();
   if (tenantFilter) {
-    items = items.filter(
-      (item) => (item as Record<string, JsonValue>)["tenant_id"] === tenantFilter,
-    );
+    items = items.filter((item) => asRecord(item)["tenant_id"] === tenantFilter);
   }
   if (eventType) {
-    items = items.filter(
-      (item) => (item as Record<string, JsonValue>)["event_type"] === eventType,
-    );
+    items = items.filter((item) => asRecord(item)["event_type"] === eventType);
   }
-  // Bare-array shape (matches T22 backend); the schema accepts both.
-  writeJson(res, 200, items.slice(offset, offset + limit));
+  if (q) {
+    items = items.filter((item) => {
+      const r = asRecord(item);
+      const action = String(r["action"] ?? "").toLowerCase();
+      const resourceType = String(r["resource_type"] ?? "").toLowerCase();
+      return action.includes(q) || resourceType.includes(q);
+    });
+  }
+  const sliced = items.slice(offset, offset + limit);
+  // Wrapped envelope shape — mirrors the post-T22 backend; the schema
+  // accepts the bare-array form too, but the wrapped form lets us return
+  // an accurate `total` to drive the page counter.
+  writeJson(res, 200, {
+    items: sliced,
+    total: items.length,
+    next_cursor: null,
+  });
 }
 
-function handleVerifyChain(res: ServerResponse): void {
+/**
+ * Chain verify mock. Honours `?_test_drift=true` to flip the verdict to
+ * a drift response pointing at `MOCK_AUDIT_DRIFT_ID` so T27's red-banner
+ * scenarios can assert the drift UX without a real chain ledger.
+ */
+/**
+ * Trigger value the E2E suite uses to make the chain-verify endpoint
+ * return a DRIFT verdict. Plumbed through `event_type` because that is
+ * the only knob the UI's verify-chain mutation actually forwards to
+ * the backend (see `audit-logs/actions.ts::buildVerifyQuery`).
+ *
+ * Production audit events would never carry this `event_type` value, so
+ * leaking the trigger to a real backend would simply return zero rows.
+ * Making the trigger reachable via a filter keeps test wiring out of the
+ * production code path entirely.
+ */
+const VERIFY_DRIFT_TRIGGER = "_t27_drift";
+
+function handleVerifyChain(url: URL, res: ServerResponse): void {
+  const eventType = url.searchParams.get("event_type") ?? "";
+  const drift =
+    eventType === VERIFY_DRIFT_TRIGGER ||
+    url.searchParams.get("_test_drift") === "true";
+  if (drift) {
+    writeJson(res, 200, {
+      ok: false,
+      verified_count: 1,
+      last_verified_index: 1,
+      drift_event_id: MOCK_AUDIT_DRIFT_ID,
+      drift_detected_at: "2026-04-20T08:11:00Z",
+      effective_since: "2026-04-01T00:00:00Z",
+      effective_until: "2026-04-21T00:00:00Z",
+    });
+    return;
+  }
   writeJson(res, 200, {
     ok: true,
     verified_count: AUDIT_LOGS.length,
@@ -324,15 +623,8 @@ function handleScansList(url: URL, res: ServerResponse): void {
   const offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0;
   const limit = Number.parseInt(url.searchParams.get("limit") ?? "25", 10) || 25;
 
-  // Without a tenant filter we still return the full set so the page
-  // renders rows for the a11y suite. Production routing layer enforces
-  // tenant filtering.
   const items = tenantId
-    ? SCANS.filter(
-        (s) =>
-          (s as Record<string, JsonValue>)["id"] !== "ignore" &&
-          tenantId.length > 0,
-      )
+    ? SCANS.filter((s) => asRecord(s)["tenant_id"] === tenantId)
     : SCANS.slice();
   writeJson(res, 200, {
     scans: items.slice(offset, offset + limit),
@@ -343,15 +635,65 @@ function handleScansList(url: URL, res: ServerResponse): void {
 }
 
 function handleScanDetail(scanId: string, res: ServerResponse): void {
-  if (scanId !== MOCK_SCAN_ID) {
-    writeNotFound(res);
+  if (scanId === MOCK_SCAN_ID) {
+    writeJson(res, 200, SCAN_DETAIL);
     return;
   }
-  writeJson(res, 200, SCAN_DETAIL);
+  if (scanId === MOCK_SCAN_SECONDARY_ID) {
+    // Mirror the secondary entry in `SCANS` and reuse the primary's
+    // tool/error shapes so the drawer renders identically. Avoids
+    // duplicating the entire object literal twice.
+    const primary = asRecord(SCAN_DETAIL);
+    writeJson(res, 200, {
+      ...primary,
+      id: MOCK_SCAN_SECONDARY_ID,
+      status: "running",
+      progress: 42,
+      phase: "exploit",
+      target: "https://web.example.com",
+      created_at: "2026-04-19T12:00:00Z",
+      updated_at: "2026-04-19T12:15:00Z",
+      scan_mode: "deep",
+    });
+    return;
+  }
+  writeNotFound(res);
 }
 
 function handleTenants(res: ServerResponse): void {
   writeJson(res, 200, TENANTS);
+}
+
+/**
+ * Findings export endpoint. The real backend dispatches on the `format`
+ * query param and returns SARIF JSON or JUnit XML. The mock returns a
+ * minimal but valid-looking document so the browser-side blob/anchor
+ * dance succeeds and Playwright can observe the resulting download.
+ */
+function handleFindingsExport(
+  scanId: string,
+  url: URL,
+  res: ServerResponse,
+): void {
+  if (scanId !== MOCK_SCAN_ID && scanId !== MOCK_SCAN_SECONDARY_ID) {
+    writeNotFound(res);
+    return;
+  }
+  const fmt = url.searchParams.get("format");
+  if (fmt === "junit") {
+    writeText(res, 200, "application/xml; charset=utf-8", JUNIT_XML);
+    return;
+  }
+  if (fmt === "sarif") {
+    const text = JSON.stringify(SARIF_BODY);
+    res.writeHead(200, {
+      "Content-Type": "application/sarif+json; charset=utf-8",
+      "Content-Length": Buffer.byteLength(text).toString(),
+    });
+    res.end(text);
+    return;
+  }
+  writeJson(res, 400, { detail: "invalid_format" });
 }
 
 async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -378,7 +720,7 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
 
   if (path === "/api/v1/admin/findings/bulk-suppress" && method === "POST") {
     const body = await readBody(req);
-    handleBulkSuppress(body, res);
+    handleBulkSuppress(url, body, res);
     return;
   }
 
@@ -388,7 +730,7 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
   }
 
   if (path === "/api/v1/admin/audit-logs/verify-chain" && method === "POST") {
-    handleVerifyChain(res);
+    handleVerifyChain(url, res);
     return;
   }
 
@@ -405,6 +747,17 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
   const scanDetailMatch = path.match(/^\/api\/v1\/admin\/scans\/([^/]+)$/);
   if (scanDetailMatch && method === "GET") {
     handleScanDetail(scanDetailMatch[1], res);
+    return;
+  }
+
+  // T23 export endpoint — note this lives under `/api/v1/scans/...`,
+  // NOT `/api/v1/admin/scans/...` (matches the real router layout in
+  // `backend/src/api/routers/scans.py::export_scan_findings`).
+  const exportMatch = path.match(
+    /^\/api\/v1\/scans\/([^/]+)\/findings\/export$/,
+  );
+  if (exportMatch && method === "GET") {
+    handleFindingsExport(exportMatch[1], url, res);
     return;
   }
 
@@ -468,3 +821,21 @@ export const ADMIN_BACKEND_MOCK_KEY = "test-a11y-admin-key";
 export const MOCK_TENANT_PRIMARY = MOCK_TENANT_ID;
 export const MOCK_TENANT_SECONDARY = MOCK_SECONDARY_TENANT_ID;
 export const MOCK_SCAN_PRIMARY = MOCK_SCAN_ID;
+export const MOCK_SCAN_SECONDARY = MOCK_SCAN_SECONDARY_ID;
+export const MOCK_AUDIT_DRIFT_EVENT_ID = MOCK_AUDIT_DRIFT_ID;
+
+/**
+ * Stable, public-by-design ids for the synthetic data the mock seeds.
+ * Tests import these instead of hard-coding ids inline so a future
+ * dataset change ripples through one place only.
+ */
+export const MOCK_FINDINGS_IDS = {
+  primaryCritical: "f0000001-0000-0000-0000-000000000001",
+  primaryHigh: "f0000002-0000-0000-0000-000000000002",
+  secondaryMedium: "f0000003-0000-0000-0000-000000000003",
+  primaryMedium: "f0000004-0000-0000-0000-000000000004",
+  primaryLow: "f0000005-0000-0000-0000-000000000005",
+  secondaryCritical: "f0000006-0000-0000-0000-000000000006",
+  secondaryHigh: "f0000007-0000-0000-0000-000000000007",
+  secondaryInfo: "f0000008-0000-0000-0000-000000000008",
+} as const;

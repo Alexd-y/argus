@@ -211,6 +211,7 @@ function AdminScansBody() {
           </label>
           <select
             id="admin-scan-tenant"
+            data-testid="scans-tenant-select"
             className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
             value={tenantId}
             onChange={(e) => {
@@ -269,8 +270,8 @@ function AdminScansBody() {
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded border border-[var(--border)]">
-        <table className="min-w-full text-left text-sm">
+      <div className="overflow-x-auto rounded border border-[var(--border)]" data-testid="scans-table-wrapper">
+        <table className="min-w-full text-left text-sm" data-testid="scans-table">
           <thead className="border-b border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-secondary)]">
             <tr>
               <th className="px-3 py-2">
@@ -317,7 +318,11 @@ function AdminScansBody() {
               </tr>
             ) : (
               rows.map((r) => (
-                <tr key={r.id} className="hover:bg-[var(--bg-secondary)]/60">
+                <tr
+                  key={r.id}
+                  className="hover:bg-[var(--bg-secondary)]/60"
+                  data-testid={`scans-row-${r.id}`}
+                >
                   <td className="px-3 py-2">
                     <input
                       type="checkbox"
@@ -343,6 +348,7 @@ function AdminScansBody() {
                     <button
                       type="button"
                       className="text-[var(--accent)] hover:underline"
+                      data-testid={`scans-row-details-${r.id}`}
                       onClick={() => openDetail(r.id)}
                     >
                       Details
@@ -416,6 +422,7 @@ function AdminScansBody() {
             role="dialog"
             aria-modal="true"
             aria-label="Scan details"
+            data-testid="scans-detail-drawer"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-2">
@@ -423,6 +430,7 @@ function AdminScansBody() {
               <button
                 type="button"
                 className="text-sm text-[var(--accent)] hover:underline"
+                data-testid="scans-detail-close"
                 onClick={closeDetail}
               >
                 Close

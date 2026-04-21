@@ -14,6 +14,7 @@
     "verify:playwright-config": "playwright test --list --project=chromium",
     "test:e2e:vuln-smoke": "playwright test --project=vuln-smoke",
     "test:e2e:a11y": "playwright test --config playwright.a11y.config.ts",
+    "test:e2e:functional": "playwright test --config playwright.mock.config.ts",
     "test:e2e:install": "playwright install --with-deps",
     "sdk:generate": "openapi --input ../docs/mcp-server-openapi.yaml --output ./src/sdk/argus-mcp --client fetch --useUnionTypes --useOptions --indent 2",
     "sdk:check": "npm run sdk:generate && git diff --exit-code --stat src/sdk/argus-mcp"

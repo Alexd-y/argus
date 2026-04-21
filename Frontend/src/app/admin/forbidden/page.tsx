@@ -1,6 +1,6 @@
 export default function AdminForbiddenPage() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="admin-forbidden-page">
       <h1 className="text-lg font-semibold text-[var(--text-primary)]">Access denied</h1>
       <p className="text-sm text-[var(--text-secondary)]">
         You do not have permission to use the admin console. Sign in with an authorised role or
