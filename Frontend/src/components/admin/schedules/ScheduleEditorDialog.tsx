@@ -53,6 +53,7 @@ import {
   ScheduleActionError,
   ScheduleCreateInputSchema,
   ScheduleUpdateInputSchema,
+  extractScheduleActionCode,
   isUuid,
   scheduleActionErrorMessage,
   type ScanMode,
@@ -228,7 +229,7 @@ export function ScheduleEditorDialog({
           if (onSuccess) onSuccess(created);
         } catch (err) {
           setErrorMessage(scheduleActionErrorMessage(err));
-          setErrorCode(err instanceof ScheduleActionError ? err.code : null);
+          setErrorCode(extractScheduleActionCode(err));
         }
       });
       return;
@@ -270,7 +271,7 @@ export function ScheduleEditorDialog({
         if (onSuccess) onSuccess(updated);
       } catch (err) {
         setErrorMessage(scheduleActionErrorMessage(err));
-        setErrorCode(err instanceof ScheduleActionError ? err.code : null);
+        setErrorCode(extractScheduleActionCode(err));
       }
     });
   };

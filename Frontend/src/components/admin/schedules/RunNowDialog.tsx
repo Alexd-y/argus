@@ -42,6 +42,7 @@ import {
   RUN_NOW_REASON_MIN,
   RunNowInputSchema,
   ScheduleActionError,
+  extractScheduleActionCode,
   scheduleActionErrorMessage,
   type RunNowResponse,
   type Schedule,
@@ -161,7 +162,7 @@ export function RunNowDialog({
         if (onSuccess) onSuccess(result);
       } catch (err) {
         setErrorMessage(scheduleActionErrorMessage(err));
-        setErrorCode(err instanceof ScheduleActionError ? err.code : null);
+        setErrorCode(extractScheduleActionCode(err));
       }
     });
   };

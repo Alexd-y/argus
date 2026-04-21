@@ -103,6 +103,44 @@ export class ScheduleActionError extends Error {
   }
 }
 
+/**
+ * Best-effort extraction of a closed-taxonomy code from an unknown error
+ * thrown by a server action. Server actions in Next.js cross a
+ * serialization boundary that strips the prototype chain — so a thrown
+ * `ScheduleActionError` arrives on the client as a plain `Error` whose
+ * code only survives in `.message` (the `super(code)` constructor call).
+ *
+ * Resolution order, each step short-circuiting on success:
+ *   1. `instanceof ScheduleActionError` — direct/in-process callers
+ *      (unit tests, server-side composition).
+ *   2. `err.code` — defensive, in case future plumbing forwards it.
+ *   3. `err.message` — Next.js dev-mode preserves it; in production the
+ *      message is stripped but the digest is logged server-side.
+ *
+ * Returns `null` when no taxonomy member is recognised. Callers should
+ * treat `null` as `server_error` for both the displayed message AND any
+ * `data-error-code` DOM hook (so error-class-aware UI never reads stale
+ * codes from a previous failure).
+ */
+export function extractScheduleActionCode(
+  err: unknown,
+): ScheduleFailureCode | null {
+  if (err instanceof ScheduleActionError) return err.code;
+  if (typeof err !== "object" || err === null) return null;
+  const candidate = err as { code?: unknown; message?: unknown };
+  const taxonomy = SCHEDULE_FAILURE_TAXONOMY as readonly string[];
+  if (typeof candidate.code === "string" && taxonomy.includes(candidate.code)) {
+    return candidate.code as ScheduleFailureCode;
+  }
+  if (typeof candidate.message === "string") {
+    const trimmed = candidate.message.trim();
+    if (taxonomy.includes(trimmed)) {
+      return trimmed as ScheduleFailureCode;
+    }
+  }
+  return null;
+}
+
 const ERROR_MESSAGES_RU: Readonly<Record<ScheduleFailureCode, string>> = {
   unauthorized: "Сессия истекла. Войдите заново.",
   forbidden: "Недостаточно прав для управления расписаниями этого tenant.",
@@ -132,10 +170,7 @@ const ERROR_MESSAGES_RU: Readonly<Record<ScheduleFailureCode, string>> = {
 };
 
 export function scheduleActionErrorMessage(err: unknown): string {
-  if (err instanceof ScheduleActionError) {
-    return ERROR_MESSAGES_RU[err.code];
-  }
-  return ERROR_MESSAGES_RU.server_error;
+  return ERROR_MESSAGES_RU[extractScheduleActionCode(err) ?? "server_error"];
 }
 
 // ---------------------------------------------------------------------------

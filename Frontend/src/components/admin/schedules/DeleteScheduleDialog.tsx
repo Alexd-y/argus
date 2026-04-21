@@ -32,7 +32,7 @@ import {
 import { useFocusTrap } from "@/components/admin/operations/useFocusTrap";
 import { deleteScheduleAction } from "@/app/admin/schedules/actions";
 import {
-  ScheduleActionError,
+  extractScheduleActionCode,
   scheduleActionErrorMessage,
   type Schedule,
 } from "@/lib/adminSchedules";
@@ -108,7 +108,7 @@ export function DeleteScheduleDialog({
         if (onSuccess) onSuccess();
       } catch (err) {
         setErrorMessage(scheduleActionErrorMessage(err));
-        setErrorCode(err instanceof ScheduleActionError ? err.code : null);
+        setErrorCode(extractScheduleActionCode(err));
       }
     });
   };
