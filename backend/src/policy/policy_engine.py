@@ -32,10 +32,10 @@ Design notes:
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Final, Self
+from typing import TYPE_CHECKING, Final, Self
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -50,6 +50,9 @@ from pydantic import (
 
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
+
+if TYPE_CHECKING:  # pragma: no cover — type-only to avoid runtime cycle
+    from src.policy.kill_switch import KillSwitchVerdict
 
 
 _logger = logging.getLogger(__name__)
@@ -67,6 +70,8 @@ _REASON_RATE_LIMIT: Final[str] = "policy_rate_limit_exceeded"
 _REASON_BUDGET_EXCEEDED: Final[str] = "policy_budget_exceeded"
 _REASON_PLAN_TIER_BLOCKED: Final[str] = "policy_plan_tier_blocked"
 _REASON_TARGET_NOT_OWNED: Final[str] = "policy_target_not_owned"
+_REASON_EMERGENCY_GLOBAL: Final[str] = "policy_emergency_global"
+_REASON_EMERGENCY_TENANT: Final[str] = "policy_emergency_tenant"
 
 POLICY_FAILURE_REASONS: Final[frozenset[str]] = frozenset(
     {
@@ -77,8 +82,14 @@ POLICY_FAILURE_REASONS: Final[frozenset[str]] = frozenset(
         _REASON_BUDGET_EXCEEDED,
         _REASON_PLAN_TIER_BLOCKED,
         _REASON_TARGET_NOT_OWNED,
+        _REASON_EMERGENCY_GLOBAL,
+        _REASON_EMERGENCY_TENANT,
     }
 )
+
+
+#: Type alias for the optional kill-switch checker injected into ``PolicyEngine``.
+KillSwitchChecker = Callable[[UUID], "KillSwitchVerdict"]
 
 
 # ---------------------------------------------------------------------------
@@ -259,15 +270,29 @@ PLAN_MAX_RISK: Final[Mapping[PlanTier, RiskLevel]] = {
 
 
 class PolicyEngine:
-    """Stateless per-tenant policy evaluator."""
+    """Stateless per-tenant policy evaluator.
 
-    def __init__(self, policy: TenantPolicy) -> None:
+    Optional ``kill_switch_checker`` (a callable returning
+    :class:`~src.policy.kill_switch.KillSwitchVerdict`) is consulted FIRST in
+    :meth:`evaluate` so a global emergency or per-tenant throttle short-
+    circuits all other rules. The checker is the ONLY I/O surface this class
+    accepts; it is injected by the caller (e.g. orchestrator startup) so the
+    pure-function contract holds for callers that opt out (default ``None``).
+    """
+
+    def __init__(
+        self,
+        policy: TenantPolicy,
+        *,
+        kill_switch_checker: KillSwitchChecker | None = None,
+    ) -> None:
         # Defensive runtime guard — ``TenantPolicy | None`` is not part
         # of the public signature, but a misconfigured caller could
         # still pass ``None``.
         if policy is None:
             raise ValueError("policy must not be None")
         self._policy = policy
+        self._kill_switch_checker = kill_switch_checker
 
     @property
     def policy(self) -> TenantPolicy:
@@ -278,6 +303,8 @@ class PolicyEngine:
 
         Decision algorithm (short-circuit on first failure):
 
+        0. Emergency kill-switch (when checker injected) — global stop or
+           per-tenant throttle deny first; nothing else is evaluated.
         1. Plan-tier ceiling — risk_level must be at or below the tier cap.
         2. Phase-risk cap — risk_level must be at or below the phase cap.
         3. Banned tools / families.
@@ -290,6 +317,16 @@ class PolicyEngine:
             raise ValueError(
                 "PolicyContext.tenant_id does not match the engine's tenant_id"
             )
+
+        if self._kill_switch_checker is not None:
+            verdict = self._kill_switch_checker(context.tenant_id)
+            if verdict.blocked:
+                summary = (
+                    _REASON_EMERGENCY_GLOBAL
+                    if verdict.scope is not None and verdict.scope.value == "global"
+                    else _REASON_EMERGENCY_TENANT
+                )
+                return self._deny(context, summary, matched_cap=None)
 
         plan_cap = PLAN_MAX_RISK[self._policy.plan_tier]
         if not _is_at_or_below(context.risk_level, plan_cap):

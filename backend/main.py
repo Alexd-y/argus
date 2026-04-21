@@ -31,6 +31,7 @@ from src.api.routers import (
 )
 import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
 import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
+import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / throttle (T31)
 import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
 import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
 
@@ -61,7 +62,9 @@ async def lifespan(_app: FastAPI):
         subprocess.run(["alembic", "upgrade", "head"], check=True, timeout=60)
         logger.info("Alembic migrations applied successfully")
     except Exception as e:
-        logger.warning("Startup migrations skipped: %s", type(e).__name__, exc_info=False)
+        logger.warning(
+            "Startup migrations skipped: %s", type(e).__name__, exc_info=False
+        )
     try:
         get_knowledge_base().warm_cache()
     except Exception as e:

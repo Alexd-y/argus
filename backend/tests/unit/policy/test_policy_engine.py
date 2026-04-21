@@ -512,3 +512,79 @@ class TestCrossCutting:
         for tier, risk in PLAN_MAX_RISK.items():
             assert isinstance(tier, PlanTier)
             assert isinstance(risk, RiskLevel)
+
+
+# ---------------------------------------------------------------------------
+# Kill-switch hook (T31, ARG-052)
+# ---------------------------------------------------------------------------
+
+
+class TestPolicyEngineKillSwitchHook:
+    """Optional ``kill_switch_checker`` MUST short-circuit ``evaluate``.
+
+    Decision algorithm step 0: when the injected checker reports
+    ``blocked=True``, no other rule fires and the closed-taxonomy reason
+    leaks the scope (global vs tenant) so audit logs distinguish the two
+    operator-driven kill paths.
+    """
+
+    def test_global_kill_switch_short_circuits_with_emergency_global_reason(
+        self, tenant_id: UUID, tenant_policy: TenantPolicy
+    ) -> None:
+        from src.policy.kill_switch import KillSwitchScope, KillSwitchVerdict
+
+        def _checker(_: UUID) -> KillSwitchVerdict:
+            return KillSwitchVerdict(
+                blocked=True,
+                scope=KillSwitchScope.GLOBAL,
+                reason="ic in flight",
+            )
+
+        engine = PolicyEngine(tenant_policy, kill_switch_checker=_checker)
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+        assert decision.allowed is False
+        assert decision.failure_summary == "policy_emergency_global"
+
+    def test_tenant_kill_switch_short_circuits_with_emergency_tenant_reason(
+        self, tenant_id: UUID, tenant_policy: TenantPolicy
+    ) -> None:
+        from src.policy.kill_switch import KillSwitchScope, KillSwitchVerdict
+
+        def _checker(_: UUID) -> KillSwitchVerdict:
+            return KillSwitchVerdict(
+                blocked=True,
+                scope=KillSwitchScope.TENANT,
+                reason="tenant throttle",
+            )
+
+        engine = PolicyEngine(tenant_policy, kill_switch_checker=_checker)
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+        assert decision.allowed is False
+        assert decision.failure_summary == "policy_emergency_tenant"
+
+    def test_kill_switch_unblocked_falls_through_to_normal_evaluation(
+        self, tenant_id: UUID, tenant_policy: TenantPolicy
+    ) -> None:
+        from src.policy.kill_switch import KillSwitchVerdict
+
+        called: list[UUID] = []
+
+        def _checker(tid: UUID) -> KillSwitchVerdict:
+            called.append(tid)
+            return KillSwitchVerdict(blocked=False)
+
+        engine = PolicyEngine(tenant_policy, kill_switch_checker=_checker)
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+        assert decision.allowed is True
+        assert called == [tenant_id]
+
+    def test_no_checker_keeps_engine_pure_and_does_not_call_io(
+        self, tenant_id: UUID, tenant_policy: TenantPolicy
+    ) -> None:
+        engine = PolicyEngine(tenant_policy)
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+        assert decision.allowed is True
+
+    def test_emergency_summaries_part_of_closed_taxonomy(self) -> None:
+        assert "policy_emergency_global" in POLICY_FAILURE_REASONS
+        assert "policy_emergency_tenant" in POLICY_FAILURE_REASONS

@@ -71,7 +71,9 @@ class ScanOptions(BaseModel):
     rateLimit: str = "normal"
     ports: str = "80,443,8080,8443"
     followRedirects: bool = True
-    vulnerabilities: ScanOptionsVulnerabilities = Field(default_factory=ScanOptionsVulnerabilities)
+    vulnerabilities: ScanOptionsVulnerabilities = Field(
+        default_factory=ScanOptionsVulnerabilities
+    )
     authentication: ScanOptionsAuth = Field(default_factory=ScanOptionsAuth)
     scope: ScanOptionsScope = Field(default_factory=ScanOptionsScope)
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
@@ -385,6 +387,174 @@ class AuditChainVerifyResponse(BaseModel):
     )
 
 
+# --- Emergency stop / throttle (T31, ARG-052) ---
+
+EMERGENCY_REASON_MIN_LEN: int = 10
+EMERGENCY_REASON_MAX_LEN: int = 1000
+EMERGENCY_STOP_PHRASE: str = "STOP ALL SCANS"
+EMERGENCY_RESUME_PHRASE: str = "RESUME ALL SCANS"
+
+EmergencyThrottleDurationMinutes = Literal[15, 60, 240, 1440]
+
+EmergencyAuditEventType = Literal[
+    "emergency.stop_all",
+    "emergency.resume_all",
+    "emergency.throttle",
+    "emergency.tenant_resume",
+]
+
+EmergencyReasonTaxonomy = Literal["global", "tenant"]
+
+
+class _EmergencyReasonBase(BaseModel):
+    """Common reason validation; min/max length plus stripped non-blank check."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        ...,
+        min_length=EMERGENCY_REASON_MIN_LEN,
+        max_length=EMERGENCY_REASON_MAX_LEN,
+        description=(
+            "Operator-supplied free-text justification recorded in the audit "
+            "trail. Must be at least 10 non-whitespace characters."
+        ),
+    )
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < EMERGENCY_REASON_MIN_LEN:
+            raise ValueError(
+                f"reason must contain at least {EMERGENCY_REASON_MIN_LEN} "
+                "non-whitespace characters"
+            )
+        return normalized
+
+
+class EmergencyStopAllRequest(_EmergencyReasonBase):
+    """POST /admin/system/emergency/stop_all — body."""
+
+    confirmation_phrase: str = Field(
+        ...,
+        description=(
+            "Must equal the literal phrase ``STOP ALL SCANS`` (case-sensitive). "
+            "Defends against accidental cross-tenant kill from CLI typos."
+        ),
+    )
+
+    @field_validator("confirmation_phrase")
+    @classmethod
+    def _enforce_phrase(cls, value: str) -> str:
+        if value != EMERGENCY_STOP_PHRASE:
+            raise ValueError("confirmation_phrase mismatch")
+        return value
+
+
+class EmergencyStopAllResponse(BaseModel):
+    """202 — fanout summary plus audit fingerprint."""
+
+    status: Literal["stopped"]
+    cancelled_count: int = Field(ge=0)
+    skipped_terminal_count: int = Field(ge=0)
+    tenants_affected: int = Field(ge=0)
+    activated_at: datetime
+    audit_id: str
+
+
+class EmergencyResumeAllRequest(_EmergencyReasonBase):
+    """POST /admin/system/emergency/resume_all — body."""
+
+    confirmation_phrase: str = Field(
+        ...,
+        description=(
+            "Must equal the literal phrase ``RESUME ALL SCANS`` (case-sensitive)."
+        ),
+    )
+
+    @field_validator("confirmation_phrase")
+    @classmethod
+    def _enforce_phrase(cls, value: str) -> str:
+        if value != EMERGENCY_RESUME_PHRASE:
+            raise ValueError("confirmation_phrase mismatch")
+        return value
+
+
+class EmergencyResumeAllResponse(BaseModel):
+    """200 — emergency lifted."""
+
+    status: Literal["resumed"]
+    resumed_at: datetime
+    audit_id: str
+
+
+class EmergencyThrottleRequest(_EmergencyReasonBase):
+    """POST /admin/system/emergency/throttle — per-tenant TTL throttle."""
+
+    tenant_id: UUID
+    duration_minutes: EmergencyThrottleDurationMinutes = Field(
+        ...,
+        description="Allowed values: 15, 60, 240, or 1440 minutes.",
+    )
+
+
+class EmergencyThrottleResponse(BaseModel):
+    """200 — TTL flag set; ``expires_at`` is the absolute resume instant."""
+
+    status: Literal["throttled"]
+    tenant_id: str
+    duration_minutes: EmergencyThrottleDurationMinutes
+    expires_at: datetime
+    audit_id: str
+
+
+class EmergencyGlobalStateOut(BaseModel):
+    """Global kill-switch presence + reason summary (no operator subject leaked)."""
+
+    active: bool
+    reason: str | None = None
+    activated_at: datetime | None = None
+
+
+class EmergencyTenantThrottleOut(BaseModel):
+    """One per-tenant active throttle entry."""
+
+    tenant_id: str
+    reason: str
+    activated_at: datetime
+    expires_at: datetime
+    duration_seconds: int = Field(ge=0)
+
+
+class EmergencyStatusResponse(BaseModel):
+    """GET /admin/system/emergency/status — current emergency posture."""
+
+    global_state: EmergencyGlobalStateOut
+    tenant_throttles: list[EmergencyTenantThrottleOut] = Field(default_factory=list)
+    queried_at: datetime
+
+
+class EmergencyAuditTrailItem(BaseModel):
+    """One audit row projected for the emergency UI (T30 audit trail viewer)."""
+
+    audit_id: str
+    event_type: EmergencyAuditEventType
+    tenant_id_hash: str
+    operator_subject_hash: str | None = None
+    reason: str | None = None
+    details: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class EmergencyAuditTrailResponse(BaseModel):
+    """GET /admin/system/emergency/audit-trail — recent emergency events."""
+
+    items: list[EmergencyAuditTrailItem]
+    limit: int = Field(ge=1, le=200)
+    has_more: bool
+
+
 class ScanCostApiResponse(BaseModel):
     """GET /scans/{scan_id}/cost — mirrors ScanCostTracker.breakdown subset."""
 
@@ -637,7 +807,9 @@ class ReportListResponse(BaseModel):
         default="ready",
         description="Report artifact generation: pending | processing | ready | failed",
     )
-    tier: str = Field(default="midgard", description="Report tier from generate request")
+    tier: str = Field(
+        default="midgard", description="Report tier from generate request"
+    )
     requested_formats: list[str] | None = Field(
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
@@ -658,7 +830,9 @@ class ReportDetailResponse(BaseModel):
         default="ready",
         description="Report artifact generation: pending | processing | ready | failed",
     )
-    tier: str = Field(default="midgard", description="Report tier from generate request")
+    tier: str = Field(
+        default="midgard", description="Report tier from generate request"
+    )
     requested_formats: list[str] | None = Field(
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
@@ -672,7 +846,9 @@ class ReportGenerateRequest(BaseModel):
     """POST /scans/{scan_id}/reports/generate — RPT-007."""
 
     type: ReportTierLiteral = Field(..., description="Report tier / template family")
-    formats: list[str] = Field(..., min_length=1, description="Export formats to produce")
+    formats: list[str] = Field(
+        ..., min_length=1, description="Export formats to produce"
+    )
 
     @field_validator("formats", mode="before")
     @classmethod
@@ -689,7 +865,9 @@ class ReportGenerateRequest(BaseModel):
             raise ValueError("formats must contain at least one value")
         bad = [x for x in v if x not in allowed]
         if bad:
-            raise ValueError(f"Invalid format(s): use pdf, html, json, csv (got: {bad})")
+            raise ValueError(
+                f"Invalid format(s): use pdf, html, json, csv (got: {bad})"
+            )
         # de-dupe preserving order
         seen: set[str] = set()
         out: list[str] = []
@@ -704,7 +882,9 @@ class ReportGenerateAcceptedResponse(BaseModel):
     """202 Accepted after queuing report generation (RPT-007)."""
 
     report_id: str
-    task_id: str | None = Field(default=None, description="Background task id when queued via Celery")
+    task_id: str | None = Field(
+        default=None, description="Background task id when queued via Celery"
+    )
 
 
 DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv")
@@ -739,7 +919,9 @@ class ReportGenerateAllRequest(BaseModel):
         allowed = frozenset({"pdf", "html", "json", "csv"})
         bad = [x for x in v if x not in allowed]
         if bad:
-            raise ValueError(f"Invalid format(s): use pdf, html, json, csv (got: {bad})")
+            raise ValueError(
+                f"Invalid format(s): use pdf, html, json, csv (got: {bad})"
+            )
         seen: set[str] = set()
         out: list[str] = []
         for x in v:
@@ -759,7 +941,9 @@ class ReportGenerateAllAcceptedResponse(BaseModel):
 
     bundle_id: str
     report_ids: list[str]
-    task_id: str | None = Field(default=None, description="Celery task id for generate_all_reports")
+    task_id: str | None = Field(
+        default=None, description="Celery task id for generate_all_reports"
+    )
     count: int = Field(description="Number of report rows created (tiers × formats)")
 
 
@@ -915,7 +1099,9 @@ class IntelligenceCveIntelBody(BaseModel):
 class IntelligenceOsintDomainRequest(BaseModel):
     """POST /intelligence/osint-domain."""
 
-    domain: str = Field(..., min_length=1, max_length=253, description="Hostname or domain")
+    domain: str = Field(
+        ..., min_length=1, max_length=253, description="Hostname or domain"
+    )
 
 
 class IntelligenceShodanServiceItem(BaseModel):
