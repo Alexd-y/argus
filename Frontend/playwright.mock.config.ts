@@ -36,10 +36,10 @@ const BACKEND_URL = `http://127.0.0.1:${ADMIN_BACKEND_MOCK_PORT}`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  // Match the four T27 spec files. Anchored regex so future spec files
-  // don't get pulled into this config by accident.
+  // Match the T27 + T36 functional spec files. Anchored regex so future
+  // spec files don't get pulled into this config by accident.
   testMatch:
-    /admin-(findings|audit|export-toggle|rbac)\.spec\.ts$/,
+    /admin-(findings|audit|export-toggle|rbac|operations|schedules)\.spec\.ts$/,
   globalSetup: require.resolve("./tests/e2e/admin-axe.global-setup.ts"),
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),

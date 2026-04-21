@@ -1,6 +1,6 @@
 /**
  * Stand-alone mock of the FastAPI `/api/v1/admin/*` surface used by the
- * Playwright accessibility (T26) and functional (T27) E2E suites.
+ * Playwright accessibility (T26) and functional (T27, T36) E2E suites.
  *
  * Why a real HTTP server, not `page.route()`:
  *   The admin pages call FastAPI from Next.js Server Actions running on the
@@ -19,6 +19,27 @@
  *   - `?_test_export_disabled=true` on `GET /admin/scans` returns the
  *     scan with `exports_sarif_junit_enabled: false` to assert the
  *     toggle's disabled state (T23 RBAC variant).
+ *   - A schedule whose `maintenance_window_cron === "* * * * *"` is
+ *     treated as always-in-window so a Run-Now without bypass returns
+ *     409 deterministically without dragging a real cron-parser into
+ *     the mock.
+ *   - `?_test_in_maintenance=true` on `POST /admin/scan-schedules/{id}/
+ *     run-now` returns 409 + `detail: "in_maintenance_window"` so T36
+ *     can deterministically exercise the "bypass" toast branch without
+ *     racing the wall clock.
+ *   - `?_test_emergency_active=true` on the same endpoint returns 409 +
+ *     `detail: "emergency_active"` so T36 can assert the global-
+ *     kill-switch interlock from the schedules surface.
+ *   - `?_test_name_conflict=true` on `POST /admin/scan-schedules` returns
+ *     409 + `detail: "schedule_name_conflict"` regardless of the actual
+ *     in-memory state so T36 can exercise the editor's error mapping.
+ *
+ * Mock-only control endpoint (NOT served by real FastAPI):
+ *   - `POST /api/v1/__test__/reset` clears the per-suite in-memory state
+ *     (kill-switch flag, throttles, schedules, emergency audit log) so
+ *     each spec starts from the same seed. The real production router
+ *     does not expose `/api/v1/__test__/*` — leaking a call here against
+ *     a real backend simply 404s and is therefore harmless.
  *
  * Security boundary:
  *   The mock NEVER returns tenant secrets, real tokens, or PII. Every
@@ -310,7 +331,13 @@ const AUDIT_LOGS: JsonValue[] = [
   },
 ];
 
-const SCANS: JsonValue[] = [
+/**
+ * `SCANS` is mutable because T36 fires `bulk-cancel` against the running
+ * row (status: "running" → "cancelled") and asserts the badge flip on
+ * reload. The reset endpoint reseeds it from `SCANS_SEED` so each spec
+ * gets the same starting state regardless of order.
+ */
+const SCANS_SEED: ReadonlyArray<JsonValue> = [
   {
     id: MOCK_SCAN_ID,
     tenant_id: MOCK_TENANT_ID,
@@ -334,6 +361,149 @@ const SCANS: JsonValue[] = [
     scan_mode: "deep",
   },
 ];
+
+let SCANS: JsonValue[] = SCANS_SEED.map((s) => ({ ...asRecord(s) }));
+
+// ──────────────────────────────────────────────────────────────────────
+// T36 mock state — emergency surface (kill-switch, throttles, audit) +
+// scan schedules. All reseeded by `POST /api/v1/__test__/reset`.
+// ──────────────────────────────────────────────────────────────────────
+
+const MOCK_SCHEDULE_PRIMARY_ID = "55555555-aaaa-bbbb-cccc-111111111111";
+const MOCK_SCHEDULE_MAINT_ID = "55555555-aaaa-bbbb-cccc-222222222222";
+const MOCK_SCHEDULE_SECONDARY_ID = "55555555-aaaa-bbbb-cccc-333333333333";
+
+type ScheduleRow = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  cron_expression: string;
+  target_url: string;
+  scan_mode: string;
+  enabled: boolean;
+  maintenance_window_cron: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const SCHEDULES_SEED: ReadonlyArray<ScheduleRow> = [
+  {
+    id: MOCK_SCHEDULE_PRIMARY_ID,
+    tenant_id: MOCK_TENANT_ID,
+    name: "Nightly api scan",
+    cron_expression: "0 2 * * *",
+    target_url: "https://api.example.com",
+    scan_mode: "standard",
+    enabled: true,
+    maintenance_window_cron: null,
+    last_run_at: "2026-04-21T02:00:00Z",
+    next_run_at: "2026-04-22T02:00:00Z",
+    created_at: "2026-03-01T00:00:00Z",
+    updated_at: "2026-04-21T02:00:00Z",
+  },
+  {
+    id: MOCK_SCHEDULE_MAINT_ID,
+    tenant_id: MOCK_TENANT_ID,
+    name: "Hourly internal probe",
+    cron_expression: "0 * * * *",
+    target_url: "https://web.example.com",
+    scan_mode: "standard",
+    enabled: false,
+    maintenance_window_cron: "0 22 * * *",
+    last_run_at: null,
+    next_run_at: null,
+    created_at: "2026-04-10T00:00:00Z",
+    updated_at: "2026-04-10T00:00:00Z",
+  },
+  {
+    id: MOCK_SCHEDULE_SECONDARY_ID,
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    name: "Beta tenant cron",
+    cron_expression: "30 6 * * *",
+    target_url: "https://internal.example.com",
+    scan_mode: "deep",
+    enabled: true,
+    maintenance_window_cron: null,
+    last_run_at: null,
+    next_run_at: "2026-04-22T06:30:00Z",
+    created_at: "2026-04-12T00:00:00Z",
+    updated_at: "2026-04-12T00:00:00Z",
+  },
+];
+
+type ThrottleRow = {
+  tenant_id: string;
+  reason: string;
+  activated_at: string;
+  expires_at: string;
+  duration_seconds: number;
+};
+
+type EmergencyAuditRow = {
+  audit_id: string;
+  event_type: "emergency.stop_all" | "emergency.resume_all" | "emergency.throttle";
+  tenant_id_hash: string;
+  operator_subject_hash: string | null;
+  reason: string | null;
+  details: Record<string, JsonValue> | null;
+  created_at: string;
+};
+
+type MockState = {
+  killSwitchActive: boolean;
+  killSwitchReason: string | null;
+  killSwitchActivatedAt: string | null;
+  throttles: ThrottleRow[];
+  schedules: ScheduleRow[];
+  emergencyAudit: EmergencyAuditRow[];
+  auditCounter: number;
+};
+
+function freshState(): MockState {
+  return {
+    killSwitchActive: false,
+    killSwitchReason: null,
+    killSwitchActivatedAt: null,
+    throttles: [],
+    schedules: SCHEDULES_SEED.map((s) => ({ ...s })),
+    emergencyAudit: [],
+    auditCounter: 0,
+  };
+}
+
+let mockState: MockState = freshState();
+
+function resetMockState(): void {
+  mockState = freshState();
+  SCANS = SCANS_SEED.map((s) => ({ ...asRecord(s) }));
+}
+
+/**
+ * Deterministic 16-char hex hash for synthetic data. Mirrors the shape
+ * of the backend `_hash_actor` helper (BLAKE2b(8 bytes) → 16 hex chars)
+ * so the frontend Zod schemas accept it without modification.
+ */
+function fakeHash(prefix: string, value: string): string {
+  let acc = 0;
+  for (let i = 0; i < value.length; i++) {
+    acc = (acc * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  const head = prefix.padEnd(4, "0").slice(0, 4);
+  const body = acc.toString(16).padStart(8, "0").slice(0, 8);
+  return `${head}${body}${"abcdef01".slice(0, 4)}`;
+}
+
+function nextAuditId(): string {
+  mockState.auditCounter += 1;
+  const counter = mockState.auditCounter.toString(16).padStart(12, "0");
+  return `00000000-0000-0000-0000-${counter}`;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
 
 const SCAN_DETAIL: JsonValue = {
   id: MOCK_SCAN_ID,
@@ -696,6 +866,554 @@ function handleFindingsExport(
   writeJson(res, 400, { detail: "invalid_format" });
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// T36 — bulk-cancel (per-scan kill-switch funnels through this).
+// ──────────────────────────────────────────────────────────────────────
+
+function handleBulkScanCancel(body: string, res: ServerResponse): void {
+  let parsed: { tenant_id?: string; scan_ids?: string[] };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const tenantId = parsed.tenant_id ?? "";
+  const ids = Array.isArray(parsed.scan_ids) ? parsed.scan_ids : [];
+  if (!tenantId || ids.length === 0) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+
+  let cancelled = 0;
+  let skippedTerminal = 0;
+  let notFound = 0;
+  const results: Array<{ scan_id: string; status: string }> = [];
+
+  for (const id of ids) {
+    const idx = SCANS.findIndex(
+      (s) =>
+        asRecord(s)["id"] === id &&
+        asRecord(s)["tenant_id"] === tenantId,
+    );
+    if (idx < 0) {
+      notFound += 1;
+      results.push({ scan_id: id, status: "not_found" });
+      continue;
+    }
+    const row = asRecord(SCANS[idx]);
+    const currentStatus = String(row["status"]);
+    if (currentStatus === "completed" || currentStatus === "cancelled" || currentStatus === "failed") {
+      skippedTerminal += 1;
+      results.push({ scan_id: id, status: "skipped_terminal" });
+      continue;
+    }
+    SCANS[idx] = {
+      ...row,
+      status: "cancelled",
+      updated_at: nowIso(),
+    };
+    cancelled += 1;
+    results.push({ scan_id: id, status: "cancelled" });
+  }
+
+  writeJson(res, 202, {
+    cancelled_count: cancelled,
+    skipped_terminal_count: skippedTerminal,
+    not_found_count: notFound,
+    audit_id: nextAuditId(),
+    results,
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// T36 — emergency surface
+// ──────────────────────────────────────────────────────────────────────
+
+function buildGlobalState(): JsonValue {
+  return {
+    active: mockState.killSwitchActive,
+    reason: mockState.killSwitchReason,
+    activated_at: mockState.killSwitchActivatedAt,
+  };
+}
+
+function buildTenantThrottlesView(tenantFilter: string | null): JsonValue {
+  const view = tenantFilter
+    ? mockState.throttles.filter((t) => t.tenant_id === tenantFilter)
+    : mockState.throttles.slice();
+  return view.map((t) => ({ ...t }));
+}
+
+function handleEmergencyStatus(url: URL, res: ServerResponse): void {
+  const tenantFilter = url.searchParams.get("tenant_id");
+  writeJson(res, 200, {
+    global_state: buildGlobalState(),
+    tenant_throttles: buildTenantThrottlesView(tenantFilter),
+    queried_at: nowIso(),
+  });
+}
+
+function handleEmergencyThrottle(body: string, res: ServerResponse): void {
+  let parsed: { tenant_id?: string; duration_minutes?: number; reason?: string };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const tenantId = parsed.tenant_id ?? "";
+  const duration = Number(parsed.duration_minutes);
+  const reason = (parsed.reason ?? "").trim();
+
+  if (!tenantId || ![15, 60, 240, 1440].includes(duration) || reason.length < 10) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_already_active" });
+    return;
+  }
+
+  // Tenant-not-found path: only the seeded tenants exist.
+  if (
+    tenantId !== MOCK_TENANT_ID &&
+    tenantId !== MOCK_SECONDARY_TENANT_ID
+  ) {
+    writeJson(res, 404, { detail: "tenant_not_found" });
+    return;
+  }
+
+  const activatedAt = nowIso();
+  const expiresAt = new Date(Date.now() + duration * 60_000).toISOString();
+  const throttle: ThrottleRow = {
+    tenant_id: tenantId,
+    reason,
+    activated_at: activatedAt,
+    expires_at: expiresAt,
+    duration_seconds: duration * 60,
+  };
+  // Replace existing throttle for the same tenant rather than stacking.
+  mockState.throttles = mockState.throttles
+    .filter((t) => t.tenant_id !== tenantId)
+    .concat(throttle);
+
+  const auditId = nextAuditId();
+  mockState.emergencyAudit.unshift({
+    audit_id: auditId,
+    event_type: "emergency.throttle",
+    tenant_id_hash: fakeHash("ten_", tenantId),
+    operator_subject_hash: fakeHash("op__", "throttle"),
+    reason,
+    details: { duration_minutes: duration },
+    created_at: activatedAt,
+  });
+
+  writeJson(res, 200, {
+    status: "throttled",
+    tenant_id: tenantId,
+    duration_minutes: duration,
+    expires_at: expiresAt,
+    audit_id: auditId,
+  });
+}
+
+function handleEmergencyStopAll(body: string, res: ServerResponse): void {
+  let parsed: { reason?: string; confirmation_phrase?: string };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const reason = (parsed.reason ?? "").trim();
+  if (parsed.confirmation_phrase !== "STOP ALL SCANS" || reason.length < 10) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_already_active" });
+    return;
+  }
+  const activatedAt = nowIso();
+  mockState.killSwitchActive = true;
+  mockState.killSwitchReason = reason;
+  mockState.killSwitchActivatedAt = activatedAt;
+
+  // Cancel every running scan to mirror the backend behaviour.
+  let cancelled = 0;
+  let skipped = 0;
+  const tenantsAffected = new Set<string>();
+  for (let i = 0; i < SCANS.length; i++) {
+    const row = asRecord(SCANS[i]);
+    const currentStatus = String(row["status"]);
+    if (
+      currentStatus === "completed" ||
+      currentStatus === "cancelled" ||
+      currentStatus === "failed"
+    ) {
+      skipped += 1;
+      continue;
+    }
+    SCANS[i] = { ...row, status: "cancelled", updated_at: activatedAt };
+    cancelled += 1;
+    tenantsAffected.add(String(row["tenant_id"]));
+  }
+
+  const auditId = nextAuditId();
+  mockState.emergencyAudit.unshift({
+    audit_id: auditId,
+    event_type: "emergency.stop_all",
+    tenant_id_hash: fakeHash("glb_", "global"),
+    operator_subject_hash: fakeHash("op__", "stop_all"),
+    reason,
+    details: { cancelled, skipped, tenants_affected: tenantsAffected.size },
+    created_at: activatedAt,
+  });
+
+  writeJson(res, 200, {
+    status: "stopped",
+    cancelled_count: cancelled,
+    skipped_terminal_count: skipped,
+    tenants_affected: tenantsAffected.size,
+    activated_at: activatedAt,
+    audit_id: auditId,
+  });
+}
+
+function handleEmergencyResumeAll(body: string, res: ServerResponse): void {
+  let parsed: { reason?: string; confirmation_phrase?: string };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const reason = (parsed.reason ?? "").trim();
+  if (parsed.confirmation_phrase !== "RESUME ALL SCANS" || reason.length < 10) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+  if (!mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_not_active" });
+    return;
+  }
+  const resumedAt = nowIso();
+  mockState.killSwitchActive = false;
+  mockState.killSwitchReason = null;
+  mockState.killSwitchActivatedAt = null;
+
+  const auditId = nextAuditId();
+  mockState.emergencyAudit.unshift({
+    audit_id: auditId,
+    event_type: "emergency.resume_all",
+    tenant_id_hash: fakeHash("glb_", "global"),
+    operator_subject_hash: fakeHash("op__", "resume_all"),
+    reason,
+    details: null,
+    created_at: resumedAt,
+  });
+
+  writeJson(res, 200, {
+    status: "resumed",
+    resumed_at: resumedAt,
+    audit_id: auditId,
+  });
+}
+
+function handleEmergencyAuditTrail(url: URL, res: ServerResponse): void {
+  const tenantFilter = url.searchParams.get("tenant_id");
+  const limit = Math.min(
+    200,
+    Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "25", 10) || 25),
+  );
+
+  let items = mockState.emergencyAudit.slice();
+  if (tenantFilter) {
+    const wantedHash = fakeHash("ten_", tenantFilter);
+    items = items.filter((row) => row.tenant_id_hash === wantedHash);
+  }
+  const sliced = items.slice(0, limit);
+  writeJson(res, 200, {
+    items: sliced,
+    limit,
+    has_more: items.length > sliced.length,
+  });
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// T36 — scan schedules CRUD + run-now
+// ──────────────────────────────────────────────────────────────────────
+
+function buildScheduleResponse(row: ScheduleRow): JsonValue {
+  return { ...row };
+}
+
+function handleSchedulesList(url: URL, res: ServerResponse): void {
+  const tenantId = url.searchParams.get("tenant_id");
+  const offset = Math.max(0, Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0);
+  const limit = Math.min(
+    200,
+    Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50),
+  );
+
+  let items = mockState.schedules.slice();
+  if (tenantId) {
+    items = items.filter((s) => s.tenant_id === tenantId);
+  }
+  const sliced = items.slice(offset, offset + limit);
+  writeJson(res, 200, {
+    items: sliced.map(buildScheduleResponse),
+    total: items.length,
+    limit,
+    offset,
+  });
+}
+
+function handleScheduleCreate(url: URL, body: string, res: ServerResponse): void {
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_active" });
+    return;
+  }
+  if (url.searchParams.get("_test_name_conflict") === "true") {
+    writeJson(res, 409, { detail: "schedule_name_conflict" });
+    return;
+  }
+  let parsed: {
+    tenant_id?: string;
+    name?: string;
+    cron_expression?: string;
+    target_url?: string;
+    scan_mode?: string;
+    enabled?: boolean;
+    maintenance_window_cron?: string | null;
+  };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const tenantId = parsed.tenant_id ?? "";
+  const name = (parsed.name ?? "").trim();
+  const cron = (parsed.cron_expression ?? "").trim();
+  const target = (parsed.target_url ?? "").trim();
+  const mode = parsed.scan_mode ?? "";
+
+  if (!tenantId || !name || !cron || !target || !mode) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+  // Synthetic cron sanity: the backend rejects expressions firing more
+  // often than every 5 min. We only check the leading minute field for
+  // the test-control case `"* * * * *"` to keep the mock small.
+  if (cron === "* * * * *") {
+    writeJson(res, 422, { detail: "invalid_cron_expression" });
+    return;
+  }
+  // Real conflict check (in addition to the test-control flag above).
+  const conflict = mockState.schedules.find(
+    (s) => s.tenant_id === tenantId && s.name === name,
+  );
+  if (conflict) {
+    writeJson(res, 409, { detail: "schedule_name_conflict" });
+    return;
+  }
+
+  const createdAt = nowIso();
+  const id = `${MOCK_SCHEDULE_PRIMARY_ID.slice(0, 24)}${(mockState.schedules.length + 100).toString(16).padStart(12, "0").slice(-12)}`;
+  const row: ScheduleRow = {
+    id,
+    tenant_id: tenantId,
+    name,
+    cron_expression: cron,
+    target_url: target,
+    scan_mode: mode,
+    enabled: parsed.enabled !== false,
+    maintenance_window_cron:
+      typeof parsed.maintenance_window_cron === "string" &&
+      parsed.maintenance_window_cron.trim() !== ""
+        ? parsed.maintenance_window_cron.trim()
+        : null,
+    last_run_at: null,
+    next_run_at: null,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+  mockState.schedules.push(row);
+  writeJson(res, 201, buildScheduleResponse(row));
+}
+
+function findScheduleById(id: string): {
+  index: number;
+  row: ScheduleRow | null;
+} {
+  const idx = mockState.schedules.findIndex((s) => s.id === id);
+  if (idx < 0) return { index: -1, row: null };
+  return { index: idx, row: mockState.schedules[idx] };
+}
+
+function handleScheduleUpdate(
+  scheduleId: string,
+  body: string,
+  res: ServerResponse,
+): void {
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_active" });
+    return;
+  }
+  const { index, row } = findScheduleById(scheduleId);
+  if (!row) {
+    writeJson(res, 404, { detail: "schedule_not_found" });
+    return;
+  }
+  let parsed: Partial<ScheduleRow> & { maintenance_window_cron?: string | null };
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+
+  if (typeof parsed.cron_expression === "string" && parsed.cron_expression === "* * * * *") {
+    writeJson(res, 422, { detail: "invalid_cron_expression" });
+    return;
+  }
+  if (typeof parsed.name === "string") {
+    const wanted = parsed.name.trim();
+    const conflict = mockState.schedules.find(
+      (s) =>
+        s.tenant_id === row.tenant_id &&
+        s.name === wanted &&
+        s.id !== row.id,
+    );
+    if (conflict) {
+      writeJson(res, 409, { detail: "schedule_name_conflict" });
+      return;
+    }
+  }
+
+  const next: ScheduleRow = {
+    ...row,
+    ...(typeof parsed.name === "string" ? { name: parsed.name.trim() } : {}),
+    ...(typeof parsed.cron_expression === "string"
+      ? { cron_expression: parsed.cron_expression.trim() }
+      : {}),
+    ...(typeof parsed.target_url === "string"
+      ? { target_url: parsed.target_url.trim() }
+      : {}),
+    ...(typeof parsed.scan_mode === "string"
+      ? { scan_mode: parsed.scan_mode }
+      : {}),
+    ...(typeof parsed.enabled === "boolean" ? { enabled: parsed.enabled } : {}),
+    ...(typeof parsed.maintenance_window_cron === "string"
+      ? {
+          maintenance_window_cron:
+            parsed.maintenance_window_cron.trim() === ""
+              ? null
+              : parsed.maintenance_window_cron.trim(),
+        }
+      : {}),
+    updated_at: nowIso(),
+  };
+  mockState.schedules[index] = next;
+  writeJson(res, 200, buildScheduleResponse(next));
+}
+
+function handleScheduleDelete(
+  scheduleId: string,
+  res: ServerResponse,
+): void {
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_active" });
+    return;
+  }
+  const { index } = findScheduleById(scheduleId);
+  if (index < 0) {
+    writeJson(res, 404, { detail: "schedule_not_found" });
+    return;
+  }
+  mockState.schedules.splice(index, 1);
+  res.writeHead(204);
+  res.end();
+}
+
+function handleScheduleRunNow(
+  scheduleId: string,
+  url: URL,
+  body: string,
+  res: ServerResponse,
+): void {
+  const { row } = findScheduleById(scheduleId);
+  if (!row) {
+    writeJson(res, 404, { detail: "schedule_not_found" });
+    return;
+  }
+
+  let parsed: { bypass_maintenance_window?: boolean; reason?: string };
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return;
+  }
+  const reason = (parsed.reason ?? "").trim();
+  const bypass = parsed.bypass_maintenance_window === true;
+
+  if (reason.length < 10) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return;
+  }
+
+  // Test-control flags first so a green deterministic path always wins
+  // over the synthetic seed state.
+  if (url.searchParams.get("_test_emergency_active") === "true") {
+    writeJson(res, 409, { detail: "emergency_active" });
+    return;
+  }
+  if (mockState.killSwitchActive) {
+    writeJson(res, 409, { detail: "emergency_active" });
+    return;
+  }
+  if (
+    url.searchParams.get("_test_in_maintenance") === "true" &&
+    !bypass
+  ) {
+    writeJson(res, 409, { detail: "in_maintenance_window" });
+    return;
+  }
+
+  // Sentinel maintenance-window: a schedule whose `maintenance_window_cron`
+  // is the catch-all `"* * * * *"` is treated as ALWAYS inside its own
+  // window. The mock doesn't ship a real cron parser, so we use this
+  // string as a stable signal — any test that wants to exercise the
+  // 409 branch can seed a schedule with this value (or PATCH its
+  // existing one) and the next run-now will reject unless `bypass` is
+  // set. This keeps E2E tests deterministic without dragging
+  // `cron-parser` into the mock.
+  const scheduleRow = (row as { maintenance_window_cron?: unknown }).maintenance_window_cron;
+  if (
+    typeof scheduleRow === "string" &&
+    scheduleRow.trim() === "* * * * *" &&
+    !bypass
+  ) {
+    writeJson(res, 409, { detail: "in_maintenance_window" });
+    return;
+  }
+
+  const enqueuedAt = nowIso();
+  const taskId = `mock-task-${nextAuditId().slice(-12)}`;
+  const auditId = nextAuditId();
+  writeJson(res, 202, {
+    schedule_id: row.id,
+    enqueued_task_id: taskId,
+    bypassed_maintenance_window: bypass,
+    enqueued_at: enqueuedAt,
+    audit_id: auditId,
+  });
+}
+
 async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = parseUrl(req);
   const method = (req.method ?? "GET").toUpperCase();
@@ -758,6 +1476,81 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
   );
   if (exportMatch && method === "GET") {
     handleFindingsExport(exportMatch[1], url, res);
+    return;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // T36 — bulk-cancel + emergency surface
+  // ──────────────────────────────────────────────────────────────────
+  if (path === "/api/v1/admin/scans/bulk-cancel" && method === "POST") {
+    const body = await readBody(req);
+    handleBulkScanCancel(body, res);
+    return;
+  }
+  if (path === "/api/v1/admin/system/emergency/status" && method === "GET") {
+    handleEmergencyStatus(url, res);
+    return;
+  }
+  if (path === "/api/v1/admin/system/emergency/throttle" && method === "POST") {
+    const body = await readBody(req);
+    handleEmergencyThrottle(body, res);
+    return;
+  }
+  if (path === "/api/v1/admin/system/emergency/stop_all" && method === "POST") {
+    const body = await readBody(req);
+    handleEmergencyStopAll(body, res);
+    return;
+  }
+  if (path === "/api/v1/admin/system/emergency/resume_all" && method === "POST") {
+    const body = await readBody(req);
+    handleEmergencyResumeAll(body, res);
+    return;
+  }
+  if (path === "/api/v1/admin/system/emergency/audit-trail" && method === "GET") {
+    handleEmergencyAuditTrail(url, res);
+    return;
+  }
+
+  // ──────────────────────────────────────────────────────────────────
+  // T36 — scan schedules CRUD + run-now
+  // ──────────────────────────────────────────────────────────────────
+  if (path === "/api/v1/admin/scan-schedules" && method === "GET") {
+    handleSchedulesList(url, res);
+    return;
+  }
+  if (path === "/api/v1/admin/scan-schedules" && method === "POST") {
+    const body = await readBody(req);
+    handleScheduleCreate(url, body, res);
+    return;
+  }
+  const scheduleRunNowMatch = path.match(
+    /^\/api\/v1\/admin\/scan-schedules\/([^/]+)\/run-now$/,
+  );
+  if (scheduleRunNowMatch && method === "POST") {
+    const body = await readBody(req);
+    handleScheduleRunNow(scheduleRunNowMatch[1], url, body, res);
+    return;
+  }
+  const scheduleByIdMatch = path.match(
+    /^\/api\/v1\/admin\/scan-schedules\/([^/]+)$/,
+  );
+  if (scheduleByIdMatch && method === "PATCH") {
+    const body = await readBody(req);
+    handleScheduleUpdate(scheduleByIdMatch[1], body, res);
+    return;
+  }
+  if (scheduleByIdMatch && method === "DELETE") {
+    handleScheduleDelete(scheduleByIdMatch[1], res);
+    return;
+  }
+
+  // Mock-only state-reset endpoint. Lives outside `/admin/*` so the real
+  // backend never has a route there even if a stale BACKEND_URL config
+  // accidentally pointed at production. The mock requires no body.
+  if (path === "/api/v1/__test__/reset" && method === "POST") {
+    resetMockState();
+    res.writeHead(204);
+    res.end();
     return;
   }
 
@@ -838,4 +1631,28 @@ export const MOCK_FINDINGS_IDS = {
   secondaryCritical: "f0000006-0000-0000-0000-000000000006",
   secondaryHigh: "f0000007-0000-0000-0000-000000000007",
   secondaryInfo: "f0000008-0000-0000-0000-000000000008",
+} as const;
+
+/**
+ * Stable, public-by-design ids for the seeded scan-schedules. Test
+ * specs import these so a future seed change ripples through one place
+ * only. Names are also stable to keep typed-name confirmation gates
+ * deterministic.
+ */
+export const MOCK_SCHEDULES = {
+  primaryNightly: {
+    id: "55555555-aaaa-bbbb-cccc-111111111111",
+    name: "Nightly api scan",
+    tenantId: MOCK_TENANT_ID,
+  },
+  primaryHourlyMaint: {
+    id: "55555555-aaaa-bbbb-cccc-222222222222",
+    name: "Hourly internal probe",
+    tenantId: MOCK_TENANT_ID,
+  },
+  secondaryDaily: {
+    id: "55555555-aaaa-bbbb-cccc-333333333333",
+    name: "Beta tenant cron",
+    tenantId: MOCK_SECONDARY_TENANT_ID,
+  },
 } as const;

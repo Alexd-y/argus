@@ -241,6 +241,97 @@ test.describe("admin a11y — route audits", () => {
     });
     await expectNoAxeViolations(page, "scans-admin");
   });
+
+  test("operations (super-admin) — both panels rendered", async ({
+    context,
+    page,
+  }) => {
+    await seedAdminSession(context, "super-admin");
+    await page.goto("/admin/operations");
+    await waitForRouteReady(page);
+    await expect(
+      page.getByTestId("per-tenant-throttle-client"),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByTestId("global-kill-switch-client"),
+    ).toBeVisible();
+    await expectNoAxeViolations(page, "operations-super-admin");
+  });
+
+  test("operations (admin) — throttle + super-admin notice", async ({
+    context,
+    page,
+  }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // `bg-amber-600 text-white` on the per-tenant throttle CTA scores
+    // 3.19:1, below the WCAG 2 AA threshold of 4.5:1. The same token
+    // pair is reused by other "destructive but reversible" actions
+    // (kill-switch, run-now), so the fix belongs to the design-system
+    // remediation pass — not this T36 task. Removing the annotation
+    // is criterion (c) on ISS-T26-001.
+    test.fail(
+      true,
+      "ISS-T26-001: bg-amber-600 throttle CTA contrast = 3.19:1, need 4.5:1",
+    );
+
+    await seedAdminSession(context, "admin");
+    await page.goto("/admin/operations");
+    await waitForRouteReady(page);
+    await expect(
+      page.getByTestId("per-tenant-throttle-client"),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByTestId("global-kill-switch-admin-notice"),
+    ).toBeVisible();
+    await expectNoAxeViolations(page, "operations-admin");
+  });
+
+  test("schedules (super-admin) — table + tenant selector", async ({
+    context,
+    page,
+  }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // `bg-[var(--accent)] text-white` on the "Создать расписание" CTA
+    // scores 3.98:1; same accent-on-dark family the audit-logs banner
+    // already gates with `test.fail()`. Removing the annotation is
+    // criterion (c) on ISS-T26-001.
+    test.fail(
+      true,
+      "ISS-T26-001: bg-[var(--accent)] CTA contrast = 3.98:1, need 4.5:1",
+    );
+
+    await seedAdminSession(context, "super-admin");
+    await page.goto("/admin/schedules");
+    await waitForRouteReady(page);
+    await expect(page.getByTestId("schedules-client")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByTestId("schedules-tenant-selector-row"),
+    ).toBeVisible();
+    await expectNoAxeViolations(page, "schedules-super-admin");
+  });
+
+  test("schedules (admin) — pinned tenant", async ({ context, page }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // Same `bg-[var(--accent)] text-white` CTA failure as the
+    // super-admin variant; gated under the same issue.
+    test.fail(
+      true,
+      "ISS-T26-001: bg-[var(--accent)] CTA contrast = 3.98:1, need 4.5:1",
+    );
+
+    await seedAdminSession(context, "admin");
+    await page.goto("/admin/schedules");
+    await waitForRouteReady(page);
+    await expect(page.getByTestId("schedules-client")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByTestId("schedules-tenant-selector-row"),
+    ).toHaveCount(0);
+    await expectNoAxeViolations(page, "schedules-admin");
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────
@@ -339,5 +430,79 @@ test.describe("admin a11y — interactive states", () => {
     await expect(drawer).toBeVisible();
 
     await expectNoAxeViolations(page, "scans-detail-drawer");
+  });
+
+  test("operations: STOP-ALL dialog open", async ({ context, page }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // The dialog itself uses `bg-red-600` which passes WCAG 2 AA, but
+    // axe scans the full `<main>` region and the parent
+    // `/admin/operations` page (super-admin layout) keeps the
+    // PerTenantThrottle panel visible alongside the global kill-switch.
+    // The throttle CTA (`bg-amber-600 text-white` = 3.19:1) is the
+    // failing node — same root-cause family as the other ISS-T26-001
+    // entries.
+    test.fail(
+      true,
+      "ISS-T26-001: throttle CTA remains visible behind STOP-ALL dialog (3.19:1)",
+    );
+
+    await seedAdminSession(context, "super-admin");
+    await page.goto("/admin/operations");
+    await waitForRouteReady(page);
+
+    const stopBtn = page.getByTestId("global-kill-switch-open-stop");
+    await expect(stopBtn).toBeVisible({ timeout: 15_000 });
+    await stopBtn.click();
+
+    await expect(page.getByTestId("kill-switch-dialog")).toBeVisible();
+    await expectNoAxeViolations(page, "operations-stop-all-dialog");
+  });
+
+  test("operations: per-tenant throttle dialog open", async ({
+    context,
+    page,
+  }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // Same `bg-amber-600 text-white` confirm CTA family as the route
+    // audit. The throttle dialog opens onto the operations page that
+    // also fails — both surfaces share the design-system token issue.
+    test.fail(
+      true,
+      "ISS-T26-001: bg-amber-600 throttle confirm CTA contrast = 3.19:1",
+    );
+
+    await seedAdminSession(context, "admin");
+    await page.goto("/admin/operations");
+    await waitForRouteReady(page);
+
+    const openDialog = page.getByTestId("throttle-open-dialog");
+    await expect(openDialog).toBeVisible({ timeout: 15_000 });
+    await openDialog.click();
+
+    await expect(page.getByTestId("throttle-dialog")).toBeVisible();
+    await expectNoAxeViolations(page, "operations-throttle-dialog");
+  });
+
+  test("schedules: editor dialog open", async ({ context, page }) => {
+    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
+    // The active cron-mode tab uses `text-[var(--accent)]` on
+    // `bg-[var(--bg-tertiary)]` and the editor "Сохранить" CTA uses
+    // `bg-[var(--accent)] text-white` — both fall in the same
+    // accent-on-dark family already tracked under ISS-T26-001.
+    test.fail(
+      true,
+      "ISS-T26-001: editor tab + CTA accent-on-dark contrast < 4.5:1",
+    );
+
+    await seedAdminSession(context, "admin");
+    await page.goto("/admin/schedules");
+    await waitForRouteReady(page);
+
+    const createBtn = page.getByTestId("schedules-create-button");
+    await expect(createBtn).toBeVisible({ timeout: 15_000 });
+    await createBtn.click();
+
+    await expect(page.getByTestId("schedule-editor-dialog")).toBeVisible();
+    await expectNoAxeViolations(page, "schedules-editor-dialog");
   });
 });
