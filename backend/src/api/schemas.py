@@ -286,6 +286,47 @@ class AdminBulkFindingSuppressResponse(BaseModel):
     results: list[BulkFindingSuppressItemResult]
 
 
+# --- Admin findings (T24 — cross-tenant query API) ---
+
+AdminFindingSeverity = Literal["critical", "high", "medium", "low", "info"]
+AdminFindingConfidence = Literal["confirmed", "likely", "possible", "advisory"]
+
+
+class AdminFindingSummary(BaseModel):
+    """Single row in GET /admin/findings response (admin triage console).
+
+    Field set is the storage-backed projection of ``Finding`` (no runtime intel
+    enrichment fields like ``epss_score`` / ``kev_listed`` / ``ssvc_decision``,
+    which originate from separate intel tables joined at report-render time).
+    Frontend must treat extra columns as additive over time.
+    """
+
+    id: str
+    tenant_id: str
+    scan_id: str
+    report_id: str | None = None
+    severity: str
+    title: str
+    description: str | None = None
+    cwe: str | None = None
+    cvss: float | None = None
+    owasp_category: str | None = None
+    confidence: str
+    dedup_status: str | None = None
+    false_positive: bool = False
+    created_at: str
+
+
+class AdminFindingsListResponse(BaseModel):
+    """GET /admin/findings paginated envelope."""
+
+    findings: list[AdminFindingSummary]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    offset: int = Field(ge=0)
+    has_more: bool
+
+
 class ScanCostApiResponse(BaseModel):
     """GET /scans/{scan_id}/cost — mirrors ScanCostTracker.breakdown subset."""
 

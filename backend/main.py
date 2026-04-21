@@ -30,6 +30,7 @@ from src.api.routers import (
     tools,
 )
 import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
+import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
 import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
 
 from src.api.routers.recon import recon_router
