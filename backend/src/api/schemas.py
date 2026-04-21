@@ -1,5 +1,6 @@
 """Pydantic schemas per api-contracts.md."""
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -325,6 +326,42 @@ class AdminFindingsListResponse(BaseModel):
     limit: int = Field(ge=1, le=200)
     offset: int = Field(ge=0)
     has_more: bool
+
+
+# --- Admin audit-log chain integrity verification (T25) ---
+
+
+class AuditChainVerifyResponse(BaseModel):
+    """POST /admin/audit-logs/verify-chain envelope.
+
+    Carries the verdict of replaying the SHA-256 hash chain over the
+    ``audit_logs`` rows in the requested time-window. ``ok`` is ``True`` for a
+    clean chain (or an empty window); ``False`` signals tamper-evident drift,
+    in which case ``drift_event_id`` and ``drift_detected_at`` localize the
+    first inconsistent row. Frontend (T22) renders an OK / DRIFT badge from
+    these fields.
+    """
+
+    ok: bool
+    verified_count: int = Field(
+        ge=0,
+        description="Number of rows that passed verification (0 when window empty).",
+    )
+    last_verified_index: int = Field(
+        ge=-1,
+        description=(
+            "Zero-based index of the last verified row in the time-window slice; "
+            "``-1`` when no rows verified (empty window or drift on the first row)."
+        ),
+    )
+    drift_event_id: str | None = Field(
+        default=None,
+        description="``id`` of the row at which drift was detected; null on success.",
+    )
+    drift_detected_at: datetime | None = Field(
+        default=None,
+        description="``created_at`` of the drifted row; null on success.",
+    )
 
 
 class ScanCostApiResponse(BaseModel):

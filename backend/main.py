@@ -29,6 +29,7 @@ from src.api.routers import (
     skills_public,
     tools,
 )
+import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
 import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
 import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
 import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes

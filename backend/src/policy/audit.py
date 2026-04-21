@@ -39,10 +39,11 @@ import json
 import logging
 import re
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Final, Protocol, runtime_checkable
+from typing import Any, Final, Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -393,13 +394,229 @@ class AuditLogger:
             return lock
 
 
+# ---------------------------------------------------------------------------
+# AuditLog (DB ORM) hash-chain verification — T25
+# ---------------------------------------------------------------------------
+#
+# The :class:`AuditLogger` above operates on the in-memory ``AuditEvent`` model
+# whose chain hashes are persisted as columns. The HTTP-side ``audit_logs``
+# table (``src.db.models.AuditLog``) stores the same kind of append-only events
+# but does not yet carry ``event_hash`` / ``prev_event_hash`` columns (no
+# Alembic migration in T25 — additive read-only endpoint only). The helpers
+# below replay an equivalent SHA-256 hash chain over a sequence of
+# ``AuditLog`` rows so the admin audit viewer (T22) can surface tamper-evident
+# linkage of the persisted audit trail.
+#
+# Drift detection is two-tier:
+#
+# * Optional on-row markers ``details["_event_hash"]`` and
+#   ``details["_prev_event_hash"]`` (write-once on emit by an audit-aware
+#   caller) are compared against the freshly computed expected values. A
+#   mismatch yields ``ok=False`` with the drifted row's id and timestamp.
+# * In the absence of markers (the current production state), the chain is
+#   recomputed cleanly and returned as ``ok=True``. The forensic checksum
+#   is still useful: callers can persist ``last_verified_index`` and the
+#   final hash for later cross-checking after archival or replication.
+#
+# Performance: linear (~1µs per row for canonical JSON + SHA-256). On the
+# Backlog target dataset of ≤10⁴ events per verification window, total
+# compute stays well under 100 ms and well within the 2 s p95 SLO.
+
+
+_AUDIT_LOG_CHAIN_MARKER_KEYS: Final[frozenset[str]] = frozenset(
+    {"_event_hash", "_prev_event_hash"}
+)
+
+
+@dataclass(frozen=True)
+class AuditLogChainVerifyResult:
+    """Outcome of replaying the SHA-256 hash chain over a sequence of audit rows.
+
+    Attributes
+    ----------
+    ok:
+        ``True`` when the chain replays cleanly (no marker mismatch); ``False``
+        when a row's persisted ``_event_hash`` / ``_prev_event_hash`` marker
+        contradicts the recomputed expected value.
+    verified_count:
+        Number of rows that passed verification before the chain ended (clean
+        chain) or broke (drift detected). Equals the input length on success.
+    last_verified_index:
+        Zero-based index of the last successfully verified row in the input
+        sequence; ``-1`` when no rows verified (empty input or drift on the
+        very first row).
+    drift_event_id:
+        ``id`` of the row at which drift was detected, or ``None`` on a clean
+        chain.
+    drift_detected_at:
+        ``created_at`` of the drifted row, or ``None`` on a clean chain.
+    """
+
+    ok: bool
+    verified_count: int
+    last_verified_index: int
+    drift_event_id: str | None
+    drift_detected_at: datetime | None
+
+
+def _strip_chain_markers(details: object) -> object:
+    """Return ``details`` minus any ``_event_hash`` / ``_prev_event_hash`` keys.
+
+    Applied recursively only at the top level: chain markers are an emit-time
+    contract, not nested user data. Returns ``details`` unchanged when it is
+    not a mapping.
+    """
+    if not isinstance(details, Mapping):
+        return details
+    return {
+        str(k): v
+        for k, v in details.items()
+        if str(k) not in _AUDIT_LOG_CHAIN_MARKER_KEYS
+    }
+
+
+def _extract_chain_markers(details: object) -> tuple[str | None, str | None]:
+    """Pull (``_prev_event_hash``, ``_event_hash``) markers out of ``details``.
+
+    Returns ``(None, None)`` when ``details`` is not a mapping or markers
+    are absent / non-string. Non-string marker values are treated as absent
+    (defence-in-depth: a tampered marker of the wrong type yields ``None``
+    rather than crashing the verifier).
+    """
+    if not isinstance(details, Mapping):
+        return (None, None)
+    prev_marker = details.get("_prev_event_hash")
+    curr_marker = details.get("_event_hash")
+    prev_str = prev_marker if isinstance(prev_marker, str) else None
+    curr_str = curr_marker if isinstance(curr_marker, str) else None
+    return (prev_str, curr_str)
+
+
+def _canonical_audit_log_view(
+    *,
+    row: Any,
+    prev_hash: str,
+    sanitized_details: object,
+) -> bytes:
+    """Return canonical JSON bytes for one audit row chained with ``prev_hash``.
+
+    The projection mirrors :func:`_compute_event_hash` in shape (sorted keys,
+    no whitespace, ASCII-safe via ``ensure_ascii=False``). ``default=str``
+    coerces UUIDs / datetimes that may slip through without breaking the
+    deterministic byte layout.
+    """
+    created_at = getattr(row, "created_at", None)
+    payload: dict[str, object | None] = {
+        "id": str(getattr(row, "id", "")) if getattr(row, "id", None) is not None else None,
+        "tenant_id": (
+            str(getattr(row, "tenant_id", ""))
+            if getattr(row, "tenant_id", None) is not None
+            else None
+        ),
+        "user_id": (
+            str(getattr(row, "user_id", ""))
+            if getattr(row, "user_id", None) is not None
+            else None
+        ),
+        "action": getattr(row, "action", None),
+        "resource_type": getattr(row, "resource_type", None),
+        "resource_id": getattr(row, "resource_id", None),
+        "details": sanitized_details,
+        "ip_address": getattr(row, "ip_address", None),
+        "created_at": created_at.isoformat() if isinstance(created_at, datetime) else None,
+        "prev_event_hash": prev_hash,
+    }
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+
+
+def _compute_audit_log_hash(*, row: Any, prev_hash: str) -> str:
+    """SHA-256 of the canonical projection of ``row`` chained with ``prev_hash``.
+
+    Chain markers (``_event_hash`` / ``_prev_event_hash``) are stripped from
+    ``details`` before hashing so a row's own markers never influence its
+    expected value (otherwise drift would be undetectable: editing the marker
+    would also shift the expected hash to match).
+    """
+    sanitized = _strip_chain_markers(getattr(row, "details", None))
+    canonical = _canonical_audit_log_view(
+        row=row, prev_hash=prev_hash, sanitized_details=sanitized
+    )
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def verify_audit_log_chain(
+    rows: Sequence[Any],
+) -> AuditLogChainVerifyResult:
+    """Replay the SHA-256 hash chain over a sequence of ``AuditLog`` rows.
+
+    Rows MUST already be ordered by ``created_at`` ASC (then ``id`` ASC for
+    deterministic tie-break). The first row's chain anchor is
+    :data:`GENESIS_HASH`; each subsequent row's expected hash chains the
+    prior expected hash into its canonical projection.
+
+    Drift detection rules:
+
+    * If a row carries ``details["_prev_event_hash"]`` and the value differs
+      from the running ``prev_hash``, the chain is broken: return ``ok=False``
+      with ``drift_event_id`` / ``drift_detected_at`` from that row.
+    * If a row carries ``details["_event_hash"]`` and the value differs from
+      the freshly recomputed expected hash, same outcome.
+    * Otherwise the row counts as verified and the chain advances.
+
+    Returns
+    -------
+    AuditLogChainVerifyResult
+        Aggregate verdict — see the dataclass docstring.
+    """
+    prev_hash = GENESIS_HASH
+    last_idx = -1
+    for idx, row in enumerate(rows):
+        marker_prev, marker_curr = _extract_chain_markers(getattr(row, "details", None))
+        expected_hash = _compute_audit_log_hash(row=row, prev_hash=prev_hash)
+
+        if marker_prev is not None and marker_prev != prev_hash:
+            return AuditLogChainVerifyResult(
+                ok=False,
+                verified_count=idx,
+                last_verified_index=last_idx,
+                drift_event_id=str(getattr(row, "id", "")) or None,
+                drift_detected_at=getattr(row, "created_at", None),
+            )
+        if marker_curr is not None and marker_curr != expected_hash:
+            return AuditLogChainVerifyResult(
+                ok=False,
+                verified_count=idx,
+                last_verified_index=last_idx,
+                drift_event_id=str(getattr(row, "id", "")) or None,
+                drift_detected_at=getattr(row, "created_at", None),
+            )
+        prev_hash = expected_hash
+        last_idx = idx
+
+    return AuditLogChainVerifyResult(
+        ok=True,
+        verified_count=len(rows),
+        last_verified_index=last_idx,
+        drift_event_id=None,
+        drift_detected_at=None,
+    )
+
+
 __all__ = [
     "GENESIS_HASH",
     "AuditChainError",
     "AuditEvent",
     "AuditEventType",
+    "AuditLogChainVerifyResult",
     "AuditLogger",
     "AuditPayloadError",
     "AuditSink",
     "InMemoryAuditSink",
+    "verify_audit_log_chain",
 ]
