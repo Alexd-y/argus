@@ -262,10 +262,14 @@ async def admin_verify_audit_chain(
     rows = list(result.scalars().all())
     verdict = verify_audit_log_chain(rows)
 
+    # S1-1: fingerprint MUST hash the EFFECTIVE window (post-default resolution)
+    # so SIEM correlation survives the "no since/until → implicit 90d" path.
+    # Two requests issued hours apart with no time params target *different*
+    # real windows; their fingerprints must reflect that.
     fingerprint = _query_fingerprint(
         tenant_id=effective_tenant,
-        since=since,
-        until=until,
+        since=effective_since,
+        until=effective_until,
         event_type=event_type,
     )
 
@@ -282,15 +286,30 @@ async def admin_verify_audit_chain(
             "verified_count": verdict.verified_count,
             "last_verified_index": verdict.last_verified_index,
             "cross_tenant": effective_tenant is None,
+            # S2-1: surface drift identifiers to the structured log so SIEM /
+            # forensic queries can pivot to the offending row without a second
+            # response fetch. Both fields are admin-visible by RBAC and carry
+            # no PII (UUID + ISO timestamp); ``None`` on a clean chain.
+            "drift_event_id": verdict.drift_event_id,
+            "drift_detected_at": (
+                verdict.drift_detected_at.isoformat()
+                if verdict.drift_detected_at is not None
+                else None
+            ),
         },
     )
 
+    # S2-2: echo the effective window so operators / UI / SIEM can render
+    # "verified the last 90 days" instead of silently missing the implicit
+    # default-resolution path.
     return AuditChainVerifyResponse(
         ok=verdict.ok,
         verified_count=verdict.verified_count,
         last_verified_index=verdict.last_verified_index,
         drift_event_id=verdict.drift_event_id,
         drift_detected_at=verdict.drift_detected_at,
+        effective_since=effective_since,
+        effective_until=effective_until,
     )
 
 

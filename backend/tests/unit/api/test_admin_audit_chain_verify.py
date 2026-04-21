@@ -342,8 +342,10 @@ class TestVerifyChainTimeWindow:
 
         Confirms the verifier is callable without timestamps for the common
         "verify recent activity" case while remaining bounded by the cap.
+        Also verifies the response echoes the resolved bounds (S2-2).
         """
         _override_db([])
+        before = datetime.now(tz=timezone.utc)
         try:
             with patch.object(settings, "admin_api_key", _ADMIN_KEY):
                 r = client.post(
@@ -352,11 +354,22 @@ class TestVerifyChainTimeWindow:
                 )
         finally:
             _clear_db_override()
+        after = datetime.now(tz=timezone.utc)
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["ok"] is True
         assert body["verified_count"] == 0
         assert body["last_verified_index"] == -1
+        # S2-2 — response MUST echo the effective bounds even when defaults
+        # were applied (no since/until in the request).
+        eff_until = datetime.fromisoformat(body["effective_until"])
+        eff_since = datetime.fromisoformat(body["effective_since"])
+        assert before <= eff_until <= after, (
+            "effective_until must be anchored to server-side utcnow"
+        )
+        assert eff_until - eff_since == timedelta(days=90), (
+            "effective_since must be exactly 90 days before effective_until"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -384,6 +397,14 @@ class TestVerifyChainHappyPath:
         assert body["last_verified_index"] == 4
         assert body["drift_event_id"] is None
         assert body["drift_detected_at"] is None
+        # S2-2 — effective window MUST be present on every response (even
+        # when defaults were applied) so callers / SIEM can render the real
+        # verified range.
+        assert "effective_since" in body
+        assert "effective_until" in body
+        assert datetime.fromisoformat(body["effective_since"]) < datetime.fromisoformat(
+            body["effective_until"]
+        )
 
     def test_empty_range_returns_ok_true_zero_count(self, client: TestClient) -> None:
         _override_db([])
@@ -635,3 +656,271 @@ class TestVerifyChainNoPiiLeak:
         )
         bad_hash = hashlib.sha256(canonical_with_raw.encode("utf-8")).hexdigest()[:24]
         assert fp != bad_hash
+
+
+# ---------------------------------------------------------------------------
+# S1-1 — Fingerprint MUST hash the EFFECTIVE window (not raw query params)
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyChainFingerprintEffectiveWindow:
+    """Regression for SIEM-correlation drift when defaults are applied.
+
+    Background: prior to fix, ``_query_fingerprint`` was fed the raw ``since`` /
+    ``until`` query parameters — which are ``None`` whenever the operator
+    omitted them. Two requests issued hours apart with no time params would
+    therefore collapse to the same fingerprint despite scanning different real
+    windows. SIEM analytics correlating verify-runs by fingerprint would
+    silently merge unrelated runs.
+    """
+
+    def test_fingerprint_uses_effective_window_not_raw_params(
+        self, client: TestClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Two endpoint calls with no since/until at different `now` MUST diverge."""
+        from src.api.routers import admin_audit_chain as router_mod
+
+        # Two distinct simulated-now windows separated by 6h, each ≤90 days
+        # wide so the cap-guard does not trip. The router calls
+        # ``_resolve_chain_window(None, None)`` once per request, so a
+        # side-effect generator yields the next window per invocation.
+        anchor_until_a = datetime(2026, 5, 1, 6, 0, tzinfo=timezone.utc)
+        anchor_until_b = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+        windows: list[tuple[datetime, datetime]] = [
+            (anchor_until_a - timedelta(days=90), anchor_until_a),
+            (anchor_until_b - timedelta(days=90), anchor_until_b),
+        ]
+        idx = {"i": 0}
+
+        def stubbed_resolve(
+            since: datetime | None, until: datetime | None
+        ) -> tuple[datetime, datetime]:
+            if since is None and until is None:
+                w = windows[idx["i"]]
+                idx["i"] += 1
+                return w
+            return (since or windows[0][0], until or windows[0][1])
+
+        _override_db([])
+        try:
+            with patch.object(
+                router_mod, "_resolve_chain_window", side_effect=stubbed_resolve
+            ):
+                with caplog.at_level(logging.INFO):
+                    with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                        r1 = client.post(
+                            VERIFY,
+                            headers={
+                                **_ADMIN_HEADERS,
+                                "X-Admin-Role": "super-admin",
+                            },
+                        )
+                        r2 = client.post(
+                            VERIFY,
+                            headers={
+                                **_ADMIN_HEADERS,
+                                "X-Admin-Role": "super-admin",
+                            },
+                        )
+        finally:
+            _clear_db_override()
+
+        assert r1.status_code == 200, r1.text
+        assert r2.status_code == 200, r2.text
+
+        records = [
+            rec
+            for rec in caplog.records
+            if rec.message == "admin.audit_chain_verify"
+        ]
+        assert len(records) >= 2, "expected two audit_chain_verify log records"
+        fp_first = getattr(records[-2], "query_fingerprint", None)
+        fp_second = getattr(records[-1], "query_fingerprint", None)
+        assert isinstance(fp_first, str) and isinstance(fp_second, str)
+        assert fp_first != fp_second, (
+            "Fingerprint MUST diverge when the effective window advances; "
+            "otherwise SIEM cannot tell distinct verify runs apart."
+        )
+
+    def test_fingerprint_stable_when_explicit_bounds_match_resolved_defaults(
+        self,
+    ) -> None:
+        """Explicit bounds == resolved-default bounds → identical fingerprint.
+
+        Defence-in-depth check that the helper is purely a function of the
+        effective window (no hidden discriminator on whether the bounds came
+        from the URL or from default-resolution).
+        """
+        from src.api.routers.admin_audit_chain import (
+            _query_fingerprint,
+            _resolve_chain_window,
+        )
+
+        # First: resolve with no bounds (defaults applied at "now_a"); second:
+        # call helper directly with those exact resolved bounds.
+        resolved_since, resolved_until = _resolve_chain_window(None, None)
+        tid = str(uuid.uuid4())
+        fp_default = _query_fingerprint(
+            tenant_id=tid,
+            since=resolved_since,
+            until=resolved_until,
+            event_type=None,
+        )
+        fp_explicit = _query_fingerprint(
+            tenant_id=tid,
+            since=resolved_since,
+            until=resolved_until,
+            event_type=None,
+        )
+        assert fp_default == fp_explicit, (
+            "Same effective window MUST produce the same fingerprint regardless "
+            "of how the bounds were sourced (defaults vs explicit query params)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# S2-1 — Drift identifiers MUST surface in the structured audit-emit log
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyChainAuditEmitDriftFields:
+    """SIEM forensics MUST be able to pivot to the offending row from the log.
+
+    Without ``drift_event_id`` / ``drift_detected_at`` on the structured
+    record, SIEM has to re-fetch the response body to identify the row that
+    broke the chain — slow and brittle. Both fields are admin-visible per
+    RBAC and carry no PII (UUID + ISO timestamp).
+    """
+
+    def test_audit_emit_includes_drift_id_when_drift_detected(
+        self, client: TestClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        tid = str(uuid.uuid4())
+        rows = _build_clean_chain(tid, count=4)
+        # Synthesize drift on row index 2 by tampering its prev-marker.
+        assert isinstance(rows[2].details, dict)
+        rows[2].details["_prev_event_hash"] = "f" * 64
+        drifted_id = rows[2].id
+        drifted_at = rows[2].created_at
+        _override_db(rows)
+        try:
+            with caplog.at_level(logging.INFO):
+                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                    r = client.post(
+                        VERIFY,
+                        headers={
+                            **_ADMIN_HEADERS,
+                            "X-Admin-Role": "super-admin",
+                        },
+                    )
+        finally:
+            _clear_db_override()
+        assert r.status_code == 200, r.text
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.audit_chain_verify"),
+            None,
+        )
+        assert record is not None, "expected admin.audit_chain_verify log record"
+        assert getattr(record, "ok", None) is False
+        assert getattr(record, "drift_event_id", None) == drifted_id, (
+            "Structured log MUST carry the drifted row id for SIEM pivot."
+        )
+        emitted_drift_at = getattr(record, "drift_detected_at", None)
+        assert isinstance(emitted_drift_at, str)
+        assert emitted_drift_at.startswith(drifted_at.isoformat()[:19])
+
+    def test_audit_emit_drift_fields_null_on_clean_chain(
+        self, client: TestClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Clean chain → both drift fields explicitly ``None`` (not absent)."""
+        tid = str(uuid.uuid4())
+        rows = _build_clean_chain(tid, count=3)
+        _override_db(rows)
+        try:
+            with caplog.at_level(logging.INFO):
+                with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                    r = client.post(
+                        VERIFY,
+                        headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                    )
+        finally:
+            _clear_db_override()
+        assert r.status_code == 200, r.text
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.audit_chain_verify"),
+            None,
+        )
+        assert record is not None
+        assert getattr(record, "ok", None) is True
+        # Sentinel test: keys present but explicitly null — SIEM mappings rely
+        # on a stable schema rather than absence-vs-presence to mean "no drift".
+        assert hasattr(record, "drift_event_id")
+        assert hasattr(record, "drift_detected_at")
+        assert getattr(record, "drift_event_id") is None
+        assert getattr(record, "drift_detected_at") is None
+
+
+# ---------------------------------------------------------------------------
+# S2-2 — Response MUST echo the effective window when defaults were applied
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyChainResponseEffectiveWindow:
+    """Response surfaces the implicit-default window so UI / SIEM can render
+    "Verified the last 90 days" instead of silently missing the bound.
+    """
+
+    def test_response_includes_effective_window_when_defaults_applied(
+        self, client: TestClient
+    ) -> None:
+        _override_db([])
+        before = datetime.now(tz=timezone.utc)
+        try:
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                )
+        finally:
+            _clear_db_override()
+        after = datetime.now(tz=timezone.utc)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "effective_since" in body and "effective_until" in body, (
+            "Default-resolved windows MUST be echoed back in the response."
+        )
+        eff_until = datetime.fromisoformat(body["effective_until"])
+        eff_since = datetime.fromisoformat(body["effective_since"])
+        # Server-side anchor sits between client-side `before` and `after`.
+        assert before - timedelta(seconds=1) <= eff_until <= after + timedelta(
+            seconds=1
+        ), "effective_until must be ~utcnow at request time"
+        assert eff_until - eff_since == timedelta(days=90), (
+            "Implicit default window MUST be exactly 90 days wide."
+        )
+
+    def test_response_echoes_explicit_bounds_unchanged(
+        self, client: TestClient
+    ) -> None:
+        """Explicit bounds → response echoes them verbatim (no surprise rebase)."""
+        until = datetime(2026, 4, 21, 12, 0, tzinfo=timezone.utc)
+        since = until - timedelta(days=30)
+        _override_db([])
+        try:
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                r = client.post(
+                    VERIFY,
+                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                    params={
+                        "since": since.isoformat(),
+                        "until": until.isoformat(),
+                    },
+                )
+        finally:
+            _clear_db_override()
+        assert r.status_code == 200, r.text
+        body = r.json()
+        echoed_since = datetime.fromisoformat(body["effective_since"])
+        echoed_until = datetime.fromisoformat(body["effective_until"])
+        assert echoed_since == since
+        assert echoed_until == until

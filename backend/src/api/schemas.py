@@ -340,6 +340,12 @@ class AuditChainVerifyResponse(BaseModel):
     in which case ``drift_event_id`` and ``drift_detected_at`` localize the
     first inconsistent row. Frontend (T22) renders an OK / DRIFT badge from
     these fields.
+
+    ``effective_since`` / ``effective_until`` echo the resolved time-window
+    actually scanned (the implicit "last 90 days" default is applied when the
+    caller omits one or both bounds). UI / SIEM consume them to render the
+    real verified range — never assume the request bounds match the response
+    bounds without comparing.
     """
 
     ok: bool
@@ -361,6 +367,21 @@ class AuditChainVerifyResponse(BaseModel):
     drift_detected_at: datetime | None = Field(
         default=None,
         description="``created_at`` of the drifted row; null on success.",
+    )
+    effective_since: datetime = Field(
+        description=(
+            "Lower bound of the time-window actually scanned (resolved from the "
+            "request ``since`` or the implicit 90-day default anchored to "
+            "``effective_until``). Always present so callers can verify the "
+            "real range."
+        ),
+    )
+    effective_until: datetime = Field(
+        description=(
+            "Upper bound of the time-window actually scanned (resolved from the "
+            "request ``until`` or anchored to ``utcnow`` when omitted). Always "
+            "present so callers can verify the real range."
+        ),
     )
 
 
