@@ -365,3 +365,242 @@ function safeTimestamp(iso: string | null): number {
 export function sortFindings(items: ReadonlyArray<AdminFindingItem>): AdminFindingItem[] {
   return [...items].sort(compareFindings);
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk findings actions (T21)
+//
+// Backend endpoint:
+//   POST /admin/findings/bulk-suppress
+//     body: { tenant_id: UUID, finding_ids: UUID[1..100], reason: str(1..4000) }
+//     resp: { suppressed_count, skipped_already_suppressed_count,
+//             not_found_count, audit_id, results: [{finding_id, status}] }
+//
+// Available actions backed by this endpoint:
+//   - "suppress" with operator-selected reason (taxonomy below)
+//   - "mark_false_positive" with fixed reason "false_positive"
+//
+// Phase-2 actions deferred (no backend support yet — see ISS-T21-001 /
+// ISS-T21-002): "escalate" (severity raise), "attach_to_cve".
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Backend cap (`AdminBulkFindingSuppressRequest.finding_ids` max_length). */
+export const MAX_BULK_FINDING_IDS = 100;
+
+/** Backend cap (`AdminBulkFindingSuppressRequest.reason` max_length). */
+export const MAX_BULK_REASON_LENGTH = 4000;
+
+/** UI-side comment cap (UX limit, well below backend's 4000 char `reason`). */
+export const MAX_BULK_COMMENT_LENGTH = 500;
+
+const BULK_SUPPRESS_REASON_VALUES = [
+  "duplicate",
+  "risk_accepted",
+  "compensating_control",
+  "environmental_noise",
+  "other",
+] as const;
+
+export const BULK_SUPPRESS_REASONS: ReadonlyArray<BulkSuppressReason> =
+  BULK_SUPPRESS_REASON_VALUES;
+
+export const BulkSuppressReasonSchema = z.enum(BULK_SUPPRESS_REASON_VALUES);
+export type BulkSuppressReason = z.infer<typeof BulkSuppressReasonSchema>;
+
+const BULK_SUPPRESS_REASON_SET = new Set<string>(BULK_SUPPRESS_REASON_VALUES);
+
+export function isBulkSuppressReason(value: unknown): value is BulkSuppressReason {
+  return typeof value === "string" && BULK_SUPPRESS_REASON_SET.has(value);
+}
+
+/** Human-readable label for the reason chip / dropdown. */
+export const BULK_SUPPRESS_REASON_LABEL_RU: Readonly<Record<BulkSuppressReason, string>> = {
+  duplicate: "Дубликат",
+  risk_accepted: "Risk accepted",
+  compensating_control: "Compensating control",
+  environmental_noise: "Environmental noise",
+  other: "Другое",
+};
+
+/**
+ * Per-tenant raw response from `POST /admin/findings/bulk-suppress`. The
+ * action layer fans out one call per tenant (super-admin cross-tenant) and
+ * aggregates the results into a single {@link BulkActionResult}; the UI
+ * never sees the raw envelope.
+ */
+const BackendBulkSuppressItemResultSchema = z.object({
+  finding_id: z.string().min(1),
+  status: z.enum(["suppressed", "skipped_already_suppressed", "not_found"]),
+});
+
+export const BackendBulkSuppressResponseSchema = z.object({
+  suppressed_count: z.number().int().nonnegative(),
+  skipped_already_suppressed_count: z.number().int().nonnegative(),
+  not_found_count: z.number().int().nonnegative(),
+  audit_id: z.string().min(1),
+  results: z.array(BackendBulkSuppressItemResultSchema),
+});
+
+export type BackendBulkSuppressResponse = z.infer<typeof BackendBulkSuppressResponseSchema>;
+
+/**
+ * Closed taxonomy of failure reasons surfaced to the bulk-action UI.
+ * Mirrors the read-side `AdminFindingsErrorCode` so the operator gets a
+ * consistent set of localized strings regardless of which surface failed.
+ */
+export const BULK_FAILURE_TAXONOMY = [
+  "unauthorized",
+  "forbidden",
+  "not_found",
+  "validation_failed",
+  "rate_limited",
+  "server_error",
+  "network_error",
+] as const;
+
+export const BulkFailureCodeSchema = z.enum(BULK_FAILURE_TAXONOMY);
+export type BulkFailureCode = z.infer<typeof BulkFailureCodeSchema>;
+
+/**
+ * Aggregated result returned by the server actions. Counts and ids are
+ * always plain primitives so React Query / serializers stay happy.
+ *
+ * - `affected_count` — total findings that the backend successfully
+ *   transitioned (sum of `suppressed_count` across tenants).
+ * - `skipped_count` — already-suppressed entries (idempotent no-op).
+ * - `failed_ids` — finding ids that the backend reported as `not_found`
+ *   PLUS any ids the action layer rejected pre-flight (non-UUID, etc.).
+ * - `failure_reason_taxonomy` — non-null when at least one tenant's call
+ *   failed entirely (e.g. forbidden); null on full / partial success.
+ */
+export const BulkActionResultSchema = z.object({
+  affected_count: z.number().int().nonnegative(),
+  skipped_count: z.number().int().nonnegative(),
+  failed_ids: z.array(z.string()),
+  failure_reason_taxonomy: BulkFailureCodeSchema.nullable(),
+  audit_ids: z.array(z.string()),
+});
+
+export type BulkActionResult = z.infer<typeof BulkActionResultSchema>;
+
+/**
+ * Closed-taxonomy error specific to the bulk-action server actions. Distinct
+ * class from `AdminFindingsError` so callers can render dedicated messaging
+ * (a failed bulk write is a different operator situation than a failed
+ * read), but reuses the same RU string registry where the codes overlap.
+ */
+export class BulkFindingsActionError extends Error {
+  readonly code: BulkFailureCode;
+  readonly status: number | null;
+  readonly failedIds: ReadonlyArray<string>;
+
+  constructor(
+    code: BulkFailureCode,
+    status: number | null = null,
+    failedIds: ReadonlyArray<string> = [],
+  ) {
+    super(code);
+    this.name = "BulkFindingsActionError";
+    this.code = code;
+    this.status = status;
+    this.failedIds = failedIds;
+  }
+}
+
+const BULK_ERROR_MESSAGES_RU: Readonly<Record<BulkFailureCode, string>> = {
+  unauthorized: "Сессия истекла. Войдите заново.",
+  forbidden: "Недостаточно прав для bulk-операции.",
+  not_found: "Часть findings не найдена.",
+  validation_failed: "Некорректные параметры bulk-операции.",
+  rate_limited: "Слишком много запросов. Повторите попытку через минуту.",
+  server_error: "Bulk-операция не выполнена. Повторите попытку.",
+  network_error: "Сеть недоступна. Проверьте соединение и повторите попытку.",
+};
+
+export function bulkActionErrorMessage(err: unknown): string {
+  if (err instanceof BulkFindingsActionError) {
+    return BULK_ERROR_MESSAGES_RU[err.code];
+  }
+  return BULK_ERROR_MESSAGES_RU.server_error;
+}
+
+/** Map an HTTP status from the backend bulk endpoint into a closed code. */
+export function statusToBulkFailureCode(status: number): BulkFailureCode {
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 429) return "rate_limited";
+  if (status === 400 || status === 422) return "validation_failed";
+  if (status === 503) return "network_error";
+  return "server_error";
+}
+
+const UUID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+/**
+ * Item shape the bulk-action callers must send in. Carrying `tenant_id`
+ * with each id is what enables the action layer to fan out the call when
+ * super-admin selected findings across multiple tenants without trusting
+ * any caller-supplied "current tenant" hint.
+ */
+export type BulkFindingTarget = {
+  readonly id: string;
+  readonly tenant_id: string;
+};
+
+/**
+ * Group target findings by tenant. Each tenant becomes one backend call.
+ * Pre-filters non-UUID ids so we never feed garbage to the backend.
+ */
+export function groupBulkTargetsByTenant(
+  targets: ReadonlyArray<BulkFindingTarget>,
+): {
+  readonly grouped: ReadonlyMap<string, ReadonlyArray<string>>;
+  readonly skipped: ReadonlyArray<string>;
+} {
+  const grouped = new Map<string, string[]>();
+  const skipped: string[] = [];
+  for (const t of targets) {
+    if (!isUuid(t.id) || !isUuid(t.tenant_id)) {
+      skipped.push(t.id);
+      continue;
+    }
+    const bucket = grouped.get(t.tenant_id);
+    if (bucket) {
+      bucket.push(t.id);
+    } else {
+      grouped.set(t.tenant_id, [t.id]);
+    }
+  }
+  return { grouped, skipped };
+}
+
+/**
+ * Encode the operator's reason + free-text comment into the backend's
+ * single `reason` string field. Format is human-readable for downstream
+ * audit-log consumers and trivially parseable by future tooling.
+ *
+ * Examples:
+ *   buildBulkSuppressReason("duplicate")            → "duplicate"
+ *   buildBulkSuppressReason("duplicate", "f-123")   → "duplicate: f-123"
+ *   buildBulkSuppressReason("false_positive", " ")  → "false_positive"
+ *
+ * The combined string is hard-capped at MAX_BULK_REASON_LENGTH so we
+ * never violate the backend's 4 000-char schema limit even with maximally
+ * long taxonomy names + 500-char comment.
+ */
+export function buildBulkSuppressReason(
+  reason: BulkSuppressReason | "false_positive",
+  comment?: string | null,
+): string {
+  const trimmed = (comment ?? "").trim();
+  if (trimmed.length === 0) {
+    return reason.slice(0, MAX_BULK_REASON_LENGTH);
+  }
+  const combined = `${reason}: ${trimmed.slice(0, MAX_BULK_COMMENT_LENGTH)}`;
+  return combined.slice(0, MAX_BULK_REASON_LENGTH);
+}

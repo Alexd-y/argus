@@ -145,9 +145,37 @@ export type FindingsTableProps = {
    * `X-Tenant-ID` header matches the row's actual scope.
    */
   readonly effectiveTenantId?: string | null;
+  // ── Bulk selection (T21) ────────────────────────────────────────────────
+  /**
+   * When true, render the leading checkbox column (per-row + tri-state
+   * header). Hidden entirely otherwise so operator-role users (gated to
+   * read-only) never see selection affordances.
+   */
+  readonly selectionMode?: boolean;
+  /**
+   * Set of currently-selected finding ids. We accept a `ReadonlySet` so the
+   * parent can keep a single source of truth and we never accidentally
+   * mutate it from inside the table.
+   */
+  readonly selectedIds?: ReadonlySet<string>;
+  /** Toggle a single row's selection. */
+  readonly onToggleSelection?: (id: string) => void;
+  /**
+   * Toggle the visible-rows-only set (header tri-state). Receives the list
+   * of currently sorted ids so the parent can decide "select all visible"
+   * vs. "clear all visible" without re-sorting.
+   */
+  readonly onToggleAll?: (visibleIds: ReadonlyArray<string>) => void;
+  /**
+   * Clear the entire selection (Esc keystroke + "Снять выбор" toolbar
+   * button). Distinct from `onToggleAll` so the semantic is unambiguous —
+   * Esc must NEVER mean "select all" even when state is "none".
+   */
+  readonly onClearSelection?: () => void;
 };
 
 const COLUMNS_BASE = 7;
+const SELECT_COLUMN_TEMPLATE = "minmax(36px,36px) ";
 
 export function FindingsTable({
   items,
@@ -160,11 +188,17 @@ export function FindingsTable({
   showTenantColumn,
   heightPx = 560,
   effectiveTenantId = null,
+  selectionMode = false,
+  selectedIds,
+  onToggleSelection,
+  onToggleAll,
+  onClearSelection,
 }: FindingsTableProps): React.ReactElement {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const drawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const headerCheckboxRef = useRef<HTMLInputElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [drawerItem, setDrawerItem] = useState<AdminFindingItem | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -173,7 +207,37 @@ export function FindingsTable({
   const sorted = useMemo(() => sortFindings(items), [items]);
 
   const totalRows = sorted.length;
-  const totalColumns = COLUMNS_BASE + (showTenantColumn ? 1 : 0);
+  const totalColumns =
+    COLUMNS_BASE + (showTenantColumn ? 1 : 0) + (selectionMode ? 1 : 0);
+
+  const selectedCount = useMemo(() => {
+    if (!selectionMode || !selectedIds) return 0;
+    let n = 0;
+    for (const item of sorted) {
+      if (selectedIds.has(item.id)) n += 1;
+    }
+    return n;
+  }, [selectionMode, selectedIds, sorted]);
+
+  // Tri-state derivation:
+  //   "none"  → no visible row selected (header unchecked, indeterminate=false)
+  //   "some"  → at least 1 but not all visible rows selected (indeterminate=true)
+  //   "all"   → every visible row selected (header checked)
+  const headerCheckboxState: "none" | "some" | "all" = useMemo(() => {
+    if (totalRows === 0 || selectedCount === 0) return "none";
+    if (selectedCount === totalRows) return "all";
+    return "some";
+  }, [selectedCount, totalRows]);
+
+  // The DOM `indeterminate` flag is not a controlled attribute — we have to
+  // imperatively sync it whenever the derived state changes (otherwise AT
+  // tooling reports the wrong "mixed" announcement).
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate =
+        headerCheckboxState === "some";
+    }
+  }, [headerCheckboxState]);
 
   const rowVirtualizer = useVirtualizer({
     count: totalRows,
@@ -275,8 +339,33 @@ export function FindingsTable({
     [drawerItem, effectiveTenantId],
   );
 
+  const handleHeaderCheckboxChange = useCallback(() => {
+    if (!onToggleAll) return;
+    onToggleAll(sorted.map((item) => item.id));
+  }, [onToggleAll, sorted]);
+
+  const handleRowCheckboxChange = useCallback(
+    (id: string) => {
+      onToggleSelection?.(id);
+    },
+    [onToggleSelection],
+  );
+
   const handleTableKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (totalRows === 0) return;
+    // Esc clears the selection (only when selection-mode is on AND there's
+    // something selected) — gives operators a single keystroke to abandon
+    // a multi-select before reaching for the "Снять выбор" button.
+    if (
+      e.key === "Escape" &&
+      selectionMode &&
+      selectedCount > 0 &&
+      onClearSelection
+    ) {
+      e.preventDefault();
+      onClearSelection();
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
       const next = Math.min(activeIndex + 1, totalRows - 1);
@@ -335,17 +424,44 @@ export function FindingsTable({
 
   const showEmpty = !loading && totalRows === 0 && !errorMessage;
 
+  const baseGridTemplate = showTenantColumn
+    ? "minmax(96px,1fr) minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)"
+    : "minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)";
+  const gridTemplateColumns = selectionMode
+    ? `${SELECT_COLUMN_TEMPLATE}${baseGridTemplate}`
+    : baseGridTemplate;
+
   const renderHeaderRow = () => (
     <div
       role="row"
       aria-rowindex={1}
       className="sticky top-0 z-10 grid bg-[var(--bg-secondary)] text-xs font-medium uppercase tracking-wider text-[var(--text-muted)] shadow-[0_1px_0_var(--border)]"
-      style={{
-        gridTemplateColumns: showTenantColumn
-          ? "minmax(96px,1fr) minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)"
-          : "minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)",
-      }}
+      style={{ gridTemplateColumns }}
     >
+      {selectionMode ? (
+        <span
+          role="columnheader"
+          className="flex items-center justify-center px-2 py-2"
+        >
+          <label className="inline-flex items-center justify-center">
+            <input
+              ref={headerCheckboxRef}
+              type="checkbox"
+              className="h-3.5 w-3.5 cursor-pointer accent-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              checked={headerCheckboxState === "all"}
+              aria-checked={
+                headerCheckboxState === "some"
+                  ? "mixed"
+                  : headerCheckboxState === "all"
+              }
+              disabled={totalRows === 0}
+              onChange={handleHeaderCheckboxChange}
+              data-testid="findings-select-all"
+            />
+            <span className="sr-only">Выбрать все видимые findings</span>
+          </label>
+        </span>
+      ) : null}
       <span role="columnheader" className="px-3 py-2">
         Severity
       </span>
@@ -381,6 +497,7 @@ export function FindingsTable({
   const renderRow = (item: AdminFindingItem, index: number, top: number) => {
     const sev = SEVERITY_PRESENTATION[item.severity];
     const isActive = index === activeIndex;
+    const isSelected = selectedIds?.has(item.id) ?? false;
     return (
       <div
         key={item.id}
@@ -388,6 +505,7 @@ export function FindingsTable({
         aria-rowindex={index + 2}
         aria-selected={isActive}
         data-row-index={index}
+        data-row-selected={isSelected ? "true" : "false"}
         data-testid={`findings-row-${item.id}`}
         onClick={() => {
           setActiveIndex(index);
@@ -395,15 +513,34 @@ export function FindingsTable({
         }}
         className={`absolute left-0 right-0 grid cursor-pointer items-center border-b border-[var(--border)] text-xs hover:bg-[var(--bg-secondary)]/60 ${
           isActive ? "bg-[var(--bg-tertiary)]" : ""
-        }`}
+        } ${isSelected ? "bg-[var(--accent)]/10" : ""}`}
         style={{
           height: `${ROW_HEIGHT_PX}px`,
           transform: `translateY(${top}px)`,
-          gridTemplateColumns: showTenantColumn
-            ? "minmax(96px,1fr) minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)"
-            : "minmax(96px,1fr) minmax(80px,80px) minmax(80px,80px) minmax(80px,80px) minmax(120px,1fr) minmax(160px,2fr) minmax(160px,1fr) minmax(120px,140px)",
+          gridTemplateColumns,
         }}
       >
+        {selectionMode ? (
+          <span
+            role="cell"
+            className="flex items-center justify-center px-2 py-1.5"
+            // Stop click propagation so toggling the checkbox doesn't also
+            // open the row drawer (would be a confusing double-action).
+            onClick={(e) => e.stopPropagation()}
+          >
+            <label className="inline-flex cursor-pointer items-center justify-center">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 cursor-pointer accent-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+                checked={isSelected}
+                aria-checked={isSelected}
+                onChange={() => handleRowCheckboxChange(item.id)}
+                data-testid={`findings-select-row-${item.id}`}
+              />
+              <span className="sr-only">Выбрать запись {item.id}</span>
+            </label>
+          </span>
+        ) : null}
         <span role="cell" className="px-3 py-1.5">
           <span
             className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${sev.className}`}

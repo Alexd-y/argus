@@ -34,15 +34,24 @@ import {
   useTransition,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { listTenants, type AdminTenant } from "@/app/admin/tenants/actions";
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   adminFindingsErrorMessage,
+  bulkActionErrorMessage,
+  BulkFindingsActionError,
+  MAX_BULK_FINDING_IDS,
   type AdminFindingItem,
   type AdminFindingsListResponse,
+  type BulkActionResult,
+  type BulkFindingTarget,
   type ListAdminFindingsParams,
 } from "@/lib/adminFindings";
 import { useAdminAuth } from "@/services/admin/useAdminAuth";
@@ -55,8 +64,22 @@ import {
 } from "@/components/admin/findings/FindingsFilterBar";
 import { FindingsTable } from "@/components/admin/findings/FindingsTable";
 import type { TenantOption } from "@/components/admin/findings/TenantSelector";
+import {
+  BulkActionsToolbar,
+  DEFAULT_BULK_AVAILABILITY,
+  type BulkActionAvailability,
+  type BulkActionKind,
+} from "@/components/admin/findings/BulkActionsToolbar";
+import {
+  BulkActionDialog,
+  type BulkActionPayload,
+} from "@/components/admin/findings/BulkActionDialog";
 
-import { listAdminFindingsAction } from "./actions";
+import {
+  bulkMarkFalsePositiveFindingsAction,
+  bulkSuppressFindingsAction,
+  listAdminFindingsAction,
+} from "./actions";
 import { AdminFindingsQueryProvider } from "./AdminFindingsQueryProvider";
 
 const PAGE_LIMIT = 50;
@@ -124,11 +147,66 @@ function detectFeatureAvailability(
   return { kev, ssvc };
 }
 
+/**
+ * Banner messages emitted by `runBulkAction` after the server-action call
+ * resolves. Kept as a closed taxonomy on the UI side so the renderer can
+ * map state → colour without parsing free-form strings.
+ */
+type BulkActionBanner =
+  | {
+      readonly tone: "success";
+      readonly message: string;
+    }
+  | {
+      readonly tone: "warning";
+      readonly message: string;
+    }
+  | {
+      readonly tone: "error";
+      readonly message: string;
+    };
+
+function buildSuccessBanner(
+  result: BulkActionResult,
+  totalRequested: number,
+): BulkActionBanner {
+  // "Partial" is anything where at least one id wasn't applied — could be
+  // permission drift between selection and execution, an item that was
+  // already suppressed, or a backend-side validation rejection. We surface
+  // the count + the closed-taxonomy hint so operators can re-triage.
+  const failedCount = result.failed_ids.length;
+  const partial =
+    result.affected_count < totalRequested ||
+    failedCount > 0 ||
+    result.skipped_count > 0;
+  if (!partial) {
+    return {
+      tone: "success",
+      message: `Применено к ${result.affected_count} findings.`,
+    };
+  }
+  return {
+    tone: "warning",
+    message: `Применено к ${result.affected_count} из ${totalRequested}; пропущено уже обработанных ${result.skipped_count}, не применено к ${failedCount}.`,
+  };
+}
+
+function bannerToneClass(tone: BulkActionBanner["tone"]): string {
+  if (tone === "success") {
+    return "border-emerald-500/60 bg-emerald-500/10 text-emerald-200";
+  }
+  if (tone === "warning") {
+    return "border-yellow-500/60 bg-yellow-500/10 text-yellow-200";
+  }
+  return "border-red-500/60 bg-red-500/10 text-red-200";
+}
+
 function AdminFindingsBody() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { role } = useAdminAuth({ minimumRole: "admin" });
   const [isPending, startTransition] = useTransition();
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState<FindingsFilterValues>(() =>
     readFiltersFromUrl(new URLSearchParams(searchParams?.toString() ?? "")),
@@ -255,8 +333,172 @@ function AdminFindingsBody() {
     [pages],
   );
 
+  // ── Bulk selection (T21) ──────────────────────────────────────────────
+  // Use a `Set<string>` to keep add/remove O(1) for very large selections.
+  // We persist ids across pagination loads so the operator can keep
+  // building a multi-page selection — but we prune ids that fall out of
+  // the materialised list (e.g. status changed after a refetch); leaving
+  // them in would let the server reject the bulk call wholesale.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [activeBulkAction, setActiveBulkAction] =
+    useState<BulkActionKind | null>(null);
+  const [bulkSubmitting, setBulkSubmitting] = useState<boolean>(false);
+  const [bulkDialogError, setBulkDialogError] = useState<string | null>(null);
+  const [bulkBanner, setBulkBanner] = useState<BulkActionBanner | null>(null);
+
+  // Build a tenant lookup for selected ids — required because both
+  // suppress and mark-FP server actions take `BulkFindingTarget[]` (id +
+  // tenant_id) so we can fan out per-tenant when super-admins select
+  // across boundaries.
+  const itemTenantById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of items) map.set(item.id, item.tenant_id);
+    return map;
+  }, [items]);
+
+  // Prune ids that no longer exist in the loaded pages. We keep ids
+  // we haven't materialised yet (e.g. selected on page 1, currently on
+  // page 2) — but only as long as the loaded page set still references
+  // them. The simple rule: if items.length grew but a previously-known
+  // id is gone, drop it. Implemented by intersecting against the union
+  // of historically-seen ids (cheap because Set ops are O(N)).
+  useEffect(() => {
+    if (selectedIds.size === 0) return;
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of selectedIds) {
+      if (itemTenantById.has(id)) {
+        next.add(id);
+      } else {
+        changed = true;
+      }
+    }
+    if (changed) setSelectedIds(next);
+  }, [itemTenantById, selectedIds]);
+
+  const handleToggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleAll = useCallback(
+    (visibleIds: ReadonlyArray<string>) => {
+      setSelectedIds((prev) => {
+        const allSelected =
+          visibleIds.length > 0 && visibleIds.every((id) => prev.has(id));
+        const next = new Set(prev);
+        if (allSelected) {
+          for (const id of visibleIds) next.delete(id);
+        } else {
+          for (const id of visibleIds) next.add(id);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setBulkBanner(null);
+  }, []);
+
+  const openBulkDialog = useCallback((kind: BulkActionKind) => {
+    setBulkDialogError(null);
+    setActiveBulkAction(kind);
+  }, []);
+
+  const closeBulkDialog = useCallback(() => {
+    if (bulkSubmitting) return;
+    setActiveBulkAction(null);
+    setBulkDialogError(null);
+  }, [bulkSubmitting]);
+
+  const bulkAvailability: BulkActionAvailability = DEFAULT_BULK_AVAILABILITY;
+
+  // Selection mode is on for both admin and super-admin. Operator role
+  // can never reach this body (AdminRouteGuard rejects below admin) —
+  // the explicit `false` for operator below is defensive belt-and-braces
+  // in case the guard is ever loosened upstream.
+  const selectionMode = role === "admin" || role === "super-admin";
+
+  // Admin without a server-side tenant binding sees the empty state
+  // already (no FindingsTable at all). For super-admin, the bulk
+  // toolbar should always be available — fan-out across tenants is
+  // handled by the server action.
+  const bulkDisabledReason: string | null = null;
+
+  const runBulkAction = useCallback(
+    async (payload: BulkActionPayload): Promise<void> => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0) {
+        setBulkDialogError("Выберите хотя бы один finding.");
+        return;
+      }
+      if (ids.length > MAX_BULK_FINDING_IDS) {
+        setBulkDialogError(
+          `Можно подавить не более ${MAX_BULK_FINDING_IDS} findings за раз.`,
+        );
+        return;
+      }
+      const targets: BulkFindingTarget[] = [];
+      for (const id of ids) {
+        const tenant = itemTenantById.get(id);
+        if (!tenant) {
+          setBulkDialogError(
+            "Часть выбранных findings больше недоступна. Обновите список.",
+          );
+          return;
+        }
+        targets.push({ id, tenant_id: tenant });
+      }
+      setBulkSubmitting(true);
+      setBulkDialogError(null);
+      try {
+        let result: BulkActionResult;
+        if (payload.kind === "suppress") {
+          result = await bulkSuppressFindingsAction({
+            targets,
+            reason: payload.reason,
+            comment: payload.comment,
+          });
+        } else {
+          result = await bulkMarkFalsePositiveFindingsAction({
+            targets,
+            comment: payload.comment,
+          });
+        }
+        setBulkBanner(buildSuccessBanner(result, targets.length));
+        setSelectedIds(new Set());
+        setActiveBulkAction(null);
+        // React Query: drop every cached findings list query so the
+        // operator sees the post-mutation truth on the next render.
+        await queryClient.invalidateQueries({
+          queryKey: ["admin", "findings"],
+        });
+      } catch (err) {
+        if (err instanceof BulkFindingsActionError) {
+          setBulkDialogError(bulkActionErrorMessage(err));
+        } else {
+          setBulkDialogError(bulkActionErrorMessage(err));
+        }
+      } finally {
+        setBulkSubmitting(false);
+      }
+    },
+    [itemTenantById, queryClient, selectedIds],
+  );
+
   const handleResetFilters = useCallback(() => {
     setFilters({ ...EMPTY_FILTER_VALUES });
+    setSelectedIds(new Set());
+    setBulkBanner(null);
   }, []);
 
   const errorMessage =
@@ -300,6 +542,18 @@ function AdminFindingsBody() {
         disabled={findingsQuery.isFetching && pages == null}
       />
 
+      {bulkBanner ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="bulk-action-banner"
+          data-tone={bulkBanner.tone}
+          className={`rounded border px-3 py-2 text-sm ${bannerToneClass(bulkBanner.tone)}`}
+        >
+          {bulkBanner.message}
+        </div>
+      ) : null}
+
       {!isSuperAdmin ? (
         <p
           role="status"
@@ -311,24 +565,52 @@ function AdminFindingsBody() {
           явно указанным <code>tenant_id</code>.
         </p>
       ) : (
-        <FindingsTable
-          items={items}
-          loading={findingsQuery.isPending || isPending}
-          fetchingMore={findingsQuery.isFetchingNextPage}
-          errorMessage={errorMessage}
-          onLoadMore={() => {
-            if (
-              findingsQuery.hasNextPage &&
-              !findingsQuery.isFetchingNextPage
-            ) {
-              void findingsQuery.fetchNextPage();
-            }
-          }}
-          hasMore={hasMore}
-          showTenantColumn={isSuperAdmin}
-          effectiveTenantId={effectiveTenantId}
-        />
+        <>
+          <BulkActionsToolbar
+            selectedCount={selectedIds.size}
+            availability={bulkAvailability}
+            disabled={bulkSubmitting}
+            disabledReason={bulkDisabledReason}
+            onAction={openBulkDialog}
+            onClearSelection={handleClearSelection}
+          />
+          <FindingsTable
+            items={items}
+            loading={findingsQuery.isPending || isPending}
+            fetchingMore={findingsQuery.isFetchingNextPage}
+            errorMessage={errorMessage}
+            onLoadMore={() => {
+              if (
+                findingsQuery.hasNextPage &&
+                !findingsQuery.isFetchingNextPage
+              ) {
+                void findingsQuery.fetchNextPage();
+              }
+            }}
+            hasMore={hasMore}
+            showTenantColumn={isSuperAdmin}
+            effectiveTenantId={effectiveTenantId}
+            selectionMode={selectionMode}
+            selectedIds={selectedIds}
+            onToggleSelection={handleToggleSelection}
+            onToggleAll={handleToggleAll}
+            onClearSelection={handleClearSelection}
+          />
+        </>
       )}
+
+      {activeBulkAction ? (
+        <BulkActionDialog
+          kind={activeBulkAction}
+          selectedCount={selectedIds.size}
+          submitting={bulkSubmitting}
+          errorMessage={bulkDialogError}
+          onConfirm={(payload) => {
+            void runBulkAction(payload);
+          }}
+          onClose={closeBulkDialog}
+        />
+      ) : null}
     </div>
   );
 }

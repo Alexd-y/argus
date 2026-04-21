@@ -423,3 +423,158 @@ describe("FindingsTable — per-row export (S1-5)", () => {
     expect(text.length).toBeGreaterThan(0);
   });
 });
+
+describe("FindingsTable — bulk selection (T21)", () => {
+  function renderWithSelection(opts: {
+    items: ReadonlyArray<AdminFindingItem>;
+    selected?: ReadonlySet<string>;
+    selectionMode?: boolean;
+    onToggleSelection?: (id: string) => void;
+    onToggleAll?: (visibleIds: ReadonlyArray<string>) => void;
+    onClearSelection?: () => void;
+    showTenantColumn?: boolean;
+  }) {
+    return render(
+      <FindingsTable
+        items={opts.items}
+        loading={false}
+        fetchingMore={false}
+        errorMessage={null}
+        hasMore={false}
+        showTenantColumn={opts.showTenantColumn ?? false}
+        heightPx={400}
+        selectionMode={opts.selectionMode ?? true}
+        selectedIds={opts.selected ?? new Set()}
+        onToggleSelection={opts.onToggleSelection}
+        onToggleAll={opts.onToggleAll}
+        onClearSelection={opts.onClearSelection}
+      />,
+    );
+  }
+
+  it("does NOT render checkboxes when selectionMode is off (operator-role guard)", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "no-sel" })],
+      selectionMode: false,
+    });
+    expect(screen.queryByTestId("findings-select-all")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("findings-select-row-no-sel"),
+    ).not.toBeInTheDocument();
+    // colcount stays at 7 (no tenant, no selection column).
+    expect(screen.getByTestId("findings-table")).toHaveAttribute(
+      "aria-colcount",
+      "7",
+    );
+  });
+
+  it("renders the leading select column when selectionMode is on (aria-colcount += 1)", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "with-sel" })],
+      selectionMode: true,
+      showTenantColumn: false,
+    });
+    expect(screen.getByTestId("findings-select-all")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("findings-select-row-with-sel"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("findings-table")).toHaveAttribute(
+      "aria-colcount",
+      "8",
+    );
+  });
+
+  it("toggling a row checkbox calls onToggleSelection with the row id (and does NOT open the drawer)", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    renderWithSelection({
+      items: [makeItem({ id: "row-1", title: "R1" })],
+      onToggleSelection: onToggle,
+    });
+
+    const cb = screen.getByTestId("findings-select-row-row-1");
+    await user.click(cb);
+    expect(onToggle).toHaveBeenCalledWith("row-1");
+    // The drawer must NOT have opened — checkbox swallows the click so
+    // toggling selection doesn't also navigate the operator into details.
+    expect(screen.queryByTestId("findings-drawer")).not.toBeInTheDocument();
+  });
+
+  it("header tri-state: 'none' → checkbox unchecked + indeterminate=false", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "a" }), makeItem({ id: "b" })],
+      selected: new Set(),
+    });
+    const header = screen.getByTestId("findings-select-all") as HTMLInputElement;
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(false);
+    expect(header.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("header tri-state: 'some' → indeterminate=true + aria-checked='mixed'", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "a" }), makeItem({ id: "b" })],
+      selected: new Set(["a"]),
+    });
+    const header = screen.getByTestId("findings-select-all") as HTMLInputElement;
+    expect(header.checked).toBe(false);
+    expect(header.indeterminate).toBe(true);
+    expect(header.getAttribute("aria-checked")).toBe("mixed");
+  });
+
+  it("header tri-state: 'all' → checked=true + indeterminate=false", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "a" }), makeItem({ id: "b" })],
+      selected: new Set(["a", "b"]),
+    });
+    const header = screen.getByTestId("findings-select-all") as HTMLInputElement;
+    expect(header.checked).toBe(true);
+    expect(header.indeterminate).toBe(false);
+  });
+
+  it("clicking the header checkbox calls onToggleAll with the full set of currently-visible ids", async () => {
+    const user = userEvent.setup();
+    const onToggleAll = vi.fn();
+    renderWithSelection({
+      items: [
+        makeItem({ id: "a", ssvc_action: "act" }),
+        makeItem({ id: "b" }),
+      ],
+      onToggleAll,
+    });
+
+    await user.click(screen.getByTestId("findings-select-all"));
+
+    expect(onToggleAll).toHaveBeenCalledTimes(1);
+    const visible = onToggleAll.mock.calls[0][0] as ReadonlyArray<string>;
+    // Order doesn't matter for the parent's logic, but every visible id must be present.
+    expect(visible).toEqual(expect.arrayContaining(["a", "b"]));
+    expect(visible).toHaveLength(2);
+  });
+
+  it("Esc inside the table clears the selection via onClearSelection (only when selection > 0)", async () => {
+    const user = userEvent.setup();
+    const onClearSelection = vi.fn();
+    renderWithSelection({
+      items: [makeItem({ id: "a" })],
+      selected: new Set(["a"]),
+      onClearSelection,
+    });
+    const table = screen.getByTestId("findings-table");
+    table.focus();
+    await user.keyboard("{Escape}");
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("each checkbox carries an sr-only label so AT users get spoken context", () => {
+    renderWithSelection({
+      items: [makeItem({ id: "labelled-row", title: "Labelled" })],
+    });
+    expect(
+      screen.getByText("Выбрать все видимые findings"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Выбрать запись labelled-row"),
+    ).toBeInTheDocument();
+  });
+});

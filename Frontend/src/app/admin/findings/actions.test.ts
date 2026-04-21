@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AdminFindingsError } from "@/lib/adminFindings";
+import {
+  AdminFindingsError,
+  BulkFindingsActionError,
+  type BulkFindingTarget,
+} from "@/lib/adminFindings";
 import type { ServerAdminSession } from "@/services/admin/serverSession";
 
 const callAdminBackendJson = vi.fn();
@@ -13,10 +17,17 @@ vi.mock("@/services/admin/serverSession", () => ({
   getServerAdminSession: () => sessionMock(),
 }));
 
-import { listAdminFindingsAction } from "./actions";
+import {
+  bulkMarkFalsePositiveFindingsAction,
+  bulkSuppressFindingsAction,
+  listAdminFindingsAction,
+} from "./actions";
 
 const SAMPLE_TENANT = "00000000-0000-0000-0000-000000000001";
 const OTHER_TENANT = "00000000-0000-0000-0000-000000000002";
+const FINDING_A = "11111111-1111-1111-1111-111111111111";
+const FINDING_B = "22222222-2222-2222-2222-222222222222";
+const FINDING_C = "33333333-3333-3333-3333-333333333333";
 
 function okEnvelope(items: unknown[] = []) {
   return {
@@ -290,5 +301,360 @@ describe("listAdminFindingsAction — error taxonomy (no internal leaks)", () =>
       expect(e).toBeInstanceOf(AdminFindingsError);
       expect(String(e)).not.toMatch(/stack trace|views\.py/);
     }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk findings actions (T21)
+// ────────────────────────────────────────────────────────────────────────────
+
+function bulkOk(overrides: {
+  suppressed_count?: number;
+  skipped_already_suppressed_count?: number;
+  not_found_count?: number;
+  audit_id?: string;
+  results?: Array<{
+    finding_id: string;
+    status: "suppressed" | "skipped_already_suppressed" | "not_found";
+  }>;
+} = {}) {
+  return {
+    ok: true as const,
+    status: 200,
+    data: {
+      suppressed_count: overrides.suppressed_count ?? 1,
+      skipped_already_suppressed_count:
+        overrides.skipped_already_suppressed_count ?? 0,
+      not_found_count: overrides.not_found_count ?? 0,
+      audit_id: overrides.audit_id ?? "audit-1",
+      results: overrides.results ?? [
+        { finding_id: FINDING_A, status: "suppressed" },
+      ],
+    },
+  };
+}
+
+describe("bulkSuppressFindingsAction — RBAC + identity propagation (T21)", () => {
+  it("operator role is rejected with BulkFindingsActionError('forbidden') and never reaches the backend", async () => {
+    sessionMock.mockResolvedValue({
+      role: "operator",
+      tenantId: SAMPLE_TENANT,
+      subject: "admin_console:operator",
+    });
+
+    await expect(
+      bulkSuppressFindingsAction({
+        targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+        reason: "duplicate",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("unauthenticated session is rejected with BulkFindingsActionError('unauthorized')", async () => {
+    sessionMock.mockResolvedValue({
+      role: null,
+      tenantId: null,
+      subject: "anon",
+    });
+
+    await expect(
+      bulkSuppressFindingsAction({
+        targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+        reason: "duplicate",
+      }),
+    ).rejects.toBeInstanceOf(BulkFindingsActionError);
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("admin role: forbids cross-tenant selection (every id must belong to session tenant)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "admin",
+      tenantId: SAMPLE_TENANT,
+      subject: "admin_console:admin",
+    });
+
+    await expect(
+      bulkSuppressFindingsAction({
+        targets: [
+          { id: FINDING_A, tenant_id: SAMPLE_TENANT },
+          { id: FINDING_B, tenant_id: OTHER_TENANT },
+        ],
+        reason: "duplicate",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("admin role with no session-bound tenant is rejected as forbidden", async () => {
+    sessionMock.mockResolvedValue({
+      role: "admin",
+      tenantId: null,
+      subject: "admin_console:admin",
+    });
+
+    await expect(
+      bulkSuppressFindingsAction({
+        targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+        reason: "duplicate",
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("super-admin: fans out one POST per tenant when selection is cross-tenant", async () => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: "admin_console:super-admin",
+    });
+    callAdminBackendJson
+      .mockResolvedValueOnce(
+        bulkOk({
+          suppressed_count: 1,
+          audit_id: "audit-T1",
+          results: [{ finding_id: FINDING_A, status: "suppressed" }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        bulkOk({
+          suppressed_count: 1,
+          audit_id: "audit-T2",
+          results: [{ finding_id: FINDING_B, status: "suppressed" }],
+        }),
+      );
+
+    const result = await bulkSuppressFindingsAction({
+      targets: [
+        { id: FINDING_A, tenant_id: SAMPLE_TENANT },
+        { id: FINDING_B, tenant_id: OTHER_TENANT },
+      ],
+      reason: "duplicate",
+      comment: "T21 cross-tenant test",
+    });
+
+    expect(callAdminBackendJson).toHaveBeenCalledTimes(2);
+    expect(result.affected_count).toBe(2);
+    expect(result.audit_ids).toEqual(
+      expect.arrayContaining(["audit-T1", "audit-T2"]),
+    );
+    expect(result.failure_reason_taxonomy).toBeNull();
+
+    // Both calls must include the matching X-Admin-Tenant + comment-bearing reason.
+    const headers0 = (callAdminBackendJson.mock.calls[0] as [
+      string,
+      { headers: Record<string, string>; body: string },
+    ])[1].headers;
+    const body0 = JSON.parse(
+      (callAdminBackendJson.mock.calls[0] as [
+        string,
+        { headers: Record<string, string>; body: string },
+      ])[1].body,
+    );
+    expect(headers0["X-Admin-Tenant"]).toBe(SAMPLE_TENANT);
+    expect(body0.tenant_id).toBe(SAMPLE_TENANT);
+    expect(body0.finding_ids).toEqual([FINDING_A]);
+    expect(body0.reason).toContain("duplicate");
+    expect(body0.reason).toContain("T21 cross-tenant test");
+  });
+
+  it("propagates X-Admin-Role + X-Operator-Subject from the session, never the caller", async () => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: "admin_console:super-admin",
+    });
+    callAdminBackendJson.mockResolvedValueOnce(bulkOk());
+
+    await bulkSuppressFindingsAction({
+      targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+      reason: "risk_accepted",
+    });
+
+    const init = (callAdminBackendJson.mock.calls[0] as [
+      string,
+      { headers: Record<string, string> },
+    ])[1];
+    expect(init.headers["X-Admin-Role"]).toBe("super-admin");
+    expect(init.headers["X-Operator-Subject"]).toBe(
+      "admin_console:super-admin",
+    );
+  });
+});
+
+describe("bulkSuppressFindingsAction — input validation", () => {
+  beforeEach(() => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: "admin_console:super-admin",
+    });
+  });
+
+  it("rejects an empty selection without hitting the backend", async () => {
+    await expect(
+      bulkSuppressFindingsAction({ targets: [], reason: "duplicate" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("rejects a selection larger than 100 items (matches backend cap)", async () => {
+    const targets: BulkFindingTarget[] = Array.from({ length: 101 }).map(
+      (_, i) => ({
+        id: `00000000-0000-0000-0000-${String(i + 1).padStart(12, "0")}`,
+        tenant_id: SAMPLE_TENANT,
+      }),
+    );
+    await expect(
+      bulkSuppressFindingsAction({ targets, reason: "duplicate" }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown reason string outside the closed taxonomy", async () => {
+    await expect(
+      bulkSuppressFindingsAction({
+        targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+        // @ts-expect-error — feeding an off-taxonomy literal on purpose.
+        reason: "make_it_disappear",
+      }),
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("filters out non-UUID ids pre-flight (skipped go straight to failed_ids)", async () => {
+    callAdminBackendJson.mockResolvedValueOnce(
+      bulkOk({
+        suppressed_count: 1,
+        results: [{ finding_id: FINDING_A, status: "suppressed" }],
+      }),
+    );
+
+    const result = await bulkSuppressFindingsAction({
+      targets: [
+        { id: FINDING_A, tenant_id: SAMPLE_TENANT },
+        { id: "not-a-uuid", tenant_id: SAMPLE_TENANT },
+      ],
+      reason: "duplicate",
+    });
+
+    expect(result.failed_ids).toContain("not-a-uuid");
+    // The good id still went through.
+    const body = JSON.parse(
+      (callAdminBackendJson.mock.calls[0] as [
+        string,
+        { body: string },
+      ])[1].body,
+    );
+    expect(body.finding_ids).toEqual([FINDING_A]);
+  });
+});
+
+describe("bulkSuppressFindingsAction — partial / total backend failures", () => {
+  beforeEach(() => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: "admin_console:super-admin",
+    });
+  });
+
+  it("aggregates per-tenant `not_found` items into failed_ids", async () => {
+    callAdminBackendJson.mockResolvedValueOnce(
+      bulkOk({
+        suppressed_count: 1,
+        not_found_count: 1,
+        results: [
+          { finding_id: FINDING_A, status: "suppressed" },
+          { finding_id: FINDING_B, status: "not_found" },
+        ],
+      }),
+    );
+
+    const result = await bulkSuppressFindingsAction({
+      targets: [
+        { id: FINDING_A, tenant_id: SAMPLE_TENANT },
+        { id: FINDING_B, tenant_id: SAMPLE_TENANT },
+      ],
+      reason: "duplicate",
+    });
+
+    expect(result.affected_count).toBe(1);
+    expect(result.failed_ids).toContain(FINDING_B);
+    expect(result.failure_reason_taxonomy).toBeNull();
+  });
+
+  it("treats a tenant-level 403 as a complete failure for that tenant (failure_reason_taxonomy=forbidden)", async () => {
+    callAdminBackendJson
+      .mockResolvedValueOnce({ ok: false, status: 403, data: {} })
+      .mockResolvedValueOnce(bulkOk());
+
+    const result = await bulkSuppressFindingsAction({
+      targets: [
+        { id: FINDING_A, tenant_id: SAMPLE_TENANT },
+        { id: FINDING_C, tenant_id: OTHER_TENANT },
+      ],
+      reason: "duplicate",
+    });
+
+    expect(result.failure_reason_taxonomy).toBe("forbidden");
+    expect(result.failed_ids).toContain(FINDING_A);
+  });
+
+  it("translates malformed envelope (200 OK, wrong shape) into server_error in failure_reason_taxonomy", async () => {
+    callAdminBackendJson.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { totally: "wrong" },
+    });
+
+    const result = await bulkSuppressFindingsAction({
+      targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+      reason: "duplicate",
+    });
+
+    expect(result.failure_reason_taxonomy).toBe("server_error");
+    expect(result.affected_count).toBe(0);
+    expect(result.failed_ids).toContain(FINDING_A);
+  });
+});
+
+describe("bulkMarkFalsePositiveFindingsAction (T21)", () => {
+  it("pins the backend reason to the literal `false_positive` (semantic distinct from generic suppress)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: "admin_console:super-admin",
+    });
+    callAdminBackendJson.mockResolvedValueOnce(bulkOk());
+
+    await bulkMarkFalsePositiveFindingsAction({
+      targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+      comment: "auto-triage rule",
+    });
+
+    const body = JSON.parse(
+      (callAdminBackendJson.mock.calls[0] as [
+        string,
+        { body: string },
+      ])[1].body,
+    );
+    expect(body.reason).toMatch(/^false_positive/);
+    expect(body.reason).toContain("auto-triage rule");
+  });
+
+  it("inherits the same operator/role gate (operator → forbidden, no backend call)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "operator",
+      tenantId: SAMPLE_TENANT,
+      subject: "admin_console:operator",
+    });
+
+    await expect(
+      bulkMarkFalsePositiveFindingsAction({
+        targets: [{ id: FINDING_A, tenant_id: SAMPLE_TENANT }],
+      }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
   });
 });

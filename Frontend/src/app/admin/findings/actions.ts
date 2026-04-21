@@ -22,13 +22,26 @@ import { callAdminBackendJson } from "@/lib/serverAdminBackend";
 import {
   AdminFindingsError,
   AdminFindingsListResponseSchema,
+  BackendBulkSuppressResponseSchema,
+  BulkFindingsActionError,
+  buildBulkSuppressReason,
+  groupBulkTargetsByTenant,
+  isBulkSuppressReason,
+  isUuid,
+  MAX_BULK_FINDING_IDS,
   statusToAdminFindingsCode,
+  statusToBulkFailureCode,
   type AdminFindingsListResponse,
+  type BulkActionResult,
+  type BulkFailureCode,
+  type BulkFindingTarget,
+  type BulkSuppressReason,
   type ListAdminFindingsParams,
 } from "@/lib/adminFindings";
 import { getServerAdminSession } from "@/services/admin/serverSession";
 
 const FINDINGS_PATH = "/findings";
+const BULK_SUPPRESS_PATH = "/findings/bulk-suppress";
 
 /**
  * Build the FastAPI-side query string from a typed parameter bag. The wire
@@ -164,4 +177,230 @@ export async function listAdminFindingsAction(
     throw new AdminFindingsError("server_error", 200);
   }
   return parsed.data;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk findings actions (T21)
+//
+// Backend contract: ONLY `POST /admin/findings/bulk-suppress` is wired today.
+// Both "suppress" and "mark false positive" funnel through this endpoint —
+// the difference is the `reason` payload (operator taxonomy vs. fixed
+// `false_positive` literal) so audit logs can distinguish them.
+//
+// Phase-2 actions (`escalate`, `attach_to_cve`) have NO backend support yet —
+// the UI surfaces them as disabled buttons with deferred-issue tooltips
+// (ISS-T21-001 / ISS-T21-002). Server actions for them are intentionally
+// omitted to avoid silent no-ops.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve the operator session and refuse the bulk write upfront for
+ * roles that have no business mutating findings (`operator`) or whose
+ * session is not signed in (`null`). Returns the role + subject the
+ * caller will forward to the backend.
+ */
+async function resolveBulkSession(): Promise<{
+  role: "admin" | "super-admin";
+  tenantId: string | null;
+  subject: string;
+}> {
+  const session = await getServerAdminSession();
+  if (session.role === null) {
+    throw new BulkFindingsActionError("unauthorized", 401);
+  }
+  if (session.role === "operator") {
+    throw new BulkFindingsActionError("forbidden", 403);
+  }
+  return {
+    role: session.role,
+    tenantId: session.tenantId,
+    subject: session.subject,
+  };
+}
+
+/**
+ * Pre-flight validation shared by every bulk action:
+ *   - reject empty / over-cap selections (hard backend limit is 100);
+ *   - reject targets whose ids/tenants are not UUIDs (defensive — the
+ *     browser shouldn't be able to feed garbage into a write path);
+ *   - for `admin` role, refuse cross-tenant selections outright (the
+ *     operator can only act on their bound tenant).
+ */
+function validateAndGroup(
+  role: "admin" | "super-admin",
+  sessionTenantId: string | null,
+  targets: ReadonlyArray<BulkFindingTarget>,
+): {
+  grouped: ReadonlyMap<string, ReadonlyArray<string>>;
+  preFlightSkipped: ReadonlyArray<string>;
+} {
+  if (targets.length === 0) {
+    throw new BulkFindingsActionError("validation_failed", 400);
+  }
+  if (targets.length > MAX_BULK_FINDING_IDS) {
+    throw new BulkFindingsActionError("validation_failed", 400);
+  }
+
+  const { grouped, skipped } = groupBulkTargetsByTenant(targets);
+
+  if (role === "admin") {
+    if (sessionTenantId === null || !isUuid(sessionTenantId)) {
+      throw new BulkFindingsActionError("forbidden", 403);
+    }
+    // Admin: every selected item must belong to the session-bound tenant.
+    // We never send another tenant's ids to the backend, even by accident.
+    for (const tid of grouped.keys()) {
+      if (tid !== sessionTenantId) {
+        throw new BulkFindingsActionError("forbidden", 403);
+      }
+    }
+  }
+
+  return { grouped, preFlightSkipped: skipped };
+}
+
+/**
+ * Issue one `POST /admin/findings/bulk-suppress` per tenant in the grouped
+ * map and aggregate the per-tenant envelopes into a single
+ * {@link BulkActionResult}. The first tenant-level failure wins for
+ * `failure_reason_taxonomy`; partial failures across other tenants still
+ * surface in `failed_ids`.
+ */
+async function fanOutBulkSuppress(
+  grouped: ReadonlyMap<string, ReadonlyArray<string>>,
+  reasonString: string,
+  role: "admin" | "super-admin",
+  subject: string,
+  preFlightSkipped: ReadonlyArray<string>,
+): Promise<BulkActionResult> {
+  let totalSuppressed = 0;
+  let totalSkipped = 0;
+  const failedIds: string[] = [...preFlightSkipped];
+  const auditIds: string[] = [];
+  let firstFailureCode: BulkFailureCode | null = null;
+
+  for (const [tenantId, ids] of grouped) {
+    if (ids.length === 0) continue;
+
+    const result = await callAdminBackendJson<unknown>(BULK_SUPPRESS_PATH, {
+      method: "POST",
+      headers: {
+        "X-Admin-Role": role,
+        "X-Admin-Tenant": tenantId,
+        "X-Operator-Subject": subject,
+      },
+      body: JSON.stringify({
+        tenant_id: tenantId,
+        finding_ids: ids,
+        reason: reasonString,
+      }),
+    });
+
+    if (!result.ok) {
+      const code = statusToBulkFailureCode(result.status);
+      if (firstFailureCode === null) firstFailureCode = code;
+      // The backend wrote nothing for this tenant — every selected id is a
+      // "failed" id from the operator's POV.
+      failedIds.push(...ids);
+      continue;
+    }
+
+    const parsed = BackendBulkSuppressResponseSchema.safeParse(result.data);
+    if (!parsed.success) {
+      if (firstFailureCode === null) firstFailureCode = "server_error";
+      failedIds.push(...ids);
+      continue;
+    }
+
+    totalSuppressed += parsed.data.suppressed_count;
+    totalSkipped += parsed.data.skipped_already_suppressed_count;
+    auditIds.push(parsed.data.audit_id);
+    for (const item of parsed.data.results) {
+      if (item.status === "not_found") {
+        failedIds.push(item.finding_id);
+      }
+    }
+  }
+
+  return {
+    affected_count: totalSuppressed,
+    skipped_count: totalSkipped,
+    failed_ids: failedIds,
+    failure_reason_taxonomy: firstFailureCode,
+    audit_ids: auditIds,
+  };
+}
+
+export type BulkSuppressFindingsParams = {
+  readonly targets: ReadonlyArray<BulkFindingTarget>;
+  readonly reason: BulkSuppressReason;
+  readonly comment?: string | null;
+};
+
+/**
+ * Operator-driven suppression (open taxonomy of business reasons). The
+ * action ALWAYS funnels through the backend's `bulk-suppress` endpoint
+ * because that is the only mutation primitive available today; the
+ * `reason` string carries the closed taxonomy + optional comment so audit
+ * trails can distinguish it from a `mark_false_positive` write.
+ */
+export async function bulkSuppressFindingsAction(
+  params: BulkSuppressFindingsParams,
+): Promise<BulkActionResult> {
+  if (!isBulkSuppressReason(params.reason)) {
+    throw new BulkFindingsActionError("validation_failed", 400);
+  }
+
+  const { role, tenantId, subject } = await resolveBulkSession();
+  const { grouped, preFlightSkipped } = validateAndGroup(
+    role,
+    tenantId,
+    params.targets,
+  );
+
+  const reasonString = buildBulkSuppressReason(params.reason, params.comment);
+
+  return fanOutBulkSuppress(
+    grouped,
+    reasonString,
+    role,
+    subject,
+    preFlightSkipped,
+  );
+}
+
+export type BulkMarkFalsePositiveParams = {
+  readonly targets: ReadonlyArray<BulkFindingTarget>;
+  readonly comment?: string | null;
+};
+
+/**
+ * "Mark as false positive" — semantically distinct from a generic
+ * suppression because it asserts the finding is wrong, not just
+ * deprioritised. We pin the backend `reason` to the literal
+ * `"false_positive"` so downstream tooling (audit log filter, dedup
+ * dashboard) can route it differently.
+ */
+export async function bulkMarkFalsePositiveFindingsAction(
+  params: BulkMarkFalsePositiveParams,
+): Promise<BulkActionResult> {
+  const { role, tenantId, subject } = await resolveBulkSession();
+  const { grouped, preFlightSkipped } = validateAndGroup(
+    role,
+    tenantId,
+    params.targets,
+  );
+
+  const reasonString = buildBulkSuppressReason(
+    "false_positive",
+    params.comment,
+  );
+
+  return fanOutBulkSuppress(
+    grouped,
+    reasonString,
+    role,
+    subject,
+    preFlightSkipped,
+  );
 }

@@ -50,9 +50,15 @@ vi.mock("next/navigation", () => ({
 }));
 
 const listAdminFindingsAction = vi.fn();
+const bulkSuppressFindingsAction = vi.fn();
+const bulkMarkFalsePositiveFindingsAction = vi.fn();
 vi.mock("./actions", () => ({
   listAdminFindingsAction: (...args: unknown[]) =>
     listAdminFindingsAction(...args),
+  bulkSuppressFindingsAction: (...args: unknown[]) =>
+    bulkSuppressFindingsAction(...args),
+  bulkMarkFalsePositiveFindingsAction: (...args: unknown[]) =>
+    bulkMarkFalsePositiveFindingsAction(...args),
 }));
 
 const listTenants = vi.fn();
@@ -196,6 +202,8 @@ beforeEach(() => {
       "argus.admin.role=; path=/; max-age=0; SameSite=Strict";
   }
   listAdminFindingsAction.mockReset();
+  bulkSuppressFindingsAction.mockReset();
+  bulkMarkFalsePositiveFindingsAction.mockReset();
   listTenants.mockReset();
   downloadFindingsExport.mockReset();
   listTenants.mockResolvedValue([]);
@@ -464,5 +472,234 @@ describe("AdminFindingsClient — export surface (S1-5)", () => {
     expect(
       screen.queryByTestId("findings-export-popover"),
     ).not.toBeInTheDocument();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Bulk findings actions integration (T21)
+// ────────────────────────────────────────────────────────────────────────────
+
+const TENANT_A = "00000000-0000-0000-0000-000000000001";
+const TENANT_B = "00000000-0000-0000-0000-000000000002";
+const FIND_A1 = "11111111-1111-1111-1111-111111111111";
+const FIND_A2 = "22222222-2222-2222-2222-222222222222";
+const FIND_B1 = "33333333-3333-3333-3333-333333333333";
+
+describe("AdminFindingsClient — bulk actions (T21)", () => {
+  it("toolbar stays hidden until at least one row is selected", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([
+        makeItem({ id: FIND_A1, tenant_id: TENANT_A, title: "row a" }),
+      ]),
+    );
+    renderClient();
+
+    await screen.findByText("row a");
+    expect(
+      screen.queryByTestId("bulk-actions-toolbar"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selecting a row reveals the toolbar with the right count", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([
+        makeItem({ id: FIND_A1, tenant_id: TENANT_A, title: "row a" }),
+        makeItem({ id: FIND_A2, tenant_id: TENANT_A, title: "row b" }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByText("row a");
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+
+    expect(
+      await screen.findByTestId("bulk-actions-toolbar"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-selection-count")).toHaveTextContent(
+      "Выбрано 1 findings",
+    );
+  });
+
+  it("running 'Suppress' calls bulkSuppressFindingsAction with grouped tenant targets and shows the success banner", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([
+        makeItem({ id: FIND_A1, tenant_id: TENANT_A, title: "row a1" }),
+        makeItem({ id: FIND_B1, tenant_id: TENANT_B, title: "row b1" }),
+      ]),
+    );
+    bulkSuppressFindingsAction.mockResolvedValue({
+      affected_count: 2,
+      skipped_count: 0,
+      failed_ids: [],
+      failure_reason_taxonomy: null,
+      audit_ids: ["audit-1", "audit-2"],
+    });
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByText("row a1");
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_B1}`));
+    await user.click(screen.getByTestId("bulk-action-suppress"));
+
+    await user.selectOptions(
+      await screen.findByTestId("bulk-suppress-reason"),
+      "duplicate",
+    );
+    await user.click(screen.getByTestId("bulk-action-dialog-confirm"));
+
+    await waitFor(() =>
+      expect(bulkSuppressFindingsAction).toHaveBeenCalledTimes(1),
+    );
+    const args = bulkSuppressFindingsAction.mock.calls[0][0] as {
+      targets: Array<{ id: string; tenant_id: string }>;
+      reason: string;
+    };
+    const ids = args.targets.map((t) => t.id);
+    expect(ids).toEqual(expect.arrayContaining([FIND_A1, FIND_B1]));
+    const tenants = args.targets.map((t) => t.tenant_id);
+    expect(tenants).toEqual(expect.arrayContaining([TENANT_A, TENANT_B]));
+    expect(args.reason).toBe("duplicate");
+
+    const banner = await screen.findByTestId("bulk-action-banner");
+    expect(banner.getAttribute("data-tone")).toBe("success");
+    expect(banner.textContent ?? "").toMatch(/Применено к 2 findings/);
+  });
+
+  it("partial-success response renders a yellow warning banner with the breakdown", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([
+        makeItem({ id: FIND_A1, tenant_id: TENANT_A }),
+        makeItem({ id: FIND_A2, tenant_id: TENANT_A }),
+      ]),
+    );
+    bulkSuppressFindingsAction.mockResolvedValue({
+      affected_count: 1,
+      skipped_count: 0,
+      failed_ids: [FIND_A2],
+      failure_reason_taxonomy: null,
+      audit_ids: ["audit-x"],
+    });
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByTestId(`findings-row-${FIND_A1}`);
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A2}`));
+    await user.click(screen.getByTestId("bulk-action-suppress"));
+
+    await user.selectOptions(
+      await screen.findByTestId("bulk-suppress-reason"),
+      "duplicate",
+    );
+    await user.click(screen.getByTestId("bulk-action-dialog-confirm"));
+
+    const banner = await screen.findByTestId("bulk-action-banner");
+    expect(banner.getAttribute("data-tone")).toBe("warning");
+    expect(banner.textContent ?? "").toMatch(/Применено к 1 из 2/);
+    expect(banner.textContent ?? "").toMatch(/не применено к 1/);
+  });
+
+  it("server-action failure (forbidden) renders a closed-taxonomy error banner inside the dialog", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([makeItem({ id: FIND_A1, tenant_id: TENANT_A })]),
+    );
+    const { BulkFindingsActionError } = await import(
+      "@/lib/adminFindings"
+    );
+    bulkSuppressFindingsAction.mockRejectedValue(
+      new BulkFindingsActionError("forbidden", 403),
+    );
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByTestId(`findings-row-${FIND_A1}`);
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+    await user.click(screen.getByTestId("bulk-action-suppress"));
+
+    await user.selectOptions(
+      await screen.findByTestId("bulk-suppress-reason"),
+      "duplicate",
+    );
+    await user.click(screen.getByTestId("bulk-action-dialog-confirm"));
+
+    const err = await screen.findByTestId("bulk-action-dialog-error");
+    expect(err).toHaveAttribute("role", "alert");
+    expect(err.textContent ?? "").toMatch(/Недостаточно прав/);
+    // Closed-taxonomy: must NOT echo HTTP details / stack traces.
+    expect(err.textContent ?? "").not.toMatch(/403|stack|forbidden/i);
+  });
+
+  it("'mark_false_positive' funnels through bulkMarkFalsePositiveFindingsAction with a confirmation checkbox", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([makeItem({ id: FIND_A1, tenant_id: TENANT_A })]),
+    );
+    bulkMarkFalsePositiveFindingsAction.mockResolvedValue({
+      affected_count: 1,
+      skipped_count: 0,
+      failed_ids: [],
+      failure_reason_taxonomy: null,
+      audit_ids: ["audit-fp"],
+    });
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByTestId(`findings-row-${FIND_A1}`);
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+    await user.click(screen.getByTestId("bulk-action-mark_false_positive"));
+
+    const confirmCb = await screen.findByTestId("bulk-fp-confirm");
+    await user.click(confirmCb);
+    await user.click(screen.getByTestId("bulk-action-dialog-confirm"));
+
+    await waitFor(() =>
+      expect(bulkMarkFalsePositiveFindingsAction).toHaveBeenCalledTimes(1),
+    );
+    const banner = await screen.findByTestId("bulk-action-banner");
+    expect(banner.getAttribute("data-tone")).toBe("success");
+  });
+
+  it("admin-no-tenant view (S1-6) does NOT render the bulk toolbar or selection checkboxes", async () => {
+    setRole("admin");
+    renderClient();
+
+    expect(
+      await screen.findByTestId("findings-admin-no-tenant"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("bulk-actions-toolbar"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("findings-select-all")).not.toBeInTheDocument();
+  });
+
+  it("'Снять выбор' clears the selection and hides the toolbar", async () => {
+    setRole("super-admin");
+    listAdminFindingsAction.mockResolvedValue(
+      pageOf([
+        makeItem({ id: FIND_A1, tenant_id: TENANT_A, title: "clear me" }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderClient();
+
+    await screen.findByText("clear me");
+    await user.click(screen.getByTestId(`findings-select-row-${FIND_A1}`));
+    expect(
+      await screen.findByTestId("bulk-actions-toolbar"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("bulk-action-clear"));
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("bulk-actions-toolbar"),
+      ).not.toBeInTheDocument(),
+    );
   });
 });
