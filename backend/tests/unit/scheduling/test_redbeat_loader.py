@@ -327,3 +327,66 @@ class TestSyncAllFromDb:
         ):
             count = await sync_all_from_db(session)
         assert count == 0
+
+
+# ===========================================================================
+# Celery beat_init signal — ARG-056 / S1.4
+# ===========================================================================
+
+
+class TestBeatInitSignalRegistration:
+    """The ``beat_init`` signal handler hydrates RedBeat from the DB at
+    beat-process startup so a restart never loses schedules. We assert
+    BOTH that the handler is registered AND that firing the signal
+    invokes ``sync_all_from_db``."""
+
+    def test_beat_init_signal_handler_is_registered(self) -> None:
+        """Importing :mod:`src.celery_app` must register a beat_init
+        receiver (the T33 hydration handler)."""
+        from celery.signals import beat_init
+
+        # Ensure the handler module has been imported at least once so
+        # the ``@beat_init.connect`` decorator has registered.
+        import src.celery_app  # noqa: F401
+
+        # ``beat_init.receivers`` is a list of (uid, weakref) tuples; a
+        # non-empty list confirms at least one handler is wired up.
+        assert len(beat_init.receivers) >= 1
+
+    def test_beat_init_signal_invokes_sync_all_from_db(self) -> None:
+        """Firing ``beat_init`` must reach ``sync_all_from_db`` via the
+        registered handler. We patch the loader and the session factory
+        directly via :func:`patch.object` (rather than dotted-path
+        ``monkeypatch.setattr``) so the test is independent of test
+        ordering — pytest's dotted-path resolver fails when intermediate
+        packages are not yet registered as attributes on their parent."""
+        from contextlib import asynccontextmanager
+
+        from celery.signals import beat_init
+
+        # Force the handler to register and the patch targets to exist.
+        import src.celery_app  # noqa: F401  — registers the handler
+        from src.db import session as session_mod
+        from src.scheduling import redbeat_loader as loader_mod
+
+        called: dict[str, bool] = {"sync": False}
+
+        async def fake_sync_all_from_db(_session: Any) -> int:
+            called["sync"] = True
+            return 0
+
+        @asynccontextmanager
+        async def _fake_session_cm() -> Any:
+            yield AsyncMock()
+
+        with (
+            patch.object(loader_mod, "sync_all_from_db", fake_sync_all_from_db),
+            patch.object(
+                session_mod,
+                "async_session_factory",
+                lambda: _fake_session_cm(),
+            ),
+        ):
+            beat_init.send(sender=None)
+
+        assert called["sync"] is True

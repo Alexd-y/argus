@@ -562,6 +562,26 @@ SCAN_SCHEDULE_RUN_NOW_REASON_MIN: int = 10
 SCAN_SCHEDULE_RUN_NOW_REASON_MAX: int = 500
 
 
+def _strip_url_query_and_fragment(value: str | None) -> str | None:
+    """Strip ``?query`` and ``#fragment`` from a target URL (S2.2).
+
+    Persisted ``target_url`` values flow into AuditLog rows and Celery
+    task arguments. Query strings and fragments commonly carry PII or
+    secrets (``?token=...``, ``?email=...``), and dropping them at the
+    schema boundary keeps every downstream consumer safe-by-default.
+    The host + path are sufficient for every supported scan tool.
+
+    Returns ``None`` when ``value`` is ``None`` (PATCH-style omission)
+    so the caller's optional-field semantics remain unchanged.
+    """
+    if value is None:
+        return None
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(value)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
 class ScanScheduleCreateRequest(BaseModel):
     """POST /admin/scan-schedules — create a recurring scheduled scan.
 
@@ -592,6 +612,15 @@ class ScanScheduleCreateRequest(BaseModel):
     maintenance_window_cron: str | None = Field(
         default=None, max_length=SCAN_SCHEDULE_CRON_MAX
     )
+
+    @field_validator("target_url")
+    @classmethod
+    def _normalize_target_url(cls, value: str) -> str:
+        normalized = _strip_url_query_and_fragment(value)
+        # Pydantic only invokes this validator when ``value`` is non-None
+        # (the field is required), so ``normalized`` cannot be None here.
+        assert normalized is not None
+        return normalized
 
 
 class ScanScheduleUpdateRequest(BaseModel):
@@ -625,6 +654,11 @@ class ScanScheduleUpdateRequest(BaseModel):
     maintenance_window_cron: str | None = Field(
         default=None, max_length=SCAN_SCHEDULE_CRON_MAX
     )
+
+    @field_validator("target_url")
+    @classmethod
+    def _normalize_target_url(cls, value: str | None) -> str | None:
+        return _strip_url_query_and_fragment(value)
 
 
 class ScanScheduleResponse(BaseModel):

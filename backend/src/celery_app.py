@@ -13,7 +13,7 @@ import time
 from typing import Any
 
 from celery import Celery
-from celery.signals import task_failure, task_postrun, task_prerun
+from celery.signals import beat_init, task_failure, task_postrun, task_prerun
 
 from src.core.config import settings
 from src.core.observability import record_celery_task
@@ -122,6 +122,49 @@ try:
     apply_beat_schedule(app)
 except Exception:  # pragma: no cover — defensive
     _logger.debug("celery.beat_schedule.setup_failed", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# T33 / ARG-056 — RedBeat hydration on beat startup.
+#
+# The CRUD layer (``admin_schedules``) writes scan_schedule rows AND syncs
+# them to RedBeat. If the beat process restarts, RedBeat's Redis keyspace
+# is rebuilt only as the next CRUD mutation lands on each row — meaning
+# a fresh beat process can sit idle for hours after a restart. The
+# ``beat_init`` signal fires once per beat-process startup; we use it to
+# reconcile the entire ``scan_schedules`` table into RedBeat from the
+# authoritative DB.
+#
+# The handler is intentionally fault-tolerant:
+#
+# * ``sync_all_from_db`` already swallows per-row failures and logs a
+#   structured warning; only an unrecoverable session-factory error
+#   would surface here, which we catch + log so beat still starts.
+# * ``asyncio.run`` is safe at this point — beat_init fires synchronously
+#   before any worker loop is running.
+# ---------------------------------------------------------------------------
+
+
+@beat_init.connect
+def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None:  # noqa: ARG001
+    """Rehydrate RedBeat from the DB on beat startup.
+
+    Idempotent — :func:`src.scheduling.redbeat_loader.sync_all_from_db`
+    upserts each row and tolerates Redis being unavailable. ARG-056 / T33.
+    """
+    import asyncio
+
+    from src.db.session import async_session_factory
+    from src.scheduling.redbeat_loader import sync_all_from_db
+
+    async def _run() -> None:
+        async with async_session_factory() as session:
+            await sync_all_from_db(session)
+
+    try:
+        asyncio.run(_run())
+    except Exception:
+        _logger.exception("celery.beat_init.redbeat_hydrate_failed")
 
 
 # ---------------------------------------------------------------------------

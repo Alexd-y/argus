@@ -37,6 +37,8 @@ from src.scheduling import scan_trigger
 from src.scheduling.cron_parser import CronValidationError
 from src.scheduling.scan_trigger import (
     DEFAULT_MAINTENANCE_WINDOW_DURATION_MINUTES,
+    EVENT_SKIPPED_EMERGENCY_STOP,
+    EVENT_SKIPPED_MAINTENANCE_WINDOW,
     _compute_next_run_at,
     _run_scheduled_scan_async,
     _should_skip_for_maintenance_window,
@@ -109,6 +111,10 @@ def _build_session_factory() -> tuple[MagicMock, MagicMock, AsyncMock]:
     """
     session = AsyncMock()
     session.commit = AsyncMock()
+    # T33 S2.1 — production calls ``session.add(audit_row)`` synchronously
+    # (real ``AsyncSession.add`` is sync). Override the auto-spawned
+    # AsyncMock so the test does not emit ``coroutine never awaited``.
+    session.add = MagicMock()
     factory = MagicMock(return_value=_AsyncSessionCM(session))
     engine = MagicMock()
     engine.dispose = AsyncMock()
@@ -349,7 +355,13 @@ class TestRunScheduledScanAsyncGates:
             "schedule_id": _SCHEDULE_ID,
         }
         dispatch_mock.assert_not_called()
-        session.commit.assert_not_awaited()
+        # T33 S2.1 — the maintenance-window skip path now writes a
+        # ``scan_schedule.skipped_maintenance_window`` AuditLog row in the
+        # already-open session and commits it. ``_dispatch_scan_phase`` is
+        # still NOT invoked (the early-return is what we care about); the
+        # commit is observed in TestSkipPathAuditEmission with row
+        # introspection.
+        assert session.commit.await_count == 1
 
 
 # ===========================================================================
@@ -515,3 +527,119 @@ class TestCeleryWrapper:
         assert captured["schedule_id"] == _SCHEDULE_ID
         assert captured["tenant_id"] == _TENANT_ID
         assert captured["fired_at"].tzinfo is timezone.utc
+
+
+# ===========================================================================
+# Skip-path audit emission — S2.1 / ARG-056
+# ===========================================================================
+
+
+class TestSkipPathAuditEmission:
+    """The kill-switch + maintenance-window skip branches must persist a
+    ``scan_schedule.skipped_*`` AuditLog row so operators can audit WHY
+    a scheduled scan didn't fire (logger.info alone may be sampled or
+    rotated out)."""
+
+    @pytest.mark.asyncio
+    async def test_kill_switch_blocked_writes_skipped_emergency_stop_audit(
+        self,
+    ) -> None:
+        """Kill-switch blocked path opens its own short-lived session and
+        inserts an ``AuditLog`` row with action ``scan_schedule.skipped_emergency_stop``."""
+        verdict = KillSwitchVerdict(
+            blocked=True,
+            scope=KillSwitchScope.GLOBAL,
+            reason="exercise",
+        )
+        captured_rows: list[Any] = []
+        audit_session = AsyncMock()
+        audit_session.add = MagicMock(side_effect=captured_rows.append)
+        audit_session.commit = AsyncMock()
+        audit_factory = MagicMock(return_value=_AsyncSessionCM(audit_session))
+
+        with (
+            _patch_kill_switch(verdict),
+            patch.object(
+                scan_trigger,
+                "async_session_factory",
+                audit_factory,
+            ),
+            patch.object(
+                scan_trigger, "create_task_engine_and_session"
+            ) as engine_factory_mock,
+            patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
+        ):
+            result = await _run_scheduled_scan_async(
+                schedule_id=_SCHEDULE_ID,
+                tenant_id=_TENANT_ID,
+                fired_at=_FIRED_AT,
+            )
+
+        assert result["status"] == "skipped_kill_switch"
+        engine_factory_mock.assert_not_called()
+        dispatch_mock.assert_not_called()
+        # Exactly one AuditLog row inserted.
+        assert len(captured_rows) == 1
+        row = captured_rows[0]
+        assert row.action == EVENT_SKIPPED_EMERGENCY_STOP
+        assert row.tenant_id == _TENANT_ID
+        assert row.resource_type == "scan_schedule"
+        assert row.resource_id == _SCHEDULE_ID
+        # Raw tenant_id MUST NOT appear in details — only the hash.
+        assert "tenant_id_hash" in row.details
+        assert _TENANT_ID not in str(row.details)
+        assert row.details["reason"] == "kill_switch_blocked"
+        assert row.details["verdict_reason"] == "exercise"
+        audit_session.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_maintenance_window_skip_writes_audit_using_open_session(
+        self,
+    ) -> None:
+        """Maintenance-window skip path reuses the already-open session
+        (it ran ``_load_schedule`` already) and inserts an AuditLog row
+        with action ``scan_schedule.skipped_maintenance_window``."""
+        engine, factory, session = _build_session_factory()
+        captured_rows: list[Any] = []
+        session.add = MagicMock(side_effect=captured_rows.append)
+
+        schedule = _build_schedule(maintenance_window_cron="0 12 * * *")
+
+        with (
+            _patch_kill_switch(KillSwitchVerdict(blocked=False)),
+            patch.object(
+                scan_trigger,
+                "create_task_engine_and_session",
+                return_value=(engine, factory),
+            ),
+            patch.object(scan_trigger, "set_session_tenant", new=AsyncMock()),
+            patch.object(
+                scan_trigger,
+                "_load_schedule",
+                new=AsyncMock(return_value=schedule),
+            ),
+            patch.object(scan_trigger, "is_in_maintenance_window", return_value=True),
+            patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
+        ):
+            result = await _run_scheduled_scan_async(
+                schedule_id=_SCHEDULE_ID,
+                tenant_id=_TENANT_ID,
+                fired_at=_FIRED_AT,
+            )
+
+        assert result["status"] == "skipped_maintenance_window"
+        dispatch_mock.assert_not_called()
+        assert len(captured_rows) == 1
+        row = captured_rows[0]
+        assert row.action == EVENT_SKIPPED_MAINTENANCE_WINDOW
+        assert row.tenant_id == _TENANT_ID
+        assert row.resource_type == "scan_schedule"
+        assert row.resource_id == _SCHEDULE_ID
+        # Raw tenant_id MUST NOT appear in details — only the hash.
+        assert "tenant_id_hash" in row.details
+        assert _TENANT_ID not in str(row.details)
+        assert row.details["reason"] == "in_maintenance_window"
+        assert row.details["maintenance_window_cron"] == "0 12 * * *"
+        # Session commit invoked for the audit row insert.
+        session.commit.assert_awaited_once()
+        engine.dispose.assert_awaited_once()

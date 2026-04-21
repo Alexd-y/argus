@@ -270,10 +270,13 @@ class TestScanScheduleRbac:
         assert r.json()["detail"] == "forbidden"
 
     def test_create_403_admin_cross_tenant(self, client: TestClient) -> None:
+        # CREATE keeps 403 (vs PATCH/DELETE/run-now which collapse to 404):
+        # the tenant comes from the request body so there is no DB lookup
+        # before this check, hence no existence-leak vector to defend.
         body = _create_body(tenant_id=_TENANT_B)
         r = client.post(LIST_PATH, headers=_HEADERS_ADMIN_A, json=body)
         assert r.status_code == 403
-        assert r.json()["detail"] == "tenant mismatch"
+        assert r.json()["detail"] == "tenant_mismatch"
 
     def test_create_403_admin_without_session_tenant_header(
         self, client: TestClient
@@ -315,32 +318,34 @@ class TestScanScheduleValidation:
         r = client.post(LIST_PATH, headers=_HEADERS_SUPER, json=body)
         assert r.status_code == 422
 
-    def test_create_400_when_cron_invalid(self, client: TestClient) -> None:
+    def test_create_422_when_cron_invalid(self, client: TestClient) -> None:
+        # Pydantic accepts the string shape; the failure is *semantic*
+        # (bad cron) → 422 per the T33 contract.
         r = client.post(
             LIST_PATH,
             headers=_HEADERS_SUPER,
             json=_create_body(cron_expression="not-a-cron"),
         )
-        assert r.status_code == 400
-        assert r.json()["detail"] == "invalid cron expression"
+        assert r.status_code == 422
+        assert r.json()["detail"] == "invalid_cron_expression"
 
-    def test_create_400_when_cron_too_frequent(self, client: TestClient) -> None:
+    def test_create_422_when_cron_too_frequent(self, client: TestClient) -> None:
         # */1 violates the 5-minute DOS-guard floor in validate_cron.
         r = client.post(
             LIST_PATH,
             headers=_HEADERS_SUPER,
             json=_create_body(cron_expression="* * * * *"),
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
 
-    def test_create_400_when_maintenance_cron_invalid(self, client: TestClient) -> None:
+    def test_create_422_when_maintenance_cron_invalid(self, client: TestClient) -> None:
         r = client.post(
             LIST_PATH,
             headers=_HEADERS_SUPER,
             json=_create_body(maintenance_window_cron="bogus"),
         )
-        assert r.status_code == 400
-        assert r.json()["detail"] == "invalid maintenance window cron"
+        assert r.status_code == 422
+        assert r.json()["detail"] == "invalid_maintenance_window_cron"
 
     def test_create_422_when_tenant_id_not_uuid(self, client: TestClient) -> None:
         r = client.post(
@@ -391,7 +396,7 @@ class TestScanScheduleCreate:
         with _patch_session(session), _patch_redbeat_sync():
             r = client.post(LIST_PATH, headers=_HEADERS_SUPER, json=_create_body())
         assert r.status_code == 409
-        assert r.json()["detail"] == "schedule name already exists for tenant"
+        assert r.json()["detail"] == "schedule_name_conflict"
         session.rollback.assert_awaited()
 
     def test_create_audit_action_is_canonical(self, client: TestClient) -> None:
@@ -409,6 +414,29 @@ class TestScanScheduleCreate:
             r = client.post(LIST_PATH, headers=_HEADERS_SUPER, json=_create_body())
         assert r.status_code == 201
         assert EVENT_SCHEDULE_CREATED in captured_actions
+
+    def test_create_strips_url_query_string_in_request_body(
+        self, client: TestClient
+    ) -> None:
+        """S2.2: query strings + fragments must be stripped at the schema
+        boundary so they never reach AuditLog details or Celery task args
+        (PII safety — operators sometimes paste reset / auth URLs).
+        """
+        session = _make_create_session()
+        with _patch_session(session), _patch_redbeat_sync():
+            r = client.post(
+                LIST_PATH,
+                headers=_HEADERS_SUPER,
+                json=_create_body(
+                    target_url="https://example.com/login?token=secret&email=x@y.z#frag"
+                ),
+            )
+        assert r.status_code == 201
+        body = r.json()
+        # Query + fragment dropped; scheme + netloc + path preserved.
+        assert body["target_url"] == "https://example.com/login"
+        assert "token" not in body["target_url"]
+        assert "frag" not in body["target_url"]
 
 
 # ===========================================================================
@@ -442,13 +470,16 @@ class TestScanScheduleList:
         assert r.json()["total"] == 1
 
     def test_list_403_admin_cross_tenant(self, client: TestClient) -> None:
+        # LIST keeps 403 (vs PATCH/DELETE/run-now which collapse to 404):
+        # the caller specifies ``tenant_id`` explicitly so 403 cannot leak
+        # the existence of any single schedule.
         r = client.get(
             LIST_PATH,
             headers=_HEADERS_ADMIN_A,
             params={"tenant_id": _TENANT_B},
         )
         assert r.status_code == 403
-        assert r.json()["detail"] == "tenant mismatch"
+        assert r.json()["detail"] == "tenant_mismatch"
 
     def test_list_filters_enabled(self, client: TestClient) -> None:
         rows = [_build_schedule_row(enabled=True)]
@@ -506,9 +537,12 @@ class TestScanScheduleUpdate:
                 json={"enabled": False},
             )
         assert r.status_code == 404
-        assert r.json()["detail"] == "schedule not found"
+        assert r.json()["detail"] == "schedule_not_found"
 
-    def test_update_403_admin_cross_tenant(self, client: TestClient) -> None:
+    def test_update_404_admin_cross_tenant(self, client: TestClient) -> None:
+        # S1.3: cross-tenant probes must not distinguish "exists but
+        # foreign" from "doesn't exist" — both collapse to 404 so a
+        # tenant-A admin cannot enumerate tenant-B schedule UUIDs.
         row = _build_schedule_row(tenant_id=_TENANT_B)
         session = _make_load_session(row)
         with _patch_session(session), _patch_redbeat_sync():
@@ -517,16 +551,20 @@ class TestScanScheduleUpdate:
                 headers=_HEADERS_ADMIN_A,
                 json={"enabled": False},
             )
-        assert r.status_code == 403
+        assert r.status_code == 404
+        assert r.json()["detail"] == "schedule_not_found"
 
-    def test_update_400_when_new_cron_invalid(self, client: TestClient) -> None:
-        # No DB hit needed — validator runs first.
+    def test_update_422_when_new_cron_invalid(self, client: TestClient) -> None:
+        # No DB hit needed — validator runs first. 422 (not 400) per the
+        # T33 contract: input shape was OK but the value is semantically
+        # invalid (Pydantic-style "unprocessable entity").
         r = client.patch(
             ITEM_PATH.format(schedule_id=_SCHEDULE_ID),
             headers=_HEADERS_SUPER,
             json={"cron_expression": "garbage"},
         )
-        assert r.status_code == 400
+        assert r.status_code == 422
+        assert r.json()["detail"] == "invalid_cron_expression"
 
     def test_update_409_when_name_collision(self, client: TestClient) -> None:
         from sqlalchemy.exc import IntegrityError
@@ -572,7 +610,8 @@ class TestScanScheduleDelete:
             )
         assert r.status_code == 404
 
-    def test_delete_403_admin_cross_tenant(self, client: TestClient) -> None:
+    def test_delete_404_admin_cross_tenant(self, client: TestClient) -> None:
+        # S1.3: see test_update_404_admin_cross_tenant for rationale.
         row = _build_schedule_row(tenant_id=_TENANT_B)
         session = _make_load_session(row)
         with _patch_session(session), _patch_redbeat_remove():
@@ -580,7 +619,8 @@ class TestScanScheduleDelete:
                 ITEM_PATH.format(schedule_id=_SCHEDULE_ID),
                 headers=_HEADERS_ADMIN_A,
             )
-        assert r.status_code == 403
+        assert r.status_code == 404
+        assert r.json()["detail"] == "schedule_not_found"
 
     def test_delete_audit_action_is_canonical(self, client: TestClient) -> None:
         row = _build_schedule_row()
@@ -654,12 +694,14 @@ class TestScanScheduleRunNow:
             )
         assert r.status_code == 404
 
-    def test_run_now_423_when_maintenance_window_active(
+    def test_run_now_409_when_maintenance_window_active(
         self, client: TestClient
     ) -> None:
-        # window cron that fires every hour AND the default duration is
-        # 60min — guarantees ``is_in_maintenance_window`` returns True
-        # for the current instant.
+        # 409 (not 423) per the T33 contract: the request is well-formed
+        # but the *current schedule state* (maintenance window open)
+        # prevents fulfilling it. Window cron that fires every hour AND
+        # the default duration is 60min — guarantees ``is_in_maintenance_window``
+        # returns True for the current instant.
         row = _build_schedule_row(maintenance_window_cron="0 * * * *")
         session = _make_load_session(row)
         with _patch_session(session), _patch_kill_switch_clear(), _patch_dispatch():
@@ -671,8 +713,8 @@ class TestScanScheduleRunNow:
                     "reason": "Operator manual override for incident triage",
                 },
             )
-        assert r.status_code == 423
-        assert r.json()["detail"] == "maintenance window currently active"
+        assert r.status_code == 409
+        assert r.json()["detail"] == "in_maintenance_window"
 
     def test_run_now_202_with_bypass_skips_maintenance_check(
         self, client: TestClient
@@ -695,16 +737,16 @@ class TestScanScheduleRunNow:
         assert r.status_code == 202
         assert r.json()["bypassed_maintenance_window"] is True
 
-    def test_run_now_423_when_kill_switch_blocked(self, client: TestClient) -> None:
+    def test_run_now_409_when_kill_switch_blocked(self, client: TestClient) -> None:
+        # 409 (not 423) per the T33 contract — same rationale as the
+        # maintenance-window block above.
         from fastapi import HTTPException
 
         row = _build_schedule_row()
         session = _make_load_session(row)
 
         def _block(_tenant_id: str) -> None:
-            raise HTTPException(
-                status_code=423, detail="scans are currently blocked for tenant"
-            )
+            raise HTTPException(status_code=409, detail="emergency_active")
 
         with (
             _patch_session(session),
@@ -722,8 +764,24 @@ class TestScanScheduleRunNow:
                     "reason": "Operator manual override for incident triage",
                 },
             )
-        assert r.status_code == 423
-        assert r.json()["detail"] == "scans are currently blocked for tenant"
+        assert r.status_code == 409
+        assert r.json()["detail"] == "emergency_active"
+
+    def test_run_now_404_admin_cross_tenant(self, client: TestClient) -> None:
+        # S1.3: see test_update_404_admin_cross_tenant for rationale.
+        row = _build_schedule_row(tenant_id=_TENANT_B)
+        session = _make_load_session(row)
+        with _patch_session(session), _patch_kill_switch_clear(), _patch_dispatch():
+            r = client.post(
+                RUN_NOW_PATH.format(schedule_id=_SCHEDULE_ID),
+                headers=_HEADERS_ADMIN_A,
+                json={
+                    "bypass_maintenance_window": False,
+                    "reason": "Operator manual override for incident triage",
+                },
+            )
+        assert r.status_code == 404
+        assert r.json()["detail"] == "schedule_not_found"
 
     def test_run_now_422_when_reason_too_short(self, client: TestClient) -> None:
         r = client.post(

@@ -64,12 +64,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.routers.admin import require_admin, router
 from src.api.routers.admin_bulk_ops import _operator_subject_dep
 from src.api.routers.admin_emergency import (
-    _DETAIL_FORBIDDEN,
-    _DETAIL_TENANT_HEADER_REQUIRED,
-    _DETAIL_TENANT_MISMATCH,
     _DETAIL_TENANT_NOT_FOUND,
     _emit_audit,
-    _enforce_tenant_scope,
     _require_admin_or_super,
 )
 from src.api.routers.admin_findings import _admin_role_dep, _admin_tenant_dep
@@ -94,16 +90,24 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Closed-taxonomy detail strings — kept short, no internals leak.
+# Closed-taxonomy detail strings — short snake_case tokens for stable
+# machine consumption (T33 contract). Sister routers (admin_emergency)
+# still use English-sentence detail strings for legacy reasons; the
+# scheduling surface is locked to snake_case so client SDKs can switch
+# on the value safely. NEVER add a sentence/i18n string here.
 # ---------------------------------------------------------------------------
 
 
-_DETAIL_SCHEDULE_NOT_FOUND: Final[str] = "schedule not found"
-_DETAIL_SCHEDULE_NAME_CONFLICT: Final[str] = "schedule name already exists for tenant"
-_DETAIL_INVALID_CRON: Final[str] = "invalid cron expression"
-_DETAIL_INVALID_MAINTENANCE_CRON: Final[str] = "invalid maintenance window cron"
-_DETAIL_KILL_SWITCH_BLOCKED: Final[str] = "scans are currently blocked for tenant"
-_DETAIL_MAINTENANCE_WINDOW_ACTIVE: Final[str] = "maintenance window currently active"
+_DETAIL_FORBIDDEN: Final[str] = "forbidden"
+_DETAIL_TENANT_REQUIRED: Final[str] = "tenant_id_required"
+_DETAIL_TENANT_HEADER_REQUIRED: Final[str] = "tenant_header_required"
+_DETAIL_TENANT_MISMATCH: Final[str] = "tenant_mismatch"
+_DETAIL_SCHEDULE_NOT_FOUND: Final[str] = "schedule_not_found"
+_DETAIL_NAME_CONFLICT: Final[str] = "schedule_name_conflict"
+_DETAIL_INVALID_CRON_EXPRESSION: Final[str] = "invalid_cron_expression"
+_DETAIL_INVALID_MAINTENANCE_CRON: Final[str] = "invalid_maintenance_window_cron"
+_DETAIL_IN_MAINTENANCE_WINDOW: Final[str] = "in_maintenance_window"
+_DETAIL_KILL_SWITCH_ACTIVE: Final[str] = "emergency_active"
 
 #: Audit-log ``action`` taxonomy for scan-schedule mutations.
 EVENT_SCHEDULE_CREATED: Final[str] = "scan_schedule.created"
@@ -124,7 +128,12 @@ _MAINTENANCE_CRON_MAX_FREQ_MINUTES: int = 60
 
 
 def _validate_primary_cron(expression: str) -> None:
-    """Raise 400 with closed taxonomy when ``expression`` is invalid."""
+    """Raise 422 with closed taxonomy when ``expression`` is invalid.
+
+    422 (not 400) because Pydantic already accepted the field shape — the
+    failure is *semantic* (bad cron) rather than structural, matching
+    Pydantic's own ``unprocessable entity`` convention.
+    """
     try:
         validate_cron(expression)
     except CronValidationError as exc:
@@ -136,8 +145,8 @@ def _validate_primary_cron(expression: str) -> None:
             },
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_DETAIL_INVALID_CRON,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_DETAIL_INVALID_CRON_EXPRESSION,
         ) from exc
 
 
@@ -159,7 +168,7 @@ def _validate_maintenance_cron(expression: str | None) -> None:
             },
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_DETAIL_INVALID_MAINTENANCE_CRON,
         ) from exc
 
@@ -170,7 +179,15 @@ def _enforce_admin_tenant_match(
     role_tenant: str | None,
     target_tenant: str,
 ) -> None:
-    """For role=admin, require ``X-Admin-Tenant`` to equal ``target_tenant``."""
+    """For role=admin, require ``X-Admin-Tenant`` to equal ``target_tenant``.
+
+    Used ONLY by the CREATE handler — there the target tenant is supplied
+    in the request body before any DB lookup, so emitting 403 cannot leak
+    schedule existence. PATCH / DELETE / run-now collapse the same check
+    to a 404 inline (after ``_load_schedule_or_404``) to avoid the
+    cross-tenant existence-leak vector documented in the T33 reviewer
+    findings (S1.3).
+    """
     if role != "admin":
         return
     if not role_tenant:
@@ -183,6 +200,43 @@ def _enforce_admin_tenant_match(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_DETAIL_TENANT_MISMATCH,
         )
+
+
+def _enforce_tenant_scope(
+    *, role: str, role_tenant: str | None, target_tenant: str | None
+) -> str | None:
+    """Resolve the tenant filter for the LIST endpoint with snake-case errors.
+
+    Mirrors :func:`src.api.routers.admin_emergency._enforce_tenant_scope`
+    but emits the closed-taxonomy snake_case detail tokens required by
+    the T33 contract. Behaviour is unchanged:
+
+    * super-admin: ``target_tenant`` optional (``None`` → cross-tenant)
+    * admin: ``target_tenant`` REQUIRED and MUST equal ``role_tenant``
+    * everyone else: 403 ``forbidden``
+    """
+    if role == "super-admin":
+        return target_tenant
+    if role == "admin":
+        if not target_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_DETAIL_TENANT_REQUIRED,
+            )
+        if not role_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_DETAIL_TENANT_HEADER_REQUIRED,
+            )
+        if role_tenant != target_tenant:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_DETAIL_TENANT_MISMATCH,
+            )
+        return target_tenant
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN
+    )
 
 
 def _utcnow() -> datetime:
@@ -443,7 +497,7 @@ async def create_scan_schedule(
             await session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_DETAIL_SCHEDULE_NAME_CONFLICT,
+                detail=_DETAIL_NAME_CONFLICT,
             ) from exc
 
         audit_id = gen_uuid()
@@ -509,9 +563,15 @@ async def update_scan_schedule(
 
     async with async_session_factory() as session:
         row = await _load_schedule_or_404(session, schedule_id_str)
-        _enforce_admin_tenant_match(
-            role=role, role_tenant=role_tenant, target_tenant=row.tenant_id
-        )
+        # S1.3: Cross-tenant admin probes must NOT distinguish "exists but
+        # foreign" (would-be 403) from "does not exist" (404). Collapsing to
+        # 404 closes the existence-leak side channel that lets a tenant-A
+        # admin enumerate tenant-B schedule UUIDs.
+        if role == "admin" and role_tenant != row.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_DETAIL_SCHEDULE_NOT_FOUND,
+            )
 
         changed_fields: dict[str, object] = {}
         if body.name is not None and body.name != row.name:
@@ -546,7 +606,7 @@ async def update_scan_schedule(
             await session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=_DETAIL_SCHEDULE_NAME_CONFLICT,
+                detail=_DETAIL_NAME_CONFLICT,
             ) from exc
 
         audit_id = gen_uuid()
@@ -603,9 +663,12 @@ async def delete_scan_schedule(
 
     async with async_session_factory() as session:
         row = await _load_schedule_or_404(session, schedule_id_str)
-        _enforce_admin_tenant_match(
-            role=role, role_tenant=role_tenant, target_tenant=row.tenant_id
-        )
+        # S1.3: see PATCH handler for rationale — same existence-leak defence.
+        if role == "admin" and role_tenant != row.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_DETAIL_SCHEDULE_NOT_FOUND,
+            )
         captured_tenant_id = row.tenant_id
         captured_name = row.name
         await session.delete(row)
@@ -677,9 +740,12 @@ async def run_scan_schedule_now(
 
     async with async_session_factory() as session:
         row = await _load_schedule_or_404(session, schedule_id_str)
-        _enforce_admin_tenant_match(
-            role=role, role_tenant=role_tenant, target_tenant=row.tenant_id
-        )
+        # S1.3: see PATCH handler for rationale — same existence-leak defence.
+        if role == "admin" and role_tenant != row.tenant_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=_DETAIL_SCHEDULE_NOT_FOUND,
+            )
 
         _ensure_kill_switch_clear(row.tenant_id)
         if not body.bypass_maintenance_window:
@@ -736,12 +802,14 @@ async def run_scan_schedule_now(
 
 
 def _ensure_kill_switch_clear(tenant_id: str) -> None:
-    """Raise 423 ``locked`` when the kill switch blocks ``tenant_id``.
+    """Raise 409 ``conflict`` when the kill switch blocks ``tenant_id``.
 
-    Kill switch unavailability is treated as "not blocked" for this
-    fast-path check: the worker re-runs the check on dispatch and will
-    fail-closed there. Surfacing 503 from the run-now endpoint would be
-    confusing for the operator (they explicitly asked to fire NOW).
+    409 (not 423) because the request is well-formed but the *current
+    system state* (kill switch active) prevents fulfilling it — exactly
+    the semantics of HTTP 409. Kill-switch unavailability is treated as
+    "not blocked" for this fast-path check: the worker re-runs the gate
+    on dispatch and will fail-closed there. Surfacing 503 from run-now
+    would be confusing for the operator who explicitly asked to fire NOW.
     """
     from src.policy.kill_switch import (
         KillSwitchUnavailableError,
@@ -752,8 +820,8 @@ def _ensure_kill_switch_clear(tenant_id: str) -> None:
         ks = get_kill_switch_service()
         if ks.is_blocked(tenant_id).blocked:
             raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail=_DETAIL_KILL_SWITCH_BLOCKED,
+                status_code=status.HTTP_409_CONFLICT,
+                detail=_DETAIL_KILL_SWITCH_ACTIVE,
             )
     except KillSwitchUnavailableError:
         logger.warning(
@@ -766,7 +834,11 @@ def _ensure_kill_switch_clear(tenant_id: str) -> None:
 
 
 def _ensure_outside_maintenance_window(row: ScanSchedule) -> None:
-    """Raise 423 when ``row`` is currently inside its maintenance window."""
+    """Raise 409 when ``row`` is currently inside its maintenance window.
+
+    Same 409 rationale as :func:`_ensure_kill_switch_clear`: the request
+    is well-formed but conflicts with current schedule state.
+    """
     if not row.maintenance_window_cron:
         return
     try:
@@ -784,8 +856,8 @@ def _ensure_outside_maintenance_window(row: ScanSchedule) -> None:
         return
     if in_window:
         raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail=_DETAIL_MAINTENANCE_WINDOW_ACTIVE,
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_DETAIL_IN_MAINTENANCE_WINDOW,
         )
 
 

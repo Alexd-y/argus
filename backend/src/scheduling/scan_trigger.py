@@ -50,8 +50,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.celery_app import app
 from src.core.observability import tenant_hash
-from src.db.models import ScanSchedule, Target, Tenant
-from src.db.session import create_task_engine_and_session, set_session_tenant
+from src.db.models import AuditLog, ScanSchedule, Target, Tenant, gen_uuid
+from src.db.session import (
+    async_session_factory,
+    create_task_engine_and_session,
+    set_session_tenant,
+)
 from src.policy.kill_switch import KillSwitchService, KillSwitchUnavailableError
 from src.scheduling.cron_parser import (
     CronValidationError,
@@ -60,6 +64,15 @@ from src.scheduling.cron_parser import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Audit-log ``action`` taxonomy emitted when the scheduler trigger silently
+#: skips a fire because of an operator-managed gate (kill switch /
+#: maintenance window). Mirrors the ``scan_schedule.*`` action namespace
+#: persisted by :mod:`src.api.routers.admin_schedules` so dashboards can
+#: filter on the same prefix for both operator-driven mutations and
+#: automatic skips.
+EVENT_SKIPPED_EMERGENCY_STOP: str = "scan_schedule.skipped_emergency_stop"
+EVENT_SKIPPED_MAINTENANCE_WINDOW: str = "scan_schedule.skipped_maintenance_window"
 
 #: Default duration assumed for a maintenance window when the schedule
 #: stores only the *opening* cron. Matches the
@@ -205,6 +218,78 @@ async def _update_run_timestamps(
     )
 
 
+def _build_skip_audit_row(
+    *,
+    action: str,
+    tenant_id: str,
+    schedule_id: str,
+    reason: str,
+    extra: dict[str, Any] | None = None,
+) -> AuditLog:
+    """Construct the ``AuditLog`` row for a silent-skip event.
+
+    PII safety (S2.1): the raw tenant id stays only in the FK column;
+    ``details`` carries ``tenant_id_hash`` so log/audit consumers can
+    correlate without persisting the raw id twice.
+    """
+    details: dict[str, Any] = {
+        "tenant_id_hash": tenant_hash(tenant_id),
+        "schedule_id": schedule_id,
+        "reason": reason,
+    }
+    if extra:
+        details.update(extra)
+    return AuditLog(
+        id=gen_uuid(),
+        tenant_id=tenant_id,
+        user_id=None,
+        action=action,
+        resource_type="scan_schedule",
+        resource_id=schedule_id,
+        details=details,
+        ip_address=None,
+    )
+
+
+async def _emit_skip_audit_standalone(
+    *,
+    action: str,
+    tenant_id: str,
+    schedule_id: str,
+    reason: str,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Open a short-lived session and persist a skip-audit row.
+
+    Used by the kill-switch skip branch which runs *before* the main
+    DB session is opened. Failures are swallowed + logged so an audit
+    persistence outage does not turn a clean skip into a Celery retry
+    loop on every beat tick.
+    """
+    try:
+        async with async_session_factory() as session:
+            session.add(
+                _build_skip_audit_row(
+                    action=action,
+                    tenant_id=tenant_id,
+                    schedule_id=schedule_id,
+                    reason=reason,
+                    extra=extra,
+                )
+            )
+            await session.commit()
+    except Exception:
+        logger.warning(
+            "scan_trigger.skip_audit_persist_failed",
+            extra={
+                "event": "scan_trigger.skip_audit_persist_failed",
+                "action": action,
+                "schedule_id": schedule_id,
+            },
+            exc_info=True,
+        )
+
+
 # ---------------------------------------------------------------------------
 # KillSwitch dependency (lazy redis client)
 # ---------------------------------------------------------------------------
@@ -262,6 +347,21 @@ async def _run_scheduled_scan_async(
                     "scope": verdict.scope.value if verdict.scope else None,
                 },
             )
+            # S2.1: emit a durable AuditLog row so operators can audit
+            # WHY a scheduled scan didn't fire, not just THAT a logger
+            # entry was emitted (logs may be sampled or rotated out).
+            await _emit_skip_audit_standalone(
+                action=EVENT_SKIPPED_EMERGENCY_STOP,
+                tenant_id=tenant_id,
+                schedule_id=schedule_id,
+                reason="kill_switch_blocked",
+                extra={
+                    "verdict_scope": (
+                        verdict.scope.value if verdict.scope else None
+                    ),
+                    "verdict_reason": verdict.reason,
+                },
+            )
             return {"status": "skipped_kill_switch", "schedule_id": schedule_id}
     except KillSwitchUnavailableError:
         logger.warning(
@@ -310,6 +410,35 @@ async def _run_scheduled_scan_async(
                         "schedule_id": schedule_id,
                     },
                 )
+                # S2.1: durable audit row — same rationale as the
+                # kill-switch skip branch. We reuse the open session so
+                # the audit insert participates in the SAME tenant-bound
+                # RLS context that the schedule load just used.
+                try:
+                    session.add(
+                        _build_skip_audit_row(
+                            action=EVENT_SKIPPED_MAINTENANCE_WINDOW,
+                            tenant_id=schedule.tenant_id,
+                            schedule_id=schedule_id,
+                            reason="in_maintenance_window",
+                            extra={
+                                "maintenance_window_cron": (
+                                    schedule.maintenance_window_cron
+                                ),
+                            },
+                        )
+                    )
+                    await session.commit()
+                except Exception:
+                    logger.warning(
+                        "scan_trigger.skip_audit_persist_failed",
+                        extra={
+                            "event": "scan_trigger.skip_audit_persist_failed",
+                            "action": EVENT_SKIPPED_MAINTENANCE_WINDOW,
+                            "schedule_id": schedule_id,
+                        },
+                        exc_info=True,
+                    )
                 return {
                     "status": "skipped_maintenance_window",
                     "schedule_id": schedule_id,
@@ -406,5 +535,7 @@ def run_scheduled_scan(
 
 __all__ = [
     "DEFAULT_MAINTENANCE_WINDOW_DURATION_MINUTES",
+    "EVENT_SKIPPED_EMERGENCY_STOP",
+    "EVENT_SKIPPED_MAINTENANCE_WINDOW",
     "run_scheduled_scan",
 ]
