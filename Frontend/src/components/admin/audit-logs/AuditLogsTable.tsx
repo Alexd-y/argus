@@ -443,13 +443,19 @@ export function AuditLogsTable({
           data-testid="audit-logs-table-scroll"
         >
           {loading && totalRows === 0 ? (
+            // The skeleton lives inside `role="table"`; ARIA forbids arbitrary
+            // children there, so we surface it as a rowgroup of placeholder
+            // rows. `aria-busy` on the table already tells AT to ignore them.
             <ul
+              role="rowgroup"
               aria-label="Загрузка audit log"
               className="m-0 list-none p-0"
             >
               {Array.from({ length: 8 }).map((_, i) => (
                 <li
                   key={i}
+                  role="row"
+                  aria-hidden="true"
                   data-testid="audit-skeleton-row"
                   className="h-11 animate-pulse border-b border-[var(--border)] bg-[var(--bg-secondary)]/40"
                 />

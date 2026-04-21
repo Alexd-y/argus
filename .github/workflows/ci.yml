@@ -304,6 +304,56 @@ jobs:
         working-directory: Frontend
         run: npm run sdk:check
 
+  # T26 (Cycle 6 Batch 6): axe-core accessibility gate for the admin
+  # console. Spins the Next.js dev server against a synthetic admin
+  # backend mock (no real secrets, no PII), then runs Playwright
+  # `admin-axe.spec.ts` which asserts zero `axe-core` violations on:
+  #   * /admin/findings (super-admin + admin/no-tenant-binding)
+  #   * /admin/audit-logs
+  #   * /admin/scans (with export toggle)
+  # plus three interactive states (bulk dialog, chain-verify banner,
+  # scan-detail drawer). One scenario is currently quarantined via
+  # `test.fail` linking ISS-T26-001 — the rest must stay green.
+  frontend-a11y:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend deps
+        run: npm ci
+
+      - name: Install Playwright Chromium with OS deps
+        run: npx playwright install --with-deps chromium
+
+      - name: Run axe-core a11y gate
+        run: npm run test:e2e:a11y
+        env:
+          # Force-disable telemetry / colored output so CI logs stay
+          # parseable; the dev server inherits these via the
+          # webServer.env block in playwright.a11y.config.ts.
+          NEXT_TELEMETRY_DISABLED: "1"
+          CI: "true"
+
+      - name: Upload Playwright a11y report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-a11y-report
+          path: |
+            Frontend/playwright-report/
+            Frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
   build:
     runs-on: ubuntu-latest
     needs:
@@ -315,6 +365,7 @@ jobs:
       - mcp-openapi-drift
       - helm-lint
       - migrations-smoke
+      - frontend-a11y
     steps:
       - uses: actions/checkout@v4
 
