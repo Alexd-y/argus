@@ -11,6 +11,7 @@ import { ScanActionError } from "@/lib/adminScans";
 const SCAN_ID = "11111111-1111-1111-1111-111111111111";
 const TENANT_ID = "00000000-0000-0000-0000-000000000001";
 const TARGET_URL = "https://example.com/api/v1";
+const VALID_REASON = "PII leak at /api/v1/users";
 
 function makeScan(over: Partial<ScanKillTarget> = {}): ScanKillTarget {
   return {
@@ -88,6 +89,13 @@ describe("PerScanKillSwitchDialog — confirm-by-typing", () => {
     expect(submit).toBeDisabled();
 
     await user.type(input, "1");
+    // Reason still empty → submit must remain disabled.
+    expect(submit).toBeDisabled();
+
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      VALID_REASON,
+    );
     expect(submit).toBeEnabled();
     expect(submit).toHaveAttribute("aria-disabled", "false");
   });
@@ -105,10 +113,72 @@ describe("PerScanKillSwitchDialog — confirm-by-typing", () => {
 
     const input = screen.getByTestId("kill-scan-dialog-input");
     await user.type(input, `${SCAN_ID}x`);
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      VALID_REASON,
+    );
 
     const submit = screen.getByTestId("kill-scan-dialog-confirm");
     expect(submit).toBeDisabled();
     expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("disables submit when reason is empty even if typed-id matches", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerScanKillSwitchDialog
+        open
+        onOpenChange={vi.fn()}
+        scan={makeScan()}
+        cancelAction={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("kill-scan-dialog-input"), SCAN_ID);
+    // Reason intentionally left empty.
+    const submit = screen.getByTestId("kill-scan-dialog-confirm");
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("disables submit when reason is below min length (9 chars)", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerScanKillSwitchDialog
+        open
+        onOpenChange={vi.fn()}
+        scan={makeScan()}
+        cancelAction={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("kill-scan-dialog-input"), SCAN_ID);
+    const reason = screen.getByTestId("kill-scan-dialog-reason");
+    await user.type(reason, "123456789"); // 9 chars, one below min
+    expect(reason).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByTestId("kill-scan-dialog-confirm")).toBeDisabled();
+  });
+
+  it("enables submit when both typed-id matches AND reason is valid", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerScanKillSwitchDialog
+        open
+        onOpenChange={vi.fn()}
+        scan={makeScan()}
+        cancelAction={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("kill-scan-dialog-input"), SCAN_ID);
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      VALID_REASON,
+    );
+
+    const submit = screen.getByTestId("kill-scan-dialog-confirm");
+    expect(submit).toBeEnabled();
+    expect(submit).toHaveAttribute("aria-disabled", "false");
   });
 
   it("blocks paste — input value stays empty after a paste event", () => {
@@ -158,7 +228,7 @@ describe("PerScanKillSwitchDialog — confirm-by-typing", () => {
 });
 
 describe("PerScanKillSwitchDialog — submission", () => {
-  it("calls cancelAction with the scan id, tenant id, and reason on confirm", async () => {
+  it("calls cancelAction with the scan id, tenant id, and trimmed operator reason on confirm", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onSuccess = vi.fn();
@@ -182,13 +252,17 @@ describe("PerScanKillSwitchDialog — submission", () => {
       screen.getByTestId("kill-scan-dialog-input"),
       SCAN_ID,
     );
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      `   ${VALID_REASON}   `,
+    );
     await user.click(screen.getByTestId("kill-scan-dialog-confirm"));
 
     await waitFor(() => expect(cancelAction).toHaveBeenCalledTimes(1));
     expect(cancelAction).toHaveBeenCalledWith({
       scanId: SCAN_ID,
       tenantId: TENANT_ID,
-      reason: expect.stringContaining("kill-switch"),
+      reason: VALID_REASON,
     });
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
@@ -223,6 +297,10 @@ describe("PerScanKillSwitchDialog — submission", () => {
       screen.getByTestId("kill-scan-dialog-input"),
       SCAN_ID,
     );
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      VALID_REASON,
+    );
     await user.click(screen.getByTestId("kill-scan-dialog-confirm"));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
@@ -251,6 +329,10 @@ describe("PerScanKillSwitchDialog — submission", () => {
     await user.type(
       screen.getByTestId("kill-scan-dialog-input"),
       SCAN_ID,
+    );
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      VALID_REASON,
     );
     await user.click(screen.getByTestId("kill-scan-dialog-confirm"));
 

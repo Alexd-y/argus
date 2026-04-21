@@ -50,14 +50,14 @@ import {
 
 import { cancelAdminScan } from "@/app/admin/scans/actions";
 import {
+  SCAN_REASON_MAX,
+  SCAN_REASON_MIN,
   scanActionErrorMessage,
   type KillScanResult,
 } from "@/lib/adminScans";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-const DEFAULT_REASON = "manual operator stop via kill-switch";
 
 export type ScanKillTarget = {
   readonly id: string;
@@ -93,12 +93,15 @@ export function PerScanKillSwitchDialog({
   const descriptionId = useId();
   const inputId = useId();
   const helpId = useId();
+  const reasonId = useId();
+  const reasonHelpId = useId();
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const [typedId, setTypedId] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -114,6 +117,7 @@ export function PerScanKillSwitchDialog({
   if (currentIdentity !== lastIdentity) {
     setLastIdentity(currentIdentity);
     setTypedId("");
+    setReason("");
     setErrorMessage(null);
   }
 
@@ -121,7 +125,11 @@ export function PerScanKillSwitchDialog({
     () => typedId === scan.id,
     [typedId, scan.id],
   );
-  const canSubmit = matches && !isPending;
+  const trimmedReason = useMemo(() => reason.trim(), [reason]);
+  const reasonValid =
+    trimmedReason.length >= SCAN_REASON_MIN &&
+    trimmedReason.length <= SCAN_REASON_MAX;
+  const canSubmit = matches && reasonValid && !isPending;
 
   // Focus management: capture the previously-focused element on open,
   // restore on close. Auto-focus the typed-id input so AT users land on
@@ -208,7 +216,7 @@ export function PerScanKillSwitchDialog({
         const result = await cancelAction({
           scanId: scan.id,
           tenantId: scan.tenant_id,
-          reason: DEFAULT_REASON,
+          reason: trimmedReason,
         });
         onOpenChange(false);
         if (onSuccess) onSuccess(result);
@@ -321,10 +329,39 @@ export function PerScanKillSwitchDialog({
             </span>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor={reasonId}
+              className="text-xs font-medium text-[var(--text-muted)]"
+            >
+              Причина (≥{SCAN_REASON_MIN} символов)
+            </label>
+            <textarea
+              id={reasonId}
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={SCAN_REASON_MAX}
+              aria-describedby={reasonHelpId}
+              aria-invalid={trimmedReason.length > 0 && !reasonValid}
+              aria-required="true"
+              className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs text-[var(--text-primary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              data-testid="kill-scan-dialog-reason"
+              disabled={isPending}
+            />
+            <span
+              id={reasonHelpId}
+              className="text-[11px] text-[var(--text-muted)]"
+              data-testid="kill-scan-dialog-reason-help"
+            >
+              Например: «Активная утечка PII по адресу /api/v1/users».
+              Причина уйдёт в audit-лог.
+            </span>
+          </div>
+
           {errorMessage ? (
             <div
               role="alert"
-              aria-live="polite"
               className="rounded border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs text-red-200"
               data-testid="kill-scan-dialog-error"
             >

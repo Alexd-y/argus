@@ -211,13 +211,17 @@ describe("AdminScansClient — per-scan kill-switch button (T28)", () => {
       "kill-scan-dialog-input",
     ) as HTMLInputElement;
     await user.type(input, scan.id);
+    await user.type(
+      screen.getByTestId("kill-scan-dialog-reason"),
+      "PII leak observed at /api/v1/users",
+    );
     await user.click(screen.getByTestId("kill-scan-dialog-confirm"));
 
     await waitFor(() => expect(cancelAdminScan).toHaveBeenCalledTimes(1));
     expect(cancelAdminScan).toHaveBeenCalledWith({
       scanId: scan.id,
       tenantId: TENANT_ID,
-      reason: expect.any(String),
+      reason: "PII leak observed at /api/v1/users",
     });
 
     // Dialog disappears, banner appears, list reloads.

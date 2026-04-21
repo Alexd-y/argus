@@ -34,7 +34,10 @@ function ok(
 ) {
   return {
     ok: true as const,
-    status: 200,
+    // Backend `/admin/scans/bulk-cancel` returns HTTP 202 (Accepted) — see
+    // backend/src/api/routers/admin_bulk_ops.py. Mock must mirror reality so
+    // any future status-code assertion does not silently drift.
+    status: 202,
     data: {
       cancelled_count: overrides.cancelled_count ?? 1,
       skipped_terminal_count: overrides.skipped_terminal_count ?? 0,
@@ -250,10 +253,10 @@ describe("cancelAdminScan — backend response taxonomy", () => {
     ).rejects.toMatchObject({ code });
   });
 
-  it("translates malformed envelope (200 OK, missing results) → server_error", async () => {
+  it("translates malformed envelope (202 Accepted, missing results) → server_error", async () => {
     callAdminBackendJson.mockResolvedValue({
       ok: true,
-      status: 200,
+      status: 202,
       data: { totally: "wrong" },
     });
     await expect(
