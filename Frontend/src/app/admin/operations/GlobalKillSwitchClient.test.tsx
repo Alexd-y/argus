@@ -93,6 +93,13 @@ beforeEach(() => {
   stopAllAction.mockReset();
   resumeAllAction.mockReset();
   listEmergencyAuditTrailAction.mockReset();
+  // T30 (S2-1): EmergencyAuditTrail (rendered for super-admin) fires a
+  // refetch on mount. Default to a never-resolving promise so sync RBAC
+  // tests don't surface "act not wrapped" warnings; the STOP-flow test
+  // overrides with `mockResolvedValue` to exercise the audit refetch.
+  listEmergencyAuditTrailAction.mockImplementation(
+    () => new Promise(() => undefined),
+  );
 });
 
 afterEach(() => {
@@ -238,6 +245,16 @@ describe("GlobalKillSwitchClient — STOP flow", () => {
         "active",
       ),
     );
+    // T30 (S2-2): audit list MUST refetch immediately so the new STOP_ALL
+    // row appears without waiting for the next 30 s poll tick (ARG-053
+    // acceptance criterion (e)). The remount triggered by `auditNonce++`
+    // re-fires the EmergencyAuditTrail on-mount fetch (S2-1 fix).
+    await waitFor(() =>
+      expect(listEmergencyAuditTrailAction).toHaveBeenCalled(),
+    );
+    expect(
+      await screen.findByTestId("emergency-audit-row-audit-stop-1"),
+    ).toBeInTheDocument();
   });
 
   // T30 case 3 — use real timers so userEvent doesn't have to interleave

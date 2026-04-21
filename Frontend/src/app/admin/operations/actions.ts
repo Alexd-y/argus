@@ -413,14 +413,18 @@ export async function resumeTenantAction(input: {
 export async function stopAllAction(
   rawInput: unknown,
 ): Promise<StopAllResponse> {
-  const parsed = StopAllInputSchema.safeParse(rawInput);
-  if (!parsed.success) {
-    throw new ThrottleActionError("validation_failed", 400);
-  }
-
+  // T30 (S3-1): RBAC fail-fast BEFORE Zod so an authenticated-but-
+  // unauthorised caller (admin / operator) cannot probe the input
+  // schema by sending well-formed payloads with a stale role. Both
+  // checks are local & microsecond — no observable cost.
   const session = await resolveAdminSession();
   if (session.role !== "super-admin") {
     throw new ThrottleActionError("forbidden", 403);
+  }
+
+  const parsed = StopAllInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    throw new ThrottleActionError("validation_failed", 400);
   }
 
   const result = await callAdminBackendJson<unknown>(STOP_ALL_PATH, {
@@ -463,14 +467,16 @@ export async function stopAllAction(
 export async function resumeAllAction(
   rawInput: unknown,
 ): Promise<ResumeAllResponse> {
-  const parsed = ResumeAllInputSchema.safeParse(rawInput);
-  if (!parsed.success) {
-    throw new ThrottleActionError("validation_failed", 400);
-  }
-
+  // T30 (S3-1): same RBAC-before-Zod ordering as `stopAllAction`. See
+  // the rationale comment there.
   const session = await resolveAdminSession();
   if (session.role !== "super-admin") {
     throw new ThrottleActionError("forbidden", 403);
+  }
+
+  const parsed = ResumeAllInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    throw new ThrottleActionError("validation_failed", 400);
   }
 
   const result = await callAdminBackendJson<unknown>(RESUME_ALL_PATH, {

@@ -62,6 +62,12 @@ let auditAction = vi.fn();
 
 beforeEach(() => {
   auditAction = vi.fn();
+  // T30 (S2-1): EmergencyAuditTrail fires a refetch on mount. Default
+  // to a never-resolving promise so sync tests don't surface
+  // "act not wrapped" warnings from a late state update; tests that
+  // exercise the fetch override with `mockResolvedValue` /
+  // `mockResolvedValueOnce` / `mockRejectedValue`.
+  auditAction.mockImplementation(() => new Promise(() => undefined));
 });
 
 afterEach(() => {
@@ -139,9 +145,15 @@ describe("EmergencyAuditTrail", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("[Обновить] button calls auditAction once and updates rows", async () => {
+  it("[Обновить] button triggers a refetch and updates rows", async () => {
     const user = userEvent.setup();
-    auditAction.mockResolvedValue(listResponse([RESUME_ITEM]));
+    // T30 (S2-1): an on-mount refetch fires immediately so a parent that
+    // remounts via `key={...}` sees the fresh row without waiting for
+    // the next poll tick. The manual button is therefore the SECOND call,
+    // not the first.
+    auditAction
+      .mockResolvedValueOnce(listResponse([STOP_ITEM])) // on-mount fetch
+      .mockResolvedValueOnce(listResponse([RESUME_ITEM])); // [Обновить] click
     render(
       <EmergencyAuditTrail
         initial={listResponse([STOP_ITEM])}
@@ -149,6 +161,9 @@ describe("EmergencyAuditTrail", () => {
         pollMs={0}
       />,
     );
+    // Wait for the on-mount fetch to settle so the [Обновить] click is
+    // unambiguously the SECOND observed call.
+    await waitFor(() => expect(auditAction).toHaveBeenCalledTimes(1));
     expect(
       screen.queryByTestId(`emergency-audit-row-${RESUME_ITEM.audit_id}`),
     ).not.toBeInTheDocument();
@@ -159,8 +174,8 @@ describe("EmergencyAuditTrail", () => {
         screen.getByTestId(`emergency-audit-row-${RESUME_ITEM.audit_id}`),
       ).toBeInTheDocument(),
     );
-    expect(auditAction).toHaveBeenCalledTimes(1);
-    expect(auditAction).toHaveBeenCalledWith({ tenantId: null, limit: 25 });
+    expect(auditAction).toHaveBeenCalledTimes(2);
+    expect(auditAction).toHaveBeenLastCalledWith({ tenantId: null, limit: 25 });
   });
 
   it("error from auditAction → role=alert banner with RU message; rows preserved", async () => {
@@ -194,7 +209,12 @@ describe("EmergencyAuditTrail", () => {
         pollMs={100}
       />,
     );
-    expect(auditAction).not.toHaveBeenCalled();
+    // T30 (S2-1): on-mount refetch is invoked synchronously inside the
+    // mount effect (recorded in vi.fn() before the first await suspends).
+    // Reset so the rest of the test asserts purely the polling cadence.
+    expect(auditAction).toHaveBeenCalledTimes(1);
+    auditAction.mockClear();
+
     await act(async () => {
       vi.advanceTimersByTime(150);
     });

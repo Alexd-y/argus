@@ -18,10 +18,14 @@
  *   chars in the table; the full body is shown only inside the
  *   expanded JSON pane so a wide reason cannot push the table off-screen.
  *
- * Polling:
- *   `setInterval(pollMs)` (default 30 s). Cleanup on unmount. Uses
- *   `reqIdRef` so a slow background fetch can never overwrite a fresh
- *   manual refresh.
+ * Mount + polling:
+ *   A `useEffect` triggers an immediate `refetch()` on mount so a parent
+ *   that remounts us via `key={...}` (e.g. `GlobalKillSwitchClient`
+ *   bumping `auditNonce` after STOP/RESUME, T30 ARG-053 acceptance
+ *   criterion (e)) sees the freshly created row WITHOUT waiting for the
+ *   first 30 s poll tick. Steady-state refresh is `setInterval(pollMs)`
+ *   (default 30 s); cleanup on unmount. `reqIdRef` ensures the on-mount
+ *   fetch and a concurrent poll tick cannot stale-overwrite each other.
  *
  * A11y:
  *   - Empty state has `role="status"` (informational, not an error).
@@ -134,6 +138,16 @@ export function EmergencyAuditTrail({
       }
     }
   }, [auditAction, tenantId]);
+
+  // On-mount refetch (T30 ARG-053): the SSR snapshot in `initial` is
+  // stale by definition after a parent-driven remount (the
+  // `key={auditNonce}` bump on STOP/RESUME). Pull fresh state on mount
+  // so the new audit row is visible immediately instead of after the
+  // first poll tick. `refetch` is `useCallback` with stable deps so this
+  // fires once per (re)mount, not on every render.
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
 
   // Polling interval — re-bound when `pollMs` or `tenantId` changes so
   // tests can override the cadence cheaply.
