@@ -113,6 +113,11 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // Defensive: a test that switches to fake timers may throw before its
+  // own `vi.useRealTimers()` runs, leaving subsequent tests stuck on a
+  // frozen clock. `useRealTimers` is a no-op when fake timers are not
+  // installed, so calling it unconditionally is the safe default.
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -423,5 +428,141 @@ describe("PerTenantThrottleClient — error surfacing", () => {
     const banner = await screen.findByTestId("throttle-dialog-error");
     expect(banner.textContent ?? "").not.toMatch(/\.tsx|stack|at /i);
     expect(banner).toHaveTextContent(/Не удалось применить throttle/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Race-condition guard for super-admin tenant switch (T29 review S2 #1)
+// ---------------------------------------------------------------------------
+
+describe("PerTenantThrottleClient — refetch race", () => {
+  it("super-admin tenant switch out-of-order responses → final state matches latest selection", async () => {
+    listTenants.mockResolvedValue([
+      makeTenant({ id: TENANT_A, name: "Acme" }),
+      makeTenant({ id: TENANT_B, name: "Beta" }),
+    ]);
+
+    let resolveA: (v: ThrottleStatusResponse) => void = () => {};
+    let resolveB: (v: ThrottleStatusResponse) => void = () => {};
+    const promiseA = new Promise<ThrottleStatusResponse>((r) => {
+      resolveA = r;
+    });
+    const promiseB = new Promise<ThrottleStatusResponse>((r) => {
+      resolveB = r;
+    });
+
+    // 1st refetch (slow) → returns A late; 2nd refetch (fast) → returns B
+    // first. Without the reqIdRef guard, A's late response overwrites B
+    // and the panel falls back to NORMAL even though tenant B IS active.
+    getEmergencyStatusAction
+      .mockImplementationOnce(() => promiseA)
+      .mockImplementationOnce(() => promiseB);
+
+    render(
+      <PerTenantThrottleClient
+        initialStatus={makeStatus()}
+        session={SUPER_SESSION}
+      />,
+    );
+
+    const select = await screen.findByTestId("throttle-tenant-select");
+    await waitFor(() => {
+      expect(
+        (select as HTMLSelectElement).querySelectorAll("option").length,
+      ).toBe(2);
+    });
+
+    await act(async () => {
+      fireEvent.change(select, { target: { value: TENANT_A } });
+    });
+    await act(async () => {
+      fireEvent.change(select, { target: { value: TENANT_B } });
+    });
+
+    await act(async () => {
+      resolveB(makeActiveStatus(TENANT_B));
+    });
+    await act(async () => {
+      resolveA(makeActiveStatus(TENANT_A));
+    });
+
+    expect(getEmergencyStatusAction).toHaveBeenCalledTimes(2);
+    const badge = await screen.findByTestId("throttle-status-badge");
+    expect(badge).toHaveAttribute("data-state", "active");
+    expect(badge).toHaveTextContent(/ACTIVE/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ResumeConfirmDialog accessibility (T29 review S2 #2)
+// ---------------------------------------------------------------------------
+
+describe("PerTenantThrottleClient — ResumeConfirmDialog a11y", () => {
+  it("ResumeConfirmDialog: Esc closes when not pending", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerTenantThrottleClient
+        initialStatus={makeActiveStatus(TENANT_A)}
+        session={ADMIN_SESSION}
+      />,
+    );
+
+    await user.click(screen.getByTestId("throttle-resume-now"));
+    expect(screen.getByTestId("throttle-resume-dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("throttle-resume-dialog"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("ResumeConfirmDialog: focus trapped (Tab cycles within dialog)", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerTenantThrottleClient
+        initialStatus={makeActiveStatus(TENANT_A)}
+        session={ADMIN_SESSION}
+      />,
+    );
+
+    await user.click(screen.getByTestId("throttle-resume-now"));
+    const dialog = await screen.findByTestId("throttle-resume-dialog");
+
+    await waitFor(() => {
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    });
+
+    // The dialog has exactly two focusables (Cancel + Confirm). Tabbing
+    // past the last one must wrap back inside the modal — the focus
+    // trap fails here without `useFocusTrap` because the parent surface
+    // also exposes tabbable buttons (`throttle-open-dialog`,
+    // `throttle-resume-now`, audit link).
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("ResumeConfirmDialog: dialog div carries aria-describedby pointing at the description paragraph", async () => {
+    const user = userEvent.setup();
+    render(
+      <PerTenantThrottleClient
+        initialStatus={makeActiveStatus(TENANT_A)}
+        session={ADMIN_SESSION}
+      />,
+    );
+
+    await user.click(screen.getByTestId("throttle-resume-now"));
+    const dialog = await screen.findByTestId("throttle-resume-dialog");
+
+    const describedBy = dialog.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    const description = describedBy
+      ? document.getElementById(describedBy)
+      : null;
+    expect(description?.textContent ?? "").toMatch(/backend-маршрута/);
   });
 });

@@ -41,7 +41,9 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -56,6 +58,7 @@ import {
   PerTenantThrottleDialog,
   type ThrottleTenantOption,
 } from "@/components/admin/operations/PerTenantThrottleDialog";
+import { useFocusTrap } from "@/components/admin/operations/useFocusTrap";
 import {
   findActiveThrottle,
   throttleActionErrorMessage,
@@ -111,6 +114,12 @@ export function PerTenantThrottleClient({
   );
   const [isPending, startTransition] = useTransition();
 
+  // Monotonic request id for `refetchStatus` so a slow response from a
+  // previously selected tenant cannot overwrite the latest selection's
+  // state. `useTransition` itself does NOT cancel in-flight async work
+  // (super-admin tenant-switch race; T29 review S2 #1).
+  const reqIdRef = useRef(0);
+
   const tenantOptions: ReadonlyArray<ThrottleTenantOption> = useMemo(
     () => tenants.map((t) => ({ id: t.id, name: t.name })),
     [tenants],
@@ -145,14 +154,17 @@ export function PerTenantThrottleClient({
     (tenantIdOverride?: string) => {
       const target = tenantIdOverride ?? selectedTenantId;
       if (!target && !isSuperAdmin) return;
+      const myReqId = ++reqIdRef.current;
       setStatusError(null);
       startTransition(async () => {
         try {
           const next = await statusAction({
             tenantId: target ? target : null,
           });
+          if (myReqId !== reqIdRef.current) return;
           setStatus(next);
         } catch (err) {
+          if (myReqId !== reqIdRef.current) return;
           setStatusError(throttleActionErrorMessage(err));
         }
       });
@@ -401,7 +413,11 @@ function ActiveThrottleSummary({
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[140px_1fr] sm:gap-x-4">
       <div className="text-xs text-[var(--text-muted)]">State</div>
-      <div className="text-sm font-semibold text-amber-300">
+      <div
+        data-testid="throttle-status-badge"
+        data-state="active"
+        className="text-sm font-semibold text-amber-300"
+      >
         ACTIVE — throttle in effect
       </div>
 
@@ -450,7 +466,11 @@ function InactiveSummary({
   return (
     <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2">
       <div className="text-xs text-[var(--text-muted)]">State</div>
-      <div className="text-sm font-semibold text-emerald-300">
+      <div
+        data-testid="throttle-status-badge"
+        data-state="inactive"
+        className="text-sm font-semibold text-emerald-300"
+      >
         NORMAL — no throttle in effect
       </div>
       <div className="text-xs text-[var(--text-muted)]">Tenant</div>
@@ -470,6 +490,20 @@ function ResumeConfirmDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }): React.ReactElement {
+  const titleId = useId();
+  const descriptionId = useId();
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  // The dialog is mounted only while open — `enabled` is therefore
+  // always true here. Esc + Tab cycling + focus restoration are
+  // delegated to the shared hook so the throttle and resume modals
+  // stay behaviourally identical for AT users (T29 review S2 #2).
+  useFocusTrap({
+    enabled: true,
+    containerRef: dialogRef,
+    onEscape: onCancel,
+  });
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
@@ -479,19 +513,18 @@ function ResumeConfirmDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="throttle-resume-confirm-title"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-amber-500/60 bg-[var(--bg-secondary)] p-4 text-[var(--text-primary)]"
         data-testid="throttle-resume-dialog"
       >
-        <h2
-          id="throttle-resume-confirm-title"
-          className="text-base font-semibold"
-        >
+        <h2 id={titleId} className="text-base font-semibold">
           Resume throttle for {tenantLabel}?
         </h2>
-        <p className="text-sm text-[var(--text-secondary)]">
+        <p id={descriptionId} className="text-sm text-[var(--text-secondary)]">
           Manual resume требует выделенного backend-маршрута и пока не
           реализован (carry-over). Подтверждение покажет ожидаемое сообщение
           об ошибке; auto-resume по TTL продолжает работать без вмешательства.

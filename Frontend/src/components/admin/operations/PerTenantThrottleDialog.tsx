@@ -37,7 +37,7 @@
  */
 
 import {
-  useEffect,
+  useCallback,
   useId,
   useMemo,
   useRef,
@@ -54,13 +54,12 @@ import {
   THROTTLE_REASON_MIN,
   ThrottleActionError,
   ThrottleTenantInputSchema,
+  isUuid,
   throttleActionErrorMessage,
   type ThrottleDurationMinutes,
   type ThrottleResponse,
 } from "@/lib/adminOperations";
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+import { useFocusTrap } from "./useFocusTrap";
 
 const DEFAULT_DURATION: ThrottleDurationMinutes = 15;
 
@@ -108,7 +107,6 @@ export function PerTenantThrottleDialog({
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const firstFieldRef = useRef<HTMLElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   const initialTenantId = useMemo<string>(() => {
     if (pinnedTenantId) return pinnedTenantId;
@@ -137,65 +135,22 @@ export function PerTenantThrottleDialog({
   const reasonValid =
     trimmedReason.length >= THROTTLE_REASON_MIN &&
     trimmedReason.length <= THROTTLE_REASON_MAX;
-  const tenantValid =
-    selectedTenantId !== "" && /^[0-9a-fA-F-]{36}$/.test(selectedTenantId);
+  const tenantValid = selectedTenantId !== "" && isUuid(selectedTenantId);
   const canSubmit = tenantValid && reasonValid && !isPending;
 
-  // Focus management.
-  useEffect(() => {
-    if (!open) return;
-    previouslyFocusedRef.current =
-      typeof document !== "undefined"
-        ? (document.activeElement as HTMLElement | null)
-        : null;
-    const id = window.setTimeout(() => {
-      firstFieldRef.current?.focus();
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-      const restoreTo = previouslyFocusedRef.current;
-      previouslyFocusedRef.current = null;
-      if (
-        restoreTo &&
-        typeof restoreTo.focus === "function" &&
-        typeof document !== "undefined" &&
-        document.contains(restoreTo)
-      ) {
-        restoreTo.focus();
-      }
-    };
-  }, [open]);
+  // Esc must be ignored mid-submit; bounce through a stable callback so
+  // useFocusTrap does not re-bind its keydown listener on every render.
+  const handleEscape = useCallback(() => {
+    if (isPending) return;
+    onOpenChange(false);
+  }, [isPending, onOpenChange]);
 
-  // Esc closes (when not submitting); Tab cycles focus inside the dialog.
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !isPending) {
-        e.preventDefault();
-        onOpenChange(false);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const container = dialogRef.current;
-      if (!container) return;
-      const focusables = Array.from(
-        container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((el) => el.getAttribute("aria-hidden") !== "true");
-      if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement as HTMLElement | null;
-      if (e.shiftKey && (active === first || !container.contains(active))) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, isPending, onOpenChange]);
+  useFocusTrap({
+    enabled: open,
+    containerRef: dialogRef,
+    initialFocusRef: firstFieldRef,
+    onEscape: handleEscape,
+  });
 
   const handleBackdropMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget && !isPending) {
