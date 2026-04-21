@@ -16,7 +16,9 @@ vi.mock("@/services/admin/serverSession", () => ({
 import {
   getEmergencyStatusAction,
   listEmergencyAuditTrailAction,
+  resumeAllAction,
   resumeTenantAction,
+  stopAllAction,
   throttleTenantAction,
 } from "./actions";
 
@@ -511,5 +513,217 @@ describe("resumeTenantAction — carry-over", () => {
     await expect(
       resumeTenantAction({ tenantId: TENANT_A }),
     ).rejects.toMatchObject({ code: "forbidden" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stopAllAction (T30, ARG-053)
+// ---------------------------------------------------------------------------
+
+const SUPER_SUBJECT = "admin_console:super-admin";
+const STOP_REASON = "supply-chain attack — halting all dispatch";
+
+function stopAllResponse(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    status: "stopped",
+    cancelled_count: over.cancelled_count ?? 7,
+    skipped_terminal_count: over.skipped_terminal_count ?? 0,
+    tenants_affected: over.tenants_affected ?? 3,
+    activated_at: over.activated_at ?? "2026-04-22T01:00:00Z",
+    audit_id: over.audit_id ?? "audit-stop-1",
+  };
+}
+
+function resumeAllResponse(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    status: "resumed",
+    resumed_at: over.resumed_at ?? "2026-04-22T02:00:00Z",
+    audit_id: over.audit_id ?? "audit-resume-1",
+  };
+}
+
+describe("stopAllAction — RBAC defence in depth", () => {
+  it("admin role → ThrottleActionError('forbidden', 403) BEFORE backend call (T30 case 13)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "admin",
+      tenantId: TENANT_A,
+      subject: "admin_console:admin",
+    });
+
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "forbidden", status: 403 });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("operator role → forbidden (no backend call)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "operator",
+      tenantId: TENANT_A,
+      subject: "admin_console:operator",
+    });
+
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("unauthenticated session → unauthorized", async () => {
+    sessionMock.mockResolvedValue({
+      role: null,
+      tenantId: null,
+      subject: "anon",
+    });
+
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "unauthorized" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+
+  it("rejects too-short reason as validation_failed (no backend call)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: SUPER_SUBJECT,
+    });
+    await expect(stopAllAction({ reason: "short" })).rejects.toMatchObject({
+      code: "validation_failed",
+    });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+});
+
+describe("stopAllAction — backend interaction", () => {
+  beforeEach(() => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: SUPER_SUBJECT,
+    });
+  });
+
+  it("super-admin happy path → returns parsed StopAllResponse (T30 case 14)", async () => {
+    callAdminBackendJson.mockResolvedValue(ok(stopAllResponse(), 202));
+
+    const out = await stopAllAction({ reason: STOP_REASON });
+
+    expect(out).toEqual(stopAllResponse());
+    expect(callAdminBackendJson).toHaveBeenCalledTimes(1);
+    const [path, init] = callAdminBackendJson.mock.calls[0] as [
+      string,
+      { method: string; headers: Record<string, string>; body: string },
+    ];
+    expect(path).toBe("/system/emergency/stop_all");
+    expect(init.method).toBe("POST");
+    expect(init.headers["X-Admin-Role"]).toBe("super-admin");
+    expect(init.headers["X-Operator-Subject"]).toBe(SUPER_SUBJECT);
+    expect(init.headers["X-Admin-Tenant"]).toBeUndefined();
+    const body = JSON.parse(init.body);
+    expect(body).toEqual({
+      reason: STOP_REASON,
+      confirmation_phrase: "STOP ALL SCANS",
+    });
+  });
+
+  it("super-admin 409 → already_active (concurrent operator beat us)", async () => {
+    callAdminBackendJson.mockResolvedValue(err(409));
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "already_active", status: 409 });
+  });
+
+  it("super-admin 503 → store_unavailable", async () => {
+    callAdminBackendJson.mockResolvedValue(err(503));
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "store_unavailable", status: 503 });
+  });
+
+  it("malformed envelope → server_error (no backend body leak)", async () => {
+    callAdminBackendJson.mockResolvedValue(ok({ totally: "wrong" }, 202));
+    await expect(
+      stopAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "server_error" });
+  });
+
+  it("trims reason on the way to the backend so leading/trailing whitespace doesn't disqualify a valid input", async () => {
+    callAdminBackendJson.mockResolvedValue(ok(stopAllResponse(), 202));
+    await stopAllAction({ reason: `   ${STOP_REASON}   ` });
+    const [, init] = callAdminBackendJson.mock.calls[0] as [
+      string,
+      { body: string },
+    ];
+    const body = JSON.parse(init.body);
+    expect(body.reason).toBe(STOP_REASON);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resumeAllAction
+// ---------------------------------------------------------------------------
+
+describe("resumeAllAction — RBAC", () => {
+  it("admin → forbidden (defence in depth)", async () => {
+    sessionMock.mockResolvedValue({
+      role: "admin",
+      tenantId: TENANT_A,
+      subject: "admin_console:admin",
+    });
+    await expect(
+      resumeAllAction({ reason: STOP_REASON }),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
+  });
+});
+
+describe("resumeAllAction — backend interaction", () => {
+  beforeEach(() => {
+    sessionMock.mockResolvedValue({
+      role: "super-admin",
+      tenantId: null,
+      subject: SUPER_SUBJECT,
+    });
+  });
+
+  it("super-admin happy path → returns parsed ResumeAllResponse", async () => {
+    callAdminBackendJson.mockResolvedValue(ok(resumeAllResponse()));
+    const out = await resumeAllAction({
+      reason: "incident closed, attacker blocked at WAF",
+    });
+    expect(out).toEqual(resumeAllResponse());
+    const [path, init] = callAdminBackendJson.mock.calls[0] as [
+      string,
+      { method: string; headers: Record<string, string>; body: string },
+    ];
+    expect(path).toBe("/system/emergency/resume_all");
+    expect(init.method).toBe("POST");
+    expect(init.headers["X-Admin-Role"]).toBe("super-admin");
+    const body = JSON.parse(init.body);
+    expect(body.confirmation_phrase).toBe("RESUME ALL SCANS");
+  });
+
+  it("super-admin 409 (emergency_not_active) → emergency_inactive (T30 case 15)", async () => {
+    callAdminBackendJson.mockResolvedValue(
+      err(409, { detail: "emergency_not_active" }),
+    );
+    await expect(
+      resumeAllAction({ reason: "test resume against inactive flag" }),
+    ).rejects.toMatchObject({ code: "emergency_inactive", status: 409 });
+  });
+
+  it("super-admin 503 → store_unavailable (T30 case 16)", async () => {
+    callAdminBackendJson.mockResolvedValue(err(503));
+    await expect(
+      resumeAllAction({ reason: "redis offline retry test  " }),
+    ).rejects.toMatchObject({ code: "store_unavailable", status: 503 });
+  });
+
+  it("rejects too-short reason as validation_failed (no backend call)", async () => {
+    await expect(resumeAllAction({ reason: "x" })).rejects.toMatchObject({
+      code: "validation_failed",
+    });
+    expect(callAdminBackendJson).not.toHaveBeenCalled();
   });
 });

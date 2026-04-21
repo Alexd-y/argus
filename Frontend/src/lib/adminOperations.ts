@@ -43,6 +43,14 @@ export const THROTTLE_REASON_MAX = 500;
 export const THROTTLE_DURATIONS = [15, 60, 240, 1440] as const;
 export type ThrottleDurationMinutes = (typeof THROTTLE_DURATIONS)[number];
 
+// Typed-phrase confirmations for the global kill-switch (T30, ARG-053).
+// Mirror of `EMERGENCY_STOP_PHRASE` / `EMERGENCY_RESUME_PHRASE` in
+// `backend/src/api/schemas.py`. Case-sensitive; UI must paste-block the
+// input that compares against them so an operator cannot fat-finger their
+// way past the confirmation gate.
+export const STOP_ALL_PHRASE = "STOP ALL SCANS";
+export const RESUME_ALL_PHRASE = "RESUME ALL SCANS";
+
 export const THROTTLE_DURATION_LABELS: Readonly<
   Record<ThrottleDurationMinutes, string>
 > = {
@@ -65,6 +73,7 @@ export const THROTTLE_FAILURE_TAXONOMY = [
   "validation_failed",
   "duration_not_allowed",
   "already_active",
+  "emergency_inactive",
   "store_unavailable",
   "rate_limited",
   "not_implemented",
@@ -99,6 +108,8 @@ const ERROR_MESSAGES_RU: Readonly<
     "Допустимы только длительности 15 минут / 1 час / 4 часа / 24 часа.",
   already_active:
     "Глобальный stop-all активен; throttle отдельного tenant не применяется.",
+  emergency_inactive:
+    "Глобальный stop не активен — кнопка resume не имеет эффекта.",
   store_unavailable:
     "Хранилище kill-switch недоступно. Повторите попытку через минуту.",
   rate_limited:
@@ -161,6 +172,7 @@ export function detailToThrottleActionCode(
   }
   if (normalized === "tenant mismatch") return "forbidden";
   if (normalized === "emergency_already_active") return "already_active";
+  if (normalized === "emergency_not_active") return "emergency_inactive";
   if (normalized === "emergency_store_unavailable") return "store_unavailable";
   if (normalized.startsWith("x-admin-tenant header is required")) {
     return "forbidden";
@@ -282,6 +294,51 @@ export const EmergencyAuditListResponseSchema = z.object({
 export type EmergencyAuditListResponse = z.infer<
   typeof EmergencyAuditListResponseSchema
 >;
+
+// ---------------------------------------------------------------------------
+// Global kill-switch (T30, ARG-053)
+// Schemas accept ONLY a `reason` from the caller — the typed-phrase
+// confirmation is part of the wire body but enforced separately by the UI
+// dialog (case-sensitive, paste-blocked) and re-checked server-side. We
+// keep the action input minimal so a stale React tree cannot accidentally
+// satisfy the phrase gate by passing the constant from a stale module.
+// ---------------------------------------------------------------------------
+
+const _emergencyReasonSchema = z
+  .string()
+  .transform((s) => s.trim())
+  .pipe(z.string().min(THROTTLE_REASON_MIN).max(THROTTLE_REASON_MAX));
+
+export const StopAllInputSchema = z.object({
+  reason: _emergencyReasonSchema,
+});
+
+export type StopAllInput = z.infer<typeof StopAllInputSchema>;
+
+export const StopAllResponseSchema = z.object({
+  status: z.literal("stopped"),
+  cancelled_count: z.number().int().nonnegative(),
+  skipped_terminal_count: z.number().int().nonnegative(),
+  tenants_affected: z.number().int().nonnegative(),
+  activated_at: z.string(),
+  audit_id: z.string(),
+});
+
+export type StopAllResponse = z.infer<typeof StopAllResponseSchema>;
+
+export const ResumeAllInputSchema = z.object({
+  reason: _emergencyReasonSchema,
+});
+
+export type ResumeAllInput = z.infer<typeof ResumeAllInputSchema>;
+
+export const ResumeAllResponseSchema = z.object({
+  status: z.literal("resumed"),
+  resumed_at: z.string(),
+  audit_id: z.string(),
+});
+
+export type ResumeAllResponse = z.infer<typeof ResumeAllResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // Selector helpers used by the client UI.

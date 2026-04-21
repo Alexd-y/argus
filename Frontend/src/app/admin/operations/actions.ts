@@ -47,6 +47,12 @@
 
 import {
   EmergencyAuditListResponseSchema,
+  ResumeAllInputSchema,
+  ResumeAllResponseSchema,
+  STOP_ALL_PHRASE,
+  RESUME_ALL_PHRASE,
+  StopAllInputSchema,
+  StopAllResponseSchema,
   ThrottleResponseSchema,
   ThrottleStatusResponseSchema,
   ThrottleTenantInputSchema,
@@ -55,6 +61,8 @@ import {
   isUuid,
   statusToThrottleActionCode,
   type EmergencyAuditListResponse,
+  type ResumeAllResponse,
+  type StopAllResponse,
   type ThrottleResponse,
   type ThrottleStatusResponse,
   type ThrottleTenantInput,
@@ -65,6 +73,8 @@ import { getServerAdminSession } from "@/services/admin/serverSession";
 const THROTTLE_PATH = "/system/emergency/throttle";
 const STATUS_PATH = "/system/emergency/status";
 const AUDIT_TRAIL_PATH = "/system/emergency/audit-trail";
+const STOP_ALL_PATH = "/system/emergency/stop_all";
+const RESUME_ALL_PATH = "/system/emergency/resume_all";
 
 const DEFAULT_AUDIT_LIMIT = 25;
 const MAX_AUDIT_LIMIT = 200;
@@ -364,4 +374,130 @@ export async function resumeTenantAction(input: {
     tenantId: input.tenantId,
   };
   throw err;
+}
+
+// ---------------------------------------------------------------------------
+// Global kill-switch — stopAllAction / resumeAllAction (T30, ARG-053).
+//
+// Defence in depth:
+//   1. The UI dialog gates the buttons behind a typed-phrase confirmation
+//      (case-sensitive, paste-blocked) and a 10..500 char reason.
+//   2. THIS layer (server action) re-validates the reason via Zod AND
+//      enforces `session.role === "super-admin"` BEFORE the round-trip,
+//      throwing `ThrottleActionError("forbidden", 403)` for admin/operator
+//      so a hand-rolled fetch from a stale `admin` session can't widen
+//      its scope by reaching this entry-point.
+//   3. The backend re-validates `_require_super_admin` AND the
+//      `confirmation_phrase` field server-side (`backend/src/api/routers/
+//      admin_emergency.py`). Three independent checks; tampering with any
+//      ONE of them still leaves the other two intact.
+//
+// We send `confirmation_phrase` as a constant (the phrase the dialog UI
+// already validated) to satisfy the backend Pydantic model. The phrase
+// is NEVER sourced from the caller arg — that would defeat layer (2).
+// ---------------------------------------------------------------------------
+
+/**
+ * Engage the global emergency stop. Cancels every active scan
+ * cross-tenant and sets the global Redis flag so future tool dispatch
+ * fails closed.
+ *
+ * @throws {@link ThrottleActionError} with closed-taxonomy codes:
+ *   - `unauthorized` (no session)
+ *   - `forbidden` (role !== super-admin)
+ *   - `validation_failed` (bad reason)
+ *   - `already_active` (409 — flag already set by a concurrent operator)
+ *   - `store_unavailable` (503 — Redis or X-Admin-Key missing)
+ *   - `server_error` (anything else, including envelope drift)
+ */
+export async function stopAllAction(
+  rawInput: unknown,
+): Promise<StopAllResponse> {
+  const parsed = StopAllInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    throw new ThrottleActionError("validation_failed", 400);
+  }
+
+  const session = await resolveAdminSession();
+  if (session.role !== "super-admin") {
+    throw new ThrottleActionError("forbidden", 403);
+  }
+
+  const result = await callAdminBackendJson<unknown>(STOP_ALL_PATH, {
+    method: "POST",
+    headers: {
+      "X-Admin-Role": session.role,
+      "X-Operator-Subject": session.subject,
+    },
+    body: JSON.stringify({
+      reason: parsed.data.reason,
+      confirmation_phrase: STOP_ALL_PHRASE,
+    }),
+  });
+
+  if (!result.ok) {
+    // 409 on stop_all only ever surfaces `emergency_already_active` (a
+    // concurrent operator beat us to the punch). Mirror the backend
+    // `_DETAIL_EMERGENCY_ACTIVE` Final constant — `mapResultToError`
+    // already maps 409 → `already_active` via `statusToThrottleActionCode`.
+    throw mapResultToError(result.status, undefined);
+  }
+
+  const parsedBody = StopAllResponseSchema.safeParse(result.data);
+  if (!parsedBody.success) {
+    throw new ThrottleActionError("server_error", 200);
+  }
+  return parsedBody.data;
+}
+
+/**
+ * Lift the global emergency stop. The backend returns 409
+ * `emergency_not_active` when no flag is set so operators get a loud
+ * signal that their resume call did NOT toggle state.
+ *
+ * @throws {@link ThrottleActionError} with closed-taxonomy codes:
+ *   - `unauthorized`, `forbidden`, `validation_failed`
+ *   - `emergency_inactive` (409 — no global stop in effect)
+ *   - `store_unavailable` (503), `server_error` (catch-all)
+ */
+export async function resumeAllAction(
+  rawInput: unknown,
+): Promise<ResumeAllResponse> {
+  const parsed = ResumeAllInputSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    throw new ThrottleActionError("validation_failed", 400);
+  }
+
+  const session = await resolveAdminSession();
+  if (session.role !== "super-admin") {
+    throw new ThrottleActionError("forbidden", 403);
+  }
+
+  const result = await callAdminBackendJson<unknown>(RESUME_ALL_PATH, {
+    method: "POST",
+    headers: {
+      "X-Admin-Role": session.role,
+      "X-Operator-Subject": session.subject,
+    },
+    body: JSON.stringify({
+      reason: parsed.data.reason,
+      confirmation_phrase: RESUME_ALL_PHRASE,
+    }),
+  });
+
+  if (!result.ok) {
+    // 409 on resume_all means `emergency_not_active` (no global stop in
+    // effect). The status-only mapping would otherwise classify this as
+    // `already_active`, which is the wrong RU sentence for the operator.
+    if (result.status === 409) {
+      throw new ThrottleActionError("emergency_inactive", 409);
+    }
+    throw mapResultToError(result.status, undefined);
+  }
+
+  const parsedBody = ResumeAllResponseSchema.safeParse(result.data);
+  if (!parsedBody.success) {
+    throw new ThrottleActionError("server_error", 200);
+  }
+  return parsedBody.data;
 }
