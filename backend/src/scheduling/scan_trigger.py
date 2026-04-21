@@ -383,7 +383,7 @@ def _dispatch_scan_phase(
 
 @app.task(bind=True, name="argus.scheduling.run_scheduled_scan")
 def run_scheduled_scan(
-    _self,
+    _self: Any,
     schedule_id: str,
     tenant_id: str,
 ) -> dict[str, Any]:

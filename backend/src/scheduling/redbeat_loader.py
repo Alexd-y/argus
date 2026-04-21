@@ -74,16 +74,18 @@ def _get_redbeat_entry_cls() -> type[Any] | None:
         from redbeat import RedBeatSchedulerEntry  # type: ignore[import-untyped]
     except ImportError:
         return None
-    return RedBeatSchedulerEntry
+    cls: type[Any] = RedBeatSchedulerEntry
+    return cls
 
 
 def _get_celery_crontab() -> type[Any] | None:
     """Return :class:`celery.schedules.crontab` or ``None``."""
     try:
-        from celery.schedules import crontab
+        from celery.schedules import crontab  # type: ignore[import-untyped]
     except ImportError:  # pragma: no cover — celery is a hard runtime dep
         return None
-    return crontab
+    cls: type[Any] = crontab
+    return cls
 
 
 def _get_celery_app() -> Any | None:
