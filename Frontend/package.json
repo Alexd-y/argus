@@ -25,6 +25,7 @@
     "@rjsf/validator-ajv8": "^6.5.0",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-virtual": "^3.13.24",
+    "cron-parser": "^4.9.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",

@@ -6,7 +6,7 @@ const SERVICE_UNAVAILABLE = "Admin service is temporarily unavailable.";
 
 export type AdminJsonResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; status: number };
+  | { ok: false; error: string; status: number; detail?: unknown };
 
 /**
  * Server-only JSON call to FastAPI `/api/v1/admin/*` with `X-Admin-Key` from env.
@@ -48,13 +48,18 @@ export async function callAdminBackendJson<T>(
     const body: unknown = await res.json();
     if (!res.ok) {
       let message = GENERIC_ERROR;
+      let rawDetail: unknown = undefined;
       if (body && typeof body === "object" && "detail" in body) {
-        const safe = normalizeAdminDetailError(
-          (body as { detail: unknown }).detail,
-        );
+        rawDetail = (body as { detail: unknown }).detail;
+        const safe = normalizeAdminDetailError(rawDetail);
         if (safe) message = safe;
       }
-      return { ok: false, error: message, status: res.status };
+      return {
+        ok: false,
+        error: message,
+        status: res.status,
+        detail: rawDetail,
+      };
     }
     return { ok: true, data: body as T };
   }
