@@ -1,0 +1,32 @@
+tool_id: mkcert_verify
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "200m"
+memory_limit: "128Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: tls-handshake
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "openssl s_client -connect {host}:{port} -servername {host} -showcerts </dev/null 2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs {out_dir}/chain.pem > {out_dir}/mkcert_verify.txt 2>&1"
+parse_strategy: custom
+evidence_artifacts:
+  - "/out/chain.pem"
+  - "/out/mkcert_verify.txt"
+cwe_hints:
+  - 295
+  - 296
+  - 297
+owasp_wstg:
+  - "WSTG-CRYP-03"
+description: "Local TLS chain validation: pulls the live certificate chain via openssl s_client and verifies it against the system CA bundle. Backlog/dev1_md §4.3."

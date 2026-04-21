@@ -1,0 +1,36 @@
+tool_id: tlsx
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: tls-handshake
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "tlsx"
+  - "-host"
+  - "{host}"
+  - "-port"
+  - "{port}"
+  - "-json"
+  - "-o"
+  - "{out_dir}/tlsx.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/tlsx.json"
+cwe_hints:
+  - 326
+  - 295
+owasp_wstg:
+  - "WSTG-CRYP-01"
+  - "WSTG-CRYP-03"
+description: "ProjectDiscovery tlsx fast TLS handshake summary (cert chain, SAN, protocol, JARM) for one host:port. Backlog/dev1_md §4.3."

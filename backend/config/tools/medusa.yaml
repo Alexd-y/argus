@@ -1,0 +1,32 @@
+tool_id: medusa
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "medusa -h {host} -U {in_dir}/u.txt -P {in_dir}/p.txt -M {mod} -O {out_dir}/medusa.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/medusa.txt"
+cwe_hints:
+  - 287
+  - 307
+  - 521
+owasp_wstg:
+  - "WSTG-ATHN-01"
+  - "WSTG-ATHN-04"
+description: "Medusa parallel credential bruteforcer driven by the per-protocol module {mod} (e.g. ssh, ftp, smbnt). APPROVAL REQUIRED: high-rate auth attempts trigger lockouts and IDS alerts. Wordlists from {in_dir}/u.txt and {in_dir}/p.txt; output is text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

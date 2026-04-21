@@ -1,0 +1,33 @@
+tool_id: subjs
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "subjs-wrapper"
+  - "-i"
+  - "{in_dir}/urls.txt"
+  - "-out"
+  - "{out_dir}/subjs.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/subjs.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-05"
+  - "WSTG-INFO-06"
+description: "subjs extracts JavaScript file URLs referenced by the URLs in `{in_dir}/urls.txt`. Image-side wrapper `subjs-wrapper` translates argv-form (`-i <urls.txt> -out <path>`) to upstream stdin/stdout pipe (`subjs -i <urls.txt> > <path>`) so the sandbox stays argv-only. Author: lc (https://github.com/lc/subjs). Backlog/dev1_md §4.6."

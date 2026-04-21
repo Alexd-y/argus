@@ -1,12 +1,12 @@
-{# OWASP Top 10:2025 — встраивается в Asgard/Valhalla (RPT-008). Требует owasp_compliance_rows. #}
+{# OWASP Top 10:2025 — embedded in Asgard/Valhalla (RPT-008). Requires owasp_compliance_rows. #}
 <section class="owasp-compliance" id="owasp-top10-compliance">
     <h3 class="owasp-compliance-heading">OWASP Top 10:2025 Compliance</h3>
     <table class="owasp-compliance-table">
         <thead>
             <tr>
-                <th scope="col">Категория</th>
-                <th scope="col">Описание</th>
-                <th scope="col" class="owasp-compliance-count-col">Наличие находок</th>
+                <th scope="col">Category</th>
+                <th scope="col">Description</th>
+                <th scope="col" class="owasp-compliance-count-col">Findings Present</th>
             </tr>
         </thead>
         <tbody>
@@ -15,10 +15,10 @@
                 <td class="owasp-compliance-category"{% if cr.description_hover %} title="{{ cr.description_hover|e }}"{% endif %}>
                     <span class="owasp-compliance-code"><code>{{ cr.category_id }}</code></span>
                     <span class="owasp-compliance-sep"> — </span>
-                    <span class="owasp-compliance-title-ru">{{ cr.title_ru }}</span>
+                    <span class="owasp-compliance-title">{{ cr.title }}</span>
                 </td>
                 <td class="owasp-compliance-desc">{{ cr.description }}</td>
-                <td class="owasp-compliance-presence">{{ cr.findings_present_ru }}</td>
+                <td class="owasp-compliance-presence">{{ cr.findings_present }}</td>
             </tr>
             {% endfor %}
         </tbody>

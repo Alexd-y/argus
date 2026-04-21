@@ -1,8 +1,8 @@
 {% set vc = valhalla_context %}
 <section class="valhalla-appendices panel" id="appendices">
-    <h2>Приложения</h2>
+    <h2>Appendices</h2>
 
-    <h3>Приложение А. Список использованных инструментов и версий</h3>
+    <h3>Appendix A. Tools and Versions Used</h3>
     {% if vc.appendix_tools %}
         <ul>
             {% for e in vc.appendix_tools %}
@@ -12,21 +12,21 @@
     {% elif tool_runs %}
         <ul>
             {% for tr in tool_runs %}
-            <li><code>{{ tr.tool_name | e }}</code> (статус: {{ tr.status | e }})</li>
+            <li><code>{{ tr.tool_name | e }}</code> (status: {{ tr.status | e }})</li>
             {% endfor %}
         </ul>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Приложение Б. Фрагменты конфигураций и вводов фаз</h3>
+    <h3>Appendix B. Phase Configuration and Input Excerpts</h3>
     {% if valhalla_appendix_phase_inputs_excerpt %}
         <pre class="ai-slot-body">{{ valhalla_appendix_phase_inputs_excerpt | e }}</pre>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Приложение В. Выдержки из журнала событий / таймлайна ARGUS</h3>
+    <h3>Appendix C. ARGUS Event Log / Timeline Excerpts</h3>
     {% if valhalla_appendix_timeline_rows %}
         <ul class="timeline">
             {% for row in valhalla_appendix_timeline_rows %}
@@ -34,28 +34,28 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Приложение Г. Выдержка из nmap / сетевого сканирования</h3>
+    <h3>Appendix D. Nmap / Network Scan Excerpt</h3>
     {% if valhalla_appendix_nmap_excerpt %}
         <pre class="ai-slot-body">{{ valhalla_appendix_nmap_excerpt | e }}</pre>
     {% elif vc.exploitation_post_excerpt %}
         <pre class="ai-slot-body">{{ vc.exploitation_post_excerpt | e }}</pre>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Приложение Д. Признаки APT (если обнаружены)</h3>
-    <p class="empty">Плейсхолдер: индикаторы компрометации, тактики MITRE ATT&CK — при отдельном согласовании и данных обнаружения. Нет данных.</p>
+    <h3>Appendix E. APT Indicators (if detected)</h3>
+    <p>APT analysis and MITRE ATT&CK tactic mapping were not conducted during this assessment. If Advanced Persistent Threat indicators or indicators of compromise (IoC) are required, a dedicated threat hunting engagement should be arranged separately.</p>
 
-    <h3>Приложение Е. Результаты проверки утечек паролей (hashed, HIBP)</h3>
+    <h3>Appendix F. Password Leak Verification Results (hashed, HIBP)</h3>
     {% if hibp_pwned_password_summary is defined and hibp_pwned_password_summary %}
         {% set hp = hibp_pwned_password_summary %}
         <ul class="hibp-summary">
-            <li>Проверено выборочных значений (k-anonymity API): <strong>{{ hp.checks_run | default(0) | int }}</strong></li>
-            <li>Совпадений с корпусом Pwned Passwords: <strong>{{ hp.pwned_count | default(0) | int }}</strong></li>
-            <li>Агрегат утечки паролей (сигнал): <strong>{{ hp.data_breach_password_exposure | default("—") | e }}</strong></li>
+            <li>Sample values checked (k-anonymity API): <strong>{{ hp.checks_run | default(0) | int }}</strong></li>
+            <li>Matches in Pwned Passwords corpus: <strong>{{ hp.pwned_count | default(0) | int }}</strong></li>
+            <li>Password breach exposure signal: <strong>{{ hp.data_breach_password_exposure | default("—") | e }}</strong></li>
         </ul>
         {% if hp.breach_signal_note %}
             <p class="ai-slot-body">{{ hp.breach_signal_note | e }}</p>
@@ -64,11 +64,11 @@
             <p class="muted"><small>{{ hp.note | e }}</small></p>
         {% endif %}
     {% else %}
-        <p class="empty">Нет агрегированных данных HIBP (политика opt-in отключена, фаза эксплуатации без выборки или проверка не выполнялась).</p>
+        <p class="empty">No aggregated HIBP data (opt-in policy disabled, exploitation phase without sampling, or verification was not performed).</p>
     {% endif %}
 
-    <h3>Приложение Ж. Сырые артефакты по фазам (presigned / API)</h3>
-    <p class="meta"><small>Те же данные, что и блок «Артефакты этапов» в основном отчёте: <code>scan_artifacts</code> из <code>ScanReportData</code> / listing MinIO.</small></p>
+    <h3>Appendix G. Raw Phase Artifacts (presigned / API)</h3>
+    <p class="meta"><small>Same data as the "Phase Artifacts" block in the main report: <code>scan_artifacts</code> from <code>ScanReportData</code> / MinIO listing.</small></p>
     <div class="valhalla-appendix-scan-artifacts" id="valhalla-appendix-scan-artifacts">
         {% include "partials/scan_artifacts_inner.html.j2" %}
     </div>

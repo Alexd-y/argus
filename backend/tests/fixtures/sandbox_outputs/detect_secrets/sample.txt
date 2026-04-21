@@ -1,0 +1,47 @@
+{
+  "version": "1.4.0",
+  "plugins_used": [
+    {"name": "AWSKeyDetector"},
+    {"name": "GitHubTokenDetector"},
+    {"name": "PrivateKeyDetector"},
+    {"name": "HighEntropyStringDetector", "limit": 4.5}
+  ],
+  "filters_used": [],
+  "results": {
+    "src/config.py": [
+      {
+        "type": "AWS Access Key",
+        "filename": "src/config.py",
+        "hashed_secret": "d033e22ae348aeb5660fc2140aec35850c4da997",
+        "is_verified": true,
+        "line_number": 42
+      },
+      {
+        "type": "High Entropy String",
+        "filename": "src/config.py",
+        "hashed_secret": "5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8",
+        "is_verified": false,
+        "line_number": 87
+      }
+    ],
+    ".env": [
+      {
+        "type": "GitHub Token",
+        "filename": ".env",
+        "hashed_secret": "356a192b7913b04c54574d18c28d46e6395428ab",
+        "is_verified": false,
+        "line_number": 3
+      }
+    ],
+    "lib/db.py": [
+      {
+        "type": "Private Key",
+        "filename": "lib/db.py",
+        "hashed_secret": "da4b9237bacccdf19c0760cab7aec4a8359010b0",
+        "is_verified": false,
+        "line_number": 13
+      }
+    ]
+  },
+  "generated_at": "2026-04-01T12:00:00Z"
+}

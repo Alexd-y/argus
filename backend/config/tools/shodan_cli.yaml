@@ -1,0 +1,30 @@
+tool_id: shodan_cli
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "300m"
+memory_limit: "256Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "shodan search --fields ip_str,port,org,hostnames hostname:{domain} > {out_dir}/shodan.csv"
+parse_strategy: csv
+evidence_artifacts:
+  - "/out/shodan.csv"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-04"
+description: "Shodan CLI passive lookup of exposed services for hostnames matching the target domain. Requires SHODAN_API_KEY. Backlog/dev1_md §4.1."

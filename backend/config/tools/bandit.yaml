@@ -1,0 +1,43 @@
+tool_id: bandit
+version: "1.0.0"
+category: misc
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "bandit"
+  - "-r"
+  - "{path}"
+  - "-f"
+  - "json"
+  - "-o"
+  - "{out_dir}/bandit.json"
+  - "-q"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/bandit.json"
+cwe_hints:
+  - 22
+  - 78
+  - 79
+  - 89
+  - 94
+  - 200
+  - 295
+  - 327
+  - 502
+  - 798
+owasp_wstg:
+  - "WSTG-INPV-05"
+  - "WSTG-CRYP-04"
+  - "WSTG-INFO-08"
+description: "PyCQA Bandit Python SAST — recursively analyses the Python source tree at {path} (under /in) for common security smells (eval/exec, weak crypto, insecure deserialisation, hardcoded passwords, subprocess shell=True, request without verify, sql concat). Fully offline (offline-no-egress); rule plugins ship inside the image. Parser deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: PyCQA (https://github.com/PyCQA/bandit). Backlog/dev1_md §4.16. ARG-018."

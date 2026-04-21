@@ -1,0 +1,31 @@
+tool_id: ike_scan
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ike-scan -M -A {host} > {out_dir}/ike_scan.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/ike_scan.txt"
+cwe_hints:
+  - 200
+  - 326
+owasp_wstg:
+  - "WSTG-CRYP-01"
+  - "WSTG-INFO-02"
+description: "ike-scan — IKEv1/v2 IPsec endpoint discovery against {host} (UDP/500). -A enables aggressive-mode handshake to capture pre-shared-key hash material on misconfigured peers; -M emits multi-line / verbose output. Read-only single-shot probe — does not exhaust DH key material. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

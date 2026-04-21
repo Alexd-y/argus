@@ -1,0 +1,96 @@
+{{- if .Values.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "argus.fullname" . }}-backend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "argus.fullname" . }}-backend
+  minReplicas: {{ .Values.hpa.backend.minReplicas }}
+  maxReplicas: {{ .Values.hpa.backend.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.backend.targetCPUUtilizationPercentage }}
+    {{- if .Values.hpa.backend.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.backend.targetMemoryUtilizationPercentage }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 20
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+      selectPolicy: Max
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "argus.fullname" . }}-celery
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "argus.fullname" . }}-celery
+  minReplicas: {{ .Values.hpa.celery.minReplicas }}
+  maxReplicas: {{ .Values.hpa.celery.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.celery.targetCPUUtilizationPercentage }}
+    {{- if .Values.hpa.celery.customMetrics.enabled }}
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .Values.hpa.celery.customMetrics.metricName }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.hpa.celery.customMetrics.averageValue | quote }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 200
+          periodSeconds: 30
+        - type: Pods
+          value: 4
+          periodSeconds: 30
+      selectPolicy: Max
+{{- end }}

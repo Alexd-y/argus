@@ -2,14 +2,14 @@
 {% set cov = vc.coverage if vc.coverage is defined else none %}
 {% if cov %}
 <section class="valhalla-coverage panel" id="data-coverage">
-    <h3>Полнота данных и покрытие (Data Completeness &amp; Coverage)</h3>
+    <h3>Data Completeness and Coverage</h3>
     {% if cov.phases_executed %}
-        <p><strong>Фазы с выходными данными:</strong> {{ cov.phases_executed | join(", ") | e }}</p>
+        <p><strong>Phases with output data:</strong> {{ cov.phases_executed | join(", ") | e }}</p>
     {% else %}
-        <p class="meta">Фазы с выходными данными: нет записей phase_outputs в контексте отчёта.</p>
+        <p class="meta">Phases with output data: no phase_outputs records in report context.</p>
     {% endif %}
     {% if cov.feature_flags %}
-        <p><strong>Feature flags (как в окружении):</strong></p>
+        <p><strong>Feature flags (as in environment):</strong></p>
         <ul class="coverage-flags">
             {% for fk, fv in cov.feature_flags.items() %}
             <li><code>{{ fk | e }}</code> = {% if fv %}true{% else %}false{% endif %}</li>
@@ -19,7 +19,7 @@
     {% if cov.sections %}
         <table class="valhalla-coverage-sections">
             <thead>
-                <tr><th>Секция</th><th>Статус</th><th>Причина / комментарий</th></tr>
+                <tr><th>Section</th><th>Status</th><th>Reason / Comment</th></tr>
             </thead>
             <tbody>
                 {% for sk, sv in cov.sections.items() %}
@@ -33,14 +33,14 @@
         </table>
     {% endif %}
     {% if cov.tool_errors_summary %}
-        <h4>Сводка неуспешных запусков инструментов</h4>
+        <h4>Failed Tool Run Summary</h4>
         <ul>
             {% for row in cov.tool_errors_summary %}
             <li><code>{{ row.tool | e }}</code> — {{ row.status | e }}{% if row.note %} <span class="meta">({{ row.note | e }})</span>{% endif %}</li>
             {% endfor %}
         </ul>
     {% else %}
-        <p class="meta"><small>Нет записей о завершении инструментов с ошибкой в tool_errors_summary.</small></p>
+        <p class="meta"><small>No records of tools completing with errors in tool_errors_summary.</small></p>
     {% endif %}
 </section>
 {% endif %}

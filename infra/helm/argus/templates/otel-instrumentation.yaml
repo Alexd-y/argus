@@ -1,0 +1,29 @@
+{{- if .Values.otelInstrumentation.enabled }}
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: {{ include "argus.fullname" . }}
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  exporter:
+    endpoint: {{ .Values.otelInstrumentation.endpoint | quote }}
+  propagators:
+    - tracecontext
+    - baggage
+    - b3
+  sampler:
+    type: parentbased_traceidratio
+    argument: {{ .Values.otelInstrumentation.sampleRatio | quote }}
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.55b0
+    env:
+      - name: OTEL_LOGS_EXPORTER
+        value: otlp_proto_http
+      - name: OTEL_METRICS_EXPORTER
+        value: otlp
+      - name: OTEL_PYTHON_LOG_CORRELATION
+        value: "true"
+  nodejs:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:0.59.0
+{{- end }}

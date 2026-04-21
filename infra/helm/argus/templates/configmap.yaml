@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-config
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+data:
+  ARGUS_LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  ARGUS_ENVIRONMENT: {{ .Values.config.environment | quote }}
+  ARGUS_SCAN_WORKER_CONCURRENCY: {{ .Values.config.scanWorkerConcurrency | quote }}
+  ARGUS_RATE_LIMITER_BUCKET_CAPACITY: {{ .Values.config.rateLimiter.bucketCapacity | quote }}
+  ARGUS_RATE_LIMITER_REFILL_RATE_PER_SEC: {{ .Values.config.rateLimiter.refillRatePerSec | quote }}
+  POSTGRES_HOST: {{ printf "%s-postgresql" .Release.Name | quote }}
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+  POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
+  REDIS_HOST: {{ printf "%s-redis-master" .Release.Name | quote }}
+  REDIS_PORT: "6379"
+  S3_ENDPOINT_URL: {{ printf "http://%s-minio:9000" .Release.Name | quote }}
+  S3_BUCKET_EVIDENCE: "argus-evidence"
+  S3_BUCKET_REPORTS: "argus-reports"
+  {{- if .Values.otelInstrumentation.enabled }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.otelInstrumentation.endpoint | quote }}
+  OTEL_TRACES_SAMPLER: traceidratio
+  OTEL_TRACES_SAMPLER_ARG: {{ .Values.otelInstrumentation.sampleRatio | quote }}
+  OTEL_SERVICE_NAME: argus
+  {{- end }}

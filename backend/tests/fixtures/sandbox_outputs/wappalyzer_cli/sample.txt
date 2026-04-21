@@ -1,0 +1,46 @@
+{
+  "urls": {
+    "https://target.example.com": {
+      "status": 200,
+      "responseTime": 142,
+      "contentType": "text/html"
+    }
+  },
+  "technologies": [
+    {
+      "slug": "nginx",
+      "name": "Nginx",
+      "version": "1.25.3",
+      "confidence": 100,
+      "categories": [{"id": 22, "slug": "web-servers", "name": "Web servers"}]
+    },
+    {
+      "slug": "react",
+      "name": "React",
+      "version": "18.2.0",
+      "confidence": 100,
+      "categories": [{"id": 12, "slug": "javascript-frameworks", "name": "JavaScript frameworks"}]
+    },
+    {
+      "slug": "cloudflare",
+      "name": "Cloudflare",
+      "version": "",
+      "confidence": 100,
+      "categories": [{"id": 31, "slug": "cdn", "name": "CDN"}]
+    },
+    {
+      "slug": "google-analytics",
+      "name": "Google Analytics",
+      "version": "4.0",
+      "confidence": 90,
+      "categories": [{"id": 10, "slug": "analytics", "name": "Analytics"}]
+    },
+    {
+      "slug": "jquery",
+      "name": "jQuery",
+      "version": "3.6.0",
+      "confidence": 100,
+      "categories": [{"id": 59, "slug": "javascript-libraries", "name": "JavaScript libraries"}]
+    }
+  ]
+}

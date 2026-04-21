@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jose import JWTError, jwt  # type: ignore[import-untyped]
 
 from src.core.config import settings
 

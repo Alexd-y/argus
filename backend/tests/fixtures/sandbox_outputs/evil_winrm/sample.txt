@@ -1,0 +1,20 @@
+Evil-WinRM shell v3.5
+
+Warning: Remote path completions is disabled due to ruby limitation: quoting_detection_proc() function is unimplemented on this machine
+
+Data: For more information, check Evil-WinRM GitHub: https://github.com/Hackplayers/evil-winrm#Remote-path-completion
+
+Info: Establishing connection to remote endpoint: dc01.contoso.local
+
+*Evil-WinRM* PS C:\Users\Administrator\Documents> whoami
+contoso\administrator
+*Evil-WinRM* PS C:\Users\Administrator\Documents> hostname
+DC01
+*Evil-WinRM* PS C:\Users\Administrator\Documents> Get-ADUser -Filter * | Select-Object SamAccountName | Out-String
+administrator
+guest
+krbtgt
+svc-backup
+jdoe
+*Evil-WinRM* PS C:\Users\Administrator\Documents> exit
+Info: Exiting with code 0

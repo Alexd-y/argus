@@ -1,8 +1,4 @@
-"""Kali pentest tool registry — 150+ tool definitions for MCP.
-
-Each tool maps to backend API: POST /api/v1/tools/{name} or /execute.
-Excludes exploit/brute-only tools per MCP-002.
-"""
+# Kali tool registry for ARGUS MCP — module __doc__ (with dynamic tool count) is set after KALI_TOOL_REGISTRY.
 
 from __future__ import annotations
 
@@ -37,7 +33,7 @@ def _arg(name: str, desc: str, required: bool = True, default: Any = None, type:
 
 
 # ---------------------------------------------------------------------------
-# 150+ Kali tool definitions
+# Kali tool definitions (count: len(KALI_TOOL_REGISTRY), set in module __doc__ below)
 # ---------------------------------------------------------------------------
 
 KALI_TOOL_REGISTRY: list[ToolDefinition] = [
@@ -1145,6 +1141,12 @@ KALI_TOOL_REGISTRY: list[ToolDefinition] = [
         args_schema=[_arg("query", "Shodan search query"), _arg("additional_args", "Extra CLI args", required=False, default="")],
     ),
 ]
+
+__doc__ = (
+    f"Kali Linux security tool registry for MCP. Contains {len(KALI_TOOL_REGISTRY)} tool definitions.\n\n"
+    "Each tool maps to backend API: POST /api/v1/tools/{name} or /execute.\n"
+    "Excludes exploit/brute-only tools per MCP-002."
+)
 
 
 def get_tools_by_category() -> dict[str, list[ToolDefinition]]:

@@ -1,0 +1,31 @@
+tool_id: radare2_info
+version: "1.0.0"
+category: binary
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-binary:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "r2 -2 -q -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/r2_info.json"
+cwe_hints:
+  - 200
+  - 121
+  - 122
+owasp_wstg:
+  - "WSTG-INFO-08"
+description: "radare2 (r2) — read-only binary triage. -A runs the auto-analysis pass; the -c command chain emits binary info (iI), header (ih), strings (iz), entrypoints (iE), and library imports (il) as a single JSON envelope on stdout. -q exits after the script; -2 silences stderr noise. {binary} is the sandbox-rooted /in/-prefixed sample. Pure offline (egress blocked). Parser deferred to Cycle 3. Backlog/dev1_md §4.18. ARG-019."

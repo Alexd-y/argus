@@ -1,0 +1,358 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ARG-047 — End-to-end capstone stack (DoD §19.4).
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Purpose
+# -------
+# Hermetic, reproducible Docker Compose topology used by the e2e capstone wrapper
+# (`scripts/e2e_full_scan.{sh,ps1}`) to drive a full ARGUS scan against a live
+# OWASP Juice Shop target. Every input is pinned to an immutable tag — NEVER
+# `:latest` — so the same compose file produces the same stack today, tomorrow,
+# and in 6 months.
+#
+# Hard constraints (do not relax — these are CI gates):
+#   * Juice Shop is pinned to ``bkimminich/juice-shop:v17.0.0`` (Backlog/dev1_md
+#     §19.4 invariant; v17.0.0 is the upstream LTS at the time of Cycle 5).
+#   * Every infra service has a ``healthcheck`` so ``docker compose up --wait``
+#     blocks until the stack is actually serving traffic (anti-flake measure).
+#   * ``juice-shop`` is the only service that exposes a port to the host: the
+#     scan target lives behind a known address (``http://localhost:3000``) so the
+#     wrapper can target it from the host or from inside the network. Backend,
+#     Postgres, Redis, MinIO, and Prometheus are reachable on the internal
+#     ``argus-e2e`` network only — no reduction in security between dev and CI.
+#   * The Juice Shop admin port (typically 3001 in upstream development docs)
+#     is NEVER exposed; only the application port 3000 is published.
+#   * Secrets are deterministic CI-only placeholders — there is NO production
+#     credential here. Production deploys go through the Helm chart
+#     (``infra/helm/argus``) with Sealed Secrets (see ARG-045).
+#   * No bind-mount of ``/var/run/docker.sock`` (sandbox profiles run inside
+#     the backend container; ARG-026 sandbox image profiles are inert in the
+#     e2e lane because the active-scan dispatcher uses an in-process executor
+#     when ``ARGUS_SANDBOX_PYTHON_ENABLED=true``).
+#
+# Local usage::
+#
+#     # From repo root
+#     docker compose -f infra/docker-compose.e2e.yml up -d --wait
+#     bash scripts/e2e_full_scan.sh http://juice-shop:3000
+#     docker compose -f infra/docker-compose.e2e.yml down -v
+#
+# CI usage — see ``.github/workflows/e2e-full-scan.yml``.
+
+name: argus-e2e
+
+services:
+
+  # ── Vulnerable target ──────────────────────────────────────────────────────
+  # Deterministic Juice Shop pin. Bumping requires (a) updating this file,
+  # (b) updating ``docs/e2e-testing.md::Deterministic Juice Shop pin``,
+  # (c) re-running the e2e flake-rate baseline (must stay <5%).
+  juice-shop:
+    image: bkimminich/juice-shop:v17.0.0
+    container_name: argus-e2e-juice-shop
+    restart: "no"
+    # Host port published so the wrapper script can hit the target from the
+    # host shell when running locally (in CI the wrapper invokes via
+    # ``docker compose exec`` and uses the in-network DNS name).
+    ports:
+      - "3000:3000"
+    networks:
+      - argus-e2e
+    environment:
+      NODE_ENV: ci
+      # Disable the noisy challenge-solved notifications — keeps the scan
+      # output deterministic and avoids accidental DoS-style noise.
+      JUICE_SHOP_VERBOSE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+
+  # ── Datastores ─────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: argus-e2e-postgres
+    environment:
+      POSTGRES_USER: argus
+      POSTGRES_PASSWORD: argus_e2e_password
+      POSTGRES_DB: argus
+    volumes:
+      - argus_e2e_postgres:/var/lib/postgresql/data
+    networks:
+      - argus-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U argus -d argus || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: argus-e2e-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - argus-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: argus-e2e-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: argus_e2e
+      MINIO_ROOT_PASSWORD: argus_e2e_minio_password
+    volumes:
+      - argus_e2e_minio:/data
+    networks:
+      - argus-e2e
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # MinIO bootstrap — creates the buckets the backend expects on first boot
+  # then exits 0. Subsequent compose runs reuse the cached state via the named
+  # volume, so this container becomes a no-op on warm starts.
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: argus-e2e-minio-init
+    restart: "no"
+    networks:
+      - argus-e2e
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set argus http://minio:9000 argus_e2e argus_e2e_minio_password 2>/dev/null; do
+          echo 'Waiting for MinIO...' && sleep 2;
+        done;
+        mc mb --ignore-existing argus/argus;
+        mc mb --ignore-existing argus/argus-reports;
+        mc mb --ignore-existing argus/stage1-artifacts;
+        mc mb --ignore-existing argus/stage2-artifacts;
+        mc mb --ignore-existing argus/stage3-artifacts;
+        mc mb --ignore-existing argus/stage4-artifacts;
+        mc mb --ignore-existing argus/argus-recon;
+        echo 'MinIO buckets ready';
+      "
+
+  # ── Backend tier ───────────────────────────────────────────────────────────
+  argus-backend:
+    image: ${ARGUS_BACKEND_IMAGE:-ghcr.io/your-org/argus-backend:cycle5-e2e}
+    container_name: argus-e2e-backend
+    pull_policy: missing
+    networks:
+      - argus-e2e
+    ports:
+      # Backend HTTP API exposed for direct curl from host wrapper.
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus_e2e_password@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: argus_e2e
+      MINIO_SECRET_KEY: argus_e2e_minio_password
+      MINIO_BUCKET: argus
+      MINIO_REPORTS_BUCKET: argus-reports
+      JWT_SECRET: e2e-test-secret-not-for-production-use-only
+      DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
+      ARGUS_API_KEYS: e2e-api-key-not-for-production
+      LOG_LEVEL: INFO
+      DEBUG: "false"
+      # E2E-specific tuning — keeps observability surface live without enabling
+      # external OTel collectors (the wrapper validates Prometheus only).
+      OTEL_ENABLED: "false"
+      METRICS_TOKEN: ""
+      # Sandbox runs in-process via the Python executor; no docker.sock needed.
+      SANDBOX_ENABLED: "true"
+      ARGUS_SANDBOX_PYTHON_ENABLED: "true"
+      VA_AI_PLAN_ENABLED: "false"
+      SQLMAP_VA_ENABLED: "false"
+      VA_EXPLOIT_AGGRESSIVE_ENABLED: "false"
+      VA_ACTIVE_SCAN_DRY_RUN: "false"
+      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: "3"
+      VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: "120"
+      ARGUS_TEST_MODE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  argus-celery:
+    image: ${ARGUS_CELERY_IMAGE:-ghcr.io/your-org/argus-celery:cycle5-e2e}
+    container_name: argus-e2e-celery
+    pull_policy: missing
+    networks:
+      - argus-e2e
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus_e2e_password@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: argus_e2e
+      MINIO_SECRET_KEY: argus_e2e_minio_password
+      MINIO_BUCKET: argus
+      MINIO_REPORTS_BUCKET: argus-reports
+      JWT_SECRET: e2e-test-secret-not-for-production-use-only
+      DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
+      LOG_LEVEL: INFO
+      OTEL_ENABLED: "false"
+      SANDBOX_ENABLED: "true"
+      ARGUS_SANDBOX_PYTHON_ENABLED: "true"
+      ARGUS_TEST_MODE: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A src.celery_app inspect ping --timeout 5 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  argus-mcp:
+    image: ${ARGUS_MCP_IMAGE:-ghcr.io/your-org/argus-mcp:cycle5-e2e}
+    container_name: argus-e2e-mcp
+    pull_policy: missing
+    networks:
+      - argus-e2e
+    environment:
+      DATABASE_URL: postgresql+asyncpg://argus:argus_e2e_password@postgres:5432/argus
+      REDIS_URL: redis://redis:6379/0
+      MCP_TRANSPORT: streamable-http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "8765"
+      MCP_AUTH_TOKEN: e2e-mcp-token-not-for-production
+      MCP_REQUIRE_AUTH: "true"
+      MCP_LOG_LEVEL: INFO
+      JWT_SECRET: e2e-test-secret-not-for-production-use-only
+      DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
+      OTEL_ENABLED: "false"
+      ARGUS_TEST_MODE: "1"
+    depends_on:
+      argus-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2)\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  # ── Observability ──────────────────────────────────────────────────────────
+  # Pinned to a specific Prometheus release so the verifier (verify_prometheus.py)
+  # talks to a known query-API surface. Bump in lockstep with the verifier.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: argus-e2e-prometheus
+    networks:
+      - argus-e2e
+    ports:
+      # Exposed on the host so the wrapper can hit ``/api/v1/query`` directly
+      # without needing ``docker compose exec``.
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=2h"
+    volumes:
+      - ./prometheus/prometheus.e2e.yml:/etc/prometheus/prometheus.yml:ro
+      - argus_e2e_prometheus:/prometheus
+    depends_on:
+      argus-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:9090/-/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+# ── Volumes ─────────────────────────────────────────────────────────────────
+# Named volumes survive ``compose down`` but are wiped by the wrapper's
+# ``docker compose down -v`` teardown phase (Phase 10), guaranteeing a clean
+# slate for the next run.
+volumes:
+  argus_e2e_postgres:
+    name: argus_e2e_postgres
+  argus_e2e_minio:
+    name: argus_e2e_minio
+  argus_e2e_prometheus:
+    name: argus_e2e_prometheus
+
+# ── Network ─────────────────────────────────────────────────────────────────
+# Single shared bridge — all e2e services live here so the host wrapper sees
+# a deterministic DNS surface. Sub-net is left to the Docker default to avoid
+# clashes with the developer's Docker Desktop overlay.
+networks:
+  argus-e2e:
+    name: argus-e2e
+    driver: bridge

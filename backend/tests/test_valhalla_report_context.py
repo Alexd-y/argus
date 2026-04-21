@@ -356,6 +356,66 @@ def test_mandatory_sections_coverage_and_harvester_flag() -> None:
     assert ctx.coverage.tool_errors_summary[0]["tool"] == "nuclei"
 
 
+def test_raw_tool_empty_stdout_errors_drive_partial_statuses() -> None:
+    keys = [
+        ("t/s/vuln_analysis/raw/20260101T000000_000000_tool_whatweb_scan_target_stdout.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000001_tool_whatweb_scan_target_stderr.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000002_tool_whatweb_scan_target_meta.json", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000003_tool_nikto_scan_target_stdout.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000004_tool_nikto_scan_target_stderr.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000005_tool_testssl_scan_target_stdout.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000006_tool_testssl_scan_target_stderr.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000007_tool_sslscan_scan_target_stdout.txt", "vuln_analysis"),
+        ("t/s/vuln_analysis/raw/20260101T000000_000008_tool_sslscan_scan_target_stderr.txt", "vuln_analysis"),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000009_tool_theharvester_scan_target_stdout.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000010_tool_theharvester_scan_target_stderr.txt",
+            "vuln_analysis",
+        ),
+    ]
+
+    def fake_download(key: str) -> bytes | None:
+        if key.endswith("_stdout.txt"):
+            return b""
+        if key.endswith("_meta.json"):
+            return b'{"exit_code": 127, "error_reason": "exec_os_error"}'
+        if key.endswith("_stderr.txt"):
+            return b"sandbox: binary not found\n"
+        return None
+
+    with patch("src.reports.valhalla_report_context.download_by_key", side_effect=fake_download):
+        ctx = build_valhalla_report_context(
+            tenant_id="t",
+            scan_id="s",
+            recon_results=None,
+            tech_profile=None,
+            anomalies_structured=None,
+            raw_artifact_keys=keys,
+            phase_outputs=[("vuln_analysis", {"findings": []})],
+            phase_inputs=[],
+            findings=[],
+            report_technologies=None,
+            fetch_raw_bodies=True,
+            harvester_enabled=True,
+            trivy_enabled=True,
+        )
+
+    assert ctx.mandatory_sections.tech_stack_structured.status == "partial"
+    assert ctx.mandatory_sections.ssl_tls_analysis.status == "partial"
+    assert ctx.mandatory_sections.security_headers_analysis.status == "partial"
+    assert ctx.mandatory_sections.leaked_emails.status == "partial"
+    assert ctx.mandatory_sections.outdated_components.status == "not_executed"
+    tools = {row["tool"]: row for row in ctx.coverage.tool_errors_summary}
+    assert tools["whatweb"]["status"] == "failed"
+    assert tools["nikto"]["status"] == "no_output"
+    assert tools["testssl"]["status"] == "no_output"
+    assert tools["sslscan"]["status"] == "no_output"
+    assert tools["theharvester"]["status"] == "no_output"
+
+
 def test_build_valhalla_minimal_context_patch_keys() -> None:
     from src.reports.valhalla_report_context import build_valhalla_minimal_context_patch
 

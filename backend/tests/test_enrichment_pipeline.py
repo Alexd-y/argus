@@ -217,7 +217,7 @@ class TestPocGeneration:
         assert "generated_poc" in result["findings"][0].get("proof_of_concept", {})
 
 
-class TestFullPipeline:
+class TestEnrichmentFullPipeline:
     """Full pipeline integration test."""
 
     @pytest.mark.asyncio

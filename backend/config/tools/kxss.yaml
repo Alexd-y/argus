@@ -1,0 +1,33 @@
+tool_id: kxss
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "kxss-runner"
+  - "--url"
+  - "{url}"
+  - "--output"
+  - "{out_dir}/kxss.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/kxss.txt"
+cwe_hints:
+  - 79
+  - 80
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-02"
+description: "kxss reflected-XSS surface enumerator — image ships /usr/local/bin/kxss-runner deriving a wayback/gau URL list from {url}, piping it into upstream kxss (stdin-only), writing per-parameter reflection report to {out_dir}/kxss.txt. Passive risk: kxss only fetches URLs and grep-matches reflected unfiltered payloads, no injection. Parsing deferred to Cycle 3 (TEXT_LINES → parsers.dispatch.unmapped_tool). Author: Tom Hudson (https://github.com/Emoe/kxss). Backlog/dev1_md §4.10. ARG-016."

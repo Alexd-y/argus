@@ -3,7 +3,7 @@
 {% if vc.mandatory_sections is defined and section_key in vc.mandatory_sections %}
 {% set env = vc.mandatory_sections[section_key] %}
 {% if env.status != 'completed' %}
-<p class="meta valhalla-mandatory-status"><strong>Статус данных ({{ section_key }}):</strong> {{ env.status | e }}{% if env.reason %} — {{ env.reason | e }}{% endif %}</p>
+<p class="meta valhalla-mandatory-status"><strong>Data status ({{ section_key }}):</strong> {{ env.status | e }}{% if env.reason %} — {{ env.reason | e }}{% endif %}</p>
 {% endif %}
 {% endif %}
 {%- endmacro %}

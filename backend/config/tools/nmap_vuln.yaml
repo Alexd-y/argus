@@ -1,0 +1,38 @@
+tool_id: nmap_vuln
+version: "1.0.0"
+category: network
+phase: vuln_analysis
+risk_level: medium
+requires_approval: false
+default_timeout_s: 3600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "nmap"
+  - "-sV"
+  - "-T2"
+  - "--script"
+  - "vuln,vulners,vulscan"
+  - "--script-args=mincvss=4.0"
+  - "-p{ports}"
+  - "-oX"
+  - "{out_dir}/nmap_vuln.xml"
+  - "{ip}"
+parse_strategy: xml_nmap
+evidence_artifacts:
+  - "/out/nmap_vuln.xml"
+cwe_hints:
+  - 1006
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-04"
+  - "WSTG-CONF-01"
+description: "Nmap NSE vuln-category scripts on confirmed ports with -sV service fingerprinting (required for the vulners/vulscan NSE scripts to fire CPE→CVE correlation; without -sV the vuln family produces zero CVE matches). Includes vuln + vulners + vulscan with mincvss=4.0 noise filter, polite -T2 timing because vuln scripts are probe-heavy. Medium risk because some scripts send active probes. Backlog/dev1_md §4.2 + ARG-019 C3 fix."

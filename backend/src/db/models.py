@@ -46,6 +46,19 @@ class Tenant(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: When true, tenant may call scan findings SARIF/JUnit export routes (T04).
+    exports_sarif_junit_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    #: Optional override — max API/MCP requests per minute (null = platform default).
+    rate_limit_rpm: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Optional hostname/path patterns blocked from in-scope scanning (null = default policy).
+    scope_blacklist: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Optional data retention override in days (null = platform default).
+    retention_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

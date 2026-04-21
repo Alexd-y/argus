@@ -1,0 +1,19 @@
+[+] IP: 10.0.0.42:445	Name: dc01.contoso.local	Status: Authenticated
+        Disk                                                  	Permissions	Comment
+	----                                                  	-----------	-------
+	ADMIN$                                            	NO ACCESS	Remote Admin
+	C$                                                	NO ACCESS	Default share
+	IPC$                                              	READ ONLY	Remote IPC
+	NETLOGON                                          	READ ONLY	Logon server share
+	SYSVOL                                            	READ ONLY	Logon server share
+	Public                                            	READ, WRITE	Public share
+	Backups                                           	READ ONLY	Daily backups
+	Reports                                           	READ, WRITE	Quarterly reports
+	HR                                                	READ ONLY	HR documents
+	Logs                                              	READ, WRITE	Application logs
+
+[+] IP: 10.0.0.43:445	Name: ws01.contoso.local	Status: Authenticated
+	Disk                                              	Permissions	Comment
+	----                                              	-----------	-------
+	ADMIN$                                            	NO ACCESS	Remote Admin
+	IPC$                                              	READ ONLY	Remote IPC

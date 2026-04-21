@@ -1,0 +1,34 @@
+tool_id: dnsrecon
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1200
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "dnsrecon"
+  - "-d"
+  - "{domain}"
+  - "-t"
+  - "std,brt,srv,axfr"
+  - "-j"
+  - "{out_dir}/dnsrecon.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/dnsrecon.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+  - "WSTG-INFO-02"
+description: "dnsrecon multi-mode lookup (std/brt/srv/axfr) emitting one JSON object with discovered records. Backlog/dev1_md §4.1."

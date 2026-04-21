@@ -1,0 +1,37 @@
+tool_id: postman_newman
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "newman"
+  - "run"
+  - "{path}"
+  - "-r"
+  - "json"
+  - "--reporter-json-export"
+  - "{out_dir}/newman.json"
+  - "--insecure"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/newman.json"
+cwe_hints:
+  - 200
+  - 285
+  - 287
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-CONF-04"
+description: "newman Postman collection runner — executes the operator-curated collection at {path} (mounted under /in) against the configured env, capturing per-request status, latency, assertions and response excerpts. Replay-style API tests and contract validation against staging. Collection JSON is the only mutable input; auth tokens belong inside it. --insecure tolerates self-signed staging certs. Parser deferred to Cycle 3. Author: Postman. Backlog §4.14. ARG-018."

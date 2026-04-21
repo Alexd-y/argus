@@ -1,0 +1,32 @@
+tool_id: chrome_csp_probe
+version: "1.0.0"
+category: browser
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "chrome-csp-probe --url {url} --output {out_dir}/csp.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/csp.json"
+cwe_hints:
+  - 79
+  - 1021
+  - 693
+owasp_wstg:
+  - "WSTG-CONF-12"
+  - "WSTG-CLNT-09"
+description: "Headless Chromium Content-Security-Policy probe — loads {url} and emits the merged CSP / CSP-Report-Only header set, plus inline-handler / unsafe-eval / unsafe-inline detections seen in the rendered DOM. Passive observation only (no actual injection). Surfaces the misconfigurations the §4.10 XSS engine (dalfox / xsstrike) needs to bypass. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019."

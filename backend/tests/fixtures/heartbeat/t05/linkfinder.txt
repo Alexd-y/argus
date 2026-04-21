@@ -1,0 +1,1 @@
+https://linkfinder.example/api/internal

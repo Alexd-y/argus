@@ -1,0 +1,7 @@
+[
+  {"ip":"203.0.113.10","timestamp":"1712001000","ports":[{"port":80,"proto":"tcp","status":"open","reason":"syn-ack","ttl":64}]},
+  {"ip":"203.0.113.10","timestamp":"1712001001","ports":[{"port":443,"proto":"tcp","status":"open","reason":"syn-ack","ttl":64}]},
+  {"ip":"203.0.113.11","timestamp":"1712001002","ports":[{"port":22,"proto":"tcp","status":"open","reason":"syn-ack","ttl":64}]},
+  {"ip":"203.0.113.12","timestamp":"1712001003","ports":[{"port":3306,"proto":"tcp","status":"open","reason":"syn-ack","ttl":64}]},
+  {"ip":"203.0.113.13","timestamp":"1712001004","ports":[{"port":445,"proto":"tcp","status":"closed","reason":"reset","ttl":64}]}
+]

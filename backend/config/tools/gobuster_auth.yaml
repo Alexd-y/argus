@@ -1,0 +1,39 @@
+tool_id: gobuster_auth
+version: "1.0.0"
+category: auth
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "gobuster"
+  - "fuzz"
+  - "-u"
+  - "{url}"
+  - "-w"
+  - "{wordlist}"
+  - "-t"
+  - "10"
+  - "--timeout"
+  - "10s"
+  - "-o"
+  - "{out_dir}/gobuster_auth.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/gobuster_auth.txt"
+cwe_hints:
+  - 307
+  - 521
+owasp_wstg:
+  - "WSTG-ATHN-04"
+description: "gobuster fuzz mode — HTTP form/cookie/header brute-force using wordlist. Suited for response-fingerprint distinguishable login endpoints. Cycle 3 will register text_lines parser. Backlog/dev1_md §4.12 (vuln_analysis class — bypass enumeration, not credential exfil). ARG-017."

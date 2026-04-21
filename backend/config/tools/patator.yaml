@@ -1,0 +1,32 @@
+tool_id: patator
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "patator {module} host={host} user=FILE0 password=FILE1 0={in_dir}/u.txt 1={in_dir}/p.txt -x ignore:code=401 > {out_dir}/patator.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/patator.log"
+cwe_hints:
+  - 287
+  - 307
+  - 521
+owasp_wstg:
+  - "WSTG-ATHN-01"
+  - "WSTG-ATHN-04"
+description: "Patator multi-module credential bruteforcer (ssh_login, ftp_login, http_fuzz, etc.) selected via {module}. APPROVAL REQUIRED: high-volume auth attempts. Filters out HTTP 401 noise via -x ignore:code=401. Wordlists from {in_dir}/u.txt and {in_dir}/p.txt. Output text log (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

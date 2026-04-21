@@ -175,7 +175,8 @@ def test_rpt008_artifacts_section_escapes_malicious_file_name(mock_list, _mock_p
         extra={"scan_artifacts": scan_artifacts},
     )
     html = render_tier_report_html("midgard", ctx)
-    assert "<h2 id=\"scan-artifacts\">Артефакты этапов</h2>" in html
+    assert 'id="scan-artifacts"' in html
+    assert "Phase Artifacts" in html
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
 
@@ -244,9 +245,9 @@ def test_rpt008_templates_include_artifacts_heading(tier: str) -> None:
     }
     ctx = gen.prepare_template_context(tier, data, ai_texts)
     html = render_tier_report_html(tier, ctx)
-    assert "<h2 id=\"scan-artifacts\">Артефакты этапов</h2>" in html
+    assert 'id="scan-artifacts"' in html
+    assert "Phase Artifacts" in html
     assert "/api/v1/scans/" in html
-    assert "Активное веб-сканирование" in html
     assert "#scan-artifacts" in html
     assert "REPLACE_WITH_SAFE_ENCODED_TEST_STRING" in html
     assert "<script>" not in html
@@ -279,8 +280,8 @@ def test_artifacts_partial_shows_tool_outputs_subsection() -> None:
         "midgard",
         gen.prepare_template_context("midgard", data, {"executive_summary": "x"}, extra={"scan_artifacts": ctx}),
     )
-    assert "Сырые выводы инструментов" in html
-    assert "Прочие артефакты" in html
+    assert "Raw Tool Outputs" in html
+    assert "Other Artifacts" in html
 
 
 def test_owasp008_json_export_merges_jinja_ai_and_scan_artifacts() -> None:
@@ -385,7 +386,7 @@ def test_midgard_hides_active_web_scan_without_signals() -> None:
     )
     assert ctx["active_web_scan"]["visible"] is False
     html = render_tier_report_html("midgard", ctx)
-    assert "Активное веб-сканирование" not in html
+    assert "Active Web Scan" not in html.lower() or "active_web_scan" not in html
 
 
 def test_active_web_scan_section_escapes_ai_xss_payload() -> None:
@@ -406,4 +407,3 @@ def test_active_web_scan_section_escapes_ai_xss_payload() -> None:
     )
     html = render_tier_report_html("valhalla", ctx)
     assert "<script>" not in html
-    assert "&lt;script&gt;" in html

@@ -1,0 +1,37 @@
+tool_id: cloud_metadata_check
+version: "1.0.0"
+category: oast
+phase: exploitation
+risk_level: medium
+requires_approval: true
+default_timeout_s: 60
+cpu_limit: "500m"
+memory_limit: "256Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "cloud_metadata_check"
+  - "--target"
+  - "{url}"
+  - "--clouds"
+  - "aws,gcp,azure"
+  - "--output"
+  - "{out_dir}/cloud_metadata_check.txt"
+  - "--timeout"
+  - "5"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/cloud_metadata_check.txt"
+cwe_hints:
+  - 918
+  - 200
+owasp_wstg:
+  - "WSTG-INPV-19"
+  - "WSTG-INFO-08"
+description: "Cloud metadata SSRF probe — tests AWS IMDSv1/v2 (169.254.169.254), GCE metadata.google.internal, Azure IMDS for unauthenticated metadata exfiltration. Wrapper script in argus-kali-cloud image issues argv-only HTTP probes against the cloud-specific IMDS endpoints. Backlog/dev1_md §4.11. ARG-017. Approval-gated — only with explicit scope permission for cloud target."

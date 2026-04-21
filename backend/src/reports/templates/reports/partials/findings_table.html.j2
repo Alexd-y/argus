@@ -14,7 +14,7 @@
                 <th>Description</th>
                 <th>CWE</th>
                 {% if show_owasp_block %}
-                <th>Категория OWASP</th>
+                <th>OWASP Category</th>
                 {% endif %}
                 <th>CVSS</th>
             </tr>
@@ -30,9 +30,9 @@
                     <td class="owasp-finding-cell">
                         {% if row.owasp_category %}
                             <span class="owasp-finding-id"><code>{{ row.owasp_category }}</code></span>
-                            {% if row.owasp_title_ru %}
+                            {% if row.owasp_title %}
                             <span class="owasp-finding-sep"> — </span>
-                            <span class="owasp-finding-label">{{ row.owasp_title_ru }}</span>
+                            <span class="owasp-finding-label">{{ row.owasp_title }}</span>
                             {% elif labels.get(row.owasp_category) %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ labels.get(row.owasp_category) }}</span>
@@ -98,7 +98,7 @@
                     {% elif tier_low == "midgard" %}
                         <tr class="poc-row poc-tier-midgard">
                             <td colspan="{{ 6 if show_owasp_block else 5 }}">
-                                <p class="poc-tier-note">Подробности PoC доступны в отчётах Asgard / Valhalla.</p>
+                                <p class="poc-tier-note">PoC details are available in Asgard / Valhalla reports.</p>
                             </td>
                         </tr>
                     {% endif %}

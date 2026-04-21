@@ -1,0 +1,33 @@
+tool_id: cmsmap
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1200
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "cmsmap"
+  - "{url}"
+  - "-F"
+  - "-o"
+  - "{out_dir}/cmsmap.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/cmsmap.txt"
+cwe_hints:
+  - 1395
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-CONF-04"
+description: "CMSmap multi-CMS scanner (WordPress/Joomla/Drupal/Moodle) — force-detect mode (-F), full plugin/theme enumeration; text-only report. Author: Dionach (https://github.com/Dionach/CMSmap). Backlog/dev1_md §4.7."

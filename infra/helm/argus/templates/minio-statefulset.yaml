@@ -1,0 +1,19 @@
+{{/*
+MinIO — sub-chart wrapper notes. Same pattern as postgres-statefulset.yaml.
+The real StatefulSet ships from Bitnami `minio` (~14.6.0). Overrides live in
+`.Values.minio.*`.
+*/}}
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-minio-marker
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+data:
+  subchart: "bitnami/minio"
+  mode: {{ .Values.minio.mode | quote }}
+  defaultBuckets: {{ .Values.minio.defaultBuckets | quote }}
+  persistenceSize: {{ .Values.minio.persistence.size | quote }}
+{{- end }}

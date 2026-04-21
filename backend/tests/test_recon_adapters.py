@@ -93,7 +93,7 @@ class TestHttpxAdapter:
         assert results == []
 
 
-class TestAdapterRegistry:
+class TestReconAdapterRegistry:
     """Test adapter registry."""
 
     def test_subfinder_registered(self):

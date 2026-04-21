@@ -1,0 +1,30 @@
+tool_id: smbmap
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-smb
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "smbmap -H {ip} -R -q > {out_dir}/smbmap.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/smbmap.txt"
+cwe_hints:
+  - 200
+  - 285
+owasp_wstg:
+  - "WSTG-INFO-04"
+description: "smbmap recursively enumerates SMB shares and access rights using anonymous credentials by default. Backlog/dev1_md §4.2."

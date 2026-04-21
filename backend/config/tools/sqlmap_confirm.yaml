@@ -1,0 +1,39 @@
+tool_id: sqlmap_confirm
+version: "1.0.0"
+category: web_va
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sqlmap"
+  - "-u"
+  - "{url}"
+  - "--batch"
+  - "--technique=E"
+  - "--dbs"
+  - "--count"
+  - "--random-agent"
+  - "--timeout=30"
+  - "--retries=2"
+  - "--threads=4"
+  - "--disable-coloring"
+  - "--output-dir={out_dir}/sqlmap_confirm"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/sqlmap_confirm"
+cwe_hints:
+  - 89
+owasp_wstg:
+  - "WSTG-INPV-05"
+description: "sqlmap confirmation pass — error-based exploitation (--technique=E) + DBMS schema enumeration (--dbs --count). APPROVAL REQUIRED: actively exploits confirmed SQLi to dump schema, will trigger WAF/IDS alerts. Companion to sqlmap_safe.yaml (the passive detection step). Output dir under {out_dir}/sqlmap_confirm parsed by sandbox/parsers/sqlmap_parser.py via TEXT_LINES. Author: sqlmap project (https://github.com/sqlmapproject/sqlmap). Backlog/dev1_md §4.9. ARG-016."

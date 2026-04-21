@@ -1,0 +1,72 @@
+# ARG-043 — Azure Managed-Identity / OAuth egress allowlist for argus-backend.
+#
+# Selects pods carrying BOTH labels:
+#   app:        argus-backend
+#   cloud-iam:  enabled
+#
+# Egress is allowed ONLY to the Azure AD / Entra OAuth control plane on
+# TCP/443. FQDN intent is captured in `argus.io/egress-fqdns`. The IPv4
+# ranges below are the published Microsoft AzureActiveDirectory service
+# tag — refresh via `infra/scripts/sync_azure_ip_ranges.sh` against
+# https://www.microsoft.com/en-us/download/confirmation.aspx?id=56519.
+#
+# Defence-in-depth: ingress denied, only 443/tcp open, no wildcard, the
+# Azure IMDS at 169.254.169.254 is NOT in the egress and remains
+# unreachable for the labelled pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-backend-cloud-azure
+  namespace: argus
+  labels:
+    app.kubernetes.io/name: argus-backend
+    app.kubernetes.io/component: cloud-iam-egress
+    argus.io/scope: cloud-azure
+    argus.io/managed-by: arg-043
+  annotations:
+    argus.io/cloud-iam: azure
+    argus.io/egress-fqdns: >-
+      login.microsoftonline.com,
+      login.microsoft.com,
+      login.windows.net,
+      management.azure.com,
+      graph.microsoft.com,
+      sts.windows.net
+spec:
+  podSelector:
+    matchLabels:
+      app: argus-backend
+      cloud-iam: enabled
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # Static subset of Microsoft's `AzureActiveDirectory` service tag.
+    # Production rotates these via
+    # `infra/scripts/sync_azure_ip_ranges.sh`.
+    - to:
+        - ipBlock:
+            cidr: 20.190.128.0/18  # AzureActiveDirectory east/west US
+        - ipBlock:
+            cidr: 40.126.0.0/18    # AzureActiveDirectory APAC / EU
+        - ipBlock:
+            cidr: 20.20.32.0/19    # graph.microsoft.com global front door
+        - ipBlock:
+            cidr: 13.107.6.152/29  # login.microsoftonline.com anycast
+      ports:
+        - protocol: TCP
+          port: 443
+    # CoreDNS only — never the Azure IMDS at 169.254.169.254.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

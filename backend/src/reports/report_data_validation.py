@@ -138,8 +138,7 @@ _EXEC_SEV_SECTION_KEYS: frozenset[str] = frozenset(
     {"executive_summary", "executive_summary_valhalla"}
 )
 
-# English + Russian quantity phrases near severity words (T9 AI quality gate).
-_SEV_PATTERNS: list[tuple[str, str]] = [
+_SEV_PATTERNS_EN: list[tuple[str, str]] = [
     (r"\b(\d{1,4})\s+critical\b", "critical"),
     (r"\b(\d{1,4})\s+critically\b", "critical"),
     (r"\b(\d{1,4})\s+high[\s-]severity\b", "high"),
@@ -147,11 +146,18 @@ _SEV_PATTERNS: list[tuple[str, str]] = [
     (r"\b(\d{1,4})\s+low\b", "low"),
     (r"\b(\d{1,4})\s+informational\b", "info"),
     (r"\b(\d{1,4})\s+info\b", "info"),
-    (r"\b(\d{1,4})\s+критич", "critical"),
-    (r"\b(\d{1,4})\s+высок", "high"),
-    (r"\b(\d{1,4})\s+средн", "medium"),
-    (r"\b(\d{1,4})\s+низк", "low"),
 ]
+
+# Backward compat: RU severity labels from legacy scanner tools that emit Russian output.
+_SEV_PATTERNS_RU: list[tuple[str, str]] = [
+    (r"\b(\d{1,4})\s+\u043a\u0440\u0438\u0442\u0438\u0447", "critical"),
+    (r"\b(\d{1,4})\s+\u0432\u044b\u0441\u043e\u043a", "high"),
+    (r"\b(\d{1,4})\s+\u0441\u0440\u0435\u0434\u043d", "medium"),
+    (r"\b(\d{1,4})\s+\u043d\u0438\u0437\u043a", "low"),
+]
+
+# Combined for backward compat (used in quality gate text extraction).
+_SEV_PATTERNS: list[tuple[str, str]] = _SEV_PATTERNS_EN + _SEV_PATTERNS_RU
 
 
 def _int_totals_from_payload(payload: dict[str, Any]) -> dict[str, int]:
@@ -211,7 +217,8 @@ def validate_executive_ai_text_against_payload(
             break
 
     fc = _finding_count_from_payload(payload)
-    for m in re.finditer(r"\b(\d{1,4})\s+(?:findings?|уязвимост|находок)\b", tl, re.IGNORECASE):
+    # EN labels; union with RU patterns for legacy scanner output support
+    for m in re.finditer(r"\b(\d{1,4})\s+(?:findings?|vulnerabilit(?:y|ies)|уязвимост|находок)\b", tl, re.IGNORECASE):
         try:
             n = int(m.group(1))
         except ValueError:

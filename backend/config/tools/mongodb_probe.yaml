@@ -1,0 +1,32 @@
+tool_id: mongodb_probe
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "mongosh --host {host} --port {port} --quiet --eval 'JSON.stringify({serverStatus: db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1, nameOnly:true})})' > {out_dir}/mongo_info.json"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/mongo_info.json"
+cwe_hints:
+  - 200
+  - 287
+  - 521
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-ATHN-04"
+description: "mongosh probe — anonymous MongoDB enumeration against {host}:{port}. Read-only serverStatus + listDatabases roundtrip; surfaces version, build flags, and the database inventory exposed by missing-auth deployments (the canonical 'open mongo' misconfiguration). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

@@ -1,0 +1,31 @@
+tool_id: onesixtyone
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "onesixtyone -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/onesixtyone.txt"
+cwe_hints:
+  - 521
+  - 287
+owasp_wstg:
+  - "WSTG-INFO-09"
+  - "WSTG-ATHN-02"
+description: "onesixtyone — fast SNMP community string scanner; UDP/161 sweep against the host list at {in_dir}/hosts.txt using community candidates from {wordlist} (the standard sandbox-rooted wordlist mount). Read-only, but a positive hit is the precursor to §4.17 snmpwalk extraction. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

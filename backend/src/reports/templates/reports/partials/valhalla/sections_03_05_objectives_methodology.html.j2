@@ -1,4 +1,4 @@
-{# Объект, цели, задачи; объём; методология #}
+{# Objectives, scope, and methodology #}
 {% set opts = scan.options if scan and scan.options is mapping else {} %}
 {% set target = recon_summary.target_url or (report.target if report else "") or (scan.target_url if scan else "") or "" %}
 {% set obj = opts.get("object_text") or opts.get("scope_object") %}
@@ -7,46 +7,46 @@
 {% set scope_out = opts.get("scope_out") or opts.get("out_of_scope") %}
 
 <section class="valhalla-objectives panel" id="objectives">
-    <h2>Объект, цели и задачи</h2>
-    <p><strong>Объект:</strong> {% if obj %}{{ obj }}{% else %}Публичный веб-ресурс {{ target or "Нет данных" }} и связанные компоненты (при наличии).{% endif %}</p>
-    <p><strong>Цель:</strong> {% if goal %}{{ goal }}{% else %}Оценка уровня защищённости веб-ресурса {{ target or "Нет данных" }} от внешнего злоумышленника (модель по параметрам сканирования).{% endif %}</p>
-    <p><strong>Задачи:</strong></p>
+    <h2>Subject, Goals and Objectives</h2>
+    <p><strong>Subject:</strong> {% if obj %}{{ obj }}{% else %}Public web resource {{ target or "No data" }} and related components (if applicable).{% endif %}</p>
+    <p><strong>Goal:</strong> {% if goal %}{{ goal }}{% else %}Assess the security level of the web resource {{ target or "No data" }} against an external attacker (model based on scan parameters).{% endif %}</p>
+    <p><strong>Objectives:</strong></p>
     <ul>
         {% if opts.get("tasks") and opts.get("tasks") is iterable and opts.get("tasks") is not string %}
             {% for t in opts.get("tasks") %}
                 <li>{{ t }}</li>
             {% endfor %}
         {% else %}
-            <li>Выявить уязвимости в веб-приложении и смежной инфраструктуре.</li>
-            <li>Оценить возможность несанкционированного доступа к данным и учётным записям.</li>
-            <li>Предоставить рекомендации по повышению уровня безопасности.</li>
+            <li>Identify vulnerabilities in the web application and adjacent infrastructure.</li>
+            <li>Assess the possibility of unauthorized access to data and user accounts.</li>
+            <li>Provide recommendations for improving the security posture.</li>
         {% endif %}
     </ul>
 </section>
 
 <section class="valhalla-scope panel" id="scope">
-    <h2>Объём работ и ограничения</h2>
-    <h3>В scope</h3>
+    <h2>Scope and Limitations</h2>
+    <h3>In Scope</h3>
     {% if scope_in %}
         <div class="ai-slot-body">{{ scope_in }}</div>
     {% else %}
         <ul>
-            <li>Домены, поддомены и IP, согласованные для сканирования: {{ target or "Нет данных" }}.</li>
-            <li>Внешний периметр и согласованные точки входа (URL, формы, API при наличии).</li>
-            <li>Недеструктивное тестирование без DoS и без действий вне согласованного объёма.</li>
+            <li>Domains, subdomains, and IPs agreed upon for scanning: {{ target or "No data" }}.</li>
+            <li>External perimeter and agreed entry points (URLs, forms, APIs if applicable).</li>
+            <li>Non-destructive testing without DoS and without actions outside the agreed scope.</li>
         </ul>
     {% endif %}
-    <h3>Out of scope</h3>
+    <h3>Out of Scope</h3>
     {% if scope_out %}
         <div class="ai-slot-body">{{ scope_out }}</div>
     {% else %}
-        <p>Системы и сервисы третьих лиц, не включённые в согласованный объект; платёжные шлюзы сторонних банков — без тестирования, если не согласовано отдельно.</p>
+        <p>Third-party systems and services not included in the agreed scope; third-party payment gateways — not tested unless separately agreed upon.</p>
     {% endif %}
 </section>
 
 <section class="valhalla-methodology panel" id="methodology">
-    <h2>Методология и стандарты</h2>
-    <h3>Использованные стандарты и ориентиры</h3>
+    <h2>Methodology and Standards</h2>
+    <h3>Standards and References Used</h3>
     <ul>
         <li>NIST SP 800-115 — Technical Guide to Information Security Testing and Assessment</li>
         <li>CWE — Common Weakness Enumeration (MITRE)</li>
@@ -54,38 +54,38 @@
         <li>OWASP ASVS; OWASP Top 10</li>
         <li>SANS CWE Top 25</li>
         <li>CVSS v3.1</li>
-        <li>WASC, OSSTMM (включая перечисленные классы: HTTP pollution/tampering, Injection, XSS, Broken Authentication, CSRF, Security Misconfiguration, Insecure Cryptographic Storage, Failure to Restrict URL Access, Insufficient Transport Layer Protection, Unvalidated Redirects, IDOR, SSRF, XXE, supply chain analysis)</li>
+        <li>WASC, OSSTMM (including classes: HTTP pollution/tampering, Injection, XSS, Broken Authentication, CSRF, Security Misconfiguration, Insecure Cryptographic Storage, Failure to Restrict URL Access, Insufficient Transport Layer Protection, Unvalidated Redirects, IDOR, SSRF, XXE, supply chain analysis)</li>
     </ul>
 
-    <h3>Типы тестов (WSTG-ориентиры)</h3>
-    <p><strong>Сбор информации (Information Gathering):</strong> домены/поддомены, технологии, точки входа, порты и сервисы. В отчёте: проводился OSINT и технический сбор информации в соответствии с разделом WSTG Information Gathering.</p>
-    <p><strong>Конфигурация и деплой:</strong> HTTP-методы, TLS/HTTPS, HSTS, заголовки безопасности (CSP, X-Frame-Options, X-Content-Type-Options и др.).</p>
-    <p><strong>Аутентификация и идентичность:</strong> логин, восстановление пароля, альтернативные каналы входа.</p>
-    <p><strong>Авторизация и доступ:</strong> вертикальная/горизонтальная эскалация, IDOR, ACL, скрытые админ-интерфейсы.</p>
-    <p><strong>Сессии:</strong> cookie-флаги, session fixation, logout, время жизни.</p>
-    <p><strong>Валидация ввода и инъекции:</strong> SQL/NoSQL/Command injection, XSS, SSTI, path traversal, XXE.</p>
-    <p><strong>Бизнес-логика:</strong> обход шагов процессов, лимиты, роли.</p>
-    <p><strong>Криптография и данные:</strong> алгоритмы, ключи, чувствительные данные в трафике/логах/cookies.</p>
-    <p><strong>Клиентская часть:</strong> DOM XSS, SPA/PWA, localStorage/sessionStorage.</p>
-    <p><strong>API (при наличии):</strong> REST/GraphQL — authZ, bulk, rate limiting, OWASP API Top 10.</p>
+    <h3>Test Types (WSTG-aligned)</h3>
+    <p><strong>Information Gathering:</strong> domains/subdomains, technologies, entry points, ports and services. OSINT and technical information gathering performed per WSTG Information Gathering section.</p>
+    <p><strong>Configuration and Deployment:</strong> HTTP methods, TLS/HTTPS, HSTS, security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.).</p>
+    <p><strong>Authentication and Identity:</strong> login, password recovery, alternative authentication channels.</p>
+    <p><strong>Authorization and Access:</strong> vertical/horizontal privilege escalation, IDOR, ACL, hidden admin interfaces.</p>
+    <p><strong>Session Management:</strong> cookie flags, session fixation, logout, session lifetime.</p>
+    <p><strong>Input Validation and Injection:</strong> SQL/NoSQL/Command injection, XSS, SSTI, path traversal, XXE.</p>
+    <p><strong>Business Logic:</strong> workflow bypass, limits, roles.</p>
+    <p><strong>Cryptography and Data:</strong> algorithms, keys, sensitive data in traffic/logs/cookies.</p>
+    <p><strong>Client-Side:</strong> DOM XSS, SPA/PWA, localStorage/sessionStorage.</p>
+    <p><strong>API (if applicable):</strong> REST/GraphQL — authZ, bulk, rate limiting, OWASP API Top 10.</p>
 
-    <h3>Этапы</h3>
+    <h3>Phases</h3>
     <ul>
-        <li>Разведка (OSINT, сбор информации)</li>
-        <li>Автоматизированное сканирование</li>
-        <li>Ручное подтверждение (PoC)</li>
-        <li>Анализ утечек паролей (hashed), при включённой политике</li>
-        <li>Оценка влияния и рекомендации</li>
+        <li>Reconnaissance (OSINT, information gathering)</li>
+        <li>Automated scanning</li>
+        <li>Manual verification (PoC)</li>
+        <li>Password leak analysis (hashed), if policy enabled</li>
+        <li>Impact assessment and recommendations</li>
     </ul>
 
-    <h3>Задействованные средства разведки (динамически)</h3>
+    <h3>Reconnaissance Tools Used (dynamic)</h3>
     <p>
         {% if active_web_scan.tools_run %}
-            По артефактам активного сканирования: {% for name in active_web_scan.tools_run %}<code>{{ name | e }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+            Per active scan artifacts: {% for name in active_web_scan.tools_run %}<code>{{ name | e }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
         {% elif tool_runs %}
-            По журналу tool_runs: {% for tr in tool_runs %}<code>{{ tr.tool_name | e }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+            Per tool_runs log: {% for tr in tool_runs %}<code>{{ tr.tool_name | e }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
         {% else %}
-            Нет данных
+            No data
         {% endif %}
     </p>
 

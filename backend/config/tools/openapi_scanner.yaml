@@ -1,0 +1,35 @@
+tool_id: openapi_scanner
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1200
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "openapi-scanner"
+  - "--target"
+  - "{url}"
+  - "--output"
+  - "{out_dir}/openapi.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/openapi.json"
+cwe_hints:
+  - 200
+  - 862
+  - 863
+  - 20
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "openapi_scanner — internal Semgrep-style OpenAPI walker that derives an API surface from an exposed schema (Swagger/OpenAPI 3.x) at {url} and feeds it into nuclei api-templates. Active recon: probes documented endpoints with safe, non-mutating methods (GET / OPTIONS / HEAD). JSON output captures discovered endpoints, auth schemes, and response codes for downstream API security analysis. Parser deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Backlog/dev1_md §4.14. ARG-018."

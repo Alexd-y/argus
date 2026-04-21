@@ -37,11 +37,7 @@ class DomainValidator:
 
         host = host.lower().strip()
 
-        for pattern in cls._get_patterns():
-            if pattern.search(host):
-                return True
-
-        return False
+        return any(pattern.search(host) for pattern in cls._get_patterns())
 
     @staticmethod
     def _extract_host(value: str) -> str | None:

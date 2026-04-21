@@ -1,0 +1,29 @@
+tool_id: otx_alienvault
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "200m"
+memory_limit: "128Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "curl -sS --fail-with-body --max-time 60 'https://otx.alienvault.com/api/v1/indicators/domain/{domain}/passive_dns' -o {out_dir}/otx.json"
+parse_strategy: custom
+evidence_artifacts:
+  - "/out/otx.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+description: "AlienVault OTX passive DNS lookup for historical resolutions of the target domain. Backlog/dev1_md §4.1."

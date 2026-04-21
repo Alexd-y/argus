@@ -1,0 +1,36 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "argus.fullname" . }}
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.clusterIssuer | quote }}
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.host }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          {{- range .Values.ingress.paths }}
+          - path: {{ .path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "argus.fullname" $ }}-{{ .service }}
+                port:
+                  number: {{ if eq .service "backend" }}{{ $.Values.service.backend.port }}{{ else if eq .service "frontend" }}{{ $.Values.service.frontend.port }}{{ else if eq .service "mcp" }}{{ $.Values.service.mcp.port }}{{ else }}80{{ end }}
+          {{- end }}
+{{- end }}

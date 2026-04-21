@@ -1,4 +1,4 @@
-"""Intelligence API — target analysis, CVE/OSINT, Shodan (HexStrike v4 alignment)."""
+"""Intelligence API — target analysis, CVE/OSINT, Shodan (ARGUS v4 alignment)."""
 
 from __future__ import annotations
 

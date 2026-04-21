@@ -1,0 +1,52 @@
+family_id: oauth
+description: >-
+  OAuth 2.0 / OIDC misconfiguration probes (redirect_uri tampering, state
+  reuse, PKCE downgrade markers). All redirects target an OAST host so any
+  successful flow leaks the auth code to a controlled collector.
+cwe_ids: [601, 602, 287]
+owasp_top10:
+  - 'A01:2021'
+  - 'A07:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: redirect_uri_tamper
+    template: "https://{oast_host}/{canary}"
+    confidence: likely
+    notes: Replace registered redirect_uri with an OAST-controlled host.
+  - id: redirect_uri_path_append
+    template: "{registered_redirect_uri}/../../{canary}"
+    confidence: suspected
+    notes: Path-traversal append; tests prefix-only redirect_uri matching.
+  - id: redirect_uri_subdomain
+    template: "https://{canary}.{oast_host}/cb"
+    confidence: confirmed
+    notes: Subdomain take-over canary; OAST DNS callback confirms hit.
+  - id: state_blank
+    template: ' '
+    confidence: suspected
+    notes: Single-space state parameter; tests CSRF protection on the auth endpoint.
+  - id: response_type_token
+    template: 'token'
+    confidence: suspected
+    notes: Implicit-flow downgrade; rejected on hardened authorization servers.
+  - id: pkce_downgrade
+    template: 'plain'
+    confidence: suspected
+    notes: code_challenge_method downgrade to plain (PKCE bypass research).
+mutations:
+  - name: case_flip
+    description: URL/scheme case flips defeat naive substring filters.
+  - name: unicode_homoglyph
+    description: Cyrillic look-alikes in the redirect host name.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw URL/parameter payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string OAuth parameters.
+  - name: url_double
+    stages: [url_double]
+    description: Double-encoded; bypasses one-pass-decoding gateways.

@@ -1,0 +1,31 @@
+tool_id: responder
+version: "1.0.0"
+category: network
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "responder -I {interface} -A -v 2>&1 | tee {out_dir}/responder.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/responder.log"
+cwe_hints:
+  - 290
+  - 287
+  - 522
+owasp_wstg:
+  - "WSTG-ATHN-04"
+description: "Responder — LLMNR/NBT-NS/MDNS poisoner that captures NTLMv1/NTLMv2 challenge-response hashes by impersonating broadcast name-service responders on the {interface} link. APPROVAL REQUIRED: active layer-2 poisoning is destructive on shared segments. -A runs in analyse-only mode (no SMB / HTTP / DNS server is started), keeping the operator's blast radius bounded. Captured hashes feed §4.13 hashcat -m 5500/5600 once a parser lands. Backlog/dev1_md §4.17. ARG-019."

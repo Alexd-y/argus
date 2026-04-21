@@ -1,0 +1,32 @@
+tool_id: enum4linux_ng
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-smb
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "enum4linux-ng"
+  - "-A"
+  - "-oJ"
+  - "{out_dir}/enum4linux.json"
+  - "{ip}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/enum4linux.json"
+cwe_hints:
+  - 200
+  - 285
+owasp_wstg:
+  - "WSTG-INFO-04"
+description: "enum4linux-ng full SMB/NetBIOS enumeration including users, groups, shares, and policies. Backlog/dev1_md §4.2."

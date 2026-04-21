@@ -1,0 +1,2 @@
+/admin (Status: 200)
+/static/app.js (Status: 200)

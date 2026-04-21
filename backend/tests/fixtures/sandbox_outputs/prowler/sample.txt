@@ -1,0 +1,47 @@
+[
+  {
+    "Status": "FAIL",
+    "StatusExtended": "S3 bucket public-read ACL detected",
+    "Severity": "high",
+    "CheckID": "s3_bucket_acl_grants_to_authenticated_users",
+    "CheckTitle": "Ensure no S3 buckets allow Authenticated Users access",
+    "ServiceName": "s3",
+    "Description": "Public-read ACL grants any authenticated AWS user access to bucket data.",
+    "Risk": "Data exfiltration; reputation damage; compliance violation.",
+    "Remediation": {"Code": {"CLI": "aws s3api put-bucket-acl --bucket example-bucket --acl private"}},
+    "Resource": {"Identifier": "arn:aws:s3:::example-bucket-123456789012", "Region": "us-east-1", "Tags": []}
+  },
+  {
+    "Status": "FAIL",
+    "StatusExtended": "IAM user without MFA",
+    "Severity": "medium",
+    "CheckID": "iam_user_mfa_enabled_console_access",
+    "CheckTitle": "Ensure MFA is enabled for IAM users with console access",
+    "ServiceName": "iam",
+    "Description": "Console-access user has no MFA configured.",
+    "Risk": "Credential stuffing leads to account takeover.",
+    "Remediation": {"Code": {"CLI": "aws iam enable-mfa-device ..."}},
+    "Resource": {"Identifier": "arn:aws:iam::123456789012:user/legacy-admin", "Region": "global", "Tags": []}
+  },
+  {
+    "Status": "PASS",
+    "StatusExtended": "Root account MFA enabled",
+    "Severity": "high",
+    "CheckID": "iam_root_mfa_enabled",
+    "CheckTitle": "Ensure MFA is enabled on root account",
+    "ServiceName": "iam",
+    "Resource": {"Identifier": "arn:aws:iam::123456789012:root", "Region": "global", "Tags": []}
+  },
+  {
+    "Status": "FAIL",
+    "StatusExtended": "Security group allows 0.0.0.0/0 to SSH (port 22)",
+    "Severity": "critical",
+    "CheckID": "ec2_securitygroup_allow_ingress_from_internet_to_tcp_port_22",
+    "CheckTitle": "Ensure no security groups allow ingress from 0.0.0.0/0 to port 22",
+    "ServiceName": "ec2",
+    "Description": "Open SSH from the internet enables brute force.",
+    "Risk": "Full host compromise.",
+    "Remediation": {"Code": {"CLI": "aws ec2 revoke-security-group-ingress ..."}},
+    "Resource": {"Identifier": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0123abcd", "Region": "us-east-1", "Tags": []}
+  }
+]

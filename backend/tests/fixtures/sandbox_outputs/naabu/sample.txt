@@ -1,0 +1,5 @@
+{"ip":"203.0.113.10","port":80,"protocol":"tcp","timestamp":"2026-04-01T12:00:01Z","host":"target.example.com"}
+{"ip":"203.0.113.10","port":443,"protocol":"tcp","timestamp":"2026-04-01T12:00:01Z","host":"target.example.com"}
+{"ip":"203.0.113.10","port":8080,"protocol":"tcp","timestamp":"2026-04-01T12:00:02Z","host":"target.example.com"}
+{"ip":"203.0.113.10","port":22,"protocol":"tcp","timestamp":"2026-04-01T12:00:03Z","host":"target.example.com"}
+{"ip":"203.0.113.11","port":443,"protocol":"tcp","timestamp":"2026-04-01T12:00:04Z","host":"alt.example.com"}

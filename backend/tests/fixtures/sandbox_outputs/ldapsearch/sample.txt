@@ -1,0 +1,47 @@
+# extended LDIF
+#
+# LDAPv3
+# base <DC=contoso,DC=local> with scope subtree
+# filter: (objectclass=user)
+# requesting: ALL
+#
+
+dn: CN=Administrator,CN=Users,DC=contoso,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: Administrator
+sn: Administrator
+description: Built-in account for administering the computer/domain
+distinguishedName: CN=Administrator,CN=Users,DC=contoso,DC=local
+memberOf: CN=Domain Admins,CN=Users,DC=contoso,DC=local
+memberOf: CN=Enterprise Admins,CN=Users,DC=contoso,DC=local
+memberOf: CN=Schema Admins,CN=Users,DC=contoso,DC=local
+sAMAccountName: Administrator
+userPrincipalName: administrator@contoso.local
+
+dn: CN=svc-backup,OU=Service Accounts,DC=contoso,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: svc-backup
+sn: Backup
+distinguishedName: CN=svc-backup,OU=Service Accounts,DC=contoso,DC=local
+memberOf: CN=Domain Users,CN=Users,DC=contoso,DC=local
+sAMAccountName: svc-backup
+userPrincipalName: svc-backup@contoso.local
+
+dn: CN=jdoe,OU=Employees,DC=contoso,DC=local
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: John Doe
+sn: Doe
+givenName: John
+distinguishedName: CN=jdoe,OU=Employees,DC=contoso,DC=local
+memberOf: CN=Domain Users,CN=Users,DC=contoso,DC=local
+sAMAccountName: jdoe
+userPrincipalName: jdoe@contoso.local

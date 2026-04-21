@@ -1,0 +1,52 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-00000a800002",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-04-21T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "ARGUS",
+        "name": "infra/sandbox/images/sbom-network.cdx.json",
+        "version": "cycle5-arg048-stub",
+        "externalReferences": [
+          {
+            "type": "documentation",
+            "url": "https://github.com/argus-active-pentest/argus/blob/main/sandbox/images/argus-kali-network/Dockerfile"
+          }
+        ]
+      }
+    ],
+    "component": {
+      "type": "container",
+      "bom-ref": "argus-kali-network@1.0.0",
+      "name": "argus-kali-network",
+      "version": "1.0.0",
+      "purl": "pkg:oci/argus-kali-network@1.0.0",
+      "description": "ARGUS sandbox image — Backlog/dev1_md §4.17 (network protocol exploitation: SNMP, LDAP, IKE, SMB, IMPACKET, BloodHound). Pinned tooling, USER 65532, no SUID introduction, HEALTHCHECK present.",
+      "licenses": [{"license": {"id": "Apache-2.0"}}],
+      "properties": [
+        {"name": "argus:image:profile", "value": "network"},
+        {"name": "argus:image:cycle", "value": "ARG-048"},
+        {"name": "argus:sbom:status", "value": "placeholder"},
+        {"name": "argus:sbom:source-of-truth", "value": "/usr/share/doc/sbom.cdx.json (baked into runtime image at build time via _shared/generate_sbom.sh)"}
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "bom-ref": "placeholder:argus-kali-network",
+      "name": "argus-kali-network-placeholder",
+      "version": "1.0.0",
+      "description": "Committed stub. Real CycloneDX components materialise inside the image at /usr/share/doc/sbom.cdx.json (dpkg-query fallback or syft) during `docker build` and are extracted by CI into the GitHub Actions artifact `sbom-network`. Do NOT treat this file as authoritative — it exists only so that `docs_tool_catalog.py` and `tests/integration/sandbox/test_image_security_contract.py` can validate the JSON envelope offline (no docker daemon required)."
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "argus-kali-network@1.0.0",
+      "dependsOn": ["placeholder:argus-kali-network"]
+    }
+  ]
+}

@@ -4,7 +4,8 @@ Validates:
 - Multi-stage build (builder + runtime)
 - gunicorn in CMD
 - Non-root user
-- requirements.txt in build
+- Builder installs deps from pyproject.toml (single source of truth, PEP 621)
+- requirements.txt is kept as auto-generated mirror for legacy CI/SCA tooling
 """
 
 from pathlib import Path
@@ -14,6 +15,7 @@ import pytest
 ARGUS_ROOT = Path(__file__).resolve().parent.parent
 DOCKERFILE_PATH = ARGUS_ROOT / "infra" / "backend" / "Dockerfile"
 BACKEND_ROOT = ARGUS_ROOT / "backend"
+PYPROJECT_PATH = BACKEND_ROOT / "pyproject.toml"
 REQUIREMENTS_PATH = BACKEND_ROOT / "requirements.txt"
 
 
@@ -66,15 +68,25 @@ class TestInfra005BackendDockerfileContent:
             "INFRA-005: Must not run as root (USER root or USER 0)"
         )
 
-    def test_requirements_txt_referenced(self, dockerfile_content: str) -> None:
-        """Must reference requirements.txt (COPY or pip install -r)."""
-        assert "requirements.txt" in dockerfile_content, (
-            "INFRA-005: Dockerfile must reference requirements.txt"
+    def test_pyproject_is_dependency_source(self, dockerfile_content: str) -> None:
+        """Builder must install runtime deps from pyproject.toml (single source of truth)."""
+        assert "COPY pyproject.toml" in dockerfile_content, (
+            "INFRA-005: Dockerfile builder must COPY pyproject.toml as dependency source"
+        )
+        assert "pip install" in dockerfile_content, (
+            "INFRA-005: Dockerfile must install Python dependencies in the builder stage"
         )
 
-    def test_requirements_txt_exists_in_backend(self) -> None:
-        """requirements.txt must exist in backend (build context)."""
+    def test_pyproject_exists_in_backend(self) -> None:
+        """pyproject.toml must exist in backend (build context)."""
+        assert PYPROJECT_PATH.exists(), (
+            f"INFRA-005: pyproject.toml must exist at {PYPROJECT_PATH} "
+            "(backend is build context, [project.dependencies] drives the image build)"
+        )
+
+    def test_requirements_txt_kept_as_mirror(self) -> None:
+        """requirements.txt is auto-generated from pyproject.toml — must stay present for CI/SCA."""
         assert REQUIREMENTS_PATH.exists(), (
             f"INFRA-005: requirements.txt must exist at {REQUIREMENTS_PATH} "
-            "(backend is build context)"
+            "(legacy CI/SCA mirror; regenerate with backend/scripts/sync_requirements.py)"
         )

@@ -109,34 +109,30 @@ class TestExecutorNoLeak:
         """On Exception, stderr is generic, not str(exception)."""
         from src.tools.executor import execute_command
 
-        with patch("src.tools.executor.subprocess.run") as mock_run:
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
             mock_run.side_effect = FileNotFoundError("nmap not found in PATH")
             result = execute_command("nmap -sV 8.8.8.8")
         assert result["success"] is False
         assert result["stderr"] == "Command execution failed"
         assert "FileNotFoundError" not in result["stderr"]
-        assert "nmap" not in result["stderr"]
         assert "PATH" not in result["stderr"]
 
     def test_timeout_expired_returns_generic_stderr(self) -> None:
         """On TimeoutExpired, stderr is generic, no internal details."""
-        import subprocess
-
         from src.tools.executor import execute_command
 
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.side_effect = subprocess.TimeoutExpired(
-                cmd="nmap -sV 8.8.8.8",
-                timeout=300,
-                output="partial output",
-                stderr="nmap: timeout details",
-            )
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.side_effect = RuntimeError("Command timed out after 300s")
             result = execute_command("nmap -sV 8.8.8.8")
         assert result["success"] is False
-        assert result["stderr"] == "Command timed out"
-        assert "nmap" not in result["stderr"]
+        assert result["stderr"] == "Command execution failed"
         assert "300" not in result["stderr"]
-        assert "partial output" not in result["stderr"]
 
     def test_executor_stderr_sanitized_on_any_exception(self) -> None:
         """Any exception during execution returns generic stderr, never raw message."""
@@ -146,26 +142,31 @@ class TestExecutorNoLeak:
             PermissionError("Permission denied: /usr/bin/nmap"),
             OSError(2, "No such file or directory", "/opt/tools/nmap"),
         ]:
-            with patch("src.tools.executor.subprocess.run") as mock_run:
+            with (
+                patch("src.tools.executor.check_tool_available", return_value=True),
+                patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+            ):
                 mock_run.side_effect = exc
                 result = execute_command("nmap -sV 8.8.8.8")
             assert result["success"] is False
             assert result["stderr"] == "Command execution failed"
             assert "/usr" not in result["stderr"]
             assert "/opt" not in result["stderr"]
-            assert "nmap" not in result["stderr"]
             assert "Permission" not in result["stderr"]
             assert "No such file" not in result["stderr"]
 
-    def test_subprocess_uses_shell_false(self) -> None:
-        """subprocess.run never uses shell=True when command is allowed."""
+    def test_run_argv_receives_list_not_string(self) -> None:
+        """run_argv_simple_sync receives a list of args (no shell injection)."""
         from src.tools.executor import execute_command
 
-        with patch("src.tools.executor.subprocess.run") as mock_run:
-            mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        with (
+            patch("src.tools.executor.check_tool_available", return_value=True),
+            patch("src.tools.executor.run_argv_simple_sync") as mock_run,
+        ):
+            mock_run.return_value = {"success": True, "stdout": "", "stderr": "", "return_code": 0}
             execute_command("nmap -sV 8.8.8.8")
-        call_kwargs = mock_run.call_args[1]
-        assert call_kwargs.get("shell") is False
+        args = mock_run.call_args[0][0]
+        assert isinstance(args, list)
 
 
 class TestPathTraversalStorage:

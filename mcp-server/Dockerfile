@@ -13,11 +13,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN useradd -m -u 1000 mcp
+USER mcp
+
 # ARGUS_SERVER_URL: backend URL (e.g. http://backend:8000 in docker-compose)
 ENV ARGUS_SERVER_URL=http://backend:8000
 
 # HTTP transport for Docker: keeps container running; stdio for local Cursor spawn
 ENV MCP_TRANSPORT=http
-ENV MCP_PORT=8000
+ENV ARGUS_MCP_PORT=8765
 
 CMD ["python", "argus_mcp.py"]

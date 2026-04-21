@@ -1,0 +1,41 @@
+tool_id: w3af_console
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "w3af_console"
+  - "-y"
+  - "-n"
+  - "-s"
+  - "{in_dir}/w3af.profile"
+  - "-o"
+  - "{out_dir}/w3af.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/w3af.txt"
+cwe_hints:
+  - 79
+  - 89
+  - 22
+  - 78
+  - 200
+  - 287
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-05"
+  - "WSTG-INPV-12"
+  - "WSTG-AUTHZ-01"
+description: "w3af Web Application Attack & Audit Framework console — runs the user-supplied profile from {in_dir}/w3af.profile (target URL pinned in the profile), non-interactive, plain-text report. Approval-gated due to active audit modules (xss / sqli / rce probes). Profile is the canonical injection point for {url}. Author: Andres Riancho (https://github.com/andresriancho/w3af). Backlog/dev1_md §4.8."

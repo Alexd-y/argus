@@ -1,0 +1,241 @@
+{# ARG-036 — Asgard tier PDF layout (security team, orange brand).
+   Self-contained template; not extending base.html.j2. Renders the
+   asgard_report assembly (asgard_tier_renderer.AsgardSectionAssembly)
+   with sanitised reproducer commands and presigned evidence links. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ARGUS Asgard Report — {{ target | e }}</title>
+  <link rel="stylesheet" href="pdf_styles.css" />
+</head>
+<body class="tier-asgard">
+
+  {# ----------------------- COVER PAGE ----------------------- #}
+  <section class="cover-page">
+    <div class="cover-brand">
+      <div class="brand-mark" aria-label="ARGUS logo">
+        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ARGUS shield">
+          <circle cx="32" cy="32" r="30" fill="#c46410" stroke="#7a3e08" stroke-width="2" />
+          <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#fff" opacity="0.9" />
+          <circle cx="32" cy="30" r="6" fill="#c46410" />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">ARGUS</div>
+        <div class="brand-sub">Security Pentest Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-title-block">
+      <div class="cover-tier-badge tier-badge-asgard">ASGARD · Security Team Brief</div>
+      <h1 class="cover-title">Operational Findings Report</h1>
+      <p class="cover-target">{{ target | e or "Unspecified target" }}</p>
+    </div>
+
+    <div class="cover-meta">
+      <dl class="meta-grid">
+        <dt>Tenant</dt><dd>{{ tenant_id | e or "—" }}</dd>
+        <dt>Scan ID</dt><dd>{{ scan_id | e or "—" }}</dd>
+        <dt>Issued</dt><dd>{{ scan_completed_at | e or "—" }}</dd>
+        <dt>Tier</dt><dd>Asgard (Tier&nbsp;2)</dd>
+        <dt>Watermark</dt><dd class="watermark">{{ pdf_watermark | e }}</dd>
+      </dl>
+    </div>
+
+    <div class="cover-confidential">
+      ARGUS Confidential · Restricted to security team
+    </div>
+  </section>
+
+  {# --------------------- TABLE OF CONTENTS ------------------- #}
+  <section class="toc">
+    <h2 class="section-heading">Contents</h2>
+    <ol class="toc-list">
+      <li><a href="#sec-exec">Executive Summary</a></li>
+      <li><a href="#sec-findings">Findings</a></li>
+      <li><a href="#sec-remediation">Remediation Guidance</a></li>
+      <li><a href="#sec-reproducer">Sanitised Reproducers</a></li>
+      <li><a href="#sec-evidence">Evidence References</a></li>
+      <li><a href="#sec-timeline">Pipeline Timeline</a></li>
+    </ol>
+  </section>
+
+  {# --------------------- EXECUTIVE SUMMARY ------------------- #}
+  <section id="sec-exec" class="exec-summary">
+    <h2 class="section-heading">Executive Summary</h2>
+    {% set sev = severity_counts or (asgard_report.executive_summary_counts if asgard_report else {}) or {} %}
+    <div class="severity-pills">
+      <span class="pill pill-critical">Critical · {{ sev.get('critical', 0) }}</span>
+      <span class="pill pill-high">High · {{ sev.get('high', 0) }}</span>
+      <span class="pill pill-medium">Medium · {{ sev.get('medium', 0) }}</span>
+      <span class="pill pill-low">Low · {{ sev.get('low', 0) }}</span>
+      <span class="pill pill-info">Info · {{ sev.get('info', 0) }}</span>
+    </div>
+
+    {% set exec_text = (ai_sections or {}).get('executive_summary') or (ai_sections or {}).get('report.ai.section.executive_summary') %}
+    {% if exec_text %}
+      <div class="prose">{{ exec_text | md }}</div>
+    {% else %}
+      <p class="prose">
+        Asgard surface — the working-level brief for the security team.
+        ARGUS recorded {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
+        across <strong>{{ target | e or 'the engagement' }}</strong>.
+        Each finding ships with a remediation card and a sanitised reproducer
+        command (raw secrets / destructive flags scrubbed at render time).
+      </p>
+    {% endif %}
+  </section>
+
+  {# ------------------------- FINDINGS ------------------------ #}
+  <section id="sec-findings" class="findings">
+    <h2 class="section-heading">Findings</h2>
+    {% set findings_list = (asgard_report.findings if asgard_report else findings) or [] %}
+    {% if findings_list %}
+      <table class="findings-table">
+        <thead>
+          <tr>
+            <th class="col-sev">Severity</th>
+            <th class="col-title">Finding</th>
+            <th class="col-cwe">CWE</th>
+            <th class="col-cvss">CVSS</th>
+            <th class="col-owasp">OWASP</th>
+            <th class="col-conf">Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in findings_list %}
+            <tr class="row-severity-{{ (f.severity or 'info') | lower }}">
+              <td class="col-sev"><span class="sev-tag sev-{{ (f.severity or 'info') | lower }}">{{ (f.severity or 'info') | upper }}</span></td>
+              <td class="col-title">
+                <div class="finding-title">{{ f.title | e or '—' }}</div>
+                {% if f.description %}
+                  <div class="finding-desc">{{ f.description | e | truncate(280, killwords=False, end='…') }}</div>
+                {% endif %}
+              </td>
+              <td class="col-cwe">{{ f.cwe | e or '—' }}</td>
+              <td class="col-cvss">{{ '%.1f' | format(f.cvss) if f.cvss is not none else '—' }}</td>
+              <td class="col-owasp">{{ f.owasp_category | e or '—' }}</td>
+              <td class="col-conf">{{ f.confidence | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No findings were emitted for this scan.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------- REMEDIATION CARDS ----------------------- #}
+  <section id="sec-remediation" class="remediation">
+    <h2 class="section-heading">Remediation Guidance</h2>
+    {% set remediation_list = (asgard_report.remediation if asgard_report else []) or [] %}
+    {% if remediation_list %}
+      <div class="remediation-grid">
+        {% for r in remediation_list %}
+          <div class="remediation-card sev-border-{{ (r.severity or 'info') | lower }}">
+            <div class="card-header">
+              <span class="sev-tag sev-{{ (r.severity or 'info') | lower }}">{{ (r.severity or 'info') | upper }}</span>
+              <span class="card-title">{{ r.finding_title | e or '—' }}</span>
+            </div>
+            <div class="card-body">
+              {{ r.guidance | e or 'Review vendor patches or apply compensating controls.' }}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="prose empty-state">No remediation cards available for this report.</p>
+    {% endif %}
+  </section>
+
+  {# --------------- SANITISED REPRODUCER COMMANDS ------------- #}
+  <section id="sec-reproducer" class="reproducers">
+    <h2 class="section-heading">Sanitised Reproducers</h2>
+    {% set reproducer_list = (asgard_report.reproducer if asgard_report else []) or [] %}
+    {% if reproducer_list %}
+      {% for rep in reproducer_list %}
+        <div class="reproducer-block">
+          <div class="reproducer-meta">
+            <span class="sev-tag sev-{{ (rep.severity or 'info') | lower }}">{{ (rep.severity or 'info') | upper }}</span>
+            <span class="reproducer-title">{{ rep.finding_title | e or '—' }}</span>
+          </div>
+          <pre class="reproducer-code"><code>{{ ' '.join(rep.command) | e }}</code></pre>
+        </div>
+      {% endfor %}
+      <p class="prose footnote">
+        Reproducer commands have been passed through
+        <code>sanitize_replay_command()</code>: raw secrets are replaced with
+        <code>[REDACTED-…]</code> placeholders and destructive flags
+        (<code>--rm</code>, <code>-rf</code>, <code>--force</code>) are stripped.
+      </p>
+    {% else %}
+      <p class="prose empty-state">No sanitised reproducers were captured.</p>
+    {% endif %}
+  </section>
+
+  {# -------------------- EVIDENCE APPENDIX -------------------- #}
+  <section id="sec-evidence" class="evidence">
+    <h2 class="section-heading">Evidence References</h2>
+    {% set evidence_list = (asgard_report.evidence if asgard_report else []) or [] %}
+    {% if evidence_list %}
+      <table class="evidence-table">
+        <thead>
+          <tr>
+            <th>Finding</th>
+            <th>Object key</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in evidence_list %}
+            <tr>
+              <td>{{ ev.finding_id | e or '—' }}</td>
+              <td><code>{{ ev.object_key | e or '—' }}</code></td>
+              <td>{{ ev.description | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No evidence artefacts were attached.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------------- TIMELINE -------------------------- #}
+  <section id="sec-timeline" class="timeline">
+    <h2 class="section-heading">Pipeline Timeline</h2>
+    {% set timeline_list = (asgard_report.timeline if asgard_report else []) or [] %}
+    {% if timeline_list %}
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th class="col-tl-order">#</th>
+            <th class="col-tl-phase">Phase</th>
+            <th class="col-tl-snippet">Snippet</th>
+            <th class="col-tl-time">Recorded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in timeline_list %}
+            <tr>
+              <td class="col-tl-order">{{ t.order_index }}</td>
+              <td class="col-tl-phase">{{ t.phase | e or '—' }}</td>
+              <td class="col-tl-snippet">{{ t.snippet | e or '—' }}</td>
+              <td class="col-tl-time">{{ t.created_at | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No pipeline timeline entries are available.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------------- FOOTER --------------------------- #}
+  <footer class="report-footer">
+    <p>ARGUS Confidential · Asgard Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
+  </footer>
+
+</body>
+</html>

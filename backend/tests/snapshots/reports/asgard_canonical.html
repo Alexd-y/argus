@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGUS Report — https://acme.example.com</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+        h1 { color: #1a1a2e; }
+        h2 { margin-top: 1.75rem; font-size: 1.15rem; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.35rem; }
+        h3 { font-size: 0.95rem; margin: 0.75rem 0 0.35rem; color: #444; }
+        .meta { color: #555; font-size: 0.9rem; margin-bottom: 1.5rem; }
+        .tier-badge { display: inline-block; padding: 0.2rem 0.55rem; border-radius: 4px; background: #eef2ff; font-size: 0.8rem; text-transform: capitalize; }
+        table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+        th, td { border: 1px solid #ddd; padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+        th { background: #f5f5f5; }
+        td.desc { white-space: pre-wrap; word-break: break-word; }
+        .sev-critical { color: #c00; font-weight: bold; }
+        .sev-high { color: #e67e22; font-weight: bold; }
+        .sev-medium { color: #f39c12; }
+        .sev-low { color: #27ae60; }
+        .sev-info { color: #3498db; }
+        .panel { margin-top: 1.25rem; padding: 1rem; background: #f8f9fa; border-radius: 6px; }
+        .ai-slot-body { margin: 0.25rem 0 0.75rem; white-space: normal; word-break: break-word; }
+        .ai-slot-body h1, .ai-slot-body h2, .ai-slot-body h3, .ai-slot-body h4 {
+            margin-top: 0.8em; margin-bottom: 0.4em;
+        }
+        .ai-slot-body ul, .ai-slot-body ol {
+            margin-left: 1.5em; margin-bottom: 0.5em;
+        }
+        .ai-slot-body p { margin-bottom: 0.5em; }
+        .ai-slot-body code {
+            background: #f4f4f4; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em;
+        }
+        ul.timeline { margin: 0.35rem 0 0 1.25rem; }
+        .empty { color: #777; font-style: italic; }
+        .owasp-compliance { margin: 1rem 0 1.25rem; }
+        .owasp-compliance-heading { font-size: 1rem; margin: 0 0 0.5rem; color: #333; border-bottom: none; }
+        .owasp-compliance-table { margin-top: 0.35rem; font-size: 0.9rem; }
+        .owasp-compliance-table th.owasp-compliance-count-col { text-align: center; width: 8rem; }
+        .owasp-compliance-table td.owasp-compliance-presence { text-align: center; font-weight: 600; }
+        tr.owasp-compliance-0 td.owasp-compliance-presence { background: #e8f5e9; color: #1b5e20; }
+        tr.owasp-compliance-warn td.owasp-compliance-presence { background: #fff8e1; color: #e65100; }
+        tr.owasp-compliance-high td.owasp-compliance-presence { background: #ffebee; color: #b71c1c; }
+        .owasp-finding-cell { font-size: 0.9rem; }
+        .owasp-finding-label { color: #444; }
+        /* Valhalla — wide findings table + PoC sub-rows (WeasyPrint) */
+        .valhalla-findings .findings-main-table { font-size: 0.8rem; table-layout: fixed; }
+        .valhalla-findings .findings-main-table th:nth-child(4),
+        .valhalla-findings .findings-main-table td.desc { word-break: break-word; overflow-wrap: anywhere; }
+        .valhalla-findings .findings-main-table code { font-size: 0.85em; word-break: break-all; }
+        .finding-poc { margin-top: 0.5rem; padding: 0.5rem 0; border-top: 1px solid #e8e8e8; }
+        .finding-poc-title { font-size: 0.9rem; margin: 0 0 0.35rem; }
+        .finding-poc-block { margin: 0.25rem 0; padding: 0.45rem 0.55rem; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 0.78rem; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+        .finding-poc-screenshot-thumb img { display: block; margin-top: 0.35rem; }
+    </style>
+</head>
+<body>
+    <h1>ARGUS Security Report</h1>
+    <p class="meta">
+        <span class="tier-badge">asgard</span>
+            — Asgard (technical)
+    </p>
+<section class="recon-summary panel" id="recon-summary">
+    <h2>Recon summary</h2>
+    <p><strong>Target:</strong> https://acme.example.com</p>
+    <p><strong>Technologies:</strong>
+            nginx, django
+    </p>
+    <p><strong>Severity counts:</strong>
+                critical: 1;                 high: 2;                 medium: 1;                 low: 1;                 info: 0    </p>
+    <p><strong>Phase I/O:</strong> inputs 0, outputs 1; timeline entries 2; findings 5</p>
+        <h3>Timeline (preview)</h3>
+        <ul class="timeline">
+                <li><strong>recon</strong> (#0): {&#39;phase&#39;: &#39;started&#39;}</li>
+                <li><strong>exploit</strong> (#1): {&#39;phase&#39;: &#39;rce&#39;}</li>
+        </ul>
+</section><section class="findings" id="findings">
+    <h2>Findings</h2>
+<section class="owasp-compliance" id="owasp-top10-compliance">
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 Compliance</h3>
+    <table class="owasp-compliance-table">
+        <thead>
+            <tr>
+                <th scope="col">Category</th>
+                <th scope="col">Description</th>
+                <th scope="col" class="owasp-compliance-count-col">Findings Present</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="owasp-compliance-warn">
+                <td class="owasp-compliance-category" title="Принудительная авторизация на сервере для каждого запроса, политики по ролям и владельцу ресурса, запрет на опору только на «скрытые» URL и параметры.">
+                    <span class="owasp-compliance-code"><code>A01</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Broken Access Control</span>
+                </td>
+                <td class="owasp-compliance-desc">Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.</td>
+                <td class="owasp-compliance-presence">Yes</td>
+            </tr>
+            <tr class="owasp-compliance-warn">
+                <td class="owasp-compliance-category" title="Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.">
+                    <span class="owasp-compliance-code"><code>A02</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Security Misconfiguration</span>
+                </td>
+                <td class="owasp-compliance-desc">Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.</td>
+                <td class="owasp-compliance-presence">Yes</td>
+            </tr>
+            <tr class="owasp-compliance-0">
+                <td class="owasp-compliance-category" title="Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.">
+                    <span class="owasp-compliance-code"><code>A03</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Software Supply Chain Failures</span>
+                </td>
+                <td class="owasp-compliance-desc">Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.</td>
+                <td class="owasp-compliance-presence">No</td>
+            </tr>
+            <tr class="owasp-compliance-warn">
+                <td class="owasp-compliance-category" title="TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.">
+                    <span class="owasp-compliance-code"><code>A04</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Cryptographic Failures</span>
+                </td>
+                <td class="owasp-compliance-desc">Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.</td>
+                <td class="owasp-compliance-presence">Yes</td>
+            </tr>
+            <tr class="owasp-compliance-warn">
+                <td class="owasp-compliance-category" title="Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.">
+                    <span class="owasp-compliance-code"><code>A05</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Injection</span>
+                </td>
+                <td class="owasp-compliance-desc">SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.</td>
+                <td class="owasp-compliance-presence">Yes</td>
+            </tr>
+            <tr class="owasp-compliance-0">
+                <td class="owasp-compliance-category" title="Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.">
+                    <span class="owasp-compliance-code"><code>A06</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Insecure Design</span>
+                </td>
+                <td class="owasp-compliance-desc">Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.</td>
+                <td class="owasp-compliance-presence">No</td>
+            </tr>
+            <tr class="owasp-compliance-warn">
+                <td class="owasp-compliance-category" title="MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.">
+                    <span class="owasp-compliance-code"><code>A07</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Authentication Failures</span>
+                </td>
+                <td class="owasp-compliance-desc">Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.</td>
+                <td class="owasp-compliance-presence">Yes</td>
+            </tr>
+            <tr class="owasp-compliance-0">
+                <td class="owasp-compliance-category" title="Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.">
+                    <span class="owasp-compliance-code"><code>A08</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Software or Data Integrity Failures</span>
+                </td>
+                <td class="owasp-compliance-desc">Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.</td>
+                <td class="owasp-compliance-presence">No</td>
+            </tr>
+            <tr class="owasp-compliance-0">
+                <td class="owasp-compliance-category" title="Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.">
+                    <span class="owasp-compliance-code"><code>A09</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Security Logging &amp; Alerting Failures</span>
+                </td>
+                <td class="owasp-compliance-desc">Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.</td>
+                <td class="owasp-compliance-presence">No</td>
+            </tr>
+            <tr class="owasp-compliance-0">
+                <td class="owasp-compliance-category" title="Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.">
+                    <span class="owasp-compliance-code"><code>A10</code></span>
+                    <span class="owasp-compliance-sep"> — </span>
+                    <span class="owasp-compliance-title">Mishandling of Exceptional Conditions</span>
+                </td>
+                <td class="owasp-compliance-desc">Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.</td>
+                <td class="owasp-compliance-presence">No</td>
+            </tr>
+        </tbody>
+    </table>
+</section>    <table class="findings-main-table">
+        <thead>
+            <tr>
+                <th>Severity</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>CWE</th>
+                <th>OWASP Category</th>
+                <th>CVSS</th>
+            </tr>
+        </thead>
+        <tbody>
+                <tr>
+                    <td><span class="sev-critical">critical</span></td>
+                    <td>SQLi at /api/v1/users</td>
+                    <td class="desc">UNION-based SQLi via id parameter.</td>
+                    <td>CWE-89</td>
+                    <td class="owasp-finding-cell">
+                            <span class="owasp-finding-id"><code>A05</code></span>
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">Injection</span>
+                    </td>
+                    <td>9.8</td>
+                </tr>
+                        <tr class="poc-row">
+                            <td colspan="6">
+                                <p class="finding-poc-empty">No PoC available</p>
+                            </td>
+                        </tr>
+                <tr>
+                    <td><span class="sev-high">high</span></td>
+                    <td>Reverse shell PoC in /upload</td>
+                    <td class="desc">File upload allows RCE; PoC included.</td>
+                    <td>CWE-78</td>
+                    <td class="owasp-finding-cell">
+                            <span class="owasp-finding-id"><code>A01</code></span>
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">Broken Access Control</span>
+                    </td>
+                    <td>8.6</td>
+                </tr>
+                        <tr class="poc-row">
+                            <td colspan="6">
+                                <p class="finding-poc-empty">No PoC available</p>
+                            </td>
+                        </tr>
+                <tr>
+                    <td><span class="sev-high">high</span></td>
+                    <td>GitHub PAT leaked in JS bundle</td>
+                    <td class="desc">ghp_* token observed in /static/app.js.</td>
+                    <td>CWE-200</td>
+                    <td class="owasp-finding-cell">
+                            <span class="owasp-finding-id"><code>A04</code></span>
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">Cryptographic Failures</span>
+                    </td>
+                    <td>7.5</td>
+                </tr>
+                        <tr class="poc-row">
+                            <td colspan="6">
+                                <p class="finding-poc-empty">No PoC available</p>
+                            </td>
+                        </tr>
+                <tr>
+                    <td><span class="sev-medium">medium</span></td>
+                    <td>Missing security headers</td>
+                    <td class="desc">No CSP / HSTS / X-Frame-Options.</td>
+                    <td>CWE-693</td>
+                    <td class="owasp-finding-cell">
+                            <span class="owasp-finding-id"><code>A02</code></span>
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">Security Misconfiguration</span>
+                    </td>
+                    <td>—</td>
+                </tr>
+                <tr>
+                    <td><span class="sev-low">low</span></td>
+                    <td>MySQL root password observed in CI script</td>
+                    <td class="desc">Hardcoded password in deploy script.</td>
+                    <td>CWE-798</td>
+                    <td class="owasp-finding-cell">
+                            <span class="owasp-finding-id"><code>A07</code></span>
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">Authentication Failures</span>
+                    </td>
+                    <td>—</td>
+                </tr>
+                        <tr class="poc-row">
+                            <td colspan="6">
+                                <p class="finding-poc-empty">No PoC available</p>
+                            </td>
+                        </tr>
+        </tbody>
+    </table>
+</section><section class="panel active-web-scan" id="active-web-scan">
+    <h2>Active Web Scanning</h2>
+    <p class="meta">Dynamic testing (phases <code>vuln_analysis</code>, <code>exploitation</code>): tool outputs in raw artifacts and condensed AI context for report sections.</p>
+
+        <p class="empty">No active scanning tools were identified from raw artifact names (or artifacts were not uploaded).</p>
+
+    <h3>Artifacts and API</h3>
+    <p>Raw logs are available in the <a href="#scan-artifacts">Phase Artifacts</a> section.
+        Additionally: <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=vuln_analysis&amp;raw=true</code>,
+        <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=exploitation&amp;raw=true</code>.</p>
+
+        <h3>AI Context Summary (report sections)</h3>
+            <h4>Vulnerability Description (AI)</h4>
+            <div class="ai-slot-body"><p>LLM exec summary</p></div>
+            <h4>Remediation Steps (AI)</h4>
+            <div class="ai-slot-body"><p>Patch ORM.</p>
+<p>Disable unrestricted upload.</p>
+<p>Rotate all PATs.</p></div>
+
+    <h3>Reflected Input Verification Example (curl)</h3>
+    <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
+    <pre class="ai-slot-body"><code>curl -sS -G &#39;https://TARGET.example/search&#39; --data-urlencode &#39;q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING&#39;</code></pre>
+</section>
+<h2 id="scan-artifacts">Phase Artifacts</h2>
+    <p class="empty">Raw artifact listing was not loaded for this report. Via API (with a valid scan id):
+        <code>GET /api/v1/scans/scan-int-asgard-1/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
+        (<code>phase</code>: recon, threat_modeling, vuln_analysis, exploitation, post_exploitation).</p>
+<section class="ai-sections panel" id="ai-sections">
+    <h2>AI Conclusions</h2>
+                <section class="ai-slot" data-section="executive_summary">
+                    <h3>Executive Summary</h3>
+                    <div class="ai-slot-body"><p>Critical SQLi and RCE; rotate exposed credentials immediately.</p></div>
+                </section>
+                <section class="ai-slot" data-section="vulnerability_description">
+                    <h3>Vulnerability Description</h3>
+                    <div class="ai-slot-body"><p>LLM exec summary</p></div>
+                </section>
+                <section class="ai-slot" data-section="remediation_step">
+                    <h3>Remediation Step</h3>
+                    <div class="ai-slot-body"><p>Patch ORM.</p>
+<p>Disable unrestricted upload.</p>
+<p>Rotate all PATs.</p></div>
+                </section>
+                <section class="ai-slot" data-section="business_risk">
+                    <h3>Business Risk</h3>
+                    <div class="ai-slot-body"><p>AI generation skipped: could not generate content</p></div>
+                </section>
+                <section class="ai-slot" data-section="compliance_check">
+                    <h3>Compliance Check</h3>
+                    <div class="ai-slot-body"><p>AI generation skipped: could not generate content</p></div>
+                </section>
+</section><section class="asgard-report" id="asgard-report">
+    <h2>Asgard tier — security team brief</h2>
+
+    <p class="meta">
+        <strong>Report:</strong> r-int-asgard-1
+        — <strong>Target:</strong> https://acme.example.com
+        — <strong>Scan:</strong> scan-int-asgard-1
+    </p>
+
+    <h3>Severity rollup</h3>
+    <table class="asgard-severity-table">
+        <thead>
+            <tr>
+                <th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Info</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="sev-critical">1</td>
+                <td class="sev-high">2</td>
+                <td class="sev-medium">1</td>
+                <td class="sev-low">1</td>
+                <td class="sev-info">0</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>All findings (5)</h3>
+    <table class="asgard-findings-table">
+        <thead>
+            <tr>
+                <th>Severity</th><th>Title</th><th>Description</th><th>CWE</th><th>OWASP</th><th>CVSS</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="sev-critical">critical</span></td>
+                <td>SQLi at /api/v1/users</td>
+                <td class="desc">UNION-based SQLi via id parameter.</td>
+                <td>CWE-89</td>
+                <td>A05</td>
+                <td>9.8</td>
+            </tr>
+            <tr>
+                <td><span class="sev-high">high</span></td>
+                <td>Reverse shell PoC in /upload</td>
+                <td class="desc">File upload allows RCE; PoC included.</td>
+                <td>CWE-78</td>
+                <td>A01</td>
+                <td>8.6</td>
+            </tr>
+            <tr>
+                <td><span class="sev-high">high</span></td>
+                <td>GitHub PAT leaked in JS bundle</td>
+                <td class="desc">ghp_* token observed in /static/app.js.</td>
+                <td>CWE-200</td>
+                <td>A04</td>
+                <td>7.5</td>
+            </tr>
+            <tr>
+                <td><span class="sev-medium">medium</span></td>
+                <td>Missing security headers</td>
+                <td class="desc">No CSP / HSTS / X-Frame-Options.</td>
+                <td>CWE-693</td>
+                <td>A02</td>
+                <td>—</td>
+            </tr>
+            <tr>
+                <td><span class="sev-low">low</span></td>
+                <td>MySQL root password observed in CI script</td>
+                <td class="desc">Hardcoded password in deploy script.</td>
+                <td>CWE-798</td>
+                <td>A07</td>
+                <td>—</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Remediation</h3>
+    <table class="asgard-remediation-table">
+        <thead>
+            <tr><th>Severity</th><th>Finding</th><th>Guidance</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="sev-critical">critical</span></td>
+                <td>SQLi at /api/v1/users</td>
+                <td class="desc">Patch ORM and parameterise the id field.</td>
+            </tr>
+            <tr>
+                <td><span class="sev-high">high</span></td>
+                <td>Reverse shell PoC in /upload</td>
+                <td class="desc">Reject non-image MIME types and run the worker as a non-root user.</td>
+            </tr>
+            <tr>
+                <td><span class="sev-high">high</span></td>
+                <td>GitHub PAT leaked in JS bundle</td>
+                <td class="desc">Rotate token and migrate to fine-grained PAT.</td>
+            </tr>
+            <tr>
+                <td><span class="sev-medium">medium</span></td>
+                <td>Missing security headers</td>
+                <td class="desc">Review the finding and apply vendor-provided patches or compensating controls.</td>
+            </tr>
+            <tr>
+                <td><span class="sev-low">low</span></td>
+                <td>MySQL root password observed in CI script</td>
+                <td class="desc">Review the finding and apply vendor-provided patches or compensating controls.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Sanitised reproducer commands</h3>
+    <p class="meta">Bearer / API tokens, NT-LM hashes, passwords, destructive flags and
+    reverse-shell payloads have been redacted by ``replay_command_sanitizer``
+    (NIST SP 800-204D §5.1.4). Targets are replaced with <code>{ASSET}</code> /
+    <code>{ENDPOINT}</code> placeholders.</p>
+    <ul class="asgard-reproducer-list">
+        <li>
+            <strong>SQLi at /api/v1/users</strong>
+            <span class="sev-critical">[critical]</span>
+            <pre class="finding-poc-block">curl -H Authorization: Bearer [REDACTED-BEARER] {ENDPOINT}?id=1&#39; UNION SELECT 1,2,3--</pre>
+        </li>
+        <li>
+            <strong>Reverse shell PoC in /upload</strong>
+            <span class="sev-high">[high]</span>
+            <pre class="finding-poc-block">sh -c [REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0&gt;&amp;1</pre>
+        </li>
+        <li>
+            <strong>GitHub PAT leaked in JS bundle</strong>
+            <span class="sev-high">[high]</span>
+            <pre class="finding-poc-block">curl -H &#39;Authorization: token [REDACTED-GH-TOKEN]&#39; https://api.github.com/user</pre>
+        </li>
+        <li>
+            <strong>Missing security headers</strong>
+            <span class="sev-medium">[medium]</span>
+            <pre class="finding-poc-block">curl -I {ASSET}/</pre>
+        </li>
+        <li>
+            <strong>MySQL root password observed in CI script</strong>
+            <span class="sev-low">[low]</span>
+            <pre class="finding-poc-block">mysql -u root --password=[REDACTED-PASSWORD] -h acme.example.com -e SHOW DATABASES;</pre>
+        </li>
+    </ul>
+
+    <h3>Pipeline timeline</h3>
+    <ul class="timeline">
+        <li>
+            <strong>#0 recon</strong>
+ <em>(2026-04-19T10:00:00Z)</em>: {&#34;phase&#34;: &#34;started&#34;}        </li>
+        <li>
+            <strong>#1 exploit</strong>
+ <em>(2026-04-19T11:00:00Z)</em>: {&#34;phase&#34;: &#34;rce&#34;}        </li>
+    </ul>
+
+    <h3>Evidence</h3>
+    <table class="asgard-evidence-table">
+        <thead>
+            <tr><th>Finding</th><th>Object</th><th>Description</th><th>Presigned URL</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>f1</td>
+                <td><code>evidence/sqli/dump.txt</code></td>
+                <td>HTTP req/resp dump</td>
+                <td>
+                        <span class="empty">No URL</span>
+                </td>
+            </tr>
+            <tr>
+                <td>f2</td>
+                <td><code>evidence/upload/payload.bin</code></td>
+                <td>Reverse-shell artefact</td>
+                <td>
+                        <span class="empty">No URL</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Screenshots</h3>
+    <table class="asgard-screenshots-table">
+        <thead>
+            <tr><th>Object</th><th>URL / email context</th><th>Presigned URL</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>screenshots/login.png</code></td>
+                <td>login</td>
+                <td>
+                        <span class="empty">No URL</span>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+</body>
+</html>

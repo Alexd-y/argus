@@ -1,0 +1,47 @@
+tool_id: arachni
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "arachni"
+  - "{url}"
+  - "--scope-include-subdomains"
+  - "--scope-page-limit"
+  - "500"
+  - "--http-request-concurrency"
+  - "10"
+  - "--report-save-path"
+  - "{out_dir}/arachni.afr"
+  - "--checks=*"
+  - "--timeout"
+  - "00:25:00"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/arachni.afr"
+cwe_hints:
+  - 79
+  - 89
+  - 22
+  - 78
+  - 200
+  - 287
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-05"
+  - "WSTG-INPV-12"
+  - "WSTG-AUTHZ-01"
+  - "WSTG-CONF-04"
+description: "Arachni full-featured web application security scanner — crawls {url} (subdomain scope, 500 page cap), runs the complete check set, writes binary AFR report. Approval-gated due to active payload injection (XSS, SQLi, RCE checks fire real probes). Convert AFR → JSON via 'arachni_reporter' for finding extraction in Cycle 3 follow-up. Author: Tasos Laskos (https://github.com/Arachni/arachni). Backlog/dev1_md §4.8."

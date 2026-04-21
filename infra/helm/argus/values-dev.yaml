@@ -1,0 +1,103 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ARGUS — DEV overlay (kind / minikube / single-node)
+# ──────────────────────────────────────────────────────────────────────────────
+# Single replica everywhere, no TLS, no NetworkPolicies, no autoscaling.
+# Cosign verification is OFF in dev to allow local images without supply-chain
+# signatures.
+# DO NOT use this overlay outside dev clusters — it intentionally leaves the
+# attack surface wider.
+
+global:
+  imageRegistry: ""
+  storageClass: standard
+
+config:
+  logLevel: DEBUG
+  environment: dev
+  scanWorkerConcurrency: 2
+
+replicaCount:
+  backend: 1
+  celery: 1
+  frontend: 1
+  mcp: 1
+
+resources:
+  backend:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  celery:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  frontend:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  mcp:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+cosign:
+  verify:
+    enabled: false  # DEV ONLY — never in staging/prod.
+
+ingress:
+  enabled: false
+
+certManager:
+  enabled: false
+
+prometheus:
+  serviceMonitor:
+    enabled: false
+
+otelInstrumentation:
+  enabled: false
+
+hpa:
+  enabled: false
+
+pdb:
+  enabled: false
+
+networkPolicies:
+  enabled: false
+
+sealedSecrets:
+  enabled: false  # DEV: secrets created via plain k8s Secret (kubectl).
+
+postgresql:
+  primary:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+redis:
+  master:
+    persistence:
+      size: 1Gi
+
+minio:
+  persistence:
+    size: 5Gi

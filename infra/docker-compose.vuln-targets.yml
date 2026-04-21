@@ -1,0 +1,73 @@
+# Optional deliberately-vulnerable targets for Playwright smoke (T10 / ARG-058+).
+#
+# Not part of the ARG-047 full-stack e2e capstone — use `docker-compose.e2e.yml` for that.
+#
+# Start exactly ONE profile at a time (avoids port clashes on localhost):
+#   docker compose -f infra/docker-compose.vuln-targets.yml --profile juice-shop up -d --wait
+#   docker compose -f infra/docker-compose.vuln-targets.yml --profile dvwa up -d --wait
+#   docker compose -f infra/docker-compose.vuln-targets.yml --profile webgoat up -d --wait
+#
+# Image refs: tag@sha256 — pin confirmed via Docker Hub API (linux/amd64 index or manifest list).
+# Lab default credentials for DVWA/WebGoat are NOT committed here; pass via CI env if tests need them.
+
+name: argus-vuln-targets
+
+services:
+  juice-shop:
+    profiles: ["juice-shop"]
+    image: bkimminich/juice-shop:v17.0.0@sha256:babfd4e9685b71f3da564cb35f02e870d3dc7d0f444954064bff4bc38602af6b
+    container_name: argus-vuln-juice-shop
+    restart: "no"
+    ports:
+      - "3000:3000"
+    networks:
+      - argus-vuln-targets
+    environment:
+      NODE_ENV: ci
+      JUICE_SHOP_VERBOSE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 25s
+
+  dvwa:
+    profiles: ["dvwa"]
+    image: vulnerables/web-dvwa:1.9@sha256:14c929ec1a99edb77326201f7f0fb431d1b3dd099c09ddeaf46312ab0ff53cfe
+    container_name: argus-vuln-dvwa
+    restart: "no"
+    ports:
+      - "40080:80"
+    networks:
+      - argus-vuln-targets
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/login.php >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  webgoat:
+    profiles: ["webgoat"]
+    image: webgoat/webgoat:v2025.3@sha256:3101bd9e7bcfe122d7ef91e690ef3720de36cc4e86b3d06763a1ddf2e2751a4b
+    container_name: argus-vuln-webgoat
+    restart: "no"
+    ports:
+      - "48080:8080"
+      - "49090:9090"
+    networks:
+      - argus-vuln-targets
+    environment:
+      TZ: UTC
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/WebGoat >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 25
+      start_period: 60s
+
+networks:
+  argus-vuln-targets:
+    name: argus-vuln-targets
+    driver: bridge

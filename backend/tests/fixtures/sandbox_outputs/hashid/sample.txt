@@ -1,0 +1,29 @@
+[
+  {
+    "hash": "5d41402abc4b2a76b9719d911017c592",
+    "modes": [
+      {"name": "MD5", "hashcat": "0", "john": "raw-md5"},
+      {"name": "MD4", "hashcat": "900", "john": "raw-md4"},
+      {"name": "Domain Cached Credentials", "hashcat": "1100", "john": "mscash"}
+    ]
+  },
+  {
+    "hash": "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d",
+    "modes": [
+      {"name": "SHA-1", "hashcat": "100", "john": "raw-sha1"},
+      {"name": "RIPEMD-160", "hashcat": "6000", "john": "ripemd-160"}
+    ]
+  },
+  {
+    "hash": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
+    "modes": [
+      {"name": "bcrypt", "hashcat": "3200", "john": "bcrypt"}
+    ]
+  },
+  {
+    "hash": "7c4a8d09ca3762af61e59520943dc26494f8941b",
+    "modes": [
+      {"name": "SHA-1", "hashcat": "100", "john": "raw-sha1"}
+    ]
+  }
+]

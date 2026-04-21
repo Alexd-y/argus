@@ -2,10 +2,10 @@
 
 import logging
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.models_recon import Engagement, NormalizedFinding, ReconTarget, ScanJob
+from src.db.models_recon import Engagement, ReconTarget
 from src.recon.schemas.target import ReconTargetCreate
 from src.recon.scope.validator import ScopeValidator
 from src.recon.schemas.scope import ScopeConfig

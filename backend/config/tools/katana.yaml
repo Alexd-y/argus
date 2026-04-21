@@ -1,0 +1,38 @@
+tool_id: katana
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "katana"
+  - "-u"
+  - "{url}"
+  - "-jc"
+  - "-d"
+  - "3"
+  - "-rl"
+  - "50"
+  - "-jsonl"
+  - "-output"
+  - "{out_dir}/katana.jsonl"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/katana.jsonl"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-06"
+  - "WSTG-INFO-07"
+description: "ProjectDiscovery katana headless crawler — depth 3, rate-limited 50 req/s, JS-aware. Active crawl emits one JSON object per discovered request. Author: ProjectDiscovery (https://github.com/projectdiscovery/katana). Backlog/dev1_md §4.6."

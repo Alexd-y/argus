@@ -1,0 +1,30 @@
+tool_id: snmp_check
+version: "1.0.0"
+category: auth
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "snmp-check -c {community} {host} > {out_dir}/snmp.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/snmp.txt"
+cwe_hints:
+  - 200
+  - 521
+owasp_wstg:
+  - "WSTG-INFO-09"
+description: "snmp-check — SNMPv1/v2c walk against {host} using {community} string (default-community recon). Single-shot read — no write OIDs touched. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

@@ -1,0 +1,35 @@
+tool_id: naabu
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "naabu"
+  - "-host"
+  - "{ip}"
+  - "-p"
+  - "-"
+  - "-json"
+  - "-o"
+  - "{out_dir}/naabu.json"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/naabu.json"
+cwe_hints:
+  - 200
+  - 668
+owasp_wstg:
+  - "WSTG-INFO-02"
+description: "ProjectDiscovery naabu full-range TCP SYN port scan emitting JSONL one entry per open port. Backlog/dev1_md §4.2."

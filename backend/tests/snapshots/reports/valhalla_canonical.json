@@ -1,0 +1,915 @@
+{
+  "report_id": "r-int-valhalla-1",
+  "target": "https://acme.example.com",
+  "scan_id": "scan-int-valhalla-1",
+  "created_at": "2026-04-19T10:00:00Z",
+  "metadata": {
+    "report_id": "r-int-valhalla-1",
+    "target": "https://acme.example.com",
+    "scan_id": "scan-int-valhalla-1",
+    "created_at": "2026-04-19T10:00:00Z",
+    "technologies": [
+      "django",
+      "nginx"
+    ]
+  },
+  "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+  "summary": {
+    "critical": 1,
+    "high": 2,
+    "medium": 1,
+    "low": 1,
+    "info": 0,
+    "technologies": [
+      "django",
+      "nginx"
+    ],
+    "sslIssues": 1,
+    "headerIssues": 2,
+    "leaksFound": false
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQLi at /api/v1/users",
+      "description": "UNION-based SQLi via id parameter on the payments API.",
+      "cwe": "CWE-89",
+      "cvss": 9.8,
+      "owasp_category": "A05",
+      "proof_of_concept": {
+        "url": "https://payments.acme.example.com/api/v1/users",
+        "replay_command": [
+          "curl",
+          "-H",
+          "Authorization: Bearer [REDACTED-BEARER]",
+          "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
+        ]
+      }
+    },
+    {
+      "severity": "high",
+      "title": "GitHub PAT leaked in JS bundle",
+      "description": "ghp_* token observed in /static/app.js.",
+      "cwe": "CWE-200",
+      "cvss": 7.5,
+      "owasp_category": "A01",
+      "proof_of_concept": {
+        "url": "https://www.acme.example.com/static/app.js",
+        "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user"
+      }
+    },
+    {
+      "severity": "high",
+      "title": "Reverse shell PoC in /upload",
+      "description": "File upload allows RCE; PoC included.",
+      "cwe": "CWE-78",
+      "cvss": 8.6,
+      "owasp_category": "A05",
+      "proof_of_concept": {
+        "url": "https://app.acme.example.com/upload",
+        "replay_command": [
+          "sh",
+          "-c",
+          "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
+        ]
+      }
+    },
+    {
+      "severity": "medium",
+      "title": "Missing security headers",
+      "description": "No CSP / HSTS / X-Frame-Options.",
+      "cwe": "CWE-693",
+      "cvss": 4.3,
+      "owasp_category": "A02"
+    },
+    {
+      "severity": "low",
+      "title": "MySQL root password observed in CI script",
+      "description": "Hardcoded password in deploy script.",
+      "cwe": "CWE-798",
+      "cvss": 2.9,
+      "owasp_category": "A07",
+      "proof_of_concept": {
+        "url": "https://ci.acme.example.com/deploy",
+        "replay_command": [
+          "mysql",
+          "-u",
+          "root",
+          "--password=[REDACTED-PASSWORD]",
+          "-h",
+          "ci.acme.example.com",
+          "-e",
+          "SHOW DATABASES;"
+        ]
+      }
+    }
+  ],
+  "technologies": [
+    "django",
+    "nginx"
+  ],
+  "timeline": [
+    {
+      "phase": "recon",
+      "order_index": 0,
+      "entry": {
+        "phase": "started"
+      },
+      "created_at": "2026-04-19T10:00:00Z"
+    },
+    {
+      "phase": "exploit",
+      "order_index": 1,
+      "entry": {
+        "phase": "rce"
+      },
+      "created_at": "2026-04-19T11:00:00Z"
+    }
+  ],
+  "phase_outputs": [
+    {
+      "phase": "recon",
+      "output_data": {
+        "k": "v"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "finding_id": "f1",
+      "object_key": "evidence/sqli/dump.txt",
+      "description": "HTTP req/resp dump"
+    },
+    {
+      "finding_id": "f2",
+      "object_key": "evidence/upload/payload.bin",
+      "description": "Reverse-shell artefact"
+    }
+  ],
+  "screenshots": [
+    {
+      "object_key": "screenshots/login.png",
+      "url_or_email": "login"
+    }
+  ],
+  "ai_conclusions": [
+    "LLM exec summary"
+  ],
+  "remediation": [
+    "Patch ORM.",
+    "Disable unrestricted upload.",
+    "Rotate all PATs."
+  ],
+  "ai_sections": {
+    "attack_scenarios": "AI generation skipped: could not generate content",
+    "business_risk": "AI generation skipped: could not generate content",
+    "compliance_check": "AI generation skipped: could not generate content",
+    "cost_summary": "AI generation skipped: could not generate content",
+    "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+    "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+    "exploit_chains": "AI generation skipped: could not generate content",
+    "hardening_recommendations": "AI generation skipped: could not generate content",
+    "prioritization_roadmap": "AI generation skipped: could not generate content",
+    "remediation_stages": "AI generation skipped: could not generate content",
+    "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
+    "vulnerability_description": "LLM exec summary",
+    "zero_day_potential": "AI generation skipped: could not generate content"
+  },
+  "scan_artifacts": {
+    "phase_blocks": [
+      {
+        "other_rows": [],
+        "phase_key": "unknown",
+        "phase_label": "Other",
+        "phase_query": "",
+        "rows": [
+          {
+            "download_url": null,
+            "file_name": "",
+            "key": "",
+            "last_modified": "",
+            "size": 0
+          }
+        ],
+        "tool_output_rows": [
+          {
+            "download_url": null,
+            "file_name": "",
+            "key": "",
+            "last_modified": "",
+            "size": 0
+          }
+        ]
+      }
+    ],
+    "status": "ok"
+  },
+  "active_web_scan": {
+    "ai_summary_rows": [
+      {
+        "label": "Vulnerability Description (AI)",
+        "section_key": "vulnerability_description",
+        "text": "LLM exec summary"
+      },
+      {
+        "label": "Remediation Steps (AI)",
+        "section_key": "remediation_step",
+        "text": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs."
+      }
+    ],
+    "artifacts_section_id": "scan-artifacts",
+    "curl_xss_example": "curl -sS -G 'https://TARGET.example/search' --data-urlencode 'q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING'",
+    "has_signals": true,
+    "tier": "valhalla",
+    "tools_run": [],
+    "visible": true
+  },
+  "raw_artifacts": [
+    {
+      "raw": "recon dump"
+    }
+  ],
+  "valhalla_report": {
+    "title_meta": {
+      "created_at": "2026-04-19T10:00:00Z",
+      "report_id": "r-int-valhalla-1",
+      "scan_id": "scan-int-valhalla-1",
+      "target": "https://acme.example.com",
+      "tenant_id": "tenant-int-valhalla-1",
+      "tier": "valhalla"
+    },
+    "executive_summary_counts": {
+      "critical": 1,
+      "high": 2,
+      "info": 0,
+      "low": 1,
+      "medium": 1
+    },
+    "owasp_compliance": [
+      {
+        "category_id": "A01",
+        "count": 1,
+        "description": "Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.",
+        "description_hover": "Принудительная авторизация на сервере для каждого запроса, политики по ролям и владельцу ресурса, запрет на опору только на «скрытые» URL и параметры.",
+        "findings_present": "Yes",
+        "has_findings": true,
+        "row_class": "owasp-compliance-warn",
+        "title": "Broken Access Control"
+      },
+      {
+        "category_id": "A02",
+        "count": 1,
+        "description": "Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.",
+        "description_hover": "Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.",
+        "findings_present": "Yes",
+        "has_findings": true,
+        "row_class": "owasp-compliance-warn",
+        "title": "Security Misconfiguration"
+      },
+      {
+        "category_id": "A03",
+        "count": 0,
+        "description": "Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.",
+        "description_hover": "Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Software Supply Chain Failures"
+      },
+      {
+        "category_id": "A04",
+        "count": 0,
+        "description": "Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.",
+        "description_hover": "TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Cryptographic Failures"
+      },
+      {
+        "category_id": "A05",
+        "count": 2,
+        "description": "SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.",
+        "description_hover": "Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.",
+        "findings_present": "Yes",
+        "has_findings": true,
+        "row_class": "owasp-compliance-warn",
+        "title": "Injection"
+      },
+      {
+        "category_id": "A06",
+        "count": 0,
+        "description": "Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.",
+        "description_hover": "Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Insecure Design"
+      },
+      {
+        "category_id": "A07",
+        "count": 1,
+        "description": "Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.",
+        "description_hover": "MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.",
+        "findings_present": "Yes",
+        "has_findings": true,
+        "row_class": "owasp-compliance-warn",
+        "title": "Authentication Failures"
+      },
+      {
+        "category_id": "A08",
+        "count": 0,
+        "description": "Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.",
+        "description_hover": "Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Software or Data Integrity Failures"
+      },
+      {
+        "category_id": "A09",
+        "count": 0,
+        "description": "Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.",
+        "description_hover": "Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Security Logging & Alerting Failures"
+      },
+      {
+        "category_id": "A10",
+        "count": 0,
+        "description": "Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.",
+        "description_hover": "Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.",
+        "findings_present": "No",
+        "has_findings": false,
+        "row_class": "owasp-compliance-0",
+        "title": "Mishandling of Exceptional Conditions"
+      }
+    ],
+    "robots_sitemap": {
+      "robots_txt_analysis": {
+        "allow_paths_sample": [],
+        "allow_rule_count": 0,
+        "disallow_rule_count": 0,
+        "disallowed_paths_sample": [],
+        "found": false,
+        "raw_excerpt": null,
+        "sensitive_path_hints": [],
+        "sitemap_hints": []
+      },
+      "sitemap_analysis": {
+        "found": false,
+        "index_found": false,
+        "sample_urls": [],
+        "url_count": 0
+      }
+    },
+    "tech_stack": [],
+    "outdated_components": [],
+    "emails": [],
+    "ssl_tls": {
+      "hsts": null,
+      "issuer": null,
+      "protocols": [],
+      "validity": null,
+      "weak_ciphers": [],
+      "weak_protocols": []
+    },
+    "headers": {
+      "missing_recommended": [],
+      "rows": [],
+      "summary": null
+    },
+    "dependencies": [],
+    "risk_matrix": {
+      "cells": [],
+      "distribution": [],
+      "variant": "matrix"
+    },
+    "critical_vulns": [],
+    "threat_modeling_ref": {
+      "exploitation_post_excerpt": "",
+      "threat_model": {
+        "api_hint": "",
+        "excerpt": "",
+        "phase": "threat_modeling",
+        "scan_id": "",
+        "tenant_id": ""
+      },
+      "threat_model_excerpt": "",
+      "threat_model_phase_link": ""
+    },
+    "findings": [
+      {
+        "cvss": 9.8,
+        "cwe": "CWE-89",
+        "description": "UNION-based SQLi via id parameter on the payments API.",
+        "owasp_category": "A05",
+        "proof_of_concept": {
+          "replay_command": [
+            "curl",
+            "-H",
+            "Authorization: Bearer [REDACTED-BEARER]",
+            "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
+          ],
+          "url": "https://payments.acme.example.com/api/v1/users"
+        },
+        "severity": "critical",
+        "title": "SQLi at /api/v1/users"
+      },
+      {
+        "cvss": 8.6,
+        "cwe": "CWE-78",
+        "description": "File upload allows RCE; PoC included.",
+        "owasp_category": "A05",
+        "proof_of_concept": {
+          "replay_command": [
+            "sh",
+            "-c",
+            "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
+          ],
+          "url": "https://app.acme.example.com/upload"
+        },
+        "severity": "high",
+        "title": "Reverse shell PoC in /upload"
+      },
+      {
+        "cvss": 7.5,
+        "cwe": "CWE-200",
+        "description": "ghp_* token observed in /static/app.js.",
+        "owasp_category": "A01",
+        "proof_of_concept": {
+          "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user",
+          "url": "https://www.acme.example.com/static/app.js"
+        },
+        "severity": "high",
+        "title": "GitHub PAT leaked in JS bundle"
+      },
+      {
+        "cvss": 4.3,
+        "cwe": "CWE-693",
+        "description": "No CSP / HSTS / X-Frame-Options.",
+        "owasp_category": "A02",
+        "severity": "medium",
+        "title": "Missing security headers"
+      },
+      {
+        "cvss": 2.9,
+        "cwe": "CWE-798",
+        "description": "Hardcoded password in deploy script.",
+        "owasp_category": "A07",
+        "proof_of_concept": {
+          "replay_command": [
+            "mysql",
+            "-u",
+            "root",
+            "--password=[REDACTED-PASSWORD]",
+            "-h",
+            "ci.acme.example.com",
+            "-e",
+            "SHOW DATABASES;"
+          ],
+          "url": "https://ci.acme.example.com/deploy"
+        },
+        "severity": "low",
+        "title": "MySQL root password observed in CI script"
+      }
+    ],
+    "exploit_chains_text": "AI generation skipped: could not generate content",
+    "remediation_stages_text": "AI generation skipped: could not generate content",
+    "zero_day_text": "AI generation skipped: could not generate content",
+    "conclusion_text": "AI generation skipped: could not generate content\n\nAI generation skipped: could not generate content",
+    "hibp_pwned_password_summary": {
+      "pwned_count": 12
+    },
+    "appendices": {
+      "ai_sections_supplemental": {
+        "attack_scenarios": "AI generation skipped: could not generate content",
+        "business_risk": "AI generation skipped: could not generate content",
+        "compliance_check": "AI generation skipped: could not generate content",
+        "cost_summary": "AI generation skipped: could not generate content",
+        "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+        "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+        "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
+        "vulnerability_description": "LLM exec summary"
+      },
+      "exploitation": [],
+      "raw_artifacts": [
+        {
+          "raw": "recon dump"
+        }
+      ],
+      "recon_summary": {
+        "findings_count": 5,
+        "phase_inputs_count": 0,
+        "phase_outputs_count": 1,
+        "pipeline": {},
+        "pipeline_live_hosts": [],
+        "pipeline_ports": [],
+        "pipeline_subdomains": [],
+        "pipeline_url_count": 0,
+        "scan": {},
+        "summary_counts": {
+          "critical": 1,
+          "high": 2,
+          "info": 0,
+          "low": 1,
+          "medium": 1
+        },
+        "target_url": "https://acme.example.com",
+        "technologies": [
+          "nginx",
+          "django"
+        ],
+        "timeline_count": 2,
+        "timeline_preview": [
+          {
+            "order_index": 0,
+            "phase": "recon",
+            "snippet": "{'phase': 'started'}"
+          },
+          {
+            "order_index": 1,
+            "phase": "exploit",
+            "snippet": "{'phase': 'rce'}"
+          }
+        ]
+      },
+      "scan_artifacts": {
+        "phase_blocks": [
+          {
+            "other_rows": [],
+            "phase_key": "unknown",
+            "phase_label": "Other",
+            "phase_query": "",
+            "rows": [
+              {
+                "download_url": null,
+                "file_name": "",
+                "key": "",
+                "last_modified": "",
+                "size": 0
+              }
+            ],
+            "tool_output_rows": [
+              {
+                "download_url": null,
+                "file_name": "",
+                "key": "",
+                "last_modified": "",
+                "size": 0
+              }
+            ]
+          }
+        ],
+        "status": "ok"
+      }
+    }
+  },
+  "valhalla_executive_report": {
+    "evidence_refs": [
+      {
+        "description": "HTTP req/resp dump",
+        "finding_id": "f1",
+        "object_key": "evidence/sqli/dump.txt",
+        "presigned_url": null
+      },
+      {
+        "description": "Reverse-shell artefact",
+        "finding_id": "f2",
+        "object_key": "evidence/upload/payload.bin",
+        "presigned_url": null
+      }
+    ],
+    "executive_summary": "During scan scan-int-valhalla-1 for tenant tenant-int-valhalla-1 as of 2026-04-19T10:00:00Z, ARGUS identified 5 finding(s) (1 CRITICAL, 2 HIGH, 1 MEDIUM, 1 LOW). Top business risk: payments.acme.example.com (composite score 49.00). Recommended priority: P0 (critical, SLA ≤ 7 days, 1 item(s)).",
+    "executive_summary_counts": {
+      "critical": 1,
+      "high": 2,
+      "info": 0,
+      "low": 1,
+      "medium": 1
+    },
+    "owasp_rollup_matrix": [
+      {
+        "category_id": "A01",
+        "critical": 0,
+        "high": 1,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Broken Access Control",
+        "total": 1
+      },
+      {
+        "category_id": "A02",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 1,
+        "title": "Security Misconfiguration",
+        "total": 1
+      },
+      {
+        "category_id": "A03",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Software Supply Chain Failures",
+        "total": 0
+      },
+      {
+        "category_id": "A04",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Cryptographic Failures",
+        "total": 0
+      },
+      {
+        "category_id": "A05",
+        "critical": 1,
+        "high": 1,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Injection",
+        "total": 2
+      },
+      {
+        "category_id": "A06",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Insecure Design",
+        "total": 0
+      },
+      {
+        "category_id": "A07",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 0,
+        "title": "Authentication Failures",
+        "total": 1
+      },
+      {
+        "category_id": "A08",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Software or Data Integrity Failures",
+        "total": 0
+      },
+      {
+        "category_id": "A09",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Security Logging & Alerting Failures",
+        "total": 0
+      },
+      {
+        "category_id": "A10",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Mishandling of Exceptional Conditions",
+        "total": 0
+      },
+      {
+        "category_id": "A00",
+        "critical": 0,
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0,
+        "title": "Other / Unmapped",
+        "total": 0
+      }
+    ],
+    "remediation_roadmap": [
+      {
+        "finding_count": 1,
+        "phase_id": "P0",
+        "severity_bucket": "critical",
+        "sla_days": 7,
+        "top_finding_titles": [
+          "SQLi at /api/v1/users"
+        ]
+      },
+      {
+        "finding_count": 2,
+        "phase_id": "P1",
+        "severity_bucket": "high",
+        "sla_days": 30,
+        "top_finding_titles": [
+          "GitHub PAT leaked in JS bundle",
+          "Reverse shell PoC in /upload"
+        ]
+      },
+      {
+        "finding_count": 1,
+        "phase_id": "P2",
+        "severity_bucket": "medium",
+        "sla_days": 90,
+        "top_finding_titles": [
+          "Missing security headers"
+        ]
+      },
+      {
+        "finding_count": 1,
+        "phase_id": "P3",
+        "severity_bucket": "low/info (backlog)",
+        "sla_days": 0,
+        "top_finding_titles": [
+          "MySQL root password observed in CI script"
+        ]
+      }
+    ],
+    "risk_quantification_per_asset": [
+      {
+        "asset": "payments.acme.example.com",
+        "business_value": 5.0,
+        "composite_score": 49.0,
+        "exploitability_factor": 1.0,
+        "finding_count": 1,
+        "max_cvss": 9.8,
+        "top_severity": "critical"
+      },
+      {
+        "asset": "app.acme.example.com",
+        "business_value": 3.0,
+        "composite_score": 25.8,
+        "exploitability_factor": 1.0,
+        "finding_count": 1,
+        "max_cvss": 8.6,
+        "top_severity": "high"
+      },
+      {
+        "asset": "www.acme.example.com",
+        "business_value": 1.0,
+        "composite_score": 7.5,
+        "exploitability_factor": 1.0,
+        "finding_count": 1,
+        "max_cvss": 7.5,
+        "top_severity": "high"
+      },
+      {
+        "asset": "acme.example.com",
+        "business_value": 1.0,
+        "composite_score": 3.225,
+        "exploitability_factor": 0.75,
+        "finding_count": 1,
+        "max_cvss": 4.3,
+        "top_severity": "medium"
+      },
+      {
+        "asset": "ci.acme.example.com",
+        "business_value": 2.0,
+        "composite_score": 2.9,
+        "exploitability_factor": 0.5,
+        "finding_count": 1,
+        "max_cvss": 2.9,
+        "top_severity": "low"
+      }
+    ],
+    "timeline_entries": [
+      {
+        "created_at": "2026-04-19T10:00:00Z",
+        "order_index": 0,
+        "phase": "recon",
+        "snippet": "{\"phase\": \"started\"}"
+      },
+      {
+        "created_at": "2026-04-19T11:00:00Z",
+        "order_index": 1,
+        "phase": "exploit",
+        "snippet": "{\"phase\": \"rce\"}"
+      }
+    ],
+    "title_meta": {
+      "created_at": "2026-04-19T10:00:00Z",
+      "report_id": "r-int-valhalla-1",
+      "scan_id": "scan-int-valhalla-1",
+      "target": "https://acme.example.com",
+      "tenant_id": "tenant-int-valhalla-1",
+      "tier": "valhalla"
+    },
+    "top_findings_by_business_impact": [
+      {
+        "asset": "payments.acme.example.com",
+        "business_value": 5.0,
+        "composite_score": 49.0,
+        "cvss": 9.8,
+        "cwe": "CWE-89",
+        "description": "UNION-based SQLi via id parameter on the payments API.",
+        "exploitability_factor": 1.0,
+        "owasp_category": "A05",
+        "rank": 1,
+        "sanitized_command": [
+          "curl",
+          "-H",
+          "Authorization: Bearer [REDACTED-BEARER]",
+          "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
+        ],
+        "severity": "critical",
+        "title": "SQLi at /api/v1/users"
+      },
+      {
+        "asset": "app.acme.example.com",
+        "business_value": 3.0,
+        "composite_score": 25.8,
+        "cvss": 8.6,
+        "cwe": "CWE-78",
+        "description": "File upload allows RCE; PoC included.",
+        "exploitability_factor": 1.0,
+        "owasp_category": "A05",
+        "rank": 2,
+        "sanitized_command": [
+          "sh",
+          "-c",
+          "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
+        ],
+        "severity": "high",
+        "title": "Reverse shell PoC in /upload"
+      },
+      {
+        "asset": "www.acme.example.com",
+        "business_value": 1.0,
+        "composite_score": 7.5,
+        "cvss": 7.5,
+        "cwe": "CWE-200",
+        "description": "ghp_* token observed in /static/app.js.",
+        "exploitability_factor": 1.0,
+        "owasp_category": "A01",
+        "rank": 3,
+        "sanitized_command": [
+          "curl",
+          "-H",
+          "'Authorization:",
+          "token",
+          "[REDACTED-GH-TOKEN]'",
+          "https://api.github.com/user"
+        ],
+        "severity": "high",
+        "title": "GitHub PAT leaked in JS bundle"
+      },
+      {
+        "asset": "acme.example.com",
+        "business_value": 1.0,
+        "composite_score": 3.225,
+        "cvss": 4.3,
+        "cwe": "CWE-693",
+        "description": "No CSP / HSTS / X-Frame-Options.",
+        "exploitability_factor": 0.75,
+        "owasp_category": "A02",
+        "rank": 4,
+        "sanitized_command": [
+          "curl",
+          "-I",
+          "https://www.acme.example.com/"
+        ],
+        "severity": "medium",
+        "title": "Missing security headers"
+      },
+      {
+        "asset": "ci.acme.example.com",
+        "business_value": 2.0,
+        "composite_score": 2.9,
+        "cvss": 2.9,
+        "cwe": "CWE-798",
+        "description": "Hardcoded password in deploy script.",
+        "exploitability_factor": 0.5,
+        "owasp_category": "A07",
+        "rank": 5,
+        "sanitized_command": [
+          "mysql",
+          "-u",
+          "root",
+          "--password=[REDACTED-PASSWORD]",
+          "-h",
+          "ci.acme.example.com",
+          "-e",
+          "SHOW DATABASES;"
+        ],
+        "severity": "low",
+        "title": "MySQL root password observed in CI script"
+      }
+    ]
+  }
+}

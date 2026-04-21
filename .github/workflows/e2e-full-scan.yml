@@ -1,0 +1,214 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ARG-047 — Nightly + on-demand e2e capstone (Backlog/dev1_md §16.13 + §19.4).
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Drives ``scripts/e2e_full_scan.sh`` against a freshly built backend image and
+# the pinned ``bkimminich/juice-shop:v17.0.0`` target. Long-running by design
+# (~30-60 minutes wall-time depending on the runner's IO throughput) so the
+# job lives in its own workflow file — never blocks the fast CI pipeline.
+#
+# Triggers
+# --------
+# * ``schedule``       — nightly cron at 02:00 UTC.
+# * ``workflow_dispatch`` — manual / ad-hoc with input overrides.
+# * ``push``           — on the protected branch when paths in the e2e
+#                        infrastructure change (so a regression in compose /
+#                        wrappers fails fast instead of on the next nightly).
+#
+# Outputs
+# -------
+# * Phase JSON, summary.json, diagnostics, raw logs uploaded as a 30-day
+#   artifact named ``e2e-results-<run_id>``.
+# * Job summary surfaces ``failed_phase`` + ``failure_detail`` when the run
+#   fails so a triager can grep without downloading the artifact first.
+#
+# Flake-rate gate
+# ---------------
+# Backlog §17 requires a CI flake rate < 5%. We reduce flakes by:
+#   * Pinning every external image to an immutable digest / tag.
+#   * Generous per-phase timeouts (3× expected wall-time).
+#   * ``--wait`` on ``docker compose up`` so we don't hit ``connection refused``
+#     mid-scrape.
+#   * A diagnostic capture step that runs unconditionally so a flake leaves
+#     enough breadcrumbs for triage.
+
+name: e2e-full-scan
+
+on:
+  schedule:
+    # 02:00 UTC daily — clear of all other ARGUS workflows.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Scan target URL passed to the wrapper"
+        required: false
+        default: "http://juice-shop:3000"
+      scan_mode:
+        description: "Scan mode (quick | standard | deep)"
+        required: false
+        default: "standard"
+      min_findings:
+        description: "Minimum findings count threshold"
+        required: false
+        default: "50"
+      expected_reports:
+        description: "Expected report count (12 default; raise to 18 once SARIF/JUNIT API surfaces)"
+        required: false
+        default: "12"
+      keep_stack:
+        description: "Skip teardown for post-mortem inspection"
+        required: false
+        default: "false"
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - "infra/docker-compose.e2e.yml"
+      - "infra/docker-compose.vuln-targets.yml"
+      - "infra/prometheus/prometheus.e2e.yml"
+      - "scripts/e2e_full_scan.sh"
+      - "scripts/e2e_full_scan.ps1"
+      - "scripts/e2e/**"
+      - ".github/workflows/e2e-full-scan.yml"
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  # Cancel in-progress runs on the same ref to avoid stacking — but never
+  # cancel scheduled runs (we want full nightly coverage).
+  group: e2e-full-scan-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  e2e-juice-shop:
+    name: ARG-047 — Juice Shop full scan
+    # Larger runner gives us headroom for the active-scan sandbox + Juice Shop
+    # under one process tree. Falls back to ``ubuntu-latest`` when the larger
+    # runner is unavailable on a fork.
+    runs-on: ubuntu-latest-large
+    timeout-minutes: 75
+
+    env:
+      # Surface the workflow-dispatch overrides into the wrapper's env contract.
+      E2E_TARGET: ${{ github.event.inputs.target || 'http://juice-shop:3000' }}
+      E2E_SCAN_MODE: ${{ github.event.inputs.scan_mode || 'standard' }}
+      E2E_MIN_FINDINGS: ${{ github.event.inputs.min_findings || '50' }}
+      E2E_EXPECTED_REPORTS: ${{ github.event.inputs.expected_reports || '12' }}
+      E2E_KEEP_STACK: ${{ github.event.inputs.keep_stack == 'true' && '1' || '0' }}
+      E2E_BACKEND_URL: http://localhost:8000
+      E2E_PROM_URL: http://localhost:9090
+      # Token is the CI-only e2e key baked into docker-compose.e2e.yml — DO NOT
+      # replace with a production secret. The compose file accepts it via
+      # ``ARGUS_API_KEYS`` for parity.
+      E2E_TOKEN: e2e-api-key-not-for-production
+      # Local images built in this job; compose reads these via ${...:-...}.
+      ARGUS_BACKEND_IMAGE: argus-backend:e2e
+      ARGUS_CELERY_IMAGE: argus-backend:e2e
+      ARGUS_MCP_IMAGE: argus-backend:e2e
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (for verifier helpers)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Cosign (verify_cosign.sh)
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.4.1
+
+      - name: Pre-flight info
+        run: |
+          docker version
+          docker compose version
+          python --version
+          uname -a
+
+      - name: Build backend / celery / mcp image (single-tag reuse)
+        # The Celery worker and MCP server share the backend image (same
+        # codebase, different CMD). Building once keeps cold-start time
+        # under ~3 minutes on the large runner.
+        run: |
+          docker build \
+            --tag "${ARGUS_BACKEND_IMAGE}" \
+            --file infra/backend/Dockerfile \
+            backend
+
+      - name: Pull external images in parallel (deterministic warmup)
+        # Pulling here lets ``docker compose up --wait`` avoid hitting the
+        # registry under load mid-startup. ``--quiet`` keeps the log readable.
+        run: |
+          docker compose -f infra/docker-compose.e2e.yml pull --ignore-pull-failures --quiet
+
+      - name: Run e2e capstone wrapper
+        id: run
+        env:
+          E2E_RESULTS_DIR: ${{ github.workspace }}/e2e-results
+        run: |
+          set -euo pipefail
+          chmod +x scripts/e2e_full_scan.sh scripts/e2e/verify_cosign.sh scripts/e2e/archive_results.sh
+          bash scripts/e2e_full_scan.sh
+
+      - name: Append failure detail to job summary
+        if: failure()
+        run: |
+          set +e
+          summary="${{ github.workspace }}/e2e-results/summary.json"
+          if [[ -f "${summary}" ]]; then
+            echo "## ARG-047 e2e capstone — FAILED" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "${summary}" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # Also surface the most recent phase log for quick triage.
+          for f in "${{ github.workspace }}/e2e-results/diagnostics/"*.log; do
+            [[ -f "${f}" ]] || continue
+            echo '<details><summary>'$(basename "${f}")'</summary>'  >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 200 "${f}" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo '</details>' >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Append success summary
+        if: success()
+        run: |
+          summary="${{ github.workspace }}/e2e-results/summary.json"
+          if [[ -f "${summary}" ]]; then
+            echo "## ARG-047 e2e capstone — PASSED" >> "$GITHUB_STEP_SUMMARY"
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat "${summary}" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Capture compose ps + final logs (always)
+        if: always()
+        run: |
+          mkdir -p e2e-results/diagnostics
+          docker compose -f infra/docker-compose.e2e.yml ps > e2e-results/diagnostics/ps.txt 2>&1 || true
+          for svc in juice-shop argus-backend argus-celery argus-mcp postgres redis minio prometheus; do
+            docker compose -f infra/docker-compose.e2e.yml logs --no-color --tail 500 "${svc}" \
+              > "e2e-results/diagnostics/${svc}.log" 2>&1 || true
+          done
+
+      - name: Upload e2e results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ github.run_id }}
+          path: |
+            e2e-results/
+            e2e-results-*.tar.gz
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Tear down compose (best effort; cleanup safety net)
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.e2e.yml down -v --remove-orphans || true

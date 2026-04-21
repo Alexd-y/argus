@@ -1,0 +1,508 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "artifacts": [
+        {
+          "description": {
+            "text": "Scan target"
+          },
+          "location": {
+            "uri": "https://app.example.test"
+          }
+        }
+      ],
+      "automationDetails": {
+        "id": "scan-int-midgard-1"
+      },
+      "results": [
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "57f68ef2263fcb8e1f799a333605d8f91a459b86f211ae7b34f71bf658566f72"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "UNION-based SQLi via id parameter.",
+            "text": "SQL Injection in /api/users"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cvss_v3_score": 9.8,
+            "cwe": "CWE-89",
+            "evidence_refs": [
+              "s3://argus-evidence/sqli-dump"
+            ],
+            "owasp_top10_2025": "A03",
+            "owasp_top10_2025_title": "Software Supply Chain Failures",
+            "security-severity": "9.8",
+            "severity": "critical"
+          },
+          "ruleId": "ARGUS-CWE-89"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "5c3d9a1d063c1589495c62bf7ee1c1a2565452b25222cb66926f46a68531c704"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Unrestricted file upload + LFI chain.",
+            "text": "Remote Code Execution in /upload"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cvss_v3_score": 9.5,
+            "cwe": "CWE-78",
+            "security-severity": "9.5",
+            "severity": "critical"
+          },
+          "ruleId": "ARGUS-CWE-78"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "dd66c4d4aeed143b0025c2543d70a5415394fc320c45c25719b1244bac9bba1c"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Internal metadata endpoint reachable.",
+            "text": "Server-Side Request Forgery"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cvss_v3_score": 8.1,
+            "cwe": "CWE-918",
+            "security-severity": "8.1",
+            "severity": "high"
+          },
+          "ruleId": "ARGUS-CWE-918"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "45e3d4c29edaf2524ed1d0f81415784f75a7a264f860fa7ff3f14adb3b29ce3b"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "`q` echoed unescaped.",
+            "text": "Reflected XSS in search"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cvss_v3_score": 7.5,
+            "cwe": "CWE-79",
+            "owasp_top10_2025": "A03",
+            "owasp_top10_2025_title": "Software Supply Chain Failures",
+            "security-severity": "7.5",
+            "severity": "high"
+          },
+          "ruleId": "ARGUS-CWE-79"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "37f6e6cb0d3ff980017090fa64a2c818a2701cb630a3d9559f98ad3079072ed9"
+          },
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "jQuery 1.x with known prototype-pollution.",
+            "text": "Outdated jQuery"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cvss_v3_score": 6.1,
+            "cwe": "CWE-1104",
+            "security-severity": "6.1",
+            "severity": "medium"
+          },
+          "ruleId": "ARGUS-CWE-1104"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "650e19556d31bb5cb7697e9b5f85da3899939c99e2126807074ac2f7bd8b1652"
+          },
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "No CSP / HSTS / X-Frame-Options.",
+            "text": "Missing security headers"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cwe": "CWE-693",
+            "severity": "medium"
+          },
+          "ruleId": "ARGUS-CWE-693"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "c3af80cdc29ec21a254ff7f4fca2af45559ef6de8e989978d45e80f0457dfc13"
+          },
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Session cookie served over HTTP.",
+            "text": "Cookie missing Secure flag"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cwe": "CWE-614",
+            "severity": "low"
+          },
+          "ruleId": "ARGUS-CWE-614"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "f1e415a6336986aa70a0a43e6d74c8201c99b8ea57eadfafa80cd8582613bf5e"
+          },
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Server header leaks nginx/1.18.0.",
+            "text": "Server banner exposed"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cwe": "CWE-200",
+            "severity": "low"
+          },
+          "ruleId": "ARGUS-CWE-200"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "4830143d0774e703ccc52122fa17192a82ea319dda2e81350a372f2987504443"
+          },
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Plain HTTP returns 200 OK.",
+            "text": "HTTP allowed alongside HTTPS"
+          },
+          "properties": {
+            "confidence": "likely",
+            "severity": "info"
+          },
+          "ruleId": "ARGUS-RULE-2741b7e3b88b"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "584915646ce02de187ce8699f633a1535e8faa7f5f20a0ae34d275eed7458a58"
+          },
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://app.example.test"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "/static/ shows directory index.",
+            "text": "Open directory listing"
+          },
+          "properties": {
+            "confidence": "likely",
+            "severity": "info"
+          },
+          "ruleId": "ARGUS-RULE-c3600a6f6a7b"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/argus-security/argus",
+          "name": "ARGUS",
+          "rules": [
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "jQuery 1.x with known prototype-pollution."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/1104.html",
+              "id": "ARGUS-CWE-1104",
+              "name": "ARGUS-CWE-1104",
+              "properties": {
+                "cwe": "CWE-1104",
+                "security-severity": "6.1",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Outdated jQuery"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "fullDescription": {
+                "text": "Server header leaks nginx/1.18.0."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/200.html",
+              "id": "ARGUS-CWE-200",
+              "name": "ARGUS-CWE-200",
+              "properties": {
+                "cwe": "CWE-200",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Server banner exposed"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "fullDescription": {
+                "text": "Session cookie served over HTTP."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/614.html",
+              "id": "ARGUS-CWE-614",
+              "name": "ARGUS-CWE-614",
+              "properties": {
+                "cwe": "CWE-614",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Cookie missing Secure flag"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "No CSP / HSTS / X-Frame-Options."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/693.html",
+              "id": "ARGUS-CWE-693",
+              "name": "ARGUS-CWE-693",
+              "properties": {
+                "cwe": "CWE-693",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Missing security headers"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "Unrestricted file upload + LFI chain."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/78.html",
+              "id": "ARGUS-CWE-78",
+              "name": "ARGUS-CWE-78",
+              "properties": {
+                "cwe": "CWE-78",
+                "security-severity": "9.5",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Remote Code Execution in /upload"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "`q` echoed unescaped."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/79.html",
+              "id": "ARGUS-CWE-79",
+              "name": "ARGUS-CWE-79",
+              "properties": {
+                "cwe": "CWE-79",
+                "security-severity": "7.5",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Reflected XSS in search"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "UNION-based SQLi via id parameter."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/89.html",
+              "id": "ARGUS-CWE-89",
+              "name": "ARGUS-CWE-89",
+              "properties": {
+                "cwe": "CWE-89",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "SQL Injection in /api/users"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "Internal metadata endpoint reachable."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/918.html",
+              "id": "ARGUS-CWE-918",
+              "name": "ARGUS-CWE-918",
+              "properties": {
+                "cwe": "CWE-918",
+                "security-severity": "8.1",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Server-Side Request Forgery"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "fullDescription": {
+                "text": "Plain HTTP returns 200 OK."
+              },
+              "id": "ARGUS-RULE-2741b7e3b88b",
+              "name": "ARGUS-RULE-2741b7e3b88b",
+              "properties": {
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "HTTP allowed alongside HTTPS"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "fullDescription": {
+                "text": "/static/ shows directory index."
+              },
+              "id": "ARGUS-RULE-c3600a6f6a7b",
+              "name": "ARGUS-RULE-c3600a6f6a7b",
+              "properties": {
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Open directory listing"
+              }
+            }
+          ],
+          "version": "arg-024-snapshot"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

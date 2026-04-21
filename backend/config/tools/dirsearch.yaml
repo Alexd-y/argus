@@ -1,0 +1,36 @@
+tool_id: dirsearch
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "dirsearch"
+  - "-u"
+  - "{url}"
+  - "-e"
+  - "php,aspx,js,html"
+  - "-o"
+  - "{out_dir}/dirsearch.json"
+  - "--format"
+  - "json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/dirsearch.json"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-CONFIG-04"
+  - "WSTG-CONFIG-06"
+description: "dirsearch directory / file discovery with extension fuzzing, JSON output. Author: maurosoria (https://github.com/maurosoria/dirsearch). Backlog/dev1_md §4.5."

@@ -1,0 +1,57 @@
+apiVersion: v2
+name: argus
+description: |
+  ARGUS — AI-driven security assessment platform.
+  Production-grade Helm chart wiring backend, Celery worker, Next.js
+  frontend, MCP runtime and the in-cluster Postgres / Redis / MinIO data
+  plane. Sub-charts are pinned to Bitnami's hardened images and image
+  references in deployments use immutable @sha256 digests with an
+  optional Cosign verify-init container (mandatory in prod values).
+type: application
+version: 0.1.0
+appVersion: "v1.0.0-cycle5"
+kubeVersion: ">=1.27.0-0"
+
+home: https://github.com/your-org/ARGUS
+sources:
+  - https://github.com/your-org/ARGUS
+
+keywords:
+  - security
+  - pentest
+  - dast
+  - sast
+  - llm
+  - mcp
+  - argus
+
+maintainers:
+  - name: ARGUS Platform Team
+    email: platform@example.invalid
+
+annotations:
+  category: Security
+  licenses: Apache-2.0
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial production Helm chart for ARGUS Cycle 5 (ARG-045)
+
+dependencies:
+  - name: postgresql
+    version: ~13.4.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+    tags:
+      - data-plane
+  - name: redis
+    version: ~19.5.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+    tags:
+      - data-plane
+  - name: minio
+    version: ~14.6.0
+    repository: https://charts.bitnami.com/bitnami
+    condition: minio.enabled
+    tags:
+      - data-plane

@@ -1,0 +1,29 @@
+tool_id: ssrfmap
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: oast-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o {out_dir}/ssrfmap.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/ssrfmap.txt"
+cwe_hints:
+  - 918
+owasp_wstg:
+  - "WSTG-INPV-19"
+description: "SSRFmap — automated SSRF exploitation pipeline that walks a captured request through the readfiles + portscan modules. APPROVAL REQUIRED: actively probes internal services through the SSRF entry point. Reads the full HTTP request from {in_dir}/req.txt (operator-supplied), hits the parameter list via {params}. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.11. ARG-017."

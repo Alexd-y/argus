@@ -1,0 +1,33 @@
+tool_id: oastify_client
+version: "1.0.0"
+category: oast
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: oast-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "oastify-client"
+  - "-server"
+  - "https://oast.argus.local"
+  - "-json"
+  - "-o"
+  - "{out_dir}/interactsh.jsonl"
+  - "-v"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/interactsh.jsonl"
+cwe_hints:
+  - 918
+owasp_wstg:
+  - "WSTG-INPV-19"
+description: "oastify-client — wire-compatible mirror of interactsh that polls the ARGUS OAST plane for OOB callbacks. Same JSONL contract as interactsh_client; both route through sandbox/parsers/interactsh_parser.py. Used as a hot-standby OAST receiver when the upstream interactsh image is unavailable. Backlog/dev1_md §4.11. ARG-017."

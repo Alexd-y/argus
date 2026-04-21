@@ -1,0 +1,36 @@
+tool_id: dockle
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "dockle"
+  - "-f"
+  - "json"
+  - "-o"
+  - "{out_dir}/dockle.json"
+  - "{image}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/dockle.json"
+cwe_hints:
+  - 16
+  - 250
+  - 732
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Goodwith Dockle container best-practice checker — runs the CIS Docker Benchmark + OWASP container Top 10 against {image}. Detects misconfigured users (root in CMD/ENTRYPOINT), missing HEALTHCHECK, world-writable paths, embedded credentials, hardening gaps. Read-only, only inspects metadata + layers. recon-passive = TCP/443 to registries. Parser deferred to Cycle 3. Author: Goodwith. Backlog §4.15. ARG-018."

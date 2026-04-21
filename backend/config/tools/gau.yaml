@@ -1,0 +1,35 @@
+tool_id: gau
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "gau"
+  - "--threads"
+  - "5"
+  - "--json"
+  - "--o"
+  - "{out_dir}/gau.json"
+  - "{domain}"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/gau.json"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-06"
+  - "WSTG-INFO-07"
+description: "GetAllUrls (gau) fetches archived URLs for {domain} from the Wayback Machine, Common Crawl, OTX AlienVault and URLScan. Threads 5; JSON output (one record per URL). Passive (no traffic to target). Author: lc (https://github.com/lc/gau). Backlog/dev1_md §4.6."

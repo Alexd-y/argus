@@ -1,6 +1,7 @@
 """Pydantic schemas per api-contracts.md."""
 
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -122,7 +123,7 @@ class ScanDetailResponse(BaseModel):
 
 
 class ScanListItemResponse(BaseModel):
-    """GET /scans list item (HexStrike v4)."""
+    """GET /scans list item (ARGUS v4)."""
 
     id: str
     status: str
@@ -168,6 +169,121 @@ class ScanCancelResponse(BaseModel):
     scan_id: str
     status: str
     message: str | None = None
+
+
+BulkScanCancelItemStatus = Literal["cancelled", "skipped_terminal", "not_found"]
+
+
+class BulkScanCancelItemResult(BaseModel):
+    """Per-scan outcome for POST /admin/scans/bulk-cancel."""
+
+    scan_id: str
+    status: BulkScanCancelItemStatus
+
+
+class AdminBulkScanCancelRequest(BaseModel):
+    """POST /admin/scans/bulk-cancel — tenant-scoped bulk cancel."""
+
+    tenant_id: UUID
+    scan_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+
+
+class AdminBulkScanCancelResponse(BaseModel):
+    """202 response — Appendix B style counts plus per-id outcomes."""
+
+    cancelled_count: int = Field(ge=0)
+    skipped_terminal_count: int = Field(ge=0)
+    not_found_count: int = Field(ge=0)
+    audit_id: str
+    results: list[BulkScanCancelItemResult]
+
+
+AdminScanSort = Literal["created_at_desc", "created_at_asc"]
+
+
+class AdminScanListItemResponse(BaseModel):
+    """GET /admin/scans — one row (tenant-scoped)."""
+
+    id: str
+    status: str
+    progress: int
+    phase: str
+    target: str
+    created_at: str
+    updated_at: str
+    scan_mode: str = "standard"
+
+
+class AdminScanListResponse(BaseModel):
+    """GET /admin/scans — paginated list."""
+
+    scans: list[AdminScanListItemResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    offset: int = Field(ge=0)
+
+
+class AdminScanToolMetricResponse(BaseModel):
+    """Per-tool execution summary (from ``tool_runs``)."""
+
+    tool_name: str
+    status: str
+    duration_sec: float | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class AdminScanErrorItemResponse(BaseModel):
+    """Sanitized scan error line for admin UI (no stack traces)."""
+
+    at: str
+    phase: str | None = None
+    message: str
+
+
+class AdminScanDetailResponse(BaseModel):
+    """GET /admin/scans/{scan_id} — drill-down metrics + error summary."""
+
+    id: str
+    status: str
+    progress: int
+    phase: str
+    target: str
+    created_at: str
+    updated_at: str
+    scan_mode: str = "standard"
+    tool_metrics: list[AdminScanToolMetricResponse]
+    error_summary: list[AdminScanErrorItemResponse]
+
+
+BulkFindingSuppressItemStatus = Literal[
+    "suppressed",
+    "skipped_already_suppressed",
+    "not_found",
+]
+
+
+class BulkFindingSuppressItemResult(BaseModel):
+    """Per-finding outcome for POST /admin/findings/bulk-suppress."""
+
+    finding_id: str
+    status: BulkFindingSuppressItemStatus
+
+
+class AdminBulkFindingSuppressRequest(BaseModel):
+    """POST /admin/findings/bulk-suppress — marks findings as false positive / suppressed."""
+
+    tenant_id: UUID
+    finding_ids: list[UUID] = Field(..., min_length=1, max_length=100)
+    reason: str = Field(..., min_length=1, max_length=4000)
+
+
+class AdminBulkFindingSuppressResponse(BaseModel):
+    suppressed_count: int = Field(ge=0)
+    skipped_already_suppressed_count: int = Field(ge=0)
+    not_found_count: int = Field(ge=0)
+    audit_id: str
+    results: list[BulkFindingSuppressItemResult]
 
 
 class ScanCostApiResponse(BaseModel):
@@ -267,6 +383,12 @@ class Finding(BaseModel):
     applicability_notes: str | None = None
     adversarial_score: float | None = None
     dedup_status: str | None = None
+    # ARG-044 — intel-enrichment fields (all optional / backward-compat).
+    epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)
+    kev_listed: bool = False
+    kev_added_date: str | None = None  # ISO-8601 date
+    ssvc_decision: str | None = None  # "Act" | "Attend" | "Track*" | "Track"
 
 
 class FindingDetailResponse(BaseModel):
@@ -290,6 +412,12 @@ class FindingDetailResponse(BaseModel):
     adversarial_score: float | None = None
     dedup_status: str | None = None
     created_at: str | None = None
+    # ARG-044 — intel-enrichment fields (all optional / backward-compat).
+    epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)
+    kev_listed: bool = False
+    kev_added_date: str | None = None
+    ssvc_decision: str | None = None
 
 
 class FindingValidationApiResponse(BaseModel):
@@ -544,13 +672,57 @@ class HealthResponse(BaseModel):
     version: str | None = None
 
 
-class ReadinessResponse(BaseModel):
-    """GET /ready response — DB, Redis, storage checks."""
+class CheckDetail(BaseModel):
+    """ARG-041 — single dependency probe outcome inside /ready."""
 
-    status: str  # "ok" | "degraded"
+    ok: bool
+    latency_ms: float | None = None
+    error: str | None = None
+
+
+class ReadinessResponse(BaseModel):
+    """GET /ready response — DB, Redis, storage, LLM provider checks (ARG-041)."""
+
+    status: Literal["ok", "degraded"]
     database: bool
     redis: bool
     storage: bool
+    llm_providers: bool
+    checks: dict[str, CheckDetail] | None = None
+
+
+class ProviderHealth(BaseModel):
+    """ARG-041 — single LLM provider health snapshot inside /providers/health."""
+
+    provider: str
+    state: Literal["closed", "open", "half_open", "unknown"]
+    last_success_ts: float | None = None
+    error_rate_5xx: float = Field(ge=0.0, le=1.0, default=0.0)
+    error_count_60s: int = Field(ge=0, default=0)
+    request_count_60s: int = Field(ge=0, default=0)
+
+
+class ProvidersHealthResponse(BaseModel):
+    """GET /providers/health response."""
+
+    status: Literal["ok", "degraded"]
+    providers: list[ProviderHealth]
+
+
+class QueueDepth(BaseModel):
+    """ARG-041 — single Celery queue length probe."""
+
+    queue: str
+    depth: int = Field(ge=0)
+
+
+class QueuesHealthResponse(BaseModel):
+    """GET /queues/health response — Celery queue depths + worker count."""
+
+    status: Literal["ok", "degraded"]
+    queues: list[QueueDepth]
+    worker_count: int = Field(ge=0)
+    redis_reachable: bool
 
 
 # --- Error ---

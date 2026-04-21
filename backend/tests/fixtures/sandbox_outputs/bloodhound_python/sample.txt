@@ -1,0 +1,17 @@
+INFO: Found AD domain: contoso.local
+INFO: Connecting to LDAP server: dc01.contoso.local
+INFO: Found 1 domains
+INFO: Found 2 domains in the forest
+INFO: Found 3 computers
+INFO: Connecting to GC LDAP server: dc01.contoso.local
+INFO: Found 312 users
+INFO: Found 84 groups
+INFO: Found 8 trusts
+INFO: Found 12 ous
+INFO: Found 5 gpos
+INFO: Starting computer enumeration with 10 workers
+INFO: Querying computer: DC01.CONTOSO.LOCAL
+INFO: Querying computer: WS01.CONTOSO.LOCAL
+INFO: Done in 00M 12S
+[+] Compressing output into 20260419123456_BloodHound.zip
+INFO: Wrote /opt/bloodhound/loot/20260419123456_BloodHound.zip

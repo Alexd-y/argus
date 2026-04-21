@@ -1,0 +1,440 @@
+{
+  "report_id": "r-int-asgard-1",
+  "target": "https://acme.example.com",
+  "scan_id": "scan-int-asgard-1",
+  "created_at": "2026-04-19T10:00:00Z",
+  "metadata": {
+    "report_id": "r-int-asgard-1",
+    "target": "https://acme.example.com",
+    "scan_id": "scan-int-asgard-1",
+    "created_at": "2026-04-19T10:00:00Z",
+    "technologies": [
+      "django",
+      "nginx"
+    ]
+  },
+  "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+  "summary": {
+    "critical": 1,
+    "high": 2,
+    "medium": 1,
+    "low": 1,
+    "info": 0,
+    "technologies": [
+      "django",
+      "nginx"
+    ],
+    "sslIssues": 1,
+    "headerIssues": 2,
+    "leaksFound": false
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "SQLi at /api/v1/users",
+      "description": "UNION-based SQLi via id parameter.",
+      "cwe": "CWE-89",
+      "cvss": 9.8,
+      "owasp_category": "A05",
+      "proof_of_concept": {
+        "replay_command": [
+          "curl",
+          "-H",
+          "Authorization: Bearer [REDACTED-BEARER]",
+          "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
+        ]
+      }
+    },
+    {
+      "severity": "high",
+      "title": "GitHub PAT leaked in JS bundle",
+      "description": "ghp_* token observed in /static/app.js.",
+      "cwe": "CWE-200",
+      "cvss": 7.5,
+      "owasp_category": "A04",
+      "proof_of_concept": {
+        "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user"
+      }
+    },
+    {
+      "severity": "high",
+      "title": "Reverse shell PoC in /upload",
+      "description": "File upload allows RCE; PoC included.",
+      "cwe": "CWE-78",
+      "cvss": 8.6,
+      "owasp_category": "A01",
+      "proof_of_concept": {
+        "replay_command": [
+          "sh",
+          "-c",
+          "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
+        ]
+      }
+    },
+    {
+      "severity": "medium",
+      "title": "Missing security headers",
+      "description": "No CSP / HSTS / X-Frame-Options.",
+      "cwe": "CWE-693",
+      "cvss": null,
+      "owasp_category": "A02"
+    },
+    {
+      "severity": "low",
+      "title": "MySQL root password observed in CI script",
+      "description": "Hardcoded password in deploy script.",
+      "cwe": "CWE-798",
+      "cvss": null,
+      "owasp_category": "A07",
+      "proof_of_concept": {
+        "replay_command": [
+          "mysql",
+          "-u",
+          "root",
+          "--password=[REDACTED-PASSWORD]",
+          "-h",
+          "acme.example.com",
+          "-e",
+          "SHOW DATABASES;"
+        ]
+      }
+    }
+  ],
+  "technologies": [
+    "django",
+    "nginx"
+  ],
+  "timeline": [
+    {
+      "phase": "recon",
+      "order_index": 0,
+      "entry": {
+        "phase": "started"
+      },
+      "created_at": "2026-04-19T10:00:00Z"
+    },
+    {
+      "phase": "exploit",
+      "order_index": 1,
+      "entry": {
+        "phase": "rce"
+      },
+      "created_at": "2026-04-19T11:00:00Z"
+    }
+  ],
+  "phase_outputs": [
+    {
+      "phase": "recon",
+      "output_data": {
+        "k": "v"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "finding_id": "f1",
+      "object_key": "evidence/sqli/dump.txt",
+      "description": "HTTP req/resp dump"
+    },
+    {
+      "finding_id": "f2",
+      "object_key": "evidence/upload/payload.bin",
+      "description": "Reverse-shell artefact"
+    }
+  ],
+  "screenshots": [
+    {
+      "object_key": "screenshots/login.png",
+      "url_or_email": "login"
+    }
+  ],
+  "ai_conclusions": [
+    "LLM exec summary"
+  ],
+  "remediation": [
+    "Patch ORM.",
+    "Disable unrestricted upload.",
+    "Rotate all PATs."
+  ],
+  "ai_sections": {
+    "business_risk": "AI generation skipped: could not generate content",
+    "compliance_check": "AI generation skipped: could not generate content",
+    "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
+    "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
+    "vulnerability_description": "LLM exec summary"
+  },
+  "scan_artifacts": {
+    "phase_blocks": [],
+    "status": "skipped"
+  },
+  "active_web_scan": {
+    "ai_summary_rows": [
+      {
+        "label": "Vulnerability Description (AI)",
+        "section_key": "vulnerability_description",
+        "text": "LLM exec summary"
+      },
+      {
+        "label": "Remediation Steps (AI)",
+        "section_key": "remediation_step",
+        "text": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs."
+      }
+    ],
+    "artifacts_section_id": "scan-artifacts",
+    "curl_xss_example": "curl -sS -G 'https://TARGET.example/search' --data-urlencode 'q=REPLACE_WITH_SAFE_ENCODED_TEST_STRING'",
+    "has_signals": true,
+    "tier": "asgard",
+    "tools_run": [],
+    "visible": true
+  },
+  "raw_artifacts": [],
+  "asgard_report": {
+    "evidence": [
+      {
+        "description": "HTTP req/resp dump",
+        "finding_id": "f1",
+        "object_key": "evidence/sqli/dump.txt",
+        "presigned_url": null
+      },
+      {
+        "description": "Reverse-shell artefact",
+        "finding_id": "f2",
+        "object_key": "evidence/upload/payload.bin",
+        "presigned_url": null
+      }
+    ],
+    "executive_summary_counts": {
+      "critical": 1,
+      "high": 2,
+      "info": 0,
+      "low": 1,
+      "medium": 1
+    },
+    "findings": [
+      {
+        "confidence": "confirmed",
+        "cvss": 9.8,
+        "cwe": "CWE-89",
+        "description": "UNION-based SQLi via id parameter.",
+        "evidence_type": "tool_output",
+        "owasp_category": "A05",
+        "severity": "critical",
+        "title": "SQLi at /api/v1/users"
+      },
+      {
+        "confidence": "confirmed",
+        "cvss": 8.6,
+        "cwe": "CWE-78",
+        "description": "File upload allows RCE; PoC included.",
+        "evidence_type": "tool_output",
+        "owasp_category": "A01",
+        "severity": "high",
+        "title": "Reverse shell PoC in /upload"
+      },
+      {
+        "confidence": "confirmed",
+        "cvss": 7.5,
+        "cwe": "CWE-200",
+        "description": "ghp_* token observed in /static/app.js.",
+        "evidence_type": "tool_output",
+        "owasp_category": "A04",
+        "severity": "high",
+        "title": "GitHub PAT leaked in JS bundle"
+      },
+      {
+        "confidence": "likely",
+        "cvss": null,
+        "cwe": "CWE-693",
+        "description": "No CSP / HSTS / X-Frame-Options.",
+        "evidence_type": "tool_output",
+        "owasp_category": "A02",
+        "severity": "medium",
+        "title": "Missing security headers"
+      },
+      {
+        "confidence": "possible",
+        "cvss": null,
+        "cwe": "CWE-798",
+        "description": "Hardcoded password in deploy script.",
+        "evidence_type": "tool_output",
+        "owasp_category": "A07",
+        "severity": "low",
+        "title": "MySQL root password observed in CI script"
+      }
+    ],
+    "owasp_compliance": [
+      {
+        "category_id": "A01",
+        "count": 1,
+        "has_findings": true,
+        "title": "Broken Access Control"
+      },
+      {
+        "category_id": "A02",
+        "count": 1,
+        "has_findings": true,
+        "title": "Security Misconfiguration"
+      },
+      {
+        "category_id": "A03",
+        "count": 0,
+        "has_findings": false,
+        "title": "Software Supply Chain Failures"
+      },
+      {
+        "category_id": "A04",
+        "count": 1,
+        "has_findings": true,
+        "title": "Cryptographic Failures"
+      },
+      {
+        "category_id": "A05",
+        "count": 1,
+        "has_findings": true,
+        "title": "Injection"
+      },
+      {
+        "category_id": "A06",
+        "count": 0,
+        "has_findings": false,
+        "title": "Insecure Design"
+      },
+      {
+        "category_id": "A07",
+        "count": 1,
+        "has_findings": true,
+        "title": "Authentication Failures"
+      },
+      {
+        "category_id": "A08",
+        "count": 0,
+        "has_findings": false,
+        "title": "Software or Data Integrity Failures"
+      },
+      {
+        "category_id": "A09",
+        "count": 0,
+        "has_findings": false,
+        "title": "Security Logging & Alerting Failures"
+      },
+      {
+        "category_id": "A10",
+        "count": 0,
+        "has_findings": false,
+        "title": "Mishandling of Exceptional Conditions"
+      }
+    ],
+    "remediation": [
+      {
+        "finding_title": "SQLi at /api/v1/users",
+        "guidance": "Patch ORM and parameterise the id field.",
+        "severity": "critical"
+      },
+      {
+        "finding_title": "Reverse shell PoC in /upload",
+        "guidance": "Reject non-image MIME types and run the worker as a non-root user.",
+        "severity": "high"
+      },
+      {
+        "finding_title": "GitHub PAT leaked in JS bundle",
+        "guidance": "Rotate token and migrate to fine-grained PAT.",
+        "severity": "high"
+      },
+      {
+        "finding_title": "Missing security headers",
+        "guidance": "Review the finding and apply vendor-provided patches or compensating controls.",
+        "severity": "medium"
+      },
+      {
+        "finding_title": "MySQL root password observed in CI script",
+        "guidance": "Review the finding and apply vendor-provided patches or compensating controls.",
+        "severity": "low"
+      }
+    ],
+    "reproducer": [
+      {
+        "command": [
+          "curl",
+          "-H",
+          "Authorization: Bearer [REDACTED-BEARER]",
+          "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
+        ],
+        "finding_title": "SQLi at /api/v1/users",
+        "severity": "critical"
+      },
+      {
+        "command": [
+          "sh",
+          "-c",
+          "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
+        ],
+        "finding_title": "Reverse shell PoC in /upload",
+        "severity": "high"
+      },
+      {
+        "command": [
+          "curl",
+          "-H",
+          "'Authorization:",
+          "token",
+          "[REDACTED-GH-TOKEN]'",
+          "https://api.github.com/user"
+        ],
+        "finding_title": "GitHub PAT leaked in JS bundle",
+        "severity": "high"
+      },
+      {
+        "command": [
+          "curl",
+          "-I",
+          "{ASSET}/"
+        ],
+        "finding_title": "Missing security headers",
+        "severity": "medium"
+      },
+      {
+        "command": [
+          "mysql",
+          "-u",
+          "root",
+          "--password=[REDACTED-PASSWORD]",
+          "-h",
+          "acme.example.com",
+          "-e",
+          "SHOW DATABASES;"
+        ],
+        "finding_title": "MySQL root password observed in CI script",
+        "severity": "low"
+      }
+    ],
+    "screenshots": [
+      {
+        "object_key": "screenshots/login.png",
+        "presigned_url": null,
+        "url_or_email": "login"
+      }
+    ],
+    "timeline": [
+      {
+        "created_at": "2026-04-19T10:00:00Z",
+        "order_index": 0,
+        "phase": "recon",
+        "snippet": "{\"phase\": \"started\"}"
+      },
+      {
+        "created_at": "2026-04-19T11:00:00Z",
+        "order_index": 1,
+        "phase": "exploit",
+        "snippet": "{\"phase\": \"rce\"}"
+      }
+    ],
+    "title_meta": {
+      "created_at": "2026-04-19T10:00:00Z",
+      "report_id": "r-int-asgard-1",
+      "scan_id": "scan-int-asgard-1",
+      "target": "https://acme.example.com",
+      "tenant_id": "tenant-int-asgard-1",
+      "tier": "asgard"
+    }
+  }
+}

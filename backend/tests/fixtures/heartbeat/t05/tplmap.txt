@@ -1,0 +1,1 @@
+[+] Template injection confirmed — Jinja2 engine reachable via name parameter

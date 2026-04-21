@@ -45,6 +45,9 @@ class CvssVector(BaseModel):
     cwe_id: str
 
 
+# CWE → (CVSS:3.1 vector, base score, severity) lookup for findings without a scanner-provided score.
+# Reference: NIST NVD scoring guidance — https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator
+# Entries use typical worst-case vectors; context adjustments in _apply_context_adjustments() may lower scores.
 _CWE_CVSS_MAP: dict[str, tuple[str, float, str]] = {
     "79": ("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N", 6.1, "medium"),
     "79-stored": ("CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N", 5.4, "medium"),

@@ -330,10 +330,7 @@ def build_report_object_key(
 def build_finding_poc_object_key(tenant_id: str, scan_id: str, finding_id: str) -> str:
     """Stable key for idempotent PoC JSON: ``{tenant}/{scan}/poc/{finding_id}.json`` (primary MinIO bucket)."""
     fid = _sanitize_path_component(finding_id, "finding_id")
-    if not fid.endswith(".json"):
-        fname = f"{fid}.json"
-    else:
-        fname = fid
+    fname = f"{fid}.json" if not fid.endswith(".json") else fid
     return build_object_key(tenant_id, scan_id, OBJECT_TYPE_POC, fname)
 
 

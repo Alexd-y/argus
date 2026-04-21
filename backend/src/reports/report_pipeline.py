@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from src.reports.report_data_validation import (
-    log_report_validation_failure,
-    report_validation_failure_payload,
-    validate_report_data,
-)
-
-from sqlalchemy import cast, select, String, update
+import jinja2
+from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Finding, Report, ReportObject
@@ -23,9 +20,18 @@ from src.reports.generators import (
     generate_pdf,
     generate_valhalla_sections_csv,
 )
+from src.reports.report_data_validation import (
+    log_report_validation_failure,
+    report_validation_failure_payload,
+    validate_report_data,
+)
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
+
+class ReportGenerationError(Exception):
+    """Raised when the report generation pipeline encounters a recoverable failure."""
+
 
 REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv"})
 DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf")
@@ -339,26 +345,24 @@ async def run_generate_report_pipeline(
             "formats": list(generated.keys()),
             "object_keys": generated,
         }
-    except Exception as exc:
-        logger.exception(
-            "report_generation_pipeline_failed",
-            extra={
-                "event": "report_generation_pipeline_failed",
-                "report_id": report_id,
-                "tenant_id": tenant_id,
-            },
-        )
+    except jinja2.TemplateError as exc:
+        logger.error("Report template rendering failed", exc_info=exc)
         err_msg = safe_report_task_error_message(exc)
-        try:
-            await session.execute(
-                update(Report)
-                .where(cast(Report.id, String) == report_id)
-                .values(generation_status="failed", last_error_message=err_msg)
-            )
-            await session.commit()
-        except Exception:
-            try:
-                await session.rollback()
-            except Exception:
-                pass
-        return {"status": "failed", "report_id": report_id, "error": "generation_failed"}
+    except OSError as exc:
+        logger.error("Report file I/O failed", exc_info=exc)
+        err_msg = safe_report_task_error_message(exc)
+    except Exception as exc:
+        logger.error("Unexpected report generation failure", exc_info=exc)
+        err_msg = safe_report_task_error_message(exc)
+
+    try:
+        await session.execute(
+            update(Report)
+            .where(cast(Report.id, String) == report_id)
+            .values(generation_status="failed", last_error_message=err_msg)
+        )
+        await session.commit()
+    except Exception:
+        with contextlib.suppress(Exception):
+            await session.rollback()
+    return {"status": "failed", "report_id": report_id, "error": "generation_failed"}

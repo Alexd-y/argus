@@ -1,0 +1,1 @@
+CVE-2023-99999 vulnerable Joomla extension detected in components/

@@ -1,0 +1,19 @@
+user:[Administrator] rid:[0x1f4]
+user:[Guest] rid:[0x1f5]
+user:[krbtgt] rid:[0x1f6]
+user:[svc-backup] rid:[0x454]
+user:[svc-sql] rid:[0x453]
+user:[jdoe] rid:[0x455]
+group:[Domain Admins] rid:[0x200]
+group:[Domain Users] rid:[0x201]
+group:[Domain Guests] rid:[0x202]
+group:[Schema Admins] rid:[0x206]
+account[Administrator]: name:[Administrator] desc:[Built-in account for administering the computer/domain] attribs:[]
+account[Guest]: name:[Guest] desc:[Built-in account for guest access] attribs:[Account Disabled]
+account[krbtgt]: name:[krbtgt] desc:[Key Distribution Center Service Account] attribs:[Account Disabled]
+Domain Name: CONTOSO
+Domain Server: DC01
+Domain Controller: DC01
+Total Users: 6
+Total Groups: 4
+Total Aliases: 0

@@ -1,0 +1,38 @@
+tool_id: playwright_xss_verify
+version: "1.0.0"
+category: browser
+phase: exploitation
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "playwright-verify-xss"
+  - "--url"
+  - "{url}"
+  - "--canary"
+  - "{canary}"
+  - "--output"
+  - "{out_dir}/playwright.json"
+  - "--screenshot"
+  - "{out_dir}/playwright.png"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/playwright.json"
+  - "/out/playwright.png"
+cwe_hints:
+  - 79
+  - 80
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-02"
+description: "Headless Playwright XSS verifier — /usr/local/bin/playwright-verify-xss (Node wrapper, lands Cycle 3 ARG-019). Loads {url} with {canary}, captures DOM execution + screenshot, writes {out_dir}/playwright.json verdict. §4.10 'validation' phase missing in ScanPhase; ARG-016 maps to 'exploitation' risk=low so approval gate stays off (canary-only). Parser deferred to Cycle 3. Author: ARGUS team (in-house wrapper around https://playwright.dev/). Backlog/dev1_md §4.10. ARG-016."

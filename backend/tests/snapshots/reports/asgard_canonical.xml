@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="ARGUS Findings" tests="5" failures="4" errors="0" time="0">
+  <testsuite name="ARGUS Findings" hostname="argus-pentest" package="argus.report" id="scan-int-asgard-1" timestamp="2026-04-19T10:00:00Z" tests="5" failures="4" errors="0" skipped="0" time="0">
+    <properties>
+      <property name="report_id" value="r-int-asgard-1"/>
+      <property name="scan_id" value="scan-int-asgard-1"/>
+      <property name="target" value="https://acme.example.com"/>
+      <property name="technologies" value="django,nginx"/>
+      <property name="tenant_id" value="tenant-int-asgard-1"/>
+    </properties>
+    <testcase classname="argus.findings.critical" name="0001. SQLi at /api/v1/users" time="0">
+      <failure message="[CRITICAL] [CVSS:9.8] SQLi at /api/v1/users" type="CWE-89">Target: https://acme.example.com
+CWE: CWE-89
+CVSS: 9.8
+OWASP: A05
+
+UNION-based SQLi via id parameter.</failure>
+    </testcase>
+    <testcase classname="argus.findings.high" name="0002. Reverse shell PoC in /upload" time="0">
+      <failure message="[HIGH] [CVSS:8.6] Reverse shell PoC in /upload" type="CWE-78">Target: https://acme.example.com
+CWE: CWE-78
+CVSS: 8.6
+OWASP: A01
+
+File upload allows RCE; PoC included.</failure>
+    </testcase>
+    <testcase classname="argus.findings.high" name="0003. GitHub PAT leaked in JS bundle" time="0">
+      <failure message="[HIGH] [CVSS:7.5] GitHub PAT leaked in JS bundle" type="CWE-200">Target: https://acme.example.com
+CWE: CWE-200
+CVSS: 7.5
+OWASP: A04
+
+ghp_* token observed in /static/app.js.</failure>
+    </testcase>
+    <testcase classname="argus.findings.medium" name="0004. Missing security headers" time="0">
+      <failure message="[MEDIUM] Missing security headers" type="CWE-693">Target: https://acme.example.com
+CWE: CWE-693
+OWASP: A02
+
+No CSP / HSTS / X-Frame-Options.</failure>
+    </testcase>
+    <testcase classname="argus.findings.low" name="0005. MySQL root password observed in CI script" time="0">
+      <system-out>[LOW] MySQL root password observed in CI script
+Target: https://acme.example.com
+
+Hardcoded password in deploy script.</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,37 @@
+# ARG-047 — Prometheus config for the e2e capstone stack.
+#
+# Scrape targets:
+#   * argus-backend  — /metrics (FastAPI Prometheus exporter, ARG-041)
+#   * argus-celery   — /metrics (worker process is in the same image; ARG-041
+#                      registers a multi-process collector when CELERY_BEAT
+#                      env-vars are set, so the backend already reflects worker
+#                      counters via shared MULTIPROC_DIR. We therefore scrape
+#                      backend-only here — the verifier checks for
+#                      ``argus_findings_emitted_total`` and
+#                      ``argus_sandbox_runs_total`` which come from the
+#                      worker via the shared registry.)
+#   * argus-mcp      — /metrics (separate process — has its own counter set
+#                      under the ``argus_mcp_*`` prefix; verifier asserts at
+#                      least one MCP request was recorded, otherwise warning
+#                      surfaced in the structured failure JSON).
+#
+# Tight scrape interval so the e2e wrapper sees fresh values within a few
+# seconds of the scan completing.
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    stack: argus-e2e
+    cycle: cycle5
+
+scrape_configs:
+  - job_name: argus-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["argus-backend:8000"]
+
+  - job_name: argus-mcp
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["argus-mcp:8765"]

@@ -1,0 +1,515 @@
+name: Sandbox Images (build + push + SBOM + Cosign + Trivy gating)
+
+# =============================================================================
+# .github/workflows/sandbox-images.yml — ARG-034 (Cycle 4) image-build CI gating.
+#
+# Pipeline (5 jobs in dependency order):
+#
+#   1. hardening-contract     — Dockerfile static analysis (65 assertions).
+#   2. build-images           — matrix(profile) → docker build + push to GHCR
+#                               + extract baked-in SBOM + cosign attach sbom
+#                               (OCI artefact) + upload-artifact backup.
+#   3. trivy-scan             — matrix(profile) → BLOCKING Trivy scan against
+#                               the just-pushed GHCR image (CRITICAL+HIGH,
+#                               include unfixed, exit-code 1 on any finding).
+#   4. compose-smoke          — pull all 6 GHCR images (ARG-026 4 + ARG-048 2)
+#                               + boot the data tier (postgres + redis + minio)
+#                               from infra/docker-compose.yml. No e2e — that
+#                               lands in Cycle 6.
+#   5. sign-images / sign-dry-run
+#                             — Cosign signing. ARG-033 (Cycle 4) switched
+#                               this from the dry-run skeleton to production
+#                               keyless: GH OIDC → Sigstore Fulcio short-lived
+#                               cert → cosign sign + cosign attest (CycloneDX
+#                               SBOM predicate) → Rekor transparency log. PR
+#                               builds keep a cheap dry-run leg for early
+#                               feedback.
+#   6. verify-images          — ARG-033. Independent verifier that pulls the
+#                               just-signed image from GHCR, runs
+#                               `cosign verify --certificate-identity-regexp`
+#                               against the workflow identity, and runs
+#                               `cosign verify-attestation --type cyclonedx`
+#                               against the SBOM predicate. Fails merge if a
+#                               signature is missing OR the certificate
+#                               identity doesn't match this workflow path.
+#
+# Triggers:
+#   * push to main affecting sandbox/images/**, infra/scripts/{build,sign}_images.sh,
+#     infra/docker-compose.yml, .trivyignore, or this workflow file.
+#   * PRs touching the same paths (excluding push-to-main effects).
+#   * manual workflow_dispatch with a profile selector (ad-hoc validation).
+#
+# Branch protection (documented in docs/sandbox-images.md §3):
+#   The following job names MUST be marked Required Status Checks for `main`:
+#     - hardening-contract
+#     - build-images / Build & push (web|cloud|browser|full|recon|network)
+#     - trivy-scan / Trivy scan (web|cloud|browser|full|recon|network)
+#     - compose-smoke
+#   Plus the existing CI workflow checks: lint, test-no-docker,
+#   test-docker-required, security, npm-audit (Frontend, admin-frontend).
+#   ARG-048 (Cycle 5) widened the matrix from 4 → 6 profiles; the two new
+#   leg names ("recon", "network") MUST be added to the protected-checks
+#   list before merging this commit, otherwise their failures won't gate.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sandbox/images/**'
+      - 'infra/scripts/build_images.sh'
+      - 'infra/scripts/sign_images.sh'
+      - 'infra/scripts/sbom_drift_check.py'
+      - 'infra/docker-compose.yml'
+      - '.github/workflows/sandbox-images.yml'
+      - '.trivyignore'
+      - 'renovate.json'
+      - 'backend/tests/integration/sandbox/test_image_security_contract.py'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'sandbox/images/**'
+      - 'infra/scripts/build_images.sh'
+      - 'infra/scripts/sign_images.sh'
+      - 'infra/scripts/sbom_drift_check.py'
+      - 'infra/docker-compose.yml'
+      - '.github/workflows/sandbox-images.yml'
+      - '.trivyignore'
+      - 'renovate.json'
+      - 'backend/tests/integration/sandbox/test_image_security_contract.py'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Image profile to build (web, cloud, browser, full, recon, network, all)'
+        required: true
+        default: 'all'
+        type: choice
+        options: [web, cloud, browser, full, recon, network, all]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # required for keyless cosign + Sigstore OIDC (ARG-033)
+
+jobs:
+  hardening-contract:
+    name: Hardening contract (Dockerfile static analysis)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run hardening contract test
+        run: pytest tests/integration/sandbox/test_image_security_contract.py -q --tb=short
+        env:
+          DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
+          JWT_SECRET: test-secret-for-ci-only
+          DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
+          ARGUS_TEST_MODE: '1'
+
+      - name: Run sandbox regression tests
+        run: pytest tests/integration/sandbox -q --tb=short -x --ignore=tests/integration/sandbox/test_image_security_contract.py
+        env:
+          DATABASE_URL: 'sqlite+aiosqlite:///:memory:'
+          JWT_SECRET: test-secret-for-ci-only
+          DEFAULT_TENANT_ID: 00000000-0000-0000-0000-000000000001
+          ARGUS_TEST_MODE: '1'
+
+  build-images:
+    # NB: job name is the value branch protection latches onto. Each matrix
+    # leg surfaces as "build-images / Build & push (<profile>)".
+    name: Build & push (${{ matrix.profile }})
+    needs: [hardening-contract]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [web, cloud, browser, full, recon, network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image refs (lowercased owner)
+        id: refs
+        run: |
+          # GHCR rejects uppercase repo owners; lowercase to be safe.
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER_LC}/argus-kali-${{ matrix.profile }}"
+          TAG="${GITHUB_SHA}"
+          {
+            echo "owner=${OWNER_LC}"
+            echo "image=${IMAGE}"
+            echo "tag=${TAG}"
+            echo "image_ref=${IMAGE}:${TAG}"
+            echo "image_latest=${IMAGE}:latest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build & push image (${{ matrix.profile }})
+        run: |
+          chmod +x infra/scripts/build_images.sh
+          # --push tags both :<sha> and :latest under the resolved registry
+          # prefix and pushes both tags after the build succeeds. Keeps the
+          # local-only path (no --push) byte-identical for offline dev.
+          infra/scripts/build_images.sh \
+            --profile "${{ matrix.profile }}" \
+            --tag "${{ steps.refs.outputs.tag }}" \
+            --registry "ghcr.io/${{ steps.refs.outputs.owner }}" \
+            --push
+
+      - name: Extract baked-in SBOM (CycloneDX 1.5)
+        id: sbom
+        run: |
+          SBOM_PATH="${{ runner.temp }}/sbom-${{ matrix.profile }}.cdx.json"
+          # Every ARG-026 image bakes its SBOM at /usr/share/doc/sbom.cdx.json
+          # (canonical path, also surfaced by the argus.sbom.path label).
+          docker run --rm --entrypoint cat \
+            "${{ steps.refs.outputs.image_ref }}" \
+            /usr/share/doc/sbom.cdx.json > "$SBOM_PATH"
+          echo "path=$SBOM_PATH" >> "$GITHUB_OUTPUT"
+          echo "Extracted SBOM ($(wc -c < "$SBOM_PATH") bytes)"
+
+      - name: Validate SBOM envelope
+        env:
+          SBOM_PATH: ${{ steps.sbom.outputs.path }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          path = os.environ["SBOM_PATH"]
+          with open(path, "r", encoding="utf-8") as fh:
+              doc = json.load(fh)
+          assert doc.get("bomFormat") == "CycloneDX", f"unexpected bomFormat: {doc.get('bomFormat')}"
+          assert doc.get("specVersion") in {"1.5", "1.6"}, f"unsupported specVersion: {doc.get('specVersion')}"
+          assert isinstance(doc.get("components"), list), "components must be a list"
+          assert len(doc["components"]) > 0, "SBOM has zero components — fallback misfired?"
+          print(f"OK: SBOM at {path} is CycloneDX {doc['specVersion']} with {len(doc['components'])} components.")
+          PY
+
+      - name: SBOM fingerprint vs baseline (advisory, T09)
+        continue-on-error: true
+        env:
+          SBOM_PATH: ${{ steps.sbom.outputs.path }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          python3 infra/scripts/sbom_drift_check.py \
+            --profile "$PROFILE" \
+            --built-sbom "$SBOM_PATH"
+
+      - name: Install Cosign v2 (attach sbom requires v2.x)
+        # cosign v3.x removed `attach sbom` — pin to the latest v2.x line so
+        # the OCI SBOM artefact upload keeps working. ARG-033 will switch
+        # signing/attestation to v2.x as well, so versions converge.
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.4.1
+
+      - name: Attach SBOM as OCI artefact (cosign attach sbom)
+        run: |
+          cosign attach sbom \
+            --sbom "${{ steps.sbom.outputs.path }}" \
+            --type cyclonedx \
+            "${{ steps.refs.outputs.image_ref }}"
+
+      - name: Upload SBOM as workflow artefact (backup, 30d retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.profile }}-${{ steps.refs.outputs.tag }}
+          path: ${{ steps.sbom.outputs.path }}
+          retention-days: 30
+
+  trivy-scan:
+    # BLOCKING vulnerability scan against the just-pushed GHCR image. Each
+    # matrix leg surfaces as "trivy-scan / Trivy scan (<profile>)" — list
+    # all four as Required Status Checks on `main`.
+    name: Trivy scan (${{ matrix.profile }})
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [web, cloud, browser, full, recon, network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR (Trivy pulls the image to scan)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image ref
+        id: refs
+        run: |
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          echo "image_ref=ghcr.io/${OWNER_LC}/argus-kali-${{ matrix.profile }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Trivy vulnerability scan (BLOCKING)
+        # Blocking gate: any unsuppressed CRITICAL or HIGH (fixed OR unfixed)
+        # fails the job. Suppressions live in .trivyignore at repo root and
+        # MUST carry a justification + expiry date per the policy in
+        # docs/sandbox-images.md §3.
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.refs.outputs.image_ref }}
+          format: table
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: false
+          exit-code: '1'
+          trivyignores: '.trivyignore'
+
+  compose-smoke:
+    # DoD §19.4 partial — proves all 6 sandbox images (ARG-026 + ARG-048) are
+    # pullable from GHCR AND the data-tier compose stack boots cleanly. The
+    # ARG-048 carry-over expanded the matrix from 4 → 6 images. End-to-end
+    # scan smoke is deferred to Cycle 6 (out of ARG-034 scope).
+    name: Compose smoke (pull GHCR images + boot data tier)
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve owner (lowercase)
+        id: refs
+        run: |
+          echo "owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Pull all 6 sandbox images from GHCR
+        run: |
+          set -e
+          for profile in web cloud browser full recon network; do
+            IMAGE="ghcr.io/${{ steps.refs.outputs.owner }}/argus-kali-${profile}:${GITHUB_SHA}"
+            echo "─── docker pull ${IMAGE} ──────────────────────────────"
+            docker pull "$IMAGE"
+          done
+
+      - name: Smoke per sandbox image (uid 65532 + SBOM intact)
+        run: |
+          set -e
+          for profile in web cloud browser full recon network; do
+            IMAGE="ghcr.io/${{ steps.refs.outputs.owner }}/argus-kali-${profile}:${GITHUB_SHA}"
+            echo "─── ${profile}: id ──────────────────────────────"
+            docker run --rm --user 65532 --entrypoint id "$IMAGE"
+            echo "─── ${profile}: SBOM head ───────────────────────"
+            docker run --rm --entrypoint cat "$IMAGE" /usr/share/doc/sbom.cdx.json | head -c 256
+            echo
+          done
+
+      - name: Seed minimal infra/.env for compose
+        run: |
+          cat > infra/.env <<'ENV'
+          POSTGRES_USER=argus
+          POSTGRES_PASSWORD=argus-ci-smoke
+          POSTGRES_DB=argus
+          REDIS_PASSWORD=
+          MINIO_ACCESS_KEY=argus
+          MINIO_SECRET_KEY=argus-ci-smoke-secret-32chars-min!!
+          MINIO_BUCKET=argus
+          MINIO_REPORTS_BUCKET=argus-reports
+          JWT_SECRET=ci-smoke-jwt-secret-do-not-use-in-prod
+          DEFAULT_TENANT_ID=00000000-0000-0000-0000-000000000001
+          LOG_LEVEL=INFO
+          SANDBOX_ENABLED=true
+          ENV
+
+      - name: Compose up — data tier only (postgres + redis + minio)
+        # Backend/worker services have build: directives whose context is
+        # outside this workflow's scope — they're built by ci.yml, not here.
+        # Booting the data tier is enough to prove infra/docker-compose.yml
+        # parses cleanly + service images pull + healthchecks pass.
+        run: |
+          docker compose -f infra/docker-compose.yml up -d postgres redis minio minio-init
+          # boot grace — the postgres/minio healthchecks need ~10–15s on a
+          # cold runner before they report `healthy`.
+          sleep 15
+          docker compose -f infra/docker-compose.yml ps
+
+      - name: Compose down (cleanup volumes)
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.yml down -v || true
+
+  sign-images:
+    # ARG-033: production keyless signing via Sigstore Fulcio + Rekor.
+    # No long-lived secrets — id-token: write yields the OIDC JWT cosign
+    # exchanges for a short-lived (10-minute) Fulcio certificate. The cert,
+    # the signature, and the SBOM attestation are all written to the public
+    # Rekor transparency log. Branch-protect on `verify-images` to make this
+    # gate truly mandatory.
+    name: Cosign sign (${{ matrix.profile }})
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write   # mandatory — Fulcio OIDC exchange
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [web, cloud, browser, full, recon, network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign v2
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.4.1
+
+      - name: Resolve image ref + extract SBOM
+        id: refs
+        run: |
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE_REF="ghcr.io/${OWNER_LC}/argus-kali-${{ matrix.profile }}:${GITHUB_SHA}"
+          SBOM_PATH="${{ runner.temp }}/sbom-${{ matrix.profile }}.cdx.json"
+          # Pull the image once and snapshot its baked-in SBOM. Doing the
+          # extraction here (instead of inside the script) lets us reuse the
+          # exact same byte sequence the build-images job validated.
+          docker pull "$IMAGE_REF"
+          docker run --rm --entrypoint cat "$IMAGE_REF" /usr/share/doc/sbom.cdx.json > "$SBOM_PATH"
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+          echo "sbom_path=$SBOM_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Cosign keyless sign + SBOM attest
+        env:
+          IMAGE_REF: ${{ steps.refs.outputs.image_ref }}
+          SBOM_PATH: ${{ steps.refs.outputs.sbom_path }}
+        run: |
+          chmod +x infra/scripts/sign_images.sh
+          # No COSIGN_KEY env -> the script takes the keyless branch.
+          # Single --image overrides --profile/--tag/--registry, so what we
+          # sign here is byte-identical to what build-images pushed.
+          infra/scripts/sign_images.sh \
+            --image "$IMAGE_REF" \
+            --sbom "$SBOM_PATH" \
+            --output-bundle "${{ runner.temp }}/cosign-bundle-${{ matrix.profile }}.json"
+
+      - name: Upload signing bundle (manifest of signed refs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosign-bundle-${{ matrix.profile }}-${{ github.sha }}
+          path: ${{ runner.temp }}/cosign-bundle-${{ matrix.profile }}.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  verify-images:
+    # ARG-033: independent verification of the keyless signature + SBOM
+    # attestation. Runs against the just-pushed GHCR image; cosign re-resolves
+    # the Fulcio cert from the Rekor entry and matches the certificate
+    # identity against this workflow's path. Pin this job (one entry per
+    # matrix leg) as Required Status Checks for `main` so an attacker who
+    # somehow strips the signature off the registry cannot land merges.
+    name: Cosign verify (${{ matrix.profile }})
+    needs: [sign-images]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [web, cloud, browser, full, recon, network]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign v2
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.4.1
+
+      - name: Resolve image ref
+        id: refs
+        run: |
+          OWNER_LC="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          echo "image_ref=ghcr.io/${OWNER_LC}/argus-kali-${{ matrix.profile }}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify keyless signature (Fulcio cert identity)
+        # The regexp pins the certificate identity to this exact workflow
+        # file under any branch. We deliberately allow refs/heads/.+ rather
+        # than refs/heads/main because the branch-protection rule is what
+        # forbids merges; the verifier just proves provenance.
+        env:
+          IMAGE: ${{ steps.refs.outputs.image_ref }}
+        run: |
+          cosign verify "$IMAGE" \
+            --certificate-identity-regexp "^https://github\.com/[^/]+/[^/]+/\.github/workflows/sandbox-images\.yml@refs/heads/.+$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: Verify SBOM attestation (CycloneDX predicate)
+        env:
+          IMAGE: ${{ steps.refs.outputs.image_ref }}
+        run: |
+          cosign verify-attestation "$IMAGE" \
+            --type cyclonedx \
+            --certificate-identity-regexp "^https://github\.com/[^/]+/[^/]+/\.github/workflows/sandbox-images\.yml@refs/heads/.+$" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+  # PR-only dry-run signing — no secrets, no Sigstore round-trip, no fail.
+  # Confirms the script parses the matrix, finds cosign on PATH, and prints
+  # the keyless commands it WOULD run.
+  sign-dry-run:
+    name: Cosign dry-run (PR validation)
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Cosign v2
+        uses: sigstore/cosign-installer@v3.7.0
+        with:
+          cosign-release: v2.4.1
+      - name: Run signing pipeline in dry-run mode
+        run: |
+          chmod +x infra/scripts/sign_images.sh
+          infra/scripts/sign_images.sh --profile all --tag pr-test --dry-run

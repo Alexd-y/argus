@@ -1,0 +1,37 @@
+tool_id: gobuster_dir
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "gobuster"
+  - "dir"
+  - "-u"
+  - "{url}"
+  - "-w"
+  - "{wordlist}"
+  - "-x"
+  - "php,txt,html"
+  - "-o"
+  - "{out_dir}/gobuster.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/gobuster.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-CONFIG-04"
+  - "WSTG-CONFIG-06"
+description: "gobuster directory / file discovery, plain text output. Author: OJ Reeves (https://github.com/OJ/gobuster). Backlog/dev1_md §4.5."

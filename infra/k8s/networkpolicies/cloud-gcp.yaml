@@ -1,0 +1,71 @@
+# ARG-043 — GCP IAM / OAuth egress allowlist for the argus-backend pod.
+#
+# Selects pods carrying BOTH labels:
+#   app:        argus-backend
+#   cloud-iam:  enabled
+#
+# Egress allowed ONLY to the GCP IAM / OAuth control plane on TCP/443.
+# FQDN intent is captured in `argus.io/egress-fqdns`. The IPv4 ranges
+# below are the published Google "goog" netblocks — refresh via
+# `infra/scripts/sync_gcp_ip_ranges.sh` against
+# https://www.gstatic.com/ipranges/goog.json.
+#
+# Defence-in-depth identical to cloud-aws.yaml: ingress denied, only
+# 443/tcp open, no wildcard, IMDS unreachable (kept off the egress).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-backend-cloud-gcp
+  namespace: argus
+  labels:
+    app.kubernetes.io/name: argus-backend
+    app.kubernetes.io/component: cloud-iam-egress
+    argus.io/scope: cloud-gcp
+    argus.io/managed-by: arg-043
+  annotations:
+    argus.io/cloud-iam: gcp
+    argus.io/egress-fqdns: >-
+      iam.googleapis.com,
+      iamcredentials.googleapis.com,
+      oauth2.googleapis.com,
+      accounts.google.com,
+      www.googleapis.com,
+      sts.googleapis.com
+spec:
+  podSelector:
+    matchLabels:
+      app: argus-backend
+      cloud-iam: enabled
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # Static subset of Google's published "goog" netblocks. Production
+    # rotates these via `infra/scripts/sync_gcp_ip_ranges.sh` so the
+    # operator can re-render this manifest weekly.
+    - to:
+        - ipBlock:
+            cidr: 142.250.0.0/15   # google global edge (oauth2 / iam APIs)
+        - ipBlock:
+            cidr: 172.217.0.0/16   # google services anycast (sts.googleapis.com)
+        - ipBlock:
+            cidr: 216.58.192.0/19  # accounts.google.com
+        - ipBlock:
+            cidr: 34.96.0.0/20     # iamcredentials.googleapis.com — global LB
+      ports:
+        - protocol: TCP
+          port: 443
+    # CoreDNS only — never the GCE metadata server.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

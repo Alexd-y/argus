@@ -1,0 +1,32 @@
+tool_id: jadx
+version: "1.0.0"
+category: binary
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-binary:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "jadx --no-imports --show-bad-code -d {out_dir}/jadx {binary} 2>&1 | tee {out_dir}/jadx.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/jadx.log"
+  - "/out/jadx"
+cwe_hints:
+  - 200
+  - 312
+  - 798
+owasp_wstg:
+  - "WSTG-INFO-08"
+description: "JADX — DEX-to-Java decompiler. Translates the DEX bytecode inside {binary} (APK or .dex) into readable Java sources at /out/jadx/sources/, surfacing hard-coded secrets, plaintext URLs, and weak crypto. --show-bad-code keeps partially-decompiled methods for manual review; --no-imports keeps the diff-friendly. Pure offline (egress blocked). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.18. ARG-019."

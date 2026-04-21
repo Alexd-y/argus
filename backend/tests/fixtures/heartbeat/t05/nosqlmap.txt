@@ -1,0 +1,1 @@
+[!] MongoDB injection — auth bypass possible on login endpoint

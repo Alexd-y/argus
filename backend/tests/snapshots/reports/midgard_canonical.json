@@ -1,0 +1,122 @@
+{
+  "report_id": "r-int-midgard-1",
+  "target": "https://app.example.test",
+  "scan_id": "scan-int-midgard-1",
+  "created_at": "2026-04-19T10:00:00Z",
+  "metadata": {
+    "report_id": "r-int-midgard-1",
+    "target": "https://app.example.test",
+    "scan_id": "scan-int-midgard-1",
+    "created_at": "2026-04-19T10:00:00Z",
+    "technologies": [
+      "django",
+      "nginx"
+    ]
+  },
+  "executive_summary": "Critical SQL/RCE issues observed; remediate immediately.",
+  "summary": {
+    "critical": 2,
+    "high": 2,
+    "medium": 2,
+    "low": 2,
+    "info": 2,
+    "technologies": [
+      "django",
+      "nginx"
+    ],
+    "sslIssues": 1,
+    "headerIssues": 2,
+    "leaksFound": false
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "Remote Code Execution in /upload",
+      "description": "Unrestricted file upload + LFI chain.",
+      "cwe": "CWE-78",
+      "cvss": 9.5
+    },
+    {
+      "severity": "critical",
+      "title": "SQL Injection in /api/users",
+      "description": "UNION-based SQLi via id parameter.",
+      "cwe": "CWE-89",
+      "cvss": 9.8,
+      "owasp_category": "A03"
+    },
+    {
+      "severity": "high",
+      "title": "Reflected XSS in search",
+      "description": "`q` echoed unescaped.",
+      "cwe": "CWE-79",
+      "cvss": 7.5,
+      "owasp_category": "A03"
+    },
+    {
+      "severity": "high",
+      "title": "Server-Side Request Forgery",
+      "description": "Internal metadata endpoint reachable.",
+      "cwe": "CWE-918",
+      "cvss": 8.1
+    },
+    {
+      "severity": "medium",
+      "title": "Missing security headers",
+      "description": "No CSP / HSTS / X-Frame-Options.",
+      "cwe": "CWE-693",
+      "cvss": null
+    },
+    {
+      "severity": "medium",
+      "title": "Outdated jQuery",
+      "description": "jQuery 1.x with known prototype-pollution.",
+      "cwe": "CWE-1104",
+      "cvss": 6.1
+    },
+    {
+      "severity": "low",
+      "title": "Cookie missing Secure flag",
+      "description": "Session cookie served over HTTP.",
+      "cwe": "CWE-614",
+      "cvss": null
+    },
+    {
+      "severity": "low",
+      "title": "Server banner exposed",
+      "description": "Server header leaks nginx/1.18.0.",
+      "cwe": "CWE-200",
+      "cvss": null
+    },
+    {
+      "severity": "info",
+      "title": "HTTP allowed alongside HTTPS",
+      "description": "Plain HTTP returns 200 OK.",
+      "cwe": null,
+      "cvss": null
+    },
+    {
+      "severity": "info",
+      "title": "Open directory listing",
+      "description": "/static/ shows directory index.",
+      "cwe": null,
+      "cvss": null
+    }
+  ],
+  "technologies": [
+    "django",
+    "nginx"
+  ],
+  "timeline": [],
+  "phase_outputs": [],
+  "evidence": [],
+  "screenshots": [],
+  "ai_conclusions": [],
+  "remediation": [],
+  "ai_sections": {},
+  "scan_artifacts": {
+    "phase_blocks": [],
+    "status": "skipped"
+  },
+  "active_web_scan": {},
+  "raw_artifacts": []
+}

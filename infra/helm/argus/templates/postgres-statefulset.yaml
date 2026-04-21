@@ -1,0 +1,34 @@
+{{/*
+PostgreSQL — sub-chart wrapper notes.
+
+The actual StatefulSet is rendered by the Bitnami `postgresql` sub-chart
+(pinned in Chart.yaml at ~13.4.0). We don't redefine it here to avoid
+duplicating Bitnami's hardened template — instead, every Postgres-specific
+override lives in `.Values.postgresql.*` (see values.yaml + the prod / staging
+overlays).
+
+This file emits a marker ConfigMap so:
+
+  1. `helm template` produces a deterministic record that the chart's Postgres
+     surface was rendered (catches accidental `postgresql.enabled=false`).
+  2. Operators can `kubectl describe configmap -l app.kubernetes.io/component=postgres`
+     to confirm which sub-chart version + initdb script are in effect.
+
+If a future need arises to override the StatefulSet directly (e.g. attaching
+custom sidecars), this file is the right place — see Bitnami's
+`extraTemplates` hook as the preferred extension point.
+*/}}
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-postgres-marker
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+data:
+  subchart: "bitnami/postgresql"
+  database: {{ .Values.postgresql.auth.database | quote }}
+  username: {{ .Values.postgresql.auth.username | quote }}
+  persistenceSize: {{ .Values.postgresql.primary.persistence.size | quote }}
+{{- end }}

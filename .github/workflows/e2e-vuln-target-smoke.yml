@@ -1,0 +1,121 @@
+# Playwright smoke against optional lab targets (Juice Shop, DVWA, WebGoat).
+# Separate from ARG-047 full-stack capstone (.github/workflows/e2e-full-scan.yml).
+#
+# Flaky third-party images: matrix legs `dvwa` and `webgoat` use continue-on-error so
+# a registry blip or slow JVM boot does not block merges; `juice-shop` remains strict.
+# See docs/e2e-testing.md §11 and infra/e2e-vuln-targets.md.
+
+name: e2e-vuln-target-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_dvwa:
+        description: "Skip DVWA leg (manual workaround for flaky service)"
+        required: false
+        default: "false"
+        type: boolean
+      skip_webgoat:
+        description: "Skip WebGoat leg (manual workaround for flaky service)"
+        required: false
+        default: "false"
+        type: boolean
+  push:
+    branches: [main, develop]
+    paths:
+      - "Frontend/playwright.config.ts"
+      - "Frontend/tests/e2e/vuln-targets/**"
+      - "Frontend/package.json"
+      - "infra/docker-compose.vuln-targets.yml"
+      - ".github/workflows/e2e-vuln-target-smoke.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "Frontend/playwright.config.ts"
+      - "Frontend/tests/e2e/vuln-targets/**"
+      - "Frontend/package.json"
+      - "infra/docker-compose.vuln-targets.yml"
+      - ".github/workflows/e2e-vuln-target-smoke.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-vuln-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: vuln target — ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [juice-shop, dvwa, webgoat]
+    continue-on-error: ${{ matrix.target != 'juice-shop' }}
+
+    env:
+      E2E_VULN_TARGET: ${{ matrix.target }}
+      PLAYWRIGHT_NO_SERVER: "1"
+      # Public WebGoat demo defaults — supplied via env (not committed as secrets).
+      E2E_WEBGOAT_USERNAME: webgoat
+      E2E_WEBGOAT_PASSWORD: webgoat
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine skip (optional workflow_dispatch)
+        id: skip_check
+        run: |
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "${{ matrix.target }}" == "dvwa" && "${{ inputs.skip_dvwa }}" == "true" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ matrix.target }}" == "webgoat" && "${{ inputs.skip_webgoat }}" == "true" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Map target URL
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          case "${{ matrix.target }}" in
+            juice-shop) echo "E2E_VULN_BASE_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV" ;;
+            dvwa)       echo "E2E_VULN_BASE_URL=http://127.0.0.1:40080" >> "$GITHUB_ENV" ;;
+            webgoat)    echo "E2E_VULN_BASE_URL=http://127.0.0.1:48080" >> "$GITHUB_ENV" ;;
+            *) echo "unknown target" && exit 1 ;;
+          esac
+
+      - name: Pull & start target container
+        if: steps.skip_check.outputs.skip != 'true'
+        run: |
+          set -euxo pipefail
+          docker compose -f infra/docker-compose.vuln-targets.yml pull --ignore-pull-failures
+          docker compose -f infra/docker-compose.vuln-targets.yml --profile "${{ matrix.target }}" up -d --wait
+
+      - uses: actions/setup-node@v4
+        if: steps.skip_check.outputs.skip != 'true'
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend deps + Playwright browser
+        if: steps.skip_check.outputs.skip != 'true'
+        working-directory: Frontend
+        run: |
+          npm ci
+          npx playwright install chromium
+
+      - name: Run vuln-smoke project
+        if: steps.skip_check.outputs.skip != 'true'
+        working-directory: Frontend
+        run: npm run test:e2e:vuln-smoke
+
+      - name: Tear down
+        if: always() && steps.skip_check.outputs.skip != 'true'
+        run: docker compose -f infra/docker-compose.vuln-targets.yml --profile "${{ matrix.target }}" down -v

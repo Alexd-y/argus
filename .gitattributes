@@ -1,0 +1,69 @@
+# Normalize line endings across platforms.
+#
+# Without this file, Windows clones with `core.autocrlf=true` rewrite shell
+# scripts and other Linux-runtime files with CRLF, which breaks containers:
+# `exec /entrypoint.sh: no such file or directory` (the kernel reads the
+# shebang as `#!/bin/sh\r` and tries to find an interpreter named `\r`).
+#
+# Rule of thumb: every file that runs inside a Linux container or that is
+# parsed by tools sensitive to CR (sh, bash, alembic, dotenv, yaml, json,
+# Dockerfile) must stay LF — *regardless* of the author's host OS.
+
+* text=auto eol=lf
+
+# --- Linux-runtime scripts and config — MUST be LF ---
+*.sh             text eol=lf
+*.bash           text eol=lf
+*.zsh            text eol=lf
+Dockerfile       text eol=lf
+Dockerfile.*     text eol=lf
+*.dockerfile     text eol=lf
+docker-compose*.yml text eol=lf
+.env             text eol=lf
+.env.*           text eol=lf
+
+# --- Source code — LF for cross-platform sanity ---
+*.py             text eol=lf
+*.toml           text eol=lf
+*.yaml           text eol=lf
+*.yml            text eol=lf
+*.json           text eol=lf
+*.md             text eol=lf
+*.sql            text eol=lf
+*.html           text eol=lf
+*.css            text eol=lf
+*.js             text eol=lf
+*.ts             text eol=lf
+*.tsx            text eol=lf
+*.jsx            text eol=lf
+
+# --- Windows-only files keep CRLF ---
+*.bat            text eol=crlf
+*.cmd            text eol=crlf
+*.ps1            text eol=crlf
+
+# --- Binary files — never touch ---
+*.png            binary
+*.jpg            binary
+*.jpeg           binary
+*.gif            binary
+*.ico            binary
+*.pdf            binary
+*.zip            binary
+*.tar            binary
+*.tar.gz         binary
+*.tgz            binary
+*.gz             binary
+*.bz2            binary
+*.xz             binary
+*.7z             binary
+*.woff           binary
+*.woff2          binary
+*.ttf            binary
+*.otf            binary
+*.eot            binary
+*.so             binary
+*.dll            binary
+*.dylib          binary
+*.exe            binary
+*.ed25519.pub    binary

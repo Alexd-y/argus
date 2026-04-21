@@ -1,0 +1,8 @@
+# Ruff config for ARGUS backend (run from this directory).
+target-version = "py312"
+src = ["src"]
+
+[lint.per-file-ignores]
+# FastAPI/Typer use framework calls in parameter defaults by design.
+"src/api/**/*.py" = ["B008"]
+"src/recon/cli/**/*.py" = ["B008"]

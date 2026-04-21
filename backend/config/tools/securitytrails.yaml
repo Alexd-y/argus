@@ -1,0 +1,29 @@
+tool_id: securitytrails
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "200m"
+memory_limit: "128Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "curl -sS --fail-with-body --max-time 60 -H \"APIKEY: ${SECURITYTRAILS_API_KEY:?missing}\" 'https://api.securitytrails.com/v1/domain/{domain}/subdomains' -o {out_dir}/securitytrails.json"
+parse_strategy: custom
+evidence_artifacts:
+  - "/out/securitytrails.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+description: "SecurityTrails passive subdomain lookup via the v1 REST API. Requires SECURITYTRAILS_API_KEY env. Backlog/dev1_md §4.1."

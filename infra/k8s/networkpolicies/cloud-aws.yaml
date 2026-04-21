@@ -1,0 +1,85 @@
+# ARG-043 — AWS STS / IAM egress allowlist for the argus-backend pod.
+#
+# Selects pods carrying BOTH labels:
+#   app:        argus-backend
+#   cloud-iam:  enabled
+#
+# Egress is allowed ONLY to the AWS STS / IAM control plane on TCP/443.
+# The `argus.io/egress-fqdns` annotation enumerates the upstream FQDNs
+# so audit tooling and FQDN-aware enforcers (Cilium, Calico v3.20+) can
+# pick them up without re-parsing this file. NetworkPolicy v1 itself
+# cannot match on DNS — the IP allowlist below MUST be kept aligned
+# with the AWS IP-ranges feed (https://ip-ranges.amazonaws.com/ip-ranges.json,
+# service=STS / IAM / EC2-INSTANCE-CONNECT). Operators rotate the file
+# via `infra/scripts/sync_aws_ip_ranges.sh` (ARG-046 follow-up).
+#
+# Defence-in-depth:
+#   * Ingress: empty       → all ingress denied to the labelled pod.
+#   * Egress private/IMDS  → blocked via the `except` peer in egress[0]
+#     (only relevant if a future override widens the wildcard peer).
+#   * Single port 443      → no plaintext / SSH / SMTP fallout.
+#   * No `0.0.0.0/0`       → strict allowlist, never wildcard.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argus-backend-cloud-aws
+  namespace: argus
+  labels:
+    app.kubernetes.io/name: argus-backend
+    app.kubernetes.io/component: cloud-iam-egress
+    argus.io/scope: cloud-aws
+    argus.io/managed-by: arg-043
+  annotations:
+    argus.io/cloud-iam: aws
+    argus.io/egress-fqdns: >-
+      sts.amazonaws.com,
+      sts.us-east-1.amazonaws.com,
+      sts.us-east-2.amazonaws.com,
+      sts.us-west-1.amazonaws.com,
+      sts.us-west-2.amazonaws.com,
+      sts.eu-west-1.amazonaws.com,
+      sts.eu-west-2.amazonaws.com,
+      sts.eu-central-1.amazonaws.com,
+      sts.ap-southeast-1.amazonaws.com,
+      sts.ap-southeast-2.amazonaws.com,
+      sts.ap-northeast-1.amazonaws.com,
+      iam.amazonaws.com,
+      iam.us-gov.amazonaws.com,
+      sts.amazonaws.com.cn
+spec:
+  podSelector:
+    matchLabels:
+      app: argus-backend
+      cloud-iam: enabled
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # Pinned AWS STS regional endpoints (IPv4 /32 — refreshed nightly
+    # via `infra/scripts/sync_aws_ip_ranges.sh`). The list below is
+    # representative; the real cluster pulls the live JSON feed and
+    # recreates this manifest. NEVER widen to `0.0.0.0/0`.
+    - to:
+        - ipBlock:
+            cidr: 52.94.232.0/22  # sts global anycast (us-east-1 anchor)
+        - ipBlock:
+            cidr: 54.239.0.0/16   # iam global control plane
+        - ipBlock:
+            cidr: 18.64.0.0/14    # cloudfront edge fronting iam endpoints
+      ports:
+        - protocol: TCP
+          port: 443
+    # DNS pinned to in-cluster CoreDNS — never the EC2 metadata service.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

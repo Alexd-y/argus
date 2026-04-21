@@ -1,0 +1,44 @@
+tool_id: nuclei
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "nuclei"
+  - "-target"
+  - "{url}"
+  - "-severity"
+  - "info,low,medium,high,critical"
+  - "-jsonl"
+  - "-output"
+  - "{out_dir}/nuclei.jsonl"
+  - "-disable-update-check"
+  - "-no-color"
+  - "-rate-limit"
+  - "50"
+  - "-c"
+  - "10"
+  - "-stats"
+parse_strategy: nuclei_jsonl
+evidence_artifacts:
+  - "/out/nuclei.jsonl"
+cwe_hints:
+  - 16
+  - 200
+  - 1395
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-CONF-04"
+description: "ProjectDiscovery nuclei flagship template-driven vulnerability scanner — runs the full curated template set (info..critical) against {url}, JSONL output. Rate-limited (50 r/s, c=10) to keep the host budget bounded. Author: ProjectDiscovery (https://github.com/projectdiscovery/nuclei). Backlog/dev1_md §4.8. Templates ship in image; parser is the flagship NUCLEI_JSONL handler in src/sandbox/parsers/nuclei_parser.py shared with the §4.7 wrappers."

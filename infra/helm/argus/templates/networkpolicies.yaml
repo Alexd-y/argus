@@ -1,0 +1,305 @@
+{{- if .Values.networkPolicies.enabled }}
+{{/*
+ARGUS NetworkPolicies — default-deny baseline + per-component egress allowlists.
+
+Design notes
+============
+1. Default-deny baseline catches ANY pod that does not match a more specific
+   policy. This means every workload added to the namespace MUST be paired
+   with an explicit allow policy or it will be isolated. This is intentional.
+2. Egress to LLM providers is FQDN-annotated (cilium honours this; for vanilla
+   Calico/Cilium you need a CRD for FQDN allowlists — annotation is the
+   contract). For non-FQDN-aware CNIs, run an egress proxy (e.g. Squid,
+   Cloudflare Gateway) and replace these policies with a single egress to the
+   proxy.
+3. Sandbox profiles get one NetworkPolicy each; the egress block is generated
+   from `.Values.sandbox.profiles[*].egress`. The PodSelector targets pods
+   labelled `argus.dev/sandbox-profile=<name>`.
+4. cloudIam.enabled stitches in the per-cloud helper (cloud-aws / cloud-gcp /
+   cloud-azure) from `infra/k8s/networkpolicies/` if mounted as a separate
+   chart resource.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-default-deny
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-allow-dns
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-backend-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: frontend
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: mcp-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.port }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.metricsPort }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    {{- range .Values.networkPolicies.llmProviders }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: {{ .port }}
+      # FQDN: {{ .host }}  (CNI must enforce via FQDN policy or egress proxy)
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-celery-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.celery.metricsPort }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    {{- if .Values.sandbox.enabled }}
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: argus.dev/sandbox-profile
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 8443
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-mcp-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mcp-server
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.mcp.port }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.mcp.metricsPort }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    {{- range .Values.networkPolicies.llmProviders }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: {{ .port }}
+      # FQDN: {{ .host }}
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-frontend-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.frontend.port }}
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: backend
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.backend.port }}
+{{- if .Values.sandbox.enabled }}
+{{- range $profile := .Values.sandbox.profiles }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" $ }}-sandbox-{{ $profile.name }}
+  labels:
+    {{- include "argus.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: sandbox
+    argus.dev/sandbox-profile: {{ $profile.name | quote }}
+spec:
+  podSelector:
+    matchLabels:
+      argus.dev/sandbox-profile: {{ $profile.name | quote }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- range $egress := $profile.egress }}
+    - to:
+        - ipBlock:
+            cidr: {{ $egress.host }}
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: {{ $egress.port }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

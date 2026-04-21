@@ -56,6 +56,7 @@ class TestLoginEndpoint:
             "test-secret-key-min-32-chars-long-for-hs256",
         )
         monkeypatch.setattr("src.core.config.settings.debug", True)
+        monkeypatch.setattr("src.core.config.settings.dev_login_bypass_enabled", True)
         _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
@@ -106,6 +107,7 @@ class TestLoginEndpoint:
         assert response.status_code == 422
 
 
+@pytest.mark.no_auth_override
 class TestProtectedRoute:
     """GET /api/v1/auth/me — requires auth."""
 
@@ -132,6 +134,7 @@ class TestProtectedRoute:
             "test-secret-key-min-32-chars-long-for-hs256",
         )
         monkeypatch.setattr("src.core.config.settings.debug", True)
+        monkeypatch.setattr("src.core.config.settings.dev_login_bypass_enabled", True)
         _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
@@ -161,7 +164,7 @@ class TestProtectedRoute:
             "src.core.config.settings.jwt_secret",
             "test-secret-key-min-32-chars-long-for-hs256",
         )
-        monkeypatch.setenv("ARGUS_API_KEYS", "test-argus-api-key-one")
+        monkeypatch.setattr("src.core.config.settings.api_keys", ["test-argus-api-key-one"])
         from main import app
         from starlette.testclient import TestClient
         test_client = TestClient(app)

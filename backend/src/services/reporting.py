@@ -15,7 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.llm_config import has_any_llm_key
-from src.data_sources.hibp_pwned_passwords import validate_hibp_pwned_password_summary_light
+from src.data_sources.hibp_pwned_passwords import (
+    validate_hibp_pwned_password_summary_light,
+)
 from src.orchestration.prompt_registry import (
     EXPLOITATION,
     REPORT_AI_SECTION_ATTACK_SCENARIOS,
@@ -68,7 +70,6 @@ from src.reports.generators import (
     build_owasp_compliance_rows,
     build_report_data_from_scan_report,
 )
-from src.reports.i18n import get_translations
 from src.reports.valhalla_report_context import (
     ValhallaReportContext,
     derive_exploit_available_flag,
@@ -84,15 +85,14 @@ from src.storage.s3 import (
 
 logger = logging.getLogger(__name__)
 
-# HTML report (Jinja): human labels for raw artifact phase groups (RU)
 _SCAN_ARTIFACT_PHASE_LABELS: dict[str, str] = {
-    "recon": "Разведка",
-    "threat_modeling": "Моделирование угроз",
-    "vuln_analysis": "Анализ уязвимостей",
-    "exploitation": "Эксплуатация",
-    "post_exploitation": "Постэксплуатация",
-    "legacy_raw": "Raw (устаревший путь)",
-    "other": "Прочее",
+    "recon": "Reconnaissance",
+    "threat_modeling": "Threat Modeling",
+    "vuln_analysis": "Vulnerability Analysis",
+    "exploitation": "Exploitation",
+    "post_exploitation": "Post-Exploitation",
+    "legacy_raw": "Raw (legacy path)",
+    "other": "Other",
 }
 
 # Matches ``{timestamp}_{artifact_type}.{ext}`` from ``build_raw_phase_object_key`` / RawPhaseSink
@@ -115,12 +115,12 @@ _ACTIVE_WEB_SCAN_AI_KEYS_ORDERED: tuple[str, ...] = (
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
 )
 
-_ACTIVE_WEB_SCAN_AI_LABELS_RU: dict[str, str] = {
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "Описание уязвимостей (ИИ)",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "Шаги устранения (ИИ)",
-    REPORT_AI_SECTION_BUSINESS_RISK: "Бизнес-риски (ИИ)",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "Дорожная карта приоритетов (ИИ)",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "Рекомендации по усилению (ИИ)",
+_ACTIVE_WEB_SCAN_AI_LABELS: dict[str, str] = {
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "Vulnerability Description (AI)",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "Remediation Steps (AI)",
+    REPORT_AI_SECTION_BUSINESS_RISK: "Business Risks (AI)",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "Prioritization Roadmap (AI)",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "Hardening Recommendations (AI)",
 }
 
 # Safe, non-executable documentation string (no live XSS payload; placeholder only)
@@ -131,7 +131,7 @@ ACTIVE_WEB_SCAN_CURL_XSS_EXAMPLE = (
 
 _ACTIVE_WEB_SCAN_AI_SUMMARY_MAX_LEN = 720
 
-# OWASP-004: per-field cap for RU reference embedded in RPT-004 AI context (token/size bound)
+# OWASP-004: per-field cap for OWASP reference embedded in RPT-004 AI context (token/size bound)
 _OWASP_AI_REFERENCE_FIELD_MAX_LEN = 400
 _VALHALLA_AI_EXCERPT_MAX = 900
 _VALHALLA_AI_TECH_ROWS = 28
@@ -260,6 +260,25 @@ def build_scan_artifacts_section_context(
 
 REPORT_TIERS: frozenset[str] = frozenset({"midgard", "asgard", "valhalla"})
 
+TIER_METADATA: dict[str, dict[str, Any]] = {
+    "midgard": {
+        "label": "Midgard",
+        "focus": "summary",
+        "active_web_scan": False,
+    },
+    "asgard": {
+        "label": "Asgard",
+        "focus": "technical",
+        "active_web_scan": True,
+    },
+    "valhalla": {
+        "label": "Valhalla",
+        "focus": "leadership_technical",
+        "active_web_scan": True,
+    },
+}
+TIER_STUBS = TIER_METADATA  # deprecated alias
+
 
 def _json_or_str(obj: Any, max_len: int) -> str:
     try:
@@ -273,7 +292,7 @@ def _json_or_str(obj: Any, max_len: int) -> str:
 
 
 def valhalla_nmap_appendix_excerpt(phase_outputs: list[PhaseOutputRow]) -> str:
-    """Pick a bounded nmap-like excerpt from phase outputs for appendix Г."""
+    """Pick a bounded nmap-like excerpt from phase outputs for the appendix."""
     for row in phase_outputs:
         od = row.output_data
         if isinstance(od, dict):
@@ -321,10 +340,7 @@ def valhalla_timeline_appendix_rows(
     out: list[dict[str, Any]] = []
     for t in rows:
         ent = t.entry
-        if ent is not None:
-            snippet = _json_or_str(ent, 800)
-        else:
-            snippet = ""
+        snippet = _json_or_str(ent, 800) if ent is not None else ""
         out.append(
             {
                 "phase": t.phase or "",
@@ -399,14 +415,15 @@ def _xss_poc_narrative_for_report(poc: dict[str, Any], param: str | None) -> str
             return v[:4000]
     pe = _poc_nonempty_str(poc.get("payload_entered")) or _poc_nonempty_str(poc.get("payload"))
     rc = _poc_nonempty_str(poc.get("reflection_context")) or _poc_nonempty_str(poc.get("context"))
-    p_label = param.strip() if isinstance(param, str) and param.strip() else "параметр"
+    p_label = param.strip() if isinstance(param, str) and param.strip() else "parameter"
     if pe and rc:
         return (
-            f"В параметре «{p_label}» передана полезная нагрузка; отражение зафиксировано в контексте «{rc}». "
-            "Способ подтверждения указан в поле Verification line."
+            f"A payload was injected via the \"{p_label}\" parameter; "
+            f"reflection detected in \"{rc}\" context. "
+            "Confirmation method is specified in the Verification line field."
         )
     if pe and isinstance(param, str) and param.strip():
-        return f"Полезная нагрузка была передана через параметр «{param.strip()}»."
+        return f"Payload was delivered through the \"{param.strip()}\" parameter."
     return None
 
 
@@ -448,7 +465,7 @@ def _build_xss_poc_detail_for_jinja(poc: dict[str, Any], row: dict[str, Any]) ->
 
 
 def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
-    """Serializable finding rows for RPT-008 templates (autoescaped at render)."""
+    """Serializable finding rows for report templates (autoescaped at render)."""
     rows: list[dict[str, Any]] = []
     for f in data.findings:
         parsed_owasp = (
@@ -464,9 +481,7 @@ def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
             "owasp_category": parsed_owasp,
         }
         if parsed_owasp:
-            ru = (get_owasp_category_info(parsed_owasp).get("title_ru") or "").strip()
-            if ru:
-                row["owasp_title_ru"] = ru
+            row["owasp_title"] = OWASP_TOP10_2025_CATEGORY_TITLES.get(parsed_owasp, parsed_owasp)
         poc: dict[str, Any] = {}
         if isinstance(f.proof_of_concept, dict):
             poc = dict(f.proof_of_concept)
@@ -640,21 +655,27 @@ def _owasp_summary_for_ai_payload(findings: list[FindingRow]) -> dict[str, Any] 
     }
 
 
-def _compact_owasp_ru_fields(info: dict[str, Any]) -> dict[str, str]:
-    """Pick RU reference keys and truncate for LLM context (OWASP-004)."""
+def _compact_owasp_fields(info: dict[str, Any]) -> dict[str, str]:
+    """Pick OWASP reference keys and truncate for LLM context (OWASP-004).
+
+    Supports both EN (``title``) and legacy RU (``title_ru``) layouts.
+    """
     out: dict[str, str] = {}
-    for key in ("title_ru", "example_attack", "how_to_find", "how_to_fix"):
+    title = info.get("title") or info.get("title_ru")
+    if isinstance(title, str) and title.strip():
+        out["title"] = _truncate_report_text(title, _OWASP_AI_REFERENCE_FIELD_MAX_LEN)
+    for key in ("example_attack", "how_to_find", "how_to_fix"):
         raw = info.get(key)
         if isinstance(raw, str) and raw.strip():
             out[key] = _truncate_report_text(raw, _OWASP_AI_REFERENCE_FIELD_MAX_LEN)
     return out
 
 
-def _owasp_category_reference_ru_for_ai(
+def _owasp_category_reference_for_ai(
     owasp_summary: dict[str, Any] | None,
 ) -> dict[str, dict[str, str]] | None:
     """
-    When the scan has OWASP-classified findings (``owasp_summary`` present), attach compact RU text
+    When the scan has OWASP-classified findings (``owasp_summary`` present), attach compact text
     for each A01–A10 category that appears in the scan via findings (``counts[cid] > 0``) or that
     is listed in ``gap_categories`` (zero mapped findings but category row present in Top-10 coverage).
     Omits categories missing from the loaded JSON.
@@ -673,7 +694,7 @@ def _owasp_category_reference_ru_for_ai(
         info = get_owasp_category_info(cid)
         if not info:
             continue
-        compact = _compact_owasp_ru_fields(info)
+        compact = _compact_owasp_fields(info)
         if compact:
             ref[cid] = compact
     return ref or None
@@ -718,7 +739,8 @@ def _asset_from_poc_or_url(poc: dict[str, Any], url: str | None) -> str | None:
             p = urlparse(url)
             if p.netloc:
                 return p.netloc[:512]
-        except Exception:
+        except Exception as exc:
+            logger.debug("asset_url_parse_failed", extra={"url": url}, exc_info=exc)
             return None
     return None
 
@@ -865,7 +887,7 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             "allow_rule_count": vc.robots_sitemap_merged.allow_rule_count,
             "sitemap_url_count": vc.robots_sitemap_merged.sitemap_url_count,
             "sensitive_path_hints": (vc.robots_sitemap_merged.sensitive_path_hints or [])[:16],
-            "notes_ru": _truncate_report_text(vc.robots_sitemap_merged.notes_ru or "", 400),
+            "notes": _truncate_report_text(vc.robots_sitemap_merged.notes or "", 400),
         },
         "dependency_sample": [
             {
@@ -983,9 +1005,9 @@ def _owasp_compliance_table_for_ai(data: ScanReportData) -> list[dict[str, Any]]
         out.append(
             {
                 "category_id": r.get("category_id"),
-                "title_ru": _truncate_report_text(str(r.get("title_ru") or ""), 200),
+                "title": _truncate_report_text(str(r.get("title") or ""), 200),
                 "has_findings": bool(r.get("has_findings")),
-                "findings_present_ru": r.get("findings_present_ru"),
+                "findings_present": r.get("findings_present"),
                 "count": int(r.get("count") or 0),
                 "row_class": r.get("row_class"),
             }
@@ -1043,7 +1065,7 @@ def _active_web_scan_ai_summary_rows(
             continue
         if raw.strip() in skip_texts:
             continue
-        label = _ACTIVE_WEB_SCAN_AI_LABELS_RU.get(key, key)
+        label = _ACTIVE_WEB_SCAN_AI_LABELS.get(key, key)
         rows.append(
             {
                 "section_key": key,
@@ -1060,7 +1082,7 @@ def build_active_web_scan_section_context(
     ai_section_texts: dict[str, str],
 ) -> dict[str, Any]:
     """
-    OWASP2-007 — «Активное веб-сканирование»: инструменты по артефактам, ссылка на блок артефактов, краткий ИИ-контекст.
+    OWASP2-007 — Active web scanning: tools from artifacts, artifact block reference, brief AI context.
     """
     tier_norm = normalize_report_tier(tier)
     tools_run = _collect_active_web_scan_tool_names(scan_artifacts)
@@ -1215,7 +1237,7 @@ class ReportGenerator:
         payload: dict[str, Any] = {
             "scan_id": data.scan_id,
             "tenant_id": data.tenant_id,
-            "report_language": "en",
+            "report_language": settings.report_language,
             "finding_count": len(data.findings),
             "severity_counts": severity_counts,
             "executive_severity_totals": executive_severity_totals,
@@ -1235,9 +1257,9 @@ class ReportGenerator:
         owasp_summary = _owasp_summary_for_ai_payload(data.findings)
         if owasp_summary is not None:
             payload["owasp_summary"] = owasp_summary
-        owasp_ref = _owasp_category_reference_ru_for_ai(owasp_summary)
+        owasp_ref = _owasp_category_reference_for_ai(owasp_summary)
         if owasp_ref is not None:
-            payload["owasp_category_reference_ru"] = owasp_ref
+            payload["owasp_category_reference"] = owasp_ref
         payload["owasp_compliance_table"] = _owasp_compliance_table_for_ai(data)
         if tier_norm == "valhalla":
             compact_vc = _compact_valhalla_context_for_ai(data.valhalla_context)
@@ -1248,7 +1270,7 @@ class ReportGenerator:
             payload["security_headers_analysis"] = compact_vc.get("security_headers")
             payload["outdated_components_table"] = compact_vc.get("outdated_components")
             payload["robots_sitemap_analysis"] = compact_vc.get("robots_sitemap_analysis")
-            payload["valhalla_fallback_messages_ru"] = {
+            payload["valhalla_fallback_messages"] = {
                 "tech_stack": vc.tech_stack_fallback_message,
                 "ssl_tls": vc.ssl_tls_fallback_message,
                 "security_headers": vc.security_headers_fallback_message,
@@ -1422,7 +1444,6 @@ class ReportGenerator:
     ) -> dict[str, Any]:
         """
         Pure Jinja context: scan/report snapshots, per-tier slot maps, and shared ``ai_sections``.
-        RPT-008 can extend ``jinja.*.slots`` or add partials under ``tier_stubs``.
 
         Applies ``AITextDeduplicator`` as a safety net before fallback filling, ensuring
         dedup runs regardless of how AI texts were produced (sync or Celery).
@@ -1470,10 +1491,10 @@ class ReportGenerator:
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
+            "tier_stubs": TIER_METADATA,
             "tenant_id": data.tenant_id,
             "scan_id": data.scan_id,
-            "i18n": get_translations(),
-            "report_language": "en",
+            "report_language": settings.report_language,
             "severity_counts": severity_counts_ctx,
             "scan": data.scan.model_dump(mode="json") if data.scan else None,
             "report": data.report.model_dump(mode="json") if data.report else None,
@@ -1502,15 +1523,6 @@ class ReportGenerator:
             "hibp_pwned_password_summary": data.hibp_pwned_password_summary,
             "ai_sections": dict(texts),
             "jinja": jinja_tiers,
-            "tier_stubs": {
-                "midgard": {"label": "Midgard", "focus": "summary", "active_web_scan": False},
-                "asgard": {"label": "Asgard", "focus": "technical", "active_web_scan": True},
-                "valhalla": {
-                    "label": "Valhalla",
-                    "focus": "leadership_technical",
-                    "active_web_scan": True,
-                },
-            },
         }
         if extra_merged:
             ctx.update(extra_merged)
@@ -1523,6 +1535,21 @@ class ReportGenerator:
         )
         if tier_norm == "valhalla":
             validate_hibp_pwned_password_summary_light(data.hibp_pwned_password_summary)
+
+        _KNOWN_RU_FIELDS = frozenset({
+            "owasp_category_reference",
+        })
+        report_language = ctx.get("report_language", "en")
+        if report_language == "en":
+            for key, val in ctx.items():
+                if key in _KNOWN_RU_FIELDS:
+                    continue
+                if isinstance(val, str) and any("\u0400" <= c <= "\u04FF" for c in val):
+                    logger.warning(
+                        "cyrillic_text_in_en_report_context",
+                        extra={"event": "cyrillic_text_in_en_report_context", "key": key},
+                    )
+
         return ctx
 
     async def build_context(

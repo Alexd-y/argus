@@ -35,6 +35,10 @@
 # PATH sanity (example):
 #   which nmap nuclei ffuf sqlmap searchsploit testssl.sh dalfox xsstrike
 
+# Pin: Kali rolling image — verify digest periodically with:
+#   docker pull kalilinux/kali-rolling && docker inspect --format='{{.RepoDigests}}' kalilinux/kali-rolling
+# For reproducible production builds, replace :latest with a specific digest:
+#   FROM kalilinux/kali-rolling@sha256:<digest>
 FROM kalilinux/kali-rolling:latest
 
 ARG SANDBOX_PROFILE=standard

@@ -1,0 +1,2235 @@
+components:
+  schemas:
+    ApprovalDecideInput:
+      additionalProperties: false
+      description: "``approvals.decide`` arguments \u2014 operator records a decision.\n\nThe MCP server NEVER signs approvals\
+        \ on the operator's behalf. The\n``signature_b64`` is computed externally by the operator UI from\n``ApprovalRequest.canonical_bytes()``\
+        \ and submitted here \u2014 the MCP\nlayer only verifies and persists the resulting decision."
+      properties:
+        decision:
+          $ref: '#/components/schemas/ApprovalDecisionAction'
+        justification:
+          anyOf:
+          - maxLength: 500
+            type: string
+          - type: 'null'
+          default: null
+          description: Operator note attached to the decision. Required when ``decision == deny`` or ``decision == revoke``.
+          title: Justification
+        public_key_id:
+          anyOf:
+          - maxLength: 16
+            minLength: 16
+            type: string
+          - type: 'null'
+          default: null
+          description: Operator's Ed25519 public key id (16-char hex).
+          title: Public Key Id
+        request_id:
+          maxLength: 64
+          minLength: 8
+          title: Request Id
+          type: string
+        signature_b64:
+          anyOf:
+          - maxLength: 128
+            minLength: 86
+            type: string
+          - type: 'null'
+          default: null
+          description: Required when ``decision == grant``. Ed25519 signature over ``ApprovalRequest.canonical_bytes`` produced
+            by the operator UI.
+          title: Signature B64
+      required:
+      - request_id
+      - decision
+      title: ApprovalDecideInput
+      type: object
+    ApprovalDecideResult:
+      additionalProperties: false
+      description: Result of ``approvals.decide``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        new_status:
+          maxLength: 16
+          title: New Status
+          type: string
+        request_id:
+          maxLength: 64
+          minLength: 8
+          title: Request Id
+          type: string
+      required:
+      - request_id
+      - new_status
+      title: ApprovalDecideResult
+      type: object
+    ApprovalDecisionAction:
+      description: Closed taxonomy of operator decisions surfaced via MCP.
+      enum:
+      - grant
+      - deny
+      - revoke
+      title: ApprovalDecisionAction
+      type: string
+    ApprovalListInput:
+      additionalProperties: false
+      description: "``approvals.list(tenant_id, status)`` arguments.\n\nNote\n----\nThe ``tenant_id`` argument is informational\
+        \ only \u2014 the MCP server always\nfilters by the *authenticated* tenant (extracted from the bearer token /\n``X-Tenant-ID``\
+        \ header). A mismatch raises\n:class:`src.mcp.exceptions.TenantMismatchError`."
+      properties:
+        pagination:
+          $ref: '#/components/schemas/PaginationInput'
+        status:
+          anyOf:
+          - maxLength: 16
+            type: string
+          - type: 'null'
+          default: null
+          description: One of ``pending``, ``granted``, ``denied``, ``revoked``, ``expired``.
+          title: Status
+        tenant_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          description: Optional caller-supplied tenant identifier (must match the authenticated tenant; otherwise a TenantMismatchError
+            is raised).
+          title: Tenant Id
+        tool_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 2
+            type: string
+          - type: 'null'
+          default: null
+          title: Tool Id
+      title: ApprovalListInput
+      type: object
+    ApprovalListResult:
+      additionalProperties: false
+      description: Result of ``approvals.list``.
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ApprovalSummary'
+          title: Items
+          type: array
+        total:
+          minimum: 0
+          title: Total
+          type: integer
+      required:
+      - total
+      title: ApprovalListResult
+      type: object
+    ApprovalSummary:
+      additionalProperties: false
+      description: Compact representation of an approval row for list views.
+      properties:
+        action:
+          maxLength: 16
+          title: Action
+          type: string
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        expires_at:
+          format: date-time
+          title: Expires At
+          type: string
+        request_id:
+          maxLength: 64
+          minLength: 8
+          title: Request Id
+          type: string
+        requires_dual_control:
+          default: false
+          title: Requires Dual Control
+          type: boolean
+        signatures_present:
+          maximum: 8
+          minimum: 0
+          title: Signatures Present
+          type: integer
+        status:
+          maxLength: 16
+          title: Status
+          type: string
+        target:
+          maxLength: 2048
+          minLength: 1
+          title: Target
+          type: string
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+      required:
+      - request_id
+      - tool_id
+      - target
+      - action
+      - status
+      - created_at
+      - expires_at
+      - signatures_present
+      title: ApprovalSummary
+      type: object
+    FindingDetail:
+      additionalProperties: false
+      description: "Full finding payload exposed via ``findings.get``.\n\nNotes\n-----\nThe ``proof_of_concept`` and ``evidence_refs``\
+        \ payloads are surfaced\n*only* after :class:`src.evidence.redaction` has scrubbed secrets \u2014 the\nMCP server\
+        \ never serves raw artifacts."
+      properties:
+        confidence:
+          default: likely
+          maxLength: 20
+          title: Confidence
+          type: string
+        created_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Created At
+        cvss:
+          anyOf:
+          - maximum: 10.0
+            minimum: 0.0
+            type: number
+          - type: 'null'
+          default: null
+          title: Cvss
+        cwe:
+          anyOf:
+          - maxLength: 20
+            type: string
+          - type: 'null'
+          default: null
+          title: Cwe
+        description:
+          anyOf:
+          - maxLength: 8000
+            type: string
+          - type: 'null'
+          default: null
+          title: Description
+        evidence_refs:
+          items:
+            type: string
+          maxItems: 64
+          title: Evidence Refs
+          type: array
+        evidence_type:
+          anyOf:
+          - maxLength: 40
+            type: string
+          - type: 'null'
+          default: null
+          title: Evidence Type
+        false_positive:
+          default: false
+          title: False Positive
+          type: boolean
+        false_positive_reason:
+          anyOf:
+          - maxLength: 500
+            type: string
+          - type: 'null'
+          default: null
+          title: False Positive Reason
+        finding_id:
+          maxLength: 64
+          minLength: 8
+          title: Finding Id
+          type: string
+        owasp_category:
+          anyOf:
+          - maxLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Owasp Category
+        proof_of_concept:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          default: null
+          title: Proof Of Concept
+        reproducible_steps:
+          anyOf:
+          - maxLength: 8000
+            type: string
+          - type: 'null'
+          default: null
+          title: Reproducible Steps
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        severity:
+          $ref: '#/components/schemas/Severity'
+        title:
+          maxLength: 500
+          minLength: 1
+          title: Title
+          type: string
+      required:
+      - finding_id
+      - scan_id
+      - severity
+      - title
+      title: FindingDetail
+      type: object
+    FindingFilter:
+      additionalProperties: false
+      description: Optional filters for ``findings.list``.
+      properties:
+        confidence:
+          anyOf:
+          - maxLength: 20
+            type: string
+          - type: 'null'
+          default: null
+          description: One of ``confirmed``, ``likely``, ``possible``, ``advisory``.
+          title: Confidence
+        cwe:
+          anyOf:
+          - maxLength: 20
+            type: string
+          - type: 'null'
+          default: null
+          description: Filter by CWE id (e.g. ``CWE-79``).
+          title: Cwe
+        include_false_positive:
+          default: false
+          title: Include False Positive
+          type: boolean
+        owasp_category:
+          anyOf:
+          - maxLength: 8
+            pattern: ^A(0[1-9]|10)$
+            type: string
+          - type: 'null'
+          default: null
+          description: "OWASP Top 10:2025 short id (``A01``\u2026``A10``)."
+          title: Owasp Category
+        severity:
+          anyOf:
+          - $ref: '#/components/schemas/Severity'
+          - type: 'null'
+          default: null
+      title: FindingFilter
+      type: object
+    FindingGetInput:
+      additionalProperties: false
+      description: '``findings.get(finding_id)`` arguments.'
+      properties:
+        finding_id:
+          maxLength: 64
+          minLength: 8
+          title: Finding Id
+          type: string
+      required:
+      - finding_id
+      title: FindingGetInput
+      type: object
+    FindingListInput:
+      additionalProperties: false
+      description: '``findings.list(scan_id, filter)`` arguments.'
+      properties:
+        filters:
+          $ref: '#/components/schemas/FindingFilter'
+        pagination:
+          $ref: '#/components/schemas/PaginationInput'
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+      required:
+      - scan_id
+      title: FindingListInput
+      type: object
+    FindingListResult:
+      additionalProperties: false
+      description: Result of ``findings.list``.
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/FindingSummary'
+          title: Items
+          type: array
+        next_offset:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          title: Next Offset
+        total:
+          minimum: 0
+          title: Total
+          type: integer
+      required:
+      - total
+      title: FindingListResult
+      type: object
+    FindingMarkFalsePositiveInput:
+      additionalProperties: false
+      description: '``findings.mark_false_positive(finding_id, reason)`` arguments.'
+      properties:
+        finding_id:
+          maxLength: 64
+          minLength: 8
+          title: Finding Id
+          type: string
+        reason:
+          description: Operator-provided justification (recorded in audit log).
+          maxLength: 500
+          minLength: 10
+          title: Reason
+          type: string
+      required:
+      - finding_id
+      - reason
+      title: FindingMarkFalsePositiveInput
+      type: object
+    FindingMarkResult:
+      additionalProperties: false
+      description: Result of ``findings.mark_false_positive``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        finding_id:
+          maxLength: 64
+          minLength: 8
+          title: Finding Id
+          type: string
+        status:
+          $ref: '#/components/schemas/ToolResultStatus'
+      required:
+      - finding_id
+      - status
+      title: FindingMarkResult
+      type: object
+    FindingSummary:
+      additionalProperties: false
+      description: Compact representation of a finding for list views.
+      properties:
+        confidence:
+          default: likely
+          maxLength: 20
+          title: Confidence
+          type: string
+        created_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Created At
+        cwe:
+          anyOf:
+          - maxLength: 20
+            type: string
+          - type: 'null'
+          default: null
+          title: Cwe
+        false_positive:
+          default: false
+          title: False Positive
+          type: boolean
+        finding_id:
+          maxLength: 64
+          minLength: 8
+          title: Finding Id
+          type: string
+        owasp_category:
+          anyOf:
+          - maxLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Owasp Category
+        severity:
+          $ref: '#/components/schemas/Severity'
+        title:
+          maxLength: 500
+          minLength: 1
+          title: Title
+          type: string
+      required:
+      - finding_id
+      - severity
+      - title
+      title: FindingSummary
+      type: object
+    PaginationInput:
+      additionalProperties: false
+      description: 'Common pagination parameters.
+
+
+        The MCP server enforces an explicit upper bound (``limit <= 200``) so a
+
+        client cannot accidentally drain the entire findings table in a single
+
+        call. Larger result sets must paginate.'
+      properties:
+        limit:
+          default: 50
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+        offset:
+          default: 0
+          maximum: 100000
+          minimum: 0
+          title: Offset
+          type: integer
+      title: PaginationInput
+      type: object
+    PolicyEvaluateInput:
+      additionalProperties: false
+      description: '``policy.evaluate(tool_id, target, risk_level)`` arguments.'
+      properties:
+        estimated_cost_cents:
+          default: 0
+          maximum: 10000
+          minimum: 0
+          title: Estimated Cost Cents
+          type: integer
+        payload_family:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Payload Family
+        risk_level:
+          $ref: '#/components/schemas/PolicyRiskLevel'
+          default: passive
+        target:
+          maxLength: 2048
+          minLength: 1
+          title: Target
+          type: string
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+      required:
+      - tool_id
+      - target
+      title: PolicyEvaluateInput
+      type: object
+    PolicyEvaluateResult:
+      additionalProperties: false
+      description: Result of ``policy.evaluate``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        failure_summary:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Failure Summary
+        outcome:
+          $ref: '#/components/schemas/PolicyEvaluationOutcome'
+        requires_approval:
+          default: false
+          title: Requires Approval
+          type: boolean
+        risk_level:
+          $ref: '#/components/schemas/PolicyRiskLevel'
+      required:
+      - outcome
+      - risk_level
+      title: PolicyEvaluateResult
+      type: object
+    PolicyEvaluationOutcome:
+      description: Public outcome of a ``policy.evaluate`` call.
+      enum:
+      - allowed
+      - denied
+      - requires_approval
+      title: PolicyEvaluationOutcome
+      type: string
+    PolicyRiskLevel:
+      description: 'Closed taxonomy of action risk levels.
+
+
+        Mirrors :class:`src.pipeline.contracts.tool_job.RiskLevel` so the MCP
+
+        tool can pass the value straight through to :class:`PolicyEngine`.'
+      enum:
+      - passive
+      - low
+      - medium
+      - high
+      - destructive
+      title: PolicyRiskLevel
+      type: string
+    RemediationAdvisorPromptArguments:
+      additionalProperties: false
+      description: Arguments for the `remediation.advisor` MCP prompt.
+      properties:
+        cwe:
+          type: string
+        evidence_summary:
+          type: string
+        severity:
+          type: string
+        stack:
+          type: string
+        title:
+          type: string
+      required:
+      - severity
+      - title
+      title: RemediationAdvisorPromptArguments
+      type: object
+    ReportDownloadInput:
+      additionalProperties: false
+      description: '``report.download(report_id)`` arguments.'
+      properties:
+        format:
+          $ref: '#/components/schemas/ReportFormat'
+          default: json
+        report_id:
+          maxLength: 64
+          minLength: 8
+          title: Report Id
+          type: string
+      required:
+      - report_id
+      title: ReportDownloadInput
+      type: object
+    ReportDownloadResult:
+      additionalProperties: false
+      description: 'Result of ``report.download``.
+
+
+        The MCP server NEVER streams raw bytes back over the JSON-RPC channel;
+
+        callers receive a *short-lived* presigned URL plus a SHA-256 of the
+
+        final artifact for tamper detection.'
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        expires_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Expires At
+        format:
+          $ref: '#/components/schemas/ReportFormat'
+        presigned_url:
+          anyOf:
+          - maxLength: 2048
+            type: string
+          - type: 'null'
+          default: null
+          title: Presigned Url
+        report_id:
+          maxLength: 64
+          minLength: 8
+          title: Report Id
+          type: string
+        sha256:
+          anyOf:
+          - maxLength: 64
+            minLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          description: SHA-256 hex of the report artifact bytes.
+          title: Sha256
+      required:
+      - report_id
+      - format
+      title: ReportDownloadResult
+      type: object
+    ReportFormat:
+      description: "Closed taxonomy of report output formats.\n\nThe MCP server intentionally does NOT expose ``valhalla_sections_csv``\n\
+        (a debug helper) \u2014 only the canonical formats listed here."
+      enum:
+      - html
+      - pdf
+      - json
+      - csv
+      - sarif
+      - junit
+      title: ReportFormat
+      type: string
+    ReportGenerateInput:
+      additionalProperties: false
+      description: '``report.generate(scan_id, tier, format)`` arguments.'
+      properties:
+        format:
+          $ref: '#/components/schemas/ReportFormat'
+          default: json
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        tier:
+          $ref: '#/components/schemas/ReportTier'
+          default: midgard
+      required:
+      - scan_id
+      title: ReportGenerateInput
+      type: object
+    ReportGenerateResult:
+      additionalProperties: false
+      description: Result of ``report.generate``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        format:
+          $ref: '#/components/schemas/ReportFormat'
+        queued:
+          default: true
+          title: Queued
+          type: boolean
+        report_id:
+          maxLength: 64
+          minLength: 8
+          title: Report Id
+          type: string
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        tier:
+          $ref: '#/components/schemas/ReportTier'
+      required:
+      - report_id
+      - scan_id
+      - tier
+      - format
+      title: ReportGenerateResult
+      type: object
+    ReportTier:
+      description: 'Closed taxonomy of report tiers exposed via MCP.
+
+
+        Mirrors the ARGUS Midgard / Asgard / Valhalla cascade. Tier selection
+
+        is gated by the tenant plan inside :class:`PolicyEngine`; the MCP layer
+
+        only echoes the requested tier and reports the policy decision.'
+      enum:
+      - midgard
+      - asgard
+      - valhalla
+      title: ReportTier
+      type: string
+    ScanCancelInput:
+      additionalProperties: false
+      description: '``scan.cancel(scan_id, reason)`` arguments.'
+      properties:
+        reason:
+          description: Operator-provided reason for cancellation (recorded in audit log).
+          maxLength: 200
+          minLength: 4
+          title: Reason
+          type: string
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+      required:
+      - scan_id
+      - reason
+      title: ScanCancelInput
+      type: object
+    ScanCancelResult:
+      additionalProperties: false
+      description: Result of ``scan.cancel``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        new_state:
+          $ref: '#/components/schemas/ScanStatus'
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        status:
+          $ref: '#/components/schemas/ToolResultStatus'
+      required:
+      - scan_id
+      - status
+      - new_state
+      title: ScanCancelResult
+      type: object
+    ScanCreateInput:
+      additionalProperties: false
+      description: '``scan.create(target, scope, profile)`` arguments.'
+      properties:
+        justification:
+          anyOf:
+          - maxLength: 512
+            type: string
+          - type: 'null'
+          default: null
+          description: Operator-provided justification; required for HIGH-risk profiles.
+          title: Justification
+        profile:
+          $ref: '#/components/schemas/ScanProfile'
+          default: standard
+        scope:
+          $ref: '#/components/schemas/ScanScopeInput'
+        target:
+          description: URL or domain to scan (must already be in the tenant's allow-list).
+          maxLength: 512
+          minLength: 1
+          pattern: ^(https?://)?[a-zA-Z0-9][a-zA-Z0-9.-]*(:[0-9]{1,5})?(/.*)?$
+          title: Target
+          type: string
+      required:
+      - target
+      title: ScanCreateInput
+      type: object
+    ScanCreateResult:
+      additionalProperties: false
+      description: Result of ``scan.create``.
+      properties:
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        profile:
+          $ref: '#/components/schemas/ScanProfile'
+        requires_approval:
+          default: false
+          title: Requires Approval
+          type: boolean
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        status:
+          $ref: '#/components/schemas/ScanStatus'
+        target:
+          maxLength: 512
+          minLength: 1
+          title: Target
+          type: string
+      required:
+      - scan_id
+      - status
+      - target
+      - profile
+      title: ScanCreateResult
+      type: object
+    ScanProfile:
+      description: 'Public-facing scan profile names exposed to MCP clients.
+
+
+        Maps 1-to-1 to ``Settings.scan_mode`` (``quick`` / ``standard`` / ``deep``)
+
+        so that ``scan.create`` arguments stay in sync with the rest of the
+
+        backend. The MCP client cannot pick a deeper profile than its tenant
+
+        plan allows; that gate sits in :class:`PolicyEngine`.'
+      enum:
+      - quick
+      - standard
+      - deep
+      title: ScanProfile
+      type: string
+    ScanScopeInput:
+      additionalProperties: false
+      description: "Optional scope hints supplied when creating a scan.\n\nThe MCP server's :class:`ScopeEngine` integration\
+        \ ignores anything the\nclient cannot explicitly substantiate \u2014 these hints only narrow the\nautomatic discovery\
+        \ (e.g. ``include_subdomains=False`` to avoid spending\nbudget on unrelated apex domains)."
+      properties:
+        follow_redirects:
+          default: true
+          title: Follow Redirects
+          type: boolean
+        include_subdomains:
+          default: false
+          title: Include Subdomains
+          type: boolean
+        max_depth:
+          default: 3
+          maximum: 10
+          minimum: 1
+          title: Max Depth
+          type: integer
+      title: ScanScopeInput
+      type: object
+    ScanStatus:
+      description: "Closed taxonomy of high-level scan lifecycle states.\n\nMirrors the ``scans.status`` column but is intentionally\
+        \ smaller: the\nMCP layer never exposes internal pipeline phases (``recon`` /\n``vuln_analysis`` / ``exploitation``)\
+        \ \u2014 those leak implementation\nstructure to the LLM."
+      enum:
+      - pending
+      - running
+      - completed
+      - failed
+      - cancelled
+      title: ScanStatus
+      type: string
+    ScanStatusInput:
+      additionalProperties: false
+      description: '``scan.status(scan_id)`` arguments.'
+      properties:
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+      required:
+      - scan_id
+      title: ScanStatusInput
+      type: object
+    ScanStatusResult:
+      additionalProperties: false
+      description: Result of ``scan.status``.
+      properties:
+        finding_counts:
+          additionalProperties:
+            type: integer
+          description: "Severity \u2192 count snapshot (e.g. {'critical': 2, 'high': 5})."
+          title: Finding Counts
+          type: object
+        finished_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Finished At
+        progress_percent:
+          maximum: 100
+          minimum: 0
+          title: Progress Percent
+          type: integer
+        scan_id:
+          maxLength: 64
+          minLength: 8
+          title: Scan Id
+          type: string
+        started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Started At
+        status:
+          $ref: '#/components/schemas/ScanStatus'
+        target:
+          maxLength: 512
+          minLength: 1
+          title: Target
+          type: string
+      required:
+      - scan_id
+      - status
+      - progress_percent
+      - target
+      title: ScanStatusResult
+      type: object
+    ScopeVerifyInput:
+      additionalProperties: false
+      description: '``scope.verify(target, tenant_id)`` arguments.'
+      properties:
+        port:
+          anyOf:
+          - maximum: 65535
+            minimum: 1
+            type: integer
+          - type: 'null'
+          default: null
+          title: Port
+        target:
+          maxLength: 2048
+          minLength: 1
+          title: Target
+          type: string
+        tenant_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          description: Optional caller-supplied tenant identifier (must match the authenticated tenant; otherwise a TenantMismatchError
+            is raised).
+          title: Tenant Id
+      required:
+      - target
+      title: ScopeVerifyInput
+      type: object
+    ScopeVerifyResult:
+      additionalProperties: false
+      description: Result of ``scope.verify``.
+      properties:
+        allowed:
+          title: Allowed
+          type: boolean
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        failure_summary:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Failure Summary
+        matched_rule_index:
+          anyOf:
+          - minimum: 0
+            type: integer
+          - type: 'null'
+          default: null
+          title: Matched Rule Index
+        target:
+          maxLength: 2048
+          minLength: 1
+          title: Target
+          type: string
+      required:
+      - target
+      - allowed
+      title: ScopeVerifyResult
+      type: object
+    Severity:
+      description: Closed taxonomy of severity values exposed to MCP clients.
+      enum:
+      - critical
+      - high
+      - medium
+      - low
+      - info
+      title: Severity
+      type: string
+    SeverityNormalizerPromptArguments:
+      additionalProperties: false
+      description: Arguments for the `severity.normalizer` MCP prompt.
+      properties:
+        advisory_text:
+          type: string
+        impact_hint:
+          type: string
+      required:
+      - advisory_text
+      title: SeverityNormalizerPromptArguments
+      type: object
+    ToolCatalogEntry:
+      additionalProperties: false
+      description: "One catalog row exposed via MCP.\n\nThe entry intentionally omits ``command_template``, ``image``, and\
+        \ other\nsandbox-internal fields \u2014 the LLM never needs them to reason about\ncapabilities, and they would leak\
+        \ the templating contract to a\npotentially-untrusted client."
+      properties:
+        category:
+          maxLength: 64
+          minLength: 2
+          title: Category
+          type: string
+        cwe_hints:
+          items:
+            type: integer
+          maxItems: 32
+          title: Cwe Hints
+          type: array
+        description:
+          default: ''
+          maxLength: 2048
+          title: Description
+          type: string
+        phase:
+          maxLength: 64
+          minLength: 2
+          title: Phase
+          type: string
+        requires_approval:
+          title: Requires Approval
+          type: boolean
+        risk_level:
+          $ref: '#/components/schemas/ToolRiskLevel'
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+      required:
+      - tool_id
+      - category
+      - phase
+      - risk_level
+      - requires_approval
+      title: ToolCatalogEntry
+      type: object
+    ToolCatalogListInput:
+      additionalProperties: false
+      description: '``tool.catalog.list(filter)`` arguments.'
+      properties:
+        category:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          description: Filter by tool category (e.g. ``web_va``, ``recon_passive``).
+          title: Category
+        pagination:
+          $ref: '#/components/schemas/PaginationInput'
+        requires_approval:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          default: null
+          title: Requires Approval
+        risk_level:
+          anyOf:
+          - $ref: '#/components/schemas/ToolRiskLevel'
+          - type: 'null'
+          default: null
+      title: ToolCatalogListInput
+      type: object
+    ToolCatalogListResult:
+      additionalProperties: false
+      description: Result of ``tool.catalog.list``.
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/ToolCatalogEntry'
+          title: Items
+          type: array
+        total:
+          minimum: 0
+          title: Total
+          type: integer
+      required:
+      - total
+      title: ToolCatalogListResult
+      type: object
+    ToolResultStatus:
+      description: 'Closed taxonomy for tool result status flags.
+
+
+        Used by tools that return a small acknowledgement payload (e.g.
+
+        ``scan.cancel``, ``findings.mark_false_positive``). Avoid free-form
+
+        strings so callers can switch on the value without a string-compare.'
+      enum:
+      - ok
+      - success
+      - unchanged
+      - noop
+      - queued
+      - denied
+      title: ToolResultStatus
+      type: string
+    ToolRiskLevel:
+      description: Mirrors :class:`src.pipeline.contracts.tool_job.RiskLevel` for MCP.
+      enum:
+      - passive
+      - low
+      - medium
+      - high
+      - destructive
+      title: ToolRiskLevel
+      type: string
+    ToolRunStatus:
+      description: Closed taxonomy of tool-run lifecycle states.
+      enum:
+      - pending
+      - queued
+      - running
+      - completed
+      - failed
+      - cancelled
+      - approval_pending
+      title: ToolRunStatus
+      type: string
+    ToolRunStatusInput:
+      additionalProperties: false
+      description: '``tool.run.status(tool_run_id)`` arguments.'
+      properties:
+        tool_run_id:
+          maxLength: 64
+          minLength: 8
+          title: Tool Run Id
+          type: string
+      required:
+      - tool_run_id
+      title: ToolRunStatusInput
+      type: object
+    ToolRunStatusResult:
+      additionalProperties: false
+      description: Result of ``tool.run.status``.
+      properties:
+        approval_request_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Approval Request Id
+        finding_count:
+          default: 0
+          minimum: 0
+          title: Finding Count
+          type: integer
+        finished_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Finished At
+        started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          default: null
+          title: Started At
+        status:
+          $ref: '#/components/schemas/ToolRunStatus'
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+        tool_run_id:
+          maxLength: 64
+          minLength: 8
+          title: Tool Run Id
+          type: string
+      required:
+      - tool_run_id
+      - tool_id
+      - status
+      title: ToolRunStatusResult
+      type: object
+    ToolRunTriggerInput:
+      additionalProperties: false
+      description: '``tool.run.trigger(tool_id, target, params)`` arguments.'
+      properties:
+        justification:
+          anyOf:
+          - maxLength: 512
+            type: string
+          - type: 'null'
+          default: null
+          description: Required when the resolved tool has ``risk_level >= high``.
+          title: Justification
+        params:
+          additionalProperties:
+            type: string
+          description: "Whitelisted argv overrides \u2014 keys must match the tool's allowed placeholder set (see src.sandbox.templating.ALLOWED_PLACEHOLDERS)."
+          title: Params
+          type: object
+        scan_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Scan Id
+        target:
+          maxLength: 2048
+          minLength: 1
+          title: Target
+          type: string
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+      required:
+      - tool_id
+      - target
+      title: ToolRunTriggerInput
+      type: object
+    ToolRunTriggerResult:
+      additionalProperties: false
+      description: 'Result of ``tool.run.trigger``.
+
+
+        For HIGH / DESTRUCTIVE tools the MCP server NEVER kicks off the actual
+
+        run; instead it records an :class:`ApprovalRequest`, logs an audit
+
+        event, and returns ``status=approval_pending`` with the request id so
+
+        an operator can sign it.'
+      properties:
+        approval_request_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Approval Request Id
+        audit_event_id:
+          anyOf:
+          - maxLength: 64
+            type: string
+          - type: 'null'
+          default: null
+          title: Audit Event Id
+        requires_approval:
+          default: false
+          title: Requires Approval
+          type: boolean
+        risk_level:
+          $ref: '#/components/schemas/ToolRiskLevel'
+        status:
+          $ref: '#/components/schemas/ToolRunStatus'
+        tool_id:
+          maxLength: 64
+          minLength: 2
+          title: Tool Id
+          type: string
+        tool_run_id:
+          anyOf:
+          - maxLength: 64
+            minLength: 8
+            type: string
+          - type: 'null'
+          default: null
+          title: Tool Run Id
+      required:
+      - tool_id
+      - status
+      - risk_level
+      title: ToolRunTriggerResult
+      type: object
+    VulnerabilityExplainerPromptArguments:
+      additionalProperties: false
+      description: Arguments for the `vulnerability.explainer` MCP prompt.
+      properties:
+        cwe:
+          type: string
+        description:
+          type: string
+        owasp_category:
+          type: string
+        severity:
+          type: string
+        title:
+          type: string
+      required:
+      - severity
+      - title
+      title: VulnerabilityExplainerPromptArguments
+      type: object
+    approvals_decideArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ApprovalDecideInput'
+      required:
+      - payload
+      title: approvals_decideArguments
+      type: object
+    approvals_listArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ApprovalListInput'
+      required:
+      - payload
+      title: approvals_listArguments
+      type: object
+    findings_getArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/FindingGetInput'
+      required:
+      - payload
+      title: findings_getArguments
+      type: object
+    findings_listArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/FindingListInput'
+      required:
+      - payload
+      title: findings_listArguments
+      type: object
+    findings_mark_false_positiveArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/FindingMarkFalsePositiveInput'
+      required:
+      - payload
+      title: findings_mark_false_positiveArguments
+      type: object
+    policy_evaluateArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/PolicyEvaluateInput'
+      required:
+      - payload
+      title: policy_evaluateArguments
+      type: object
+    report_downloadArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ReportDownloadInput'
+      required:
+      - payload
+      title: report_downloadArguments
+      type: object
+    report_generateArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ReportGenerateInput'
+      required:
+      - payload
+      title: report_generateArguments
+      type: object
+    scan_cancelArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ScanCancelInput'
+      required:
+      - payload
+      title: scan_cancelArguments
+      type: object
+    scan_createArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ScanCreateInput'
+      required:
+      - payload
+      title: scan_createArguments
+      type: object
+    scan_statusArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ScanStatusInput'
+      required:
+      - payload
+      title: scan_statusArguments
+      type: object
+    scope_verifyArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ScopeVerifyInput'
+      required:
+      - payload
+      title: scope_verifyArguments
+      type: object
+    tool_catalog_listArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ToolCatalogListInput'
+      required:
+      - payload
+      title: tool_catalog_listArguments
+      type: object
+    tool_run_statusArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ToolRunStatusInput'
+      required:
+      - payload
+      title: tool_run_statusArguments
+      type: object
+    tool_run_triggerArguments:
+      properties:
+        payload:
+          $ref: '#/components/schemas/ToolRunTriggerInput'
+      required:
+      - payload
+      title: tool_run_triggerArguments
+      type: object
+  securitySchemes:
+    apiKey:
+      description: API key from ARGUS_API_KEYS or ADMIN_API_KEY.
+      in: header
+      name: X-API-Key
+      type: apiKey
+    bearer:
+      bearerFormat: JWT
+      description: Static token, JWT access token, or HMAC-issued bearer (see backend/src/mcp/auth.py).
+      scheme: bearer
+      type: http
+info:
+  contact:
+    name: ARGUS Engineering
+    url: https://github.com/argus/argus
+  description: "Model Context Protocol surface for ARGUS \u2014 generated from FastMCP Pydantic schemas; do not edit by hand.\
+    \ Regenerate via `python -m scripts.export_mcp_openapi --out ../docs/mcp-server-openapi.yaml`."
+  license:
+    name: Proprietary
+  title: ARGUS MCP Server
+  version: 0.4.0
+openapi: 3.1.0
+paths:
+  /prompts/remediation.advisor:
+    post:
+      description: 'Generates step-by-step remediation guidance for a finding. Inputs: title, severity, stack hint (optional),
+        evidence summary.'
+      operationId: render_remediation_advisor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemediationAdvisorPromptArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Rendered prompt as a list of MCP messages.
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+      summary: Propose safe-by-default remediation steps for a finding
+      tags:
+      - mcp-prompt
+  /prompts/severity.normalizer:
+    post:
+      description: Maps an unstructured advisory to ARGUS-canonical severity, CVSS-3.1 vector, and OWASP 2025 Top-10 category.
+      operationId: render_severity_normalizer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeverityNormalizerPromptArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Rendered prompt as a list of MCP messages.
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+      summary: Normalize advisory severity to CVSS-3.1 + OWASP Top-10
+      tags:
+      - mcp-prompt
+  /prompts/vulnerability.explainer:
+    post:
+      description: 'Produce a stakeholder-friendly explanation of a single finding. Inputs: title, severity, optional CWE
+        / OWASP / description.'
+      operationId: render_vulnerability_explainer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VulnerabilityExplainerPromptArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Rendered prompt as a list of MCP messages.
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+      summary: Explain a finding to a non-security audience
+      tags:
+      - mcp-prompt
+  /resources/approvals/pending:
+    get:
+      description: Tenant-scoped pending approval requests (capped at 100). Operators should poll this resource and submit
+        decisions via approvals.decide.
+      operationId: read_argus_approvals_pending
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: OK
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+      summary: Pending approval queue
+      tags:
+      - mcp-resource
+  /resources/catalog/tools:
+    get:
+      description: Snapshot of the signed tool catalog (capped at 200 entries). Sandbox-internal fields (image, command_template,
+        etc.) are stripped.
+      operationId: read_argus_catalog_tools
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: OK
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+      summary: ARGUS signed tool catalog
+      tags:
+      - mcp-resource
+  /resources/findings/{scan_id}:
+    get:
+      description: Paginated findings for the given scan (tenant-scoped; capped at 200 entries).
+      operationId: read_argus_findings_scan
+      parameters:
+      - in: path
+        name: scan_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: OK
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+      summary: ARGUS findings for a scan
+      tags:
+      - mcp-resource
+  /resources/reports/{report_id}:
+    get:
+      description: Tenant-scoped report metadata and short-lived presigned URL. Defaults to JSON format.
+      operationId: read_argus_reports_report
+      parameters:
+      - in: path
+        name: report_id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: OK
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+      summary: ARGUS report metadata + presigned URL
+      tags:
+      - mcp-resource
+  /rpc/approvals.decide:
+    post:
+      description: 'Record an operator decision (grant / deny / revoke) on an approval request. The MCP server verifies signatures
+        but never produces them: GRANT decisions require a pre-computed Ed25519 signature.'
+      operationId: call_approvals_decide
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/approvals_decideArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalDecideResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: approvals.decide
+      tags:
+      - mcp-tool
+  /rpc/approvals.list:
+    post:
+      description: List approval requests visible to the authenticated tenant. Supports filtering by status (pending/granted/denied/revoked/expired)
+        and tool_id.
+      operationId: call_approvals_list
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/approvals_listArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalListResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: approvals.list
+      tags:
+      - mcp-tool
+  /rpc/findings.get:
+    post:
+      description: Return a single finding (with redacted evidence and proof-of-concept) owned by the authenticated tenant.
+      operationId: call_findings_get
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/findings_getArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingDetail'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: findings.get
+      tags:
+      - mcp-tool
+  /rpc/findings.list:
+    post:
+      description: List findings for a scan owned by the authenticated tenant. Supports filtering by severity, CWE, OWASP
+        category, and confidence; returns paginated summaries.
+      operationId: call_findings_list
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/findings_listArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingListResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: findings.list
+      tags:
+      - mcp-tool
+  /rpc/findings.mark_false_positive:
+    post:
+      description: "Mark a finding as a false positive (with operator justification). Idempotent \u2014 returning ``unchanged``\
+        \ when already flagged."
+      operationId: call_findings_mark_false_positive
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/findings_mark_false_positiveArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FindingMarkResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: findings.mark_false_positive
+      tags:
+      - mcp-tool
+  /rpc/policy.evaluate:
+    post:
+      description: Run the PolicyEngine against a hypothetical action and return one of allowed / requires_approval / denied.
+        Used by the LLM to pre-flight a tool call before invoking ``tool.run.trigger``.
+      operationId: call_policy_evaluate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/policy_evaluateArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyEvaluateResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: policy.evaluate
+      tags:
+      - mcp-tool
+  /rpc/report.download:
+    post:
+      description: Return a short-lived presigned URL and SHA-256 for a report owned by the authenticated tenant. The MCP
+        server NEVER streams artifact bytes in the JSON-RPC response.
+      operationId: call_report_download
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/report_downloadArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportDownloadResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: report.download
+      tags:
+      - mcp-tool
+  /rpc/report.generate:
+    post:
+      description: "Queue a report (Midgard / Asgard / Valhalla cascade) for a scan owned by the authenticated tenant. The\
+        \ MCP server only enqueues the generation job \u2014 poll ``report.download`` for the artifact."
+      operationId: call_report_generate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/report_generateArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportGenerateResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: report.generate
+      tags:
+      - mcp-tool
+  /rpc/scan.cancel:
+    post:
+      description: Cancel an in-progress scan owned by the authenticated tenant. Requires an operator-supplied reason that
+        is recorded in the audit log.
+      operationId: call_scan_cancel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/scan_cancelArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanCancelResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: scan.cancel
+      tags:
+      - mcp-tool
+  /rpc/scan.create:
+    post:
+      description: Enqueue a new pentest scan for the authenticated tenant. Returns the new scan_id and high-level lifecycle
+        state. DEEP profile requires a justification.
+      operationId: call_scan_create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/scan_createArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanCreateResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: scan.create
+      tags:
+      - mcp-tool
+  /rpc/scan.status:
+    post:
+      description: Return the current status, progress, and severity counts for a scan owned by the authenticated tenant.
+      operationId: call_scan_status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/scan_statusArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStatusResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: scan.status
+      tags:
+      - mcp-tool
+  /rpc/scope.verify:
+    post:
+      description: Check whether a given target is in the authenticated tenant's customer scope. Returns the raw ScopeEngine
+        decision plus a closed-taxonomy failure summary.
+      operationId: call_scope_verify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/scope_verifyArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopeVerifyResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: scope.verify
+      tags:
+      - mcp-tool
+  /rpc/tool.catalog.list:
+    post:
+      description: List tools from the signed catalog, optionally filtered by category, risk level, or approval requirement.
+        The catalog is loaded from the process-wide signed registry (sandbox-internal fields are stripped).
+      operationId: call_tool_catalog_list
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tool_catalog_listArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCatalogListResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: tool.catalog.list
+      tags:
+      - mcp-tool
+  /rpc/tool.run.status:
+    post:
+      description: Return the lifecycle state of an ad-hoc tool run owned by the authenticated tenant.
+      operationId: call_tool_run_status
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tool_run_statusArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolRunStatusResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: tool.run.status
+      tags:
+      - mcp-tool
+  /rpc/tool.run.trigger:
+    post:
+      description: "Trigger an ad-hoc tool run for the authenticated tenant. HIGH or DESTRUCTIVE risk tools are NEVER executed\
+        \ inline \u2014 instead they create an approval request and return ``status=approval_pending``."
+      operationId: call_tool_run_trigger
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/tool_run_triggerArguments'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolRunTriggerResult'
+          description: "OK \u2014 tool call accepted and executed."
+        '400':
+          description: "Invalid arguments \u2014 validation error."
+        '401':
+          description: Unauthorized (missing or invalid bearer / API key).
+        '403':
+          description: "Forbidden \u2014 tenant mismatch, scope violation, or policy denial."
+        '404':
+          description: Resource not found (anti-enumeration response).
+        '422':
+          description: "Invalid arguments \u2014 validation error."
+        '429':
+          description: Rate limit exceeded.
+        '500':
+          description: Internal MCP error (server-side stack trace redacted).
+      summary: tool.run.trigger
+      tags:
+      - mcp-tool
+security:
+- bearer: []
+- apiKey: []
+servers:
+- description: Production (streamable-http transport)
+  url: https://argus.example.com/mcp
+- description: Local development (stdio + streamable-http)
+  url: http://localhost:8765/mcp
+tags:
+- description: MCP tool calls (JSON-RPC over POST).
+  name: mcp-tool
+- description: MCP resources (read-only views).
+  name: mcp-resource
+- description: MCP prompt templates.
+  name: mcp-prompt

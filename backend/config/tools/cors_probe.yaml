@@ -1,0 +1,32 @@
+tool_id: cors_probe
+version: "1.0.0"
+category: browser
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "cors-probe --url {url} --output {out_dir}/cors.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/cors.json"
+cwe_hints:
+  - 942
+  - 346
+  - 200
+owasp_wstg:
+  - "WSTG-CLNT-07"
+  - "WSTG-ATHN-04"
+description: "CORS misconfiguration probe — fires a curated Origin-header matrix at {url} (null, attacker.tld, sub.attacker.tld, evil.{host}) and observes Access-Control-Allow-Origin / Access-Control-Allow-Credentials reflections. Categorises the response into reflected / wildcard-with-creds / null-origin / pre-flight-bypass buckets. No actual cross-origin call is performed — pure header probe. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019."

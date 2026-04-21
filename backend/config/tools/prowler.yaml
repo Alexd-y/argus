@@ -1,0 +1,40 @@
+tool_id: prowler
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "prowler"
+  - "aws"
+  - "-M"
+  - "json"
+  - "-o"
+  - "{out_dir}/prowler.json"
+  - "--profile"
+  - "{profile}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/prowler.json"
+cwe_hints:
+  - 16
+  - 200
+  - 285
+  - 732
+  - 1395
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Prowler AWS posture scan — runs the full curated AWS check suite (CIS/NIST/PCI/SOC2 packs) against {profile} and emits canonical JSON. Approval-gated: even read-only execution uses live AWS credentials, enumerates IAM/CloudTrail/S3 metadata and produces auditable cross-account API noise. recon-passive = broad TCP/443 to AWS; production should pin a dedicated `cloud-aws` policy (deferred to Cycle 4). Parser deferred to Cycle 3. Author: Prowler team. Backlog §4.15. ARG-018."

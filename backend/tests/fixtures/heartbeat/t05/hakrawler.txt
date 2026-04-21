@@ -1,0 +1,1 @@
+https://hakrawler.example/assets/app.js

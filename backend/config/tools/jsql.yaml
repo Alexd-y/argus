@@ -1,0 +1,32 @@
+tool_id: jsql
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 900
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "jsql-cli"
+  - "--url"
+  - "{url}"
+  - "--get-data"
+  - "--output"
+  - "{out_dir}/jsql.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/jsql.json"
+cwe_hints:
+  - 89
+owasp_wstg:
+  - "WSTG-INPV-05"
+description: "jsql-injection (Java) headless wrapper — /usr/local/bin/jsql-cli drives 'java -jar /opt/jsql/jsql.jar' non-interactively (upstream is GUI-first), writing JSON to {out_dir}/jsql.json. APPROVAL REQUIRED: --get-data exfiltrates injectable column data on confirmation. JSON parsing deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: ron190 (https://github.com/ron190/jsql-injection). Backlog/dev1_md §4.9. ARG-016."

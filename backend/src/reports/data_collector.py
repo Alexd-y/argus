@@ -12,7 +12,7 @@ Field → report section mapping (downstream generators may subset this model):
 - ``stage3`` → VA normalized tasks, exploitation candidates, evidence gate artifacts (§ VA).
 - ``stage4`` → exploitation plan, results, shells, AI exploitation summary (§ exploitation).
 - ``valhalla_context`` → VHL-001 Valhalla template blocks (robots/sitemap, tech table, TLS, headers, deps, phases).
-- ``hibp_pwned_password_summary`` → агрегат HIBP Pwned Passwords (opt-in), одна форма для AI/Jinja/JSON.
+- ``hibp_pwned_password_summary`` → HIBP Pwned Passwords aggregate (opt-in), single shape for AI/Jinja/JSON.
 
 Empty stages: lists default empty; ``scan`` is None only if the row is missing (invalid input).
 MinIO: each file is optional; failures set ``StageArtifactItem.error`` (``not_found`` vs
@@ -170,7 +170,7 @@ def _owasp_description_from_loader_info(info: dict[str, Any]) -> str:
 
 
 class OwaspCategorySummaryEntry(BaseModel):
-    """Per A01–A10 template payload (OWASP-002): RU title, short description, optional fix tooltip."""
+    """Per A01–A10 template payload (OWASP-002): localized title, short description, optional fix tooltip."""
 
     category_id: str
     has_findings: bool
@@ -225,7 +225,7 @@ def executive_severity_totals_from_finding_rows(findings: list[FindingRow]) -> d
 
 
 def build_owasp_summary_from_counts(counts: dict[str, int]) -> dict[str, OwaspCategorySummaryEntry]:
-    """Aggregate OWASP rows for templates from finding counts + RU JSON (OWASP-002)."""
+    """Aggregate OWASP rows for templates from finding counts + OWASP category info (OWASP-002)."""
     out: dict[str, OwaspCategorySummaryEntry] = {}
     for cid in OWASP_TOP10_2025_CATEGORY_IDS:
         n = int(counts.get(cid, 0))
@@ -320,7 +320,7 @@ class ScanReportData(BaseModel):
     valhalla_context: ValhallaReportContext = Field(default_factory=ValhallaReportContext)
     #: VHQ-001: WhatWeb JSON/NDJSON + recon/nmap → ``TechStackStructuredModel``; same object as ``valhalla_context.tech_stack_structured``.
     tech_stack: TechStackStructuredModel | None = None
-    #: VDF — зеркала блоков Valhalla для экспорта / AI без повторного разбора артефактов.
+    #: VDF — Valhalla block mirrors for export / AI without re-parsing artifacts.
     ssl_tls_analysis: SslTlsAnalysisModel | None = None
     security_headers_analysis: SecurityHeadersAnalysisModel | None = None
     outdated_components_table: list[OutdatedComponentRow] = Field(default_factory=list)

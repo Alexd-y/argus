@@ -1,0 +1,52 @@
+tool_id: semgrep
+version: "1.0.0"
+category: misc
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "semgrep"
+  - "scan"
+  - "--config"
+  - "p/owasp-top-ten"
+  - "--config"
+  - "p/ci"
+  - "--json"
+  - "--output"
+  - "{out_dir}/semgrep.json"
+  - "--metrics"
+  - "off"
+  - "--quiet"
+  - "--timeout"
+  - "300"
+  - "{path}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/semgrep.json"
+cwe_hints:
+  - 22
+  - 78
+  - 79
+  - 89
+  - 94
+  - 200
+  - 287
+  - 311
+  - 502
+  - 798
+  - 918
+owasp_wstg:
+  - "WSTG-INPV-05"
+  - "WSTG-INPV-01"
+  - "WSTG-INFO-08"
+  - "WSTG-CRYP-04"
+description: "Semgrep multi-language SAST — runs `p/owasp-top-ten` + `p/ci` rule packs against the source tree at {path} (/in). Packs are pre-bundled in argus-kali-cloud:latest; pod runs fully offline (offline-no-egress); --metrics off disables telemetry. Per-file timeout 300s. Output is canonical Semgrep JSON consumed by sandbox/parsers/semgrep_parser.py via JSON_OBJECT (severity/metadata drive FindingDTO category, confidence, score). Author: r2c. Backlog §4.16. ARG-018."

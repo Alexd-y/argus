@@ -1,0 +1,45 @@
+tool_id: trivy_fs
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "trivy"
+  - "fs"
+  - "--format"
+  - "json"
+  - "-o"
+  - "{out_dir}/trivy_fs.json"
+  - "--scanners"
+  - "vuln,config,secret"
+  - "--severity"
+  - "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  - "--no-progress"
+  - "--quiet"
+  - "{path}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/trivy_fs.json"
+cwe_hints:
+  - 16
+  - 200
+  - 732
+  - 798
+  - 1395
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Aqua Trivy filesystem scanner — sweeps the source tree mounted at {path} (under /in) for SCA findings (vulnerable lockfiles), IaC misconfigurations (Terraform/K8s/Dockerfiles), and embedded secrets. Network is used only to refresh the local vulnerability DB; --offline-scan will land in Cycle 4 alongside offline-no-egress + bundled DB. Output identical to trivy_image, consumed by sandbox/parsers/trivy_parser.py via JSON_OBJECT. Author: Aqua. Backlog §4.15. ARG-018."

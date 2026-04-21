@@ -1,0 +1,46 @@
+family_id: proto_smuggle
+description: >-
+  Protocol-confusion / parser-disagreement probes (HTTP/2-vs-HTTP/1
+  downgrade markers, gRPC trailers, websocket upgrade smuggling).
+  HIGH-risk family — operator approval is mandatory before the builder
+  emits a bundle. Seeds carry only marker headers and never include a
+  malicious second-request body.
+cwe_ids: [444, 436]
+owasp_top10:
+  - 'A05:2021'
+risk_level: high
+requires_approval: true
+oast_required: true
+payloads:
+  - id: h2c_upgrade_marker
+    template: 'Upgrade: h2c\r\nHTTP2-Settings: {canary}'
+    confidence: suspected
+    notes: HTTP/2 cleartext upgrade probe; differential vs control confirms parser.
+  - id: ws_upgrade_marker
+    template: 'Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nX-Argus-Canary: {canary}'
+    confidence: suspected
+    notes: WebSocket upgrade with marker header; OAST sees the canary if upgraded.
+  - id: grpc_trailer_marker
+    template: 'X-Argus-Trailer: {canary}'
+    confidence: suspected
+    notes: gRPC trailer marker; back-end disagreement leaks the header.
+  - id: header_unicode_split
+    template: 'X-Argus\u000a-Canary: {canary}'
+    confidence: suspected
+    notes: Unicode line-feed inside a header name; tests parser disagreement.
+  - id: oast_callback_header
+    template: 'X-Argus-Beacon: https://{oast_host}/{canary}'
+    confidence: confirmed
+    notes: Beacon-header marker; OAST hit confirms the second hop.
+mutations:
+  - name: case_flip
+    description: HTTP header names are case-insensitive; flips defeat substring filters.
+  - name: whitespace_alt
+    description: Mixed whitespace probes parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header bytes (sent by the validator's HTTP shim).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded marker (only used on header values, never on names).

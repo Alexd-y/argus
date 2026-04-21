@@ -1,0 +1,119 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ARGUS — STAGING overlay
+# ──────────────────────────────────────────────────────────────────────────────
+# Modest 2-replica setup, staging cert-manager TLS, OTel + ServiceMonitor on,
+# Cosign verify on (staging Fulcio identity), NetworkPolicies enabled.
+
+global:
+  imageRegistry: ghcr.io
+  storageClass: gp3
+
+config:
+  logLevel: INFO
+  environment: staging
+  scanWorkerConcurrency: 4
+
+replicaCount:
+  backend: 2
+  celery: 2
+  frontend: 2
+  mcp: 1
+
+resources:
+  backend:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1500m
+      memory: 2Gi
+  celery:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  mcp:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+cosign:
+  verify:
+    enabled: true
+    keyless:
+      enabled: true
+      certificateIdentityRegexp: "^https://github\\.com/your-org/ARGUS/\\.github/workflows/(release|staging)\\.yml@refs/.*"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+  host: staging.argus.example.invalid
+  tls:
+    enabled: true
+    secretName: argus-staging-tls
+
+certManager:
+  enabled: true
+  clusterIssuer: letsencrypt-staging
+
+prometheus:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    namespace: monitoring
+
+otelInstrumentation:
+  enabled: true
+  endpoint: http://otel-collector.observability.svc:4317
+  sampleRatio: "0.25"
+
+hpa:
+  enabled: true
+  backend:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  celery:
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicies:
+  enabled: true
+  defaultDeny: true
+
+sealedSecrets:
+  enabled: true
+
+postgresql:
+  primary:
+    persistence:
+      size: 50Gi
+
+redis:
+  master:
+    persistence:
+      size: 8Gi
+
+minio:
+  persistence:
+    size: 100Gi

@@ -1,0 +1,51 @@
+family_id: open_redirect
+description: >-
+  Open-redirect probes covering scheme tricks (//, /\, javascript:),
+  user-info confusion, and OAST-marked external destinations. Used by the
+  validator to confirm an unsafe redirect target sink.
+cwe_ids: [601]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: true
+payloads:
+  - id: oast_https
+    template: "https://{oast_host}/{canary}"
+    confidence: confirmed
+    notes: OAST-marked external URL; hit confirms redirect.
+  - id: protocol_relative
+    template: "//{oast_host}/{canary}"
+    confidence: confirmed
+    notes: Protocol-relative URL; bypasses naive http:// allow-lists.
+  - id: backslash_slash
+    template: "/\\{oast_host}/{canary}"
+    confidence: suspected
+    notes: Backslash+slash trick; some parsers accept as an absolute URL.
+  - id: userinfo_trick
+    template: "https://allowed.example.com@{oast_host}/{canary}"
+    confidence: suspected
+    notes: User-info segment fools allow-list checks that match prefix.
+  - id: javascript_uri
+    template: "javascript:alert({canary})"
+    confidence: suspected
+    notes: 'javascript URI scheme; only fires on <a href> sinks.'
+  - id: data_uri
+    template: "data:text/html,<script>alert({canary})</script>"
+    confidence: suspected
+    notes: 'data URI scheme redirect; rare but high-impact when accepted.'
+mutations:
+  - name: case_flip
+    description: Scheme case (HTTPS vs https) defeats substring filters.
+  - name: unicode_homoglyph
+    description: Homoglyph hostnames defeat naive look-up filters.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw URL payload (header / form sinks).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded; bypasses one-pass-decoding gateways.

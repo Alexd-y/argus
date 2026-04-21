@@ -1,4 +1,4 @@
-{# Обзор результатов и матрица рисков #}
+{# Results overview and risk matrix #}
 {% set vc = valhalla_context %}
 {% from "partials/valhalla/section_status_macro.html.j2" import section_envelope %}
 {% set robots = vc.robots_txt_analysis %}
@@ -8,61 +8,61 @@
 {% set rsa = vc.robots_sitemap_analysis if vc.robots_sitemap_analysis is defined else none %}
 
 <section class="valhalla-results panel" id="results-overview">
-    <h2>Обзор результатов и матрица рисков</h2>
+    <h2>Results Overview and Risk Matrix</h2>
 
     {% include "partials/valhalla/section_data_coverage.html.j2" %}
 
-    <h3>Анализ robots.txt и sitemap.xml</h3>
+    <h3>robots.txt and sitemap.xml Analysis</h3>
     {{ section_envelope(vc, "robots_sitemap_analysis") }}
     {% if vc.robots_sitemap_fallback_message %}
         <p class="meta">{{ vc.robots_sitemap_fallback_message | e }}</p>
     {% endif %}
-    {% if vc.robots_sitemap_merged and vc.robots_sitemap_merged.notes_ru %}
-        <p class="meta"><small>{{ vc.robots_sitemap_merged.notes_ru | e }}</small></p>
+    {% if vc.robots_sitemap_merged and (vc.robots_sitemap_merged.notes or vc.robots_sitemap_merged.notes_ru) %}
+        <p class="meta"><small>{{ (vc.robots_sitemap_merged.notes or vc.robots_sitemap_merged.notes_ru) | e }}</small></p>
     {% endif %}
-    <p><strong>robots.txt:</strong> {% if robots.found %}Найдено{% else %}Не найдено{% endif %}</p>
+    <p><strong>robots.txt:</strong> {% if robots.found %}Found{% else %}Not found{% endif %}</p>
     {% if robots.disallowed_paths_sample %}
-        <p>Содержит пути (выборка): {{ robots.disallowed_paths_sample | join(", ") | e }}</p>
+        <p>Contains paths (sample): {{ robots.disallowed_paths_sample | join(", ") | e }}</p>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
     {% if robots.sitemap_hints %}
-        <p>Упоминания sitemap: {{ robots.sitemap_hints | join(", ") | e }}</p>
+        <p>Sitemap references: {{ robots.sitemap_hints | join(", ") | e }}</p>
     {% endif %}
     {% if robots.sensitive_path_hints %}
-        <p><strong>Чувствительные шаблоны путей (эвристика):</strong> {{ robots.sensitive_path_hints | join(", ") | e }}</p>
+        <p><strong>Sensitive path patterns (heuristic):</strong> {{ robots.sensitive_path_hints | join(", ") | e }}</p>
     {% endif %}
     {% if rsa and rsa.merged %}
-        <p class="meta"><small>Сводка (robots_sitemap_analysis.merged): robots={{ rsa.merged.robots_found | default(false) }}, sitemap={{ rsa.merged.sitemap_found | default(false) }}, security.txt={{ rsa.merged.security_txt_reachable | default(false) }}, URL в sitemap: {{ rsa.merged.sitemap_url_count | default(0) }}</small></p>
+        <p class="meta"><small>Summary (robots_sitemap_analysis.merged): robots={{ rsa.merged.robots_found | default(false) }}, sitemap={{ rsa.merged.sitemap_found | default(false) }}, security.txt={{ rsa.merged.security_txt_reachable | default(false) }}, URLs in sitemap: {{ rsa.merged.sitemap_url_count | default(0) }}</small></p>
     {% endif %}
 
-    <p><strong>sitemap.xml:</strong> {% if sm.found %}Найдено{% else %}Не найдено{% endif %}{% if sm.index_found %} (в т.ч. индекс){% endif %}</p>
-    <p><strong>Количество URL:</strong> {{ sm.url_count if sm.url_count is not none else 0 }}</p>
+    <p><strong>sitemap.xml:</strong> {% if sm.found %}Found{% else %}Not found{% endif %}{% if sm.index_found %} (including index){% endif %}</p>
+    <p><strong>URL count:</strong> {{ sm.url_count if sm.url_count is not none else 0 }}</p>
     {% if sm.sample_urls %}
-        <p><strong>Примеры:</strong> {{ sm.sample_urls | join(", ") | e }}</p>
+        <p><strong>Examples:</strong> {{ sm.sample_urls | join(", ") | e }}</p>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Сводная строка по примеру уязвимости (первая находка, при наличии)</h3>
+    <h3>Sample Vulnerability Summary (first finding, if available)</h3>
     {% if findings|length > 0 %}
         {% set f0 = findings[0] %}
         <table>
             <tbody>
-                <tr><th scope="row">Идентификатор / название</th><td>{{ f0.id | e }} — {{ f0.title | e }}</td></tr>
-                <tr><th scope="row">Описание</th><td class="desc">{{ f0.description or "Нет данных" }}</td></tr>
-                <tr><th scope="row">Критичность</th><td>{{ f0.severity | e }}</td></tr>
-                <tr><th scope="row">CWE</th><td>{{ f0.cwe or "Не найдено" }}</td></tr>
-                <tr><th scope="row">OWASP</th><td>{% if f0.owasp_category %}{{ f0.owasp_category | e }}{% else %}Не найдено{% endif %}</td></tr>
+                <tr><th scope="row">Identifier / Title</th><td>{{ f0.id | e }} — {{ f0.title | e }}</td></tr>
+                <tr><th scope="row">Description</th><td class="desc">{{ f0.description or "No data" }}</td></tr>
+                <tr><th scope="row">Severity</th><td>{{ f0.severity | e }}</td></tr>
+                <tr><th scope="row">CWE</th><td>{{ f0.cwe or "Not found" }}</td></tr>
+                <tr><th scope="row">OWASP</th><td>{% if f0.owasp_category %}{{ f0.owasp_category | e }}{% else %}Not found{% endif %}</td></tr>
                 <tr><th scope="row">CVSS</th><td>{% if f0.cvss is not none %}{{ f0.cvss }}{% else %}—{% endif %}</td></tr>
-                <tr><th scope="row">CVE</th><td>{{ f0.cve or "Не найдено" }}</td></tr>
+                <tr><th scope="row">CVE</th><td>{{ f0.cve or "Not found" }}</td></tr>
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Технологический стек и компоненты</h3>
+    <h3>Technology Stack and Components</h3>
     {{ section_envelope(vc, "tech_stack_structured") }}
     {% if vc.tech_stack_fallback_message %}
         <p class="meta">{{ vc.tech_stack_fallback_message | e }}</p>
@@ -72,13 +72,13 @@
         <table class="valhalla-tech-structured">
             <thead>
                 <tr>
-                    <th>Веб-сервер</th>
-                    <th>ОС</th>
+                    <th>Web Server</th>
+                    <th>OS</th>
                     <th>CMS</th>
-                    <th>Фреймворки</th>
-                    <th>JS-библиотеки</th>
-                    <th>Порты</th>
-                    <th>Сервисы</th>
+                    <th>Frameworks</th>
+                    <th>JS Libraries</th>
+                    <th>Ports</th>
+                    <th>Services</th>
                 </tr>
             </thead>
             <tbody>
@@ -95,10 +95,10 @@
         </table>
     {% endif %}
     {% if ts and ts.entries %}
-        <h4>WhatWeb / детальные записи</h4>
+        <h4>WhatWeb / Detailed Entries</h4>
         <table>
             <thead>
-                <tr><th>Технология</th><th>Версия</th><th>Уверенность</th></tr>
+                <tr><th>Technology</th><th>Version</th><th>Confidence</th></tr>
             </thead>
             <tbody>
                 {% for e in ts.entries %}
@@ -115,10 +115,10 @@
         <table>
             <thead>
                 <tr>
-                    <th>Категория</th>
-                    <th>Компонент</th>
-                    <th>Детали</th>
-                    <th>Источник</th>
+                    <th>Category</th>
+                    <th>Component</th>
+                    <th>Details</th>
+                    <th>Source</th>
                 </tr>
             </thead>
             <tbody>
@@ -133,10 +133,10 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Устаревшие компоненты</h3>
+    <h3>Outdated Components</h3>
     {{ section_envelope(vc, "outdated_components") }}
     {% if vc.outdated_components_fallback_message %}
         <p class="meta">{{ vc.outdated_components_fallback_message | e }}</p>
@@ -145,13 +145,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>Компонент</th>
-                    <th>Версия (установленная)</th>
-                    <th>Последняя стабильная</th>
-                    <th>Статус / источник</th>
+                    <th>Component</th>
+                    <th>Installed Version</th>
+                    <th>Latest Stable</th>
+                    <th>Status / Source</th>
                     <th>CVE</th>
-                    <th>Публичный эксплойт (эвристика)</th>
-                    <th>Рекомендация</th>
+                    <th>Public Exploit (heuristic)</th>
+                    <th>Recommendation</th>
                 </tr>
             </thead>
             <tbody>
@@ -162,17 +162,17 @@
                     <td>{{ row.latest_stable or "—" }}</td>
                     <td>{{ row.support_status or "—" }}</td>
                     <td>{% if row.cves %}{{ row.cves | join(", ") | e }}{% else %}—{% endif %}</td>
-                    <td>{% if row.exploit_available %}Да{% else %}Нет / н/д{% endif %}</td>
+                    <td>{% if row.exploit_available %}Yes{% else %}No / N/A{% endif %}</td>
                     <td class="desc">{{ row.recommendation | e }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Обнаруженные email-адреса (маскированные)</h3>
+    <h3>Discovered Email Addresses (masked)</h3>
     {{ section_envelope(vc, "leaked_emails") }}
     {% if vc.leaked_emails_fallback_message and not vc.leaked_emails %}
         <p class="meta">{{ vc.leaked_emails_fallback_message | e }}</p>
@@ -184,26 +184,26 @@
             {% endfor %}
         </ul>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Результаты проверки SSL/TLS</h3>
+    <h3>SSL/TLS Analysis Results</h3>
     {{ section_envelope(vc, "ssl_tls_analysis") }}
     {% if vc.ssl_tls_fallback_message %}
         <p class="meta">{{ vc.ssl_tls_fallback_message | e }}</p>
     {% endif %}
     <table>
         <tbody>
-            <tr><th scope="row">Издатель сертификата</th><td>{{ ssl.issuer or "Не найдено" }}</td></tr>
-            <tr><th scope="row">Срок действия</th><td>{{ ssl.validity or "Не найдено" }}</td></tr>
-            <tr><th scope="row">Поддерживаемые протоколы</th><td>{% if ssl.protocols %}{{ ssl.protocols | join(", ") | e }}{% else %}Нет данных{% endif %}</td></tr>
-            <tr><th scope="row">Слабые / устаревшие протоколы</th><td>{% if ssl.weak_protocols %}{{ ssl.weak_protocols | join(", ") | e }}{% else %}Не найдено / нет данных{% endif %}</td></tr>
-            <tr><th scope="row">Слабые шифры</th><td>{% if ssl.weak_ciphers %}{{ ssl.weak_ciphers | join(", ") | e }}{% else %}Не найдено / нет данных{% endif %}</td></tr>
-            <tr><th scope="row">HSTS</th><td>{{ ssl.hsts or "Нет данных" }}</td></tr>
+            <tr><th scope="row">Certificate Issuer</th><td>{{ ssl.issuer or "Not found" }}</td></tr>
+            <tr><th scope="row">Validity Period</th><td>{{ ssl.validity or "Not found" }}</td></tr>
+            <tr><th scope="row">Supported Protocols</th><td>{% if ssl.protocols %}{{ ssl.protocols | join(", ") | e }}{% else %}No data{% endif %}</td></tr>
+            <tr><th scope="row">Weak / Deprecated Protocols</th><td>{% if ssl.weak_protocols %}{{ ssl.weak_protocols | join(", ") | e }}{% else %}Not found / no data{% endif %}</td></tr>
+            <tr><th scope="row">Weak Ciphers</th><td>{% if ssl.weak_ciphers %}{{ ssl.weak_ciphers | join(", ") | e }}{% else %}Not found / no data{% endif %}</td></tr>
+            <tr><th scope="row">HSTS</th><td>{{ ssl.hsts or "No data" }}</td></tr>
         </tbody>
     </table>
 
-    <h3>Анализ HTTP-заголовков безопасности</h3>
+    <h3>HTTP Security Headers Analysis</h3>
     {{ section_envelope(vc, "security_headers_analysis") }}
     {% if vc.security_headers_fallback_message %}
         <p class="meta">{{ vc.security_headers_fallback_message | e }}</p>
@@ -215,10 +215,10 @@
         <table>
             <thead>
                 <tr>
-                    <th>Хост (если есть)</th>
-                    <th>Заголовок</th>
-                    <th>Значение (выборка)</th>
-                    <th>Статус</th>
+                    <th>Host (if available)</th>
+                    <th>Header</th>
+                    <th>Value (sample)</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
@@ -233,19 +233,19 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Анализ компонентов и зависимостей</h3>
+    <h3>Component and Dependency Analysis</h3>
     {% if vc.dependency_analysis %}
         <table>
             <thead>
                 <tr>
-                    <th>Компонент</th>
-                    <th>Версия</th>
-                    <th>Критичность</th>
-                    <th>Источник</th>
-                    <th>Детали / рекомендация</th>
+                    <th>Component</th>
+                    <th>Version</th>
+                    <th>Severity</th>
+                    <th>Source</th>
+                    <th>Details / Recommendation</th>
                 </tr>
             </thead>
             <tbody>
@@ -261,20 +261,20 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 
-    <h3>Матрица рисков (Impact × Likelihood)</h3>
-    <p class="meta"><small>Оси: Low / Medium / High (0–3 → группы); ячейки — число находок и их идентификаторы.</small></p>
+    <h3>Risk Matrix (Impact × Likelihood)</h3>
+    <p class="meta"><small>Axes: Low / Medium / High (0–3 → groups); cells — finding count and IDs.</small></p>
     {% set rm = vc.risk_matrix %}
-    {% set ax = {"low": "Низкий", "medium": "Средний", "high": "Высокий"} %}
+    {% set ax = {"low": "Low", "medium": "Medium", "high": "High"} %}
     {% if rm.cells %}
         <table>
             <thead>
                 <tr>
-                    <th>Влияние</th>
-                    <th>Вероятность</th>
-                    <th>Количество</th>
+                    <th>Impact</th>
+                    <th>Likelihood</th>
+                    <th>Count</th>
                     <th>Finding IDs</th>
                 </tr>
             </thead>
@@ -290,20 +290,20 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 
-    <h3>Критически важные уязвимости (немедленное исправление)</h3>
-    <p class="meta"><small>CVSS ≥ 7.0 и подтверждение / признаки эксплуатации (PoC, CVE+exploit, verified).</small></p>
+    <h3>Critical Vulnerabilities (immediate remediation required)</h3>
+    <p class="meta"><small>CVSS ≥ 7.0 and confirmed / exploitation evidence (PoC, CVE+exploit, verified).</small></p>
     {% if vc.critical_vulns %}
         <table>
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Название</th>
-                    <th>Кратко</th>
+                    <th>Title</th>
+                    <th>Summary</th>
                     <th>CVSS</th>
-                    <th>Эксплойт</th>
+                    <th>Exploit</th>
                 </tr>
             </thead>
             <tbody>
@@ -313,12 +313,12 @@
                     <td>{{ v.title | e }}{% if v.severity %} <span class="meta">({{ v.severity | e }})</span>{% endif %}</td>
                     <td class="desc">{{ v.description | e }}</td>
                     <td>{% if v.cvss is not none %}{{ v.cvss }}{% else %}—{% endif %}</td>
-                    <td>{% if v.exploit_available %}да{% else %}нет{% endif %}</td>
+                    <td>{% if v.exploit_available %}yes{% else %}no{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Не найдено</p>
+        <p class="empty">Not found</p>
     {% endif %}
 </section>

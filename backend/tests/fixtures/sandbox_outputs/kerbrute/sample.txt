@@ -1,0 +1,18 @@
+    __             __               __     
+   / /_____  _____/ /_  _______  __/ /____ 
+  / //_/ _ \/ ___/ __ \/ ___/ / / / __/ _ \
+ / ,< /  __/ /  / /_/ / /  / /_/ / /_/  __/
+/_/|_|\___/_/  /_.___/_/   \__,_/\__/\___/                                        
+
+Version: dev (n/a) - 04/19/26 - Ronnie Flathers @ropnop
+
+2026/04/19 12:34:56 >  Using KDC(s):
+2026/04/19 12:34:56 >  	dc01.contoso.local:88
+
+2026/04/19 12:34:56 >  [+] VALID USERNAME:	administrator@contoso.local
+2026/04/19 12:34:56 >  [+] VALID USERNAME:	svc-backup@contoso.local
+2026/04/19 12:34:56 >  [+] VALID USERNAME:	jdoe@contoso.local
+2026/04/19 12:34:57 >  [+] VALID USERNAME (NO PREAUTH):	asreproast.user@contoso.local
+2026/04/19 12:34:57 >  [+] VALID USERNAME:	mwilliams@contoso.local
+2026/04/19 12:34:57 >  [+] VALID USERNAME (NO PREAUTH):	legacy.svc@contoso.local
+2026/04/19 12:34:58 >  Done! Tested 1234 usernames (6 valid) in 1.234 seconds

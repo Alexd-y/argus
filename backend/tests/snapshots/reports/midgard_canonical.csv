@@ -1,0 +1,17 @@
+Severity,Title,Description,CWE,CVSS
+critical,Remote Code Execution in /upload,Unrestricted file upload + LFI chain.,CWE-78,9.5
+critical,SQL Injection in /api/users,UNION-based SQLi via id parameter.,CWE-89,9.8
+high,Reflected XSS in search,`q` echoed unescaped.,CWE-79,7.5
+high,Server-Side Request Forgery,Internal metadata endpoint reachable.,CWE-918,8.1
+medium,Missing security headers,No CSP / HSTS / X-Frame-Options.,CWE-693,
+medium,Outdated jQuery,jQuery 1.x with known prototype-pollution.,CWE-1104,6.1
+low,Cookie missing Secure flag,Session cookie served over HTTP.,CWE-614,
+low,Server banner exposed,Server header leaks nginx/1.18.0.,CWE-200,
+info,HTTP allowed alongside HTTPS,Plain HTTP returns 200 OK.,,
+info,Open directory listing,/static/ shows directory index.,,
+
+"# ai_sections (section_key, text)"
+section_key,section_text
+
+# scan_artifacts (single JSON cell)
+"{""phase_blocks"": [], ""status"": ""skipped""}"

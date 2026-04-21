@@ -1,0 +1,35 @@
+tool_id: linkfinder
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "linkfinder-wrapper"
+  - "-i"
+  - "{url}"
+  - "-o"
+  - "cli"
+  - "-out"
+  - "{out_dir}/linkfinder.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/linkfinder.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-05"
+  - "WSTG-INFO-06"
+description: "LinkFinder extracts endpoint references from JavaScript bundles served at {url}. Image-side wrapper `linkfinder-wrapper` translates argv-form (`-i <url> -o cli -out <path>`) to upstream stdin/stdout pipe (`linkfinder -i <url> -o cli > <path>`) so the sandbox stays argv-only. Author: GerbenJavado (https://github.com/GerbenJavado/LinkFinder). Backlog/dev1_md §4.6."

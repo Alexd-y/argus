@@ -1,0 +1,34 @@
+tool_id: eyewitness
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "eyewitness"
+  - "-f"
+  - "{in_dir}/urls.txt"
+  - "-d"
+  - "{out_dir}/eyewitness"
+  - "--no-prompt"
+  - "--web"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/eyewitness"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-08"
+description: "EyeWitness web screenshots and HTTP report (--no-prompt --web). Backlog/dev1_md §4.4."

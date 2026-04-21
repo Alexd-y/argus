@@ -1,0 +1,30 @@
+tool_id: rustscan
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "rustscan -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml"
+parse_strategy: xml_nmap
+evidence_artifacts:
+  - "/out/rustscan.xml"
+cwe_hints:
+  - 200
+  - 668
+owasp_wstg:
+  - "WSTG-INFO-02"
+description: "RustScan fast port-discovery handing results to nmap -sC -sV for service fingerprinting. Backlog/dev1_md §4.2."

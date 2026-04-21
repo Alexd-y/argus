@@ -1,0 +1,40 @@
+tool_id: ghauri
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 900
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "ghauri"
+  - "-u"
+  - "{url}"
+  - "--batch"
+  - "--level"
+  - "2"
+  - "--dbs"
+  - "--timeout"
+  - "30"
+  - "--retries"
+  - "2"
+  - "--threads"
+  - "2"
+  - "--no-logging"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/ghauri.log"
+cwe_hints:
+  - 89
+owasp_wstg:
+  - "WSTG-INPV-05"
+description: "ghauri lightweight SQLi detector — Python rewrite of sqlmap's blind/error/UNION techniques. --batch --level 2 --dbs runs schema enumeration on confirmation. APPROVAL REQUIRED: fires real injection payloads against {url}. Image-side wrapper redirects verbose stdout into /out/ghauri.log; parsing deferred to Cycle 3 (TEXT_LINES → parsers.dispatch.unmapped_tool until then). Author: r0oth3x49 (https://github.com/r0oth3x49/ghauri). Backlog/dev1_md §4.9. ARG-016."

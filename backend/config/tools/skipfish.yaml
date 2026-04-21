@@ -1,0 +1,48 @@
+tool_id: skipfish
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "skipfish"
+  - "-o"
+  - "{out_dir}/skipfish"
+  - "-S"
+  - "{wordlist}"
+  - "-LV"
+  - "-m"
+  - "5"
+  - "-l"
+  - "10"
+  - "-t"
+  - "10"
+  - "-r"
+  - "200000"
+  - "{url}"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/skipfish/index.html"
+  - "/out/skipfish/samples.txt"
+cwe_hints:
+  - 79
+  - 22
+  - 200
+  - 16
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-AUTHZ-01"
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "skipfish active web app scanner — crawls + brute-forces {url} (5 host-conn, 10 conn/s, 10 r/host), emits HTML report + samples. -S {wordlist} runs the wordlist pass (sandbox resolves to a /wordlists/ asset shipped in argus-kali-web; Backlog §4.8 canonical pick: /wordlists/skipfish/complete.wl). -LV shortens output paths. Approval-gated: aggressive crawler, may trip WAFs. Author: Michal Zalewski / Niels Heinen (https://github.com/spinkham/skipfish). Backlog/dev1_md §4.8."

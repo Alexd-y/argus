@@ -1,0 +1,17 @@
+# snmpwalk run with community=public on 10.0.0.42
+SNMPv2-MIB::sysDescr.0 = STRING: Linux router 5.10.0 #1 SMP Thu Apr 18 21:00:01 UTC 2026 x86_64
+SNMPv2-MIB::sysObjectID.0 = OID: SNMPv2-SMI::enterprises.8072.3.2.10
+DISMAN-EVENT-MIB::sysUpTimeInstance = Timeticks: (123456789) 14 days, 6:56:07.89
+SNMPv2-MIB::sysContact.0 = STRING: admin@contoso.local
+SNMPv2-MIB::sysName.0 = STRING: edge-router-01
+SNMPv2-MIB::sysLocation.0 = STRING: rack 14, datacenter east
+SNMPv2-MIB::sysServices.0 = INTEGER: 72
+IF-MIB::ifNumber.0 = INTEGER: 12
+IF-MIB::ifIndex.1 = INTEGER: 1
+IF-MIB::ifIndex.2 = INTEGER: 2
+IF-MIB::ifDescr.1 = STRING: lo
+IF-MIB::ifDescr.2 = STRING: eth0
+IF-MIB::ifType.1 = INTEGER: softwareLoopback(24)
+IF-MIB::ifType.2 = INTEGER: ethernetCsmacd(6)
+HOST-RESOURCES-MIB::hrSystemUptime.0 = Timeticks: (1234567) 3:25:45.67
+community: public

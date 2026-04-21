@@ -1,0 +1,31 @@
+tool_id: trufflehog
+version: "1.0.0"
+category: misc
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "trufflehog filesystem {path} --json --no-update --no-verification > {out_dir}/trufflehog.json"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/trufflehog.json"
+cwe_hints:
+  - 200
+  - 312
+  - 522
+  - 798
+owasp_wstg:
+  - "WSTG-ATHN-06"
+  - "WSTG-INFO-08"
+description: "Truffle Security trufflehog secret scanner — sweeps the source tree at {path} (/in) using ~750 detectors. --no-verification keeps the pod fully offline (no live API hits to confirm a candidate token); --no-update prevents detector pulls. Output: one JSON document per line (json_lines). `sh -c` is used solely for stdout redirection. Parser deferred to Cycle 3. Author: Truffle Security. Backlog §4.16. ARG-018."

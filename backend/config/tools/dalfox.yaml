@@ -1,0 +1,44 @@
+tool_id: dalfox
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "dalfox"
+  - "url"
+  - "{url}"
+  - "--mining-dom"
+  - "--mining-dict"
+  - "--deep-domxss"
+  - "--skip-bav"
+  - "--no-color"
+  - "--format"
+  - "json"
+  - "--output"
+  - "{out_dir}/dalfox.json"
+  - "--worker"
+  - "10"
+  - "--timeout"
+  - "10"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/dalfox.json"
+cwe_hints:
+  - 79
+  - 80
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-02"
+description: "dalfox parameter-aware XSS scanner — DOM mining (--mining-dom), payload mining (--mining-dict), deep DOM-XSS traversal (--deep-domxss) against {url}; BAV skipped to focus on XSS. JSON envelope at {out_dir}/dalfox.json parsed by sandbox/parsers/dalfox_parser.py via JSON_OBJECT: V→CONFIRMED, S→LIKELY, R→SUSPECTED INFO. Approval-free (reflection contexts only, no auto-RCE/fileread). Author: hahwul (https://github.com/hahwul/dalfox). Backlog/dev1_md §4.10. ARG-016."

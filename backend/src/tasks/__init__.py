@@ -105,7 +105,10 @@ def generate_all_reports_task(
     report_ids: list[str],
 ) -> dict[str, Any]:
     """Run ``run_generate_report_pipeline`` for each report id with bounded concurrency (semaphore 4)."""
-    from src.reports.report_pipeline import normalize_generation_formats, run_generate_report_pipeline
+    from src.reports.report_pipeline import (
+        normalize_generation_formats,
+        run_generate_report_pipeline,
+    )
 
     async def _run_one(rid: str) -> dict[str, Any]:
         engine, session_factory = create_task_engine_and_session()

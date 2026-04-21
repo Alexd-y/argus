@@ -1,0 +1,31 @@
+tool_id: findomain
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "findomain"
+  - "-t"
+  - "{domain}"
+  - "-u"
+  - "{out_dir}/findomain.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/findomain.txt"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+description: "Findomain passive subdomain discovery via Certificate Transparency and OSINT. Backlog/dev1_md §4.1."

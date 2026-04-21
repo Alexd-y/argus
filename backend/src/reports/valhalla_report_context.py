@@ -5,13 +5,23 @@ Safe defaults: empty lists / false / None. No secrets in logs; raw excerpts are 
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import logging
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
+    _plugin_strings,
+    merge_whatweb_json_roots,
+    parse_whatweb_stdout,
+    parse_whatweb_text_fallback,
+    parse_whatweb_to_tech_stack,
+)
+from src.storage.s3 import download_by_key
 
 ValhallaSectionCoverageStatus = Literal["completed", "partial", "not_executed", "no_data"]
 
@@ -23,15 +33,6 @@ _MANDATORY_SECTION_IDS: tuple[str, ...] = (
     "robots_sitemap_analysis",
     "leaked_emails",
 )
-
-from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
-    _plugin_strings,
-    merge_whatweb_json_roots,
-    parse_whatweb_stdout,
-    parse_whatweb_text_fallback,
-    parse_whatweb_to_tech_stack,
-)
-from src.storage.s3 import download_by_key
 
 logger = logging.getLogger(__name__)
 
@@ -496,7 +497,15 @@ class RobotsSitemapMergedSummaryModel(BaseModel):
     allow_rule_count: int = 0
     sitemap_url_count: int = 0
     sensitive_path_hints: list[str] = Field(default_factory=list)
-    notes_ru: str = ""
+    notes: str = ""
+    notes_ru: str = Field(default="", description="Deprecated: backward-compat alias for notes.")
+
+    @model_validator(mode="after")
+    def _migrate_notes_ru(self) -> "RobotsSitemapMergedSummaryModel":
+        """Copy legacy notes_ru → notes when notes is empty (backward compat)."""
+        if not self.notes and self.notes_ru:
+            self.notes = self.notes_ru
+        return self
 
 
 class ValhallaRobotsSitemapAnalysisBundleModel(BaseModel):
@@ -631,6 +640,138 @@ def _tool_name_from_raw_artifact_type(artifact_type: str) -> str | None:
     return m.group("name").strip() or None
 
 
+def _artifact_type_from_raw_key(key: str) -> str:
+    """Extract artifact_type from ``{timestamp}_{artifact_type}.{ext}`` raw object keys."""
+    basename = key.rsplit("/", 1)[-1] if "/" in key else key
+    name_no_ext = basename.rsplit(".", 1)[0] if "." in basename else basename
+    parts = name_no_ext.split("_", 2)
+    if len(parts) >= 3:
+        return parts[2]
+    return name_no_ext
+
+
+def _tool_name_from_raw_key(key: str) -> str | None:
+    at = _artifact_type_from_raw_key(key)
+    if not at.startswith("tool_"):
+        return None
+    body = at[len("tool_") :]
+    for stream_marker in ("_stdout", "_stderr", "_meta"):
+        idx = body.find(stream_marker)
+        if idx > 0:
+            body = body[:idx]
+            break
+    for sep in ("_scan_", "_celery_", "_cand_", "_http_audit_"):
+        if sep in body:
+            body = body.split(sep, 1)[0]
+            break
+    name = body.strip("_")
+    return name[:200] if name else None
+
+
+def _raw_artifact_stream_kind(key: str) -> Literal["stdout", "stderr", "meta"] | None:
+    parts = _artifact_type_from_raw_key(key).split("_")
+    if "stdout" in parts:
+        return "stdout"
+    if "stderr" in parts:
+        return "stderr"
+    if parts and parts[-1] == "meta":
+        return "meta"
+    return None
+
+
+def _first_stderr_note(text: str) -> str:
+    for line in (text or "").splitlines():
+        s = line.strip()
+        if s:
+            return _truncate(s, 180)
+    return "stderr_nonempty"
+
+
+def _raw_tool_issues_from_artifacts(
+    raw_artifact_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+    max_items: int = 48,
+) -> list[dict[str, str]]:
+    """Infer failed/empty tool attempts from raw stdout/stderr/meta artifacts.
+
+    DB tool_run status can be green even when a sandboxed binary produced empty stdout
+    and only stderr/meta. Valhalla coverage should make that visible instead of
+    presenting the related data section as neutral ``no_data``.
+    """
+    if not fetch_bodies:
+        return []
+    state: dict[str, dict[str, Any]] = {}
+    for key, _phase in raw_artifact_keys:
+        tool = _tool_name_from_raw_key(key)
+        kind = _raw_artifact_stream_kind(key)
+        if not tool or not kind:
+            continue
+        cur = state.setdefault(
+            tool,
+            {
+                "stdout_seen": False,
+                "stdout_nonempty": False,
+                "stderr_note": "",
+                "error_reason": "",
+                "exit_code": None,
+            },
+        )
+        blob = _safe_download_raw(key)
+        if blob is None:
+            continue
+        text = _text_from_raw_bytes(blob) or ""
+        if kind == "stdout":
+            cur["stdout_seen"] = True
+            cur["stdout_nonempty"] = bool(text.strip())
+        elif kind == "stderr":
+            if text.strip() and not cur.get("stderr_note"):
+                cur["stderr_note"] = _first_stderr_note(text)
+        elif kind == "meta" and text.strip().startswith("{"):
+            try:
+                meta = json.loads(text)
+            except json.JSONDecodeError:
+                meta = {}
+            if isinstance(meta, dict):
+                err = meta.get("error_reason")
+                if isinstance(err, str) and err.strip():
+                    cur["error_reason"] = err.strip()[:160]
+                ec = meta.get("exit_code")
+                with contextlib.suppress(TypeError, ValueError):
+                    cur["exit_code"] = int(ec) if ec is not None else None
+
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for tool, info in sorted(state.items()):
+        exit_code = info.get("exit_code")
+        exit_bad = isinstance(exit_code, int) and exit_code != 0
+        error_reason = str(info.get("error_reason") or "").strip()
+        stderr_note = str(info.get("stderr_note") or "").strip()
+        stdout_seen = bool(info.get("stdout_seen"))
+        stdout_nonempty = bool(info.get("stdout_nonempty"))
+        if not (error_reason or exit_bad or (stderr_note and stdout_seen and not stdout_nonempty)):
+            continue
+        key = tool.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if error_reason:
+            status = "failed"
+            note = f"raw_meta_error:{error_reason}"
+        elif exit_bad:
+            status = "failed"
+            note = f"raw_meta_exit_code:{exit_code}"
+        else:
+            status = "no_output"
+            note = "stderr_nonempty_with_empty_stdout"
+            if stderr_note:
+                note = f"{note}:{stderr_note}"
+        out.append({"tool": tool, "status": status, "note": _truncate(note, 240)})
+        if len(out) >= max_items:
+            break
+    return out
+
+
 def build_appendix_tools(
     *,
     tool_runs: list[tuple[str, dict[str, Any] | None]] | None,
@@ -699,10 +840,7 @@ def _mask_email(addr: str) -> str:
     domain = domain.strip()
     if not local or not domain:
         return "***"
-    if len(local) <= 2:
-        masked_local = local[0] + "***"
-    else:
-        masked_local = local[0] + "***" + local[-1]
+    masked_local = local[0] + "***" if len(local) <= 2 else local[0] + "***" + local[-1]
     parts = domain.split(".")
     if len(parts) >= 2:
         root = parts[0]
@@ -1364,9 +1502,8 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
                     "tls1_1",
                     "tls1.1",
                 )
-            ):
-                if len(weak_proto) < 32:
-                    weak_proto.append(_truncate(finding, 400))
+            ) and len(weak_proto) < 32:
+                weak_proto.append(_truncate(finding, 400))
             if any(x in low for x in ("cbc", "rc4", "weak", "deprecated", "sslv2", "sslv3")):
                 if len(weak) < 48:
                     weak.append(_truncate(finding, 400))
@@ -1579,7 +1716,7 @@ def _walk_collect_http_headers_maps(obj: Any, acc: list[dict[str, Any]]) -> None
             hs = obj.get(alt)
             if not isinstance(hs, dict) or not hs:
                 continue
-            keys_low = {str(x).lower() for x in hs.keys()}
+            keys_low = {str(x).lower() for x in hs}
             if keys_low & {
                 "content-security-policy",
                 "x-frame-options",
@@ -1669,7 +1806,7 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
     miss_sorted = sorted(missing)
     summary = None
     if miss_sorted:
-        summary = "Отсутствуют рекомендуемые заголовки: " + ", ".join(miss_sorted[:12])
+        summary = "Missing recommended headers: " + ", ".join(miss_sorted[:12])
     return SecurityHeadersAnalysisModel(
         rows=rows[:500],
         missing_recommended=miss_sorted[:24],
@@ -1940,11 +2077,7 @@ def derive_exploit_available_flag(f: dict[str, Any]) -> bool:
     st = str(f.get("source_tool") or "").lower()
     if st == "searchsploit" or "exploit" in st:
         return True
-    if _CVE_RE.search(blob) and re.search(
-        r"\b(exploit|proof.of.concept|poc|metasploit|weaponized)\b", blob, re.IGNORECASE
-    ):
-        return True
-    return False
+    return bool(_CVE_RE.search(blob) and re.search(r"\b(exploit|proof.of.concept|poc|metasploit|weaponized)\b", blob, re.IGNORECASE))
 
 
 def _cvss_vector_string(f: dict[str, Any]) -> str | None:
@@ -2069,9 +2202,7 @@ def _critical_vuln_include(f: dict[str, Any]) -> bool:
         return True
     if derive_exploit_available_flag(f):
         return True
-    if _cve_known_exploit_heuristic(f):
-        return True
-    return False
+    return bool(_cve_known_exploit_heuristic(f))
 
 
 def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[CriticalVulnRefModel]:
@@ -2123,7 +2254,7 @@ def _outdated_from_findings(findings: list[dict[str, Any]]) -> list[OutdatedComp
                 latest_stable="—",
                 support_status=support,
                 cves=cves,
-                recommendation="Отслеживать патчи; устранить уязвимые версии по advisory",
+                recommendation="Track patches; remediate vulnerable versions per advisory",
             )
         )
     return out[:80]
@@ -2152,7 +2283,7 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
                 latest_stable="—",
                 support_status="whatweb",
                 cves=[],
-                recommendation="Сверить версию с upstream и установить поддерживаемый релиз",
+                recommendation="Verify version against upstream and install a supported release",
             )
         )
     return rows[:40]
@@ -2182,7 +2313,7 @@ def _outdated_from_nmap_sv(nmap_text: str) -> list[OutdatedComponentRow]:
                 latest_stable="—",
                 support_status="nmap -sV",
                 cves=[],
-                recommendation="Обновить сервис до исправленной версии (vendor/CVE)",
+                recommendation="Update service to a patched version (vendor/CVE)",
             )
         )
         if len(rows) >= 40:
@@ -2228,7 +2359,7 @@ def _outdated_from_searchsploit_phase(phase_outputs: list[tuple[str, dict[str, A
                 latest_stable="—",
                 support_status="searchsploit",
                 cves=cves,
-                recommendation="Проверить публичный эксплойт и применить патч / компенсирующие меры",
+                recommendation="Verify public exploit and apply patch / compensating controls",
                 exploit_available=True,
             )
         )
@@ -2251,7 +2382,7 @@ def _outdated_from_trivy_dependency_rows(
         sev = (d.severity or "").lower()
         if not cves and sev not in ("critical", "high"):
             continue
-        rec = (d.detail or "")[:500] or "Устранить по рекомендациям Trivy / поставщика ПО"
+        rec = (d.detail or "")[:500] or "Remediate per Trivy / vendor recommendations"
         rows.append(
             OutdatedComponentRow(
                 component=d.package[:256],
@@ -2397,7 +2528,7 @@ def _build_robots_sitemap_merged(
         allow_rule_count=robots.allow_rule_count,
         sitemap_url_count=sitemap.url_count,
         sensitive_path_hints=list(robots.sensitive_path_hints or [])[:24],
-        notes_ru="",
+        notes="",
     )
     jd = _first_raw_json_dict_by_substr(
         raw_keys,
@@ -2419,7 +2550,7 @@ def _build_robots_sitemap_merged(
         allow_rule_count=int(jd.get("allow_count") or base.allow_rule_count),
         sitemap_url_count=int(jd.get("sitemap_loc_count") or base.sitemap_url_count),
         sensitive_path_hints=sens_l or base.sensitive_path_hints,
-        notes_ru="Сводка по robots.txt / sitemap / security.txt (HTTP fetch + разбор).",
+        notes="Summary of robots.txt / sitemap / security.txt (HTTP fetch + parsing).",
     )
 
 
@@ -2584,28 +2715,56 @@ def _raw_keys_hint_flags(raw_artifact_keys: list[tuple[str, str]]) -> dict[str, 
 def _tool_errors_summary_from_runs(
     tool_run_summaries: list[tuple[str, str]] | None,
     *,
+    raw_tool_issues: list[dict[str, str]] | None = None,
     max_items: int = 48,
 ) -> list[dict[str, str]]:
-    if not tool_run_summaries:
-        return []
     bad_status = frozenset({"failed", "error", "timeout", "cancelled", "canceled", "aborted"})
     out: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for name, status in tool_run_summaries:
-        n = (name or "").strip()[:200]
-        st = (status or "").strip().lower()
-        if not n:
-            continue
-        if st not in bad_status:
-            continue
-        key = (n.lower(), st)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"tool": n, "status": st, "note": "tool_run_finished_non_success"})
-        if len(out) >= max_items:
-            break
+    if tool_run_summaries:
+        for name, status in tool_run_summaries:
+            n = (name or "").strip()[:200]
+            st = (status or "").strip().lower()
+            if not n:
+                continue
+            if st not in bad_status:
+                continue
+            key = (n.lower(), st)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"tool": n, "status": st, "note": "tool_run_finished_non_success"})
+            if len(out) >= max_items:
+                return out
+    if raw_tool_issues:
+        for row in raw_tool_issues:
+            n = str(row.get("tool") or "").strip()[:200]
+            st = str(row.get("status") or "").strip().lower()[:80]
+            note = str(row.get("note") or "").strip()[:240]
+            if not n or not st:
+                continue
+            key = (n.lower(), st)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"tool": n, "status": st, "note": note or "raw_artifact_issue"})
+            if len(out) >= max_items:
+                break
     return out
+
+
+def _tool_issue_present(
+    raw_tool_issues: list[dict[str, str]],
+    *needles: str,
+) -> bool:
+    if not raw_tool_issues:
+        return False
+    lowered = tuple(n.lower() for n in needles if n)
+    for row in raw_tool_issues:
+        tool = str(row.get("tool") or "").lower()
+        if any(n in tool for n in lowered):
+            return True
+    return False
 
 
 def _envelope_completed() -> ValhallaSectionEnvelopeModel:
@@ -2643,50 +2802,73 @@ def _compute_mandatory_sections_and_coverage(
     fallback_messages: dict[str, str | None],
 ) -> tuple[ValhallaMandatorySectionsModel, ValhallaCoverageModel]:
     phases = _phases_executed_from_outputs(phase_outputs)
-    tool_errs = _tool_errors_summary_from_runs(tool_run_summaries)
+    raw_tool_issues = _raw_tool_issues_from_artifacts(
+        raw_artifact_keys,
+        fetch_bodies=fetch_raw_bodies,
+    )
+    tool_errs = _tool_errors_summary_from_runs(
+        tool_run_summaries,
+        raw_tool_issues=raw_tool_issues,
+    )
+    has_dep_artifacts = any(_artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys)
 
     # --- tech_stack_structured
     tech_empty = _structured_stack_effectively_empty(structured) and not tech_table
     if not tech_empty:
         tech_env = _envelope_completed()
+    elif raw_hints.get("has_whatweb") and _tool_issue_present(raw_tool_issues, "whatweb"):
+        tech_env = _envelope(
+            "partial",
+            "WhatWeb artifacts exist, but the tool produced no parseable stdout or reported stderr/meta issues; "
+            "see tool_errors_summary.",
+        )
+    elif raw_hints.get("has_whatweb"):
+        tech_env = _envelope(
+            "partial",
+            "WhatWeb artifacts exist, but no parseable technology entries were reconstructed from them.",
+        )
     elif not fetch_raw_bodies and (raw_hints.get("has_whatweb") or phase_outputs):
         tech_env = _envelope(
             "partial",
-            "Not scanned: INCLUDE_MINIO=false — тела raw-артефактов WhatWeb не загружались; "
-            "реконструкция стека только из phase_outputs / recon_results.",
+            "Not scanned: INCLUDE_MINIO=false — WhatWeb raw artifact bodies were not fetched; "
+            "stack reconstruction from phase_outputs / recon_results only.",
         )
     elif not phase_outputs and not fetch_raw_bodies:
         tech_env = _envelope(
             "not_executed",
-            "Нет выходов фаз и отключена загрузка raw; tech stack не собирался.",
+            "No phase outputs and raw fetching disabled; tech stack was not collected.",
         )
     else:
         tech_env = _envelope(
             "no_data",
-            (fallback_messages.get("tech_stack") or "Стек не определён: нет WhatWeb и недостаточно рекон-сигналов."),
+            (fallback_messages.get("tech_stack") or "Stack not identified: no WhatWeb output and insufficient recon signals."),
         )
 
     # --- outdated_components
     if outdated:
         outd_env = _envelope_completed()
     elif trivy_enabled and not any("trivy" in (d.source or "").lower() for d in deps):
+        if has_dep_artifacts:
+            outd_env = _envelope(
+                "partial",
+                "TRIVY_ENABLED=true and dependency/SCA artifacts exist, but no Trivy rows were parsed.",
+            )
+        else:
+            outd_env = _envelope(
+                "not_executed",
+                "TRIVY_ENABLED=true, but no Trivy/dependency artifacts were collected for this scan.",
+            )
+    elif not fetch_raw_bodies and has_dep_artifacts:
         outd_env = _envelope(
             "partial",
-            "TRIVY_ENABLED=true, но строк Trivy в dependency_analysis нет; проверьте manifest-артефакты.",
-        )
-    elif not fetch_raw_bodies and any(
-        _artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
-    ):
-        outd_env = _envelope(
-            "partial",
-            "Not scanned: INCLUDE_MINIO=false — JSON зависимостей из raw не загружался.",
+            "Not scanned: INCLUDE_MINIO=false — dependency JSON from raw artifacts was not fetched.",
         )
     else:
         outd_env = _envelope(
             "no_data",
             (
                 fallback_messages.get("outdated")
-                or "Нет сигналов устаревших компонентов (CVE/Trivy/searchsploit/версии)."
+                or "No outdated component signals (CVE/Trivy/searchsploit/versions)."
             ),
         )
 
@@ -2700,17 +2882,28 @@ def _compute_mandatory_sections_and_coverage(
     if not _ssl_surface_empty(ssl_out):
         ssl_env = _envelope_completed() if not ssl_from_recon_only else _envelope(
             "partial",
-            "Есть данные сертификата из recon; полный TLS-скан (testssl/sslscan) отсутствует или не распарсен.",
+            "Certificate data available from recon; full TLS scan (testssl/sslscan) missing or not parsed.",
+        )
+    elif raw_hints.get("has_tls") and _tool_issue_present(raw_tool_issues, "testssl", "sslscan", "sslyze", "tlsx"):
+        ssl_env = _envelope(
+            "partial",
+            "TLS tool artifacts exist, but testssl/sslscan produced no parseable output or reported stderr/meta issues; "
+            "see tool_errors_summary.",
+        )
+    elif raw_hints.get("has_tls") and fetch_raw_bodies:
+        ssl_env = _envelope(
+            "partial",
+            "TLS artifacts exist, but no parseable testssl/sslscan JSON or text summary was reconstructed.",
         )
     elif not fetch_raw_bodies and raw_hints.get("has_tls"):
         ssl_env = _envelope(
             "not_executed",
-            "Not scanned: INCLUDE_MINIO=false — TLS-артефакты есть в индексе, тела не загружались.",
+            "Not scanned: INCLUDE_MINIO=false — TLS artifacts exist in index, bodies were not fetched.",
         )
     else:
         ssl_env = _envelope(
             "no_data",
-            (fallback_messages.get("ssl_tls") or "SSL/TLS: нет testssl/sslscan и нет данных сертификата."),
+            (fallback_messages.get("ssl_tls") or "SSL/TLS: no testssl/sslscan output and no certificate data."),
         )
 
     if sec_hdr.rows:
@@ -2718,14 +2911,20 @@ def _compute_mandatory_sections_and_coverage(
     elif merged_http_headers:
         sec_env = _envelope(
             "partial",
-            "Частичные заголовки в данных, но каноническая таблица security headers не построена.",
+            "Partial headers present in data, but canonical security headers table was not built.",
+        )
+    elif _tool_issue_present(raw_tool_issues, "nikto", "whatweb", "httpx"):
+        sec_env = _envelope(
+            "partial",
+            "Header-capable tool artifacts exist, but they produced no parseable stdout or reported stderr/meta issues; "
+            "see tool_errors_summary.",
         )
     else:
         sec_env = _envelope(
             "no_data",
             (
                 fallback_messages.get("security_headers")
-                or "Нет карты http_headers в recon и вложенных заголовков в фазах."
+                or "No http_headers map in recon and no embedded headers in phase outputs."
             ),
         )
 
@@ -2734,36 +2933,42 @@ def _compute_mandatory_sections_and_coverage(
         or robots_sitemap_merged.sitemap_found
         or robots.found
         or sitemap.found
-        or (robots_sitemap_merged.notes_ru or "").strip()
+        or (robots_sitemap_merged.notes or "").strip()
     )
     if robots.found or sitemap.found:
         rs_env = _envelope_completed()
-    elif rs_signal and (robots_sitemap_merged.notes_ru or "").strip():
-        rs_env = _envelope("partial", "Сводный JSON robots/sitemap; тела robots/sitemap могли быть не разобраны.")
+    elif rs_signal and (robots_sitemap_merged.notes or "").strip():
+        rs_env = _envelope("partial", "Merged robots/sitemap JSON available; raw robots/sitemap bodies may not have been parsed.")
     elif rs_signal:
         rs_env = _envelope_completed()
     elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
         rs_env = _envelope(
             "not_executed",
-            "Not scanned: INCLUDE_MINIO=false — robots/sitemap ключи есть, тела не загружались.",
+            "Not scanned: INCLUDE_MINIO=false — robots/sitemap keys exist, bodies were not fetched.",
         )
     else:
         rs_env = _envelope(
             "no_data",
-            (fallback_messages.get("robots_sitemap") or "robots.txt и sitemap не получены."),
+            (fallback_messages.get("robots_sitemap") or "robots.txt and sitemap were not retrieved."),
         )
 
     if final_emails:
         em_env = _envelope_completed()
+    elif harvester_enabled and raw_hints.get("has_harvester") and _tool_issue_present(raw_tool_issues, "harvester"):
+        em_env = _envelope(
+            "partial",
+            "theHarvester artifacts exist, but the tool produced no parseable email output or reported stderr/meta issues; "
+            "see tool_errors_summary.",
+        )
     elif harvester_enabled:
         em_env = _envelope(
             "no_data",
-            (fallback_messages.get("leaked_emails") or "theHarvester включён, маскированных email в данных нет."),
+            (fallback_messages.get("leaked_emails") or "theHarvester enabled, but no masked emails found in data."),
         )
     else:
         em_env = _envelope(
             "not_executed",
-            "Not scanned: HARVESTER_ENABLED=false — целевой сбор email через theHarvester не выполнялся.",
+            "Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.",
         )
 
     mandatory = ValhallaMandatorySectionsModel(
@@ -3063,16 +3268,12 @@ def build_valhalla_report_context(
         )
     )
     if isinstance(anomalies_structured, dict):
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             emails.extend(_extract_emails_from_text(json.dumps(anomalies_structured, ensure_ascii=False)))
-        except (TypeError, ValueError):
-            pass
     for _ph, inp in phase_inputs:
         if isinstance(inp, dict):
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 emails.extend(_extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000]))
-            except (TypeError, ValueError):
-                pass
 
     if not emails:
         harvester_phase_emails = _emails_from_harvester_phase_outputs(phase_outputs)
@@ -3121,23 +3322,23 @@ def build_valhalla_report_context(
     tech_stack_fallback_message: str | None = None
     if _structured_stack_effectively_empty(structured) and not tech_table:
         tech_stack_fallback_message = (
-            "Стек технологий не определён автоматически: нет валидного вывода WhatWeb "
-            "или недостаточно рекон-сигналов для заполнения таблицы."
+            "Technology stack not identified automatically: no valid WhatWeb output "
+            "or insufficient recon signals to populate the table."
         )
 
     ssl_tls_fallback_message: str | None = None
     if _ssl_surface_empty(ssl_out):
         ssl_tls_fallback_message = (
-            "Данные SSL/TLS отсутствуют или не получены: для HTTPS ожидается вывод testssl.sh (JSON) "
-            "или sslscan в сырых артефактах; для HTTP цели TLS-проверка не выполнялась. "
-            "При необходимости проверьте политику VA и наличие testssl.sh в sandbox."
+            "SSL/TLS data missing or not retrieved: for HTTPS targets testssl.sh (JSON) "
+            "or sslscan output is expected in raw artifacts; for HTTP targets TLS check was not performed. "
+            "If needed, verify VA policy and testssl.sh availability in the sandbox."
         )
 
     security_headers_fallback_message: str | None = None
     if not sec_hdr.rows and not merged_http_headers:
         security_headers_fallback_message = (
-            "Анализ заголовков безопасности недоступен: нет карты http_headers в recon_results.json "
-            "и не найдено вложенных заголовков в выходах фаз recon/vuln_analysis."
+            "Security headers analysis unavailable: no http_headers map in recon_results.json "
+            "and no embedded headers found in recon/vuln_analysis phase outputs."
         )
 
     outdated_components_fallback_message: str | None = None
@@ -3145,27 +3346,27 @@ def build_valhalla_report_context(
         has_trivy_rows = any("trivy" in (d.source or "").lower() for d in deps)
         if trivy_enabled and not has_trivy_rows:
             outdated_components_fallback_message = (
-                "Trivy включён, но manifest'ы зависимостей не собраны или отчёт Trivy пуст; "
-                "блок устаревших компонентов по SCA не заполнен (проверьте сбор артефактов и TRIVY_ENABLED)."
+                "Trivy enabled, but dependency manifests were not collected or Trivy report is empty; "
+                "outdated components SCA block is not populated (check artifact collection and TRIVY_ENABLED)."
             )
         else:
             outdated_components_fallback_message = (
-                "Явных сигналов устаревших компонентов (CVE, Trivy, searchsploit, версии из WhatWeb/nmap) "
-                "в данных сканирования нет."
+                "No explicit outdated component signals (CVE, Trivy, searchsploit, versions from WhatWeb/nmap) "
+                "found in scan data."
             )
 
     robots_sitemap_fallback_message: str | None = None
     if not robots_sitemap_merged.robots_found and not robots_sitemap_merged.sitemap_found:
         robots_sitemap_fallback_message = (
-            "robots.txt и sitemap не получены или недоступны по HTTP; расширенный анализ поверхности "
-            "по ним отсутствует."
+            "robots.txt and sitemap were not retrieved or are unavailable via HTTP; "
+            "extended surface analysis based on them is absent."
         )
 
     leaked_emails_fallback_message: str | None = None
     if not final_emails:
         leaked_emails_fallback_message = (
-            "Маскированные email-индикаторы не обнаружены. При HARVESTER_ENABLED=true theHarvester "
-            "добавляет сигналы из stdout-артефактов; иначе возможны только косвенные совпадения в recon."
+            "No masked email indicators detected. With HARVESTER_ENABLED=true theHarvester "
+            "adds signals from stdout artifacts; otherwise only indirect matches in recon are possible."
         )
 
     ff: dict[str, bool] = {

@@ -1,0 +1,34 @@
+tool_id: inql
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "inql"
+  - "-t"
+  - "{url}/graphql"
+  - "-o"
+  - "{out_dir}/inql.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/inql.json"
+cwe_hints:
+  - 200
+  - 862
+  - 863
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-IDNT-04"
+description: "inql GraphQL introspection + query-template generator — pulls the schema of {url}/graphql via standard introspection and emits skeleton queries/mutations plus Cycle 3 fuzz candidates (auth-protected fields, dangerous mutations, IDOR-prone args). Read-only. Output is canonical inql JSON: {schema, queries, mutations, subscriptions}. Parser deferred to Cycle 3 (JSON_OBJECT → unmapped_tool). Author: doyensec. Backlog §4.14. ARG-018."

@@ -1,0 +1,49 @@
+family_id: cache_poisoning
+description: >-
+  Web-cache-poisoning probes via unkeyed headers (X-Forwarded-Host,
+  X-Original-URL, X-Forwarded-Scheme) and parameter-cloaking variants.
+  Seeds carry a {canary} marker; the validator pairs them with a unique
+  cache-buster and observes whether subsequent vanilla requests reflect it.
+cwe_ids: [444, 79, 524]
+owasp_top10:
+  - 'A05:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: x_forwarded_host
+    template: 'X-Forwarded-Host: {oast_host}-{canary}'
+    confidence: likely
+    notes: Classic XFH header; cache key may not include it.
+  - id: x_original_url
+    template: 'X-Original-URL: /{canary}'
+    confidence: likely
+    notes: XOU header; some routers honour it bypassing the requested path.
+  - id: x_forwarded_scheme
+    template: 'X-Forwarded-Scheme: javascript'
+    confidence: suspected
+    notes: 'Scheme-confusion; mirrored into Location header triggers stored XSS.'
+  - id: x_host
+    template: 'X-Host: {oast_host}-{canary}'
+    confidence: suspected
+    notes: Alternative Host-override header on legacy ATS proxies.
+  - id: param_cloak_utm
+    template: 'utm_source=oast-{canary}'
+    confidence: suspected
+    notes: Param cloak; tests cache that strips known marketing parameters.
+  - id: oast_marker_body
+    template: 'X-Argus-Canary: https://{oast_host}/{canary}'
+    confidence: confirmed
+    notes: Canary header; OAST callback confirms the URL is reflected & cached.
+mutations:
+  - name: case_flip
+    description: Header-name case is irrelevant to HTTP but matters to some caches.
+  - name: whitespace_alt
+    description: Whitespace variants confirm parser/cache key robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header (validator's HTTP shim sets it directly).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded header value (param-cloak variants).

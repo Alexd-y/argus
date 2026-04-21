@@ -1,0 +1,34 @@
+tool_id: kiterunner
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "kr"
+  - "scan"
+  - "{url}"
+  - "-w"
+  - "{wordlist}"
+  - "-o"
+  - "{out_dir}/kr.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/kr.json"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-CONFIG-04"
+  - "WSTG-CONFIG-06"
+description: "kiterunner (kr) API route discovery using Swagger / OpenAPI wordlists. Author: assetnote (https://github.com/assetnote/kiterunner). Backlog/dev1_md §4.5."

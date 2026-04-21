@@ -1,0 +1,74 @@
+{
+  "collection": {"info": {"name": "ARGUS API Smoke Tests", "id": "abc-123"}},
+  "environment": {"id": "env-1", "name": "staging"},
+  "run": {
+    "stats": {
+      "iterations": {"total": 1, "pending": 0, "failed": 0},
+      "items": {"total": 4, "pending": 0, "failed": 0},
+      "scripts": {"total": 4, "pending": 0, "failed": 0},
+      "prerequests": {"total": 4, "pending": 0, "failed": 0},
+      "requests": {"total": 4, "pending": 0, "failed": 0},
+      "tests": {"total": 4, "pending": 0, "failed": 0},
+      "assertions": {"total": 5, "pending": 0, "failed": 2}
+    },
+    "failures": [
+      {
+        "error": {
+          "name": "AssertionError",
+          "test": "Status code is 200",
+          "message": "expected response to have status code 200 but got 401"
+        },
+        "at": "test-script",
+        "source": {
+          "name": "GET /api/v1/admin",
+          "request": {
+            "method": "GET",
+            "url": {"raw": "https://target.example.com/api/v1/admin", "path": ["api","v1","admin"]}
+          }
+        },
+        "parent": {"name": "Admin endpoints"}
+      },
+      {
+        "error": {
+          "name": "AssertionError",
+          "test": "Body contains JWT token",
+          "message": "expected response body to contain 'token' but got error"
+        },
+        "at": "test-script",
+        "source": {
+          "name": "POST /api/v1/auth/login",
+          "request": {
+            "method": "POST",
+            "url": {"raw": "https://target.example.com/api/v1/auth/login", "path": ["api","v1","auth","login"]}
+          }
+        },
+        "parent": {"name": "Auth flow"}
+      }
+    ],
+    "executions": [
+      {
+        "item": {"name": "GET /api/v1/admin"},
+        "request": {"method": "GET", "url": {"raw": "https://target.example.com/api/v1/admin"}},
+        "response": {
+          "code": 401,
+          "status": "Unauthorized",
+          "responseTime": 42,
+          "stream": {
+            "type": "Buffer",
+            "data": []
+          }
+        }
+      },
+      {
+        "item": {"name": "POST /api/v1/internal/sync"},
+        "request": {"method": "POST", "url": {"raw": "https://target.example.com/api/v1/internal/sync"}},
+        "response": {
+          "code": 500,
+          "status": "Internal Server Error",
+          "responseTime": 1024,
+          "body": "{\"error\":\"NullPointerException at com.example.SyncService.process(SyncService.java:127)\",\"trace\":\"  at com.example.SyncService.process\\n  at com.example.SyncController.handle\",\"token\":\"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiYWRtaW4ifQ.signature\"}"
+        }
+      }
+    ]
+  }
+}

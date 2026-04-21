@@ -1,0 +1,47 @@
+tool_id: zap_baseline
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "zap-baseline.py"
+  - "-t"
+  - "{url}"
+  - "-J"
+  - "{out_dir}/zap_baseline.json"
+  - "-r"
+  - "{out_dir}/zap_baseline.html"
+  - "-x"
+  - "{out_dir}/zap_baseline.xml"
+  - "-T"
+  - "25"
+  - "-z"
+  - "-config api.disablekey=true"
+  - "-d"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/zap_baseline.json"
+  - "/out/zap_baseline.html"
+  - "/out/zap_baseline.xml"
+cwe_hints:
+  - 16
+  - 200
+  - 693
+  - 1021
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-CONF-07"
+  - "WSTG-INFO-08"
+description: "OWASP ZAP baseline.py — passive-only scan of {url} (no active payloads), 25 min cap, JSON + HTML + XML reports. Spider + passive scan rules, no probe injection. -d emits debug log. NOTE: dedicated JSON parser deferred to Cycle 3 — parse_strategy stays text_lines so dispatch is honest about not extracting findings yet (raw reports still land in evidence). Author: OWASP ZAP (https://www.zaproxy.org/docs/docker/baseline-scan/). Backlog/dev1_md §4.8."

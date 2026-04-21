@@ -73,6 +73,7 @@ class TestAuthLoginBlock9:
         secret = "test-secret-key-min-32-chars-long-for-hs256"
         monkeypatch.setattr("src.core.config.settings.jwt_secret", secret)
         monkeypatch.setattr("src.core.config.settings.debug", True)
+        monkeypatch.setattr("src.core.config.settings.dev_login_bypass_enabled", True)
         _patch_login_db_no_user(monkeypatch)
         from main import app
 
@@ -105,11 +106,10 @@ class TestAuthLoginBlock9:
         assert r.status_code == 401
         assert (r.json().get("detail") or "").lower().find("invalid") >= 0
 
-    def test_require_admin_403_without_key_in_prod_mode(
+    def test_require_admin_503_without_key_in_prod_mode(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("src.core.config.settings.admin_api_key", "")
         monkeypatch.setattr("src.core.config.settings.debug", False)
         r = client.get("/api/v1/cache/stats")
-        assert r.status_code == 403
-        assert "ADMIN_API_KEY" in (r.json().get("detail") or "")
+        assert r.status_code == 503

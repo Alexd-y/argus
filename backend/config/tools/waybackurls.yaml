@@ -1,0 +1,33 @@
+tool_id: waybackurls
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "waybackurls-wrapper"
+  - "-domain"
+  - "{domain}"
+  - "-out"
+  - "{out_dir}/wayback.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/wayback.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-06"
+  - "WSTG-INFO-07"
+description: "waybackurls fetches every historical URL ever recorded by the Internet Archive Wayback Machine for {domain}. Image-side wrapper `waybackurls-wrapper` translates argv-form (`-domain <domain> -out <path>`) to upstream stdin/stdout pipe (`echo <domain> | waybackurls > <path>`) so the sandbox stays argv-only. Passive (no traffic to target). Author: tomnomnom (https://github.com/tomnomnom/waybackurls). Backlog/dev1_md §4.6."

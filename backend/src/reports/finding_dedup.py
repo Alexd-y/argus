@@ -39,9 +39,7 @@ def deduplicate_findings(findings: list[Any]) -> list[Any]:
     for candidate in findings:
         is_dup = False
         for i, existing in enumerate(seen):
-            if _is_hard_duplicate(candidate, existing):
-                is_dup = True
-            elif _is_soft_duplicate(candidate, existing):
+            if _is_hard_duplicate(candidate, existing) or _is_soft_duplicate(candidate, existing):
                 is_dup = True
 
             if is_dup:

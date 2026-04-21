@@ -1,0 +1,45 @@
+tool_id: trivy_image
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "trivy"
+  - "image"
+  - "--format"
+  - "json"
+  - "-o"
+  - "{out_dir}/trivy.json"
+  - "--scanners"
+  - "vuln,config,secret"
+  - "--severity"
+  - "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  - "--no-progress"
+  - "--quiet"
+  - "{image}"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/trivy.json"
+cwe_hints:
+  - 16
+  - 200
+  - 732
+  - 798
+  - 1395
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Aqua Trivy container image scanner — pulls {image} from the registry and scans for OS-package CVEs, language CVEs, container misconfigs and embedded secrets. Output is canonical Trivy v2 JSON (Results[].Vulnerabilities/Misconfigurations/Secrets) consumed by sandbox/parsers/trivy_parser.py via JSON_OBJECT. recon-passive = TCP/443 to registries (Docker Hub, GHCR, ECR, GCR, ACR). Author: Aqua Security. Backlog §4.15. ARG-018."

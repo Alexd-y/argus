@@ -1,0 +1,29 @@
+tool_id: oast_dns_probe
+version: "1.0.0"
+category: oast
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "256Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: oast-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "dig +short +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/oast_dns.txt"
+cwe_hints:
+  - 918
+owasp_wstg:
+  - "WSTG-INPV-19"
+description: "Out-of-band DNS probe — fires a unique {rand}.oast.argus.local query so the OAST plane records the resolver chain that issued it. Used as a hot-path canary check before launching SSRF / blind-RCE campaigns; the {rand} token is later correlated against interactsh callbacks via sandbox/parsers/interactsh_parser.py. Backlog/dev1_md §4.11. ARG-017."

@@ -1,1 +1,167 @@
 {% extends "base.html.j2" %}
+{# ARG-025 — Asgard tier render. Re-uses base.html.j2 partials for recon /
+   findings / OWASP / artifacts / AI slots; the ``extra`` block adds the
+   Asgard-specific full-findings + remediation + sanitized reproducer +
+   timeline + presigned evidence-URL stack from ``asgard_report``. #}
+{% block extra %}
+{% set asgard = asgard_report if asgard_report is defined else None %}
+{% if asgard %}
+<section class="asgard-report" id="asgard-report">
+    <h2>Asgard tier — security team brief</h2>
+
+    {# Title meta — the Asgard renderer's contract #}
+    <p class="meta">
+        <strong>Report:</strong> {{ asgard.title_meta.report_id }}
+        — <strong>Target:</strong> {{ asgard.title_meta.target or "—" }}
+        — <strong>Scan:</strong> {{ asgard.title_meta.scan_id or "—" }}
+    </p>
+
+    {# Severity rollup #}
+    <h3>Severity rollup</h3>
+    <table class="asgard-severity-table">
+        <thead>
+            <tr>
+                <th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Info</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="sev-critical">{{ asgard.executive_summary_counts.critical }}</td>
+                <td class="sev-high">{{ asgard.executive_summary_counts.high }}</td>
+                <td class="sev-medium">{{ asgard.executive_summary_counts.medium }}</td>
+                <td class="sev-low">{{ asgard.executive_summary_counts.low }}</td>
+                <td class="sev-info">{{ asgard.executive_summary_counts.info }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {# Full findings — no Top-N cap (vs Midgard) #}
+    <h3>All findings ({{ asgard.findings | length }})</h3>
+    {% if asgard.findings %}
+    <table class="asgard-findings-table">
+        <thead>
+            <tr>
+                <th>Severity</th><th>Title</th><th>Description</th><th>CWE</th><th>OWASP</th><th>CVSS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in asgard.findings %}
+            <tr>
+                <td><span class="sev-{{ (f.severity or 'info') | lower }}">{{ f.severity }}</span></td>
+                <td>{{ f.title }}</td>
+                <td class="desc">{{ f.description }}</td>
+                <td>{{ f.cwe or "—" }}</td>
+                <td>{{ f.owasp_category or "—" }}</td>
+                <td>{% if f.cvss is not none %}{{ f.cvss }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No findings.</p>
+    {% endif %}
+
+    {# Remediation guidance — one row per finding #}
+    {% if asgard.remediation %}
+    <h3>Remediation</h3>
+    <table class="asgard-remediation-table">
+        <thead>
+            <tr><th>Severity</th><th>Finding</th><th>Guidance</th></tr>
+        </thead>
+        <tbody>
+            {% for r in asgard.remediation %}
+            <tr>
+                <td><span class="sev-{{ (r.severity or 'info') | lower }}">{{ r.severity }}</span></td>
+                <td>{{ r.finding_title }}</td>
+                <td class="desc">{{ r.guidance }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {# Sanitised reproducer commands — every secret span has been redacted #}
+    {% if asgard.reproducer %}
+    <h3>Sanitised reproducer commands</h3>
+    <p class="meta">Bearer / API tokens, NT-LM hashes, passwords, destructive flags and
+    reverse-shell payloads have been redacted by ``replay_command_sanitizer``
+    (NIST SP 800-204D §5.1.4). Targets are replaced with <code>{{ '{ASSET}' }}</code> /
+    <code>{{ '{ENDPOINT}' }}</code> placeholders.</p>
+    <ul class="asgard-reproducer-list">
+        {% for r in asgard.reproducer %}
+        <li>
+            <strong>{{ r.finding_title }}</strong>
+            <span class="sev-{{ (r.severity or 'info') | lower }}">[{{ r.severity }}]</span>
+            <pre class="finding-poc-block">{{ r.command | join(" ") }}</pre>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {# Timeline — chronological pipeline phases #}
+    {% if asgard.timeline %}
+    <h3>Pipeline timeline</h3>
+    <ul class="timeline">
+        {% for t in asgard.timeline %}
+        <li>
+            <strong>#{{ t.order_index }} {{ t.phase }}</strong>
+            {% if t.created_at %} <em>({{ t.created_at }})</em>{% endif %}
+            {% if t.snippet %}: {{ t.snippet }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {# Evidence — presigned URLs (when storage layer issued them) #}
+    {% if asgard.evidence %}
+    <h3>Evidence</h3>
+    <table class="asgard-evidence-table">
+        <thead>
+            <tr><th>Finding</th><th>Object</th><th>Description</th><th>Presigned URL</th></tr>
+        </thead>
+        <tbody>
+            {% for e in asgard.evidence %}
+            <tr>
+                <td>{{ e.finding_id }}</td>
+                <td><code>{{ e.object_key }}</code></td>
+                <td>{{ e.description or "—" }}</td>
+                <td>
+                    {% if e.presigned_url %}
+                        <a href="{{ e.presigned_url }}" target="_blank" rel="noopener noreferrer">Download</a>
+                    {% else %}
+                        <span class="empty">No URL</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {# Screenshots — same presigned-URL semantics as evidence #}
+    {% if asgard.screenshots %}
+    <h3>Screenshots</h3>
+    <table class="asgard-screenshots-table">
+        <thead>
+            <tr><th>Object</th><th>URL / email context</th><th>Presigned URL</th></tr>
+        </thead>
+        <tbody>
+            {% for s in asgard.screenshots %}
+            <tr>
+                <td><code>{{ s.object_key }}</code></td>
+                <td>{{ s.url_or_email or "—" }}</td>
+                <td>
+                    {% if s.presigned_url %}
+                        <a href="{{ s.presigned_url }}" target="_blank" rel="noopener noreferrer">Open</a>
+                    {% else %}
+                        <span class="empty">No URL</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.argus.local/validation_plan_v1.json",
+  "title": "ValidationPlanV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "hypothesis",
+    "risk",
+    "payload_strategy",
+    "validator",
+    "approval_required",
+    "evidence_to_collect",
+    "remediation_focus"
+  ],
+  "properties": {
+    "hypothesis": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 500
+    },
+    "risk": {
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "payload_strategy": {
+      "type": "object",
+      "required": ["registry_family", "mutation_classes", "raw_payloads_allowed"],
+      "properties": {
+        "registry_family": {
+          "type": "string",
+          "pattern": "^[a-z_]+\\.[a-z_]+(\\.[a-z0-9_]+)+\\.v[0-9]+$"
+        },
+        "mutation_classes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "canonicalization",
+              "context_encoding",
+              "length_variation",
+              "case_normalization",
+              "charset_shift",
+              "waf_detour_lite"
+            ]
+          }
+        },
+        "raw_payloads_allowed": {
+          "const": false
+        }
+      }
+    },
+    "validator": {
+      "type": "object",
+      "required": ["tool", "inputs", "success_signals", "stop_conditions"],
+      "properties": {
+        "tool": {
+          "enum": [
+            "safe_validator",
+            "browser_validator",
+            "oast_canary",
+            "payload_registry"
+          ]
+        },
+        "inputs": {
+          "type": "object"
+        },
+        "success_signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stop_conditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "approval_required": {
+      "type": "boolean"
+    },
+    "evidence_to_collect": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "remediation_focus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

@@ -3,8 +3,8 @@
 ARGUS MCP Server — FastMCP, stdio or HTTP transport.
 
 SSE-MCP-007: Tools call backend API. Typed schemas, auth placeholder, tenant awareness.
-MCP-002: 150+ Kali pentest tools via backend /api/v1/tools/* endpoints.
-MCP-002: HTTP transport for Docker; stdio for local Cursor spawn.
+MCP-002: Kali pentest tools via backend /api/v1/tools/* (registry size in tools.kali_registry).
+MCP-002: HTTP transport for Docker; stdio for local Cursor spawn. Default HTTP port: ARGUS_MCP_PORT (8765).
 """
 
 from __future__ import annotations
@@ -12,18 +12,24 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import hmac
 import json
 import logging
 import os
 import shlex
 import sys
 import time
+import uuid
 from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
 from fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.middleware import Middleware as StarletteMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse as StarletteJSONResponse
 from tools.kali_registry import KALI_TOOL_REGISTRY, ToolDefinition
 from tools.va_sandbox_tools import build_enqueue_payload
 
@@ -189,7 +195,7 @@ class ReportSchema(BaseModel):
 # Configuration
 # ---------------------------------------------------------------------------
 
-DEFAULT_SERVER_URL = "http://127.0.0.1:8000"
+DEFAULT_SERVER_URL = os.environ.get("ARGUS_SERVER_URL", "http://127.0.0.1:8000")
 DEFAULT_TIMEOUT = 300
 MAX_RETRIES = 3
 # Cap base64 payload size for MCP responses (report / artifact downloads).
@@ -197,10 +203,10 @@ _MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
 
 
 def _get_auth_headers() -> dict[str, str]:
-    """Auth placeholder: return headers when ARGUS_API_KEY is set."""
+    """Return auth headers for backend API calls (X-API-Key contract)."""
     api_key = os.environ.get("ARGUS_API_KEY")
     if api_key:
-        return {"Authorization": f"Bearer {api_key}"}
+        return {"X-API-Key": api_key}
     return {}
 
 
@@ -213,8 +219,8 @@ def _get_tenant_headers(tenant_id: str | None) -> dict[str, str]:
 
 
 def _get_admin_headers() -> dict[str, str]:
-    """Internal VA enqueue: X-Admin-Key when ARGUS_ADMIN_KEY is set (matches backend require_admin)."""
-    key = (os.environ.get("ARGUS_ADMIN_KEY") or "").strip()
+    """Internal VA enqueue: X-Admin-Key (matches backend require_admin)."""
+    key = (os.environ.get("ADMIN_API_KEY") or os.environ.get("ARGUS_ADMIN_KEY") or "").strip()
     if key:
         return {"X-Admin-Key": key}
     return {}
@@ -351,15 +357,18 @@ class ArgusClient:
         return {**self._headers(), **_get_admin_headers()}
 
     def _err_response(self, r: httpx.Response) -> dict[str, Any]:
-        try:
-            data = r.json()
-            if isinstance(data, dict):
-                out: dict[str, Any] = {"error": f"HTTP {r.status_code}"}
-                out.update(data)
-                return out
-        except Exception:
-            pass
-        return {"error": f"HTTP {r.status_code}", "detail": (r.text or "")[:500]}
+        error_id = uuid.uuid4().hex[:12]
+        logger.warning(
+            "backend_error_response",
+            extra={"status": r.status_code, "error_id": error_id, "detail": (r.text or "")[:500]},
+        )
+        return {"error": f"HTTP {r.status_code}", "error_id": error_id}
+
+    def _safe_request_error(self, label: str, exc: BaseException) -> dict[str, Any]:
+        """Return opaque error dict and log the real cause. Prevents leaking internals."""
+        error_id = uuid.uuid4().hex[:12]
+        logger.warning("%s error_id=%s", label, error_id, exc_info=exc)
+        return {"error": f"Internal error (ref: {error_id})"}
 
     def _get_json(
         self,
@@ -401,7 +410,7 @@ class ArgusClient:
                 if attempt < 2:
                     time.sleep(2**attempt)
                     continue
-        return {"error": str(last_exc) if last_exc else "request_failed"}
+        return self._safe_request_error("get_json_retry_exhausted", last_exc) if last_exc else {"error": "request_failed"}
 
     def _post_json(
         self,
@@ -422,8 +431,7 @@ class ArgusClient:
                 return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
             return self._err_response(r)
         except httpx.RequestError as e:
-            logger.error("POST %s failed: %s", path, e)
-            return {"error": str(e)}
+            return self._safe_request_error("post_json", e)
 
     def _delete_json(
         self,
@@ -444,8 +452,7 @@ class ArgusClient:
                 return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
             return self._err_response(r)
         except httpx.RequestError as e:
-            logger.error("DELETE %s failed: %s", path, e)
-            return {"error": str(e)}
+            return self._safe_request_error("delete_json", e)
 
     def _patch_json(
         self,
@@ -466,8 +473,7 @@ class ArgusClient:
                 return {"note": "non_json_ok", "text_preview": (r.text or "")[:8192]}
             return self._err_response(r)
         except httpx.RequestError as e:
-            logger.error("PATCH %s failed: %s", path, e)
-            return {"error": str(e)}
+            return self._safe_request_error("patch_json", e)
 
     def _get_download_response(
         self,
@@ -518,8 +524,7 @@ class ArgusClient:
                 "note": "binary_body_base64",
             }
         except httpx.RequestError as e:
-            logger.error("GET download %s failed: %s", path, e)
-            return {"error": str(e)}
+            return self._safe_request_error("get_download", e)
 
     def _connect(self) -> None:
         for i in range(MAX_RETRIES):
@@ -647,7 +652,7 @@ class ArgusClient:
                 "note": "non_json_or_binary_report_body_truncated",
             }
         except httpx.RequestError as e:
-            return {"error": str(e)}
+            return self._safe_request_error("get_scan_report", e)
 
     def get_scan_cost(self, scan_id: str) -> dict[str, Any]:
         return self._get_json(f"/api/v1/scans/{scan_id}/cost")
@@ -872,8 +877,8 @@ class ArgusClient:
                 "task_id": "",
             }
         except httpx.RequestError as e:
-            logger.error("enqueue_va_sandbox_tool failed: %s", e)
-            return {"success": False, "error": str(e), "task_id": ""}
+            err = self._safe_request_error("enqueue_va_sandbox_tool", e)
+            return {"success": False, **err, "task_id": ""}
 
     def kal_run(
         self,
@@ -2531,7 +2536,7 @@ def _register_va_sandbox_enqueue_tools(mcp: FastMCP, client: ArgusClient) -> Non
 
 
 def _register_kali_tools(mcp: FastMCP, client: ArgusClient) -> None:
-    """Register 150+ Kali tools from registry. Each tool calls backend run_tool."""
+    """Register all Kali pentest tools from the registry. Each tool calls backend run_tool."""
     for tool_def in KALI_TOOL_REGISTRY:
         _register_single_kali_tool(mcp, client, tool_def)
 
@@ -2559,6 +2564,31 @@ def _get_primary_arg(tool_def: ToolDefinition) -> str:
     return "target"
 
 
+MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "")
+
+
+class MCPBearerAuthMiddleware(BaseHTTPMiddleware):
+    """Starlette middleware: rejects requests without a valid Bearer / X-API-Key token."""
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        token = MCP_AUTH_TOKEN
+        if not token:
+            return await call_next(request)
+
+        auth_header = request.headers.get("authorization", "")
+        api_key = request.headers.get("x-api-key", "")
+
+        bearer_ok = auth_header.startswith("Bearer ") and hmac.compare_digest(
+            auth_header[7:], token
+        )
+        key_ok = bool(api_key) and hmac.compare_digest(api_key, token)
+
+        if bearer_ok or key_ok:
+            return await call_next(request)
+
+        return StarletteJSONResponse(status_code=401, content={"error": "unauthorized"})
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="ARGUS MCP Server")
     parser.add_argument(
@@ -2582,14 +2612,20 @@ def main() -> None:
 
     if args.transport == "http":
         try:
-            port = int(os.environ.get("MCP_PORT", "8000"))
+            raw = (os.environ.get("ARGUS_MCP_PORT") or os.environ.get("MCP_PORT") or "8765").strip()
+            port = int(raw)
             if not 1 <= port <= 65535:
                 raise ValueError(f"Port {port} out of range")
         except ValueError as e:
-            logger.warning("Invalid MCP_PORT (%s), falling back to 8000", e)
-            port = 8000
-        logger.info("Starting ARGUS MCP server (HTTP transport on 0.0.0.0:%d)", port)
-        mcp.run(transport="http", host="0.0.0.0", port=port)
+            logger.warning("Invalid ARGUS_MCP_PORT/MCP_PORT (%s), falling back to 8765", e)
+            port = 8765
+        bind_host = os.environ.get("MCP_BIND_HOST", "127.0.0.1")
+        if MCP_AUTH_TOKEN:
+            bind_host = os.environ.get("MCP_BIND_HOST", "0.0.0.0")
+        host = bind_host
+        middleware = [StarletteMiddleware(MCPBearerAuthMiddleware)] if MCP_AUTH_TOKEN else []
+        logger.info("Starting ARGUS MCP server (HTTP transport on %s:%d, auth=%s)", host, port, bool(MCP_AUTH_TOKEN))
+        mcp.run(transport="http", host=host, port=port, middleware=middleware or None)
     else:
         logger.info("Starting ARGUS MCP server (stdio transport)")
         mcp.run()

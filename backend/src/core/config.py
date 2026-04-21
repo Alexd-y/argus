@@ -69,11 +69,133 @@ class Settings(BaseSettings):
     # When unset, presigned URLs are returned as-is (dev mode).
     minio_public_url: str | None = None
 
+    # ARG-041 — Observability (OpenTelemetry + Prometheus + cardinality discipline)
+    # Tenant hash salt MUST be set in production; default empty triggers warning.
+    # Used to compute tenant_hash = sha256(tenant_id + salt)[:16] for metric/span labels.
+    tenant_hash_salt: str = Field(
+        default="",
+        validation_alias=AliasChoices("TENANT_HASH_SALT", "tenant_hash_salt"),
+    )
+    # OTel master toggle. When false, tracer is no-op (zero overhead).
+    otel_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("OTEL_ENABLED", "otel_enabled"),
+    )
+    # OTLP collector endpoint (gRPC). Default is the standard OTel Collector port.
+    otel_otlp_endpoint: str = Field(
+        default="http://localhost:4317",
+        validation_alias=AliasChoices("OTEL_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_ENDPOINT"),
+    )
+    # When true, gRPC channel is plaintext (dev/local). In prod use TLS via OTel-managed certs.
+    otel_insecure: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("OTEL_INSECURE", "otel_insecure"),
+    )
+    otel_service_name: str = Field(
+        default="argus",
+        validation_alias=AliasChoices("OTEL_SERVICE_NAME", "otel_service_name"),
+    )
+    otel_environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("OTEL_ENVIRONMENT", "DEPLOYMENT_ENVIRONMENT"),
+    )
+    # Sampler ratio 0..1. 1.0 means 100% sampling (dev); production typically 0.05..0.20.
+    otel_sampler_ratio: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices("OTEL_SAMPLER_RATIO", "otel_sampler_ratio"),
+    )
+
+    @field_validator("otel_enabled", "otel_insecure", mode="before")
+    @classmethod
+    def coerce_otel_bool(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("otel_sampler_ratio", mode="after")
+    @classmethod
+    def validate_sampler_ratio(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(f"OTEL_SAMPLER_RATIO must be in [0,1], got {v}")
+        return v
+
     # Redis & Celery (Phase 5)
     redis_url: str = "redis://localhost:6379/0"
+    # TLS: use ``rediss://`` in ``redis_url`` (no separate TLS toggle).
+    # OAST correlator durability (Redis Streams) — ARG-061 / T01
+    oast_redis_streams_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "OAST_REDIS_STREAMS_ENABLED",
+            "oast_redis_streams_enabled",
+        ),
+    )
+    oast_stream_key: str = Field(
+        default="argus:oast:interactions",
+        validation_alias=AliasChoices("OAST_STREAM_KEY", "oast_stream_key"),
+    )
+    oast_stream_group: str = Field(
+        default="argus-oast-correlators",
+        validation_alias=AliasChoices("OAST_STREAM_GROUP", "oast_stream_group"),
+    )
+    oast_stream_consumer_name: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "OAST_STREAM_CONSUMER_NAME",
+            "oast_stream_consumer_name",
+        ),
+    )
+    oast_stream_maxlen: int = Field(
+        default=100_000,
+        ge=1,
+        validation_alias=AliasChoices("OAST_STREAM_MAXLEN", "oast_stream_maxlen"),
+    )
+    oast_stream_block_ms: int = Field(
+        default=5000,
+        ge=1,
+        validation_alias=AliasChoices("OAST_STREAM_BLOCK_MS", "oast_stream_block_ms"),
+    )
+
+    @field_validator("oast_redis_streams_enabled", mode="before")
+    @classmethod
+    def coerce_oast_redis_streams_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
     celery_broker_url: str | None = None  # Defaults to redis_url if unset
     sandbox_container_name: str = "argus-sandbox"
     sandbox_enabled: bool = False  # Enable docker exec into sandbox when True
+
+    # ARG-044 — Intelligence ingest (EPSS / KEV)
+    # When True, the daily EPSS / KEV refresh tasks short-circuit and the
+    # inline EPSS / KEV clients return ``None`` / ``False`` rather than
+    # contacting external APIs. Operators are expected to seed the
+    # ``epss_scores`` / ``kev_catalog`` tables out-of-band (e.g. via a
+    # mirror import). Required for air-gapped on-prem deployments.
+    intel_airgap_mode: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("INTEL_AIRGAP_MODE", "intel_airgap_mode"),
+    )
+
+    @field_validator("intel_airgap_mode", mode="before")
+    @classmethod
+    def coerce_intel_airgap_mode(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
     # Dev-only: POST /sandbox/python. Not a security boundary. Env: ARGUS_SANDBOX_PYTHON_ENABLED (true/1).
     argus_sandbox_python_enabled: bool = Field(
         default=False,
@@ -351,6 +473,134 @@ class Settings(BaseSettings):
     # OWASP-001 — Russian OWASP Top 10:2025 reference JSON for reports/templates. Env: OWASP_JSON_PATH
     # Relative paths resolve from backend package root (directory containing ``src/``).
     owasp_json_path: str = "data/owasp_top_10_2025_ru.json"
+
+    # ---------------------------------------------------------------------
+    # Backend MCP server (Backlog/dev1_md §13 — src.mcp.server).
+    # All MCP_* knobs are optional; sensible defaults keep stdio mode usable
+    # out of the box. Production HTTP/SSE deployments MUST set MCP_AUTH_TOKEN
+    # (or expose JWT / API-key headers via an auth proxy).
+    # ---------------------------------------------------------------------
+    mcp_transport: Literal["stdio", "streamable-http", "sse"] = Field(
+        default="stdio",
+        validation_alias=AliasChoices("MCP_TRANSPORT", "mcp_transport"),
+    )
+    mcp_http_host: str = Field(
+        default="127.0.0.1",
+        validation_alias=AliasChoices("MCP_HTTP_HOST", "mcp_http_host"),
+    )
+    mcp_http_port: int = Field(
+        default=8765,
+        validation_alias=AliasChoices("MCP_HTTP_PORT", "mcp_http_port"),
+    )
+    mcp_server_name: str = Field(
+        default="argus",
+        validation_alias=AliasChoices("MCP_SERVER_NAME", "mcp_server_name"),
+    )
+    mcp_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
+        default="INFO",
+        validation_alias=AliasChoices("MCP_LOG_LEVEL", "mcp_log_level"),
+    )
+    mcp_auth_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("MCP_AUTH_TOKEN", "mcp_auth_token"),
+    )
+    mcp_stdio_tenant_id: str = Field(
+        default="00000000-0000-0000-0000-000000000001",
+        validation_alias=AliasChoices("MCP_STDIO_TENANT_ID", "mcp_stdio_tenant_id"),
+    )
+    mcp_stdio_actor_id: str = Field(
+        default="local-stdio",
+        validation_alias=AliasChoices("MCP_STDIO_ACTOR_ID", "mcp_stdio_actor_id"),
+    )
+    mcp_config_path: str = Field(
+        default="backend/config/mcp/server.yaml",
+        validation_alias=AliasChoices("MCP_CONFIG_PATH", "mcp_config_path"),
+    )
+    mcp_config_signatures_path: str = Field(
+        default="backend/config/mcp/SIGNATURES",
+        validation_alias=AliasChoices(
+            "MCP_CONFIG_SIGNATURES_PATH", "mcp_config_signatures_path"
+        ),
+    )
+    mcp_config_keys_dir: str = Field(
+        default="backend/config/mcp/_keys",
+        validation_alias=AliasChoices("MCP_CONFIG_KEYS_DIR", "mcp_config_keys_dir"),
+    )
+
+    # ARG-035 — MCP webhook notifications + per-LLM-client rate limiter.
+    # All three webhook URLs / API tokens MUST come from env (server.yaml never
+    # carries secrets). The master kill-switch is MCP_NOTIFICATIONS_ENABLED;
+    # individual adapters live behind their own per-tenant flag in server.yaml.
+    mcp_notifications_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "MCP_NOTIFICATIONS_ENABLED", "mcp_notifications_enabled"
+        ),
+    )
+    slack_webhook_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SLACK_WEBHOOK_URL", "slack_webhook_url"),
+    )
+    # ARG-048 — Slack interactive-action callback signing secret. The
+    # ``Slack-App → Basic Information → Signing Secret`` value MUST be
+    # provided when the callback router is mounted; absence forces the
+    # router into hard-fail mode (HTTP 503 on every request) so a
+    # mis-configured deployment cannot silently accept unsigned actions.
+    slack_signing_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SLACK_SIGNING_SECRET", "slack_signing_secret"),
+    )
+    linear_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LINEAR_API_KEY", "linear_api_key"),
+    )
+    linear_team_map: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("LINEAR_TEAM_MAP", "linear_team_map"),
+    )
+    jira_site_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("JIRA_SITE_URL", "jira_site_url"),
+    )
+    jira_user_email: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("JIRA_USER_EMAIL", "jira_user_email"),
+    )
+    jira_api_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("JIRA_API_TOKEN", "jira_api_token"),
+    )
+    jira_project_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("JIRA_PROJECT_KEY", "jira_project_key"),
+    )
+    jira_finding_field_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "JIRA_FINDING_FIELD_ID", "jira_finding_field_id"
+        ),
+    )
+
+    @field_validator(
+        "mcp_notifications_enabled",
+        mode="before",
+    )
+    @classmethod
+    def coerce_mcp_notifications_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("mcp_http_port", mode="after")
+    @classmethod
+    def validate_mcp_http_port(cls, v: int) -> int:
+        if not (1 <= v <= 65_535):
+            raise ValueError(f"MCP_HTTP_PORT must be in 1..65535, got {v}")
+        return v
 
     @property
     def celery_broker(self) -> str:

@@ -1,0 +1,32 @@
+tool_id: paramspider
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "paramspider"
+  - "-d"
+  - "{domain}"
+  - "-o"
+  - "{out_dir}/paramspider.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/paramspider.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INPV-04"
+description: "paramspider mines URL parameters from the Wayback Machine archive (passive, no traffic to target). Author: devanshbatham (https://github.com/devanshbatham/ParamSpider). Backlog/dev1_md §4.5."

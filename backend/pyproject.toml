@@ -6,6 +6,11 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.34.0",
+    "botocore>=1.34.0",
+    "google-auth>=2.27.0",
+    "google-cloud-iam>=2.13.0",
+    "azure-identity>=1.16.0",
+    "azure-core>=1.30.0",
     "celery[redis]>=5.3.0",
     "httpx>=0.27.0",
     "fastapi>=0.109.0",
@@ -24,9 +29,14 @@ dependencies = [
     "weasyprint>=62.0",
     "prometheus-client>=0.19.0",
     "python-json-logger>=2.0.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27.0",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-celery>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+    "opentelemetry-instrumentation-redis>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
     "typer>=0.9.0",
     "tldextract>=5.1.0",
     "dnspython>=2.6.0",
@@ -35,12 +45,28 @@ dependencies = [
     "Jinja2>=3.1.0",
     "markdown>=3.5.0",
     "nh3>=0.2.0",
+    "defusedxml>=0.7.1",
+    "mcp>=1.0.0",
+    "PyYAML>=6.0",
+    "cryptography>=42.0.0",
 ]
 
 [project.optional-dependencies]
-mcp = [
-    "mcp>=1.0.0",
+mcp_extras = [
     "mcp-server-fetch>=2025.4.0",
+]
+# ARG-048 — LaTeX Phase-2 (Cycle 5). Operators who select the LaTeX PDF
+# backend in production (``REPORT_PDF_BACKEND=latex``) need ``jinja2-latex``
+# installed to render the per-tier ``main.tex.j2`` templates. The runtime
+# image ships without LaTeX deps by default (Cairo/WeasyPrint is the
+# default backend), so this is gated behind an opt-in extras group:
+#   pip install '.[latex]'
+# CI mirrors this in the ``requires_latex`` job; dev environments get
+# ``jinja2-latex`` for free via the ``dev`` group below so the parity
+# tests in ``tests/integration/reports/test_latex_phase2_parity.py``
+# can import it without a separate install step.
+latex = [
+    "jinja2-latex>=0.11",
 ]
 dev = [
     "pytest>=7.4.0",
@@ -50,6 +76,30 @@ dev = [
     "black>=24.0.0",
     "bandit>=1.7.0",
     "safety>=3.0.0",
+    "jsonschema>=4.21.0",
+    # ARG-036 — Phase-2 LaTeX templating substrate. Phase-1 (Cycle 4) ships
+    # a minimal LaTeX stub in ``pdf_backend.LatexBackend``; the dependency
+    # is registered now so designers can scaffold ``_latex/<tier>/main.tex.j2``
+    # against a stable runtime, and CI's ``requires_latex`` job has a
+    # known-good install target. ``jinja2-latex`` is a pure-Python
+    # adapter — no native dependencies — and is dev-only because the
+    # runtime LaTeX backend invokes ``latexmk`` directly without it.
+    "jinja2-latex>=0.11",
+    # ARG-036 — PDF metadata + structural assertions in
+    # ``tests/integration/reports/test_pdf_branded.py`` and the extended
+    # ``tests/security/test_report_no_secret_leak.py`` PDF text-extraction
+    # check. Pinned conservatively; pypdf has stable API since 4.x.
+    "pypdf>=4.0",
+    # ARG-045 — async SQLite driver required by the Alembic round-trip smoke
+    # test (``tests/integration/migrations/test_alembic_smoke.py``). The
+    # project's ``alembic/env.py`` is async-only (``async_engine_from_config``)
+    # so the smoke test cannot use the stock sync ``sqlite://`` URL.
+    "aiosqlite>=0.19",
+    # ARG-045 — sync Postgres driver used by ``scripts/dump_alembic_schema.py``
+    # to take a canonical schema snapshot during the round-trip smoke test.
+    # Runtime stays on asyncpg; psycopg2-binary is dev-only (binary wheel — no
+    # native build chain required).
+    "psycopg2-binary>=2.9",
 ]
 
 [build-system]
@@ -95,8 +145,22 @@ skips = ["B101"]  # assert_used in tests
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+# ARG-028 — keep the ``-m "not requires_docker"`` filter aligned with
+# ``backend/pytest.ini``. Pytest discovers ``pytest.ini`` first, but mirroring
+# the config here keeps IDE integrations (PyCharm, VS Code Python ext.) and
+# tools that read ``pyproject.toml`` (e.g. tox-uv) consistent.
+addopts = "-v --tb=short -m 'not requires_docker'"
 filterwarnings = ["ignore::DeprecationWarning"]
 markers = [
     "weasyprint_pdf: needs WeasyPrint (Pango/Cairo); skip with ARGUS_SKIP_WEASYPRINT_PDF=1 or if import fails",
+    "no_auth_override: skip autouse get_required_auth override (real auth behaviour)",
+    "storage_contract: in-memory S3 fake; validates artifact paths without real MinIO",
+    "integration: optional real Docker/network; gate with env vars (e.g. RUN_ALF_NU_E2E)",
+    "requires_postgres: needs a live PostgreSQL backend (skipped by default in dev)",
+    "requires_redis: needs a live Redis backend / Celery broker (skipped by default in dev)",
+    "requires_oast: needs a live OAST listener (interactsh) (skipped by default in dev)",
+    "requires_docker: union marker — any test that needs the Docker test-stack (skipped by default in dev)",
+    "requires_docker_e2e: ARG-047 e2e capstone tests — need the full docker-compose.e2e.yml stack (juice-shop + ARGUS + prometheus); skipped by default. Enable with ``pytest -m requires_docker_e2e`` or via the ``e2e-full-scan`` CI workflow.",
+    "mutates_catalog: test legitimately mutates the signed catalog (MUST use tmp_path copy — read_only_catalog fixture chmods production catalog to 0o444 for the session, so this marker is documentation-only)",
+    "requires_latex: needs a working ``latexmk`` toolchain on PATH (skipped by default in dev; CI runs the LaTeX job separately for ARG-036)",
 ]

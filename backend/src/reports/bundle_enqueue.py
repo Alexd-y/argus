@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import cast, select, String
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS

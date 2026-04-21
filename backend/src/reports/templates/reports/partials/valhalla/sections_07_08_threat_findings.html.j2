@@ -1,24 +1,24 @@
-{# Моделирование угроз + детальные находки #}
+{# Threat modeling + detailed findings #}
 {% set vc = valhalla_context %}
 <section class="valhalla-threat panel" id="threat-modeling">
-    <h2>Моделирование угроз и сценарии атак</h2>
-    <p>На основе выявленных уязвимостей смоделированы вероятные сценарии атак злоумышленника.</p>
-    <h3>Сценарии (ИИ)</h3>
+    <h2>Threat Modeling and Attack Scenarios</h2>
+    <p>Based on identified vulnerabilities, probable attacker scenarios have been modeled.</p>
+    <h3>Scenarios (AI)</h3>
     <div class="ai-slot-body">
         {% set atk = ai_sections.get("attack_scenarios") if ai_sections is defined else "" %}
         {% if atk and atk.strip() %}
             {{ atk | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
-    <h3>Выдержка из threat model (контекст скана)</h3>
+    <h3>Threat Model Excerpt (scan context)</h3>
     {% if vc.threat_model_excerpt %}
         <pre class="ai-slot-body">{{ vc.threat_model_excerpt | e }}</pre>
     {% elif vc.threat_model and vc.threat_model.excerpt %}
         <pre class="ai-slot-body">{{ vc.threat_model.excerpt | e }}</pre>
     {% else %}
-        <p class="empty">Нет данных</p>
+        <p class="empty">No data</p>
     {% endif %}
 </section>
 

@@ -1,0 +1,32 @@
+tool_id: binwalk
+version: "1.0.0"
+category: binary
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-binary:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "binwalk -e --run-as=root --directory={out_dir}/binwalk {file} 2>&1 | tee {out_dir}/binwalk.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/binwalk.log"
+  - "/out/binwalk"
+cwe_hints:
+  - 200
+  - 798
+  - 506
+owasp_wstg:
+  - "WSTG-INFO-08"
+description: "Binwalk — firmware / ELF / PE blob signature scanner. -e auto-extracts every embedded archive / filesystem / compressed payload from {file} into /out/binwalk/_<basename>.extracted/. --run-as=root tolerates UID-0 inside the locked-down sandbox container (no setuid leak — the container is non-priv on the host). Pure offline (egress blocked). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.18. ARG-019."

@@ -1,0 +1,30 @@
+tool_id: syft
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "syft {image} -o cyclonedx-json --quiet > {out_dir}/sbom.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/sbom.json"
+cwe_hints:
+  - 1395
+owasp_wstg:
+  - "WSTG-INFO-08"
+description: "Anchore Syft SBOM generator — pulls {image} and emits a CycloneDX SBOM (components, dependencies, licences, origin) for downstream Grype/Trivy SCA correlation. Read-only, never executes container code, only inspects layers. `sh -c` is used solely for stdout redirection. recon-passive = TCP/443 to registries. Parser deferred to Cycle 3 (SBOMs are usually kept as raw evidence rather than mapped to FindingDTO). Author: Anchore. Backlog §4.15. ARG-018."

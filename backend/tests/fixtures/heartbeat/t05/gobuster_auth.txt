@@ -1,0 +1,1 @@
+https://auth-gobuster.example/internal (Status: 401)

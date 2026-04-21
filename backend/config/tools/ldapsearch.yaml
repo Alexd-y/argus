@@ -1,0 +1,31 @@
+tool_id: ldapsearch
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ldapsearch -x -H ldap://{host} -b {basedn} -s sub > {out_dir}/ldapsearch.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/ldapsearch.txt"
+cwe_hints:
+  - 200
+  - 287
+owasp_wstg:
+  - "WSTG-INFO-05"
+  - "WSTG-ATHN-04"
+description: "OpenLDAP ldapsearch — anonymous LDAP enumeration (-x simple bind) against {host} below {basedn}. -s sub recurses the full subtree. Read-only operation, but emits operator-level information disclosure on misconfigured directories that allow anonymous binds. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

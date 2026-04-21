@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Auto-generated MCP SDK — never lint, never edit by hand.
+    "src/sdk/argus-mcp/**",
   ]),
 ]);
 

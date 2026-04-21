@@ -1,0 +1,494 @@
+{# ARG-031 — Valhalla executive (business-impact lens).
+
+    Renders the new ValhallaSectionAssembly when the Jinja context
+    carries a ``valhalla_executive_report`` dict (built by
+    ``valhalla_assembly_to_jinja_context``). Stays silent when the
+    legacy ``valhalla_context`` is the only thing wired so the
+    pre-existing template still renders cleanly.
+
+    Audience: CISO / Board / executives. The visual language is gold +
+    dark-grey to differentiate from Midgard (blue) and Asgard (orange).
+    Every value passes through Jinja autoescape — never use ``| safe``
+    on an attacker-controlled string.
+#}
+{% set _ver = valhalla_executive_report if valhalla_executive_report is defined else None %}
+{% if _ver %}
+<style>
+    .valhalla-exec {
+        margin: 1.5rem 0;
+        padding: 1.5rem;
+        background: linear-gradient(180deg, #1f1f24 0%, #2a2a30 100%);
+        color: #f5f0e1;
+        border-radius: 8px;
+        border: 1px solid #c9a64a;
+        font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+    }
+    .valhalla-exec h2 {
+        margin: 0 0 0.5rem;
+        padding-bottom: 0.35rem;
+        border-bottom: 2px solid #c9a64a;
+        color: #c9a64a;
+        font-size: 1.25rem;
+        letter-spacing: 0.01em;
+    }
+    .valhalla-exec h3 {
+        margin: 1.25rem 0 0.5rem;
+        color: #e0c574;
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .valhalla-exec p { line-height: 1.55; }
+    .valhalla-exec .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.4rem 1.25rem;
+        margin: 0.5rem 0 1rem;
+        font-size: 0.9rem;
+    }
+    .valhalla-exec .meta-grid dt { color: #c9a64a; font-weight: 600; }
+    .valhalla-exec .meta-grid dd { margin: 0; color: #f5f0e1; }
+    .valhalla-exec .summary-card {
+        background: rgba(201, 166, 74, 0.08);
+        border-left: 3px solid #c9a64a;
+        padding: 0.75rem 1rem;
+        border-radius: 4px;
+        margin: 0.75rem 0;
+    }
+    .valhalla-exec .counts-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; }
+    .valhalla-exec .counts-pill {
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .valhalla-exec .counts-pill.critical { background: #5a1a1a; color: #ffd6d6; }
+    .valhalla-exec .counts-pill.high     { background: #5a3a1a; color: #ffe6c2; }
+    .valhalla-exec .counts-pill.medium   { background: #5a4a1a; color: #fff5d6; }
+    .valhalla-exec .counts-pill.low      { background: #2a4a2a; color: #d6ffd9; }
+    .valhalla-exec .counts-pill.info     { background: #1a3a4a; color: #d6e9ff; }
+    .valhalla-exec table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.5rem 0 1rem;
+        font-size: 0.85rem;
+        background: rgba(20, 20, 24, 0.6);
+        color: #f5f0e1;
+    }
+    .valhalla-exec th, .valhalla-exec td {
+        border: 1px solid #4a4a52;
+        padding: 0.45rem 0.6rem;
+        text-align: left;
+        vertical-align: top;
+    }
+    .valhalla-exec th {
+        background: #34343c;
+        color: #c9a64a;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+    }
+    .valhalla-exec td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .valhalla-exec td.center { text-align: center; }
+    .valhalla-exec .severity-badge {
+        display: inline-block;
+        padding: 0.1rem 0.45rem;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    .valhalla-exec .severity-badge.critical { background: #c00; color: #fff; }
+    .valhalla-exec .severity-badge.high     { background: #e67e22; color: #fff; }
+    .valhalla-exec .severity-badge.medium   { background: #f39c12; color: #1a1a1a; }
+    .valhalla-exec .severity-badge.low      { background: #27ae60; color: #fff; }
+    .valhalla-exec .severity-badge.info     { background: #3498db; color: #fff; }
+    /* ARG-044 — SSVC + KEV badges */
+    .valhalla-exec .ssvc-badge {
+        display: inline-block;
+        padding: 0.1rem 0.45rem;
+        border-radius: 3px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border: 1px solid transparent;
+    }
+    .valhalla-exec .ssvc-badge.act       { background: #c0392b; color: #fff; border-color: #ff6f61; }
+    .valhalla-exec .ssvc-badge.attend    { background: #d35400; color: #fff; border-color: #f39c12; }
+    .valhalla-exec .ssvc-badge.track-star { background: #2980b9; color: #fff; border-color: #3498db; }
+    .valhalla-exec .ssvc-badge.track     { background: #34495e; color: #ecf0f1; border-color: #7f8c8d; }
+    .valhalla-exec .kev-badge {
+        display: inline-block;
+        padding: 0.1rem 0.45rem;
+        border-radius: 3px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        background: #8e0000;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: 1px solid #ff3030;
+    }
+    .valhalla-exec .epss-pct {
+        font-variant-numeric: tabular-nums;
+        color: #f5f0e1;
+    }
+    .valhalla-exec .roadmap-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin: 0.75rem 0;
+    }
+    .valhalla-exec .roadmap-card {
+        padding: 0.85rem 1rem;
+        background: rgba(0, 0, 0, 0.25);
+        border-left: 4px solid #c9a64a;
+        border-radius: 4px;
+    }
+    .valhalla-exec .roadmap-card .phase-id {
+        color: #c9a64a;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+    .valhalla-exec .roadmap-card .sla {
+        color: #e0c574;
+        font-size: 0.85rem;
+    }
+    .valhalla-exec .footer {
+        margin-top: 1.5rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #4a4a52;
+        font-size: 0.75rem;
+        color: #b0a984;
+        text-align: center;
+    }
+    .valhalla-exec .empty { color: #b0a984; font-style: italic; }
+    .valhalla-exec code.sanitized-cmd {
+        display: block;
+        max-width: 22rem;
+        font-size: 0.75rem;
+        background: rgba(0, 0, 0, 0.35);
+        color: #f5f0e1;
+        padding: 0.25rem 0.4rem;
+        border-radius: 3px;
+        word-break: break-all;
+        white-space: pre-wrap;
+    }
+</style>
+<section class="valhalla-exec" id="valhalla-executive-report">
+    <h2>Valhalla Executive Report — Business-Impact Lens</h2>
+    {% set meta = _ver.title_meta if _ver.title_meta is mapping else {} %}
+    <dl class="meta-grid">
+        <dt>Tenant</dt>
+        <dd>{{ meta.get("tenant_id") or "—" }}</dd>
+        <dt>Scan ID</dt>
+        <dd>{{ meta.get("scan_id") or "—" }}</dd>
+        <dt>Report ID</dt>
+        <dd>{{ meta.get("report_id") or "—" }}</dd>
+        <dt>Asset</dt>
+        <dd>{{ meta.get("target") or "—" }}</dd>
+        <dt>Generated</dt>
+        <dd>{{ meta.get("created_at") or "—" }}</dd>
+        <dt>Tier</dt>
+        <dd>Valhalla (Executive)</dd>
+    </dl>
+
+    <h3>Executive Summary</h3>
+    <div class="summary-card">
+        <p>{{ _ver.executive_summary or "No findings to report." }}</p>
+    </div>
+    {% set counts = _ver.executive_summary_counts if _ver.executive_summary_counts is mapping else {} %}
+    {% if counts %}
+    <div class="counts-row">
+        {% for sev in ["critical", "high", "medium", "low", "info"] %}
+        <span class="counts-pill {{ sev }}">{{ sev | upper }}: {{ counts.get(sev, 0) }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3>Risk Quantification per Asset</h3>
+    {% set assets = _ver.risk_quantification_per_asset or [] %}
+    {% if assets %}
+    <table>
+        <thead>
+            <tr>
+                <th>Asset</th>
+                <th class="center">Findings</th>
+                <th class="num">Max CVSS</th>
+                <th class="num">Business Value</th>
+                <th class="num">Exploitability</th>
+                <th class="num">Composite Score</th>
+                <th class="center">Top Severity</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in assets %}
+            <tr>
+                <td>{{ row.asset or "—" }}</td>
+                <td class="center">{{ row.finding_count }}</td>
+                <td class="num">{{ "%.2f"|format(row.max_cvss) }}</td>
+                <td class="num">{{ "%.2f"|format(row.business_value) }}</td>
+                <td class="num">{{ "%.2f"|format(row.exploitability_factor) }}</td>
+                <td class="num"><strong>{{ "%.2f"|format(row.composite_score) }}</strong></td>
+                <td class="center"><span class="severity-badge {{ row.top_severity }}">{{ row.top_severity }}</span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No assets ranked.</p>
+    {% endif %}
+
+    <h3>OWASP Top-10 (2025) Rollup Matrix</h3>
+    {% set rollup = _ver.owasp_rollup_matrix or [] %}
+    {% if rollup %}
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Title</th>
+                <th class="center">Critical</th>
+                <th class="center">High</th>
+                <th class="center">Medium</th>
+                <th class="center">Low</th>
+                <th class="center">Info</th>
+                <th class="center">Total</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in rollup %}
+            <tr>
+                <td>{{ row.category_id }}</td>
+                <td>{{ row.title }}</td>
+                <td class="center">{{ row.critical }}</td>
+                <td class="center">{{ row.high }}</td>
+                <td class="center">{{ row.medium }}</td>
+                <td class="center">{{ row.low }}</td>
+                <td class="center">{{ row.info }}</td>
+                <td class="center"><strong>{{ row.total }}</strong></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No OWASP rollup data.</p>
+    {% endif %}
+
+    <h3>Top Findings by Business Impact</h3>
+    {% set top = _ver.top_findings_by_business_impact or [] %}
+    {% if top %}
+    <table>
+        <thead>
+            <tr>
+                <th class="center">#</th>
+                <th>Title</th>
+                <th class="center">Severity</th>
+                <th class="center">SSVC</th>
+                <th class="center">KEV</th>
+                <th class="num">EPSS%</th>
+                <th>OWASP</th>
+                <th>CWE</th>
+                <th class="num">CVSS</th>
+                <th class="num">Composite</th>
+                <th>Asset</th>
+                <th>Sanitised reproducer</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for f in top %}
+            {% set ssvc_slug = (f.ssvc_decision or "")|lower|replace("*", "-star")|replace(" ", "-") %}
+            <tr>
+                <td class="center">{{ f.rank }}</td>
+                <td>{{ f.title or "—" }}</td>
+                <td class="center"><span class="severity-badge {{ f.severity }}">{{ f.severity }}</span></td>
+                <td class="center">
+                    {% if f.ssvc_decision %}
+                        <span class="ssvc-badge {{ ssvc_slug }}" title="CISA SSVC v2.1">{{ f.ssvc_decision }}</span>
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+                <td class="center">
+                    {% if f.kev_listed %}
+                        <span class="kev-badge" title="CISA Known Exploited Vulnerabilities">KEV</span>
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+                <td class="num epss-pct">
+                    {% if f.epss_percentile is not none %}
+                        {{ "%.1f"|format(f.epss_percentile * 100.0) }}%
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ f.owasp_category }}</td>
+                <td>{{ f.cwe or "—" }}</td>
+                <td class="num">{% if f.cvss is not none %}{{ "%.1f"|format(f.cvss) }}{% else %}—{% endif %}</td>
+                <td class="num"><strong>{{ "%.2f"|format(f.composite_score) }}</strong></td>
+                <td>{{ f.asset or "—" }}</td>
+                <td>
+                    {% if f.sanitized_command %}
+                        <code class="sanitized-cmd">{{ f.sanitized_command | join(" ") }}</code>
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No findings ranked by business impact.</p>
+    {% endif %}
+
+    {# ARG-044 — KEV-listed findings (CISA Known Exploited Vulnerabilities). #}
+    <h3>KEV-Listed Findings (Actively Exploited)</h3>
+    {% set kev_rows = _ver.kev_listed_findings or [] %}
+    {% if kev_rows %}
+    <table>
+        <thead>
+            <tr>
+                <th class="center">#</th>
+                <th>Title</th>
+                <th class="center">Severity</th>
+                <th class="center">SSVC</th>
+                <th>OWASP</th>
+                <th>CWE</th>
+                <th class="num">CVSS</th>
+                <th class="num">EPSS%</th>
+                <th>Asset</th>
+                <th>KEV Added</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for k in kev_rows %}
+            {% set kssvc_slug = (k.ssvc_decision or "")|lower|replace("*", "-star")|replace(" ", "-") %}
+            <tr>
+                <td class="center">{{ k.rank }}</td>
+                <td>{{ k.title or "—" }}</td>
+                <td class="center"><span class="severity-badge {{ k.severity }}">{{ k.severity }}</span></td>
+                <td class="center">
+                    {% if k.ssvc_decision %}
+                        <span class="ssvc-badge {{ kssvc_slug }}" title="CISA SSVC v2.1">{{ k.ssvc_decision }}</span>
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ k.owasp_category }}</td>
+                <td>{{ k.cwe or "—" }}</td>
+                <td class="num">{% if k.cvss is not none %}{{ "%.1f"|format(k.cvss) }}{% else %}—{% endif %}</td>
+                <td class="num epss-pct">
+                    {% if k.epss_percentile is not none %}
+                        {{ "%.1f"|format(k.epss_percentile * 100.0) }}%
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ k.asset or "—" }}</td>
+                <td>{{ k.kev_added_date or "—" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No KEV-listed vulnerabilities detected.</p>
+    {% endif %}
+
+    <h3>Remediation Roadmap</h3>
+    {% set roadmap = _ver.remediation_roadmap or [] %}
+    {% if roadmap %}
+    <div class="roadmap-grid">
+        {% for phase in roadmap %}
+        <div class="roadmap-card">
+            <div><span class="phase-id">{{ phase.phase_id }}</span>
+                {% if phase.sla_days > 0 %}
+                    <span class="sla">— SLA ≤ {{ phase.sla_days }} days</span>
+                {% else %}
+                    <span class="sla">— Backlog</span>
+                {% endif %}
+            </div>
+            <div><strong>Bucket:</strong> {{ phase.severity_bucket }}</div>
+            <div><strong>Items:</strong> {{ phase.finding_count }}</div>
+            {% if phase.top_finding_titles %}
+            <ul>
+                {% for t in phase.top_finding_titles %}
+                <li>{{ t }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">No remediation roadmap.</p>
+    {% endif %}
+
+    <h3>Evidence References</h3>
+    {% set evidence = _ver.evidence_refs or [] %}
+    {% if evidence %}
+    <table>
+        <thead>
+            <tr>
+                <th>Finding</th>
+                <th>Object Key</th>
+                <th>Description</th>
+                <th>Presigned URL</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for ev in evidence %}
+            <tr>
+                <td>{{ ev.finding_id }}</td>
+                <td><code>{{ ev.object_key }}</code></td>
+                <td>{{ ev.description or "—" }}</td>
+                <td>
+                    {% if ev.presigned_url %}
+                        <a href="{{ ev.presigned_url }}" rel="noopener noreferrer">View</a>
+                    {% else %}
+                        <span class="empty">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No evidence references.</p>
+    {% endif %}
+
+    <h3>Pipeline Timeline</h3>
+    {% set timeline = _ver.timeline_entries or [] %}
+    {% if timeline %}
+    <table>
+        <thead>
+            <tr>
+                <th class="center">#</th>
+                <th>Phase</th>
+                <th>Snippet</th>
+                <th>When</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for t in timeline %}
+            <tr>
+                <td class="center">{{ t.order_index }}</td>
+                <td>{{ t.phase or "—" }}</td>
+                <td><code>{{ t.snippet }}</code></td>
+                <td>{{ t.created_at or "—" }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No timeline entries.</p>
+    {% endif %}
+
+    <p class="footer">
+        ARGUS Valhalla Executive Report — generated by ARGUS ReportService.
+        This document is privileged and confidential. Distribute on a need-to-know basis only.
+    </p>
+</section>
+{% endif %}

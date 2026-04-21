@@ -1,0 +1,45 @@
+[
+  {
+    "title": "Introspection Query Enabled",
+    "result": true,
+    "severity": "INFO",
+    "description": "GraphQL introspection is publicly accessible and exposes the full schema.",
+    "color": "green",
+    "impact": "Information disclosure",
+    "curl_verify": "curl -X POST -H 'Content-Type: application/json' -d '{\"query\":\"{__schema{types{name}}}\"}' https://target.example.com/graphql"
+  },
+  {
+    "title": "Field Suggestions Enabled",
+    "result": true,
+    "severity": "INFO",
+    "description": "Server returns field suggestions (typo correction).",
+    "color": "green",
+    "impact": "Information disclosure",
+    "curl_verify": "curl -X POST -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U' -H 'Content-Type: application/json' -d '{\"query\":\"{user(id:1){nam}}\"}' https://target.example.com/graphql"
+  },
+  {
+    "title": "Alias-based Denial of Service",
+    "result": true,
+    "severity": "HIGH",
+    "description": "Server processes massive aliased queries unbounded — degenerate parser DoS.",
+    "color": "red",
+    "impact": "Denial of service",
+    "curl_verify": "curl -X POST -H 'Content-Type: application/json' -d '{\"query\":\"{a:user(id:1){id} b:user(id:2){id}}\"}' https://target.example.com/graphql"
+  },
+  {
+    "title": "Mutation through GET method",
+    "result": true,
+    "severity": "MEDIUM",
+    "description": "Mutations accepted through HTTP GET — vulnerable to CSRF.",
+    "color": "yellow",
+    "impact": "Cross-site request forgery",
+    "curl_verify": "curl 'https://target.example.com/graphql?query=mutation{deleteUser(id:1)}'"
+  },
+  {
+    "title": "Schema introspection disabled",
+    "result": false,
+    "severity": "INFO",
+    "description": "Schema introspection appears to be disabled.",
+    "color": "blue"
+  }
+]

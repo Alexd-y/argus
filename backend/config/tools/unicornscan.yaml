@@ -1,0 +1,32 @@
+tool_id: unicornscan
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-udp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "unicornscan"
+  - "-mT"
+  - "{ip}:a"
+  - "-I"
+  - "-l"
+  - "{out_dir}/unicornscan.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/unicornscan.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-02"
+description: "unicornscan asynchronous TCP/UDP port discovery with PCAP-style logging. Backlog/dev1_md §4.2."

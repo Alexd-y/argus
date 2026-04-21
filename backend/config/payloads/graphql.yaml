@@ -1,0 +1,52 @@
+family_id: graphql
+description: >-
+  GraphQL-specific probes covering introspection enumeration, batched
+  alias overload, deep-recursion DoS markers, and field-suggestion
+  oracles. Seeds are conservative read-only queries with low blast radius.
+cwe_ids: [863, 209, 400]
+owasp_top10:
+  - 'A01:2021'
+  - 'A05:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: introspection
+    template: '{__schema{types{name}}}'
+    confidence: likely
+    notes: Standard introspection probe; unauthenticated success → schema leak.
+  - id: introspection_typename
+    template: '{__typename}'
+    confidence: suspected
+    notes: Minimal __typename probe; useful for endpoint fingerprinting.
+  - id: alias_overload
+    template: '{a:__typename b:__typename c:__typename d:__typename e:__typename}'
+    confidence: suspected
+    notes: Alias-overload (5x) probe; full DoS variant requires operator approval.
+  - id: deep_recursion_seed
+    template: '{me{friends{friends{friends{name}}}}}'
+    confidence: suspected
+    notes: Three-level recursion seed; depth limits should reject.
+  - id: field_suggestion_oracle
+    template: '{usre{id}}'
+    confidence: suspected
+    notes: Misspelled field; servers that return "Did you mean user?" leak schema.
+  - id: oast_marker
+    template: '{__type(name:"{canary}"){name}}'
+    confidence: confirmed
+    notes: Embeds a {canary} marker the OAST collector correlates if logged.
+mutations:
+  - name: case_flip
+    description: GraphQL field names are case-sensitive — flips produce known errors.
+  - name: whitespace_alt
+    description: Tab/space variants confirm parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw GraphQL query string.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for GET endpoints.
+  - name: base64
+    stages: [base64]
+    description: Base64-encoded; tests gateways that accept encoded queries.

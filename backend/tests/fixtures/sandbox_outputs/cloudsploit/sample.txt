@@ -1,0 +1,54 @@
+{
+  "results": [
+    {
+      "plugin": "rootMfaEnabled",
+      "category": "IAM",
+      "title": "Root Account MFA",
+      "description": "Ensures MFA is enabled for the root account.",
+      "resource": "arn:aws:iam::123456789012:root",
+      "region": "global",
+      "status": "FAIL",
+      "message": "MFA is not enabled for the root account."
+    },
+    {
+      "plugin": "encryptedEbsVolume",
+      "category": "EC2",
+      "title": "Encrypted EBS Volume",
+      "description": "Ensures EBS volumes are encrypted at rest.",
+      "resource": "arn:aws:ec2:us-east-1:123456789012:volume/vol-0123abcd456ef",
+      "region": "us-east-1",
+      "status": "FAIL",
+      "message": "EBS volume vol-0123abcd456ef is not encrypted."
+    },
+    {
+      "plugin": "s3BucketPublicAccessBlock",
+      "category": "S3",
+      "title": "S3 Bucket Public Access Block",
+      "description": "Ensures S3 buckets block public access.",
+      "resource": "arn:aws:s3:::backups-prod-123456789012",
+      "region": "us-east-1",
+      "status": "WARN",
+      "message": "S3 bucket has block-public-acls enabled but block-public-policy disabled."
+    },
+    {
+      "plugin": "cloudtrailEncryption",
+      "category": "CloudTrail",
+      "title": "CloudTrail Encryption",
+      "description": "Ensures CloudTrail logs are encrypted.",
+      "resource": "arn:aws:cloudtrail:us-east-1:123456789012:trail/main",
+      "region": "us-east-1",
+      "status": "PASS",
+      "message": "CloudTrail logs are encrypted with KMS key alias/cloudtrail."
+    },
+    {
+      "plugin": "openSshAccess",
+      "category": "EC2",
+      "title": "Open SSH Access",
+      "description": "Determines if any security groups allow SSH from the public internet.",
+      "resource": "arn:aws:ec2:us-east-1:123456789012:security-group/sg-0123abcd",
+      "region": "us-east-1",
+      "status": "FAIL",
+      "message": "Security group sg-0123abcd allows public SSH access."
+    }
+  ]
+}

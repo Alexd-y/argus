@@ -1,0 +1,44 @@
+family_id: race_condition
+description: >-
+  Race-condition probes for TOCTOU sinks (single-use tokens, balance
+  updates, idempotency keys). HIGH-risk family — operator approval is
+  mandatory before the builder emits a bundle. Seeds are marker payloads
+  the validator multiplexes through a small concurrent send-burst.
+cwe_ids: [362, 367]
+owasp_top10:
+  - 'A04:2021'
+  - 'A08:2021'
+risk_level: high
+requires_approval: true
+oast_required: false
+payloads:
+  - id: idem_key_same
+    template: 'Idempotency-Key: {canary}'
+    confidence: likely
+    notes: Same idempotency-key in N concurrent sends; tests dedup window.
+  - id: idem_key_drift
+    template: 'Idempotency-Key: {canary}-{burst_index}'
+    confidence: suspected
+    notes: Per-request idempotency-key; tests body-only dedup variant.
+  - id: token_reuse
+    template: '{"singleUseToken":"{canary}"}'
+    confidence: likely
+    notes: Single-use token replayed in concurrent requests; tests TOCTOU.
+  - id: balance_decrement
+    template: '{"amount":1,"argusCanary":"{canary}"}'
+    confidence: suspected
+    notes: Balance-decrement marker; double-spend research seed.
+  - id: oauth_code_replay
+    template: '?code={canary}&state={canary}'
+    confidence: suspected
+    notes: OAuth code replay; tests authorization-server one-time enforcement.
+mutations:
+  - name: case_flip
+    description: Header/key names case flips test parser robustness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw header / JSON / form payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string variants.

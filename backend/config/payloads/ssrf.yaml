@@ -1,0 +1,52 @@
+family_id: ssrf
+description: >-
+  Server-Side Request Forgery probes targeting cloud metadata endpoints,
+  loopback addresses, and DNS-rebinding markers. All outbound destinations
+  rely on an OAST-supplied {oast_host}; no real metadata endpoint is hit
+  by the canonical seeds.
+cwe_ids: [918]
+owasp_top10:
+  - 'A10:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: oast_http
+    template: "http://{oast_host}/{canary}"
+    confidence: confirmed
+    notes: Out-of-band HTTP probe; OAST DNS callback confirms egress.
+  - id: oast_https
+    template: "https://{oast_host}/{canary}"
+    confidence: confirmed
+    notes: HTTPS variant; tests TLS-egress allow-list.
+  - id: loopback_http
+    template: "http://127.0.0.1:80/"
+    confidence: suspected
+    notes: Loopback probe; differential vs control URL flags blind SSRF.
+  - id: ipv6_loopback
+    template: "http://[::1]:80/"
+    confidence: suspected
+    notes: IPv6 loopback variant; some allow-lists miss [::1].
+  - id: decimal_loopback
+    template: "http://2130706433/"
+    confidence: suspected
+    notes: Decimal-encoded 127.0.0.1; bypasses naive substring blockers.
+  - id: dns_rebind
+    template: "http://{canary}.{oast_host}/"
+    confidence: confirmed
+    notes: DNS-rebinding canary subdomain; OAST collector resolves to attacker IP.
+mutations:
+  - name: case_flip
+    description: URL schemes are case-insensitive; HTTP vs http differential.
+  - name: unicode_homoglyph
+    description: Cyrillic look-alikes in hostname for filter bypass research.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw URL (most SSRF sinks expect literal URLs).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded; tests double-decoding in nested API gateways.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded for proxies that strip one layer.

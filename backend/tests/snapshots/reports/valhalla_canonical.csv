@@ -1,0 +1,29 @@
+Severity,Title,Description,CWE,CVSS
+critical,SQLi at /api/v1/users,UNION-based SQLi via id parameter on the payments API.,CWE-89,9.8
+high,GitHub PAT leaked in JS bundle,ghp_* token observed in /static/app.js.,CWE-200,7.5
+high,Reverse shell PoC in /upload,File upload allows RCE; PoC included.,CWE-78,8.6
+medium,Missing security headers,No CSP / HSTS / X-Frame-Options.,CWE-693,4.3
+low,MySQL root password observed in CI script,Hardcoded password in deploy script.,CWE-798,2.9
+
+"# ai_sections (section_key, text)"
+section_key,section_text
+attack_scenarios,AI generation skipped: could not generate content
+business_risk,AI generation skipped: could not generate content
+compliance_check,AI generation skipped: could not generate content
+cost_summary,AI generation skipped: could not generate content
+executive_summary,Critical SQLi and RCE; rotate exposed credentials immediately.
+executive_summary_valhalla,Critical SQLi and RCE; rotate exposed credentials immediately.
+exploit_chains,AI generation skipped: could not generate content
+hardening_recommendations,AI generation skipped: could not generate content
+prioritization_roadmap,AI generation skipped: could not generate content
+remediation_stages,AI generation skipped: could not generate content
+remediation_step,"Patch ORM.
+
+Disable unrestricted upload.
+
+Rotate all PATs."
+vulnerability_description,LLM exec summary
+zero_day_potential,AI generation skipped: could not generate content
+
+# scan_artifacts (single JSON cell)
+"{""phase_blocks"": [{""other_rows"": [], ""phase_key"": ""unknown"", ""phase_label"": ""Other"", ""phase_query"": """", ""rows"": [{""download_url"": null, ""file_name"": """", ""key"": """", ""last_modified"": """", ""size"": 0}], ""tool_output_rows"": [{""download_url"": null, ""file_name"": """", ""key"": """", ""last_modified"": """", ""size"": 0}]}], ""status"": ""ok""}"

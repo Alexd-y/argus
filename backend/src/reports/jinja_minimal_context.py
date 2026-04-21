@@ -7,20 +7,26 @@ from typing import TYPE_CHECKING, Any
 
 from src.core.config import settings
 from src.core.llm_config import has_any_llm_key
-from src.owasp_top10_2025 import OWASP_TOP10_2025_CATEGORY_TITLES
 from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
 )
+from src.owasp_top10_2025 import OWASP_TOP10_2025_CATEGORY_TITLES
 from src.reports.ai_text_generation import (
     REPORT_AI_SKIPPED_GENERATION_FAILED,
     REPORT_AI_SKIPPED_NO_LLM,
 )
 from src.reports.data_collector import executive_severity_totals_from_severity_strings
+from src.services.reporting import TIER_METADATA
 
 if TYPE_CHECKING:
     from src.reports.generators import ReportData
+
+_TIMELINE_PREVIEW_LIMIT = 24
+_TIMELINE_SNIPPET_CHARS = 240
+_VALHALLA_TIMELINE_LIMIT = 32
+_VALHALLA_SNIPPET_CHARS = 800
 
 
 def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[str, Any]:
@@ -56,10 +62,10 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         jinja_tiers[name] = {"active": name == tier_norm, "slots": slots}
 
     timeline_preview: list[dict[str, Any]] = []
-    for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:24]:
+    for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_TIMELINE_PREVIEW_LIMIT]:
         snippet = ""
         if t.entry is not None:
-            snippet = str(t.entry)[:240]
+            snippet = str(t.entry)[:_TIMELINE_SNIPPET_CHARS]
         timeline_preview.append(
             {"phase": t.phase, "order_index": t.order_index, "snippet": snippet}
         )
@@ -77,7 +83,7 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
     pipeline_summary: dict[str, Any] = {}
     recon_summary = {
         "target_url": data.target or "",
-        "scan": None,
+        "scan": {},
         "summary_counts": {k: aligned_counts[k] for k in ("critical", "high", "medium", "low", "info")},
         "technologies": list(data.technologies or []),
         "timeline_preview": timeline_preview,
@@ -138,8 +144,8 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         "scan_id": data.scan_id or "",
         "scan_artifacts": scan_artifacts_min,
         "active_web_scan": active_web,
-        "scan": None,
-        "report": None,
+        "scan": {},
+        "report": {},
         "findings_count": len(data.findings),
         "severity_counts": dict(aligned_counts),
         "timeline_count": len(data.timeline),
@@ -152,15 +158,7 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         "exploitation": exploitation,
         "ai_sections": dict(texts),
         "jinja": jinja_tiers,
-        "tier_stubs": {
-            "midgard": {"label": "Midgard", "focus": "summary", "active_web_scan": False},
-            "asgard": {"label": "Asgard", "focus": "technical", "active_web_scan": True},
-            "valhalla": {
-                "label": "Valhalla",
-                "focus": "leadership_technical",
-                "active_web_scan": True,
-            },
-        },
+        "tier_stubs": TIER_METADATA,
     }
     if valhalla_ctx is not None:
         out["valhalla_context"] = valhalla_ctx
@@ -168,14 +166,14 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         out["test_limitations"] = valhalla_ctx.get("test_limitations")
         out["report_executor_display_name"] = settings.report_executor_display_name
         out["tool_runs"] = []
-        out["valhalla_appendix_nmap_excerpt"] = ""
-        out["valhalla_appendix_phase_inputs_excerpt"] = ""
+        out["valhalla_appendix_nmap_excerpt"] = None
+        out["valhalla_appendix_phase_inputs_excerpt"] = None
         tl_rows: list[dict[str, Any]] = []
-        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:32]:
+        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_VALHALLA_TIMELINE_LIMIT]:
             snippet = ""
             if t.entry is not None:
                 try:
-                    snippet = json.dumps(t.entry, ensure_ascii=False)[:800]
+                    snippet = json.dumps(t.entry, ensure_ascii=False)[:_VALHALLA_SNIPPET_CHARS]
                 except (TypeError, ValueError):
                     snippet = str(t.entry)[:800]
             tl_rows.append({
@@ -189,12 +187,14 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
 
 
 _PHASE_LABELS: dict[str, str] = {
-    "recon": "Разведка",
-    "threat_modeling": "Моделирование угроз",
-    "vuln_analysis": "Анализ уязвимостей",
-    "exploitation": "Эксплуатация",
-    "post_exploitation": "Постэксплуатация",
-    "unknown": "Прочее",
+    "recon": "Reconnaissance",
+    "threat_modeling": "Threat Modeling",
+    "vulnerability_analysis": "Vulnerability Analysis",
+    "vuln_analysis": "Vulnerability Analysis",
+    "exploitation": "Exploitation",
+    "post_exploitation": "Post-Exploitation",
+    "reporting": "Reporting",
+    "unknown": "Other",
 }
 
 _PHASE_ORDER: tuple[str, ...] = (

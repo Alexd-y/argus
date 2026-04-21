@@ -1,0 +1,39 @@
+tool_id: httpx
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "httpx"
+  - "-l"
+  - "{in_dir}/urls.txt"
+  - "-json"
+  - "-title"
+  - "-tech-detect"
+  - "-status-code"
+  - "-tls-probe"
+  - "-favicon"
+  - "-jarm"
+  - "-o"
+  - "{out_dir}/httpx.json"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/httpx.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-08"
+description: "ProjectDiscovery httpx HTTP fingerprinting (status, title, tech, TLS, favicon, JARM). Backlog/dev1_md §4.4."

@@ -6,10 +6,7 @@ Reads intel_findings.json (aggregated adapter outputs) and builds:
 """
 
 import html
-import json
 import logging
-from datetime import UTC, datetime
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

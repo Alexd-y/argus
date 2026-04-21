@@ -1,0 +1,12 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 13.4.4
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 19.5.5
+- name: minio
+  repository: https://charts.bitnami.com/bitnami
+  version: 14.6.33
+digest: sha256:ec16bf95e04e34192b164caa5fe674c3b48a707d83781da80febcaee6de4928d
+generated: "2026-04-20T10:13:35.8994709+03:00"

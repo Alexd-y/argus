@@ -1,0 +1,31 @@
+tool_id: puppeteer_screens
+version: "1.0.0"
+category: browser
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "puppeteer-screens --url {url} --output {out_dir}/puppeteer"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/puppeteer"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-08"
+description: "Puppeteer-driven full-page screenshot + DOM snapshot of {url}. Headless Chromium loads the URL with default navigation timeout, waits for network-idle, captures a viewport + full-page PNG and the rendered HTML to /out/puppeteer/. Pure passive recon — no form submission, no script injection. Used as the cheap visual triage step before §4.4 httpx / §4.7 wpscan deeper enumeration. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019."

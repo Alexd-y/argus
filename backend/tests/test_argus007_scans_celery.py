@@ -38,12 +38,12 @@ def mock_db_session_create():
 class TestCreateScanUsesCelery:
     """create_scan enqueues scan_phase_task via Celery."""
 
-    def test_create_scan_calls_scan_phase_task_delay(
+    def test_create_scan_calls_scan_phase_task_apply_async(
         self,
         client: TestClient,
         mock_db_session_create,
     ) -> None:
-        """POST /scans enqueues Celery scan_phase_task instead of BackgroundTasks."""
+        """POST /scans enqueues Celery scan_phase_task via apply_async."""
         with (
             patch(
                 "src.api.routers.scans.async_session_factory",
@@ -62,6 +62,6 @@ class TestCreateScanUsesCelery:
         data = response.json()
         assert data["status"] == "queued"
         assert "scan_id" in data
-        mock_task.delay.assert_called_once()
-        call_args = mock_task.delay.call_args[0]
-        assert call_args[2] == "https://example.com"
+        mock_task.apply_async.assert_called_once()
+        queued_args = mock_task.apply_async.call_args.kwargs["args"]
+        assert queued_args[2] == "https://example.com"

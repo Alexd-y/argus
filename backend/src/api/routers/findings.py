@@ -1,4 +1,4 @@
-"""Findings router — HexStrike v4 paths under /findings."""
+"""Findings router — ARGUS v4 paths under /findings."""
 
 from __future__ import annotations
 

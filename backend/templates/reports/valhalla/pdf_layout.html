@@ -1,0 +1,305 @@
+{# ARG-036 — Valhalla tier PDF layout (executive / CISO / Board, gold brand).
+   Self-contained template; not extending base.html.j2. Renders the
+   valhalla_executive_report assembly built by valhalla_tier_renderer:
+   risk-quant per asset, OWASP rollup matrix, top findings by business
+   impact, P0..P3 remediation roadmap. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ARGUS Valhalla Report — {{ target | e }}</title>
+  <link rel="stylesheet" href="pdf_styles.css" />
+</head>
+<body class="tier-valhalla">
+
+  {# ----------------------- COVER PAGE ----------------------- #}
+  <section class="cover-page">
+    <div class="cover-brand">
+      <div class="brand-mark" aria-label="ARGUS logo">
+        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ARGUS shield">
+          <circle cx="32" cy="32" r="30" fill="#1f1f24" stroke="#0d0d10" stroke-width="2" />
+          <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#c9a64a" opacity="0.95" />
+          <circle cx="32" cy="30" r="6" fill="#1f1f24" />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">ARGUS</div>
+        <div class="brand-sub">Security Pentest Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-title-block">
+      <div class="cover-tier-badge tier-badge-valhalla">VALHALLA · Executive Brief</div>
+      <h1 class="cover-title">Strategic Security Report</h1>
+      <p class="cover-target">{{ target | e or "Unspecified target" }}</p>
+    </div>
+
+    <div class="cover-meta">
+      <dl class="meta-grid">
+        <dt>Tenant</dt><dd>{{ tenant_id | e or "—" }}</dd>
+        <dt>Scan ID</dt><dd>{{ scan_id | e or "—" }}</dd>
+        <dt>Issued</dt><dd>{{ scan_completed_at | e or "—" }}</dd>
+        <dt>Tier</dt><dd>Valhalla (Tier&nbsp;3)</dd>
+        <dt>Watermark</dt><dd class="watermark">{{ pdf_watermark | e }}</dd>
+      </dl>
+    </div>
+
+    <div class="cover-confidential">
+      ARGUS Confidential · Restricted to executive leadership
+    </div>
+  </section>
+
+  {# --------------------- TABLE OF CONTENTS ------------------- #}
+  <section class="toc">
+    <h2 class="section-heading">Contents</h2>
+    <ol class="toc-list">
+      <li><a href="#sec-exec">Executive Summary</a></li>
+      <li><a href="#sec-risk">Risk Quantification per Asset</a></li>
+      <li><a href="#sec-owasp">OWASP Top-10 Rollup Matrix</a></li>
+      <li><a href="#sec-top">Top Findings by Business Impact</a></li>
+      <li><a href="#sec-roadmap">Remediation Roadmap (P0–P3)</a></li>
+      <li><a href="#sec-evidence">Evidence References</a></li>
+      <li><a href="#sec-timeline">Pipeline Timeline</a></li>
+    </ol>
+  </section>
+
+  {# --------------------- EXECUTIVE SUMMARY ------------------- #}
+  <section id="sec-exec" class="exec-summary">
+    <h2 class="section-heading">Executive Summary</h2>
+    {% set sev = severity_counts or (valhalla_executive_report.executive_summary_counts if valhalla_executive_report else {}) or {} %}
+    <div class="severity-pills">
+      <span class="pill pill-critical">Critical · {{ sev.get('critical', 0) }}</span>
+      <span class="pill pill-high">High · {{ sev.get('high', 0) }}</span>
+      <span class="pill pill-medium">Medium · {{ sev.get('medium', 0) }}</span>
+      <span class="pill pill-low">Low · {{ sev.get('low', 0) }}</span>
+      <span class="pill pill-info">Info · {{ sev.get('info', 0) }}</span>
+    </div>
+
+    {% set vexec = (valhalla_executive_report.executive_summary if valhalla_executive_report else '') %}
+    {% set ai_exec = (ai_sections or {}).get('executive_summary_valhalla') or (ai_sections or {}).get('executive_summary') %}
+    {% if vexec %}
+      <p class="prose">{{ vexec | e }}</p>
+    {% elif ai_exec %}
+      <div class="prose">{{ ai_exec | md }}</div>
+    {% else %}
+      <p class="prose">
+        Valhalla — the strategic lens for the executive team. ARGUS reviewed
+        {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
+        on <strong>{{ target | e or 'the engagement' }}</strong> and
+        cross-mapped them against business-impact weighting and
+        OWASP Top-10 (2025) coverage.
+      </p>
+    {% endif %}
+  </section>
+
+  {# ------------------- RISK QUANTIFICATION ------------------ #}
+  <section id="sec-risk" class="risk-quant">
+    <h2 class="section-heading">Risk Quantification per Asset</h2>
+    {% set asset_rows = (valhalla_executive_report.risk_quantification_per_asset if valhalla_executive_report else []) or [] %}
+    {% if asset_rows %}
+      <table class="risk-table">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th class="col-num">Findings</th>
+            <th class="col-num">Max&nbsp;CVSS</th>
+            <th class="col-num">Business Value</th>
+            <th class="col-num">Exploitability</th>
+            <th class="col-num">Composite</th>
+            <th>Top Severity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in asset_rows %}
+            <tr>
+              <td>{{ row.asset | e or '—' }}</td>
+              <td class="col-num">{{ row.finding_count }}</td>
+              <td class="col-num">{{ '%.1f' | format(row.max_cvss) }}</td>
+              <td class="col-num">{{ '%.2f' | format(row.business_value) }}</td>
+              <td class="col-num">{{ '%.2f' | format(row.exploitability_factor) }}</td>
+              <td class="col-num composite-score">{{ '%.2f' | format(row.composite_score) }}</td>
+              <td><span class="sev-tag sev-{{ (row.top_severity or 'info') | lower }}">{{ (row.top_severity or 'info') | upper }}</span></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No assets resolved for risk quantification.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- OWASP ROLLUP MATRIX ------------------ #}
+  <section id="sec-owasp" class="owasp-rollup">
+    <h2 class="section-heading">OWASP Top-10 (2025) Rollup</h2>
+    {% set owasp_rows = (valhalla_executive_report.owasp_rollup_matrix if valhalla_executive_report else []) or owasp_compliance_rows or [] %}
+    {% if owasp_rows %}
+      <table class="owasp-matrix">
+        <thead>
+          <tr>
+            <th class="col-owasp-id">Cat.</th>
+            <th>Title</th>
+            <th class="col-num">Critical</th>
+            <th class="col-num">High</th>
+            <th class="col-num">Medium</th>
+            <th class="col-num">Low</th>
+            <th class="col-num">Info</th>
+            <th class="col-num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in owasp_rows %}
+            <tr>
+              <td class="col-owasp-id">{{ row.category_id | e }}</td>
+              <td>{{ row.title | e }}</td>
+              <td class="col-num">{{ row.critical | default(0) }}</td>
+              <td class="col-num">{{ row.high | default(0) }}</td>
+              <td class="col-num">{{ row.medium | default(0) }}</td>
+              <td class="col-num">{{ row.low | default(0) }}</td>
+              <td class="col-num">{{ row.info | default(0) }}</td>
+              <td class="col-num"><strong>{{ row.total | default(row.count | default(0)) }}</strong></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No OWASP rollup data available.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- TOP BUSINESS-IMPACT ------------------ #}
+  <section id="sec-top" class="top-business">
+    <h2 class="section-heading">Top Findings by Business Impact</h2>
+    {% set top_rows = (valhalla_executive_report.top_findings_by_business_impact if valhalla_executive_report else []) or [] %}
+    {% if top_rows %}
+      <table class="business-table">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th>Finding</th>
+            <th class="col-sev">Severity</th>
+            <th class="col-owasp">OWASP</th>
+            <th>Asset</th>
+            <th class="col-num">CVSS</th>
+            <th class="col-num">Composite</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in top_rows %}
+            <tr>
+              <td class="col-rank">{{ row.rank }}</td>
+              <td>
+                <div class="finding-title">{{ row.title | e or '—' }}</div>
+                {% if row.description %}
+                  <div class="finding-desc">{{ row.description | e | truncate(220, killwords=False, end='…') }}</div>
+                {% endif %}
+              </td>
+              <td class="col-sev"><span class="sev-tag sev-{{ (row.severity or 'info') | lower }}">{{ (row.severity or 'info') | upper }}</span></td>
+              <td class="col-owasp">{{ row.owasp_category | e }}</td>
+              <td>{{ row.asset | e or '—' }}</td>
+              <td class="col-num">{{ '%.1f' | format(row.cvss) if row.cvss is not none else '—' }}</td>
+              <td class="col-num composite-score">{{ '%.2f' | format(row.composite_score) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No business-impact ranking available.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- REMEDIATION ROADMAP ------------------ #}
+  <section id="sec-roadmap" class="roadmap">
+    <h2 class="section-heading">Remediation Roadmap</h2>
+    {% set roadmap_rows = (valhalla_executive_report.remediation_roadmap if valhalla_executive_report else []) or [] %}
+    {% if roadmap_rows %}
+      <div class="roadmap-grid">
+        {% for phase in roadmap_rows %}
+          <div class="roadmap-card phase-{{ phase.phase_id | lower }}">
+            <div class="phase-header">
+              <span class="phase-id">{{ phase.phase_id | e }}</span>
+              <span class="phase-sla">SLA ≤ {{ phase.sla_days }}d</span>
+            </div>
+            <div class="phase-body">
+              <div class="phase-bucket">{{ (phase.severity_bucket or 'info') | upper }}</div>
+              <div class="phase-count">{{ phase.finding_count }} finding{{ '' if phase.finding_count == 1 else 's' }}</div>
+              {% if phase.top_finding_titles %}
+                <ul class="phase-titles">
+                  {% for title in phase.top_finding_titles %}
+                    <li>{{ title | e }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="prose empty-state">No remediation roadmap entries available.</p>
+    {% endif %}
+  </section>
+
+  {# -------------------- EVIDENCE APPENDIX -------------------- #}
+  <section id="sec-evidence" class="evidence">
+    <h2 class="section-heading">Evidence References</h2>
+    {% set evidence_list = (valhalla_executive_report.evidence_refs if valhalla_executive_report else []) or [] %}
+    {% if evidence_list %}
+      <table class="evidence-table">
+        <thead>
+          <tr>
+            <th>Finding</th>
+            <th>Object key</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ev in evidence_list %}
+            <tr>
+              <td>{{ ev.finding_id | e or '—' }}</td>
+              <td><code>{{ ev.object_key | e or '—' }}</code></td>
+              <td>{{ ev.description | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No evidence artefacts were attached.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------------- TIMELINE -------------------------- #}
+  <section id="sec-timeline" class="timeline">
+    <h2 class="section-heading">Pipeline Timeline</h2>
+    {% set timeline_list = (valhalla_executive_report.timeline_entries if valhalla_executive_report else []) or [] %}
+    {% if timeline_list %}
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th class="col-tl-order">#</th>
+            <th class="col-tl-phase">Phase</th>
+            <th class="col-tl-snippet">Snippet</th>
+            <th class="col-tl-time">Recorded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in timeline_list %}
+            <tr>
+              <td class="col-tl-order">{{ t.order_index }}</td>
+              <td class="col-tl-phase">{{ t.phase | e or '—' }}</td>
+              <td class="col-tl-snippet">{{ t.snippet | e or '—' }}</td>
+              <td class="col-tl-time">{{ t.created_at | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No pipeline timeline entries are available.</p>
+    {% endif %}
+  </section>
+
+  {# ----------------------- FOOTER --------------------------- #}
+  <footer class="report-footer">
+    <p>ARGUS Confidential · Valhalla Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
+  </footer>
+
+</body>
+</html>

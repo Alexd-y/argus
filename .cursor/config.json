@@ -1,0 +1,39 @@
+{
+  "workspace": {
+    "path": ".cursor/workspace",
+    "cleanup": {
+      "autoCleanCompleted": true,
+      "cleanupAfterDays": 7,
+      "keepFailed": true
+    }
+  },
+  
+  "documentation": {
+    "paths": {
+      "root": "ai_docs",
+      "plans": "ai_docs/develop/plans",
+      "reports": "ai_docs/develop/reports",
+      "issues": "ai_docs/develop/issues",
+      "architecture": "ai_docs/develop/architecture",
+      "features": "ai_docs/develop/features",
+      "api": "ai_docs/develop/api",
+      "components": "ai_docs/develop/components",
+      "design": "ai_docs/design",
+      "changelog": "ai_docs/changelog",
+      "audits": "ai_docs/develop/audits"
+    },
+    "enabled": {
+      "plans": true,
+      "reports": true,
+      "issues": true,
+      "architecture": true,
+      "features": true,
+      "api": true,
+      "components": true,
+      "design": true,
+      "changelog": true,
+      "audits": true
+    },
+    "comment": "Customize paths for your project. Set 'enabled' to false or path to null to disable specific documentation types"
+  }
+}

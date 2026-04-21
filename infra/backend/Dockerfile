@@ -10,8 +10,15 @@ WORKDIR /build
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Single source of truth for runtime deps: PEP 621 [project.dependencies] in
+# pyproject.toml. requirements.txt is kept in the repo as an auto-generated
+# mirror for legacy CI / SCA tooling (regenerate with
+# `python backend/scripts/sync_requirements.py`).
+COPY pyproject.toml ./
+RUN python -c "import tomllib, pathlib; \
+deps = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['dependencies']; \
+pathlib.Path('/tmp/requirements.txt').write_text('\n'.join(deps))" \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 # --- Runtime stage ---
 FROM python:3.12-slim AS runtime

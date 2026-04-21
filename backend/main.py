@@ -19,18 +19,26 @@ from src.api.routers import (
     intelligence,
     internal_va,
     knowledge,
+    mcp_slack_callbacks,
     metrics,
+    providers_health,
+    queues_health,
     reports,
     sandbox,
     scans,
     skills_public,
     tools,
 )
+import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
+import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
+
 from src.api.routers.recon import recon_router
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
+from src.core.metrics_middleware import HttpMetricsMiddleware
+from src.core.otel_init import setup_observability, shutdown_observability
 from src.core.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger(__name__)
@@ -40,6 +48,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     """Lifespan — startup/shutdown."""
     configure_logging()
+    try:
+        setup_observability(_app)
+    except Exception as e:
+        logger.warning(
+            "otel_setup_failed",
+            extra={"event": "otel_setup_failed", "error_type": type(e).__name__},
+        )
     try:
         subprocess.run(["alembic", "upgrade", "head"], check=True, timeout=60)
         logger.info("Alembic migrations applied successfully")
@@ -52,7 +67,16 @@ async def lifespan(_app: FastAPI):
             "kb_warm_skipped",
             extra={"event": "kb_warm_skipped", "error_type": type(e).__name__},
         )
-    yield
+    try:
+        yield
+    finally:
+        try:
+            shutdown_observability()
+        except Exception as e:
+            logger.warning(
+                "otel_shutdown_failed",
+                extra={"event": "otel_shutdown_failed", "error_type": type(e).__name__},
+            )
 
 
 app = FastAPI(
@@ -65,6 +89,7 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
+app.add_middleware(HttpMetricsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -75,7 +100,10 @@ app.add_middleware(
 )
 
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(health.router)
 app.include_router(metrics.router)
+app.include_router(providers_health.router)
+app.include_router(queues_health.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 app.include_router(findings.router, prefix="/api/v1")
@@ -89,6 +117,7 @@ app.include_router(recon_router, prefix="/api/v1")
 app.include_router(intelligence.router, prefix="/api/v1")
 app.include_router(skills_public.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")
+app.include_router(mcp_slack_callbacks.router, prefix="/api/v1")
 
 
 @app.get("/")

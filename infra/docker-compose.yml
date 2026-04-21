@@ -21,7 +21,7 @@ services:
     env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-argus}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-argus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${POSTGRES_DB:-argus}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -40,6 +40,8 @@ services:
     image: redis:7-alpine
     container_name: argus-redis
     env_file: .env
+    # WARNING: If REDIS_PASSWORD is empty, Redis runs without authentication.
+    # For production, always set REDIS_PASSWORD in .env
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     command:
@@ -78,7 +80,7 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-argus}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-argussecret}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
     volumes:
       - minio_data:/data
     # Ports: NOT exposed in production. Use docker-compose.dev.yml for dev
@@ -95,13 +97,13 @@ services:
   # in Docker Desktop this looks "stopped"; that is expected (not a crash). Re-run if needed:
   #   docker compose -f infra/docker-compose.yml run --rm minio-init
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: argus-minio-init
     env_file: .env
     restart: "no"
     entrypoint: >
       /bin/sh -c "
-        until mc alias set argus http://minio:9000 $${MINIO_ACCESS_KEY:-argus} $${MINIO_SECRET_KEY:-argussecret} 2>/dev/null; do
+        until mc alias set argus http://minio:9000 $${MINIO_ACCESS_KEY:-argus} $${MINIO_SECRET_KEY} 2>/dev/null; do
           echo 'Waiting for MinIO...' && sleep 2;
         done;
         mc mb --ignore-existing argus/$${MINIO_BUCKET:-argus};
@@ -126,16 +128,27 @@ services:
     image: argus-backend
     container_name: argus-backend
     env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:-argus}@postgres:5432/${POSTGRES_DB:-argus}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      # SECURITY (H-7): When REDIS_PASSWORD is set, REDIS_URL and CELERY_BROKER_URL
+      # MUST include the password: redis://:PASSWORD@redis:6379/0
+      # Defaults below assume no auth (dev). Override in .env for production.
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
       MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-prod-32chars}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
@@ -154,10 +167,12 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       VERCEL_FRONTEND_URL: ${VERCEL_FRONTEND_URL:-}
     volumes:
-      # Active VA: docker exec into argus-sandbox (sync API path / tools)
+      # SECURITY: docker.sock is required for VA active-scan sandbox exec.
+      # In production, prefer a dedicated sandbox REST API (see docs/security.md).
+      # Risk: container compromise → host control. Mitigate with read-only mount + network isolation.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
@@ -182,17 +197,27 @@ services:
       dockerfile: worker/Dockerfile
     image: argus-worker
     container_name: argus-worker
-    # Docker Desktop (and some hosts) expose docker.sock as root:root 660 — appuser cannot dial it.
-    # Required for `docker exec` into argus-sandbox from Celery (VA active scan).
-    user: "0:0"
+    # Docker socket requires docker group (GID from host). Override GID if needed:
+    #   DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) docker compose up
+    user: "1000:${DOCKER_GID:-999}"
     env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:-argus}@postgres:5432/${POSTGRES_DB:-argus}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      # SECURITY (H-7): When REDIS_PASSWORD is set, REDIS_URL and CELERY_BROKER_URL
+      # MUST include the password: redis://:PASSWORD@redis:6379/0
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-argussecret}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
       MINIO_BUCKET: ${MINIO_BUCKET:-argus}
       MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -214,14 +239,16 @@ services:
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
     volumes:
-      # Celery scan_phase_task: docker exec into argus-sandbox (same host daemon)
+      # SECURITY: docker.sock is required for VA active-scan sandbox exec.
+      # In production, prefer a dedicated sandbox REST API (see docs/security.md).
+      # Risk: container compromise → host control. Mitigate with read-only mount + network isolation.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
       - data
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -268,14 +295,26 @@ services:
       start_period: 10s
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     container_name: argus-nginx
     env_file: .env
+    entrypoint: ["/docker-entrypoint.sh"]
+    environment:
+      # Accept either ARGUS_CORS_ALLOWED_ORIGINS (canonical) or CORS_ORIGINS
+      # (used by backend FastAPI app) so the same .env value drives both layers.
+      # Without this, the nginx CORS map silently falls back to the example
+      # default and Vercel preflights are denied at the gateway.
+      ARGUS_CORS_ALLOWED_ORIGINS: ${ARGUS_CORS_ALLOWED_ORIGINS:-${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}}
+      # Optional server-side API key injection for proxied /api requests.
+      # Keep this key PRIVATE (infra/.env only). Prefer a dedicated key with
+      # limited scope/rate-limits; do not expose backend auth keys in frontend JS.
+      ARGUS_GATEWAY_API_KEY: ${ARGUS_GATEWAY_API_KEY:-${ARGUS_API_KEYS:-}}
     ports:
-      - "${NGINX_HTTP_PORT:-80}:80"
-      - "${NGINX_HTTPS_PORT:-443}:443"
+      - "${ARGUS_HTTP_PORT:-8080}:80"
+      - "${ARGUS_HTTPS_PORT:-8443}:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
     networks:
       - frontend
       - backend
@@ -283,7 +322,10 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/health"]
+      # Use IPv4 explicitly: BusyBox wget on Alpine resolves "localhost" to ::1
+      # first and fails with "Connection refused" because nginx only binds
+      # 0.0.0.0:80 (no `listen [::]:80` directive in api.conf).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
       interval: 10s
       timeout: 5s
       retries: 5

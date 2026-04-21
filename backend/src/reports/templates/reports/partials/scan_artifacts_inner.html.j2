@@ -1,27 +1,29 @@
+{# API path: defaults to /api/v1. Override via api_base_url context variable when available #}
+{% set _api_base = api_base_url | default("/api/v1", true) %}
 {% if scan_artifacts.status == "skipped" %}
-    <p class="empty">Список сырых артефактов не загружался для этого отчёта. Через API (при валидном scan id):
-        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
+    <p class="empty">Raw artifact listing was not loaded for this report. Via API (with a valid scan id):
+        <code>GET {{ _api_base }}/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
         (<code>phase</code>: recon, threat_modeling, vuln_analysis, exploitation, post_exploitation).</p>
 {% elif scan_artifacts.status == "unavailable" %}
-    <p class="empty">Объектное хранилище недоступно; список артефактов не получен.</p>
-    <p>Когда хранилище доступно, перечислите raw-объекты через
-        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>.</p>
+    <p class="empty">Object storage is unavailable; artifact listing could not be retrieved.</p>
+    <p>When storage is available, list raw objects via
+        <code>GET {{ _api_base }}/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>.</p>
 {% elif scan_artifacts.phase_blocks %}
-    <p>Фазовые raw-объекты (MinIO). Ссылки на скачивание — ограниченные по времени presigned URL, если генерация успешна.</p>
+    <p>Phase raw objects (MinIO). Download links are time-limited presigned URLs when generation succeeds.</p>
     {% for block in scan_artifacts.phase_blocks %}
         <h3>{{ block.phase_label }}</h3>
         <p><small>API:
-            <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase={{ block.phase_query }}&amp;raw=true</code></small></p>
+            <code>GET {{ _api_base }}/scans/{{ scan_id }}/artifacts?phase={{ block.phase_query }}&amp;raw=true</code></small></p>
         {% if block.tool_output_rows %}
-            <h4 id="raw-tool-outputs">Сырые выводы инструментов</h4>
-            <p class="meta"><small>Секция raw CLI / stdout MinIO (alias: «Сырые выводы», данные из <code>ScanReportData.raw_artifacts</code>).</small></p>
+            <h4 id="raw-tool-outputs">Raw Tool Outputs</h4>
+            <p class="meta"><small>Raw CLI / stdout MinIO section (alias: "Raw outputs", data from <code>ScanReportData.raw_artifacts</code>).</small></p>
             <table>
                 <thead>
                     <tr>
-                        <th>Файл</th>
-                        <th>Размер (байт)</th>
-                        <th>Изменён (UTC)</th>
-                        <th>Скачать</th>
+                        <th>File</th>
+                        <th>Size (bytes)</th>
+                        <th>Modified (UTC)</th>
+                        <th>Download</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -34,7 +36,7 @@
                                 {% if item.download_url %}
                                     <a href="{{ item.download_url }}">Presigned link</a>
                                 {% else %}
-                                    <span class="empty">Нет presigned URL — используйте API выше</span>
+                                    <span class="empty">No presigned URL — use the API above</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -43,17 +45,17 @@
             </table>
         {% endif %}
         {% if block.tool_output_rows and block.other_rows %}
-            <h4>Прочие артефакты</h4>
+            <h4>Other Artifacts</h4>
         {% endif %}
         {% set main_items = block.other_rows if block.tool_output_rows else block.rows %}
         {% if main_items %}
             <table>
                 <thead>
                     <tr>
-                        <th>Файл</th>
-                        <th>Размер (байт)</th>
-                        <th>Изменён (UTC)</th>
-                        <th>Скачать</th>
+                        <th>File</th>
+                        <th>Size (bytes)</th>
+                        <th>Modified (UTC)</th>
+                        <th>Download</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -66,7 +68,7 @@
                                 {% if item.download_url %}
                                     <a href="{{ item.download_url }}">Presigned link</a>
                                 {% else %}
-                                    <span class="empty">Нет presigned URL — используйте API выше</span>
+                                    <span class="empty">No presigned URL — use the API above</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -76,8 +78,8 @@
         {% endif %}
     {% endfor %}
 {% else %}
-    <p class="empty">Для этого скана raw-артефакты не найдены.</p>
-    <p>Список и скачивание:
-        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
-        (опционально <code>presigned=true</code> для прямых ссылок).</p>
+    <p class="empty">No raw artifacts found for this scan.</p>
+    <p>Listing and download:
+        <code>GET {{ _api_base }}/scans/{{ scan_id }}/artifacts?phase=&lt;phase&gt;&amp;raw=true</code>
+        (optionally <code>presigned=true</code> for direct links).</p>
 {% endif %}

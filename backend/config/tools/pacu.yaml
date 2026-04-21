@@ -1,0 +1,36 @@
+tool_id: pacu
+version: "1.0.0"
+category: cloud
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "pacu"
+  - "--session"
+  - "{s}"
+  - "--module"
+  - "{module}"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/"
+cwe_hints:
+  - 285
+  - 287
+  - 732
+  - 1395
+owasp_wstg:
+  - "WSTG-ATHZ-01"
+  - "WSTG-ATHZ-02"
+description: "Pacu AWS exploitation framework — runs {module} (e.g. iam__enum_permissions) inside session {s}. Approval-gated, risk=high: Pacu is a true offensive tool that can enumerate, escalate and persist AWS access. Output: module-dependent text logs (~/.pacu/{s}/ mounted at /out). Operators MUST verify the module is non-mutating before approving (recon-only: iam__enum_permissions, ec2__enum, etc.). Parser deferred to Cycle 3. Author: Rhino Security Labs. Backlog §4.15. ARG-018."

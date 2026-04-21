@@ -1,0 +1,32 @@
+tool_id: jarm
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "jarm"
+  - "-i"
+  - "{in_dir}/urls.txt"
+  - "-j"
+  - "{out_dir}/jarm.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/jarm.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-08"
+description: "JARM TLS server fingerprinting from a URL list. Backlog/dev1_md §4.4."

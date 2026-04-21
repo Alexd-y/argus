@@ -1,0 +1,37 @@
+tool_id: nmap_tcp_top
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "nmap"
+  - "-sS"
+  - "-Pn"
+  - "-T4"
+  - "--top-ports"
+  - "1000"
+  - "-oX"
+  - "{out_dir}/nmap_tcp.xml"
+  - "{ip}"
+parse_strategy: xml_nmap
+evidence_artifacts:
+  - "/out/nmap_tcp.xml"
+cwe_hints:
+  - 200
+  - 668
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-04"
+description: "Nmap TCP SYN scan against the 1000 most common ports; baseline service exposure map. Backlog/dev1_md §4.2."

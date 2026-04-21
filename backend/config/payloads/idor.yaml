@@ -1,0 +1,46 @@
+family_id: idor
+description: >-
+  Insecure Direct Object Reference probes — sequential ID enumeration,
+  UUID format-confusion, hash-chosen-prefix markers, and tenant-scope
+  bypass via path/header overrides. Conservative read-only seeds.
+cwe_ids: [639, 284]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: sequential_minus_one
+    template: '{baseline_id_minus_one}'
+    confidence: suspected
+    notes: Adjacent-ID probe; differential vs baseline confirms cross-tenant read.
+  - id: sequential_plus_one
+    template: '{baseline_id_plus_one}'
+    confidence: suspected
+    notes: Adjacent-ID probe (forward).
+  - id: zero_id
+    template: '0'
+    confidence: suspected
+    notes: Zero ID; tests sentinel-value handling.
+  - id: large_id
+    template: '99999999'
+    confidence: suspected
+    notes: Large ID; tests range-check enforcement.
+  - id: uuid_zero
+    template: '00000000-0000-0000-0000-000000000000'
+    confidence: suspected
+    notes: All-zero UUID; tests sentinel-value handling.
+  - id: tenant_override_header
+    template: 'X-Tenant-Id: {canary}'
+    confidence: suspected
+    notes: Tenant-override header; differential vs control tenant confirms scope bypass.
+mutations:
+  - name: case_flip
+    description: UUID hex case is canonical-lowercase — flips test parser strictness.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw ID payload (path / header sinks).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

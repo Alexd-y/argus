@@ -63,7 +63,7 @@ def sample_scan_report_data() -> ScanReportData:
 def test_report_tier_sections_counts() -> None:
     assert len(report_tier_sections("midgard")) == 2
     assert len(report_tier_sections("asgard")) == 5
-    assert len(report_tier_sections("valhalla")) == 11
+    assert len(report_tier_sections("valhalla")) == 12
     assert "executive_summary" not in report_tier_sections("valhalla")
     assert "executive_summary_valhalla" in report_tier_sections("valhalla")
     assert "attack_scenarios" in report_tier_sections("valhalla")

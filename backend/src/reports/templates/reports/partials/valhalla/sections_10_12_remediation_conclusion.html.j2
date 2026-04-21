@@ -1,88 +1,105 @@
 <section class="valhalla-remediation panel" id="remediation-priority">
-    <h2>Рекомендации и приоритизация</h2>
-    <h3>Этапы устранения уязвимостей</h3>
+    <h2>Recommendations and Prioritization</h2>
+    <h3>Vulnerability Remediation Stages</h3>
     <div class="ai-slot-body">
         {% set st = ai_sections.get("remediation_stages") if ai_sections is defined else "" %}
         {% if st and st.strip() %}
             {{ st | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
-    <h3>Дорожная карта приоритетов</h3>
+    <h3>Priority Roadmap</h3>
     <div class="ai-slot-body">
         {% set road = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
         {% if road and road.strip() %}
             {{ road | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
-    <h3>Ответственные и сроки (заготовка)</h3>
+    <h3>Responsible Parties and Timelines</h3>
     <table>
         <thead>
             <tr>
-                <th>Уязвимость</th>
-                <th>Ответственное подразделение</th>
-                <th>Рекомендуемый срок</th>
+                <th>Vulnerability</th>
+                <th>Responsible Department</th>
+                <th>Recommended Timeline</th>
             </tr>
         </thead>
         <tbody>
-            <tr>
-                <td colspan="3" class="empty">Нет данных — заполнить по согласованию с заказчиком (ИИ / процесс).</td>
-            </tr>
+            {% if findings %}
+                {% for row in findings if row.severity in ["critical", "high"] %}
+                <tr>
+                    <td><code>{{ row.id | e }}</code> — {{ row.title | e }} ({{ row.severity | e }})</td>
+                    <td>To be determined based on organizational priorities</td>
+                    <td>{% if row.severity == "critical" %}Immediate (0–48 hours){% else %}Short-term (1–2 weeks){% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% for row in findings if row.severity in ["medium", "low"] %}
+                <tr>
+                    <td><code>{{ row.id | e }}</code> — {{ row.title | e }} ({{ row.severity | e }})</td>
+                    <td>To be determined based on organizational priorities</td>
+                    <td>{% if row.severity == "medium" %}Medium-term (1–3 months){% else %}Planned maintenance cycle{% endif %}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="3" class="empty">No vulnerability data available. Timelines to be determined based on organizational priorities.</td>
+                </tr>
+            {% endif %}
         </tbody>
     </table>
 </section>
 
 <section class="valhalla-zero-day panel" id="zero-day-potential">
-    <h2>Zero-day потенциал</h2>
+    <h2>Zero-Day Potential</h2>
     <div class="ai-slot-body">
         {% set zd = ai_sections.get("zero_day_potential") if ai_sections is defined else "" %}
         {% if zd and zd.strip() %}
             {{ zd | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
 </section>
 
 <section class="valhalla-conclusion panel" id="conclusion">
-    <h2>Заключение</h2>
-    <h3>Итоговая оценка (ИИ)</h3>
+    <h2>Conclusion</h2>
+    <h3>Overall Assessment</h3>
     <div class="ai-slot-body">
-        {% set ex = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
-        {% if ex and ex.strip() %}
-            {{ ex | md | safe }}
+        {% set ca = ai_sections.get("conclusion_assessment") if ai_sections is defined else "" %}
+        {% if ca and ca.strip() %}
+            {{ ca | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p>This penetration test identified the vulnerabilities detailed in the findings section above. The severity distribution and recommended remediation priorities are outlined in the Remediation section. Refer to the Executive Summary for an overview of the key business risks.</p>
         {% endif %}
     </div>
-    <h3>Рекомендации по усилению (hardening)</h3>
+    <h3>Hardening Recommendations</h3>
     <div class="ai-slot-body">
         {% set hd = ai_sections.get("hardening_recommendations") if ai_sections is defined else "" %}
         {% if hd and hd.strip() %}
             {{ hd | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
-    <h3>Шаги устранения и готовность к продакшену</h3>
+    <h3>Remediation Steps and Production Readiness</h3>
     <div class="ai-slot-body">
         {% set rs = ai_sections.get("remediation_step") if ai_sections is defined else "" %}
         {% if rs and rs.strip() %}
             {{ rs | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
-    <h3>Дополнительное описание уязвимостей (ИИ)</h3>
+    <h3>Additional Vulnerability Descriptions</h3>
     <div class="ai-slot-body">
         {% set vd = ai_sections.get("vulnerability_description") if ai_sections is defined else "" %}
         {% if vd and vd.strip() %}
             {{ vd | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
 </section>

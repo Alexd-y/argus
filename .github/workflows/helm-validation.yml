@@ -1,0 +1,150 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# T07 (Cycle 6 Batch 1) — Helm chart kubeconform schema validation gate.
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Closes ISS-cycle6-carry-over.md §"Known limitations carry-over" item #7
+# ("Helm chart kubeconform schema validation в CI"). The pre-existing
+# `helm-lint` job in `ci.yml` runs kubeconform conditionally against ONE
+# Kubernetes version and ONLY the prod overlay; this workflow hardens that
+# coverage by:
+#
+#   * pinning kubeconform v0.6.7 (matches ci.yml; never `:latest`);
+#   * matrix-validating against the chart's `kubeVersion: ">=1.27.0-0"` floor
+#     plus two production-relevant API levels (1.29 LTS-ish, 1.31 latest);
+#   * rendering ALL three overlays (dev / staging / prod) instead of prod
+#     only — drift in dev/staging values blocks promotion before it lands;
+#   * emitting `--output json` so the job summary parses a digest table
+#     instead of grepping human-readable text;
+#   * failing the build on ANY validation error (no advisory mode).
+#
+# The validation logic lives in `infra/scripts/helm_kubeconform.sh` so devs
+# can run the same pipeline locally (`bash infra/scripts/helm_kubeconform.sh`
+# or the PowerShell twin). Keeping the script as the source of truth avoids
+# CI-vs-local drift documented as a recurring pain in earlier cycles
+# (see ai_docs/develop/troubleshooting/mypy-windows-access-violation.md).
+#
+# Path filters scope the workflow to chart + workflow changes only — the
+# average PR (backend / Frontend code) skips the gate entirely. Schema
+# downloads are not cached; for three matrix legs the cold cost is ≤30s.
+
+name: Helm chart kubeconform
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "infra/helm/argus/**"
+      - "infra/scripts/helm_kubeconform.sh"
+      - "infra/scripts/helm_kubeconform.ps1"
+      - ".github/workflows/helm-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/helm/argus/**"
+      - "infra/scripts/helm_kubeconform.sh"
+      - "infra/scripts/helm_kubeconform.ps1"
+      - ".github/workflows/helm-validation.yml"
+  workflow_dispatch:
+    inputs:
+      kubernetes_version:
+        description: "Single K8s version to validate (overrides matrix; e.g. 1.30.4)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-validation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  kubeconform:
+    name: kubeconform (k8s ${{ matrix.kube_version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      # Validate against every leg even if one fails — operators want the
+      # full surface (e.g. a deprecation that hits 1.31 only, while 1.27
+      # passes) in one CI run, not via repeated PR pushes.
+      fail-fast: false
+      matrix:
+        # Floor matches Chart.yaml::kubeVersion (>=1.27.0-0); 1.29 / 1.31
+        # represent typical production cluster versions through 2026.
+        # Override via workflow_dispatch.inputs.kubernetes_version when
+        # validating an ad-hoc cluster spec.
+        kube_version: ["1.27.0", "1.29.0", "1.31.0"]
+
+    env:
+      KUBE_VERSION: ${{ github.event.inputs.kubernetes_version || matrix.kube_version }}
+      KUBECONFORM_OUTPUT: json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helm v3.14.4 (matches ci.yml/helm-lint)
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install kubeconform v0.6.7 (pinned, never :latest)
+        run: |
+          set -euo pipefail
+          KUBECONFORM_VERSION="v0.6.7"
+          curl -sSL \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Skip notice (no chart in tree)
+        if: ${{ hashFiles('infra/helm/argus/Chart.yaml') == '' }}
+        run: |
+          echo "::notice::infra/helm/argus/Chart.yaml not found — nothing to validate." >&2
+          exit 0
+
+      - name: Run helm_kubeconform.sh (overlay × kubernetes-version)
+        if: ${{ hashFiles('infra/helm/argus/Chart.yaml') != '' }}
+        id: kubeconform
+        run: |
+          set -euo pipefail
+          chmod +x infra/scripts/helm_kubeconform.sh
+          # Tee both stdout and stderr to a per-leg log so the summary step
+          # can attach a tail without re-running the validator.
+          mkdir -p kubeconform-logs
+          bash infra/scripts/helm_kubeconform.sh --kube-version "${KUBE_VERSION}" \
+            2>&1 | tee "kubeconform-logs/k8s-${KUBE_VERSION}.log"
+
+      - name: Append job summary (always)
+        if: always() && hashFiles('infra/helm/argus/Chart.yaml') != ''
+        run: |
+          set +e
+          log="kubeconform-logs/k8s-${KUBE_VERSION}.log"
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## Helm kubeconform — k8s ${KUBE_VERSION} — PASSED"
+            else
+              echo "## Helm kubeconform — k8s ${KUBE_VERSION} — FAILED"
+            fi
+            echo
+            echo "Validated overlays: dev, staging, prod"
+            echo "Chart kubeVersion floor: \`>=1.27.0-0\` (Chart.yaml)"
+            echo
+            if [[ -f "${log}" ]]; then
+              echo "<details><summary>kubeconform tail (last 200 lines)</summary>"
+              echo
+              echo '```'
+              tail -n 200 "${log}"
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload per-leg log artefact
+        if: always() && hashFiles('infra/helm/argus/Chart.yaml') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-kubeconform-k8s-${{ env.KUBE_VERSION }}
+          path: kubeconform-logs/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,4 +1,9 @@
-"""Report internationalization — English-only static string translations for Jinja2 templates."""
+"""Report i18n — English-only translation layer.
+
+Currently supports only English. The language parameter is preserved for future
+multi-language support. Russian data in OWASP/scanner output is handled at the
+data layer, not the i18n layer.
+"""
 
 from __future__ import annotations
 

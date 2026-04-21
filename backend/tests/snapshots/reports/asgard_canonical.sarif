@@ -1,0 +1,284 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "artifacts": [
+        {
+          "description": {
+            "text": "Scan target"
+          },
+          "location": {
+            "uri": "https://acme.example.com"
+          }
+        }
+      ],
+      "automationDetails": {
+        "id": "scan-int-asgard-1"
+      },
+      "results": [
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "e1289024dd3ef2acedca4cbeb1d3ed94068ecbe0a2cae226a3a800c82fd28a7c"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://acme.example.com"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "UNION-based SQLi via id parameter.",
+            "text": "SQLi at /api/v1/users"
+          },
+          "properties": {
+            "confidence": "confirmed",
+            "cvss_v3_score": 9.8,
+            "cwe": "CWE-89",
+            "evidence_refs": [
+              "s3://argus-evidence/sqli-dump"
+            ],
+            "owasp_top10_2025": "A05",
+            "owasp_top10_2025_title": "Injection",
+            "security-severity": "9.8",
+            "severity": "critical"
+          },
+          "ruleId": "ARGUS-CWE-89"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "e3d10dedcd7f2045951e38caa63674571414c5f902303133c2b7e046cf290fea"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://acme.example.com"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "File upload allows RCE; PoC included.",
+            "text": "Reverse shell PoC in /upload"
+          },
+          "properties": {
+            "confidence": "confirmed",
+            "cvss_v3_score": 8.6,
+            "cwe": "CWE-78",
+            "owasp_top10_2025": "A01",
+            "owasp_top10_2025_title": "Broken Access Control",
+            "security-severity": "8.6",
+            "severity": "high"
+          },
+          "ruleId": "ARGUS-CWE-78"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "f488d50c4e25c7c7368a908873fa30fd1eb21093180104dbf19261b1bdfce8fd"
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://acme.example.com"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "ghp_* token observed in /static/app.js.",
+            "text": "GitHub PAT leaked in JS bundle"
+          },
+          "properties": {
+            "confidence": "confirmed",
+            "cvss_v3_score": 7.5,
+            "cwe": "CWE-200",
+            "owasp_top10_2025": "A04",
+            "owasp_top10_2025_title": "Cryptographic Failures",
+            "security-severity": "7.5",
+            "severity": "high"
+          },
+          "ruleId": "ARGUS-CWE-200"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "35fef6f2dedcc22b95b4f7050da91df5157e2b1df5ed334e04dc3fba3a7de5c3"
+          },
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://acme.example.com"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "No CSP / HSTS / X-Frame-Options.",
+            "text": "Missing security headers"
+          },
+          "properties": {
+            "confidence": "likely",
+            "cwe": "CWE-693",
+            "owasp_top10_2025": "A02",
+            "owasp_top10_2025_title": "Security Misconfiguration",
+            "severity": "medium"
+          },
+          "ruleId": "ARGUS-CWE-693"
+        },
+        {
+          "fingerprints": {
+            "primaryFinding/v1": "9a0f49b343c48e05e54581d6424c42506ab30c014c5c1883a57aac498551d6cb"
+          },
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://acme.example.com"
+                }
+              }
+            }
+          ],
+          "message": {
+            "markdown": "Hardcoded password in deploy script.",
+            "text": "MySQL root password observed in CI script"
+          },
+          "properties": {
+            "confidence": "possible",
+            "cwe": "CWE-798",
+            "owasp_top10_2025": "A07",
+            "owasp_top10_2025_title": "Authentication Failures",
+            "severity": "low"
+          },
+          "ruleId": "ARGUS-CWE-798"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/argus-security/argus",
+          "name": "ARGUS",
+          "rules": [
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "ghp_* token observed in /static/app.js."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/200.html",
+              "id": "ARGUS-CWE-200",
+              "name": "ARGUS-CWE-200",
+              "properties": {
+                "cwe": "CWE-200",
+                "security-severity": "7.5",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "GitHub PAT leaked in JS bundle"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "fullDescription": {
+                "text": "No CSP / HSTS / X-Frame-Options."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/693.html",
+              "id": "ARGUS-CWE-693",
+              "name": "ARGUS-CWE-693",
+              "properties": {
+                "cwe": "CWE-693",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Missing security headers"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "File upload allows RCE; PoC included."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/78.html",
+              "id": "ARGUS-CWE-78",
+              "name": "ARGUS-CWE-78",
+              "properties": {
+                "cwe": "CWE-78",
+                "security-severity": "8.6",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "Reverse shell PoC in /upload"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "fullDescription": {
+                "text": "Hardcoded password in deploy script."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/798.html",
+              "id": "ARGUS-CWE-798",
+              "name": "ARGUS-CWE-798",
+              "properties": {
+                "cwe": "CWE-798",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "MySQL root password observed in CI script"
+              }
+            },
+            {
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "fullDescription": {
+                "text": "UNION-based SQLi via id parameter."
+              },
+              "helpUri": "https://cwe.mitre.org/data/definitions/89.html",
+              "id": "ARGUS-CWE-89",
+              "name": "ARGUS-CWE-89",
+              "properties": {
+                "cwe": "CWE-89",
+                "security-severity": "9.8",
+                "tags": [
+                  "security",
+                  "argus"
+                ]
+              },
+              "shortDescription": {
+                "text": "SQLi at /api/v1/users"
+              }
+            }
+          ],
+          "version": "arg-025-snapshot"
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

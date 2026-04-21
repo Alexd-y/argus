@@ -1,0 +1,40 @@
+tool_id: gospider
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "gospider"
+  - "-s"
+  - "{url}"
+  - "-c"
+  - "10"
+  - "-d"
+  - "3"
+  - "--js"
+  - "--sitemap"
+  - "--robots"
+  - "--json"
+  - "-o"
+  - "{out_dir}/gospider"
+parse_strategy: json_lines
+evidence_artifacts:
+  - "/out/gospider"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-06"
+  - "WSTG-INFO-07"
+description: "Gospider fast Go crawler — concurrency 10, depth 3, follows JS / sitemap.xml / robots.txt; emits JSONL on stdout (one record per discovered URL). Active crawl. Author: jaeles-project (https://github.com/jaeles-project/gospider). Backlog/dev1_md §4.6."

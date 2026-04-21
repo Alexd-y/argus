@@ -1,0 +1,62 @@
+{
+  "A01": {
+    "title": "Broken Access Control",
+    "example_attack": "A user modifies an identifier in the URL or API and gains access to another user's order, report, or admin functionality without server-side role verification.",
+    "how_to_find": "Test horizontal and vertical access to objects (IDOR), client-side restriction bypass, and missing server-side checks for every action.",
+    "how_to_fix": "Enforce server-side authorization on every request, implement role-based and resource-ownership policies, and never rely solely on 'hidden' URLs or parameters."
+  },
+  "A02": {
+    "title": "Security Misconfiguration",
+    "example_attack": "Debug pages are exposed, default credentials remain active, unnecessary HTTP methods or headers are enabled; version and internal path information leaks through error responses.",
+    "how_to_find": "Scan headers, TLS configuration, directory listings, and default paths; compare against hardening guides; review cloud/IaC settings and environment variables.",
+    "how_to_fix": "Minimize attack surface: disable unnecessary features, enforce strong TLS cipher suites, maintain a unified secure baseline, and automate configuration checks in CI/CD."
+  },
+  "A03": {
+    "title": "Software Supply Chain Failures",
+    "example_attack": "A dependency or build pipeline is compromised: package substitution, malicious artifact in a registry, or a leaked CI secret.",
+    "how_to_find": "Inventory dependencies (SBOM), verify artifact integrity and provenance, audit publish permissions, and check image and commit signatures.",
+    "how_to_fix": "Pin dependency versions, use verified publishers, sign artifacts and verify checksums, isolate builds, grant minimal CI permissions, and monitor dependencies for known vulnerabilities."
+  },
+  "A04": {
+    "title": "Cryptographic Failures",
+    "example_attack": "Secrets and tokens are transmitted over HTTP, weak or deprecated algorithms are used, passwords are stored without proper hashing, and IVs/keys are predictable.",
+    "how_to_find": "Review transport channels (TLS), secret storage locations, algorithms and key lengths; search for secrets in logs and client-side code.",
+    "how_to_fix": "Enforce TLS for all sensitive data, use modern AEAD ciphers, manage keys via KMS/Vault, hash passwords with bcrypt/Argon2, and avoid custom cryptographic implementations."
+  },
+  "A05": {
+    "title": "Injection",
+    "example_attack": "SQL injection via a search form, XSS in reflected output, command injection through a shell call, or LDAP/XML injection in integrations.",
+    "how_to_find": "Fuzz input points, statically analyze query concatenation, review ORM/parameterization usage, and check for DOM and stored XSS in templates.",
+    "how_to_fix": "Use parameterized queries, apply context-aware escaping, deploy CSP where appropriate, prohibit unsafe APIs (eval, raw shell), and validate input against allowlists."
+  },
+  "A06": {
+    "title": "Insecure Design",
+    "example_attack": "Features are designed without a threat model: trust is placed in the client, rate limits are absent, and 'temporary' authentication bypasses persist in production.",
+    "how_to_find": "Perform threat modeling for key scenarios, review security requirements, and identify 'security as afterthought' anti-patterns in API design and data flows.",
+    "how_to_fix": "Adopt a Secure SDLC, define explicit controls at the design stage, separate trust zones, enforce limits and quotas, and design according to the principle of least privilege."
+  },
+  "A07": {
+    "title": "Authentication Failures",
+    "example_attack": "Password brute-force without lockout, weak account recovery, session fixation, token theft from localStorage, or missing MFA for sensitive operations.",
+    "how_to_find": "Test password policies, session management, MFA, token expiry and invalidation; verify protection against automated login attempts.",
+    "how_to_fix": "Implement MFA where needed, use secure session storage (HttpOnly, Secure, SameSite), enforce rate limiting, monitor anomalous logins, and adopt modern OAuth/OIDC flows."
+  },
+  "A08": {
+    "title": "Software or Data Integrity Failures",
+    "example_attack": "Insecure deserialization, plugin or config substitution, missing update signature verification, or CI pipeline without artifact tampering protection.",
+    "how_to_find": "Search for insecure deserialization, unsigned updates, uploads without type and integrity validation, and inadequate permissions on critical files.",
+    "how_to_fix": "Sign artifacts and verify integrity, use safe serialization formats, prohibit untrusted deserialization, and enforce integrity controls in the pipeline and on hosts."
+  },
+  "A09": {
+    "title": "Security Logging & Alerting Failures",
+    "example_attack": "An attacker erases traces or actions go unlogged; administrators remain unaware of a compromise due to noise or lack of correlation.",
+    "how_to_find": "Verify audit coverage for authentication, admin actions, and data changes; confirm log tamper protection; check for alerts on critical events.",
+    "how_to_fix": "Use structured logs without secrets, centralize collection, store logs immutably, and maintain runbooks and alerts keyed to key compromise indicators."
+  },
+  "A10": {
+    "title": "Mishandling of Exceptional Conditions",
+    "example_attack": "Service crashes from an unhandled exception, internal details leak in error responses, or denial of service through edge-case input.",
+    "how_to_find": "Run load and negative tests, review error handling and timeouts, and verify that stack traces and internal paths are never returned to the client.",
+    "how_to_fix": "Return a uniform, safe error format to clients, log details only server-side, enforce resource limits, implement circuit breakers, and set correct status codes and timeouts for dependencies."
+  }
+}

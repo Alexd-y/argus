@@ -10,7 +10,9 @@ from collections.abc import Callable
 from typing import Any
 
 from src.core.config import settings
-from src.core.llm_config import get_llm_client, has_any_llm_key
+from src.core.llm_config import has_any_llm_key
+from src.llm.facade import call_llm_sync
+from src.llm.task_router import LLMTask
 from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_KEYS,
     get_report_ai_section_prompt,
@@ -40,6 +42,8 @@ class AITextDeduplicator:
     SIMILARITY_THRESHOLD = 0.70
     MIN_SENTENCE_WORDS = 5
 
+    # Sentence boundary: EN (A-Z) + RU (U+0410-U+042F, U+0401) uppercase range.
+    # RU range kept for mixed-language AI output from OWASP/scanner data.
     _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\u0410-\u042f\u0401])")
 
     def deduplicate_sections(self, sections: dict[str, str]) -> dict[str, str]:
@@ -281,8 +285,16 @@ def run_ai_text_generation(
                             "prompt_version": prompt_version,
                             "payload_sha256": payload_hash,
                         }
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as exc:
+                    logger.warning(
+                        "AI text cache corrupted, evicting key=%s",
+                        cache_key,
+                        exc_info=exc,
+                    )
+                    try:
+                        r.delete(cache_key)
+                    except Exception as exc:
+                        logger.warning("cache delete failed", extra={"key": cache_key}, exc_info=exc)
         except Exception as e:
             logger.warning(
                 "Redis cache read failed for AI text generation",
@@ -292,55 +304,40 @@ def run_ai_text_generation(
                 },
             )
 
-    call_llm = llm_callable
-    if call_llm is None:
-        if not has_any_llm_key():
-            _log_ai_text_event(
-                cache_hit=False,
-                section_key=section_key,
-                tier=tier,
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                payload_sha256=payload_hash,
-                prompt_version=prompt_version,
-                status="llm_unavailable",
-            )
-            return {
-                "status": "skipped_no_llm",
-                "error": "llm_unavailable",
-                "text": REPORT_AI_SKIPPED_NO_LLM,
-                "section_key": section_key,
-                "cache_hit": False,
-                "prompt_version": prompt_version,
-                "payload_sha256": payload_hash,
-            }
-        try:
-            call_llm = get_llm_client()
-        except Exception:
-            _log_ai_text_event(
-                cache_hit=False,
-                section_key=section_key,
-                tier=tier,
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                payload_sha256=payload_hash,
-                prompt_version=prompt_version,
-                status="llm_unavailable",
-            )
-            return {
-                "status": "skipped_no_llm",
-                "error": "llm_unavailable",
-                "text": REPORT_AI_SKIPPED_NO_LLM,
-                "section_key": section_key,
-                "cache_hit": False,
-                "prompt_version": prompt_version,
-                "payload_sha256": payload_hash,
-            }
+    if llm_callable is None and not has_any_llm_key():
+        _log_ai_text_event(
+            cache_hit=False,
+            section_key=section_key,
+            tier=tier,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            payload_sha256=payload_hash,
+            prompt_version=prompt_version,
+            status="llm_unavailable",
+        )
+        return {
+            "status": "skipped_no_llm",
+            "error": "llm_unavailable",
+            "text": REPORT_AI_SKIPPED_NO_LLM,
+            "section_key": section_key,
+            "cache_hit": False,
+            "prompt_version": prompt_version,
+            "payload_sha256": payload_hash,
+        }
 
-    combined_prompt = f"{system_prompt}\n\n{user_prompt}"
     try:
-        generated = (call_llm(combined_prompt, {"task": section_key, "tier": tier}) or "").strip()
-    except Exception:
+        if llm_callable is not None:
+            combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+            generated = (llm_callable(combined_prompt, {"task": section_key, "tier": tier}) or "").strip()
+        else:
+            generated = call_llm_sync(
+                system_prompt,
+                user_prompt,
+                task=LLMTask.REPORT_SECTION,
+                scan_id=scan_id,
+                phase="reporting",
+            ).strip()
+    except Exception as exc:
         _log_ai_text_event(
             cache_hit=False,
             section_key=section_key,
@@ -351,6 +348,7 @@ def run_ai_text_generation(
             prompt_version=prompt_version,
             status="llm_error",
         )
+        logger.warning("LLM generation failed", extra={"section_key": section_key, "tier": tier}, exc_info=exc)
         return {
             "status": "failed",
             "error": "generation_failed",

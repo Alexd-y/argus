@@ -1,4 +1,4 @@
-"""Sandbox router — HexStrike v4 constrained execution.
+"""Sandbox router — ARGUS v4 constrained execution.
 
 POST /sandbox/python runs arbitrary code via the host interpreter when
 ``ARGUS_SANDBOX_PYTHON_ENABLED`` is true. This is intended for local/dev

@@ -1,0 +1,61 @@
+{
+  "spec": "https://target.example.com/openapi.json",
+  "spec_version": "3.0.3",
+  "scanned_at": "2026-04-01T12:00:00Z",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "auth": "bearer",
+      "description": "List users",
+      "responses": ["200", "401"]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users",
+      "auth": "bearer",
+      "description": "Create user",
+      "responses": ["201", "400", "401"]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/{id}",
+      "auth": "bearer",
+      "description": "Get user by id",
+      "responses": ["200", "404"]
+    }
+  ],
+  "findings": [
+    {
+      "id": "openapi-001",
+      "title": "Unauthenticated endpoint exposes user list",
+      "severity": "high",
+      "type": "missing_authentication",
+      "endpoint": "/api/v1/public/users",
+      "method": "GET",
+      "description": "/api/v1/public/users does not require auth and returns full user roster.",
+      "cwe": [306],
+      "evidence": "HTTP/1.1 200 OK\\nContent-Type: application/json\\n\\n[{\"id\":1,\"email\":\"alice@example.com\"}]"
+    },
+    {
+      "id": "openapi-002",
+      "title": "Possible IDOR on /api/v1/users/{id}",
+      "severity": "medium",
+      "type": "idor",
+      "endpoint": "/api/v1/users/{id}",
+      "method": "GET",
+      "description": "Numeric id allows enumeration of user records.",
+      "cwe": [639]
+    },
+    {
+      "id": "openapi-003",
+      "title": "JWT lacks audience binding",
+      "severity": "medium",
+      "type": "jwt",
+      "endpoint": "/api/v1/auth/login",
+      "method": "POST",
+      "description": "JWT has no `aud` claim — any service with the same signing key validates the token.",
+      "cwe": [347]
+    }
+  ]
+}

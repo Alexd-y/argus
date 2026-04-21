@@ -1,0 +1,64 @@
+# =============================================================================
+# .trivyignore — ARGUS sandbox image vulnerability allowlist
+# Owner: ARGUS supply-chain (ARG-034, Cycle 4)
+# Last reviewed: 2026-04-20
+#
+# This file curates the **only** known-acceptable CVEs that block-mode Trivy
+# (severity=CRITICAL,HIGH; ignore-unfixed=false) is permitted to suppress
+# during the .github/workflows/sandbox-images.yml :: trivy-scan job.
+#
+# Policy (enforced by docs/sandbox-images.md §3 and code review):
+#
+#   1. Empty by default.
+#      A clean Kali-rolling base SHOULD pass blocking Trivy. Only add an
+#      entry after a real scan flags a CVE that is demonstrably non-
+#      exploitable in the ARGUS sandbox runtime — never preemptively.
+#
+#   2. Every entry MUST be on its own line and MUST be immediately preceded
+#      by a comment block carrying:
+#        - CVE-YYYY-NNNNN identifier (matches the entry below).
+#        - Justification: why this CVE is non-applicable to ARGUS.
+#          Concretely: which package, which feature path, why the sandbox
+#          never reaches it. Do NOT write "false positive" without proof.
+#        - Owner: ARG-NNN that added the entry.
+#        - Expiry: YYYY-MM-DD (90 days from the date the entry was added).
+#          On expiry, the cycle owner MUST re-evaluate: either remove the
+#          entry (CVE has a fix and we now upgrade) or refresh the
+#          justification (still non-applicable, push expiry +90d) and the
+#          reviewer signature.
+#
+#      Format (use exactly this template):
+#
+#        # CVE-YYYY-NNNNN — vulnerability in <package> only triggered when used as <feature>;
+#        # ARGUS sandbox does not invoke this feature (evidence: <path/file or test>).
+#        # Owner: ARG-NNN; reviewer: <handle>; expires: YYYY-MM-DD.
+#        CVE-YYYY-NNNNN
+#
+#   3. NO blanket suppressions, ever.
+#      No `**/*` patterns, no severity-level wildcards, no `--ignore-unfixed`
+#      add-back. The CI workflow pins `ignore-unfixed: false` deliberately —
+#      do not toggle it to mask CVEs.
+#
+#   4. Quarterly audit.
+#      The Cycle owner runs:
+#
+#        grep -E '^CVE-[0-9]{4}-[0-9]+' .trivyignore
+#
+#      and confirms every active suppression has a non-expired comment block.
+#      Expired entries surface in the audit report and either get removed
+#      (preferred — upgrade the affected package) or re-justified.
+#
+# Sigstore Cosign attestation policy: every suppression is also recorded in
+# the in-toto SLSA predicate produced by ARG-033 so downstream verifiers can
+# audit the suppression set against the signed manifest.
+#
+# Local replay (regenerate the report off-CI):
+#   trivy image --severity CRITICAL,HIGH --ignore-unfixed=false \
+#               --exit-code 1 --ignorefile .trivyignore \
+#               ghcr.io/<org>/argus-kali-web:<sha>
+#
+# =============================================================================
+#
+# ── Active suppressions (currently empty — first real scan will surface
+# the actual list, see policy §1 above). Do NOT pre-populate.
+#

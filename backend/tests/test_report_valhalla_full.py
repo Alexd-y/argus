@@ -216,43 +216,43 @@ def test_valhalla_html_production_jinja_major_sections(_mock_llm: object) -> Non
     html = render_tier_report_html("valhalla", ctx)
 
     section_checks: list[tuple[str, str]] = [
-        ('id="valhalla-title"', "Титульный лист"),
+        ('id="valhalla-title"', "Title Page"),
         ('id="executive-summary"', "Executive Summary"),
-        ('id="objectives"', "Объект, цели и задачи"),
-        ('id="scope"', "Объём работ"),
-        ('id="methodology"', "Методология и стандарты"),
-        ('id="results-overview"', "Матрица рисков"),
-        ('id="threat-modeling"', "Моделирование угроз"),
+        ('id="objectives"', "Subject, Goals and Objectives"),
+        ('id="scope"', "Scope and Limitations"),
+        ('id="methodology"', "Methodology and Standards"),
+        ('id="results-overview"', "Results Overview and Risk Matrix"),
+        ('id="threat-modeling"', "Threat Modeling"),
         ('id="findings"', "Findings"),
         ('id="exploitation"', "Exploit Chain"),
-        ('id="remediation-priority"', "Рекомендации и приоритизация"),
-        ('id="zero-day-potential"', "Zero-day"),
-        ('id="conclusion"', "Заключение"),
-        ('id="appendices"', "Приложения"),
+        ('id="remediation-priority"', "Recommendations and Prioritization"),
+        ('id="zero-day-potential"', "Zero-Day Potential"),
+        ('id="conclusion"', "Conclusion"),
+        ('id="appendices"', "Appendices"),
     ]
     for marker, heading in section_checks:
         assert marker in html, f"missing marker {marker}"
         assert heading in html, f"missing heading {heading}"
 
     for appendix_heading in (
-        "Приложение А. Список использованных инструментов",
-        "Приложение Б. Фрагменты конфигураций",
-        "Приложение В. Выдержки из журнала событий",
-        "Приложение Г. Выдержка из nmap",
-        "Приложение Д. Признаки APT",
-        "Приложение Е. Результаты проверки утечек паролей",
+        "Appendix A. Tools and Versions Used",
+        "Appendix B. Phase Configuration and Input Excerpts",
+        "Appendix C. ARGUS Event Log / Timeline Excerpts",
+        "Appendix D. Nmap / Network Scan Excerpt",
+        "Appendix E. APT Indicators (if detected)",
+        "Appendix F. Password Leak Verification Results (hashed, HIBP)",
     ):
         assert appendix_heading in html
 
     assert 'class="valhalla-tech-structured"' in html
-    assert "Технологический стек и компоненты" in html
+    assert "Technology Stack and Components" in html
     assert "nginx/1.22" in html
-    assert "Устаревшие компоненты" in html
+    assert "Outdated Components" in html
     assert "openssl" in html
     assert "CVE-2023-0001" in html
-    assert "Матрица рисков" in html
+    assert "Risk Matrix" in html
     assert "f-valhalla" in html
-    assert "Критически важные уязвимости" in html
+    assert "Critical Vulnerabilities" in html
     assert "Fixture critical" in html
     assert "CVE-2024-FIXTURE" in html
 

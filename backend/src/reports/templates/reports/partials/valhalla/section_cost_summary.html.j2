@@ -1,0 +1,11 @@
+<section class="valhalla-cost-summary panel" id="cost-summary">
+    <h2>LLM Cost Summary</h2>
+    <div class="ai-slot-body">
+        {% set cs = ai_sections.get("cost_summary") if ai_sections is defined else "" %}
+        {% if cs and cs.strip() %}
+            {{ cs | md | safe }}
+        {% else %}
+            <p class="empty">No cost data available for this assessment.</p>
+        {% endif %}
+    </div>
+</section>

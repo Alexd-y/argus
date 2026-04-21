@@ -1,0 +1,7 @@
+[
+  {"host": "target.example.com", "port": 443, "scheme": "https", "jarm": "27d40d40d29d40d1dc42d43d00041d4689ee210389f4f6b4b5b1b099f3aef8"},
+  {"host": "api.example.com", "port": 443, "scheme": "https", "jarm": "1d4d600d1d4d600d1d4d600d1d4d600d50ed3a07e0c89cf52cf02b89e0c1c5"},
+  {"host": "mail.example.com", "port": 993, "scheme": "imaps", "jarm": "29d29d20d29d29d21c42d43d00041d52e1d10c2bda7c79b07c4cb53b5fce10"},
+  {"host": "down.example.com", "port": 443, "scheme": "https", "jarm": "00000000000000000000000000000000000000000000000000000000000000"},
+  {"host": "iot.example.com", "port": 8883, "scheme": "mqtts", "jarm": "07d14d16d21d21d00007d14d14d14d4f6b6c4e7e7c7c7c7c7c7c7c7c7c7c7c"}
+]

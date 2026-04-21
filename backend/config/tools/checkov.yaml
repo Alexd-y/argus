@@ -1,0 +1,33 @@
+tool_id: checkov
+version: "1.0.0"
+category: iac
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "checkov -d {path} -o json --quiet > {out_dir}/checkov.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/checkov.json"
+cwe_hints:
+  - 16
+  - 200
+  - 285
+  - 311
+  - 732
+  - 798
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Bridgecrew Checkov IaC static analyser — scans the IaC bundle at {path} (Terraform, CloudFormation, ARM, K8s manifests, Helm, Dockerfile, Serverless) against the bundled policy library (CIS, AWS/Azure/GCP best-practice, secret detection, supply-chain). Fully offline (offline-no-egress); Checkov ships its policy DB in-image. `sh -c` is used solely for stdout redirection. Parser deferred to Cycle 3. Author: Bridgecrew/PAN. Backlog §4.15. ARG-018."

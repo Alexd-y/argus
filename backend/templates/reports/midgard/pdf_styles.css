@@ -1,0 +1,367 @@
+/*
+ * ARG-036 — Midgard tier PDF stylesheet (CISO-facing, blue brand).
+ *
+ * WeasyPrint resolves @font-face url(...) relative to the HTML's
+ * base_url (set by pdf_backend to the template directory). Fonts
+ * live one level up under ../_fonts/ — the bundled placeholders are
+ * intentionally tiny so the repo stays lightweight; operators are
+ * expected to drop in the real Inter / DejaVu Sans WOFF2 files
+ * (SIL OFL) before production rollout (see worker report).
+ *
+ * Print-specific @page rules deliberately do NOT inherit from the
+ * shared base.html.j2 stylesheet — that template targets screens.
+ */
+
+/* ----------------------------- Fonts ----------------------------- */
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  src: url("../_fonts/DejaVuSans.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+/* --------------------------- @page rules ------------------------- */
+@page {
+  size: A4;
+  margin: 2cm;
+  /* Header text repeated on every page (overridden on cover below). */
+  @top-left {
+    content: "ARGUS · Midgard tier";
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #5a6478;
+  }
+  @top-right {
+    content: "Confidential";
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #5a6478;
+  }
+  @bottom-center {
+    content: "ARGUS Confidential — page " counter(page) " of " counter(pages);
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #5a6478;
+  }
+}
+
+/* Cover page swaps the running header for blank slugs. */
+@page :first {
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+}
+
+/* --------------------------- Base typography --------------------- */
+:root {
+  --argus-primary: #1a3a8c;       /* Midgard royal blue */
+  --argus-primary-dark: #0f2247;
+  --argus-accent: #2f6fd6;
+  --argus-text: #1a1d29;
+  --argus-text-muted: #5a6478;
+  --argus-surface: #f6f8fc;
+  --argus-surface-alt: #eef1f8;
+  --argus-rule: #c7d0e3;
+
+  --sev-critical: #b00020;
+  --sev-high: #d35400;
+  --sev-medium: #c39200;
+  --sev-low: #2f6fd6;
+  --sev-info: #6b7280;
+}
+
+html, body {
+  font-family: "Inter", "DejaVu Sans", "Segoe UI", sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: var(--argus-text);
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  color: var(--argus-primary-dark);
+  margin: 0 0 0.6em 0;
+}
+
+p { margin: 0 0 0.6em 0; }
+code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
+
+/* ----------------------------- Cover ----------------------------- */
+.cover-page {
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  height: 25cm;
+  padding: 1cm 0;
+}
+
+.cover-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6cm;
+  margin-bottom: 1.2cm;
+}
+
+.brand-mark { line-height: 0; }
+
+.brand-name {
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--argus-primary-dark);
+}
+
+.brand-sub {
+  font-size: 9pt;
+  color: var(--argus-text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cover-tier-badge {
+  display: inline-block;
+  padding: 0.18cm 0.5cm;
+  border-radius: 0.12cm;
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5cm;
+}
+
+.tier-badge-midgard {
+  background: var(--argus-primary);
+  color: #fff;
+}
+
+.cover-title {
+  font-size: 28pt;
+  margin: 0.1cm 0 0.4cm 0;
+  color: var(--argus-primary-dark);
+}
+
+.cover-target {
+  font-size: 14pt;
+  color: var(--argus-text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.cover-meta {
+  margin-top: 1.5cm;
+  background: var(--argus-surface);
+  border-left: 3pt solid var(--argus-primary);
+  padding: 0.6cm 0.8cm;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 4cm 1fr;
+  row-gap: 0.18cm;
+  column-gap: 0.4cm;
+  margin: 0;
+}
+
+.meta-grid dt {
+  font-weight: 700;
+  color: var(--argus-text-muted);
+  text-transform: uppercase;
+  font-size: 8pt;
+  letter-spacing: 0.05em;
+}
+
+.meta-grid dd {
+  margin: 0;
+  color: var(--argus-text);
+  word-break: break-word;
+}
+
+.watermark {
+  font-family: "DejaVu Sans Mono", "Consolas", monospace;
+  font-size: 9pt;
+  color: var(--argus-primary);
+}
+
+.cover-confidential {
+  margin-top: auto;
+  text-align: center;
+  font-size: 8pt;
+  color: var(--argus-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---------------------- Section headings ------------------------- */
+.section-heading {
+  font-size: 16pt;
+  border-bottom: 1pt solid var(--argus-rule);
+  padding-bottom: 0.15cm;
+  margin: 0.6cm 0 0.4cm 0;
+  color: var(--argus-primary-dark);
+}
+
+.exec-summary,
+.top-findings,
+.owasp-compliance {
+  page-break-inside: avoid;
+  margin-bottom: 0.6cm;
+}
+
+/* Sub-sections may need their own break boundaries. */
+.top-findings { page-break-inside: auto; }
+
+/* --------------------------- Severity pills ---------------------- */
+.severity-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25cm;
+  margin: 0 0 0.5cm 0;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.1cm 0.35cm;
+  border-radius: 0.5cm;
+  font-size: 9pt;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.pill-critical { background: var(--sev-critical); }
+.pill-high     { background: var(--sev-high); }
+.pill-medium   { background: var(--sev-medium); color: #1a1d29; }
+.pill-low      { background: var(--sev-low); }
+.pill-info     { background: var(--sev-info); }
+
+/* ----------------------------- Prose ----------------------------- */
+.prose {
+  color: var(--argus-text);
+  font-size: 10pt;
+}
+
+.prose strong { color: var(--argus-primary-dark); }
+.prose em { color: var(--argus-text); }
+
+.empty-state {
+  color: var(--argus-text-muted);
+  font-style: italic;
+}
+
+/* ------------------------- Findings table ------------------------ */
+.findings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.findings-table th,
+.findings-table td {
+  border: 0.5pt solid var(--argus-rule);
+  padding: 0.18cm 0.25cm;
+  text-align: left;
+  vertical-align: top;
+}
+
+.findings-table thead {
+  background: var(--argus-surface-alt);
+}
+
+.findings-table thead th {
+  color: var(--argus-primary-dark);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8pt;
+}
+
+.col-sev   { width: 2.4cm; }
+.col-cwe   { width: 1.8cm; }
+.col-cvss  { width: 1.4cm; text-align: right; }
+.col-owasp { width: 1.6cm; }
+
+.sev-tag {
+  display: inline-block;
+  padding: 0.05cm 0.2cm;
+  border-radius: 0.1cm;
+  font-size: 8pt;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.sev-critical { background: var(--sev-critical); }
+.sev-high     { background: var(--sev-high); }
+.sev-medium   { background: var(--sev-medium); color: #1a1d29; }
+.sev-low      { background: var(--sev-low); }
+.sev-info     { background: var(--sev-info); }
+
+/* -------------------------- OWASP table -------------------------- */
+.owasp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.owasp-table th,
+.owasp-table td {
+  border: 0.5pt solid var(--argus-rule);
+  padding: 0.16cm 0.25cm;
+  text-align: left;
+}
+
+.owasp-table thead {
+  background: var(--argus-surface-alt);
+}
+
+.owasp-table thead th {
+  color: var(--argus-primary-dark);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8pt;
+}
+
+.col-owasp-id    { width: 1.4cm; }
+.col-owasp-count { width: 1.6cm; text-align: right; }
+
+.owasp-compliance-0    { background: rgba(46, 160, 67, 0.08); }
+.owasp-compliance-warn { background: rgba(195, 146, 0, 0.10); }
+.owasp-compliance-high { background: rgba(176, 0, 32, 0.08); }
+
+/* ----------------------------- Footer ---------------------------- */
+.report-footer {
+  page-break-before: always;
+  margin-top: 1cm;
+  font-size: 8pt;
+  color: var(--argus-text-muted);
+  border-top: 0.5pt solid var(--argus-rule);
+  padding-top: 0.3cm;
+}
+
+.report-footer code {
+  color: var(--argus-primary);
+}

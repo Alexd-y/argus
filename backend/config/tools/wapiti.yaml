@@ -1,0 +1,49 @@
+tool_id: wapiti
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "wapiti"
+  - "-u"
+  - "{url}"
+  - "-f"
+  - "json"
+  - "-o"
+  - "{out_dir}/wapiti.json"
+  - "--flush-session"
+  - "--scope"
+  - "domain"
+  - "--max-scan-time"
+  - "1500"
+  - "--verify-ssl"
+  - "0"
+  - "-m"
+  - "all"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/wapiti.json"
+cwe_hints:
+  - 79
+  - 89
+  - 22
+  - 78
+  - 200
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-05"
+  - "WSTG-INPV-12"
+  - "WSTG-AUTHZ-01"
+description: "Wapiti3 black-box web vulnerability scanner — crawls and audits {url} for XSS, SQLi, command injection, path traversal, file inclusion, CSRF, XXE. -m all enables every audit module; --flush-session ensures a clean per-run state; --max-scan-time fits 30 min sandbox window. Author: Nicolas Surribas / Wapiti team (https://github.com/wapiti-scanner/wapiti). Backlog/dev1_md §4.8."

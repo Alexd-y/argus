@@ -1,0 +1,30 @@
+tool_id: kerbrute
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "kerbrute userenum --dc {dc} -d {domain} {in_dir}/users.txt -o {out_dir}/kerbrute.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/kerbrute.txt"
+cwe_hints:
+  - 287
+  - 204
+owasp_wstg:
+  - "WSTG-ATHN-03"
+description: "Kerbrute — Kerberos username enumeration via AS-REQ pre-auth probe (no lockout because it asks for non-existent realm tokens, not passwords). APPROVAL REQUIRED: still touches the KDC and lights up domain audit logs. Userlist from {in_dir}/users.txt; targets DC at {dc} for realm {domain}. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

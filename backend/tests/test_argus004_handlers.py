@@ -96,7 +96,7 @@ class TestRunVulnAnalysis:
             assert len(out.findings) == 1
 
 
-class TestRunExploitation:
+class TestArgus004RunExploitation:
     """run_exploitation handler."""
 
     @pytest.mark.asyncio
@@ -233,7 +233,10 @@ class TestRawPhaseArtifactsPostExploitation:
                 return_value="tenant/scan/post_exploitation/raw/x.txt",
             ) as mock_upload,
             patch("src.orchestration.ai_prompts.is_llm_available", return_value=True),
-            patch("src.orchestration.ai_prompts.call_llm", new_callable=AsyncMock) as mock_llm,
+            patch(
+                "src.orchestration.ai_prompts.call_llm_unified",
+                new_callable=AsyncMock,
+            ) as mock_llm,
         ):
             mock_llm.return_value = llm_json
             out = await run_post_exploitation(

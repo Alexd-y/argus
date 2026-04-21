@@ -1,0 +1,30 @@
+tool_id: smbclient
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: medium
+requires_approval: true
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "smbclient -L //{host} -U {user}%{pass} > {out_dir}/smb_list.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/smb_list.txt"
+cwe_hints:
+  - 287
+  - 522
+owasp_wstg:
+  - "WSTG-ATHN-01"
+description: "smbclient -L — authenticated SMB share listing using the supplied (user, pass). APPROVAL REQUIRED: authenticated probes touch domain audit logs. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

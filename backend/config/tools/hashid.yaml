@@ -1,0 +1,27 @@
+tool_id: hashid
+version: "1.0.0"
+category: misc
+phase: post_exploitation
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "500m"
+memory_limit: "256Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "hashid -m -j {hashes_file} > {out_dir}/hashid.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/hashid.json"
+cwe_hints:
+  - 326
+owasp_wstg:
+  - "WSTG-CRYP-04"
+description: "hashid — local hash-format identifier (no egress, fail-safe). Walks {hashes_file} (must live under /in/), guesses the hash algorithm via prefix + length heuristics, and emits -j JSON for the downstream cracker selector. Hashcat / John mode codes derived from this output drive the §4.13 cracker pipeline. Output JSON (parser deferred to Cycle 3). Backlog/dev1_md §4.13. ARG-017."

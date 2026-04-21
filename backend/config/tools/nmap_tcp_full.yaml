@@ -1,0 +1,38 @@
+tool_id: nmap_tcp_full
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 7200
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "nmap"
+  - "-sS"
+  - "-Pn"
+  - "-p-"
+  - "-T4"
+  - "--min-rate"
+  - "2000"
+  - "-oX"
+  - "{out_dir}/nmap_full.xml"
+  - "{ip}"
+parse_strategy: xml_nmap
+evidence_artifacts:
+  - "/out/nmap_full.xml"
+cwe_hints:
+  - 200
+  - 668
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-04"
+description: "Nmap TCP SYN scan across all 65535 ports with rate-limited probes; full port-exposure map. Backlog/dev1_md §4.2."

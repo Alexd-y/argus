@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 
 import markdown as md_lib
@@ -17,6 +16,10 @@ def report_templates_directory() -> Path:
     return _REPORT_TEMPLATES_DIR
 
 
+# SECURITY: Allowlist for nh3 HTML sanitizer applied to AI-generated markdown.
+# Only these tags survive the markdown → HTML → sanitize pipeline.
+# Adding <script>, <iframe>, <object>, <embed>, <form>, or event-handler attributes
+# would re-introduce XSS risk. Review with security team before expanding.
 _ALLOWED_TAGS = {
     "p", "br", "h1", "h2", "h3", "h4", "h5", "h6",
     "ul", "ol", "li", "strong", "em", "code", "pre",
@@ -51,17 +54,27 @@ def _md_filter(text: str) -> Markup:
     return Markup(safe_html)
 
 
-@lru_cache(maxsize=1)
-def get_report_jinja_environment() -> Environment:
-    """HTML report templates only — autoescape all outputs (user + AI text)."""
-    env = Environment(
-        loader=FileSystemLoader(str(_REPORT_TEMPLATES_DIR)),
-        autoescape=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    env.filters["md"] = _md_filter
-    return env
+_ENV_CACHE: dict[str, Environment] = {}
+
+
+def get_report_jinja_environment(template_dir: str = "") -> Environment:
+    """Return cached Jinja2 Environment. Use reset_template_env_cache() for hot reload."""
+    cache_key = template_dir or str(_REPORT_TEMPLATES_DIR)
+    if cache_key not in _ENV_CACHE:
+        env = Environment(
+            loader=FileSystemLoader(cache_key),
+            autoescape=True,
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+        env.filters["md"] = _md_filter
+        _ENV_CACHE[cache_key] = env
+    return _ENV_CACHE[cache_key]
+
+
+def reset_template_env_cache() -> None:
+    """Clear template environment cache for hot reload during development."""
+    _ENV_CACHE.clear()
 
 
 def render_tier_report_html(tier: str, context: dict) -> str:

@@ -1,0 +1,30 @@
+tool_id: impacket_examples
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "GetUserSPNs.py {domain}/{user}:{pass} -dc-ip {dc} -request -outputfile {out_dir}/spns.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/spns.txt"
+cwe_hints:
+  - 287
+  - 522
+owasp_wstg:
+  - "WSTG-ATHN-03"
+description: "Impacket GetUserSPNs.py — Kerberoasting service-principal enumeration that returns TGS tickets for crackable SPN accounts. APPROVAL REQUIRED: authenticated lookup against {dc} touches domain audit logs. Output is the raw SPN tickets ready for §4.13 hashcat -m 13100. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

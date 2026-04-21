@@ -7,8 +7,9 @@ import io
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from sqlalchemy import String, cast, select
 
 from src.api.schemas import (
@@ -44,7 +45,13 @@ from src.reports.generators import (
     generate_pdf,
     generate_valhalla_sections_csv,
 )
+from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.report_pipeline import _upsert_report_object
+from src.reports.report_service import (
+    ReportGenerationError,
+    ReportNotFoundError,
+    ReportService,
+)
 from src.reports.storage import download as storage_download
 from src.reports.storage import exists as storage_exists
 from src.reports.storage import get_presigned_url
@@ -443,3 +450,100 @@ async def download_report(
         media_type=CONTENT_TYPES[fmt],
         headers={"Content-Disposition": _attachment_content_disposition(fname)},
     )
+
+
+# ---------------------------------------------------------------------------
+# ARG-024 — Unified ReportService entry point
+# ---------------------------------------------------------------------------
+
+
+class GenerateReportRequest(BaseModel):
+    """Request body for ``POST /reports/generate`` (ARG-024)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scan_id: StrictStr | None = Field(default=None, max_length=128)
+    report_id: StrictStr | None = Field(default=None, max_length=128)
+    tier: ReportTier = ReportTier.MIDGARD
+    format: ReportFormat = ReportFormat.JSON
+
+
+class GenerateReportMetadata(BaseModel):
+    """Inline metadata returned alongside the bundle (X-Argus-* headers mirror)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tier: StrictStr
+    format: StrictStr
+    sha256: StrictStr
+    size_bytes: int
+    mime_type: StrictStr
+
+
+def _bundle_response(bundle: ReportBundle) -> StreamingResponse:
+    """Wrap a :class:`ReportBundle` in a streaming HTTP response with headers."""
+    fname = bundle.filename(stem=f"report-{bundle.tier.value}")
+    headers = {
+        "Content-Disposition": _attachment_content_disposition(fname),
+        "Content-Length": str(bundle.size_bytes),
+        "X-Argus-Report-Tier": bundle.tier.value,
+        "X-Argus-Report-Format": bundle.format.value,
+        "X-Argus-Report-SHA256": bundle.sha256,
+        "X-Argus-Report-Size-Bytes": str(bundle.size_bytes),
+    }
+    return StreamingResponse(
+        io.BytesIO(bundle.content),
+        media_type=bundle.mime_type,
+        headers=headers,
+    )
+
+
+@router.post(
+    "/generate",
+    response_class=StreamingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate a tier × format report bundle (ARG-024 ReportService)",
+    responses={
+        200: {"description": "Report bundle (binary)"},
+        400: {"description": "Invalid tier / format / missing identifiers"},
+        404: {"description": "Scan or report not visible to the tenant"},
+        503: {"description": "Generator unavailable (e.g. WeasyPrint missing for PDF)"},
+    },
+)
+async def generate_report_bundle(
+    req: GenerateReportRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StreamingResponse:
+    """Generate a ``ReportBundle`` for ``(scan_id|report_id, tier, format)``.
+
+    Tenant-scoped via ``X-Tenant-ID`` header (or default tenant when unset).
+    Returns the report bytes inline (``Content-Disposition: attachment``)
+    plus ``X-Argus-Report-*`` metadata headers — including a SHA-256 the
+    caller MUST verify before trusting the artifact (tamper evidence).
+    """
+    if not req.scan_id and not req.report_id:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of scan_id or report_id must be provided",
+        )
+
+    service = ReportService()
+    try:
+        bundle = await service.generate(
+            tenant_id=tenant_id,
+            scan_id=req.scan_id,
+            report_id=req.report_id,
+            tier=req.tier,
+            fmt=req.format,
+        )
+    except ReportNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ReportGenerationError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Report generation unavailable for {req.format.value}",
+        ) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    return _bundle_response(bundle)

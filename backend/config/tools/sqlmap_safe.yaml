@@ -1,0 +1,43 @@
+tool_id: sqlmap_safe
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sqlmap"
+  - "-u"
+  - "{url}"
+  - "--batch"
+  - "--level"
+  - "2"
+  - "--risk"
+  - "1"
+  - "--technique=BT"
+  - "--safe-url={safe}"
+  - "--flush-session"
+  - "--random-agent"
+  - "--timeout=30"
+  - "--retries=2"
+  - "--threads=2"
+  - "--disable-coloring"
+  - "--output-dir={out_dir}/sqlmap"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/sqlmap"
+cwe_hints:
+  - 89
+owasp_wstg:
+  - "WSTG-INPV-05"
+description: "sqlmap conservative passive sweep — boolean+time-based blind only (--technique=BT), level 2 risk 1, --safe-url between probes to avoid lockout. Output dir under {out_dir}/sqlmap parsed by sandbox/parsers/sqlmap_parser.py via TEXT_LINES. Approval-gated (M1 cycle 2): even the safe profile generates WAF noise + DB log churn that violates default-deny. Author: sqlmap project. Backlog §4.9. ARG-016."

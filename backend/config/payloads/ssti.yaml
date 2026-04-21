@@ -1,0 +1,52 @@
+family_id: ssti
+description: >-
+  Server-Side Template Injection probes covering Jinja2/Twig, Freemarker,
+  ERB/Velocity, and Thymeleaf. Seeds use harmless arithmetic ({{7*7}})
+  for engine fingerprinting; canary-marked variants confirm execution
+  without invoking sensitive sinks (no os.system, no exec, no rce).
+cwe_ids: [1336, 94]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: jinja_arith
+    template: '{{7*7}}'
+    confidence: likely
+    notes: Jinja2/Twig arithmetic probe; reflected '49' fingerprints engine.
+  - id: dollar_arith
+    template: '${7*7}'
+    confidence: likely
+    notes: Freemarker / Velocity / EL arithmetic probe.
+  - id: hash_arith
+    template: '#{7*7}'
+    confidence: likely
+    notes: Ruby ERB arithmetic probe.
+  - id: erb_block
+    template: '<%= 7*7 %>'
+    confidence: likely
+    notes: ERB block arithmetic; reflected '49' fingerprints engine.
+  - id: angular_arith
+    template: '{{constructor.constructor("return 49")()}}'
+    confidence: suspected
+    notes: AngularJS sandbox-bypass arithmetic; depth-bounded probe.
+  - id: jinja_canary
+    template: '{{ "{canary}" | upper }}'
+    confidence: confirmed
+    notes: Reflects {canary} uppercased; confirms execution without sensitive sinks.
+mutations:
+  - name: whitespace_alt
+    description: Template engines accept varying whitespace; tests parser robustness.
+  - name: case_flip
+    description: Engine keywords are case-sensitive — flips produce known errors.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw template-context payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.
+  - name: html_entity
+    stages: [html]
+    description: HTML-entity-encoded; tests sinks that double-decode.

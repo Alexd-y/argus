@@ -1,11 +1,40 @@
 """Report generators — HTML, JSON, PDF, CSV."""
 
 import csv
+import hashlib
 import io
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Environment, FileSystemLoader
+
+from src.api.schemas import Finding, ReportSummary
+from src.db.models import Finding as FindingModel
+from src.db.models import Report
+from src.db.models import Scan
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
+    OWASP_TOP10_2025_CATEGORY_TITLES,
+    parse_owasp_category,
+)
+from src.reports.data_collector import (
+    FindingRow,
+    OwaspCategorySummaryEntry,
+    ScanReportData,
+    TimelineRow,
+    build_owasp_summary_from_counts,
+    executive_severity_totals_from_severity_strings,
+)
+from src.reports.finding_metadata import (
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
+)
+from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +46,10 @@ _VHL_AI_ZERO_DAY = "zero_day_potential"
 _VHL_AI_ROADMAP = "prioritization_roadmap"
 _VHL_AI_HARDENING = "hardening_recommendations"
 
+# Valhalla-tier report section rendering order.
+# Sections are emitted in this sequence by the HTML/PDF generator.
+# Reordering affects the final report layout; adding a new section here
+# also requires a corresponding template partial and context builder entry.
 _VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
     "title_meta",
     "executive_summary_counts",
@@ -39,30 +72,6 @@ _VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
     "hibp_pwned_password_summary",
     "appendices",
 )
-
-from src.api.schemas import Finding, ReportSummary
-from src.db.models import Finding as FindingModel
-from src.owasp_top10_2025 import (
-    OWASP_TOP10_2025_CATEGORY_IDS,
-    OWASP_TOP10_2025_CATEGORY_TITLES,
-    parse_owasp_category,
-)
-from src.db.models import Report
-from src.reports.data_collector import (
-    FindingRow,
-    OwaspCategorySummaryEntry,
-    RawArtifactItem,
-    ScanReportData,
-    TimelineRow,
-    build_owasp_summary_from_counts,
-    executive_severity_totals_from_severity_strings,
-)
-from src.reports.finding_metadata import (
-    normalize_confidence,
-    normalize_evidence_refs,
-    normalize_evidence_type,
-)
-from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 
 @dataclass
@@ -202,8 +211,12 @@ def build_report_data_from_scan_report(
     elif data.scan is not None:
         target = data.scan.target_url
 
-    summary = summary_dict_to_report_summary(data.report.summary if data.report else None)
-    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
+    summary = summary_dict_to_report_summary(
+        data.report.summary if data.report else None
+    )
+    sev_totals = executive_severity_totals_from_severity_strings(
+        f.severity for f in data.findings
+    )
     summary = summary.model_copy(
         update={
             "critical": sev_totals["critical"],
@@ -224,7 +237,8 @@ def build_report_data_from_scan_report(
 
     timeline = [_timeline_row_to_entry(t) for t in data.timeline]
     phase_outputs = [
-        PhaseOutputEntry(phase=row.phase, output_data=row.output_data) for row in data.phase_outputs
+        PhaseOutputEntry(phase=row.phase, output_data=row.output_data)
+        for row in data.phase_outputs
     ]
 
     s = dict(data.report.summary or {}) if data.report else {}
@@ -245,9 +259,7 @@ def build_report_data_from_scan_report(
     exec_s = executive_summary
     if exec_s is None:
         raw_exec = s.get("executive_summary") or s.get("executiveSummary")
-        if isinstance(raw_exec, dict):
-            exec_s = str(raw_exec)
-        elif raw_exec is not None:
+        if isinstance(raw_exec, dict) or raw_exec is not None:
             exec_s = str(raw_exec)
 
     rem = remediation
@@ -262,9 +274,7 @@ def build_report_data_from_scan_report(
     elif isinstance(rem, str):
         rem = [rem] if rem else []
 
-    raw_artifacts_dicts = [
-        item.model_dump(mode="json") for item in data.raw_artifacts
-    ]
+    raw_artifacts_dicts = [item.model_dump(mode="json") for item in data.raw_artifacts]
 
     return ReportData(
         report_id=rid,
@@ -300,17 +310,27 @@ def build_report_data_from_db(
     """Build ReportData from DB entities."""
     s = report.summary or {}
     ai = s.get("ai_insights")
-    ai_insights = [str(x) for x in ai] if isinstance(ai, list) else [str(ai)] if ai else []
-    exec_summary = executive_summary or s.get("executive_summary") or (s.get("executiveSummary"))
+    ai_insights = (
+        [str(x) for x in ai] if isinstance(ai, list) else [str(ai)] if ai else []
+    )
+    exec_summary = (
+        executive_summary or s.get("executive_summary") or (s.get("executiveSummary"))
+    )
     if isinstance(exec_summary, dict):
         exec_summary = str(exec_summary)
-    rem = remediation if remediation is not None else s.get("remediation") or s.get("recommendations")
+    rem = (
+        remediation
+        if remediation is not None
+        else s.get("remediation") or s.get("recommendations")
+    )
     if isinstance(rem, str):
         rem = [rem] if rem else []
     elif rem is None:
         rem = []
     summary = report_to_summary(report)
-    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in findings)
+    sev_totals = executive_severity_totals_from_severity_strings(
+        f.severity for f in findings
+    )
     summary = summary.model_copy(
         update={
             "critical": sev_totals["critical"],
@@ -332,10 +352,18 @@ def build_report_data_from_db(
                 cwe=f.cwe,
                 cvss=f.cvss,
                 owasp_category=parse_owasp_category(f.owasp_category),
-                proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
-                confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
-                evidence_type=normalize_evidence_type(getattr(f, "evidence_type", None)),
-                evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
+                proof_of_concept=f.proof_of_concept
+                if isinstance(f.proof_of_concept, dict)
+                else None,
+                confidence=normalize_confidence(
+                    getattr(f, "confidence", None), default="likely"
+                ),
+                evidence_type=normalize_evidence_type(
+                    getattr(f, "evidence_type", None)
+                ),
+                evidence_refs=normalize_evidence_refs(
+                    getattr(f, "evidence_refs", None)
+                ),
                 reproducible_steps=getattr(f, "reproducible_steps", None),
                 applicability_notes=getattr(f, "applicability_notes", None),
             )
@@ -355,6 +383,72 @@ def build_report_data_from_db(
     )
 
 
+def build_report_data_from_scan_findings(
+    scan: Scan,
+    findings: list[FindingModel],
+) -> ReportData:
+    """Build :class:`ReportData` from a scan row and its findings (no ``reports`` row).
+
+    Used by T04 REST export of SARIF/JUnit directly from ``findings.scan_id``.
+    """
+    sev_totals = executive_severity_totals_from_severity_strings(
+        f.severity for f in findings
+    )
+    summary = ReportSummary(
+        critical=sev_totals["critical"],
+        high=sev_totals["high"],
+        medium=sev_totals["medium"],
+        low=sev_totals["low"],
+        info=sev_totals["info"],
+        technologies=[],
+        sslIssues=0,
+        headerIssues=0,
+        leaksFound=False,
+    )
+    created = scan.created_at.isoformat() if scan.created_at else None
+    return ReportData(
+        report_id=scan.id,
+        target=scan.target_url,
+        summary=summary,
+        findings=[
+            Finding(
+                severity=f.severity,
+                title=f.title,
+                description=f.description or "",
+                cwe=f.cwe,
+                cvss=f.cvss,
+                owasp_category=parse_owasp_category(f.owasp_category),
+                proof_of_concept=f.proof_of_concept
+                if isinstance(f.proof_of_concept, dict)
+                else None,
+                confidence=normalize_confidence(
+                    getattr(f, "confidence", None), default="likely"
+                ),
+                evidence_type=normalize_evidence_type(
+                    getattr(f, "evidence_type", None)
+                ),
+                evidence_refs=normalize_evidence_refs(
+                    getattr(f, "evidence_refs", None)
+                ),
+                reproducible_steps=getattr(f, "reproducible_steps", None),
+                applicability_notes=getattr(f, "applicability_notes", None),
+            )
+            for f in findings
+        ],
+        technologies=[],
+        created_at=created,
+        scan_id=scan.id,
+        tenant_id=scan.tenant_id,
+        ai_insights=[],
+        timeline=[],
+        phase_outputs=[],
+        evidence=[],
+        screenshots=[],
+        executive_summary=None,
+        remediation=[],
+    )
+
+
 def _resolve_owasp_summary_for_rows(
     counts: dict[str, int],
     owasp_summary: Mapping[str, OwaspCategorySummaryEntry] | None,
@@ -371,10 +465,10 @@ def build_owasp_compliance_rows(
 ) -> list[dict[str, Any]]:
     """
     One row per A01..A10 with finding counts and a CSS hint class (0 → good, 1–2 → warn, 3+ → high).
-    Merges RU fields from ``owasp_summary`` or ``build_owasp_summary_from_counts`` (OWASP-002).
-    Backward compatible keys: ``category_id``, ``title``, ``count``, ``row_class``.
+    Merges description and remediation hints from ``owasp_summary`` or ``build_owasp_summary_from_counts`` (OWASP-002).
+    Keys: ``category_id``, ``title``, ``findings_present``, ``count``, ``row_class``.
     """
-    counts: dict[str, int] = {cid: 0 for cid in OWASP_TOP10_2025_CATEGORY_IDS}
+    counts: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
     for row in findings:
         oc = row.get("owasp_category")
         if isinstance(oc, str) and oc in counts:
@@ -390,21 +484,22 @@ def build_owasp_compliance_rows(
         else:
             row_class = "owasp-compliance-high"
         ent = entries.get(cid)
-        title_ru = ent.title_ru if ent else OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
         description = ent.description if ent else ""
         how_short = ent.how_to_fix_short if ent else None
         description_hover = (how_short or "").strip()
-        out.append({
-            "category_id": cid,
-            "title": OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid),
-            "title_ru": title_ru,
-            "description": description,
-            "description_hover": description_hover,
-            "has_findings": n > 0,
-            "findings_present_ru": "Да" if n > 0 else "Нет",
-            "count": n,
-            "row_class": row_class,
-        })
+        title_en = OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
+        out.append(
+            {
+                "category_id": cid,
+                "title": title_en,
+                "description": description,
+                "description_hover": description_hover,
+                "has_findings": n > 0,
+                "findings_present": "Yes" if n > 0 else "No",
+                "count": n,
+                "row_class": row_class,
+            }
+        )
     return out
 
 
@@ -413,7 +508,9 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
     http_ev: dict[str, Any] = {}
     if poc.get("request_method") or poc.get("request_url"):
         http_ev["request_method"] = str(poc.get("request_method") or "GET")[:16]
-        http_ev["request_url"] = str(poc.get("request_url") or poc.get("url") or "")[:2048]
+        http_ev["request_url"] = str(poc.get("request_url") or poc.get("url") or "")[
+            :2048
+        ]
         if poc.get("request_headers") and isinstance(poc["request_headers"], dict):
             http_ev["request_headers"] = {
                 str(k)[:256]: str(v)[:4096]
@@ -421,13 +518,19 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
             }
         if poc.get("request_body"):
             http_ev["request_body"] = str(poc["request_body"])[:4096]
-        http_ev["response_status"] = str(poc.get("response_status") or poc.get("status_code") or "")[:16]
+        http_ev["response_status"] = str(
+            poc.get("response_status") or poc.get("status_code") or ""
+        )[:16]
         if poc.get("response_headers") and isinstance(poc["response_headers"], dict):
             http_ev["response_headers"] = {
                 str(k)[:256]: str(v)[:4096]
                 for k, v in list(poc["response_headers"].items())[:30]
             }
-        resp_body = poc.get("response_body_snippet") or poc.get("response_snippet") or poc.get("response")
+        resp_body = (
+            poc.get("response_body_snippet")
+            or poc.get("response_snippet")
+            or poc.get("response")
+        )
         if resp_body:
             http_ev["response_body_snippet"] = str(resp_body)[:2048]
     elif poc.get("request") and poc.get("response"):
@@ -437,12 +540,16 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
         method_line = req_lines[0].strip() if req_lines else ""
         parts = method_line.split(" ", 2)
         http_ev["request_method"] = parts[0][:16] if parts else "GET"
-        http_ev["request_url"] = parts[1][:2048] if len(parts) > 1 else str(poc.get("url") or "")[:2048]
+        http_ev["request_url"] = (
+            parts[1][:2048] if len(parts) > 1 else str(poc.get("url") or "")[:2048]
+        )
         http_ev["request_body"] = raw_req
         resp_lines = raw_resp.split("\n", 1)
         status_line = resp_lines[0].strip() if resp_lines else ""
         status_parts = status_line.split(" ", 2)
-        http_ev["response_status"] = " ".join(status_parts[1:])[:64] if len(status_parts) > 1 else ""
+        http_ev["response_status"] = (
+            " ".join(status_parts[1:])[:64] if len(status_parts) > 1 else ""
+        )
         http_ev["response_body_snippet"] = raw_resp[:2048]
 
     return http_ev if http_ev else None
@@ -578,7 +685,9 @@ def build_valhalla_report_payload(
     if not isinstance(recon, dict):
         recon = {}
     # Align with ``ReportData.findings`` (same list as JSON findings / pipeline), not stale report.summary.
-    exec_counts = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
+    exec_counts = executive_severity_totals_from_severity_strings(
+        f.severity for f in data.findings
+    )
     owasp = ctx.get("owasp_compliance_rows")
     if not isinstance(owasp, list):
         owasp = []
@@ -603,24 +712,26 @@ def build_valhalla_report_payload(
     exploitation = ctx.get("exploitation")
     if not isinstance(exploitation, list):
         exploitation = []
-    appendices = _canonical_json_nested({
-        "recon_summary": recon,
-        "exploitation": exploitation,
-        "scan_artifacts": ctx.get("scan_artifacts"),
-        "raw_artifacts": data.raw_artifacts,
-        "ai_sections_supplemental": {
-            k: str(v or "")
-            for k, v in sorted(ai.items())
-            if k
-            not in {
-                _VHL_AI_EXPLOIT_CHAINS,
-                _VHL_AI_REMEDIATION_STAGES,
-                _VHL_AI_ZERO_DAY,
-                _VHL_AI_ROADMAP,
-                _VHL_AI_HARDENING,
-            }
-        },
-    })
+    appendices = _canonical_json_nested(
+        {
+            "recon_summary": recon,
+            "exploitation": exploitation,
+            "scan_artifacts": ctx.get("scan_artifacts"),
+            "raw_artifacts": data.raw_artifacts,
+            "ai_sections_supplemental": {
+                k: str(v or "")
+                for k, v in sorted(ai.items())
+                if k
+                not in {
+                    _VHL_AI_EXPLOIT_CHAINS,
+                    _VHL_AI_REMEDIATION_STAGES,
+                    _VHL_AI_ZERO_DAY,
+                    _VHL_AI_ROADMAP,
+                    _VHL_AI_HARDENING,
+                }
+            },
+        }
+    )
     title_meta = {
         "report_id": data.report_id,
         "target": (ctx.get("target") or data.target or ""),
@@ -645,7 +756,9 @@ def build_valhalla_report_payload(
         "owasp_compliance": _canonical_json_nested(owasp),
         "robots_sitemap": _canonical_json_nested(robots_sitemap),
         "tech_stack": _canonical_json_nested(vc.get("tech_stack_table") or []),
-        "outdated_components": _canonical_json_nested(vc.get("outdated_components") or []),
+        "outdated_components": _canonical_json_nested(
+            vc.get("outdated_components") or []
+        ),
         "emails": _canonical_json_nested(vc.get("leaked_emails") or []),
         "ssl_tls": _canonical_json_nested(vc.get("ssl_tls_analysis") or {}),
         "headers": _canonical_json_nested(vc.get("security_headers_analysis") or {}),
@@ -673,22 +786,28 @@ def generate_valhalla_sections_csv(
     writer = csv.writer(buf)
     writer.writerow(["section", "content_markdown_or_json"])
     payload = build_valhalla_report_payload(jinja_context, data)
-    text_keys = frozenset({
-        "exploit_chains_text",
-        "remediation_stages_text",
-        "zero_day_text",
-        "conclusion_text",
-    })
+    text_keys = frozenset(
+        {
+            "exploit_chains_text",
+            "remediation_stages_text",
+            "zero_day_text",
+            "conclusion_text",
+        }
+    )
     for key in _VALHALLA_REPORT_SECTION_ORDER:
         val = payload.get(key)
         if key in text_keys:
             writer.writerow([key, str(val or "")])
         else:
-            writer.writerow([key, json.dumps(_canonical_json_nested(val), ensure_ascii=False)])
+            writer.writerow(
+                [key, json.dumps(_canonical_json_nested(val), ensure_ascii=False)]
+            )
     return buf.getvalue().encode("utf-8")
 
 
-def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
+def generate_json(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
     """Generate JSON report — full schema with metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
     ai_list = (
         data.ai_insights
@@ -740,7 +859,11 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
         for p in phase_rows
     ]
     evidence = [
-        {"finding_id": e.finding_id, "object_key": e.object_key, "description": e.description}
+        {
+            "finding_id": e.finding_id,
+            "object_key": e.object_key,
+            "description": e.description,
+        }
         for e in evidence_rows
     ]
     screenshots = [
@@ -775,22 +898,41 @@ def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = No
     }
     if _tier_from_jinja(jinja_context) == "valhalla":
         output["valhalla_report"] = build_valhalla_report_payload(jinja_context, data)
+        if isinstance(jinja_context, dict) and isinstance(
+            jinja_context.get("valhalla_executive_report"), dict
+        ):
+            output["valhalla_executive_report"] = _canonical_json_nested(
+                jinja_context["valhalla_executive_report"]
+            )
+    if (
+        _tier_from_jinja(jinja_context) == "asgard"
+        and isinstance(jinja_context, dict)
+        and isinstance(jinja_context.get("asgard_report"), dict)
+    ):
+        output["asgard_report"] = _canonical_json_nested(jinja_context["asgard_report"])
     return json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
 
 
-def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
+def generate_csv(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
     """Generate CSV report — findings as rows (same severity order as JSON, RPT-009); optional AI/artifacts appendix."""
+    # Force LF line terminator so the generator is byte-deterministic across
+    # platforms (Python's csv module defaults to CRLF on every host). This
+    # matters for snapshot stability and for reproducible content hashes.
     buf = io.StringIO()
-    writer = csv.writer(buf)
+    writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(["Severity", "Title", "Description", "CWE", "CVSS"])
     for f in _findings_sorted(data.findings):
-        writer.writerow([
-            f.severity,
-            f.title or "",
-            (f.description or "").replace("\n", " "),
-            f.cwe or "",
-            str(f.cvss) if f.cvss is not None else "",
-        ])
+        writer.writerow(
+            [
+                f.severity,
+                f.title or "",
+                (f.description or "").replace("\n", " "),
+                f.cwe or "",
+                str(f.cvss) if f.cvss is not None else "",
+            ]
+        )
     ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     writer.writerow([])
     writer.writerow(["# ai_sections (section_key, text)"])
@@ -799,7 +941,9 @@ def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = Non
         writer.writerow([k, str(ai_sections[k] or "")])
     writer.writerow([])
     writer.writerow(["# scan_artifacts (single JSON cell)"])
-    writer.writerow([json.dumps(_canonical_json_nested(scan_artifacts), ensure_ascii=False)])
+    writer.writerow(
+        [json.dumps(_canonical_json_nested(scan_artifacts), ensure_ascii=False)]
+    )
     return buf.getvalue().encode("utf-8")
 
 
@@ -813,13 +957,110 @@ def generate_html(
     from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
     from src.reports.template_env import render_tier_report_html
 
-    ctx = jinja_context if jinja_context is not None else minimal_jinja_context_from_report_data(
-        data, tier or "midgard"
+    ctx = (
+        jinja_context
+        if jinja_context is not None
+        else minimal_jinja_context_from_report_data(data, tier or "midgard")
     )
     eff_tier = str(ctx.get("tier") or tier or "midgard")
     ctx = {**ctx, "tier": eff_tier}
     html_str = render_tier_report_html(eff_tier, ctx)
     return html_str.encode("utf-8")
+
+
+def _branded_pdf_templates_directory() -> Path:
+    """Return ``backend/templates/reports`` (NEW top-level branded PDF templates).
+
+    Distinct from :func:`template_env.report_templates_directory` which returns
+    the legacy in-package templates (``src/reports/templates/reports``). Branded
+    PDF layouts live outside the Python package so designers can iterate on the
+    HTML/CSS without a Python re-deploy (the assets are shipped as data files
+    via ``pyproject.toml`` package-data globs / Dockerfile COPY).
+    """
+    return Path(__file__).resolve().parents[2] / "templates" / "reports"
+
+
+def _resolve_branded_pdf_template_path(tier: str) -> Path | None:
+    """Return the branded ``pdf_layout.html`` path for ``tier`` or ``None``.
+
+    ``None`` flips :func:`generate_pdf` into the legacy fallback (the same
+    HTML used by :func:`generate_html`). Keeps the function safe to call on a
+    deployment that has not yet shipped the ARG-036 templates.
+    """
+    candidate = _branded_pdf_templates_directory() / tier / "pdf_layout.html"
+    return candidate if candidate.exists() else None
+
+
+def _compute_pdf_watermark(
+    *, tenant_id: str | None, scan_id: str | None, scan_completed_at: str | None
+) -> str:
+    """Deterministic SHA-256 watermark for the PDF cover page / footer.
+
+    We deliberately do NOT hash the rendered PDF bytes — that would be
+    circular (the watermark would change every render even for identical
+    inputs). Instead we hash the immutable source-of-truth tuple
+    ``(tenant_id, scan_id, scan_completed_at)``. Two PDFs derived from the
+    same scan therefore share a watermark, satisfying the determinism
+    contract documented in ``docs/report-service.md``.
+    """
+    seed = "|".join(
+        [
+            (tenant_id or "").strip(),
+            (scan_id or "").strip(),
+            (scan_completed_at or "").strip(),
+        ]
+    )
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return digest[:16]  # 64 bits = ample collision resistance for a watermark
+
+
+def _build_branded_pdf_context(
+    data: ReportData,
+    base_context: Mapping[str, Any] | None,
+    *,
+    tier: str,
+) -> dict[str, Any]:
+    """Decorate ``base_context`` with ARG-036 fields the branded templates need."""
+    from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
+
+    ctx: dict[str, Any] = (
+        dict(base_context)
+        if base_context is not None
+        else minimal_jinja_context_from_report_data(data, tier)
+    )
+    ctx.setdefault("tier", tier)
+    ctx.setdefault("target", data.target or "")
+    ctx.setdefault("tenant_id", data.tenant_id or "")
+    ctx.setdefault("scan_id", data.scan_id or "")
+    ctx["scan_completed_at"] = data.created_at or ""
+    ctx["pdf_watermark"] = _compute_pdf_watermark(
+        tenant_id=data.tenant_id,
+        scan_id=data.scan_id,
+        scan_completed_at=data.created_at,
+    )
+    return ctx
+
+
+def _render_branded_pdf_html(template_path: Path, context: dict[str, Any]) -> str:
+    """Render a branded ``pdf_layout.html`` template with the report context.
+
+    Each tier's template directory is loaded as its own Jinja root so that
+    relative ``url(...)`` references in the linked CSS resolve correctly under
+    WeasyPrint's ``base_url``. The shared ``md`` filter (markdown → sanitised
+    HTML) is wired in to keep AI-section rendering consistent across HTML and
+    PDF surfaces.
+    """
+    from src.reports.template_env import _md_filter
+
+    env = Environment(
+        loader=FileSystemLoader(str(template_path.parent)),
+        autoescape=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    env.filters["md"] = _md_filter
+    template = env.get_template(template_path.name)
+    return template.render(context)
 
 
 def generate_pdf(
@@ -828,31 +1069,152 @@ def generate_pdf(
     jinja_context: dict[str, Any] | None = None,
     tier: str | None = None,
 ) -> bytes:
+    """ARG-036 — Branded, deterministic PDF dispatched through ``pdf_backend``.
+
+    Flow
+    ----
+    1. Resolve the active PDF backend (env-driven WeasyPrint → LaTeX → Disabled
+       fallback chain) via :func:`pdf_backend.get_active_backend`.
+    2. Render the tier-specific branded HTML
+       (``backend/templates/reports/<tier>/pdf_layout.html``) with the
+       provided ``jinja_context`` (or a freshly built minimal one) augmented
+       with ARG-036 fields (``pdf_watermark``, ``scan_completed_at``).
+    3. Hand the HTML + ``scan_completed_at`` to the backend, which writes the
+       PDF to a tempfile we then read back as ``bytes``.
+
+    Backwards compatibility
+    -----------------------
+    * Function signature is **unchanged** — callers
+      (``report_service``, ``report_pipeline``) get drop-in behaviour.
+    * If the branded template directory is not present (older deployment)
+      we fall back to the legacy HTML used by :func:`generate_html`. The
+      legacy path keeps shipping reports while operators roll out the new
+      template assets.
+    * If both the WeasyPrint and the LaTeX backends are unavailable we
+      raise ``RuntimeError`` — same surface contract as the previous
+      implementation, mapped to HTTP 503 by the API layer.
     """
-    RPT-009 / VHL-006 — PDF from the same tiered HTML as ``generate_html`` (e.g. ``valhalla.html.j2``
-    extending ``base.html.j2``), rendered via ``render_tier_report_html`` then WeasyPrint.
-    Requires native libs (Pango, Cairo); use Docker image or OS packages.
-    """
+    import tempfile
+
+    from src.reports.pdf_backend import (
+        DisabledBackend,
+        LatexBackend,
+        WeasyPrintBackend,
+        get_active_backend,
+        render_latex_template,
+        resolve_latex_template_path,
+    )
+
+    tier_str = tier or "midgard"
+    branded_template = _resolve_branded_pdf_template_path(tier_str)
+    ctx_for_latex: dict[str, Any] | None = None
+
+    if branded_template is not None:
+        ctx = _build_branded_pdf_context(data, jinja_context, tier=tier_str)
+        ctx_for_latex = ctx
+        try:
+            html_str = _render_branded_pdf_html(branded_template, ctx)
+        except Exception as exc:  # template/Jinja errors fall through to legacy
+            logger.warning(
+                "branded_pdf_template_render_failed",
+                extra={
+                    "event": "branded_pdf_template_render_failed",
+                    "tier": tier_str,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            html_str = generate_html(
+                data, jinja_context=jinja_context, tier=tier
+            ).decode("utf-8")
+            base_url = _legacy_base_url()
+        else:
+            base_url = str(branded_template.parent)
+    else:
+        html_str = generate_html(data, jinja_context=jinja_context, tier=tier).decode(
+            "utf-8"
+        )
+        base_url = _legacy_base_url()
+
+    backend = get_active_backend()
+
+    # ARG-048 Phase-2 — if the active backend is LaTeX and a per-tier
+    # ``main.tex.j2`` exists, pre-render the LaTeX source so the backend
+    # can use the branded layout instead of the Phase-1 HTML→text stub.
+    # We *attempt* the render here; any failure falls back gracefully to
+    # the Phase-1 stub via ``latex_template_content=None``. This keeps
+    # the PDF pipeline alive even if a tier template has a Jinja2 bug.
+    latex_template_source: str | None = None
+    if isinstance(backend, LatexBackend):
+        if resolve_latex_template_path(tier_str) is not None:
+            latex_ctx = ctx_for_latex
+            if latex_ctx is None:
+                latex_ctx = _build_branded_pdf_context(
+                    data, jinja_context, tier=tier_str
+                )
+            try:
+                latex_template_source = render_latex_template(
+                    tier_str, latex_ctx
+                )
+            except Exception as exc:  # noqa: BLE001 — template errors must not 503.
+                logger.warning(
+                    "latex_template_render_failed",
+                    extra={
+                        "event": "latex_template_render_failed",
+                        "tier": tier_str,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                latex_template_source = None
+
+    if isinstance(backend, DisabledBackend):
+        # Mirror the previous contract: callers expect a clear failure they can
+        # surface as HTTP 503 / drop the PDF from the bundle. We only escalate
+        # when WeasyPrint is the requested default; an explicit `disabled`
+        # selection (operator override) is treated as the authoritative
+        # decision and we still raise — the contract is "no PDF bytes ever".
+        logger.error(
+            "pdf_backend_unavailable",
+            extra={
+                "event": "pdf_backend_unavailable",
+                "report_id": data.report_id,
+                "requested_default": WeasyPrintBackend.name,
+            },
+        )
+        raise RuntimeError(
+            "PDF generation unavailable (no WeasyPrint or LaTeX backend on host)"
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        output_path = Path(tmp.name)
+    try:
+        ok = backend.render(
+            html_content=html_str,
+            output_path=output_path,
+            scan_completed_at=data.created_at or "",
+            base_url=base_url,
+            latex_template_content=latex_template_source,
+        )
+        if not ok or not output_path.exists() or output_path.stat().st_size == 0:
+            logger.error(
+                "pdf_generation_failed",
+                extra={
+                    "event": "pdf_generation_failed",
+                    "report_id": data.report_id,
+                    "backend": backend.name,
+                },
+            )
+            raise RuntimeError(f"PDF generation failed (backend={backend.name})")
+        return output_path.read_bytes()
+    finally:
+        try:
+            output_path.unlink(missing_ok=True)
+        except OSError:
+            # Tempfile cleanup failures must not mask successful generation.
+            pass
+
+
+def _legacy_base_url() -> str:
+    """Return base_url for the legacy in-package templates."""
     from src.reports.template_env import report_templates_directory
 
-    html_bytes = generate_html(data, jinja_context=jinja_context, tier=tier)
-    html_str = html_bytes.decode("utf-8")
-    base_url = str(report_templates_directory())
-
-    try:
-        from weasyprint import HTML
-    except (OSError, ImportError) as exc:
-        logger.error(
-            "weasyprint_unavailable",
-            extra={"event": "weasyprint_unavailable", "error_type": type(exc).__name__},
-        )
-        raise RuntimeError("PDF generation unavailable (WeasyPrint system libraries missing)") from exc
-
-    try:
-        return HTML(string=html_str, base_url=base_url).write_pdf()
-    except Exception as exc:
-        logger.exception(
-            "pdf_generation_failed",
-            extra={"event": "pdf_generation_failed", "report_id": data.report_id},
-        )
-        raise RuntimeError("PDF generation failed") from exc
+    return str(report_templates_directory())

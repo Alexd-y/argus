@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-backend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.backend.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.backend.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-celery-metrics
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.celery.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-frontend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.frontend.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-mcp
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.mcp.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.mcp.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp-server

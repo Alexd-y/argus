@@ -1,0 +1,32 @@
+tool_id: playwright_runner
+version: "1.0.0"
+category: browser
+phase: vuln_analysis
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "playwright-runner --script {script} --url {url} --output {out_dir}/playwright"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/playwright"
+cwe_hints:
+  - 79
+  - 200
+  - 1021
+owasp_wstg:
+  - "WSTG-CLNT-01"
+  - "WSTG-CLNT-09"
+description: "Generic headless Playwright runner — executes the operator-supplied {script} (TypeScript scenario file under /in/) against {url}. Approval-gated (medium risk): {script} can drive arbitrary state-changing browser actions (form submissions, OAuth consent, DOM mutations, uploads, session capture). Captures DOM/console/requests/screens/HAR into /out/playwright/. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019 + cycle-2 reviewer H1 fix."

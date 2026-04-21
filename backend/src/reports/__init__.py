@@ -1,5 +1,23 @@
-"""Reports — generation, storage, export."""
+"""Reports — generation, storage, export.
 
+Exposes the legacy ``generate_*`` helpers (HTML / PDF / JSON / CSV via
+Jinja templates and WeasyPrint) AND the ARG-024 / ARG-025
+:class:`ReportService` front-door (tier × format dispatcher with SARIF
+v2.1.0, JUnit XML and the Asgard tier renderer).
+"""
+
+from src.reports.asgard_tier_renderer import (
+    ASGARD_SECTION_ORDER,
+    AsgardEvidenceSection,
+    AsgardFindingSection,
+    AsgardRemediationSection,
+    AsgardReproducerSection,
+    AsgardScreenshotSection,
+    AsgardSectionAssembly,
+    AsgardTimelineSection,
+    asgard_assembly_to_jinja_context,
+    assemble_asgard_sections,
+)
 from src.reports.data_collector import (
     ReportDataCollector,
     ScanReportData,
@@ -15,21 +33,129 @@ from src.reports.generators import (
     generate_pdf,
     generate_valhalla_sections_csv,
 )
+from src.reports.junit_generator import build_junit_tree, generate_junit
+from src.reports.replay_command_sanitizer import (
+    PLACEHOLDER_ASSET,
+    PLACEHOLDER_ENDPOINT,
+    REDACTED_API_KEY,
+    REDACTED_AWS_KEY,
+    REDACTED_BEARER,
+    REDACTED_GH_TOKEN,
+    REDACTED_NT_HASH,
+    REDACTED_PASSWORD,
+    REDACTED_PRIVATE_KEY,
+    REDACTED_REVERSE_SHELL,
+    SanitizeContext,
+    sanitize_replay_command,
+)
+from src.reports.report_bundle import (
+    ReportBundle,
+    ReportFormat,
+    ReportTier,
+    file_extension_for,
+    mime_type_for,
+)
+from src.reports.report_service import (
+    DEFAULT_TOOL_VERSION,
+    ReportGenerationError,
+    ReportNotFoundError,
+    ReportService,
+)
+from src.reports.sarif_generator import (
+    ARGUS_TOOL_INFORMATION_URI,
+    ARGUS_TOOL_NAME,
+    PRIMARY_FINGERPRINT_KEY,
+    SARIF_SCHEMA_URL,
+    SARIF_VERSION,
+    build_sarif_payload,
+    generate_sarif,
+)
 from src.reports.storage import download, exists, upload
+from src.reports.tier_classifier import MIDGARD_TOP_FINDINGS, classify_for_tier
+from src.reports.valhalla_tier_renderer import (
+    VALHALLA_EXECUTIVE_SECTION_ORDER,
+    VALHALLA_TOP_ASSETS_CAP,
+    VALHALLA_TOP_FINDINGS_CAP,
+    AssetRiskRow,
+    BusinessContext,
+    BusinessImpactFindingRow,
+    OwaspRollupRow,
+    RemediationPhaseRow,
+    ValhallaEvidenceRef,
+    ValhallaSectionAssembly,
+    ValhallaTimelineEntry,
+    assemble_valhalla_sections,
+    valhalla_assembly_to_jinja_context,
+)
 
 __all__ = [
+    "ARGUS_TOOL_INFORMATION_URI",
+    "ARGUS_TOOL_NAME",
+    "ASGARD_SECTION_ORDER",
+    "DEFAULT_TOOL_VERSION",
+    "MIDGARD_TOP_FINDINGS",
+    "PLACEHOLDER_ASSET",
+    "PLACEHOLDER_ENDPOINT",
+    "PRIMARY_FINGERPRINT_KEY",
+    "REDACTED_API_KEY",
+    "REDACTED_AWS_KEY",
+    "REDACTED_BEARER",
+    "REDACTED_GH_TOKEN",
+    "REDACTED_NT_HASH",
+    "REDACTED_PASSWORD",
+    "REDACTED_PRIVATE_KEY",
+    "REDACTED_REVERSE_SHELL",
+    "SARIF_SCHEMA_URL",
+    "SARIF_VERSION",
+    "VALHALLA_EXECUTIVE_SECTION_ORDER",
     "VALHALLA_SECTIONS_CSV_FORMAT",
+    "VALHALLA_TOP_ASSETS_CAP",
+    "VALHALLA_TOP_FINDINGS_CAP",
+    "AsgardEvidenceSection",
+    "AsgardFindingSection",
+    "AsgardRemediationSection",
+    "AsgardReproducerSection",
+    "AsgardScreenshotSection",
+    "AsgardSectionAssembly",
+    "AsgardTimelineSection",
+    "AssetRiskRow",
+    "BusinessContext",
+    "BusinessImpactFindingRow",
+    "OwaspRollupRow",
+    "RemediationPhaseRow",
+    "ReportBundle",
     "ReportData",
     "ReportDataCollector",
+    "ReportFormat",
+    "ReportGenerationError",
+    "ReportNotFoundError",
+    "ReportService",
+    "ReportTier",
+    "SanitizeContext",
     "ScanReportData",
     "StageArtifactItem",
     "StageArtifactsBundle",
+    "ValhallaEvidenceRef",
+    "ValhallaSectionAssembly",
+    "ValhallaTimelineEntry",
+    "asgard_assembly_to_jinja_context",
+    "assemble_asgard_sections",
+    "assemble_valhalla_sections",
+    "build_junit_tree",
+    "build_sarif_payload",
+    "classify_for_tier",
     "download",
     "exists",
+    "file_extension_for",
     "generate_csv",
     "generate_html",
     "generate_json",
+    "generate_junit",
     "generate_pdf",
+    "generate_sarif",
     "generate_valhalla_sections_csv",
+    "mime_type_for",
+    "sanitize_replay_command",
     "upload",
+    "valhalla_assembly_to_jinja_context",
 ]

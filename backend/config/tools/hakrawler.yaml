@@ -1,0 +1,35 @@
+tool_id: hakrawler
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "hakrawler-wrapper"
+  - "-url"
+  - "{url}"
+  - "-depth"
+  - "3"
+  - "-subs"
+  - "-out"
+  - "{out_dir}/hakrawler.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/hakrawler.txt"
+cwe_hints:
+  - 200
+owasp_wstg:
+  - "WSTG-INFO-06"
+  - "WSTG-INFO-07"
+description: "hakrawler subdomain + endpoint crawler; depth 3, follows subdomains. Image-side wrapper `hakrawler-wrapper` translates argv-form (`-url <url> -depth N -subs -out <path>`) to upstream stdin/stdout pipe (`echo <url> | hakrawler -d N -subs > <path>`) so the sandbox stays argv-only (no shell metachars). Active crawl. Author: hakluke (https://github.com/hakluke/hakrawler). Backlog/dev1_md §4.6."

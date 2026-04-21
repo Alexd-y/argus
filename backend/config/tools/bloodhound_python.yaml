@@ -1,0 +1,33 @@
+tool_id: bloodhound_python
+version: "1.0.0"
+category: network
+phase: post_exploitation
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "bloodhound-python -d {domain} -u {user} -p {pass} -dc {dc} -c All -ns {dc} --zip -o {out_dir}/bloodhound 2>&1 | tee {out_dir}/bloodhound.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/bloodhound.log"
+  - "/out/bloodhound"
+cwe_hints:
+  - 200
+  - 269
+  - 284
+owasp_wstg:
+  - "WSTG-INFO-05"
+  - "WSTG-ATHZ-01"
+description: "BloodHound.py — Python-based Active Directory data collector (-c All gathers groups/sessions/ACLs/objectprops/trusts) authenticated as {domain}/{user}:{pass} against {dc}. APPROVAL REQUIRED: produces a complete object/relationship dump, sensitive on real estates. Outputs JSON files zipped into /out/bloodhound for upstream BloodHound CE consumption. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

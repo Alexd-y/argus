@@ -1,0 +1,21 @@
+Severity,Title,Description,CWE,CVSS
+critical,SQLi at /api/v1/users,UNION-based SQLi via id parameter.,CWE-89,9.8
+high,GitHub PAT leaked in JS bundle,ghp_* token observed in /static/app.js.,CWE-200,7.5
+high,Reverse shell PoC in /upload,File upload allows RCE; PoC included.,CWE-78,8.6
+medium,Missing security headers,No CSP / HSTS / X-Frame-Options.,CWE-693,
+low,MySQL root password observed in CI script,Hardcoded password in deploy script.,CWE-798,
+
+"# ai_sections (section_key, text)"
+section_key,section_text
+business_risk,AI generation skipped: could not generate content
+compliance_check,AI generation skipped: could not generate content
+executive_summary,Critical SQLi and RCE; rotate exposed credentials immediately.
+remediation_step,"Patch ORM.
+
+Disable unrestricted upload.
+
+Rotate all PATs."
+vulnerability_description,LLM exec summary
+
+# scan_artifacts (single JSON cell)
+"{""phase_blocks"": [], ""status"": ""skipped""}"

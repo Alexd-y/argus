@@ -71,10 +71,11 @@ class TestBackendDockerfile:
             "Backend Dockerfile must COPY alembic"
         )
 
-    def test_copy_requirements(self, backend_dockerfile_content: str) -> None:
-        """Dockerfile copies requirements.txt in builder stage."""
-        assert "COPY requirements.txt" in backend_dockerfile_content, (
-            "Backend Dockerfile must COPY requirements.txt"
+    def test_copy_dependency_manifest(self, backend_dockerfile_content: str) -> None:
+        """Builder copies the dependency manifest (pyproject.toml as PEP 621 source of truth)."""
+        assert "COPY pyproject.toml" in backend_dockerfile_content, (
+            "Backend Dockerfile must COPY pyproject.toml in the builder stage "
+            "(single source of truth for runtime deps; requirements.txt is a generated mirror)"
         )
 
     def test_backend_app_dir_exists(self) -> None:
@@ -94,8 +95,13 @@ class TestBackendDockerfile:
         main_py = BACKEND_DIR / "main.py"
         assert main_py.exists(), f"backend/main.py must exist: {main_py}"
 
+    def test_backend_pyproject_exists(self) -> None:
+        """backend/pyproject.toml exists (dependency source of truth, copied by builder)."""
+        pyproject = BACKEND_DIR / "pyproject.toml"
+        assert pyproject.exists(), f"backend/pyproject.toml must exist: {pyproject}"
+
     def test_backend_requirements_exists(self) -> None:
-        """backend/requirements.txt exists."""
+        """backend/requirements.txt exists as auto-generated mirror (legacy CI/SCA)."""
         req = BACKEND_DIR / "requirements.txt"
         assert req.exists(), f"backend/requirements.txt must exist: {req}"
 

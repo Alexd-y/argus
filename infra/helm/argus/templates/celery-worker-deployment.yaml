@@ -1,0 +1,131 @@
+{{- include "argus.cosignAssertProd" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-celery
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  replicas: {{ .Values.replicaCount.celery }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+  template:
+    metadata:
+      labels:
+        {{- include "argus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.celery.metricsPort | quote }}
+        prometheus.io/path: "/metrics"
+        argus.image.digest/celery: {{ .Values.image.celery.digest | quote }}
+    spec:
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 60
+      {{- include "argus.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "argus.cosignVerifyInit" (dict "root" $ "image" .Values.image.celery "name" "verify-celery") | nindent 8 }}
+      containers:
+        - name: celery-worker
+          image: {{ include "argus.imageRef" (dict "image" .Values.image.celery "root" $) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          command: ["celery"]
+          args:
+            - "-A"
+            - "src.celery.app:celery_app"
+            - "worker"
+            - "--loglevel=info"
+            - "--concurrency={{ .Values.config.scanWorkerConcurrency }}"
+            - "--prefetch-multiplier=1"
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.service.celery.metricsPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "argus.fullname" . }}-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database.existingSecretName }}
+                  key: {{ .Values.secrets.database.existingSecretKey }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.redis.existingSecretName }}
+                  key: {{ .Values.secrets.redis.existingSecretKey }}
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.minio.existingAccessSecretName }}
+                  key: {{ .Values.secrets.minio.existingAccessSecretKey }}
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.minio.existingSecretSecretName }}
+                  key: {{ .Values.secrets.minio.existingSecretSecretKey }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "celery -A src.celery.app:celery_app inspect ping -d celery@$HOSTNAME"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "celery -A src.celery.app:celery_app inspect ping -d celery@$HOSTNAME"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.celery | nindent 12 }}
+          volumeMounts:
+            {{- include "argus.standardVolumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "argus.standardVolumes" . | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- if .Values.affinity }}
+        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "argus.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: celery-worker
+                topologyKey: topology.kubernetes.io/zone
+        {{- end }}

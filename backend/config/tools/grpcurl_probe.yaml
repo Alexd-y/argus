@@ -1,0 +1,30 @@
+tool_id: grpcurl_probe
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "grpcurl -plaintext {host}:{port} list > {out_dir}/grpc.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/grpc.txt"
+cwe_hints:
+  - 200
+  - 16
+owasp_wstg:
+  - "WSTG-INFO-08"
+description: "grpcurl reflection-based service enumerator — issues one `list` reflection call against {host}:{port} (plaintext). One service/method per line in /out/grpc.txt. Read-only, never invokes RPCs; only enumerates schema when server reflection is enabled. `sh -c` is used solely for stdout redirection (placeholders RFC-validated, no shell injection). Parser deferred to Cycle 3. Author: fullstorydev. Backlog §4.14. ARG-018."

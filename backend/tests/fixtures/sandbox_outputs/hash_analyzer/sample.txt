@@ -1,0 +1,30 @@
+{
+  "results": [
+    {
+      "hash": "5d41402abc4b2a76b9719d911017c592",
+      "matches": [
+        {"name": "MD5", "score": 0.99, "category": "raw"},
+        {"name": "MD4", "score": 0.4, "category": "raw"},
+        {"name": "NTLM", "score": 0.7, "category": "windows"}
+      ]
+    },
+    {
+      "hash": "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d",
+      "matches": [
+        {"name": "SHA-1", "score": 0.95, "category": "raw"}
+      ]
+    },
+    {
+      "hash": "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
+      "matches": [
+        {"name": "bcrypt", "score": 0.99, "category": "kdf"}
+      ]
+    },
+    {
+      "hash": "ce71ecf1f7c0e9d9c8e6c7b4d2a1f0e9c8b7a6d5e4f3c2b1a0987654",
+      "matches": [
+        {"name": "SHA-224", "score": 0.6, "category": "raw"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+tool_id: ncrack
+version: "1.0.0"
+category: auth
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 3600
+cpu_limit: "2"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ncrack -U {in_dir}/u.txt -P {in_dir}/p.txt -oN {out_dir}/ncrack.txt {host}:{port}"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/ncrack.txt"
+cwe_hints:
+  - 287
+  - 307
+  - 521
+owasp_wstg:
+  - "WSTG-ATHN-01"
+  - "WSTG-ATHN-04"
+description: "Ncrack high-speed network auth cracker (Nmap-family, supports SSH/RDP/FTP/Telnet/POP3/IMAP/SMB/VNC/SIP/Redis/PostgreSQL/MySQL/MSSQL/MongoDB/CVS/WinRM/OWA). APPROVAL REQUIRED: high-rate auth attempts trigger lockouts. Wordlists under {in_dir}/u.txt and {in_dir}/p.txt; output -oN normal-format text (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

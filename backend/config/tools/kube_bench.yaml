@@ -1,0 +1,30 @@
+tool_id: kube_bench
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "kube-bench --json > {out_dir}/kubebench.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/kubebench.json"
+cwe_hints:
+  - 16
+  - 250
+  - 732
+  - 285
+owasp_wstg:
+  - "WSTG-CONF-04"
+description: "Aqua kube-bench CIS Kubernetes Benchmark scanner — runs the local-node assessment (master/node/etcd/policies/managed-services) against k8s config files mounted at /etc/kubernetes (host-path) and /var/lib. Output: canonical kube-bench JSON. Fully offline (offline-no-egress): all evidence is local. `sh -c` is used solely for stdout redirection. Parser deferred to Cycle 3. Author: Aqua. Backlog §4.15. ARG-018."

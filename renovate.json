@@ -1,0 +1,33 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "dependencyDashboard": true,
+  "timezone": "Etc/UTC",
+  "schedule": ["before 4:00am on Monday"],
+  "labels": ["dependencies", "supply-chain", "sandbox"],
+  "enabledManagers": ["dockerfile"],
+  "dockerfile": {
+    "fileMatch": [
+      "(^|/)sandbox/images/argus-kali-(web|cloud|browser|full|recon|network)/Dockerfile$"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Dockerfile syntax directive image — bump manually with BuildKit compatibility review.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["docker/dockerfile"],
+      "enabled": false
+    },
+    {
+      "description": "Single grouped PR for kalilinux/kali-rolling across all six sandbox profiles (digest-pinned).",
+      "matchFileNames": ["sandbox/images/**"],
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["kalilinux/kali-rolling"],
+      "groupName": "sandbox kalilinux/kali-rolling",
+      "pinDigests": true,
+      "labels": ["dependencies", "supply-chain", "sandbox", "sbom-watch"],
+      "commitMessageTopic": "sandbox base image(s)",
+      "commitMessageExtra": "(Renovate T09)"
+    }
+  ],
+  "ignorePaths": ["**/node_modules/**", "**/bower_components/**"]
+}

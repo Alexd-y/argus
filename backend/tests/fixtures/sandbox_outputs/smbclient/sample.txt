@@ -1,0 +1,22 @@
+Domain=[CONTOSO] OS=[Windows Server 2022 Datacenter Evaluation 20348] Server=[Windows Server 2022 Datacenter Evaluation 6.3]
+
+	Sharename       Type      Comment
+	---------       ----      -------
+	ADMIN$          Disk      Remote Admin
+	C$              Disk      Default share
+	IPC$            IPC       Remote IPC
+	NETLOGON        Disk      Logon server share
+	SYSVOL          Disk      Logon server share
+	Public          Disk      Public share
+	Backups         Disk      Daily backups
+	Reports         Disk      Quarterly reports
+	HR              Disk      HR documents
+
+Reconnecting with SMB1 for workgroup listing.
+
+	Server               Comment
+	---------            -------
+
+	Workgroup            Master
+	---------            -------
+	WORKGROUP            DC01

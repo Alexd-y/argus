@@ -1,0 +1,31 @@
+tool_id: sslscan
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: tls-handshake
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "sslscan"
+  - "--xml={out_dir}/sslscan.xml"
+  - "{host}:{port}"
+parse_strategy: xml_generic
+evidence_artifacts:
+  - "/out/sslscan.xml"
+cwe_hints:
+  - 326
+  - 327
+owasp_wstg:
+  - "WSTG-CRYP-01"
+  - "WSTG-CRYP-02"
+description: "sslscan enumerates supported TLS/SSL ciphers and protocol versions, emitting XML for downstream parsers. Backlog/dev1_md §4.3."

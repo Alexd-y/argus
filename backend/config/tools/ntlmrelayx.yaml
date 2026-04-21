@@ -1,0 +1,31 @@
+tool_id: ntlmrelayx
+version: "1.0.0"
+category: network
+phase: exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ntlmrelayx.py -t smb://{host} -smb2support -of {out_dir}/relay 2>&1 | tee {out_dir}/relay.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/relay.log"
+cwe_hints:
+  - 290
+  - 287
+  - 522
+owasp_wstg:
+  - "WSTG-ATHN-04"
+description: "Impacket ntlmrelayx.py — NTLM authentication relay against {host} (SMBv2). APPROVAL REQUIRED: actively forges authentication on behalf of the captured client and writes back to the target — destructive on production. -smb2support keeps the relay compatible with SMB-signing-disabled estates only. Captured creds dropped to /out/relay (NTDS dump on success). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

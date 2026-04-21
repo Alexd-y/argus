@@ -138,7 +138,7 @@ class TestAiPromptsRetryWithFixer:
         valid_response = '{"assets": ["a1","a2"], "subdomains": ["s1.com"], "ports": [80,443]}'
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm", new_callable=AsyncMock) as mock_call:
+            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
                 mock_call.side_effect = [invalid_response, valid_response]
                 from src.orchestration.ai_prompts import ai_recon
                 from src.orchestration.phases import ReconInput
@@ -156,7 +156,7 @@ class TestAiPromptsRetryWithFixer:
         valid_response = '{"assets": ["x1"], "subdomains": ["y.com"], "ports": [443]}'
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm", new_callable=AsyncMock) as mock_call:
+            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
                 mock_call.return_value = valid_response
                 from src.orchestration.ai_prompts import ai_recon
                 from src.orchestration.phases import ReconInput
@@ -168,17 +168,21 @@ class TestAiPromptsRetryWithFixer:
 
     @pytest.mark.asyncio
     async def test_fixer_still_invalid_json_raises(self) -> None:
-        """When both initial and fixer responses are invalid JSON, ai_recon raises."""
-        invalid_1 = "not valid json at all"
-        invalid_2 = '{"assets": ["broken", '  # still invalid
+        """When initial and all fixer retries return invalid JSON, ai_recon raises."""
+        invalid_responses = [
+            "not valid json at all",
+            '{"assets": ["broken", ',
+            "still not json",
+            "{bad}",
+        ]
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
-            with patch("src.orchestration.ai_prompts.call_llm", new_callable=AsyncMock) as mock_call:
-                mock_call.side_effect = [invalid_1, invalid_2]
+            with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
+                mock_call.side_effect = invalid_responses
                 from src.orchestration.ai_prompts import ai_recon
                 from src.orchestration.phases import ReconInput
 
                 with pytest.raises(RuntimeError, match="LLM returned invalid response"):
                     await ai_recon(ReconInput(target="x.com", options={}))
 
-                assert mock_call.call_count == 2
+                assert mock_call.call_count == 4

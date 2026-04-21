@@ -1,0 +1,376 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ARGUS — default values
+# ──────────────────────────────────────────────────────────────────────────────
+# This file documents EVERY tunable. Per-environment overlays only override the
+# delta they need (see values-dev.yaml / values-staging.yaml / values-prod.yaml).
+#
+# Conventions:
+#   * Image refs in deployments MUST resolve to "@sha256:<digest>" — the
+#     `image.<svc>.digest` field is what wins; the `tag` field is metadata only
+#     (used in labels for human readability).
+#   * Plain-text secrets are forbidden. Use sealedSecrets references via
+#     `existingSecretName` / `existingSecretKey` in your overlay, NEVER inline.
+#   * Cosign verify-init container is gated by `cosign.verify.enabled` — it is
+#     ON by default; production overlay LOCKS it to true and refuses to render
+#     if accidentally disabled.
+#   * NetworkPolicies default to "deny-all" with explicit egress allowlists.
+
+global:
+  # Cluster-wide image pull strategy. Override in dev for kind/minikube only.
+  imageRegistry: "ghcr.io"
+  imagePullSecrets: []
+  storageClass: ""
+
+# ── application name / labels ────────────────────────────────────────────────
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+commonAnnotations: {}
+
+# ── images (tag is metadata only — digest is mandatory in templates) ─────────
+image:
+  pullPolicy: IfNotPresent
+
+  backend:
+    repository: ghcr.io/your-org/argus-backend
+    tag: "v1.0.0-cycle5"
+    # MUST be a "@sha256:..." digest produced by the supply-chain pipeline.
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+  celery:
+    repository: ghcr.io/your-org/argus-celery
+    tag: "v1.0.0-cycle5"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+  frontend:
+    repository: ghcr.io/your-org/argus-frontend
+    tag: "v1.0.0-cycle5"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+  mcp:
+    repository: ghcr.io/your-org/argus-mcp
+    tag: "v1.0.0-cycle5"
+    digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
+# Optional, used when pulling from a private registry.
+imagePullSecrets: []
+
+# ── ServiceAccount ──────────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: true
+
+# ── replica counts (per service) ─────────────────────────────────────────────
+replicaCount:
+  backend: 2
+  celery: 2
+  frontend: 2
+  mcp: 1
+
+# ── resources (per service) ──────────────────────────────────────────────────
+resources:
+  backend:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  celery:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  mcp:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# ── pod security (applied to ALL ARGUS pods) ─────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# ── Cosign verify-init container ─────────────────────────────────────────────
+# When enabled, every ARGUS pod runs an init container `cosign-verify` that
+# verifies the image digest against Sigstore (Fulcio + Rekor) BEFORE the main
+# container starts. This is the runtime half of the supply-chain story whose
+# build half lives in `infra/scripts/sign_images.sh` (Cycle 4 ARG-033).
+cosign:
+  verify:
+    enabled: true
+    image:
+      repository: gcr.io/projectsigstore/cosign
+      tag: "v2.4.1"
+      pullPolicy: IfNotPresent
+    # Keyless mode — Fulcio + GitHub Actions OIDC issuer.
+    keyless:
+      enabled: true
+      certificateIdentityRegexp: "^https://github\\.com/your-org/ARGUS/.*"
+      certificateOidcIssuer: "https://token.actions.githubusercontent.com"
+    # Keyed fallback (rollback escape hatch — disabled by default).
+    keyed:
+      enabled: false
+      publicKeyConfigMap: ""
+      publicKeyConfigKey: "cosign.pub"
+    extraArgs: []
+
+# ── networking ───────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  backend:
+    port: 8000
+    metricsPort: 9100
+  celery:
+    metricsPort: 9101
+  frontend:
+    port: 3000
+  mcp:
+    port: 8080
+    metricsPort: 9102
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: argus.example.invalid
+  tls:
+    enabled: false
+    secretName: argus-tls
+  paths:
+    - path: /api
+      service: backend
+    - path: /
+      service: frontend
+
+certManager:
+  enabled: false
+  clusterIssuer: letsencrypt-prod
+
+# ── observability ────────────────────────────────────────────────────────────
+prometheus:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    namespace: ""
+    labels:
+      release: kube-prometheus-stack
+
+otelInstrumentation:
+  enabled: false
+  endpoint: http://otel-collector.observability.svc:4317
+  exporter: otlp
+  sampleRatio: "0.1"
+
+# ── horizontal pod autoscaler ────────────────────────────────────────────────
+hpa:
+  enabled: false
+  backend:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  celery:
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    customMetrics:
+      enabled: false
+      metricName: argus_celery_queue_depth
+      averageValue: "50"
+
+# ── pod disruption budgets ───────────────────────────────────────────────────
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# ── network policies ─────────────────────────────────────────────────────────
+networkPolicies:
+  enabled: true
+  defaultDeny: true
+  llmProviders:
+    # Egress allowlists (FQDN-annotated, IP block resolved at apply time).
+    - name: openai
+      host: api.openai.com
+      port: 443
+    - name: anthropic
+      host: api.anthropic.com
+      port: 443
+  cloudIam:
+    enabled: false
+    provider: aws  # aws | gcp | azure
+
+# ── sealed secrets (ALL secrets MUST flow through this surface) ──────────────
+sealedSecrets:
+  enabled: true
+  controllerName: sealed-secrets-controller
+  controllerNamespace: kube-system
+
+# ── secret references (resolved at runtime; chart never holds plaintext) ─────
+secrets:
+  database:
+    existingSecretName: argus-postgres
+    existingSecretKey: password
+  redis:
+    existingSecretName: argus-redis
+    existingSecretKey: password
+  minio:
+    existingAccessSecretName: argus-minio
+    existingAccessSecretKey: rootUser
+    existingSecretSecretName: argus-minio
+    existingSecretSecretKey: rootPassword
+  llm:
+    openaiSecretName: argus-llm
+    openaiSecretKey: openai_api_key
+    anthropicSecretName: argus-llm
+    anthropicSecretKey: anthropic_api_key
+  webhooks:
+    slackSecretName: argus-webhooks
+    slackSecretKey: slack_signing_secret
+
+# ── application configuration (non-secret) ───────────────────────────────────
+config:
+  logLevel: INFO
+  environment: dev
+  scanWorkerConcurrency: 4
+  rateLimiter:
+    bucketCapacity: 60
+    refillRatePerSec: 1.0
+
+# ── sandbox profile network policies ─────────────────────────────────────────
+sandbox:
+  enabled: true
+  profiles:
+    - name: nuclei
+      egress:
+        - host: 0.0.0.0/0
+          port: 443
+        - host: 0.0.0.0/0
+          port: 80
+    - name: zap
+      egress:
+        - host: 0.0.0.0/0
+          port: 443
+
+# ── Bitnami sub-chart overrides ──────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: argus
+    database: argus
+    existingSecret: argus-postgres
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+    initdb:
+      scripts:
+        # Ensure pgvector extension is available for embeddings.
+        00-create-extensions.sql: |
+          CREATE EXTENSION IF NOT EXISTS pgvector;
+          CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  metrics:
+    enabled: true
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: argus-redis
+    existingSecretPasswordKey: password
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  metrics:
+    enabled: true
+
+minio:
+  enabled: true
+  mode: standalone
+  auth:
+    existingSecret: argus-minio
+  defaultBuckets: "argus-evidence,argus-reports"
+  persistence:
+    enabled: true
+    size: 100Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  metrics:
+    serviceMonitor:
+      enabled: false
+
+# ── extra labels / annotations propagated to every workload ──────────────────
+extraEnv: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# ── tolerations / node selectors / affinity ─────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# ── readiness / liveness probe defaults ──────────────────────────────────────
+probes:
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

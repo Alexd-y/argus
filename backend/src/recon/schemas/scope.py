@@ -1,7 +1,6 @@
 """Scope definition and validation schemas."""
 
 from pydantic import BaseModel, field_validator
-from netaddr import IPNetwork
 
 
 class ScopeRule(BaseModel):

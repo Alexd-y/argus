@@ -1,0 +1,32 @@
+tool_id: cookie_probe
+version: "1.0.0"
+category: browser
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-browser:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "cookie-probe --url {url} --output {out_dir}/cookies.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/cookies.json"
+cwe_hints:
+  - 614
+  - 1004
+  - 1275
+owasp_wstg:
+  - "WSTG-SESS-02"
+  - "WSTG-SESS-09"
+description: "Headless cookie attribute auditor — drives the {url} login / landing flow with Chromium and inspects every Set-Cookie header for Secure / HttpOnly / SameSite / Domain / Path / Max-Age. Flags session cookies missing Secure on HTTPS, missing HttpOnly on session ids, SameSite=None without Secure, and overly-broad Domain / Path scopes. No mutation of the target's cookie store — pure observation. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019."

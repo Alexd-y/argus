@@ -1,0 +1,62 @@
+# ARGUS backend — local artefacts that MUST NOT enter git.
+
+# ---------------------------------------------------------------------------
+# Tool catalog signing keys. See backend/config/tools/_keys/README.md
+#
+# Private keys MUST NEVER enter git — they are minted in the HSM/Vault for prod
+# and locally generated for dev. The matching public keys (named by their
+# canonical key_id, e.g. ``a3f7c2.....ed25519.pub``) ARE committed because the
+# tool registry is fail-closed and cannot verify signatures without them.
+# ---------------------------------------------------------------------------
+config/tools/_keys/*.priv
+# Keep dev_signing.* private keys out of git in case the operator forgets to
+# delete them after signing; the canonical public keys are still committed
+# under their key_id name.
+config/tools/_keys/dev_signing*
+!config/tools/_keys/.gitkeep
+!config/tools/_keys/README.md
+
+# ---------------------------------------------------------------------------
+# Payload catalog signing keys. See backend/config/payloads/_keys/README.md
+#
+# Same fail-closed guarantee as the tool catalog: private keys NEVER enter git
+# (they are minted in the HSM/Vault for prod and generated locally for dev).
+# The matching public keys named by canonical key_id are committed.
+# ---------------------------------------------------------------------------
+config/payloads/_keys/*.priv
+config/payloads/_keys/dev_signing*
+!config/payloads/_keys/.gitkeep
+!config/payloads/_keys/README.md
+
+# ---------------------------------------------------------------------------
+# Prompt catalog signing keys. See backend/config/prompts/_keys/README.md
+#
+# Same fail-closed guarantee as the tool / payload catalogs: private keys NEVER
+# enter git (they are minted in the HSM/Vault for prod and generated locally
+# for dev). The matching public keys named by canonical key_id are committed.
+# ---------------------------------------------------------------------------
+config/prompts/_keys/*.priv
+config/prompts/_keys/dev_signing*
+!config/prompts/_keys/.gitkeep
+!config/prompts/_keys/README.md
+
+# ---------------------------------------------------------------------------
+# MCP server config signing keys. See backend/config/mcp/_keys/README.md
+# ---------------------------------------------------------------------------
+config/mcp/_keys/*.priv
+config/mcp/_keys/dev_signing*
+!config/mcp/_keys/.gitkeep
+!config/mcp/_keys/README.md
+
+# ---------------------------------------------------------------------------
+# Python build / test artefacts (also covered by repo-root .gitignore)
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml

@@ -1,0 +1,98 @@
+{{- include "argus.cosignAssertProd" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-frontend
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.replicaCount.frontend }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "argus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+      annotations:
+        argus.image.digest/frontend: {{ .Values.image.frontend.digest | quote }}
+    spec:
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "argus.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        {{- include "argus.cosignVerifyInit" (dict "root" $ "image" .Values.image.frontend "name" "verify-frontend") | nindent 8 }}
+      containers:
+        - name: frontend
+          image: {{ include "argus.imageRef" (dict "image" .Values.image.frontend "root" $) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.frontend.port }}
+              protocol: TCP
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: {{ printf "http://%s-backend:%d" (include "argus.fullname" .) (int .Values.service.backend.port) | quote }}
+            - name: NODE_ENV
+              value: production
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources.frontend | nindent 12 }}
+          volumeMounts:
+            {{- include "argus.standardVolumeMounts" . | nindent 12 }}
+            - name: nextjs-cache
+              mountPath: /app/.next/cache
+      volumes:
+        {{- include "argus.standardVolumes" . | nindent 8 }}
+        - name: nextjs-cache
+          emptyDir:
+            sizeLimit: 256Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        {{- if .Values.affinity }}
+        {{- toYaml .Values.affinity | nindent 8 }}
+        {{- else }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "argus.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: frontend
+                topologyKey: topology.kubernetes.io/zone
+        {{- end }}

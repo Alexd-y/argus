@@ -1,0 +1,32 @@
+tool_id: redis_cli_probe
+version: "1.0.0"
+category: network
+phase: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt && redis-cli -h {host} -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/redis_info.txt"
+cwe_hints:
+  - 200
+  - 287
+  - 521
+owasp_wstg:
+  - "WSTG-INFO-08"
+  - "WSTG-ATHN-04"
+description: "redis-cli probe — INFO + CONFIG GET against an unauthenticated Redis instance at {host}:{port}. Read-only commands only (no FLUSHALL / SLAVEOF / DEBUG); surfaces version banner and the dangerous-by-default CONFIG keys (dir / dbfilename / requirepass) that enable §4.15 module-load RCE on unprotected instances. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019."

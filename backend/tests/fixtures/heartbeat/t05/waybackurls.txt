@@ -1,0 +1,1 @@
+http://wayback.example/legacy/path

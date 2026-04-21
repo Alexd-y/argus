@@ -1,0 +1,29 @@
+tool_id: hashcat
+version: "1.0.0"
+category: misc
+phase: post_exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 7200
+cpu_limit: "4"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "hashcat -m {mode} -a 0 -o {out_dir}/cracked.txt {hashes_file} {wordlist}"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/cracked.txt"
+cwe_hints:
+  - 916
+  - 326
+  - 522
+owasp_wstg:
+  - "WSTG-CRYP-04"
+description: "Hashcat — GPU/CPU offline hash cracker. APPROVAL REQUIRED: long-running and CPU-bound; runs FULLY OFFLINE (offline-no-egress policy) so a malicious rule pack cannot exfiltrate hashes. -m {mode} selects the algorithm code (e.g. 1000 NTLM, 13100 Kerberos), -a 0 = straight wordlist attack, -o writes cracked plaintexts. Hashes from {hashes_file} (must live under /in/), wordlist from /wordlists/. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.13. ARG-017."

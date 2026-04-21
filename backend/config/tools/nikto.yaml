@@ -1,0 +1,44 @@
+tool_id: nikto
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "nikto"
+  - "-host"
+  - "{url}"
+  - "-Format"
+  - "json"
+  - "-output"
+  - "{out_dir}/nikto.json"
+  - "-ask"
+  - "no"
+  - "-nointeractive"
+  - "-Tuning"
+  - "1234567890abcde"
+  - "-maxtime"
+  - "1500s"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/nikto.json"
+cwe_hints:
+  - 16
+  - 200
+  - 933
+owasp_wstg:
+  - "WSTG-CONF-01"
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Nikto2 web server scanner — broad checks for ~7000 dangerous files, outdated versions, server misconfigurations. JSON output via -Format json. -Tuning string requests every check class except module-specific ones. -maxtime caps wall-clock to fit 30 min sandbox window. Author: Chris Sullo / David Lodge (https://github.com/sullo/nikto). Backlog/dev1_md §4.8."

@@ -1,0 +1,631 @@
+"""ARG-036 / ARG-048 — PDF backend abstraction for ReportService.
+
+Production-grade PDF rendering pipeline that decouples ``ReportService``
+from any single PDF library. Three implementations live behind a single
+``PDFBackend`` ``Protocol``:
+
+* :class:`WeasyPrintBackend` — default; renders branded HTML through
+  WeasyPrint. Requires Cairo + Pango + GDK-PixBuf native libs.
+* :class:`LatexBackend` — fallback for CI environments where Cairo /
+  Pango cannot be installed (typical Windows + minimal Linux runners).
+  Requires ``latexmk`` (and ideally ``xelatex``) on ``PATH``.
+
+  Phase-1 (ARG-036, Cycle 4) shipped as a stub that stripped HTML tags
+  and wrapped the plain text in a minimal preamble. The stub is kept as
+  the *fallback* path so callers without templates still get a PDF.
+
+  Phase-2 (ARG-048, Cycle 5) wires proper ``jinja2-latex`` templates
+  per tier. Callers pass ``latex_template_content`` (already-rendered
+  LaTeX source produced by :func:`render_latex_template`) and the
+  backend hands that source to ``latexmk -pdfxe`` (xelatex when
+  available, ``-pdf`` / pdflatex otherwise).
+* :class:`DisabledBackend` — graceful no-op; ``render`` returns ``False``.
+  Selected automatically when neither WeasyPrint nor LaTeX is available.
+
+Backend selection is driven by ``REPORT_PDF_BACKEND`` env var with a
+fallback chain ``weasyprint → latex → disabled``. The chain is resolved
+once per call (no module-level caching) so tests and operators can flip
+the env var between renders without restarting the process.
+
+Determinism contract
+    * Each backend's ``render`` accepts ``scan_completed_at`` (ISO-8601)
+      that maps directly to PDF ``CreationDate`` / ``ModDate`` metadata —
+      ``datetime.now()`` is forbidden. Identical inputs ⇒ byte-stable
+      output (modulo font-subset hashes which WeasyPrint emits per
+      version; structural equality is what we test).
+    * Producer / Creator strings are fixed; PDF diff'ing across releases
+      requires bumping these constants in lockstep with the cycle ID.
+
+Security
+    * No subprocess shell-execution: ``subprocess.run`` always uses an
+      explicit argv list (never ``shell=True``). LaTeX renders inside a
+      ``tempfile.TemporaryDirectory`` so artefacts cannot leak across
+      concurrent renders.
+    * Native-lib errors are caught and surfaced as ``False`` (not raised)
+      so callers can gracefully fall back to the chain. The ReportService
+      caller maps a global ``False`` to a 503 response.
+    * Phase-2 LaTeX templates run every user-controlled placeholder
+      through :func:`_latex_escape` before substitution to prevent
+      injection of LaTeX command sequences from tenant-supplied data.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any, ClassVar, Final, Mapping, Protocol, runtime_checkable
+
+logger = logging.getLogger(__name__)
+
+
+# Fixed PDF metadata — bumped only on cycle release boundaries so PDF
+# diff'ing across releases is intentional, not accidental.
+PDF_CREATOR: Final[str] = "ARGUS Cycle 5"
+PDF_PRODUCER_WEASYPRINT: Final[str] = "WeasyPrint"
+PDF_PRODUCER_LATEX: Final[str] = "LaTeX"
+PDF_TITLE: Final[str] = "ARGUS Security Report"
+PDF_AUTHOR: Final[str] = "ARGUS"
+
+# Sentinel timestamp for callers that fail to provide ``scan_completed_at``.
+# A fixed value is intentional — we MUST never use ``datetime.now()`` in the
+# PDF metadata path (would defeat byte-stable snapshot tests).
+_FALLBACK_SCAN_TIMESTAMP: Final[str] = "1970-01-01T00:00:00+00:00"
+
+
+# --------------------------------------------------------------------------- #
+# ARG-048 — LaTeX escape + template helpers (Phase-2 wiring).                 #
+# --------------------------------------------------------------------------- #
+
+#: Order matters: backslash MUST be escaped first because every other
+#: replacement target uses ``\textbackslash`` etc. and would otherwise
+#: get re-escaped on the second pass.
+#: Sentinels for the two macros whose replacement text contains
+#: ``{`` / ``}`` characters. We swap them out *before* the brace
+#: replacements run so the trailing ``{}`` (which makes
+#: ``\textbackslash`` / ``\textasciitilde`` / ``\textasciicircum`` swallow
+#: the next space) doesn't get double-escaped into a literal ``\{\}``.
+#: Sentinels use NUL bytes so they cannot collide with realistic input
+#: (``str.replace`` is total over the input alphabet, and Python rejects
+#: NULs in source files, so reaching this in user data requires an
+#: attacker who has already broken our upstream input layer).
+_BACKSLASH_SENTINEL: Final[str] = "\x00ARGUSBS\x00"
+_TILDE_SENTINEL: Final[str] = "\x00ARGUSTILDE\x00"
+_CARET_SENTINEL: Final[str] = "\x00ARGUSCARET\x00"
+_LESS_SENTINEL: Final[str] = "\x00ARGUSLT\x00"
+_GREATER_SENTINEL: Final[str] = "\x00ARGUSGT\x00"
+
+#: Replacement table for the seven plain LaTeX special characters that
+#: don't introduce ``{}`` themselves. Order matters: brace escaping must
+#: come *after* the sentinel swap above.
+_LATEX_ESCAPE_TABLE: Final[tuple[tuple[str, str], ...]] = (
+    ("&", r"\&"),
+    ("%", r"\%"),
+    ("$", r"\$"),
+    ("#", r"\#"),
+    ("_", r"\_"),
+    ("{", r"\{"),
+    ("}", r"\}"),
+)
+
+
+def _latex_escape(value: object) -> str:
+    """Escape ``value`` for safe inclusion in a LaTeX document body.
+
+    Handles the ten LaTeX special characters plus angle brackets (which
+    are interpreted as math operators in some packages). Non-string
+    values are coerced via ``str()`` so callers can pass numbers / IDs
+    without having to stringify upstream.
+
+    Implementation note — *why two passes*: characters like ``\\`` map to
+    ``\\textbackslash{}`` which itself contains ``{}``. A naive single-pass
+    table that escapes ``{`` after ``\\`` would re-escape those braces
+    into ``\\{\\}``, producing literal brace glyphs in the PDF. We therefore
+    swap macros for NUL-byte sentinels first, run the brace pass, then
+    swap the sentinels back. The function is *idempotent on already-safe
+    text*: re-escaping a string with no special chars returns it unchanged.
+    """
+    if value is None:
+        return ""
+    text = value if isinstance(value, str) else str(value)
+    text = text.replace("\\", _BACKSLASH_SENTINEL)
+    text = text.replace("~", _TILDE_SENTINEL)
+    text = text.replace("^", _CARET_SENTINEL)
+    text = text.replace("<", _LESS_SENTINEL)
+    text = text.replace(">", _GREATER_SENTINEL)
+    for needle, replacement in _LATEX_ESCAPE_TABLE:
+        text = text.replace(needle, replacement)
+    text = text.replace(_BACKSLASH_SENTINEL, r"\textbackslash{}")
+    text = text.replace(_TILDE_SENTINEL, r"\textasciitilde{}")
+    text = text.replace(_CARET_SENTINEL, r"\textasciicircum{}")
+    text = text.replace(_LESS_SENTINEL, r"\textless{}")
+    text = text.replace(_GREATER_SENTINEL, r"\textgreater{}")
+    return text
+
+
+def _latex_truncate(value: object, length: int = 200, suffix: str = "…") -> str:
+    """Truncate ``value`` to ``length`` characters, preserving word boundaries.
+
+    Used inside the Asgard / Valhalla longtables so a single multi-page
+    finding evidence string cannot blow out the page width. Truncation
+    happens *before* :func:`_latex_escape` so the suffix character is
+    rendered as-is (UTF-8 ellipsis is xelatex-safe).
+    """
+    if value is None:
+        return ""
+    text = value if isinstance(value, str) else str(value)
+    if len(text) <= length:
+        return text
+    cut = text[:length].rsplit(" ", 1)[0]
+    return f"{cut}{suffix}"
+
+
+def resolve_latex_template_path(tier: str) -> Path | None:
+    """Return the per-tier ``main.tex.j2`` path or ``None`` when missing.
+
+    Mirrors :func:`src.reports.generators._resolve_branded_pdf_template_path`
+    for the LaTeX side. Split from :func:`render_latex_template` so callers
+    can pre-flight whether to attempt Phase-2 at all (avoids importing
+    Jinja2 just to check existence).
+    """
+    candidate = (
+        Path(__file__).resolve().parents[2]
+        / "templates"
+        / "reports"
+        / "_latex"
+        / tier
+        / "main.tex.j2"
+    )
+    return candidate if candidate.exists() else None
+
+
+def render_latex_template(tier_name: str, context: Mapping[str, Any]) -> str:
+    """ARG-048 — Render the per-tier LaTeX Jinja2 template for ``tier_name``.
+
+    The branded LaTeX templates (``backend/templates/reports/_latex/<tier>/
+    main.tex.j2``) are loaded through a dedicated Jinja2 environment that
+    registers two filters used pervasively in the templates:
+
+    * ``latex_escape`` — escape user-controlled strings.
+    * ``latex_truncate`` — cap long evidence strings before they reach
+      the longtable cells.
+
+    Autoescape is **disabled** because the templates contain LaTeX
+    markup; per-placeholder escaping is enforced by the templates
+    themselves (every user-controlled value passes through
+    ``| latex_escape``). This is the same contract Sphinx + nbconvert
+    use for their LaTeX output.
+
+    Args:
+        tier_name: tier identifier (``"midgard"`` / ``"asgard"`` /
+            ``"valhalla"``). Resolved through :func:`resolve_latex_template_path`.
+        context: Jinja2 context dict (the same context as the WeasyPrint
+            HTML template — see ``_build_branded_pdf_context`` in
+            :mod:`src.reports.generators`).
+
+    Returns:
+        Rendered LaTeX source ready to hand to
+        :meth:`LatexBackend.render` via ``latex_template_content``.
+
+    Raises:
+        FileNotFoundError: if no template exists for ``tier_name``.
+        jinja2.TemplateError: on template syntax / runtime errors. The
+            caller (``generate_pdf``) catches and falls back to the
+            Phase-1 stub.
+    """
+    template_path = resolve_latex_template_path(tier_name)
+    if template_path is None or not template_path.exists():
+        raise FileNotFoundError(
+            f"LaTeX template not found for tier={tier_name!r}"
+        )
+
+    # Local import keeps the optional dep optional. We only ship Jinja2
+    # in the runtime environment, so this never raises in production.
+    # We deliberately use the default ``Undefined`` (lenient) — same as
+    # the HTML branded template env in :mod:`src.reports.generators`.
+    # ``StrictUndefined`` would force every template to wrap *every*
+    # context lookup in ``is defined`` guards, which is brittle when
+    # the upstream context shape evolves between cycles.
+    from jinja2 import Environment, FileSystemLoader
+
+    env = Environment(
+        loader=FileSystemLoader(str(template_path.parent)),
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+        keep_trailing_newline=True,
+    )
+    env.filters["latex_escape"] = _latex_escape
+    env.filters["latex_truncate"] = _latex_truncate
+    template = env.get_template(template_path.name)
+    return template.render(**dict(context))
+
+
+@runtime_checkable
+class PDFBackend(Protocol):
+    """PDF rendering backend protocol.
+
+    Implementations MUST be stateless: a single instance can be shared
+    across requests / threads. ``render`` returns ``True`` on success,
+    ``False`` on graceful failure (caller maps to HTTP 503 or skips PDF
+    in the bundle).
+
+    ``name`` is declared as ``ClassVar[str]`` so concrete implementations
+    are free to bind it as ``Final`` (read-only) without violating the
+    protocol — Final + Protocol(name: str) clashes on the "settable
+    attribute" check otherwise.
+    """
+
+    name: ClassVar[str]
+
+    @staticmethod
+    def is_available() -> bool:
+        """Cheap probe: returns ``True`` only when ``render`` would succeed."""
+        ...
+
+    def render(
+        self,
+        *,
+        html_content: str,
+        output_path: Path,
+        scan_completed_at: str,
+        base_url: str | None = None,
+        latex_template_content: str | None = None,
+    ) -> bool:
+        """Render to ``output_path``.
+
+        Args:
+            html_content: rendered Jinja HTML, ready for the WeasyPrint
+                backend. The LaTeX backend ignores this when
+                ``latex_template_content`` is provided (Phase-2) and falls
+                back to the Phase-1 stub (HTML → plain text → minimal
+                preamble) otherwise.
+            output_path: destination file (parent dir must exist).
+            scan_completed_at: ISO-8601 timestamp from the source scan;
+                used as PDF ``CreationDate`` for determinism. NEVER pass
+                ``datetime.now()`` — a fixed sentinel is preferred.
+            base_url: optional base URL for resolving relative ``url(...)``
+                references in CSS (fonts, images). Forwarded by the
+                WeasyPrint backend; ignored by LaTeX/Disabled.
+            latex_template_content: ARG-048 Phase-2 — pre-rendered LaTeX
+                source produced by :func:`render_latex_template`. When
+                supplied, the LaTeX backend writes this verbatim into the
+                tempfile and skips the Phase-1 HTML-to-text fallback.
+                Other backends ignore the kwarg.
+
+        Returns:
+            ``True`` on success, ``False`` on graceful failure. Implementations
+            MUST NOT raise on missing native deps — that is what
+            :func:`get_active_backend` resolves in the fallback chain.
+        """
+        ...
+
+
+class WeasyPrintBackend:
+    """Default backend; requires Cairo + Pango + GDK-PixBuf native libs."""
+
+    name: ClassVar[str] = "weasyprint"
+
+    @staticmethod
+    def is_available() -> bool:
+        try:
+            import weasyprint  # type: ignore[import-untyped]  # noqa: F401  # availability probe only
+        except (ImportError, OSError):
+            # ``OSError`` covers the case where the Python binding loads but
+            # the underlying Pango / Cairo native libs cannot be linked
+            # (typical Windows host without GTK runtime).
+            return False
+        return True
+
+    def render(
+        self,
+        *,
+        html_content: str,
+        output_path: Path,
+        scan_completed_at: str,
+        base_url: str | None = None,
+        latex_template_content: str | None = None,
+    ) -> bool:
+        # ``latex_template_content`` is part of the unified Protocol but
+        # is meaningless for an HTML backend — silently ignore it so
+        # callers don't need to branch by backend type.
+        del latex_template_content
+        try:
+            from weasyprint import HTML
+        except (ImportError, OSError) as exc:
+            logger.warning(
+                "weasyprint_import_failed",
+                extra={
+                    "event": "weasyprint_import_failed",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            return False
+        creation_date = (scan_completed_at or _FALLBACK_SCAN_TIMESTAMP).strip()
+        try:
+            html = (
+                HTML(string=html_content, base_url=base_url)
+                if base_url
+                else HTML(string=html_content)
+            )
+            html.write_pdf(
+                target=str(output_path),
+                # PDF determinism: every metadata field is derived from the scan
+                # input (or a fixed constant). No wall-clock timestamps.
+                metadata={
+                    "creator": PDF_CREATOR,
+                    "title": PDF_TITLE,
+                    "authors": [PDF_AUTHOR],
+                    "subject": "Security assessment report",
+                    "created": creation_date,
+                    "modified": creation_date,
+                },
+            )
+        except Exception as exc:  # weasyprint surfaces a wide error variety
+            logger.exception(
+                "weasyprint_render_failed",
+                extra={
+                    "event": "weasyprint_render_failed",
+                    "error_type": type(exc).__name__,
+                },
+            )
+            return False
+        return output_path.exists() and output_path.stat().st_size > 0
+
+
+class LatexBackend:
+    """Fallback PDF backend driven by ``latexmk``.
+
+    Two render modes share a single ``render`` entrypoint:
+
+    * **Phase-2 (ARG-048, Cycle 5)** — the preferred path. Callers pass
+      ``latex_template_content`` (already-rendered LaTeX source produced
+      by :func:`render_latex_template`). The source is written verbatim
+      to a tempfile, ``latexmk`` is invoked with ``xelatex`` when
+      available (``-pdfxe``) and ``pdflatex`` (``-pdf``) otherwise, and
+      the resulting PDF is moved to ``output_path``.
+
+    * **Phase-1 (ARG-036, Cycle 4) — fallback** — for callers that
+      cannot produce LaTeX templates (legacy code paths, ad-hoc tests),
+      :meth:`_wrap_minimal_latex` strips HTML tags and wraps the plain
+      text in a minimal preamble. Output is a one-column plain-text PDF
+      — enough to keep the dispatch chain healthy on a host without
+      WeasyPrint deps.
+
+    The Phase-1 fallback is kept on purpose — removing it would silently
+    break callers that haven't migrated to the Phase-2 templates yet. The
+    ``LATEX_PHASE`` constant on this class is intended for diagnostics /
+    metric labels that want to record which path a given render took.
+    """
+
+    name: ClassVar[str] = "latex"
+    _LATEXMK_TIMEOUT_SECONDS: Final[int] = 180  # xelatex needs a bigger budget
+
+    #: Tag attached to log records so operators can grep render mode.
+    LATEX_PHASE_TEMPLATE: Final[str] = "phase2-template"
+    LATEX_PHASE_FALLBACK: Final[str] = "phase1-fallback"
+
+    @staticmethod
+    def is_available() -> bool:
+        return shutil.which("latexmk") is not None
+
+    @staticmethod
+    def _engine_flag() -> str:
+        """Return the ``latexmk`` engine flag for the current host.
+
+        Prefers ``xelatex`` (``-pdfxe``) because the Phase-2 templates
+        rely on ``\\usepackage[T1]{fontenc}`` + ``lmodern`` which xelatex
+        handles correctly with UTF-8 input out-of-the-box. Falls back to
+        ``pdflatex`` (``-pdf``) when xelatex is not on ``PATH``.
+        """
+        return "-pdfxe" if shutil.which("xelatex") is not None else "-pdf"
+
+    def render(
+        self,
+        *,
+        html_content: str,
+        output_path: Path,
+        scan_completed_at: str,
+        base_url: str | None = None,
+        latex_template_content: str | None = None,
+    ) -> bool:
+        # ``base_url`` does not apply: LaTeX resolves \input / \include
+        # relative to the tempdir, and the templates do not pull external
+        # assets. Documented in the docstring.
+        del base_url
+        if shutil.which("latexmk") is None:
+            logger.warning(
+                "latexmk_unavailable",
+                extra={"event": "latexmk_unavailable"},
+            )
+            return False
+
+        if latex_template_content is not None and latex_template_content.strip():
+            tex_source = latex_template_content
+            phase = self.LATEX_PHASE_TEMPLATE
+        else:
+            tex_source = self._wrap_minimal_latex(html_content, scan_completed_at)
+            phase = self.LATEX_PHASE_FALLBACK
+
+        engine_flag = self._engine_flag()
+
+        with tempfile.TemporaryDirectory(prefix="argus-latex-") as tmpdir:
+            tmp_dir = Path(tmpdir)
+            tmp_tex = tmp_dir / "report.tex"
+            tmp_tex.write_text(tex_source, encoding="utf-8")
+            try:
+                result = subprocess.run(  # noqa: S603 — argv is explicit, no shell.
+                    [
+                        "latexmk",
+                        engine_flag,
+                        "-interaction=nonstopmode",
+                        "-halt-on-error",
+                        f"-output-directory={tmp_dir}",
+                        str(tmp_tex),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    timeout=self._LATEXMK_TIMEOUT_SECONDS,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+                logger.warning(
+                    "latexmk_invocation_failed",
+                    extra={
+                        "event": "latexmk_invocation_failed",
+                        "error_type": type(exc).__name__,
+                        "phase": phase,
+                        "engine_flag": engine_flag,
+                    },
+                )
+                return False
+            if result.returncode != 0:
+                logger.warning(
+                    "latexmk_nonzero_exit",
+                    extra={
+                        "event": "latexmk_nonzero_exit",
+                        "return_code": result.returncode,
+                        "phase": phase,
+                        "engine_flag": engine_flag,
+                    },
+                )
+                return False
+            tmp_pdf = tmp_dir / "report.pdf"
+            if not tmp_pdf.exists() or tmp_pdf.stat().st_size == 0:
+                return False
+            output_path.write_bytes(tmp_pdf.read_bytes())
+        logger.info(
+            "latex_render_ok",
+            extra={
+                "event": "latex_render_ok",
+                "phase": phase,
+                "engine_flag": engine_flag,
+            },
+        )
+        return output_path.exists() and output_path.stat().st_size > 0
+
+    @staticmethod
+    def _wrap_minimal_latex(html_content: str, scan_completed_at: str) -> str:
+        """Phase-1 fallback: collapse HTML to plain text and wrap in LaTeX.
+
+        Only used when ``latex_template_content`` is *not* provided. The
+        Phase-2 path (ARG-048) replaces this with full per-tier
+        templates rendered through :func:`render_latex_template`.
+        """
+        text = re.sub(r"<[^>]+>", " ", html_content)
+        text = re.sub(r"\s+", " ", text).strip()
+        text = _latex_escape(text)
+        timestamp = _latex_escape(scan_completed_at or _FALLBACK_SCAN_TIMESTAMP)
+        return (
+            r"\documentclass[a4paper,11pt]{article}" + "\n"
+            r"\usepackage[utf8]{inputenc}" + "\n"
+            r"\usepackage[T1]{fontenc}" + "\n"
+            r"\usepackage{geometry}" + "\n"
+            r"\geometry{margin=2cm}" + "\n"
+            r"\title{" + _latex_escape(PDF_TITLE) + "}" + "\n"
+            r"\author{" + _latex_escape(PDF_AUTHOR) + "}" + "\n"
+            r"\date{" + timestamp + "}" + "\n"
+            r"\begin{document}" + "\n"
+            r"\maketitle" + "\n" + text + "\n"
+            r"\end{document}" + "\n"
+        )
+
+
+class DisabledBackend:
+    """Graceful no-op backend.
+
+    Selected automatically when neither WeasyPrint nor LaTeX is available
+    on the host. ``render`` always returns ``False`` so the caller can
+    surface a 503 / skip the PDF format from the bundle.
+    """
+
+    name: ClassVar[str] = "disabled"
+
+    @staticmethod
+    def is_available() -> bool:
+        return True
+
+    def render(
+        self,
+        *,
+        html_content: str,
+        output_path: Path,
+        scan_completed_at: str,
+        base_url: str | None = None,
+        latex_template_content: str | None = None,
+    ) -> bool:
+        # All inputs are ignored by design; the disabled backend never
+        # writes anything. ``del`` keeps the linter quiet.
+        del html_content, output_path, scan_completed_at, base_url
+        del latex_template_content
+        return False
+
+
+# Registry keyed by ``REPORT_PDF_BACKEND`` env-var values. The order in
+# ``_FALLBACK_CHAIN`` is what :func:`get_active_backend` walks when the
+# requested backend is unavailable.
+_BACKEND_REGISTRY: Final[
+    dict[str, type[WeasyPrintBackend | LatexBackend | DisabledBackend]]
+] = {
+    WeasyPrintBackend.name: WeasyPrintBackend,
+    LatexBackend.name: LatexBackend,
+    DisabledBackend.name: DisabledBackend,
+}
+
+_FALLBACK_CHAIN: Final[tuple[str, ...]] = (
+    WeasyPrintBackend.name,
+    LatexBackend.name,
+    DisabledBackend.name,
+)
+
+ENV_VAR_BACKEND: Final[str] = "REPORT_PDF_BACKEND"
+DEFAULT_BACKEND_NAME: Final[str] = WeasyPrintBackend.name
+
+
+def list_backend_names() -> tuple[str, ...]:
+    """Return the canonical backend identifiers in fallback-chain order."""
+    return _FALLBACK_CHAIN
+
+
+def get_active_backend() -> PDFBackend:
+    """Resolve the active PDF backend.
+
+    Reads ``REPORT_PDF_BACKEND`` (case-insensitive). If the requested
+    backend is unavailable, walks the fallback chain
+    ``weasyprint → latex → disabled``. The disabled backend is always
+    available, so this function NEVER raises.
+    """
+    requested = os.environ.get(ENV_VAR_BACKEND, DEFAULT_BACKEND_NAME).strip().lower()
+    backend_cls = _BACKEND_REGISTRY.get(requested)
+    if backend_cls is not None and backend_cls.is_available():
+        return backend_cls()
+    for fallback_name in _FALLBACK_CHAIN:
+        candidate = _BACKEND_REGISTRY[fallback_name]
+        if candidate.is_available():
+            return candidate()
+    # _FALLBACK_CHAIN ends with DisabledBackend whose ``is_available`` is
+    # ``True`` unconditionally, so the loop above always returns. This
+    # statement is unreachable in practice; it exists for mypy --strict.
+    return DisabledBackend()
+
+
+__all__ = [
+    "DEFAULT_BACKEND_NAME",
+    "ENV_VAR_BACKEND",
+    "PDF_AUTHOR",
+    "PDF_CREATOR",
+    "PDF_PRODUCER_LATEX",
+    "PDF_PRODUCER_WEASYPRINT",
+    "PDF_TITLE",
+    "DisabledBackend",
+    "LatexBackend",
+    "PDFBackend",
+    "WeasyPrintBackend",
+    "get_active_backend",
+    "list_backend_names",
+    "render_latex_template",
+    "resolve_latex_template_path",
+]

@@ -1,0 +1,35 @@
+tool_id: theharvester
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "theHarvester"
+  - "-d"
+  - "{domain}"
+  - "-b"
+  - "all"
+  - "-f"
+  - "{out_dir}/theharvester.json"
+parse_strategy: custom
+evidence_artifacts:
+  - "/out/theharvester.json"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-03"
+description: "theHarvester OSINT collection (emails, hosts, IPs) across all configured passive sources. Backlog/dev1_md §4.1."

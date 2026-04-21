@@ -1,0 +1,32 @@
+tool_id: grype
+version: "1.0.0"
+category: cloud
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "grype {image} -o json --quiet > {out_dir}/grype.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/grype.json"
+cwe_hints:
+  - 1395
+  - 200
+owasp_wstg:
+  - "WSTG-CONF-04"
+  - "WSTG-INFO-08"
+description: "Anchore Grype vulnerability scanner — pulls {image}, derives the SBOM via bundled Syft, then matches packages against the Anchore vuln DB (NVD + Alpine/Debian/RH/Ubuntu/GHSA advisories). Output: canonical Grype JSON (matches[]). `sh -c` is used solely for stdout redirection. recon-passive = TCP/443 to registries + DB feed. Parser deferred to Cycle 3. Author: Anchore. Backlog §4.15. ARG-018."

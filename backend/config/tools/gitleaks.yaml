@@ -1,0 +1,39 @@
+tool_id: gitleaks
+version: "1.0.0"
+category: misc
+phase: vuln_analysis
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+cpu_limit: "2"
+memory_limit: "2Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "gitleaks"
+  - "detect"
+  - "-s"
+  - "{path}"
+  - "-r"
+  - "{out_dir}/gitleaks.json"
+  - "-f"
+  - "json"
+  - "--no-banner"
+  - "--exit-code"
+  - "0"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/gitleaks.json"
+cwe_hints:
+  - 200
+  - 312
+  - 522
+  - 798
+owasp_wstg:
+  - "WSTG-ATHN-06"
+  - "WSTG-INFO-08"
+description: "Gitleaks git-history secret scanner — sweeps the repo at {path} (/in) using 100+ bundled regex+entropy rules (AWS keys, GCP SA JSON, Stripe/Twilio/GitHub PATs, JWTs, generic high-entropy strings). --exit-code 0 keeps successful scans from being marked failure on hits. Fully offline (offline-no-egress); reads local filesystem only. Parser deferred to Cycle 3. Author: Zachary Rice. Backlog §4.16. ARG-018."

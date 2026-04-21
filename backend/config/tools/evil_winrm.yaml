@@ -1,0 +1,31 @@
+tool_id: evil_winrm
+version: "1.0.0"
+category: auth
+phase: post_exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 1800
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: auth-bruteforce
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-network:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "evil-winrm -i {host} -u {user} -p {pass} -s {in_dir}/ > {out_dir}/winrm.log"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/winrm.log"
+cwe_hints:
+  - 287
+  - 78
+  - 522
+owasp_wstg:
+  - "WSTG-ATHN-01"
+description: "evil-winrm — authenticated WinRM remote-shell client used for post-exploitation access on the target. APPROVAL REQUIRED: spawns an interactive shell on the victim with the supplied (user, pass) credentials. -s loads scripts from {in_dir}/ (operator-supplied harmless probe). Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017."

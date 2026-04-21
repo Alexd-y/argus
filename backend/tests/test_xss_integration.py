@@ -68,7 +68,7 @@ def _make_mock_playwright(dialog_type: str | None, page_content: str) -> MagicMo
     return mock_sync_pw
 
 
-class TestFullPipeline:
+class TestXssFullPipeline:
     """XSS integration: detect context → generate payloads → verify (mocked)."""
 
     def test_html_reflected_xss_full_flow(self) -> None:

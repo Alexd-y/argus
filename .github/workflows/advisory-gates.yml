@@ -1,0 +1,124 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# T08 (Cycle 6) — Advisory SCA / SAST gates (non-blocking CI).
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Runs scripts/argus_validate.py --only-advisory (helm_kubeconform, pip_audit,
+# npm_audit, trivy_fs, bandit). The meta-runner step uses continue-on-error: true
+# so the workflow exit code is always success; findings live in artefacts + job
+# summary. Tools are pinned (no :latest).
+
+name: Advisory SCA gates (T08)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/**"
+      - "Frontend/**"
+      - "admin-frontend/**"
+      - "mcp-server/**"
+      - "scripts/argus_validate.py"
+      - "scripts/run_npm_audit_gate.py"
+      - ".github/workflows/advisory-gates.yml"
+  schedule:
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: advisory-gates-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  advisory-sca:
+    name: Advisory SCA / SAST (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit + bandit (pinned)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pip-audit==2.7.3" "bandit==1.8.6"
+
+      - name: Install Trivy (pinned)
+        env:
+          TRIVY_VERSION: "0.59.1"
+        run: |
+          curl -sSL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin trivy
+          trivy --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: npm ci (Node projects)
+        run: |
+          cd Frontend && npm ci
+          cd ../admin-frontend && npm ci
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install kubeconform (pinned; helm_kubeconform gate)
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Advisory meta-runner (non-blocking)
+        id: meta_runner
+        continue-on-error: true
+        run: |
+          python scripts/argus_validate.py \
+            --only-advisory \
+            --output advisory_gates_results.json \
+            --logs-dir advisory_gates_logs
+
+      - name: Job summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          p = Path("advisory_gates_results.json")
+          summary = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          lines = [
+              "## Advisory SCA gates (T08)\n\n",
+              "The meta-runner step uses `continue-on-error: true`, so this workflow "
+              "**always reports success** while still recording per-gate outcomes below "
+              "and in uploaded artefacts.\n\n",
+          ]
+          if p.is_file():
+              data = json.loads(p.read_text(encoding="utf-8"))
+              lines.append(f"**Counts:** `{data.get('counts')}`\n\n")
+              for g in data.get("gates", []):
+                  exit_repr = g.get("exit_code")
+                  lines.append(
+                      f"- **{g['name']}**: {g['status']} (exit {exit_repr}) — `{g.get('log_path')}`\n"
+                  )
+          else:
+              lines.append("_No results JSON found — meta-runner may have failed before write._\n")
+          with summary.open("a", encoding="utf-8") as fh:
+              fh.write("".join(lines))
+          PY
+
+      - name: Upload logs + JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: advisory-gates-${{ github.run_id }}
+          path: |
+            advisory_gates_logs
+            advisory_gates_results.json
+          if-no-files-found: warn

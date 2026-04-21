@@ -9,18 +9,34 @@ from typing import Any
 from src.celery_app import app
 from src.core.config import settings
 from src.recon.mcp.policy import evaluate_va_active_scan_tool_policy
-from src.recon.raw_artifact_sink import sink_raw_json, sink_raw_text, slug_for_artifact_type_component
-from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import build_dalfox_argv
+from src.recon.raw_artifact_sink import (
+    sink_raw_json,
+    sink_raw_text,
+    slug_for_artifact_type_component,
+)
+from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import (
+    build_dalfox_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.ffuf_adapter import build_ffuf_argv
-from src.recon.vulnerability_analysis.active_scan.mcp_runner import run_va_active_scan_sync
-from src.recon.vulnerability_analysis.active_scan.nikto_va_adapter import build_nikto_va_argv
-from src.recon.vulnerability_analysis.active_scan.nuclei_va_adapter import build_nuclei_va_argv
-from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import build_sqlmap_va_argv
+from src.recon.vulnerability_analysis.active_scan.mcp_runner import (
+    run_va_active_scan_sync,
+)
+from src.recon.vulnerability_analysis.active_scan.nikto_va_adapter import (
+    build_nikto_va_argv,
+)
+from src.recon.vulnerability_analysis.active_scan.nuclei_va_adapter import (
+    build_nuclei_va_argv,
+)
+from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import (
+    build_sqlmap_va_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.testssl_va_adapter import (
     build_sslscan_va_argv,
     build_testssl_va_argv,
 )
-from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import build_whatweb_va_argv
+from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
+    build_whatweb_va_argv,
+)
 from src.recon.vulnerability_analysis.xsstrike_adapter import (
     resolve_xsstrike_argv,
     validate_xsstrike_target_url,

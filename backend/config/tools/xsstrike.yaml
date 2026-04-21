@@ -1,0 +1,35 @@
+tool_id: xsstrike
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "1"
+memory_limit: "1Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-active-tcp
+  egress_allowlist: []
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "xsstrike-runner"
+  - "--url"
+  - "{url}"
+  - "--crawl"
+  - "--skip-poc"
+  - "--output"
+  - "{out_dir}/xsstrike.json"
+parse_strategy: json_object
+evidence_artifacts:
+  - "/out/xsstrike.json"
+cwe_hints:
+  - 79
+  - 80
+owasp_wstg:
+  - "WSTG-INPV-01"
+  - "WSTG-INPV-02"
+description: "XSStrike polyglot XSS scanner — /usr/local/bin/xsstrike-runner wraps upstream xsstrike.py, runs --crawl with WAF detection + blind payload generation against {url}, --skip-poc disables auto-POC injection, writes JSON envelope to {out_dir}/xsstrike.json. Approval-free passive XSS surface mapper. Parsing deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: s0md3v (https://github.com/s0md3v/XSStrike). Backlog/dev1_md §4.10. ARG-016."

@@ -1,17 +1,19 @@
 """Scans router — POST /scans, GET /scans/:id, GET /scans/:id/events."""
 
 import asyncio
+import io
 import json
 import time
 import uuid
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy import String, asc, cast, desc, func, select, update
 from sse_starlette.sse import EventSourceResponse
 
+from src.api.routers.reports import _attachment_content_disposition
 from src.api.schemas import (
     Finding,
     ReportGenerateAcceptedResponse,
@@ -32,6 +34,7 @@ from src.api.schemas import (
     ScanTimelineEventItem,
     ScanTimelineResponse,
 )
+from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
@@ -42,6 +45,10 @@ from src.db.session import async_session_factory, set_session_tenant
 from src.llm.cost_tracker import ScanCostTracker
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
+from src.reports.generators import build_report_data_from_scan_findings
+from src.reports.junit_generator import generate_junit
+from src.reports.report_bundle import ReportFormat, mime_type_for
+from src.reports.sarif_generator import generate_sarif
 from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
 from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
 
@@ -137,7 +144,7 @@ async def list_scans(
     tenant_id: str | None = Query(None, description="Must match X-Tenant-ID / default tenant"),
     tenant_id_header: str = Depends(get_current_tenant_id),
 ) -> list[ScanListItemResponse]:
-    """List scans for tenant with optional status filter (HexStrike v4)."""
+    """List scans for tenant with optional status filter (ARGUS v4)."""
     effective_tenant = tenant_id_header
     if tenant_id and tenant_id.strip():
         tid = tenant_id.strip()
@@ -381,7 +388,7 @@ async def get_scan_findings_top(
     limit: int = Query(20, ge=1, le=100),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> list[Finding]:
-    """Top findings by adversarial_score (HexStrike v4)."""
+    """Top findings by adversarial_score (ARGUS v4)."""
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         result = await session.execute(
@@ -534,6 +541,125 @@ async def get_scan_findings(
         result = await session.execute(fq)
         findings = list(result.scalars().all())
         return [_finding_to_schema(f) for f in findings]
+
+
+async def _stream_scan_findings_export(
+    scan_id: str,
+    export_fmt: Literal["sarif", "junit"],
+    tenant_id: str,
+    severity: str | None,
+    validated_only: bool,
+) -> StreamingResponse:
+    """SARIF 2.1.0 or JUnit XML for scan findings; requires tenant opt-in."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Not found")
+        tr = await session.execute(
+            select(Tenant.exports_sarif_junit_enabled).where(
+                cast(Tenant.id, String) == tenant_id,
+            )
+        )
+        if not tr.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Not found")
+        fq = select(FindingModel).where(cast(FindingModel.scan_id, String) == scan_id)
+        if severity and severity.strip():
+            fq = fq.where(FindingModel.severity == severity.strip())
+        if validated_only:
+            fq = fq.where(FindingModel.confidence == "confirmed")
+        result = await session.execute(fq)
+        findings = list(result.scalars().all())
+    report_data = build_report_data_from_scan_findings(scan, findings)
+    if export_fmt == "sarif":
+        body = generate_sarif(report_data, tool_version=settings.version)
+        media = mime_type_for(ReportFormat.SARIF)
+        fname = f"findings-{scan_id}.sarif"
+    else:
+        body = generate_junit(report_data)
+        media = mime_type_for(ReportFormat.JUNIT)
+        fname = f"findings-{scan_id}.junit.xml"
+    return StreamingResponse(
+        io.BytesIO(body),
+        media_type=media,
+        headers={"Content-Disposition": _attachment_content_disposition(fname)},
+    )
+
+
+@router.get(
+    "/{scan_id}/findings/export",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {
+                "application/sarif+json": {},
+                "application/xml": {},
+            },
+            "description": "SARIF 2.1.0 or JUnit XML (see format query).",
+        },
+        404: {"description": "Not found (or export not enabled for tenant)."},
+    },
+    summary="Export findings as SARIF or JUnit",
+    description=(
+        "Requires ``tenants.exports_sarif_junit_enabled`` for the caller's tenant "
+        "(set via admin API). Otherwise returns 404 without distinguishing reason. "
+        "Output excludes raw PoC bodies and storage paths (see report generators)."
+    ),
+)
+async def export_scan_findings(
+    scan_id: str,
+    export_format: Literal["sarif", "junit"] = Query(
+        ...,
+        alias="format",
+        description="Export format: sarif (SARIF 2.1.0 JSON) or junit (JUnit XML).",
+    ),
+    severity: str | None = Query(None, description="Filter by severity (same as GET findings)"),
+    validated_only: bool = Query(False, description="Only confidence=confirmed"),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StreamingResponse:
+    return await _stream_scan_findings_export(
+        scan_id, export_format, tenant_id, severity, validated_only
+    )
+
+
+@router.get(
+    "/{scan_id}/findings/export.sarif",
+    response_class=StreamingResponse,
+    response_model=None,
+    summary="Export findings as SARIF (shorthand path)",
+)
+async def export_scan_findings_sarif(
+    scan_id: str,
+    severity: str | None = Query(None),
+    validated_only: bool = Query(False),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StreamingResponse:
+    return await _stream_scan_findings_export(
+        scan_id, "sarif", tenant_id, severity, validated_only
+    )
+
+
+@router.get(
+    "/{scan_id}/findings/export.junit.xml",
+    response_class=StreamingResponse,
+    response_model=None,
+    summary="Export findings as JUnit XML (shorthand path)",
+)
+async def export_scan_findings_junit(
+    scan_id: str,
+    severity: str | None = Query(None),
+    validated_only: bool = Query(False),
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> StreamingResponse:
+    return await _stream_scan_findings_export(
+        scan_id, "junit", tenant_id, severity, validated_only
+    )
 
 
 @router.get("/{scan_id}/artifacts", response_model=list[ScanArtifactItem])

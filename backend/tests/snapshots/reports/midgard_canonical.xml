@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites name="ARGUS Findings" tests="10" failures="6" errors="0" time="0">
+  <testsuite name="ARGUS Findings" hostname="argus-pentest" package="argus.report" id="scan-int-midgard-1" timestamp="2026-04-19T10:00:00Z" tests="10" failures="6" errors="0" skipped="0" time="0">
+    <properties>
+      <property name="report_id" value="r-int-midgard-1"/>
+      <property name="scan_id" value="scan-int-midgard-1"/>
+      <property name="target" value="https://app.example.test"/>
+      <property name="technologies" value="django,nginx"/>
+      <property name="tenant_id" value="tenant-int-midgard-1"/>
+    </properties>
+    <testcase classname="argus.findings.critical" name="0001. SQL Injection in /api/users" time="0">
+      <failure message="[CRITICAL] [CVSS:9.8] SQL Injection in /api/users" type="CWE-89">Target: https://app.example.test
+CWE: CWE-89
+CVSS: 9.8
+OWASP: A03
+
+UNION-based SQLi via id parameter.</failure>
+    </testcase>
+    <testcase classname="argus.findings.critical" name="0002. Remote Code Execution in /upload" time="0">
+      <failure message="[CRITICAL] [CVSS:9.5] Remote Code Execution in /upload" type="CWE-78">Target: https://app.example.test
+CWE: CWE-78
+CVSS: 9.5
+
+Unrestricted file upload + LFI chain.</failure>
+    </testcase>
+    <testcase classname="argus.findings.high" name="0003. Server-Side Request Forgery" time="0">
+      <failure message="[HIGH] [CVSS:8.1] Server-Side Request Forgery" type="CWE-918">Target: https://app.example.test
+CWE: CWE-918
+CVSS: 8.1
+
+Internal metadata endpoint reachable.</failure>
+    </testcase>
+    <testcase classname="argus.findings.high" name="0004. Reflected XSS in search" time="0">
+      <failure message="[HIGH] [CVSS:7.5] Reflected XSS in search" type="CWE-79">Target: https://app.example.test
+CWE: CWE-79
+CVSS: 7.5
+OWASP: A03
+
+`q` echoed unescaped.</failure>
+    </testcase>
+    <testcase classname="argus.findings.medium" name="0005. Outdated jQuery" time="0">
+      <failure message="[MEDIUM] [CVSS:6.1] Outdated jQuery" type="CWE-1104">Target: https://app.example.test
+CWE: CWE-1104
+CVSS: 6.1
+
+jQuery 1.x with known prototype-pollution.</failure>
+    </testcase>
+    <testcase classname="argus.findings.medium" name="0006. Missing security headers" time="0">
+      <failure message="[MEDIUM] Missing security headers" type="CWE-693">Target: https://app.example.test
+CWE: CWE-693
+
+No CSP / HSTS / X-Frame-Options.</failure>
+    </testcase>
+    <testcase classname="argus.findings.low" name="0007. Cookie missing Secure flag" time="0">
+      <system-out>[LOW] Cookie missing Secure flag
+Target: https://app.example.test
+
+Session cookie served over HTTP.</system-out>
+    </testcase>
+    <testcase classname="argus.findings.low" name="0008. Server banner exposed" time="0">
+      <system-out>[LOW] Server banner exposed
+Target: https://app.example.test
+
+Server header leaks nginx/1.18.0.</system-out>
+    </testcase>
+    <testcase classname="argus.findings.info" name="0009. HTTP allowed alongside HTTPS" time="0">
+      <system-out>[INFO] HTTP allowed alongside HTTPS
+Target: https://app.example.test
+
+Plain HTTP returns 200 OK.</system-out>
+    </testcase>
+    <testcase classname="argus.findings.info" name="0010. Open directory listing" time="0">
+      <system-out>[INFO] Open directory listing
+Target: https://app.example.test
+
+/static/ shows directory index.</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>

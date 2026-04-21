@@ -1,0 +1,27 @@
+tool_id: gopherus
+version: "1.0.0"
+category: web_va
+phase: vuln_analysis
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+cpu_limit: "500m"
+memory_limit: "512Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-web:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "gopherus --exploit mysql > {out_dir}/gopher.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/gopher.txt"
+cwe_hints:
+  - 918
+owasp_wstg:
+  - "WSTG-INPV-19"
+description: "Gopherus — SSRF payload-template generator (gopher://, ftp://, smtp:// chains) for blind SSRF exploitation. Runs offline (NO egress) because it only synthesises payload strings; the operator pastes them into ssrfmap or curl. Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.11. ARG-017."

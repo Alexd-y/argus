@@ -1,0 +1,19 @@
+{{/*
+Redis — sub-chart wrapper notes. Same pattern as postgres-statefulset.yaml.
+The real StatefulSet ships from Bitnami `redis` (~19.5.0). Overrides live in
+`.Values.redis.*`.
+*/}}
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-redis-marker
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+data:
+  subchart: "bitnami/redis"
+  architecture: {{ .Values.redis.architecture | quote }}
+  authEnabled: {{ .Values.redis.auth.enabled | quote }}
+  persistenceSize: {{ .Values.redis.master.persistence.size | quote }}
+{{- end }}

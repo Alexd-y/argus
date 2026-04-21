@@ -1,0 +1,441 @@
+/*
+ * ARG-036 — Asgard tier PDF stylesheet (security team, orange brand).
+ * Inherits the same font/page philosophy as the Midgard sheet — the
+ * tier delta is the colour palette and the addition of remediation /
+ * reproducer card layouts that Midgard does not need.
+ */
+
+/* ----------------------------- Fonts ----------------------------- */
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+@font-face {
+  font-family: "Inter";
+  src: url("../_fonts/Inter-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+@font-face {
+  font-family: "DejaVu Sans";
+  src: url("../_fonts/DejaVuSans.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+/* --------------------------- @page rules ------------------------- */
+@page {
+  size: A4;
+  margin: 2cm;
+  @top-left {
+    content: "ARGUS · Asgard tier";
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #6b5436;
+  }
+  @top-right {
+    content: "Confidential";
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #6b5436;
+  }
+  @bottom-center {
+    content: "ARGUS Confidential — page " counter(page) " of " counter(pages);
+    font-family: "Inter", "DejaVu Sans", sans-serif;
+    font-size: 8pt;
+    color: #6b5436;
+  }
+}
+
+@page :first {
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+}
+
+/* --------------------------- Base typography --------------------- */
+:root {
+  --argus-primary: #c46410;       /* Asgard signal-orange */
+  --argus-primary-dark: #7a3e08;
+  --argus-accent: #e07b1d;
+  --argus-text: #1f1d18;
+  --argus-text-muted: #6b5436;
+  --argus-surface: #fdf6ec;
+  --argus-surface-alt: #f6e6cd;
+  --argus-rule: #e7c79a;
+
+  --sev-critical: #b00020;
+  --sev-high: #d35400;
+  --sev-medium: #c39200;
+  --sev-low: #2f6fd6;
+  --sev-info: #6b7280;
+}
+
+html, body {
+  font-family: "Inter", "DejaVu Sans", "Segoe UI", sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: var(--argus-text);
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+  color: var(--argus-primary-dark);
+  margin: 0 0 0.6em 0;
+}
+
+p { margin: 0 0 0.6em 0; }
+code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
+
+/* ----------------------------- Cover ----------------------------- */
+.cover-page {
+  page-break-after: always;
+  display: flex;
+  flex-direction: column;
+  height: 25cm;
+  padding: 1cm 0;
+}
+
+.cover-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6cm;
+  margin-bottom: 1.2cm;
+}
+
+.brand-mark { line-height: 0; }
+
+.brand-name {
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--argus-primary-dark);
+}
+
+.brand-sub {
+  font-size: 9pt;
+  color: var(--argus-text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cover-tier-badge {
+  display: inline-block;
+  padding: 0.18cm 0.5cm;
+  border-radius: 0.12cm;
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5cm;
+}
+
+.tier-badge-asgard {
+  background: var(--argus-primary);
+  color: #fff;
+}
+
+.cover-title {
+  font-size: 28pt;
+  margin: 0.1cm 0 0.4cm 0;
+  color: var(--argus-primary-dark);
+}
+
+.cover-target {
+  font-size: 14pt;
+  color: var(--argus-text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.cover-meta {
+  margin-top: 1.5cm;
+  background: var(--argus-surface);
+  border-left: 3pt solid var(--argus-primary);
+  padding: 0.6cm 0.8cm;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 4cm 1fr;
+  row-gap: 0.18cm;
+  column-gap: 0.4cm;
+  margin: 0;
+}
+
+.meta-grid dt {
+  font-weight: 700;
+  color: var(--argus-text-muted);
+  text-transform: uppercase;
+  font-size: 8pt;
+  letter-spacing: 0.05em;
+}
+
+.meta-grid dd {
+  margin: 0;
+  color: var(--argus-text);
+  word-break: break-word;
+}
+
+.watermark {
+  font-family: "DejaVu Sans Mono", "Consolas", monospace;
+  font-size: 9pt;
+  color: var(--argus-primary);
+}
+
+.cover-confidential {
+  margin-top: auto;
+  text-align: center;
+  font-size: 8pt;
+  color: var(--argus-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ------------------------- Table of contents -------------------- */
+.toc {
+  page-break-before: always;
+  page-break-after: always;
+}
+
+.toc-list {
+  list-style: decimal;
+  padding-left: 1.2cm;
+  font-size: 11pt;
+  line-height: 1.8;
+}
+
+.toc-list a {
+  color: var(--argus-primary-dark);
+  text-decoration: none;
+}
+
+/* ---------------------- Section headings ------------------------- */
+.section-heading {
+  font-size: 16pt;
+  border-bottom: 1pt solid var(--argus-rule);
+  padding-bottom: 0.15cm;
+  margin: 0.6cm 0 0.4cm 0;
+  color: var(--argus-primary-dark);
+}
+
+.exec-summary { page-break-inside: avoid; margin-bottom: 0.6cm; }
+.findings, .remediation, .reproducers, .evidence, .timeline {
+  page-break-before: always;
+  margin-bottom: 0.6cm;
+}
+
+/* --------------------------- Severity pills ---------------------- */
+.severity-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25cm;
+  margin: 0 0 0.5cm 0;
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.1cm 0.35cm;
+  border-radius: 0.5cm;
+  font-size: 9pt;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.pill-critical { background: var(--sev-critical); }
+.pill-high     { background: var(--sev-high); }
+.pill-medium   { background: var(--sev-medium); color: #1a1d29; }
+.pill-low      { background: var(--sev-low); }
+.pill-info     { background: var(--sev-info); }
+
+/* ----------------------------- Prose ----------------------------- */
+.prose { color: var(--argus-text); font-size: 10pt; }
+.prose strong { color: var(--argus-primary-dark); }
+.empty-state { color: var(--argus-text-muted); font-style: italic; }
+.footnote { font-size: 8pt; color: var(--argus-text-muted); margin-top: 0.3cm; }
+
+/* ------------------------- Findings table ------------------------ */
+.findings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.findings-table th,
+.findings-table td {
+  border: 0.5pt solid var(--argus-rule);
+  padding: 0.18cm 0.25cm;
+  text-align: left;
+  vertical-align: top;
+}
+
+.findings-table thead {
+  background: var(--argus-surface-alt);
+}
+
+.findings-table thead th {
+  color: var(--argus-primary-dark);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8pt;
+}
+
+.col-sev   { width: 1.9cm; }
+.col-cwe   { width: 1.6cm; }
+.col-cvss  { width: 1.2cm; text-align: right; }
+.col-owasp { width: 1.5cm; }
+.col-conf  { width: 1.6cm; }
+
+.finding-title { font-weight: 700; color: var(--argus-primary-dark); }
+.finding-desc { margin-top: 0.1cm; color: var(--argus-text-muted); font-size: 8pt; }
+
+.sev-tag {
+  display: inline-block;
+  padding: 0.05cm 0.2cm;
+  border-radius: 0.1cm;
+  font-size: 8pt;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.sev-critical { background: var(--sev-critical); }
+.sev-high     { background: var(--sev-high); }
+.sev-medium   { background: var(--sev-medium); color: #1a1d29; }
+.sev-low      { background: var(--sev-low); }
+.sev-info     { background: var(--sev-info); }
+
+/* ----------------------- Remediation cards ---------------------- */
+.remediation-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4cm;
+}
+
+.remediation-card {
+  border: 0.5pt solid var(--argus-rule);
+  border-left: 3pt solid var(--argus-primary);
+  background: var(--argus-surface);
+  padding: 0.4cm 0.5cm;
+  page-break-inside: avoid;
+}
+
+.remediation-card .card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.3cm;
+  margin-bottom: 0.2cm;
+}
+
+.remediation-card .card-title {
+  font-weight: 700;
+  color: var(--argus-primary-dark);
+}
+
+.remediation-card .card-body {
+  font-size: 9.5pt;
+  color: var(--argus-text);
+}
+
+.sev-border-critical { border-left-color: var(--sev-critical); }
+.sev-border-high     { border-left-color: var(--sev-high); }
+.sev-border-medium   { border-left-color: var(--sev-medium); }
+.sev-border-low      { border-left-color: var(--sev-low); }
+.sev-border-info     { border-left-color: var(--sev-info); }
+
+/* --------------------- Reproducer code blocks ------------------- */
+.reproducer-block {
+  margin: 0.4cm 0;
+  page-break-inside: avoid;
+}
+
+.reproducer-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3cm;
+  margin-bottom: 0.15cm;
+}
+
+.reproducer-title { font-weight: 700; color: var(--argus-primary-dark); }
+
+.reproducer-code {
+  margin: 0;
+  background: #1f1d18;
+  color: #f6e6cd;
+  padding: 0.3cm 0.4cm;
+  border-radius: 0.1cm;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 9pt;
+  line-height: 1.4;
+}
+
+.reproducer-code code { color: #f6e6cd; }
+
+/* -------------------------- Evidence ----------------------------- */
+.evidence-table,
+.timeline-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+
+.evidence-table th,
+.evidence-table td,
+.timeline-table th,
+.timeline-table td {
+  border: 0.5pt solid var(--argus-rule);
+  padding: 0.16cm 0.25cm;
+  text-align: left;
+  vertical-align: top;
+}
+
+.evidence-table thead,
+.timeline-table thead {
+  background: var(--argus-surface-alt);
+}
+
+.evidence-table thead th,
+.timeline-table thead th {
+  color: var(--argus-primary-dark);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 8pt;
+}
+
+.col-tl-order   { width: 1.0cm; text-align: right; }
+.col-tl-phase   { width: 4.0cm; }
+.col-tl-time    { width: 4.0cm; }
+
+.evidence-table code {
+  color: var(--argus-primary-dark);
+  font-size: 8pt;
+}
+
+/* ----------------------------- Footer ---------------------------- */
+.report-footer {
+  page-break-before: always;
+  margin-top: 1cm;
+  font-size: 8pt;
+  color: var(--argus-text-muted);
+  border-top: 0.5pt solid var(--argus-rule);
+  padding-top: 0.3cm;
+}
+
+.report-footer code { color: var(--argus-primary); }

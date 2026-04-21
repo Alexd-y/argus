@@ -1,0 +1,29 @@
+tool_id: ophcrack
+version: "1.0.0"
+category: misc
+phase: post_exploitation
+risk_level: high
+requires_approval: true
+default_timeout_s: 7200
+cpu_limit: "4"
+memory_limit: "4Gi"
+seccomp_profile: runtime/default
+network_policy:
+  name: offline-no-egress
+  egress_allowlist: []
+  dns_resolvers: []
+image: "argus-kali-cloud:latest"
+command_template:
+  - "sh"
+  - "-c"
+  - "ophcrack -d {in_dir}/tables -t xp_free_fast -f {hashes_file} -o {out_dir}/oph.txt"
+parse_strategy: text_lines
+evidence_artifacts:
+  - "/out/oph.txt"
+cwe_hints:
+  - 916
+  - 326
+  - 522
+owasp_wstg:
+  - "WSTG-CRYP-04"
+description: "Ophcrack — Windows LM/NTLM rainbow-table cracker. APPROVAL REQUIRED: long-running and memory-bound (rainbow tables stay resident); runs FULLY OFFLINE (offline-no-egress policy). -d points at the table directory under {in_dir}/tables, -t selects the table set, -f loads hashes from {hashes_file} (must live under /in/). Output text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.13. ARG-017."

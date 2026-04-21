@@ -1,40 +1,43 @@
 # ARGUS Deployment
 
 **Version:** 0.1  
-**Source:** `infra/docker-compose.yml`, `backend/Dockerfile`, `.env.example`, `.github/workflows/ci.yml`
+**Source:** `infra/docker-compose.yml`, `infra/backend/Dockerfile`, `.env.example`, `.github/workflows/ci.yml`
 
 ---
 
 ## 1. Overview
 
-ARGUS разворачивается через Docker Compose. Backend, PostgreSQL, Redis, MinIO и опционально Celery worker и sandbox объединены в единый стек.
+ARGUS is deployed via Docker Compose. All services — backend, PostgreSQL, Redis, MinIO, worker, sandbox, nginx reverse proxy, MCP server, and optionally a Cloudflare tunnel — are part of a single stack.
 
-**Публичный hostname и ingress:** указывайте как целевой сервис только внутренние адреса стека — `http://nginx:80` (предпочтительно) или `http://backend:8000` в сети Compose. Не задавайте произвольные внешние URL как destination туннеля или обратного прокси: клиент должен подключаться к процессу внутри compose. **Nginx** удобнее как единая точка входа (маршрутизация, заголовки, **rate limiting**).
+**Public hostname / ingress:** always point tunnel or reverse proxy destinations to internal stack addresses — `http://nginx:80` (preferred) or `http://backend:8000` inside the Compose network. Do not set arbitrary external URLs as the tunnel destination; the client must connect to a process running inside the Compose stack. **Nginx** is the recommended single entry point (routing, security headers, rate limiting).
 
 ---
 
 ## 2. Docker Compose
 
-**Файл:** `infra/docker-compose.yml`
+**File:** `infra/docker-compose.yml`
 
-**Запуск:**
+**Start:**
 
 ```bash
 docker compose -f infra/docker-compose.yml up
 ```
 
-### 2.1 Сервисы
+### 2.1 Services
 
-| Сервис | Образ/сборка | Порт | Назначение |
-|--------|--------------|------|------------|
-| postgres | pgvector/pgvector:pg15 | 5432 | PostgreSQL с pgvector |
-| minio | minio/minio:latest | 9000, 9001 | Object storage (S3-совместимый) |
-| redis | redis:7-alpine | 6379 | Redis (кеш, Celery broker) |
-| backend | build: backend | 8000 | FastAPI приложение |
-| sandbox | build: sandbox | — | Контейнер для выполнения инструментов (profile: tools) |
-| celery-worker | build: backend | — | Celery worker (profile: tools) |
+| Service | Image / Build | Port (host default) | Purpose |
+|---------|---------------|---------------------|---------|
+| postgres | pgvector/pgvector:pg15 | 5432 (internal only) | PostgreSQL with pgvector extension |
+| redis | redis:7-alpine | 6379 (internal only) | Cache and Celery broker |
+| minio | minio/minio:RELEASE.* | 9000, 9001 (internal only) | S3-compatible object storage |
+| backend | build: `infra/backend/Dockerfile` | 8000 (internal) | FastAPI application |
+| worker | build: `infra/worker/Dockerfile` | — | Celery worker for scan tasks |
+| sandbox | build: `sandbox/Dockerfile` | — | Kali-based container for pentest tool execution |
+| nginx | nginx:alpine | 8080 (HTTP), 8443 (HTTPS) | Reverse proxy, rate limiting, security headers |
+| mcp | MCP server container | 8765 | ARGUS MCP server (HTTP transport) |
+| cloudflared | argus-cloudflared | — | Cloudflare tunnel (profile: tunnel) |
 
-**Сборка образа sandbox:** время сильно зависит от зеркал Kali и CPU; первая сборка часто **десятки минут** (метапакеты `kali-tools-*`, nuclei templates, dalfox/xsstrike). Профиль **`SANDBOX_PROFILE=extended`** добавляет **`kali-tools-passwords`** и обычно увеличивает размер образа примерно на **1–3+ ГБ** относительно `standard` (см. комментарии в `sandbox/Dockerfile`). Повторные сборки ускоряются кэшем слоёв Docker.
+**Building the sandbox image:** build time depends heavily on Kali mirrors and CPU; the first build often takes **tens of minutes** (metapackages `kali-tools-*`, nuclei templates, dalfox/xsstrike). **`SANDBOX_PROFILE=extended`** adds **`kali-tools-passwords`** and typically increases image size by **1–3+ GB** compared to `standard` (see comments in `sandbox/Dockerfile`). Subsequent builds benefit from Docker layer caching.
 
 ### 2.2 Volumes
 
@@ -294,7 +297,7 @@ docker compose --profile tunnel up -d
 
 ## 5. Backend Dockerfile
 
-**Путь:** `backend/Dockerfile`
+**Path:** `infra/backend/Dockerfile`
 
 ```dockerfile
 FROM python:3.12-slim
@@ -307,10 +310,10 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-**Сборка:**
+**Build:**
 
 ```bash
-docker build -t argus-backend backend
+docker compose -f infra/docker-compose.yml build backend
 ```
 
 ---

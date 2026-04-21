@@ -1,0 +1,234 @@
+version: "1.0"
+server_name: argus
+description: |
+  ARGUS Backend MCP server (Backlog/dev1_md §13).
+  Exposes 15 tools, 4 resources, and 3 prompts to MCP-compatible LLM
+  clients via stdio (default) and HTTP/SSE transports.
+
+# -----------------------------------------------------------------------------
+# Transport defaults — overridden by env vars (MCP_TRANSPORT, MCP_HTTP_HOST,
+# MCP_HTTP_PORT) and CLI flags (--transport / --host / --port).
+# -----------------------------------------------------------------------------
+transports:
+  stdio:
+    enabled: true
+    description: "Default transport for desktop / IDE clients (Cursor, Claude Code)."
+  http:
+    enabled: true
+    host: "127.0.0.1"
+    port: 8765
+    mount_path: null
+    description: "JSON-RPC over HTTP (streamable-http) for production deployments."
+  sse:
+    enabled: false
+    description: "Legacy Server-Sent-Events transport. Disabled by default."
+
+# -----------------------------------------------------------------------------
+# Authentication — order of precedence is (1) Bearer / API-key headers,
+# (2) MCP_AUTH_TOKEN env var, (3) trusted local stdio fallback.
+# -----------------------------------------------------------------------------
+auth:
+  static_token_env: MCP_AUTH_TOKEN
+  jwt:
+    enabled: true
+    issuer: "argus-backend"
+    leeway_seconds: 30
+  api_key:
+    enabled: true
+    header: "X-API-Key"
+  stdio_local_fallback:
+    enabled: true
+    description: |
+      When running over stdio without any of the above credentials we
+      fall back to a fixed `local-stdio` actor in the `local-stdio-tenant`
+      namespace. NEVER enabled for HTTP transports.
+
+# -----------------------------------------------------------------------------
+# Capability registry — declarative list of every tool / resource / prompt
+# the server exposes. The runtime registration code in src/mcp/{tools,resources,
+# prompts}/ is the single source of truth; this section serves as the audit /
+# CI checklist that the catalog matches the §13 contract.
+# -----------------------------------------------------------------------------
+capabilities:
+  tools:
+    - id: scan.create
+      risk: medium
+      requires_approval: false
+      description: "Enqueue a new pentest scan for the authenticated tenant."
+    - id: scan.status
+      risk: low
+      requires_approval: false
+      description: "Return scan progress, severity counts, lifecycle state."
+    - id: scan.cancel
+      risk: medium
+      requires_approval: false
+      description: "Cancel an in-progress scan."
+    - id: findings.list
+      risk: low
+      requires_approval: false
+      description: "Paginated finding summaries for a scan."
+    - id: findings.get
+      risk: low
+      requires_approval: false
+      description: "Single finding with redacted evidence."
+    - id: findings.mark_false_positive
+      risk: low
+      requires_approval: false
+      description: "Mark a finding as false positive (idempotent)."
+    - id: approvals.list
+      risk: low
+      requires_approval: false
+      description: "List approval requests visible to the tenant."
+    - id: approvals.decide
+      risk: high
+      requires_approval: false
+      description: "Record an operator decision on an approval request."
+    - id: tool.catalog.list
+      risk: low
+      requires_approval: false
+      description: "List signed tool catalog entries."
+    - id: tool.run.trigger
+      risk: variable
+      requires_approval: variable
+      description: "Trigger ad-hoc tool run (HIGH/DESTRUCTIVE require approval)."
+    - id: tool.run.status
+      risk: low
+      requires_approval: false
+      description: "Lifecycle state of an ad-hoc tool run."
+    - id: report.generate
+      risk: low
+      requires_approval: false
+      description: "Queue a Midgard / Asgard / Valhalla report."
+    - id: report.download
+      risk: low
+      requires_approval: false
+      description: "Presigned URL + SHA-256 for an existing report."
+    - id: scope.verify
+      risk: low
+      requires_approval: false
+      description: "Pre-flight target scope check."
+    - id: policy.evaluate
+      risk: low
+      requires_approval: false
+      description: "Pre-flight PolicyEngine evaluation."
+  resources:
+    - uri: "argus://catalog/tools"
+      mime_type: "application/json"
+      description: "Snapshot of the signed tool catalog (capped at 200 entries)."
+    - uri_template: "argus://findings/{scan_id}"
+      mime_type: "application/json"
+      description: "Paginated findings for a scan (capped at 200 entries)."
+    - uri_template: "argus://reports/{report_id}"
+      mime_type: "application/json"
+      description: "Report metadata + presigned URL."
+    - uri: "argus://approvals/pending"
+      mime_type: "application/json"
+      description: "Pending approval queue (capped at 100 entries)."
+  prompts:
+    - id: vulnerability.explainer
+      arguments: ["finding", "audience"]
+      description: "Explain a finding to non-security stakeholders."
+    - id: remediation.advisor
+      arguments: ["finding", "language"]
+      description: "Propose safe remediation steps."
+    - id: severity.normalizer
+      arguments: ["advisory_text"]
+      description: "Normalize advisory severity to CVSS-3.1 + OWASP Top-10."
+
+# -----------------------------------------------------------------------------
+# Limits & guardrails (Backlog/dev1_md §13 critical guardrails). The runtime
+# enforces these via src.mcp.tenancy + the existing PolicyEngine; the values
+# below are advisory defaults used by ops dashboards / CI checks.
+# -----------------------------------------------------------------------------
+limits:
+  per_call_payload_kib: 64
+  per_call_response_kib: 512
+  pagination_default: 50
+  pagination_max: 200
+  approval_justification_min_chars: 10
+  high_risk_levels: ["high", "destructive"]
+
+audit:
+  actor_label: "mcp_client"
+  outcomes: ["allowed", "denied", "error"]
+  arguments_hash: "sha256-canonical-json"
+  sink: "src.policy.audit.AuditLogger"
+  retention_days: 365
+
+logging:
+  level: "INFO"
+  fields_redacted:
+    - "Authorization"
+    - "X-API-Key"
+    - "password"
+    - "token"
+    - "secret"
+
+# -----------------------------------------------------------------------------
+# ARG-035 — Token-bucket rate limiter for `tools/call` requests.
+#
+# Two backends are supported:
+#   * `memory` — single-process, asyncio-aware. Default; no external deps.
+#   * `redis`  — distributed via Lua script (`redis.asyncio.Redis`).
+#
+# Two budgets are enforced *per request*:
+#   * per-client (MCPAuthContext.user_id);
+#   * per-tenant (MCPAuthContext.tenant_id).
+#
+# A request is allowed only when BOTH have enough tokens. On rejection the
+# server returns JSON-RPC error code -32029 with `data.retry_after`.
+# -----------------------------------------------------------------------------
+rate_limiter:
+  backend: memory
+  redis_key_prefix: "argus:mcp:rl"
+  default_client_budget:
+    rate_per_second: 5
+    burst: 30
+  default_tenant_budget:
+    rate_per_second: 10
+    burst: 60
+  per_client_budgets: {}
+  per_tenant_budgets: {}
+
+# -----------------------------------------------------------------------------
+# ARG-035 — Outbound webhook notifications (Slack / Linear / Jira).
+#
+# Master kill-switch: env MCP_NOTIFICATIONS_ENABLED (default false). The
+# `enabled` flag below only takes effect when that env var is true; the env
+# wins so a misconfigured manifest cannot accidentally enable outbound
+# webhooks in production.
+#
+# All secrets (webhook URLs / API tokens) come from environment variables
+# only — they MUST NEVER appear in this YAML. See docs/mcp-server.md
+# "Notifications" section for the full operator runbook.
+# -----------------------------------------------------------------------------
+notifications:
+  enabled: false
+  adapters:
+    slack:
+      enabled: false
+      events: ["approval.pending", "scan.completed", "critical.finding.detected"]
+      env_secrets: ["SLACK_WEBHOOK_URL"]
+    linear:
+      enabled: false
+      events: ["critical.finding.detected"]
+      severities: ["critical", "high"]
+      env_secrets: ["LINEAR_API_KEY", "LINEAR_TEAM_MAP"]
+    jira:
+      enabled: false
+      events: ["critical.finding.detected"]
+      severities: ["critical", "high"]
+      env_secrets:
+        - "JIRA_SITE_URL"
+        - "JIRA_USER_EMAIL"
+        - "JIRA_API_TOKEN"
+        - "JIRA_PROJECT_KEY"
+  per_tenant_disabled_adapters: {}
+  retry:
+    max_attempts: 3
+    base_seconds: 1.0
+    factor: 4.0
+    cap_seconds: 30.0
+  circuit_breaker:
+    failure_threshold: 5
+    cooldown_seconds: 60

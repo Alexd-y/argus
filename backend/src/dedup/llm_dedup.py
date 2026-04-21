@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from src.llm.task_router import LLMTask, call_llm_for_task
 

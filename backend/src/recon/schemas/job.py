@@ -4,7 +4,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.recon.schemas.base import ReconStage
 
 
 class ScanJobCreate(BaseModel):

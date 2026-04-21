@@ -4,11 +4,36 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from src.core.observability import record_llm_tokens
+
 logger = logging.getLogger(__name__)
+
+
+def _provider_from_model(model: str) -> str:
+    """Extract a provider label from a free-form model identifier."""
+    if not model:
+        return "_other"
+    m = model.lower()
+    if m.startswith("anthropic/") or "claude" in m:
+        return "anthropic"
+    if m.startswith("openai/") or m.startswith("gpt") or m.startswith("o1") or m.startswith("o3"):
+        return "openai"
+    if "deepseek" in m:
+        return "deepseek"
+    if "gemini" in m or "google/" in m:
+        return "gemini"
+    if "sonar" in m or "perplexity" in m:
+        return "perplexity"
+    if "moonshot" in m or "kimi" in m:
+        return "moonshot"
+    if m.startswith("meta-llama/") or "llama" in m:
+        return "meta"
+    return "_other"
 
 COST_PER_1K_TOKENS: dict[str, dict[str, float]] = {
     "deepseek-chat": {"input": 0.00014, "output": 0.00028},
@@ -78,6 +103,23 @@ class ScanCostTracker:
                 cost_usd=cost,
             )
         )
+        # ARG-041 — emit token counters (defensive: never break the call path).
+        try:
+            provider = _provider_from_model(model)
+            record_llm_tokens(
+                provider=provider,
+                model=model,
+                direction="in",
+                tokens=int(max(0, prompt_tokens)),
+            )
+            record_llm_tokens(
+                provider=provider,
+                model=model,
+                direction="out",
+                tokens=int(max(0, completion_tokens)),
+            )
+        except Exception:  # pragma: no cover — defensive
+            logger.debug("cost_tracker.metrics_emit_failed", exc_info=True)
         total = self.total_cost_usd
         if total > self.max_cost_usd:
             logger.warning(
@@ -154,3 +196,36 @@ def calc_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Calculate cost in USD for given model and token counts."""
     rates = COST_PER_1K_TOKENS.get(model, DEFAULT_COST)
     return (prompt_tokens * rates["input"] + completion_tokens * rates["output"]) / 1000
+
+
+_tracker_registry: dict[str, ScanCostTracker] = {}
+_tracker_lock = threading.Lock()
+
+
+def get_tracker(scan_id: str, *, max_cost_usd: float | None = None) -> ScanCostTracker:
+    """Return the per-scan ``ScanCostTracker``, creating it on first access.
+
+    Trackers are stored in a process-local registry so every LLM call made
+    during the same scan shares the same budget bookkeeping. Callers must
+    use :func:`pop_tracker` once the scan finalizes to release the entry.
+
+    The optional ``max_cost_usd`` only applies the first time the tracker
+    is created; subsequent calls for the same ``scan_id`` ignore it to
+    keep budgets stable across the scan lifecycle.
+    """
+    with _tracker_lock:
+        tracker = _tracker_registry.get(scan_id)
+        if tracker is None:
+            tracker = ScanCostTracker(scan_id, max_cost_usd=max_cost_usd)
+            _tracker_registry[scan_id] = tracker
+        return tracker
+
+
+def pop_tracker(scan_id: str) -> ScanCostTracker | None:
+    """Detach and return the tracker for ``scan_id`` or ``None`` if absent.
+
+    Used by the orchestrator at scan finalization to flush per-scan cost
+    state to the database and release the registry slot.
+    """
+    with _tracker_lock:
+        return _tracker_registry.pop(scan_id, None)

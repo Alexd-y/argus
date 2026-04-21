@@ -1,37 +1,37 @@
-{# Титульный лист + резюме для руководства #}
+{# Title page + Executive summary #}
 {% set target = recon_summary.target_url or (report.target if report else "") or (scan.target_url if scan else "") or "" %}
 {% set opts = scan.options if scan and scan.options is mapping else {} %}
 {% set cust_email = opts.get("customer_email") or opts.get("report_customer_email") or "" %}
 {% set work_start = (scan.created_at if scan else none) or (report.created_at if report else none) %}
 <section class="valhalla-title-page panel" id="valhalla-title">
-    <h2>Титульный лист</h2>
-    <p><strong>Название отчёта:</strong> Отчёт о тестировании на проникновение веб-ресурса {{ target or "Нет данных" }}</p>
-    <p><strong>Дата работ / время начала:</strong> {% if work_start %}{{ work_start }}{% else %}Нет данных{% endif %}</p>
-    <p><strong>Исполнитель:</strong> {{ report_executor_display_name | default("Svalbard Security Inc.") | e }}</p>
-    <p><strong>Заказчик:</strong> {{ target or "Нет данных" }}{% if cust_email %} — {{ cust_email | e }}{% endif %}</p>
+    <h2>Title Page</h2>
+    <p><strong>Report title:</strong> Web Application Penetration Test Report — {{ target or "No data" }}</p>
+    <p><strong>Date / start time:</strong> {% if work_start %}{{ work_start }}{% else %}No data{% endif %}</p>
+    <p><strong>Performed by:</strong> {{ report_executor_display_name | default("Security Assessment Provider") | e }}</p>
+    <p><strong>Client:</strong> {{ target or "No data" }}{% if cust_email %} — {{ cust_email | e }}{% endif %}</p>
 </section>
 
 <section class="valhalla-executive panel" id="executive-summary">
-    <h2>Резюме для руководства (Executive Summary)</h2>
+    <h2>Executive Summary</h2>
     <div class="ai-slot-body">
         {% set exec_ai = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
         {% if exec_ai and exec_ai.strip() %}
             {{ exec_ai | md | safe }}
         {% else %}
-            <p class="empty">Нет данных</p>
+            <p class="empty">No data</p>
         {% endif %}
     </div>
     {% set sev = severity_counts if severity_counts is defined else {} %}
     {% if sev %}
-    <p class="meta severity-counts-attestation"><small>Сводка по находкам в отчёте (по данным таблицы): Critical {{ sev.get("critical", 0) }}, High {{ sev.get("high", 0) }}, Medium {{ sev.get("medium", 0) }}, Low {{ sev.get("low", 0) }}, Info {{ sev.get("info", 0) }}; всего {{ findings_count | default(0) }}.</small></p>
+    <p class="meta severity-counts-attestation"><small>Findings summary (per table data): Critical {{ sev.get("critical", 0) }}, High {{ sev.get("high", 0) }}, Medium {{ sev.get("medium", 0) }}, Low {{ sev.get("low", 0) }}, Info {{ sev.get("info", 0) }}; total {{ findings_count | default(0) }}.</small></p>
     {% endif %}
 
-    <h3>Количество уязвимостей по уровням критичности</h3>
+    <h3>Vulnerability Count by Severity Level</h3>
     <table>
         <thead>
             <tr>
-                <th>Уровень</th>
-                <th>Количество</th>
+                <th>Severity</th>
+                <th>Count</th>
                 <th>Findings</th>
             </tr>
         </thead>
@@ -50,33 +50,33 @@
         {% include "partials/owasp_compliance_table.html.j2" %}
     {% endif %}
 
-    <h3>Обнаружение утечки данных (Data breach)</h3>
+    <h3>Data Breach Detection</h3>
     <div class="ai-slot-body">
         {% set breach = ai_sections.get("compliance_check") if ai_sections is defined else "" %}
         {% if breach and breach.strip() %}
             {{ breach | md | safe }}
         {% else %}
-            <p>Нет данных</p>
+            <p>No data</p>
         {% endif %}
     </div>
 
-    <h3>Основные бизнес-риски</h3>
+    <h3>Key Business Risks</h3>
     <div class="ai-slot-body">
         {% set br = ai_sections.get("business_risk") if ai_sections is defined else "" %}
         {% if br and br.strip() %}
             {{ br | md | safe }}
         {% else %}
-            <p>Нет данных</p>
+            <p>No data</p>
         {% endif %}
     </div>
 
-    <h3>Приоритетные задачи (топ план)</h3>
+    <h3>Priority Tasks (Top Plan)</h3>
     <div class="ai-slot-body">
         {% set pr = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}
         {% if pr and pr.strip() %}
             {{ pr | md | safe }}
         {% else %}
-            <p>Нет данных</p>
+            <p>No data</p>
         {% endif %}
     </div>
 </section>

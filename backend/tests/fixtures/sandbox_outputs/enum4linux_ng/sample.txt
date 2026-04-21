@@ -1,0 +1,36 @@
+ENUM4LINUX - next generation (v1.3.4)
+
+==========================
+|    Target Information   |
+==========================
+[+] Target ........... 10.0.0.42
+[+] Username ......... ''
+[+] Random username .. 'YyTPbCuf'
+
+==============================================
+|    Service Scan on 10.0.0.42 (port 445)    |
+==============================================
+[+] SMB1 supported ... no
+[+] SMB2 supported ... yes
+[+] SMB3 supported ... yes
+
+==========================================================
+|    Domain Information via SMB session for 10.0.0.42    |
+==========================================================
+[+] NetBIOS computer name ... DC01
+[+] Workgroup/Domain ........ CONTOSO
+[+] FQDN .................... dc01.contoso.local
+[+] Domain SID .............. S-1-5-21-1234567890-1234567890-1234567890
+
+================================
+|    Sessions on 10.0.0.42     |
+================================
+[+] Null sessions allowed: rpc bind succeeded for IPC$
+
+================================
+|    Users via RPC on 10.0.0.42|
+================================
+[+] Found user 'administrator' (RID: 500)
+[+] Found user 'guest' (RID: 501)
+[+] Found user 'krbtgt' (RID: 502)
+[+] Found user 'svc-backup' (RID: 1108)
