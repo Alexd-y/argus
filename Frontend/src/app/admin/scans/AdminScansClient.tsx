@@ -16,9 +16,11 @@ import {
   downloadFindingsExport,
   type ExportFormat,
 } from "@/lib/findingsExport";
+import { isTerminalScanStatus } from "@/lib/adminScans";
 
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
 import { ExportFormatToggle } from "@/components/admin/ExportFormatToggle";
+import { PerScanKillSwitchDialog } from "@/components/admin/operations/PerScanKillSwitchDialog";
 
 import {
   bulkCancelAdminScans,
@@ -70,6 +72,8 @@ function AdminScansBody() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<AdminScanDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  const [killTarget, setKillTarget] = useState<AdminScanListItem | null>(null);
 
   const selectedIds = useMemo(
     () => Object.keys(selected).filter((k) => selected[k]),
@@ -345,14 +349,41 @@ function AdminScansBody() {
                     {formatDt(r.created_at)}
                   </td>
                   <td className="px-3 py-2">
-                    <button
-                      type="button"
-                      className="text-[var(--accent)] hover:underline"
-                      data-testid={`scans-row-details-${r.id}`}
-                      onClick={() => openDetail(r.id)}
-                    >
-                      Details
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        className="text-[var(--accent)] hover:underline"
+                        data-testid={`scans-row-details-${r.id}`}
+                        onClick={() => openDetail(r.id)}
+                      >
+                        Details
+                      </button>
+                      {(() => {
+                        const terminal = isTerminalScanStatus(r.status);
+                        return (
+                          <button
+                            type="button"
+                            className="text-red-300 hover:text-red-200 hover:underline disabled:cursor-not-allowed disabled:text-[var(--text-muted)] disabled:no-underline"
+                            data-testid={`scans-row-kill-${r.id}`}
+                            disabled={terminal}
+                            aria-disabled={terminal}
+                            title={
+                              terminal
+                                ? "Scan is already in a terminal status."
+                                : "Kill this scan (типизированное подтверждение)"
+                            }
+                            onClick={() => {
+                              if (terminal) return;
+                              setActionError(null);
+                              setActionInfo(null);
+                              setKillTarget(r);
+                            }}
+                          >
+                            Kill scan
+                          </button>
+                        );
+                      })()}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -382,6 +413,32 @@ function AdminScansBody() {
           Next
         </button>
       </div>
+
+      {killTarget && tenantId ? (
+        <PerScanKillSwitchDialog
+          open={killTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setKillTarget(null);
+          }}
+          scan={{
+            id: killTarget.id,
+            target_url: killTarget.target,
+            status: killTarget.status,
+            tenant_id: tenantId,
+          }}
+          onSuccess={(result) => {
+            setKillTarget(null);
+            const verb =
+              result.status === "cancelled"
+                ? "Cancelled"
+                : result.status === "skipped_terminal"
+                  ? "Already terminal — skipped"
+                  : "Not found";
+            setActionInfo(`${verb} scan ${result.scanId.slice(0, 8)}…`);
+            void loadScans();
+          }}
+        />
+      ) : null}
 
       <dialog
         id={cancelDialogId}
