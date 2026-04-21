@@ -7,12 +7,14 @@ the approval flag computation.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
+from src.core.observability import tenant_hash
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.policy.policy_engine import (
@@ -588,3 +590,98 @@ class TestPolicyEngineKillSwitchHook:
     def test_emergency_summaries_part_of_closed_taxonomy(self) -> None:
         assert "policy_emergency_global" in POLICY_FAILURE_REASONS
         assert "policy_emergency_tenant" in POLICY_FAILURE_REASONS
+
+    def test_global_kill_switch_emits_structured_log_with_hashed_tenant(
+        self,
+        tenant_id: UUID,
+        tenant_policy: TenantPolicy,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Operator-forensic log for the global stop must:
+
+        * use the agreed event name ``tool_dispatch_denied_by_kill_switch``,
+        * carry ``tenant_id_hash`` (NOT a raw UUID) and the closed-taxonomy
+          ``reason``,
+        * suppress the generic ``policy.engine.deny`` emission so the raw
+          ``tenant_id`` field never reaches the log pipeline on the
+          emergency-deny path.
+        """
+        from src.policy.kill_switch import KillSwitchScope, KillSwitchVerdict
+
+        def _checker(_: UUID) -> KillSwitchVerdict:
+            return KillSwitchVerdict(
+                blocked=True,
+                scope=KillSwitchScope.GLOBAL,
+                reason="ic in flight",
+            )
+
+        engine = PolicyEngine(tenant_policy, kill_switch_checker=_checker)
+        caplog.set_level(logging.INFO, logger="src.policy.policy_engine")
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+
+        assert decision.allowed is False
+        assert decision.failure_summary == "policy_emergency_global"
+
+        kill_switch_records = [
+            rec
+            for rec in caplog.records
+            if rec.__dict__.get("event") == "tool_dispatch_denied_by_kill_switch"
+        ]
+        assert len(kill_switch_records) == 1
+        record = kill_switch_records[0]
+        assert record.message == "tool_dispatch_denied_by_kill_switch"
+        assert record.__dict__.get("tenant_id_hash") == tenant_hash(str(tenant_id))
+        assert record.__dict__.get("reason") == "policy_emergency_global"
+        assert "tenant_id" not in record.__dict__
+        assert str(tenant_id) not in record.getMessage()
+
+        generic_records = [
+            rec
+            for rec in caplog.records
+            if rec.message == "policy.engine.deny"
+            or rec.__dict__.get("event") == "policy.engine.deny"
+        ]
+        assert generic_records == []
+
+    def test_tenant_kill_switch_emits_structured_log_with_hashed_tenant(
+        self,
+        tenant_id: UUID,
+        tenant_policy: TenantPolicy,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Same forensic guarantees as the global case for per-tenant throttle."""
+        from src.policy.kill_switch import KillSwitchScope, KillSwitchVerdict
+
+        def _checker(_: UUID) -> KillSwitchVerdict:
+            return KillSwitchVerdict(
+                blocked=True,
+                scope=KillSwitchScope.TENANT,
+                reason="tenant throttle",
+            )
+
+        engine = PolicyEngine(tenant_policy, kill_switch_checker=_checker)
+        caplog.set_level(logging.INFO, logger="src.policy.policy_engine")
+        decision = engine.evaluate(_ctx(tenant_id=tenant_id, risk_level=RiskLevel.LOW))
+
+        assert decision.allowed is False
+        assert decision.failure_summary == "policy_emergency_tenant"
+
+        kill_switch_records = [
+            rec
+            for rec in caplog.records
+            if rec.__dict__.get("event") == "tool_dispatch_denied_by_kill_switch"
+        ]
+        assert len(kill_switch_records) == 1
+        record = kill_switch_records[0]
+        assert record.__dict__.get("tenant_id_hash") == tenant_hash(str(tenant_id))
+        assert record.__dict__.get("reason") == "policy_emergency_tenant"
+        assert "tenant_id" not in record.__dict__
+        assert str(tenant_id) not in record.getMessage()
+
+        generic_records = [
+            rec
+            for rec in caplog.records
+            if rec.message == "policy.engine.deny"
+            or rec.__dict__.get("event") == "policy.engine.deny"
+        ]
+        assert generic_records == []

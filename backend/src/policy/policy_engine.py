@@ -48,6 +48,7 @@ from pydantic import (
     model_validator,
 )
 
+from src.core.observability import tenant_hash
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 
@@ -326,7 +327,22 @@ class PolicyEngine:
                     if verdict.scope is not None and verdict.scope.value == "global"
                     else _REASON_EMERGENCY_TENANT
                 )
-                return self._deny(context, summary, matched_cap=None)
+                # Emergency-deny path: emit a kill-switch-specific structured log
+                # with the hashed tenant id (no raw UUID) and the closed-taxonomy
+                # reason, then suppress the generic ``policy.engine.deny`` line so
+                # the raw ``tenant_id`` field never reaches the log pipeline on
+                # this path (T31 / ARG-052 — operator forensic trail without PII).
+                _logger.info(
+                    "tool_dispatch_denied_by_kill_switch",
+                    extra={
+                        "event": "tool_dispatch_denied_by_kill_switch",
+                        "tenant_id_hash": tenant_hash(str(context.tenant_id)),
+                        "reason": summary,
+                    },
+                )
+                return self._deny(
+                    context, summary, matched_cap=None, skip_log=True
+                )
 
         plan_cap = PLAN_MAX_RISK[self._policy.plan_tier]
         if not _is_at_or_below(context.risk_level, plan_cap):
@@ -392,18 +408,24 @@ class PolicyEngine:
         summary: str,
         *,
         matched_cap: PhaseRiskCap | None,
+        skip_log: bool = False,
     ) -> PolicyDecision:
-        _logger.info(
-            "policy.engine.deny",
-            extra={
-                "tenant_id": str(context.tenant_id),
-                "scan_id": str(context.scan_id) if context.scan_id else None,
-                "tool_id": context.tool_id,
-                "phase": context.phase.value,
-                "risk_level": context.risk_level.value,
-                "summary": summary,
-            },
-        )
+        # ``skip_log`` is opt-in for callers (currently only the kill-switch
+        # path) that have already emitted a path-specific, PII-safe structured
+        # log entry and would otherwise re-leak the raw ``tenant_id`` UUID
+        # through the generic ``policy.engine.deny`` line below.
+        if not skip_log:
+            _logger.info(
+                "policy.engine.deny",
+                extra={
+                    "tenant_id": str(context.tenant_id),
+                    "scan_id": str(context.scan_id) if context.scan_id else None,
+                    "tool_id": context.tool_id,
+                    "phase": context.phase.value,
+                    "risk_level": context.risk_level.value,
+                    "summary": summary,
+                },
+            )
         return PolicyDecision(
             tenant_id=context.tenant_id,
             scan_id=context.scan_id,
