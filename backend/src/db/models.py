@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -148,6 +149,53 @@ class Scan(Base):
         Index("ix_scans_tenant_status", "tenant_id", "status"),
         Index("ix_scans_tenant_created", "tenant_id", "created_at"),
     )
+
+
+class ScanSchedule(Base):
+    """Operator-managed recurring scan schedule — tenant-scoped (T32 / ARG-056).
+
+    Data-layer foundation for Cycle 6 Batch 4 scheduled scans. Business logic
+    (CRUD endpoints, RedBeat reconciliation, maintenance-window evaluation)
+    lives in T33/T34 and intentionally does not reach this model.
+    """
+
+    __tablename__ = "scan_schedules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    #: Operator-visible label — unique per tenant.
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: 5-field cron expression; T34 validates with croniter before persist.
+    cron_expression: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Absolute URL of the scan target; T33 validates against tenant scope.
+    target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    #: quick | standard | deep — matches ``Scan.scan_mode`` taxonomy.
+    scan_mode: Mapped[str] = mapped_column(String(50), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    #: Optional cron window during which firings are suppressed (null = always on).
+    maintenance_window_cron: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_scan_schedules_tenant_name"),
+        Index("ix_scan_schedules_tenant_enabled", "tenant_id", "enabled"),
+        Index("ix_scan_schedules_next_run_at", "next_run_at"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover — debug aid only
+        return (
+            f"<ScanSchedule id={self.id!r} tenant_id={self.tenant_id!r} "
+            f"name={self.name!r} enabled={self.enabled!r}>"
+        )
 
 
 class ScanStep(Base):
