@@ -12,8 +12,13 @@ import {
 
 import { listTenants, type AdminTenant } from "@/app/admin/tenants/actions";
 import { getSafeErrorMessage } from "@/lib/api";
+import {
+  downloadFindingsExport,
+  type ExportFormat,
+} from "@/lib/findingsExport";
 
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
+import { ExportFormatToggle } from "@/components/admin/ExportFormatToggle";
 
 import {
   bulkCancelAdminScans,
@@ -445,6 +450,14 @@ function AdminScansBody() {
                   <dt className="text-[var(--text-muted)]">Progress</dt>
                   <dd>{detail.progress}</dd>
                 </dl>
+                <ExportFormatToggle
+                  scanId={detail.id}
+                  onDownload={async (format: ExportFormat) => {
+                    await downloadFindingsExport(detail.id, format, {
+                      tenantId,
+                    });
+                  }}
+                />
                 <div>
                   <h3 className="mb-2 font-medium text-[var(--text-primary)]">Tool metrics</h3>
                   {detail.tool_metrics.length === 0 ? (
