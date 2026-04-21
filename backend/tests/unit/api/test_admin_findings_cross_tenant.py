@@ -18,6 +18,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from src.core.config import settings
+from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import Finding as FindingModel
 
 LIST = "/api/v1/admin/findings"
@@ -540,3 +541,320 @@ class TestAuditLogging:
         assert record is not None
         assert getattr(record, "cross_tenant", None) is True
         assert getattr(record, "tenant_hash", "sentinel") is None
+
+
+class TestOperatorAttribution:
+    """``user_id_hash`` MUST attribute the operator (X-Operator-Subject), not the tenant.
+
+    Regression guard for the T24 review finding: previously
+    ``user_id_hash(role_tenant)`` collapsed to ``"system"`` for super-admin
+    cross-tenant queries, erasing operator attribution from SIEM analytics.
+    """
+
+    def test_audit_log_includes_operator_subject_hash_distinct_from_tenant(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        tid = str(uuid.uuid4())
+        operator = "alice@argus.example"
+        rows = [_finding_row(tid=tid)]
+        session = _build_session_with_set_local(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(
+                        LIST,
+                        headers={
+                            **_ADMIN_HEADERS,
+                            "X-Admin-Role": "admin",
+                            "X-Admin-Tenant": tid,
+                            "X-Operator-Subject": operator,
+                        },
+                        params={"tenant_id": tid},
+                    )
+        assert r.status_code == 200
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.findings_query"),
+            None,
+        )
+        assert record is not None
+        actual_user_hash = getattr(record, "user_id_hash", None)
+        actual_tenant_hash = getattr(record, "tenant_hash", None)
+        actual_role_tenant_hash = getattr(record, "role_tenant_hash", None)
+
+        assert actual_user_hash == user_id_hash(operator)
+        assert actual_tenant_hash == tenant_hash(tid)
+        assert actual_role_tenant_hash == tenant_hash(tid)
+        # Domain-separated: uid: prefix vs raw — never collide for same input.
+        assert actual_user_hash != actual_tenant_hash
+        assert actual_user_hash != tenant_hash(tid)
+        # Raw operator string MUST NOT leak.
+        rendered = json.dumps(
+            {
+                k: getattr(record, k, None)
+                for k in (
+                    "user_id_hash",
+                    "tenant_hash",
+                    "role_tenant_hash",
+                    "role",
+                    "query_fingerprint",
+                )
+            },
+            default=str,
+        )
+        assert operator not in rendered
+
+    def test_default_operator_subject_is_admin_api_sentinel(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """No ``X-Operator-Subject`` header → log records the ``admin_api`` default hash."""
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+        assert r.status_code == 200
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.findings_query"),
+            None,
+        )
+        assert record is not None
+        # Crucially, NOT the "system" sentinel (that was the bug).
+        assert getattr(record, "user_id_hash", None) == user_id_hash("admin_api")
+
+    def test_super_admin_cross_tenant_role_tenant_hash_is_null(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Cross-tenant super-admin query → ``role_tenant_hash`` is None (no role context)."""
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(
+                        LIST,
+                        headers={
+                            **_ADMIN_HEADERS,
+                            "X-Admin-Role": "super-admin",
+                            "X-Operator-Subject": "carol@argus.example",
+                        },
+                    )
+        assert r.status_code == 200
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.findings_query"),
+            None,
+        )
+        assert record is not None
+        assert getattr(record, "role_tenant_hash", "sentinel") is None
+        assert getattr(record, "tenant_hash", "sentinel") is None
+        assert getattr(record, "cross_tenant", None) is True
+        # Operator attribution still present even without role tenant.
+        assert getattr(record, "user_id_hash", None) == user_id_hash(
+            "carol@argus.example"
+        )
+
+    def test_super_admin_cross_tenant_role_tenant_hash_set_when_header_sent(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Super-admin sending ``X-Admin-Tenant`` records ``role_tenant_hash`` for forensics."""
+        my_tid = str(uuid.uuid4())
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(
+                        LIST,
+                        headers={
+                            **_ADMIN_HEADERS,
+                            "X-Admin-Role": "super-admin",
+                            "X-Admin-Tenant": my_tid,
+                        },
+                    )
+        assert r.status_code == 200
+        record = next(
+            (rec for rec in caplog.records if rec.message == "admin.findings_query"),
+            None,
+        )
+        assert record is not None
+        # Effective tenant hash is None (cross-tenant query, no tenant_id param) ...
+        assert getattr(record, "tenant_hash", "sentinel") is None
+        # ... but the operator's role-context tenant IS captured.
+        assert getattr(record, "role_tenant_hash", None) == tenant_hash(my_tid)
+
+
+def _build_filters_spy() -> MagicMock:
+    """Wrap real ``_build_filters`` to verify the handler did not forward reserved params."""
+    from src.api.routers import admin_findings as module
+
+    return MagicMock(side_effect=module._build_filters)
+
+
+class TestReservedQueryParams:
+    """Phase 2 placeholder params: declared deprecated, logged when set, never filter."""
+
+    def test_kev_listed_param_returns_200_logged_and_does_not_filter(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        spy = _build_filters_spy()
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    with patch(
+                        "src.api.routers.admin_findings._build_filters",
+                        spy,
+                    ):
+                        r = client.get(
+                            LIST,
+                            headers=_ADMIN_HEADERS,
+                            params={"kev_listed": "true"},
+                        )
+        assert r.status_code == 200, r.text
+        spy.assert_called_once()
+        call_kwargs = spy.call_args.kwargs
+        assert "kev_listed" not in call_kwargs
+        assert "ssvc_action" not in call_kwargs
+        warning = next(
+            (
+                rec
+                for rec in caplog.records
+                if rec.message == "admin.findings_query.reserved_param_ignored"
+            ),
+            None,
+        )
+        assert warning is not None
+        assert getattr(warning, "params", None) == ["kev_listed"]
+        assert getattr(warning, "event", None) == (
+            "argus.admin.findings_query.reserved_param_ignored"
+        )
+
+    def test_ssvc_action_param_returns_200_logged_and_does_not_filter(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        spy = _build_filters_spy()
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    with patch(
+                        "src.api.routers.admin_findings._build_filters",
+                        spy,
+                    ):
+                        r = client.get(
+                            LIST,
+                            headers=_ADMIN_HEADERS,
+                            params={"ssvc_action": "act"},
+                        )
+        assert r.status_code == 200, r.text
+        spy.assert_called_once()
+        call_kwargs = spy.call_args.kwargs
+        assert "ssvc_action" not in call_kwargs
+        warning = next(
+            (
+                rec
+                for rec in caplog.records
+                if rec.message == "admin.findings_query.reserved_param_ignored"
+            ),
+            None,
+        )
+        assert warning is not None
+        assert getattr(warning, "params", None) == ["ssvc_action"]
+
+    def test_no_warning_log_when_reserved_params_unset(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+        assert r.status_code == 200
+        warning = next(
+            (
+                rec
+                for rec in caplog.records
+                if rec.message == "admin.findings_query.reserved_param_ignored"
+            ),
+            None,
+        )
+        assert warning is None
+
+    def test_both_reserved_params_logged_together(
+        self,
+        client: TestClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        rows = [_finding_row()]
+        session = _build_session(rows)
+        factory = _session_factory(session)
+        with caplog.at_level(logging.INFO):
+            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
+                with patch(
+                    "src.api.routers.admin_findings.async_session_factory",
+                    factory,
+                ):
+                    r = client.get(
+                        LIST,
+                        headers=_ADMIN_HEADERS,
+                        params={"kev_listed": "false", "ssvc_action": "track"},
+                    )
+        assert r.status_code == 200, r.text
+        warning = next(
+            (
+                rec
+                for rec in caplog.records
+                if rec.message == "admin.findings_query.reserved_param_ignored"
+            ),
+            None,
+        )
+        assert warning is not None
+        assert sorted(getattr(warning, "params", []) or []) == [
+            "kev_listed",
+            "ssvc_action",
+        ]

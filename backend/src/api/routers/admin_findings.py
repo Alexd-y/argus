@@ -7,6 +7,23 @@ event with a sha256 fingerprint of the normalized query parameters is emitted
 for forensic correlation; raw tenant / user identifiers never appear in the log
 record (sustained PII deny-list).
 
+Operator attribution
+--------------------
+``user_id_hash`` in the audit log is derived from ``X-Operator-Subject``
+(via :func:`src.api.routers.admin_bulk_ops._operator_subject_dep`) so SIEM
+analytics see the operator identity for every query — including super-admin
+cross-tenant reads where ``role_tenant`` is ``None``. ``role_tenant_hash`` is
+emitted as a separate field so super-admin queries against a specific tenant
+remain linkable to the privileged role's session context.
+
+Reserved query params
+---------------------
+``kev_listed`` and ``ssvc_action`` are declared (``deprecated=True`` in
+OpenAPI) but DO NOT filter results: the underlying intel JOIN tables are not
+yet on ``Finding`` (Phase 2). Setting them is a no-op — the handler emits a
+``argus.admin.findings_query.reserved_param_ignored`` warning so downstream
+clients (T20 frontend) cannot silently assume filtering works.
+
 RBAC propagation
 ----------------
 This module introduces a header-based role propagation pattern that overlays
@@ -58,6 +75,7 @@ from sqlalchemy import String, case, cast, func, or_, select
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.api.routers.admin import _escape_ilike_pattern, require_admin, router
+from src.api.routers.admin_bulk_ops import _operator_subject_dep
 from src.api.schemas import (
     AdminFindingsListResponse,
     AdminFindingSummary,
@@ -71,6 +89,11 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_ROLES: frozenset[str] = frozenset({"operator", "admin", "super-admin"})
 _TENANT_SCOPED_ROLES: frozenset[str] = frozenset({"operator", "admin"})
+
+_RESERVED_PARAM_DESCRIPTION: str = (
+    "Reserved; no-op until Phase 2 (intel-table JOIN). "
+    "Filter ignored if set; usage is logged for forensic correlation."
+)
 
 _SEVERITY_PRIORITY: dict[str, int] = {
     "critical": 5,
@@ -307,9 +330,21 @@ async def admin_list_findings(
     ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=100_000),
+    kev_listed: bool | None = Query(
+        default=None,
+        deprecated=True,
+        description=_RESERVED_PARAM_DESCRIPTION,
+    ),
+    ssvc_action: str | None = Query(
+        default=None,
+        deprecated=True,
+        max_length=64,
+        description=_RESERVED_PARAM_DESCRIPTION,
+    ),
     _: None = Depends(require_admin),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
+    operator_subject: str = Depends(_operator_subject_dep),
 ) -> AdminFindingsListResponse:
     """Return a paginated, RBAC-aware page of findings."""
     _validate_time_window(since, until)
@@ -319,6 +354,26 @@ async def admin_list_findings(
         role_tenant=role_tenant,
         query_tenant=query_tid,
     )
+
+    reserved_params_set: list[str] = [
+        name
+        for name, value in (
+            ("kev_listed", kev_listed),
+            ("ssvc_action", ssvc_action),
+        )
+        if value is not None
+    ]
+    if reserved_params_set:
+        logger.info(
+            "admin.findings_query.reserved_param_ignored",
+            extra={
+                "event": "argus.admin.findings_query.reserved_param_ignored",
+                "params": reserved_params_set,
+                "role": role,
+                "tenant_hash": tenant_hash(effective_tenant) if effective_tenant else None,
+                "user_id_hash": user_id_hash(operator_subject),
+            },
+        )
 
     filters = _build_filters(
         tenant_id=effective_tenant,
@@ -372,7 +427,8 @@ async def admin_list_findings(
             "event": "argus.admin.findings_query",
             "role": role,
             "tenant_hash": tenant_hash(effective_tenant) if effective_tenant else None,
-            "user_id_hash": user_id_hash(role_tenant),
+            "role_tenant_hash": tenant_hash(role_tenant) if role_tenant else None,
+            "user_id_hash": user_id_hash(operator_subject),
             "query_fingerprint": fingerprint,
             "result_count": len(findings),
             "total": total,
