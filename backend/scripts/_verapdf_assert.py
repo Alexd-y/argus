@@ -81,6 +81,23 @@ Design invariants
   exits; the artefact upload step keeps the raw report alongside the
   PDF for forensic review.
 
+Trust boundary
+--------------
+The input XML is **trusted**: it is the stdout of ``verapdf-cli`` running
+inside the GitHub Actions runner that this script is invoked from
+(see ``.github/workflows/pdfa-validation.yml`` — ``Run verapdf-cli``
+step pipes the report into ``build/verapdf/<fixture>.verapdf.xml``,
+then this script reads it). The XML is therefore produced and consumed
+inside the same security boundary; we use ``xml.etree.ElementTree``
+without any XXE / billion-laughs hardening.
+
+If this script is reused in any context where the XML originates from
+**outside** the CI runner (e.g. an operator pasting an attachment from
+a vendor, or a webhook receiving uploads), swap the parser to
+``defusedxml.ElementTree`` (drop-in API) and add the ``defusedxml``
+package to the install step. ``ET.parse`` and ``ET.fromstring`` calls
+are localised to ``_load_report`` for that reason.
+
 Exit codes
 ----------
 ``0`` — PDF is fully PDF/A-conformant AND has no warning rules outside
