@@ -6,6 +6,41 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ## [Unreleased]
 
+### Cycle 7 — C7-T08 Amber-700 surface uniformity (2026-04-22)
+
+#### Added — `--warning-strong` + `--on-warning` foundation tokens
+- **`Frontend/src/app/globals.css`** — finalised the WCAG-AA warning pair that B6 documented but never landed in CSS:
+  - `--warning-strong: #B45309` (Tailwind amber-700, ~5.0:1 vs `#FFFFFF`, ~4.81:1 vs `#FAFAFA`).
+  - `--on-warning: #FAFAFA` — paired foreground; mirrors `--on-accent` for off-white parity, suppressing harsh pure-white glare.
+- The contrast pair is annotated inline in `globals.css` with the original ISS-T26-001 evidence (3.94:1 → 4.81:1 lift) so future contributors can audit without round-tripping to docs.
+
+#### Changed — confirm-CTA migrations off raw `bg-amber-700 text-white`
+- `Frontend/src/components/admin/operations/PerTenantThrottleDialog.tsx` — "Throttle tenant" confirm now uses `bg-[var(--warning-strong)] text-[var(--on-warning)]`. Decorative `border-amber-500` and `focus-visible:ring-amber-400` retained (non-text-bearing surfaces — see design-tokens.md §3.5).
+- `Frontend/src/components/admin/schedules/RunNowDialog.tsx` — "Run now" confirm migrated identically.
+- Background colour is byte-equivalent (amber-700 = `#B45309` = `--warning-strong`) so visual diff is zero; the migration is a token-attribution change, not a colour change.
+
+#### Added — vitest regression sentinel
+- `Frontend/src/components/admin/__tests__/WarningStrongMigration.test.tsx` (4 tests) — pins the token pair on both confirm buttons AND fails on any rollback to `bg-amber-600` / inline `#d97706`, the failing-AA combo from ISS-T26-001.
+
+#### Documented — `KEEP` justifications for non-warning amber/yellow surfaces
+- Inline `// keep:` comments added to five surfaces that are visually amber/yellow but are NOT warning-action fills. Each comment names the design-tokens.md §3.5 contract:
+  - `Frontend/src/components/admin/operations/EmergencyAuditTrail.tsx` — `emergency.throttle` event-category badge (event categorisation, not a CTA).
+  - `Frontend/src/components/admin/schedules/SchedulesTable.tsx` — "Run now" outline row trigger (lighter visual cue, not a confirm fill).
+  - `Frontend/src/app/admin/login/LoginForm.tsx` — rate-limited informational banner.
+  - `Frontend/src/app/admin/webhooks/dlq/DlqTable.tsx` — `pending` triage-status chip.
+  - `Frontend/src/components/admin/findings/FindingsTable.tsx` — `medium` severity chip (5-tone severity ladder).
+  - `Frontend/src/components/admin/audit-logs/AuditLogsTable.tsx` — `medium` severity row (same ladder).
+  - `Frontend/src/app/admin/findings/AdminFindingsClient.tsx` — `warning` bulk-action result banner (3-tone status palette).
+
+#### Documented — `ai_docs/architecture/design-tokens.md` §3.5
+- New §3.5 _Warning-strong migration status (C7-T08)_ — records the B6 prep, the C7-T08 token landing, the two confirm-CTA migrations, and the explicit KEEP exception list.
+- §1.5 token catalog updated to mark `--warning` decorative-only and to elevate `--warning-strong` / `--on-warning` to verified-AA status.
+- §2.1 verified-pair matrix gained the `(--on-warning / --warning-strong)` row at 4.81:1.
+- §2.2 forbidden-pair matrix gained `text-white on bg-amber-600` at 3.94:1.
+
+#### Out of scope (explicit non-changes — hard rule)
+- The three B6-migrated surfaces (`GlobalKillSwitchClient.tsx`, `PerTenantThrottleClient.tsx`, `ResumeAllDialog.tsx`) are NOT touched. Their B6-state `border-amber-600` / `focus-visible:ring-amber-400` are decorative remnants of the B6 migration, not a regression from it. Tracked in §3.5 for follow-up consolidation.
+
 ### Cycle 6 Batch 6 — PDF/A archival, KEV-aware HPA, supply-chain ratchets, admin session auth, WCAG AA tokens (2026-04-22)
 
 #### Added — PDF/A-2u archival pipeline (B6-T01 + B6-T02)
