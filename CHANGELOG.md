@@ -6,6 +6,23 @@ All notable changes to ARGUS platform are documented in this file.
 
 - **Security (SEC-001):** sanitized `infra/.env.example` provider placeholders — operators must still rotate keys and purge git history.
 
+### Batch 4 orchestration — Operations UI: Kill-switch + Schedules (2026-04-22)
+
+- **Per-scan kill-switch UI (T28):** typed scan-ID confirmation + reason textarea; mock 202 + a11y `role="alert"` for reason validation; `56b6818` + `85b7943`.
+- **Per-tenant emergency throttle (T29):** countdown timer on active throttle; audit emit; UUID-regex validation; reqId race-fix; RBAC (admin own-tenant / super-admin any); `9ab4f9b` + `b5c3634`.
+- **Global kill-switch UI + audit trail (T30):** super-admin STOP-ALL + RESUME-ALL with typed-phrase gate; emergency audit-trail viewer (RBAC-ordered, audit refetch race fixed); `56283d8` + `c0e6edb`.
+- **Backend emergency API + KillSwitchService (T31):** `POST /admin/system/emergency/{stop_all,resume_all,throttle}` + `GET /admin/system/emergency/{status,audit-trail}` endpoints; Redis JSON flag-store with SETNX race protection; PolicyEngine hook emits `tool_dispatch_denied_by_kill_switch` with `tenant_id_hash`; `a7ccdc8` + `787c138` + `b7c9525`.
+- **Alembic migration 026 (T32):** `scan_schedules` table with tenant-isolation RLS (FORCE keyword for hardened ownership semantics), indexes on (tenant_id, enabled) + partial next_run_at for RedBeat; `6eb8fc3`.
+- **Scan-schedules CRUD + RedBeat loader (T33):** `GET / POST / PATCH / DELETE /admin/scan-schedules` + `POST /admin/scan-schedules/{id}/run-now` endpoints; RedBeat hot-reload scheduler (celery-blessed, no restart required); closed-taxonomy errors + audit emission + beat startup integration; mypy --strict surface tightened; `6a6a9a8` + `526eed4` + `12f3ce4`.
+- **Cron parser (T34):** `croniter` wrapper with maintenance-window logic (`is_in_maintenance_window`), naive-timezone docstring, max-frequency guard (60 min floor for maint windows), PII-leak fix on traceback; `686888b` + `b1c6f01` + `2a0a41e` + `42955e3`.
+- **Scheduled-scan UI (T35):** `/admin/schedules` dashboard table + visual cron builder (`CronExpressionField` — in-house Quick Picks + raw text input + live preview via `cron-parser`; **not** `react-js-cron` to avoid antd peer-dep + a11y violations); Run-Now dialog + maintenance-window override + delete confirm; `b02e6c9`.
+- **Playwright E2E + a11y suites (T36):** operations + schedules functional E2E (27 scenarios, RBAC/CRUD/Run-Now/throttle flows); 6 new axe-core a11y scenarios (flagged `test.fail()` under ISS-T26-001 design-token contrast); E2E caught + fixed Next.js server-action serialization bug for `ScheduleActionError` (commit `acf6f76`); `b633599`.
+- **Test coverage:** vitest +60 (T28–T35), Playwright functional E2E +27 (T36), a11y E2E +6 (T36); all gates passed (0 critical/serious a11y violations after design-token fix).
+- **New dependencies:** backend `celery-redbeat>=2.2.0` + `croniter>=2.0.5` (SCA audit passed); frontend `cron-parser^4.9.0` (MIT, only transitive: `luxon`).
+- **Known carry-over:** [ISS-T26-001](ai_docs/develop/issues/ISS-T26-001.md) (accent-on-dark contrast, 6 new T36 surfaces + 7 prior surfaces, WCAG AA failure, deferred to polish PR); ISS-T29-001 candidate (manual per-tenant resume route); pre-existing ESLint warnings (_error, unused beforeEach).
+- **What this unblocks:** Batch 5 (Webhook DLQ UI on emergency audit schema), Batch 6 (HPA autoscaling on scheduled-scan metrics).
+- **Sign-off:** [`ai_docs/develop/reports/2026-04-22-cycle6-batch4-implementation.md`](ai_docs/develop/reports/2026-04-22-cycle6-batch4-implementation.md) + [`ai_docs/develop/issues/ISS-cycle6-batch4-carry-over.md`](ai_docs/develop/issues/ISS-cycle6-batch4-carry-over.md).
+
 ### Batch 3 orchestration — Admin XL Triage + Audit (2026-04-21)
 
 - **Global triage console (T20):** `/admin/findings` cross-tenant findings table; SSVC-sorted + KEV-filtered + severity-faceted; paginaged + server-action only; ✅ 213 vitest (sort/filter/empty/error/RBAC); 🚨 **ISS-T20-003 flags JWT auth gap** (cookie-based shim sufficient for non-prod; deferred to Cycle 7 before public launch).
