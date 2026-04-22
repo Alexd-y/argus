@@ -38,6 +38,10 @@ passlib[bcrypt]>=1.7.4
 # (matching modern OpenBSD bcrypt) which our hashing wrapper depends on.
 bcrypt>=4.1.0,<6.0.0
 prometheus-client>=0.19.0
+# C7-T01 — ISS-T20-003 Phase 2a Option 1 (TOTP). Backend-managed second factor
+# for admin auth. BSD-3 license, zero transitive deps; pinned to the latest
+# stable that matches the security review record.
+pyotp==2.9.0
 pydantic-settings>=2.1.0
 pydantic>=2.5.0
 python-dotenv>=1.0.0

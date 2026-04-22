@@ -39,6 +39,7 @@ import importlib.util
 import os
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,11 @@ os.environ.setdefault(
     "ADMIN_SESSION_PEPPER",
     "test-pepper-iss-t20-003-not-for-prod-32chars-min",
 )
+# C7-T01 — never set ADMIN_MFA_KEYRING at import time. The Pydantic
+# validator runs at Settings construction and would refuse a bad value
+# before any test could intervene; tests that exercise MFA crypto pull
+# the ``mfa_keyring`` fixture below, which generates fresh Fernet keys
+# per-test and pins them via ``monkeypatch.setattr(settings, ...)``.
 
 
 # ---------------------------------------------------------------------------
@@ -91,6 +97,14 @@ _REVISION: str = "028"
 #: directly because 029 touches an unrelated ``tenants`` table that the
 #: admin tests never reference.
 _REVISION_030: str = "030"
+#: Alembic 032 (C7-T01) adds the admin-MFA columns (``mfa_enabled``,
+#: ``mfa_secret_encrypted``, ``mfa_backup_codes_hash``) to ``admin_users``
+#: and ``mfa_passed_at`` to ``admin_sessions``. The ORM models declared
+#: in :mod:`src.db.models` already reference these columns, so the
+#: 028→030→032 chain is the *only* SQLite shape that keeps every
+#: ``admin_users`` / ``admin_sessions`` flush legal during a test run.
+#: (031 lands later in C7-T07 and rebases 032 to ``Revises: 031``.)
+_REVISION_032: str = "032"
 
 
 def _load_revision_module(revision: str = _REVISION) -> Any:
@@ -107,16 +121,24 @@ def _load_revision_module(revision: str = _REVISION) -> Any:
 
 
 def _apply_admin_sessions_schema_sync(conn: Any) -> None:
-    """Apply 028 then 030 ``upgrade()`` — yields the post-030 admin schema.
+    """Apply 028 → 030 → 032 ``upgrade()`` — yields the post-032 admin schema.
 
     Skipping 029 is intentional: it only touches ``tenants.pdf_archival_format``
     and the auth tests never touch that table, so a partial chain keeps the
     fixture deterministic and Postgres-free.
+
+    032 (C7-T01) adds the MFA columns required by the ORM
+    (``mfa_enabled`` / ``mfa_secret_encrypted`` / ``mfa_backup_codes_hash``
+    on ``admin_users`` and ``mfa_passed_at`` on ``admin_sessions``). Without
+    this hop, every ``AdminUser`` / ``AdminSession`` flush hits
+    ``OperationalError: no such column`` because the ORM model declares
+    columns the 030 schema does not yet have.
     """
     ctx = MigrationContext.configure(conn)
     with Operations.context(ctx):
         _load_revision_module(_REVISION).upgrade()
         _load_revision_module(_REVISION_030).upgrade()
+        _load_revision_module(_REVISION_032).upgrade()
 
 
 @pytest.fixture
@@ -236,6 +258,62 @@ def admin_api_key(monkeypatch: pytest.MonkeyPatch) -> str:
     return key
 
 
+# ---------------------------------------------------------------------------
+# C7-T01 — admin MFA fixtures.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class MfaKeyring:
+    """Per-test Fernet keyring snapshot.
+
+    ``primary`` is the newest key (the one ``MultiFernet`` encrypts with);
+    ``secondary`` is the older one used to verify decrypt-with-any-key
+    semantics. ``csv`` is the newest-first CSV that
+    :attr:`Settings.admin_mfa_keyring` expects.
+
+    Tests that need to *rotate* (e.g. swap the primary mid-test) read
+    these fields and call ``monkeypatch.setattr(settings,
+    "admin_mfa_keyring", new_csv)`` directly — see
+    ``test_mfa_crypto.test_current_key_id_changes_after_rotation``.
+    """
+
+    primary: str
+    secondary: str
+    csv: str
+
+
+@pytest.fixture
+def mfa_keyring(monkeypatch: pytest.MonkeyPatch) -> MfaKeyring:
+    """Generate a fresh 2-key Fernet keyring and pin it onto ``settings``.
+
+    Why ``monkeypatch.setattr(settings, ...)`` and not
+    ``monkeypatch.setenv``: ``Settings`` is instantiated at module import
+    time (``src.core.config.settings`` is the live singleton), and its
+    Pydantic validator runs *exactly once* against the env value seen at
+    construction. Mutating the env after import has no effect on the
+    already-built object — the only safe seam is to overwrite the
+    attribute on the live instance, which :func:`pytest.MonkeyPatch.setattr`
+    handles with automatic teardown.
+
+    The crypto layer (:func:`src.auth._mfa_crypto._build_multifernet`)
+    re-reads ``settings.admin_mfa_keyring`` on *every* call, so this
+    monkeypatch propagates immediately to the next ``encrypt`` /
+    ``decrypt`` / ``current_key_id`` invocation without needing to
+    reload :mod:`src.auth._mfa_crypto`.
+
+    Generates *fresh* keys per test — never hardcoded — so a leak from a
+    forgotten test fixture cannot ship a real key into the repo.
+    """
+    from cryptography.fernet import Fernet
+
+    secondary = Fernet.generate_key().decode("ascii")
+    primary = Fernet.generate_key().decode("ascii")
+    csv = f"{primary},{secondary}"
+    monkeypatch.setattr(settings, "admin_mfa_keyring", csv)
+    return MfaKeyring(primary=primary, secondary=secondary, csv=csv)
+
+
 @pytest.fixture
 async def admin_app(
     session_factory, monkeypatch: pytest.MonkeyPatch
@@ -304,10 +382,12 @@ TEST_ADMIN_SUBJECT: str = "soc-team@argus.example"
 __all__ = [
     "TEST_ADMIN_SUBJECT",
     "TEST_PLAINTEXT_PASSWORD",
+    "MfaKeyring",
     "admin_api_key",
     "admin_app",
     "api_client",
     "engine",
+    "mfa_keyring",
     "patch_async_session_factory",
     "session",
     "session_factory",

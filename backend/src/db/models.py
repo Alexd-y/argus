@@ -13,13 +13,14 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 
 from src.owasp_top10_2025 import findings_owasp_category_check_sql
@@ -725,8 +726,11 @@ class AdminUser(Base):
     accepts a *pre-hashed* value so plaintext credentials never appear in the
     runtime environment, the audit log, or the Alembic chain.
 
-    ``mfa_secret`` is reserved for Phase 2 (TOTP enrolment); Phase 1 leaves it
-    nullable so the column shape is forward-compatible.
+    ``mfa_secret`` is a Phase 1 placeholder kept for backwards compatibility
+    with deployments that already ran migrations 028–030. The Phase 2 (C7)
+    MFA columns added by Alembic 032 are ``mfa_enabled``,
+    ``mfa_secret_encrypted`` and ``mfa_backup_codes_hash`` — see
+    :mod:`backend.src.auth.admin_mfa`.
     """
 
     __tablename__ = "admin_users"
@@ -741,9 +745,30 @@ class AdminUser(Base):
     #: Optional tenant pin for operator/admin roles. ``NULL`` = super-admin
     #: (cross-tenant authority).
     tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    #: Phase 2 reservation — TOTP secret for MFA enrolment. Always ``NULL`` in
-    #: Phase 1; column is present so future migrations are additive only.
+    #: Legacy Phase 1 placeholder. Always ``NULL`` going forward — Phase 2
+    #: stores the TOTP secret in the Fernet-encrypted ``mfa_secret_encrypted``
+    #: column instead. Kept nullable so the 028–030 → 032 chain is additive.
     mfa_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: C7-T01 — true once :func:`admin_mfa.confirm_enrollment` succeeds.
+    #: Gates the second-factor challenge in :mod:`admin_auth`. Defaults to
+    #: ``False`` so existing rows are non-MFA until explicitly enrolled.
+    mfa_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
+    #: C7-T01 — Fernet ciphertext of the base32 TOTP secret. Encryption key
+    #: comes from ``Settings.admin_mfa_keyring`` (CSV of base64 keys, newest
+    #: first). Plaintext NEVER hits disk and MUST NOT be logged. ``NULL``
+    #: until ``enroll_totp`` runs.
+    mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    #: C7-T01 — bcrypt hashes of one-time backup codes (cost ≥ 12). Issued
+    #: 10 at a time by ``regenerate_backup_codes``; consumed atomically by
+    #: ``consume_backup_code`` so a single code can never be redeemed twice.
+    #: Postgres → ``TEXT[]``; SQLite (test/dev only) → JSON array.
+    mfa_backup_codes_hash: Mapped[list[str] | None] = mapped_column(
+        ARRAY(String).with_variant(JSON, "sqlite"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -823,6 +848,14 @@ class AdminSession(Base):
     #: Tombstone — set on logout, admin revoke, or password change. Once set,
     #: ``resolve_session`` MUST refuse the row.
     revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    #: C7-T01 — timestamp of the most recent successful MFA challenge for
+    #: this session. ``NULL`` means MFA has never been satisfied (or the
+    #: subject is not MFA-enrolled). Compared against
+    #: ``Settings.admin_mfa_reauth_window_seconds`` to gate sensitive
+    #: actions; refreshed by :func:`admin_mfa.mark_session_mfa_passed`.
+    mfa_passed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

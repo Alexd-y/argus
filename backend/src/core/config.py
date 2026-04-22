@@ -311,6 +311,119 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ISS-T20-003 Phase 2 (C7-T01) — MFA / TOTP for admin auth.
+    # ``ADMIN_MFA_KEYRING`` is a CSV of base64 Fernet keys, NEWEST FIRST.
+    # Generate one key with::
+    #     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Rotation cookbook: prepend the new key, deploy; secrets re-encrypt
+    # opportunistically on the next ``verify_totp``; drop the oldest key
+    # after ≥ 90 days. Empty string disables the encryption layer entirely
+    # — acceptable in dev/test, fatal in production once any admin is
+    # MFA-enrolled (the DAO refuses to load with no keyring).
+    admin_mfa_keyring: str = Field(
+        default="",
+        validation_alias=AliasChoices("ADMIN_MFA_KEYRING", "admin_mfa_keyring"),
+    )
+    # Sliding window after which a fresh MFA challenge is required for
+    # sensitive admin actions. 12 h matches ``admin_session_ttl_seconds``.
+    admin_mfa_reauth_window_seconds: int = Field(
+        default=43200,
+        ge=60,
+        validation_alias=AliasChoices(
+            "ADMIN_MFA_REAUTH_WINDOW_SECONDS",
+            "admin_mfa_reauth_window_seconds",
+        ),
+    )
+    # Roles for which MFA is mandatory at the policy layer. CSV-from-env
+    # (``ADMIN_MFA_ENFORCE_ROLES=super-admin,admin``). Default mirrors the
+    # most privileged role only; broaden via env once enrollment workflows
+    # land in C7-T03/C7-T04. Values are normalised to the canonical hyphen
+    # form (``super_admin`` → ``super-admin``).
+    admin_mfa_enforce_roles: list[str] = Field(
+        default_factory=lambda: ["super-admin"],
+        validation_alias=AliasChoices(
+            "ADMIN_MFA_ENFORCE_ROLES", "admin_mfa_enforce_roles"
+        ),
+    )
+
+    @field_validator("admin_mfa_keyring", mode="after")
+    @classmethod
+    def validate_admin_mfa_keyring(cls, v: str) -> str:
+        """Fail fast on a malformed Fernet keyring without leaking key bytes.
+
+        Empty / whitespace-only input is allowed (MFA layer is disabled);
+        any other value MUST be a CSV of base64-url Fernet keys that
+        :class:`cryptography.fernet.Fernet` can load. We verify each key
+        constructs successfully but never log the key material itself —
+        only the index of the bad entry and a generic shape error.
+        """
+        raw = (v or "").strip()
+        if not raw:
+            return ""
+
+        from cryptography.fernet import Fernet
+
+        keys = [k.strip() for k in raw.split(",") if k.strip()]
+        if not keys:
+            return ""
+
+        for idx, key in enumerate(keys):
+            try:
+                Fernet(key.encode("ascii"))
+            except (ValueError, TypeError) as exc:
+                logger = logging.getLogger("src.core.config")
+                logger.error(
+                    "admin_mfa_keyring_invalid",
+                    extra={
+                        "event": "argus.config.admin_mfa_keyring_invalid",
+                        "key_index": idx,
+                        "key_count": len(keys),
+                        "reason": exc.__class__.__name__,
+                    },
+                )
+                raise ValueError(
+                    f"ADMIN_MFA_KEYRING entry #{idx} is not a valid Fernet "
+                    "key (expected url-safe base64, 32 bytes decoded). "
+                    "Re-generate with: "
+                    'python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"'
+                ) from None
+
+        return ",".join(keys)
+
+    @field_validator("admin_mfa_enforce_roles", mode="before")
+    @classmethod
+    def parse_admin_mfa_enforce_roles(cls, v: object) -> list[str]:
+        """Accept CSV-from-env or a list/tuple; normalise to canonical roles.
+
+        Pydantic v2 does not auto-split ``ADMIN_MFA_ENFORCE_ROLES=a,b`` into
+        ``list[str]``; we do it here. Underscore variants (``super_admin``)
+        are normalised to the hyphenated canon used everywhere else
+        (mirrors :meth:`normalize_admin_bootstrap_role`).
+        """
+        if v is None or v == "":
+            return ["super-admin"]
+        if isinstance(v, (list, tuple)):
+            items: list[str] = [str(x).strip() for x in v if str(x).strip()]
+        else:
+            items = [p.strip() for p in str(v).split(",") if p.strip()]
+
+        canon: list[str] = []
+        seen: set[str] = set()
+        for raw in items:
+            r = raw.lower()
+            if r in ("super_admin", "superadmin", "super-admin"):
+                role = "super-admin"
+            elif r in ("admin", "operator"):
+                role = r
+            else:
+                continue
+            if role not in seen:
+                seen.add(role)
+                canon.append(role)
+
+        return canon or ["super-admin"]
+
     @field_validator("admin_auth_mode", mode="before")
     @classmethod
     def normalize_admin_auth_mode(cls, v: object) -> str:

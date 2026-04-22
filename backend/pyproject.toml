@@ -51,6 +51,10 @@ dependencies = [
     "mcp>=1.0.0",
     "PyYAML>=6.0",
     "cryptography>=42.0.0",
+    # C7-T01 — ISS-T20-003 Phase 2a Option 1 (TOTP). Pinned strictly at 2.9.0
+    # because the wire format contract (provisioning URI / secret length /
+    # window semantics) is what the operator runbook will reference.
+    "pyotp==2.9.0",
 ]
 
 [project.optional-dependencies]
