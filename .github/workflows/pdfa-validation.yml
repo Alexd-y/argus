@@ -103,24 +103,75 @@ jobs:
         with:
           python-version: "3.12"
 
-      # ``render_pdfa_sample.py`` only needs Jinja2 from the prod
-      # requirements set; installing the full ``requirements.txt`` would
-      # pull asyncpg / weasyprint / etc. and cost ~3 minutes for nothing.
-      # The ``per_tenant`` leg's resolver call falls back to the variant
-      # override when sqlalchemy / aiosqlite are absent (see
-      # ``_resolve_per_tenant_format`` in backend/scripts/render_pdfa_sample.py),
-      # so the minimal install is sufficient for every matrix leg.
-      - name: Install minimal Python deps (Jinja2 only)
+      # ``render_pdfa_sample.py`` imports the following at module top
+      # (and the imports run on EVERY matrix leg, regardless of variant):
+      #
+      #   * ``src.db.models``                 → sqlalchemy
+      #   * ``src.reports.pdf_backend``       → stdlib only
+      #   * ``src.reports.tenant_pdf_format`` → sqlalchemy[asyncio] +
+      #     transitively pydantic + pydantic-settings via
+      #     ``src.core.observability`` → ``src.core.config``
+      #
+      # Installing the full ``backend/requirements.txt`` would pull
+      # asyncpg / weasyprint / boto3 / opentelemetry / etc. and cost
+      # ~3 minutes for nothing — verapdf is the contract enforcer, not
+      # the prod runtime. Cherry-pick only what the script actually
+      # imports so each matrix leg stays under 5 minutes end-to-end.
+      # ``aiosqlite`` is added on top of this set ONLY for the
+      # per_tenant leg (next step) because nothing else needs an
+      # async DB driver.
+      - name: Install minimal Python deps (Jinja2 + sqlalchemy + pydantic)
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          # Resolve the version that backend/requirements.txt pins so the
-          # CI render mirrors the production environment exactly.
+          # Resolve the versions backend/requirements.txt pins so the CI
+          # render mirrors the production environment exactly. ``grep -i``
+          # tolerates the casing the source-of-truth uses (Jinja2 vs jinja2).
           jinja_pin="$(grep -iE '^[[:space:]]*Jinja2' backend/requirements.txt | head -n1)"
           if [[ -z "${jinja_pin}" ]]; then
             jinja_pin="Jinja2>=3.1.0"
           fi
-          pip install "${jinja_pin}"
+          sqla_pin="$(grep -iE '^[[:space:]]*sqlalchemy' backend/requirements.txt | head -n1)"
+          if [[ -z "${sqla_pin}" ]]; then
+            sqla_pin="sqlalchemy[asyncio]>=2.0.0"
+          fi
+          # ``pydantic`` MUST come after ``pydantic-settings`` in the
+          # extracted pin list - otherwise the broader ``pydantic`` line
+          # would also match ``pydantic-settings`` and we would pin the
+          # wrong package twice. Anchor on the exact start-of-line to be
+          # safe.
+          pyd_pin="$(grep -iE '^[[:space:]]*pydantic[[:space:]>=<]' backend/requirements.txt | head -n1)"
+          if [[ -z "${pyd_pin}" ]]; then
+            pyd_pin="pydantic>=2.5.0"
+          fi
+          pyds_pin="$(grep -iE '^[[:space:]]*pydantic-settings' backend/requirements.txt | head -n1)"
+          if [[ -z "${pyds_pin}" ]]; then
+            pyds_pin="pydantic-settings>=2.1.0"
+          fi
+          pip install "${jinja_pin}" "${sqla_pin}" "${pyd_pin}" "${pyds_pin}"
+          # Verify the import chain succeeds before TeX Live install
+          # so a missing transitive dep surfaces as a crisp red leg
+          # instead of hiding behind a 200-line latexmk log later.
+          python -c "import jinja2, sqlalchemy, pydantic, pydantic_settings; print('jinja2', jinja2.__version__); print('sqlalchemy', sqlalchemy.__version__); print('pydantic', pydantic.VERSION)"
+
+      # C7-T02 follow-up (DEBUG-5): the per_tenant matrix leg actually
+      # exercises ``resolve_tenant_pdf_archival_format`` against an
+      # in-memory aiosqlite SQLAlchemy session (see
+      # ``_resolve_per_tenant_format`` in backend/scripts/render_pdfa_sample.py).
+      # Pin matches backend/pyproject.toml ``aiosqlite>=0.19`` dev dep.
+      # If aiosqlite is absent the script raises loudly (no silent fallback)
+      # so this leg goes red, surfacing the missing install at the gate
+      # instead of hiding behind a "tenant_resolver_skipped" warning.
+      - name: Install per-tenant async-DB deps (aiosqlite)
+        if: matrix.fixture == 'per_tenant'
+        run: |
+          set -euo pipefail
+          aiosqlite_pin="$(grep -iE '^[[:space:]]*"?aiosqlite' backend/pyproject.toml | head -n1 \
+            | sed -E 's/^[[:space:]]*"?(aiosqlite[^"]*)"?,?$/\1/')"
+          if [[ -z "${aiosqlite_pin}" ]]; then
+            aiosqlite_pin="aiosqlite>=0.19"
+          fi
+          pip install "${aiosqlite_pin}"
 
       # TeX Live ``-extra`` carries pdfx, colorprofiles, etoolbox, ragged2e,
       # array, longtable, booktabs, datetime2, parskip, fancyhdr; the

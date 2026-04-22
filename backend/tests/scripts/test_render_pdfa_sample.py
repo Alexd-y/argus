@@ -50,6 +50,7 @@ from scripts.render_pdfa_sample import (
     _inject_variant_body,
     _parse_args,
     _png_chunk,
+    _resolve_per_tenant_format,
     _write_deterministic_png,
     main,
 )
@@ -412,13 +413,70 @@ class TestPerTenantResolver:
             assert rc == 0
             assert backend_capture.render_calls, "render was never called"
             latex = backend_capture.render_calls[0]["latex_template_content"]
-            # The marker lives in the preamble (before \begin{document}).
             preamble, _, _ = latex.partition(r"\begin{document}")
             assert f"resolved_format={sentinel_format}" in preamble, (
                 f"resolved format {sentinel_format!r} must land in the "
                 f"preamble; got preamble tail:\n{preamble[-400:]}"
             )
             assert "tenant_id=acme" in preamble
+
+
+# ---------------------------------------------------------------------------
+# Section D2 — _resolve_per_tenant_format integration (DEBUG-5)
+# ---------------------------------------------------------------------------
+#
+# These tests exercise the REAL aiosqlite + SQLAlchemy path the CI
+# matrix leg now relies on. They do NOT mock
+# ``resolve_tenant_pdf_archival_format`` — they spin up the in-memory
+# engine, seed a tenant row, and assert the resolver round-trips the
+# expected value. This is the test the reviewer asked for in DEBUG-5
+# (Option A): the per_tenant matrix leg cannot silently fall back to a
+# preamble smoke test anymore.
+
+
+class TestResolverIntegration:
+    """Real round-trip against in-memory aiosqlite (no mock)."""
+
+    def test_resolver_returns_seeded_pdfa_2u_for_known_tenant(self) -> None:
+        """Seed a tenant with override="pdfa-2u" → resolver returns it."""
+        result = _resolve_per_tenant_format("acme", "pdfa-2u")
+        assert result == "pdfa-2u", (
+            f"resolver did not round-trip the seeded override; got {result!r}. "
+            "If this fails, the per_tenant CI matrix leg is no longer "
+            "exercising the real resolver path - the gate is degraded."
+        )
+
+    def test_resolver_returns_default_for_no_override_and_no_seed(self) -> None:
+        """No override + tenant_id without a row → resolver returns "standard".
+
+        Defensive: when override is None we skip the seed, so the
+        resolver query against the empty ``tenants`` table returns
+        ``PDF_ARCHIVAL_FORMAT_DEFAULT``.
+        """
+        result = _resolve_per_tenant_format("nobody", None)
+        assert result == "standard"
+
+    def test_resolver_round_trip_assertion_raises_on_mismatch(self) -> None:
+        """If the resolver returns wrong value (mocked) → RuntimeError fires.
+
+        This is the safety belt: the matrix leg must FAIL LOUD if the
+        resolver is broken, not silently return a "correct-looking"
+        format. Mock the resolver to return a different format from
+        the seeded override and assert the renderer raises.
+        """
+        with patch(
+            "scripts.render_pdfa_sample.resolve_tenant_pdf_archival_format",
+            new_callable=AsyncMock,
+        ) as mock_resolver:
+            mock_resolver.return_value = "standard"
+            with pytest.raises(RuntimeError) as exc:
+                _resolve_per_tenant_format("acme", "pdfa-2u")
+
+            msg = str(exc.value)
+            assert "resolver" in msg
+            assert "pdfa-2u" in msg
+            assert "standard" in msg
+            assert "acme" in msg
 
 
 # ---------------------------------------------------------------------------

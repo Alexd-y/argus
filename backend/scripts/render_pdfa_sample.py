@@ -329,40 +329,82 @@ def _write_deterministic_png(
 def _resolve_per_tenant_format(tenant_id: str, override: str | None) -> str:
     """Synchronous wrapper around :func:`resolve_tenant_pdf_archival_format`.
 
-    Builds a transient in-memory aiosqlite session (no migrations / seeds)
-    and runs the async resolver under :func:`asyncio.run`. The transient
-    session has no ``Tenant`` row for *tenant_id*, so the real resolver
-    returns ``PDF_ARCHIVAL_FORMAT_DEFAULT`` (``"standard"``); we surface
-    *override* as a final fallback so the per-tenant variant still embeds
-    the intended ``"pdfa-2u"`` literal in the LaTeX preamble for verapdf
-    to inspect.
+    C7-T02 follow-up (DEBUG-5): the previous implementation silently fell
+    back to ``override or PDF_ARCHIVAL_FORMAT_DEFAULT`` whenever
+    sqlalchemy / aiosqlite were missing — and the CI workflow installs
+    only Jinja2, so that fallback ALWAYS fired. The per_tenant matrix
+    leg therefore never exercised the real resolver; it was a smoke
+    test of the LaTeX preamble. The reviewer correctly flagged this as
+    a CRITICAL gap in the gate's coverage claim.
+
+    The implementation now:
+
+    1. Imports sqlalchemy + aiosqlite at top of function (still local to
+       keep import cost off the basic / cyrillic / longtable / images
+       legs that don't need them). A missing import raises loudly so CI
+       sees a red leg instead of a silently-skipped one.
+    2. Spins up an in-memory aiosqlite engine and lets SQLAlchemy create
+       the ``tenants`` table from the ORM metadata (no migrations needed
+       — this is a single-table fixture, not a production seed).
+    3. Inserts a single Tenant row matching ``tenant_id`` with
+       ``pdf_archival_format=override`` (the variant supplies "pdfa-2u").
+    4. Calls :func:`resolve_tenant_pdf_archival_format` against the
+       seeded session.
+    5. Asserts the resolver returned ``override`` — a mismatch raises
+       :class:`RuntimeError` so the matrix leg fails red.
 
     In unit tests :func:`resolve_tenant_pdf_archival_format` is patched
-    directly (its name is bound at this module's top level), so the
-    in-memory session machinery is never actually exercised — the mock
-    intercepts the call and returns whatever the test wants.
+    at this module's top level (the AsyncMock intercepts the call), so
+    the in-memory session machinery is bypassed in the renderer's own
+    test suite. The CI matrix leg, however, exercises the real path.
 
     Args:
         tenant_id: Tenant identifier passed straight to the resolver.
-        override: Variant-level fallback used when the resolver returns
-            the default. ``None`` → fall back to
-            ``PDF_ARCHIVAL_FORMAT_DEFAULT``.
+            Inserted into the in-memory tenants table verbatim.
+        override: Per-tenant ``pdf_archival_format`` value the resolver
+            should return. ``None`` falls back to
+            ``PDF_ARCHIVAL_FORMAT_DEFAULT`` and skips the round-trip
+            assertion (defensive — the per_tenant variant always
+            supplies an override).
+
+    Raises:
+        RuntimeError: if the resolver did not return ``override``. The
+            matrix leg fails loud instead of papering over the bug.
+        ImportError: if sqlalchemy or aiosqlite are missing. CI leg
+            must install them; local debugging too.
     """
-    try:
-        from sqlalchemy.ext.asyncio import (  # noqa: PLC0415 — local import.
-            AsyncSession,
-            create_async_engine,
-        )
-    except ImportError:
-        # CI workflow only installs Jinja2; sqlalchemy is in
-        # backend/requirements.txt but the workflow opts out for speed.
-        # Fall back to the variant override and surface a structured log
-        # so the gate run is auditable.
-        logger.warning(
-            "tenant_resolver_skipped_no_sqlalchemy",
-            extra={"event": "tenant_resolver_skipped_no_sqlalchemy"},
-        )
-        return override or PDF_ARCHIVAL_FORMAT_DEFAULT
+    # Local imports keep the cost off matrix legs that don't need them
+    # (basic / cyrillic / longtable / images). PLC0415 is intentional.
+    from typing import cast  # noqa: PLC0415
+
+    from sqlalchemy import Table  # noqa: PLC0415
+    from sqlalchemy.dialects.postgresql import JSONB  # noqa: PLC0415
+    from sqlalchemy.ext.asyncio import (  # noqa: PLC0415
+        AsyncSession,
+        create_async_engine,
+    )
+    from sqlalchemy.ext.compiler import compiles  # noqa: PLC0415
+
+    from src.db.models import Tenant  # noqa: PLC0415
+
+    # SQLAlchemy compiler hook: render the project's Postgres JSONB
+    # columns as plain TEXT when the dialect is SQLite. The Tenant
+    # model declares ``scope_blacklist`` as JSONB; without this hook
+    # ``CREATE TABLE`` raises CompileError on the in-memory aiosqlite
+    # engine. The hook is idempotent (re-registration just replaces)
+    # and scoped to the SQLite dialect, so production Postgres DDL
+    # is unaffected. We never actually write to the JSONB column in
+    # this fixture path — only the ``pdf_archival_format`` matters.
+    @compiles(JSONB, "sqlite")
+    def _jsonb_as_text_on_sqlite(  # noqa: ARG001 — required hook signature
+        _element: JSONB, _compiler: object, **_kw: object,
+    ) -> str:
+        return "TEXT"
+
+    # ``Tenant.__table__`` is typed as ``FromClause`` in the SQLAlchemy
+    # 2.x stubs even though the runtime value is always ``Table``. The
+    # cast satisfies mypy without affecting runtime behaviour.
+    tenants_table: Table = cast(Table, Tenant.__table__)
 
     async def _run() -> str:
         engine = create_async_engine(
@@ -370,30 +412,43 @@ def _resolve_per_tenant_format(tenant_id: str, override: str | None) -> str:
             future=True,
         )
         try:
+            # Create only the tenants table — avoids dragging the rest
+            # of the schema (FKs to other tables that we don't need).
+            async with engine.begin() as conn:
+                await conn.run_sync(tenants_table.create)
             async with AsyncSession(engine) as session:
+                if override is not None:
+                    # Seed a tenant row that mirrors what the per_tenant
+                    # variant claims to exercise (override="pdfa-2u").
+                    session.add(
+                        Tenant(
+                            id=tenant_id,
+                            name=f"argus-fixture-{tenant_id}",
+                            pdf_archival_format=override,
+                        )
+                    )
+                    await session.commit()
                 resolved = await resolve_tenant_pdf_archival_format(
                     session, tenant_id,
                 )
         finally:
             await engine.dispose()
-        # Honour the variant override when the in-memory DB has no
-        # Tenant row for ``tenant_id`` — otherwise the LaTeX preamble
-        # would always read "standard" and the per_tenant variant
-        # would not exercise the pdfa-2u code path verapdf is meant
-        # to police.
-        if resolved == PDF_ARCHIVAL_FORMAT_DEFAULT and override:
-            return override
         return resolved
 
-    try:
-        return asyncio.run(_run())
-    except (ImportError, ModuleNotFoundError):
-        # aiosqlite missing → resolve cannot run a real session.
-        logger.warning(
-            "tenant_resolver_skipped_no_aiosqlite",
-            extra={"event": "tenant_resolver_skipped_no_aiosqlite"},
+    resolved_format = asyncio.run(_run())
+
+    # Round-trip assertion: with the tenant row seeded above, the
+    # resolver MUST return ``override``. A mismatch means either the
+    # resolver is broken, the seed didn't land, or the session/engine
+    # plumbing leaks state — all of which the matrix leg should catch.
+    if override is not None and resolved_format != override:
+        raise RuntimeError(
+            "per-tenant resolver returned "
+            f"{resolved_format!r} for tenant_id={tenant_id!r} but the "
+            f"in-memory seed pinned {override!r}. The CI matrix leg "
+            "is therefore not exercising the real resolver path."
         )
-        return override or PDF_ARCHIVAL_FORMAT_DEFAULT
+    return resolved_format or PDF_ARCHIVAL_FORMAT_DEFAULT
 
 
 # ---------------------------------------------------------------------------
