@@ -537,6 +537,7 @@ async def admin_mfa_enroll(
     responses={
         400: {"description": "Invalid TOTP or no pending enrolment"},
         401: {"description": "Authentication required"},
+        409: {"description": "MFA is already enabled for this account"},
     },
 )
 async def admin_mfa_confirm(
@@ -549,8 +550,35 @@ async def admin_mfa_confirm(
     On success: ``mfa_enabled`` flips to ``True`` AND ``mfa_passed_at``
     on the calling session is stamped — the admin is fully authenticated
     going forward without needing to re-verify in the same session.
+
+    Spec invariant — already-enabled accounts MUST 409, not silently
+    no-op as 200. Returning 200 on a retry would lie to the client about
+    state ("we just enrolled you") when in fact nothing changed; 409
+    keeps the response code aligned with the bounded taxonomy emitted
+    by ``/enroll`` for the same condition.
     """
     subject = session.principal.subject
+
+    snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
+    if snapshot is None:
+        # Authenticated session refers to a subject that no longer exists
+        # in admin_users (off-boarded between login and now). Same generic
+        # 401 as a missing session — the cookie is no longer valid. Mirrors
+        # the parity check in ``admin_mfa_enroll``.
+        _raise_unauthorized()
+        raise AssertionError("unreachable")  # pragma: no cover
+    if snapshot.enabled:
+        logger.warning(
+            "admin_mfa_confirm_already_enabled",
+            extra={
+                "event": "argus.auth.admin_mfa.confirm_already_enabled",
+                "subject": subject,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_DETAIL_MFA_ALREADY_ENABLED,
+        )
 
     try:
         await mfa_dao.confirm_enrollment(
@@ -642,6 +670,7 @@ async def _verify_one_credential(
     response_model=MFAVerifyResponse,
     responses={
         401: {"description": "Authentication required OR invalid MFA proof"},
+        409: {"description": "MFA is not enabled for this account"},
         429: {"description": "Too many MFA verify attempts; honour Retry-After"},
     },
 )
@@ -651,7 +680,16 @@ async def admin_mfa_verify(
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFAVerifyResponse:
-    """Verify a TOTP code OR a one-shot backup code on a half-auth session."""
+    """Verify a TOTP code OR a one-shot backup code on a half-auth session.
+
+    Spec invariant — calling ``/verify`` on a subject without MFA enabled
+    is a *state mismatch* (HTTP 409 ``mfa_not_enabled``), not a credential
+    failure (HTTP 401 ``mfa_verify_failed``). The state-check fires AFTER
+    the rate-limiter consumes a token so a brute-force probe targeting a
+    not-yet-enrolled account is still subject to the same 5/min/user
+    budget — the 409 response leaks no information beyond what
+    ``/status`` already reports for the calling session.
+    """
     subject = session.principal.subject
     client_ip = _client_ip(request)
 
@@ -670,6 +708,23 @@ async def admin_mfa_verify(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many MFA verify attempts. Please try again later.",
             headers={"Retry-After": str(max(1, int(retry_after) + 1))},
+        )
+
+    snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
+    if snapshot is None:
+        _raise_unauthorized()
+        raise AssertionError("unreachable")  # pragma: no cover
+    if not snapshot.enabled:
+        logger.warning(
+            "admin_mfa_verify_not_enabled",
+            extra={
+                "event": "argus.auth.admin_mfa.verify_not_enabled",
+                "subject": subject,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_DETAIL_MFA_NOT_ENABLED,
         )
 
     try:

@@ -688,7 +688,7 @@ The endpoints emit a small, deliberately bounded set of `detail` codes so the SI
 | 401 | `Authentication required` | Underlying admin gate denied the request (no cookie / expired / revoked). | Log in again. |
 | 401 | `mfa_verify_failed` | `/verify`, `/disable`, or `/backup-codes/regenerate` got a wrong TOTP **or** wrong backup code. Single detail across both paths so a brute-forcer cannot fingerprint which proof type they typed wrong. | Retry with a fresh code; if you exhausted backup codes, file an incident (§10.5). |
 | 409 | `mfa_already_enabled` | `/enroll` or `/confirm` called on an account that is already enrolled. | Use `/verify` instead, or `/disable` first if you want a fresh enrolment. |
-| 409 | `mfa_not_enabled` | `/disable` or `/backup-codes/regenerate` called on an account without MFA. | No-op — account is already in the desired state. |
+| 409 | `mfa_not_enabled` | `/verify`, `/disable`, or `/backup-codes/regenerate` called on an account without MFA enrolled. State mismatch — distinct from `401 mfa_verify_failed` which signals a wrong proof on an enrolled account. | Call `/enroll` + `/confirm` to enrol the account first; for `/disable`, no action — the row is already in the desired state. |
 | 429 | _Too Many Requests_ | Per-user-and-IP token bucket exhausted (5 req/min/user/IP). `Retry-After` header set. | Honour `Retry-After`; do not loop. |
 | 500 | `Internal Server Error` | Unhandled exception path (DB error, etc.). Stack trace stays in the structured app log; the response body carries no detail. | Pull the matching `argus.auth.admin_mfa.*_failed` log line for triage. |
 
