@@ -1,0 +1,263 @@
+# C7-T06 Wave 3 — helm-unittest suite for the KEV-aware HPA alerting rules.
+#
+# Run locally:
+#   helm plugin install https://github.com/helm-unittest/helm-unittest
+#   helm unittest infra/helm/argus
+#
+# Run in CI: see `.github/workflows/helm-validation.yml::kev-hpa-alerts-unittest`.
+#
+# Coverage matrix
+# ---------------
+#   1. `kevHpa.alerts.enabled=true` (default) renders 5 alerts in 1 group.
+#   2. `kevHpa.alerts.enabled=false` renders zero PrometheusRule documents.
+#   3. Every alert carries a `runbook_url` annotation pointing at the runbook.
+#   4. Every alert carries a `severity` label in {critical, warning}.
+#   5. Every alert carries a `team: sre`, `service: argus-scan-worker`, and
+#      `environment` label (the `environment` filter is what keeps the rules
+#      OFF the staging pager — see runbook §Production rollout signals).
+#   6. The KEVHPATargetMetricMissing expression references the source counter
+#      `argus_findings_emitted_total{kev_listed="true"}` — i.e. the metric
+#      brought into Prometheus by the backend ServiceMonitor (existing
+#      `templates/servicemonitor.yaml`). This is the rules-→ServiceMonitor
+#      coupling assertion required by C7-T06 Wave 3.
+#   7. The HPA-targeting alerts (Stuck/Flapping/Ceiling) reference the
+#      `argus-celery-kev` HPA name produced by the chart helpers.
+
+suite: kev-hpa-alerts
+templates:
+  - templates/prometheusrule-kev-hpa.yaml
+release:
+  name: argus
+  namespace: argus
+
+tests:
+  # ─────────────────────────────────────────────────────────────────────
+  # 1) Default render — 5 alerts in 1 group.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: renders one PrometheusRule with five alerts when alerts are enabled (default)
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: kind
+          value: PrometheusRule
+      - equal:
+          path: apiVersion
+          value: monitoring.coreos.com/v1
+      - equal:
+          path: metadata.name
+          value: argus-kev-hpa-alerts
+      - lengthEqual:
+          path: spec.groups
+          count: 1
+      - equal:
+          path: spec.groups[0].name
+          value: argus.kev-hpa
+      - lengthEqual:
+          path: spec.groups[0].rules
+          count: 5
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 2) Disabled toggle — zero documents (the only-rendered template
+  #    is gated by `{{- if .Values.kevHpa.alerts.enabled }}`, so the
+  #    output stream must be empty).
+  # ─────────────────────────────────────────────────────────────────────
+  - it: renders zero documents when alerts are disabled
+    set:
+      kevHpa.alerts.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 3) Each alert has a stable identity — name, severity, runbook_url.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: KEVHPATargetMetricMissing has critical severity, runbook_url, team, service, environment
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].alert
+          value: KEVHPATargetMetricMissing
+      - equal:
+          path: spec.groups[0].rules[0].labels.severity
+          value: critical
+      - equal:
+          path: spec.groups[0].rules[0].labels.team
+          value: sre
+      - equal:
+          path: spec.groups[0].rules[0].labels.service
+          value: argus-scan-worker
+      - equal:
+          path: spec.groups[0].rules[0].labels.environment
+          value: dev
+      - matchRegex:
+          path: spec.groups[0].rules[0].annotations.runbook_url
+          pattern: kev-hpa-runbook\.md#kevhpatargetmetricmissing$
+      - isNotEmpty:
+          path: spec.groups[0].rules[0].annotations.summary
+      - isNotEmpty:
+          path: spec.groups[0].rules[0].annotations.description
+
+  - it: KEVHPAScalingStuck has warning severity, runbook_url, team, service, environment
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[1].alert
+          value: KEVHPAScalingStuck
+      - equal:
+          path: spec.groups[0].rules[1].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[1].labels.team
+          value: sre
+      - equal:
+          path: spec.groups[0].rules[1].labels.service
+          value: argus-scan-worker
+      - equal:
+          path: spec.groups[0].rules[1].labels.environment
+          value: dev
+      - matchRegex:
+          path: spec.groups[0].rules[1].annotations.runbook_url
+          pattern: kev-hpa-runbook\.md#kevhpascalingstuck$
+
+  - it: KEVHPAFlappingDetected has warning severity, runbook_url, team, service, environment
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[2].alert
+          value: KEVHPAFlappingDetected
+      - equal:
+          path: spec.groups[0].rules[2].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[2].labels.team
+          value: sre
+      - equal:
+          path: spec.groups[0].rules[2].labels.service
+          value: argus-scan-worker
+      - equal:
+          path: spec.groups[0].rules[2].labels.environment
+          value: dev
+      - matchRegex:
+          path: spec.groups[0].rules[2].annotations.runbook_url
+          pattern: kev-hpa-runbook\.md#kevhpaflappingdetected$
+
+  - it: KEVHPAReachedCeiling has warning severity, runbook_url, team, service, environment
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[3].alert
+          value: KEVHPAReachedCeiling
+      - equal:
+          path: spec.groups[0].rules[3].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[3].labels.team
+          value: sre
+      - equal:
+          path: spec.groups[0].rules[3].labels.service
+          value: argus-scan-worker
+      - equal:
+          path: spec.groups[0].rules[3].labels.environment
+          value: dev
+      - matchRegex:
+          path: spec.groups[0].rules[3].annotations.runbook_url
+          pattern: kev-hpa-runbook\.md#kevhpareachedceiling$
+
+  - it: KEVHPAMetricLatencyHigh has warning severity, runbook_url, team, service, environment
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[4].alert
+          value: KEVHPAMetricLatencyHigh
+      - equal:
+          path: spec.groups[0].rules[4].labels.severity
+          value: warning
+      - equal:
+          path: spec.groups[0].rules[4].labels.team
+          value: sre
+      - equal:
+          path: spec.groups[0].rules[4].labels.service
+          value: argus-scan-worker
+      - equal:
+          path: spec.groups[0].rules[4].labels.environment
+          value: dev
+      - matchRegex:
+          path: spec.groups[0].rules[4].annotations.runbook_url
+          pattern: kev-hpa-runbook\.md#kevhpametriclatencyhigh$
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 4) Coupling to existing ServiceMonitor surface
+  #    (`templates/servicemonitor.yaml` brings `argus_findings_emitted_total`
+  #    into Prometheus; the rule references it by exact name).
+  # ─────────────────────────────────────────────────────────────────────
+  - it: KEVHPATargetMetricMissing expression references the source counter scraped via the backend ServiceMonitor
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[0].expr
+          pattern: argus_findings_emitted_total\{kev_listed="true"\}
+
+  - it: HPA-targeting alerts reference the chart-rendered HPA name (argus-celery-kev)
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[1].expr
+          pattern: horizontalpodautoscaler="argus-celery-kev"
+      - matchRegex:
+          path: spec.groups[0].rules[2].expr
+          pattern: horizontalpodautoscaler="argus-celery-kev"
+      - matchRegex:
+          path: spec.groups[0].rules[3].expr
+          pattern: horizontalpodautoscaler="argus-celery-kev"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 5) Environment scoping — production overlay must propagate to alert
+  #    labels so Alertmanager routes can filter on `environment="production"`
+  #    to keep staging quiet.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: production environment label propagates to every alert (Alertmanager routing key)
+    set:
+      config.environment: production
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.environment
+          value: production
+      - equal:
+          path: spec.groups[0].rules[1].labels.environment
+          value: production
+      - equal:
+          path: spec.groups[0].rules[2].labels.environment
+          value: production
+      - equal:
+          path: spec.groups[0].rules[3].labels.environment
+          value: production
+      - equal:
+          path: spec.groups[0].rules[4].labels.environment
+          value: production
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 6) Operator-overridable thresholds — proves the values surface is wired
+  #    into the rendered expression (not silently dropped on the floor).
+  # ─────────────────────────────────────────────────────────────────────
+  - it: flapThreshold value override propagates into the KEVHPAFlappingDetected expression
+    set:
+      kevHpa.alerts.flapThreshold: 9
+      kevHpa.alerts.flapWindow: 45m
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[2].expr
+          pattern: changes\(.*\[45m\]\)\s*>\s*9
+
+  - it: latencyThresholdSeconds override propagates into the KEVHPAMetricLatencyHigh expression
+    set:
+      kevHpa.alerts.latencyThresholdSeconds: 60
+      kevHpa.alerts.latencyWindow: 15m
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[4].expr
+          pattern: \[15m\]\s*\)\s*>\s*60
+
+  - it: additionalLabels merge into every alert (Alertmanager routing extension)
+    set:
+      kevHpa.alerts.additionalLabels.alertroute: primary-pager
+    asserts:
+      - equal:
+          path: spec.groups[0].rules[0].labels.alertroute
+          value: primary-pager
+      - equal:
+          path: spec.groups[0].rules[4].labels.alertroute
+          value: primary-pager

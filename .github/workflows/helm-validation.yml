@@ -589,3 +589,93 @@ jobs:
             echo "  - scaleDown policy = -50% per 60s"
             echo "  - External metric tracks: argus_kev_findings_emit_rate_5m + argus_celery_queue_depth"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  # C7-T06 (Cycle 7) — KEV-HPA alerts unittest gate.
+  # Runs the helm-unittest plugin against `infra/helm/argus/tests/` to assert
+  # the PrometheusRule template's behavioural contract:
+  #   * default render emits 1 PrometheusRule with 5 alerts;
+  #   * `kevHpa.alerts.enabled=false` emits 0 documents;
+  #   * each alert carries severity ∈ {critical, warning}, runbook_url,
+  #     team=sre, service=argus-scan-worker, environment=<config.environment>;
+  #   * production overlay propagates `environment="production"` (Alertmanager
+  #     routing key — keeps the rules off the staging pager);
+  #   * value-surface overrides (flapThreshold, latencyThresholdSeconds,
+  #     additionalLabels) actually propagate into the rendered expressions /
+  #     labels (regression guard against silent template drift).
+  #
+  # Why a separate job instead of folding into kev-aware-hpa-render-validation:
+  #   * helm-unittest's failure semantics (per-`it` granularity) deserve their
+  #     own status check so reviewers can pinpoint which assertion regressed.
+  #   * The plugin install adds ~3-5s; isolating keeps the kubeconform jobs
+  #     fast and skipping when only docs/test files change.
+  kev-hpa-alerts-unittest:
+    name: Helm unittest (KEV-HPA alerts contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: hashFiles('infra/helm/argus/Chart.yaml') != ''
+    permissions:
+      contents: read
+
+    env:
+      # Pin to a known-good helm-unittest release. Bump in lock-step with the
+      # plugin's compatibility matrix against helm v3.14.x.
+      HELM_UNITTEST_VERSION: v0.7.2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helm v3.14.4 (matches sibling jobs)
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install helm-unittest plugin ${{ env.HELM_UNITTEST_VERSION }} (pinned)
+        run: |
+          set -euo pipefail
+          # `--version` pin avoids surprise plugin upgrades. The plugin source
+          # does not ship Sigstore signatures, so `--verify=false` is required
+          # — the integrity gate is the helm-unittest source pin itself.
+          helm plugin install https://github.com/helm-unittest/helm-unittest \
+            --version "${HELM_UNITTEST_VERSION}" \
+            --verify=false
+          helm unittest --help >/dev/null
+
+      - name: helm dependency build (resolves Bitnami subcharts)
+        run: |
+          set -euo pipefail
+          helm dependency build infra/helm/argus
+
+      - name: Run helm-unittest suites
+        run: |
+          set -euo pipefail
+          # `--color` keeps the per-`it` PASS/FAIL legible in the GHA log.
+          # `--strict` makes unset-value assertions fail loud instead of
+          # silently passing (helm-unittest 0.5+ default is non-strict).
+          # `-f 'tests/test_*.yaml'` matches the C7-T06 plan filename
+          # convention (`test_<thing>.yaml`); helm-unittest's default glob
+          # is `tests/*_test.yaml` — explicit `-f` keeps both conventions
+          # discoverable as the suite grows.
+          helm unittest --color --strict -f 'tests/test_*.yaml' infra/helm/argus
+
+      - name: Append job summary (always)
+        if: always()
+        run: |
+          set +e
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## Helm unittest (KEV-HPA alerts contract) — PASSED"
+            else
+              echo "## Helm unittest (KEV-HPA alerts contract) — FAILED"
+            fi
+            echo
+            echo "Plugin: helm-unittest \`${HELM_UNITTEST_VERSION}\`"
+            echo "Suite:  \`infra/helm/argus/tests/test_kev_hpa_alerts.yaml\`"
+            echo
+            echo "Coverage:"
+            echo "  - default render → 1 PrometheusRule, 5 alerts"
+            echo "  - kevHpa.alerts.enabled=false → 0 documents"
+            echo "  - each alert: severity ∈ {critical, warning}, runbook_url, team=sre, service=argus-scan-worker, environment=<env>"
+            echo "  - production overlay propagates environment=production label"
+            echo "  - value-surface overrides (flap/latency thresholds, additionalLabels) propagate to rendered expressions"
+          } >> "${GITHUB_STEP_SUMMARY}"
