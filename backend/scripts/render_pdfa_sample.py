@@ -245,19 +245,30 @@ def _build_fixture_context(tier: str, scan_completed_at: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Deterministic 1×1 sRGB PNG generator
+# Deterministic 16×16 sRGB PNG generator
 # ---------------------------------------------------------------------------
 #
 # The ``images`` variant embeds two raster images via ``\includegraphics``.
 # Pillow is NOT a direct dependency in backend/requirements*.txt (it ships
 # transitively under WeasyPrint via uv.lock, but the CI workflow only
-# installs Jinja2 — see .github/workflows/pdfa-validation.yml). To stay
-# zero-dep we synthesise valid PNG bytes from stdlib (``struct`` + ``zlib``).
+# installs Jinja2 + sqlalchemy — see .github/workflows/pdfa-validation.yml).
+# To stay zero-dep we synthesise valid PNG bytes from stdlib
+# (``struct`` + ``zlib``).
 #
-# The PNGs are 1×1 RGB with an explicit ``sRGB`` chunk so they match the
-# OutputIntent registered by ``pdfx`` via ``colorprofiles`` (sRGB
+# C7-T02 follow-up (DEBUG-6): bumped the canvas from 1×1 to 16×16. A 1×1
+# raster lets verapdf short-circuit the image-tree validation (rule
+# 6.2.4-1, /XObject/Image colour-space matching) because there is
+# essentially no data to inspect — verapdf will accept it as a trivial
+# case. 16×16 is the smallest size that keeps PDF/A-2u image-tree
+# checks meaningful while still compressing to ~50 bytes for a uniform
+# colour fill, so the gate's runtime stays trivial.
+#
+# The PNGs are 16×16 RGB with an explicit ``sRGB`` chunk so they match
+# the OutputIntent registered by ``pdfx`` via ``colorprofiles`` (sRGB
 # IEC61966-2.1) — verapdf rule 6.2.4-1 fails on raster images whose
 # colour-space conflicts with the document's OutputIntent.
+
+PNG_CANVAS_PX = 16  # square dimension; bumped from 1 in DEBUG-6.
 
 
 def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
@@ -270,11 +281,14 @@ def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
 def _write_deterministic_png(
     path: Path, *, red: int, green: int, blue: int
 ) -> Path:
-    """Write a deterministic 1×1 sRGB PNG to *path* using stdlib only.
+    """Write a deterministic 16×16 sRGB PNG to *path* using stdlib only.
 
     Args:
         path: Destination filename (parent must already exist).
-        red, green, blue: RGB sample values clamped to 0..255.
+        red, green, blue: RGB sample values clamped to 0..255. The same
+            triple is repeated across every pixel — uniform fill keeps
+            the zlib-compressed IDAT tiny (~30..60 bytes) regardless of
+            the canvas dimension.
 
     Returns:
         *path* for caller convenience (chaining-friendly).
@@ -282,11 +296,13 @@ def _write_deterministic_png(
     The chunk layout is the bare minimum a PDF/A-2u-clean rendering
     pipeline needs:
 
-    * ``IHDR`` — width=1, height=1, bit_depth=8, colour_type=2 (RGB),
-      no interlace, no filter, no compression flags beyond the default.
+    * ``IHDR`` — width=``PNG_CANVAS_PX``, height=``PNG_CANVAS_PX``,
+      bit_depth=8, colour_type=2 (RGB), no interlace, no filter, no
+      compression flags beyond the default.
     * ``sRGB`` — rendering-intent byte 0 (perceptual). pdfx emits a
       perceptual OutputIntent so the embedded raster matches.
-    * ``IDAT`` — zlib-compressed scanline (1 filter byte + 3 RGB bytes).
+    * ``IDAT`` — zlib-compressed scanlines (each row = 1 filter byte +
+      ``PNG_CANVAS_PX × 3`` RGB bytes; ``PNG_CANVAS_PX`` rows total).
     * ``IEND`` — required terminator chunk.
     """
     if not all(0 <= v <= 255 for v in (red, green, blue)):
@@ -298,8 +314,8 @@ def _write_deterministic_png(
     signature = b"\x89PNG\r\n\x1a\n"
     ihdr = struct.pack(
         ">IIBBBBB",
-        1,  # width
-        1,  # height
+        PNG_CANVAS_PX,  # width
+        PNG_CANVAS_PX,  # height
         8,  # bit depth
         2,  # colour type: RGB
         0,  # compression method
@@ -307,7 +323,11 @@ def _write_deterministic_png(
         0,  # interlace method
     )
     srgb = bytes([0])  # rendering intent: perceptual
-    raw = bytes([0]) + bytes([red, green, blue])  # scanline filter byte + RGB
+    # Each scanline starts with a filter-type byte (0 = "None"), then
+    # PNG_CANVAS_PX RGB triples. Uniform fill keeps zlib output tiny.
+    pixel = bytes([red, green, blue])
+    scanline = bytes([0]) + pixel * PNG_CANVAS_PX
+    raw = scanline * PNG_CANVAS_PX
     idat = zlib.compress(raw, level=9)
 
     payload = (

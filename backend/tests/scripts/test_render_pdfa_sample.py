@@ -572,7 +572,7 @@ class TestImagesTempdirLifecycle:
 
 
 class TestPngGenerator:
-    """``_write_deterministic_png`` emits valid 1×1 sRGB PNG bytes."""
+    """``_write_deterministic_png`` emits valid 16×16 sRGB PNG bytes."""
 
     def test_signature_and_size(self, tmp_path: Path) -> None:
         path = tmp_path / "x.png"
@@ -581,9 +581,38 @@ class TestPngGenerator:
         assert data[:8] == b"\x89PNG\r\n\x1a\n", (
             "PNG file must start with the canonical 8-byte signature"
         )
-        # 1×1 RGB PNG is tiny (<200 bytes); guard against accidentally
-        # writing a multi-MB file via a wrong loop.
-        assert 50 <= len(data) <= 200, f"unexpected PNG size: {len(data)}"
+        # 16×16 RGB PNG with uniform fill compresses to ~120 bytes
+        # (signature + IHDR + sRGB + tiny IDAT + IEND); guard against
+        # accidentally writing a multi-MB file via a wrong loop. Upper
+        # bound is generous so a future zlib-level tweak does not break
+        # the test.
+        assert 80 <= len(data) <= 400, f"unexpected PNG size: {len(data)}"
+
+    def test_canvas_is_16x16_rgb(self, tmp_path: Path) -> None:
+        """IHDR must encode width=16, height=16, bit-depth=8, colour-type=2.
+
+        DEBUG-6 bumped the canvas from 1×1 to 16×16 so verapdf
+        actually exercises the image-tree validation rules instead of
+        short-circuiting on a trivial-size raster.
+        """
+        path = tmp_path / "x.png"
+        _write_deterministic_png(path, red=10, green=20, blue=30)
+        data = path.read_bytes()
+        # IHDR chunk layout (after the 8-byte signature):
+        #   4-byte length || 4-byte type "IHDR" || 13-byte data || 4-byte CRC
+        # Data: 4-byte width | 4-byte height | 1-byte bit-depth | 1-byte
+        # colour-type | 1-byte compression | 1-byte filter | 1-byte interlace.
+        ihdr_offset = 8 + 4 + 4  # past signature + length + "IHDR" type
+        width = int.from_bytes(data[ihdr_offset:ihdr_offset + 4], "big")
+        height = int.from_bytes(
+            data[ihdr_offset + 4:ihdr_offset + 8], "big",
+        )
+        bit_depth = data[ihdr_offset + 8]
+        colour_type = data[ihdr_offset + 9]
+        assert width == 16, f"expected width=16, got {width}"
+        assert height == 16, f"expected height=16, got {height}"
+        assert bit_depth == 8
+        assert colour_type == 2  # RGB
 
     def test_carries_required_chunks(self, tmp_path: Path) -> None:
         path = tmp_path / "x.png"
