@@ -8,7 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.api.routers.admin import require_admin
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.celery_app import app as celery_app
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class VaToolEnqueueResponse(BaseModel):
 @router.post(
     "/va-tools/enqueue",
     response_model=VaToolEnqueueResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin_mfa_passed)],
 )
 async def enqueue_va_tool_task(body: VaToolEnqueueRequest) -> dict[str, Any]:
     """Queue a VA sandbox tool run (policy + mcp_runner inside the worker). Requires X-Admin-Key when set."""

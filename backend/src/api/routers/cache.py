@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, select
 
 from src.api.routers.admin import require_admin
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.cache.tool_cache import (
     SANDBOX_EXEC_CACHE_PREFIX,
@@ -156,7 +157,7 @@ async def cache_stats(_: None = Depends(require_admin)) -> dict[str, Any]:
 @router.delete("")
 async def cache_flush(
     body: CacheFlushBody,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
 ) -> dict[str, Any]:
     if not body.confirm:
         raise HTTPException(
@@ -248,7 +249,7 @@ async def cache_get_key(
 @router.delete("/key/{key:path}")
 async def cache_delete_key(
     key: str,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
 ) -> dict[str, Any]:
     k = _require_argus_key(key)
     r = get_redis()
@@ -270,7 +271,7 @@ async def cache_tool_ttls_get(_: None = Depends(require_admin)) -> dict[str, Any
 @router.put("/tool-ttls")
 async def cache_tool_ttls_put(
     body: ToolTtlPutBody,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
 ) -> dict[str, Any]:
     old, new = set_tool_ttl_runtime(body.tool, body.ttl_sec)
     return {"tool": body.tool.strip().lower(), "old_ttl": old, "new_ttl": new}
@@ -317,7 +318,7 @@ async def cache_health(_: None = Depends(require_admin)) -> dict[str, Any]:
 
 
 @router.post("/warm")
-async def cache_warm(_: None = Depends(require_admin)) -> dict[str, Any]:
+async def cache_warm(_: None = Depends(require_admin_mfa_passed)) -> dict[str, Any]:
     t0 = time.perf_counter()
 
     def _warm() -> dict[str, Any]:

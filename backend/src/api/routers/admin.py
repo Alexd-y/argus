@@ -12,8 +12,6 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
-logger = logging.getLogger(__name__)
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -24,18 +22,12 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import String, cast, or_, select, text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
-from src.auth.admin_sessions import (
-    SessionPrincipal,
-    redact_session_id,
-    resolve_session,
-)
+from src.auth.admin_sessions import SessionPrincipal
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import (
@@ -51,9 +43,11 @@ from src.db.models import (
     User,
     gen_uuid,
 )
-from src.db.session import async_session_factory, get_db
+from src.db.session import get_db
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 from src.policy.scope import ScopeEngine, ScopeRule
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -337,141 +331,18 @@ def _audit_row_export_dict(row: AuditLog) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
-admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
-
-#: Cookie carrying the new CSPRNG admin session id (mirrors admin_auth router).
-_ADMIN_SESSION_COOKIE = "argus.admin.session"
-
-#: Bearer prefix in the ``Authorization`` header (case-insensitive comparison).
-_BEARER_PREFIX_LOWER = "bearer "
-
-#: Generic 401 detail for the new session-mode rejections — never leaks the
-#: failure reason. The legacy fallback path keeps the historic
-#: ``"Invalid X-Admin-Key"`` detail to avoid breaking existing test contracts.
-_SESSION_AUTH_DETAIL = "Authentication required"
-
-
-def _bearer_session_from_authorization(authorization: str | None) -> str | None:
-    """Extract a session id from ``Authorization: Bearer <session>``."""
-    if not authorization:
-        return None
-    raw = authorization.strip()
-    if len(raw) < len(_BEARER_PREFIX_LOWER):
-        return None
-    if raw[: len(_BEARER_PREFIX_LOWER)].lower() != _BEARER_PREFIX_LOWER:
-        return None
-    candidate = raw[len(_BEARER_PREFIX_LOWER) :].strip()
-    return candidate or None
-
-
-def _extract_session_id(request: Request) -> str | None:
-    """Return the presented session id (cookie wins over bearer) or ``None``."""
-    cookie_value = request.cookies.get(_ADMIN_SESSION_COOKIE)
-    if cookie_value:
-        return cookie_value
-    return _bearer_session_from_authorization(request.headers.get("authorization"))
-
-
-async def _try_resolve_admin_session(
-    request: Request,
-) -> SessionPrincipal | None:
-    """Resolve the session against the DB in a self-contained transaction.
-
-    A dedicated ``async_session_factory()`` scope keeps the resolver out of
-    the route's own ``get_db`` lifecycle: the sliding-window ``UPDATE`` is
-    committed even when the route handler aborts mid-flight (4xx / 5xx),
-    so a long-lived browser session does not silently expire because of an
-    unrelated business-logic failure further down the dependency chain.
-    """
-    session_id = _extract_session_id(request)
-    if not session_id:
-        return None
-    try:
-        async with async_session_factory() as db:
-            principal = await resolve_session(
-                db,
-                session_id=session_id,
-                ip=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-            )
-            await db.commit()
-            return principal
-    except SQLAlchemyError:
-        logger.exception(
-            "admin_session_resolve_db_error",
-            extra={
-                "event": "argus.auth.admin_session.resolve_db_error",
-                "session_id_prefix": redact_session_id(session_id),
-            },
-        )
-        return None
-
-
-def _legacy_admin_key_check(admin_key: str | None) -> None:
-    """Enforce the legacy ``X-Admin-Key`` shim — historic error wording.
-
-    Preserves the exact ``"Invalid X-Admin-Key"`` 401 detail and the
-    ``"ADMIN_API_KEY not configured"`` 403 detail because numerous existing
-    unit tests assert on the literal strings (search references in
-    ``backend/tests/unit/api/test_admin_*``).
-    """
-    expected = settings.admin_api_key
-    if not expected:
-        if settings.debug:
-            return
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="ADMIN_API_KEY not configured",
-        )
-    if not admin_key or admin_key != expected:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid X-Admin-Key",
-        )
-
-
-async def require_admin(
-    request: Request,
-    admin_key: str | None = Depends(admin_key_header),
-) -> None:
-    """Dual-mode admin gate (ISS-T20-003 Phase 1 backend, B6-T08).
-
-    Supports three modes via :data:`settings.admin_auth_mode`:
-
-    * ``"cookie"`` — *legacy* path only. Accepts the ``X-Admin-Key`` shim
-      and rejects everything else. Kept for the bridge window before the
-      frontend (B6-T09) is migrated.
-    * ``"session"`` — *new* path only. Accepts the ``argus.admin.session``
-      cookie or an ``Authorization: Bearer <session>`` header. Returns 401
-      with the generic :data:`_SESSION_AUTH_DETAIL` for every miss
-      (no enumeration).
-    * ``"both"`` (default) — try the new session first; if the resolver
-      returns ``None`` (no cookie, expired, revoked) **and** the caller
-      supplied an ``X-Admin-Key``, fall back to the legacy shim. Falls
-      through to the legacy code path on missing session, so existing
-      ``X-Admin-Key`` clients keep working without code change.
-
-    On a successful session resolve the principal is stashed at
-    ``request.state.admin_session`` so downstream dependencies (for
-    example :func:`src.api.routers.admin_bulk_ops._operator_subject_dep`)
-    can use the *real* operator subject for audit attribution instead of
-    the best-effort ``X-Operator-Subject`` header.
-    """
-    mode = settings.admin_auth_mode
-
-    if mode in ("session", "both"):
-        principal = await _try_resolve_admin_session(request)
-        if principal is not None:
-            request.state.admin_session = principal
-            return
-
-    if mode == "session":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_SESSION_AUTH_DETAIL,
-        )
-
-    _legacy_admin_key_check(admin_key)
+# Dual-mode admin gate (``require_admin``) and its session helpers live in
+# :mod:`src.auth.admin_dependencies` (ISS-T20-003 Phase 1, refactored in
+# C7-T03 to break the circular import that arose when this module needed
+# to import ``require_admin_mfa_passed`` from the same dependency layer).
+# Only the public symbols are re-exported here so every existing
+# ``from src.api.routers.admin import require_admin`` keeps working;
+# the private helpers stay internal to ``src.auth.admin_dependencies``.
+from src.auth.admin_dependencies import (  # noqa: E402, F401 — re-exports for backwards compat
+    admin_key_header,
+    require_admin,
+    require_admin_mfa_passed,
+)
 
 
 # --- Schemas ---
@@ -747,7 +618,7 @@ async def list_tenants(
 @router.post("/tenants", response_model=TenantOut)
 async def create_tenant(
     body: TenantCreate,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> TenantOut:
     """Create a new tenant."""
@@ -778,7 +649,7 @@ async def get_tenant(
 async def patch_tenant(
     tenant_id: str,
     body: TenantPatch,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     operator_subject: str = Depends(_tenants_operator_subject),
     db: AsyncSession = Depends(get_db),
 ) -> TenantOut:
@@ -901,7 +772,7 @@ async def patch_tenant(
 @router.delete("/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tenant(
     tenant_id: str,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Delete a tenant and dependent rows (FK ON DELETE CASCADE)."""
@@ -1175,7 +1046,7 @@ async def list_targets(
 async def create_target(
     tenant_id: str,
     body: TargetCreate,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> TargetOut:
     """Create a target with optional ``scope_config`` (``rules`` array)."""
@@ -1201,7 +1072,7 @@ async def patch_target(
     tenant_id: str,
     target_id: str,
     body: TargetPatch,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> TargetOut:
     """Update target URL and/or scope configuration."""
@@ -1249,7 +1120,7 @@ async def patch_target(
 async def delete_target(
     tenant_id: str,
     target_id: str,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Delete a target row."""
@@ -1372,7 +1243,7 @@ async def llm_runtime_summary(_: None = Depends(require_admin)) -> LlmRuntimeSum
 @router.post("/providers", response_model=ProviderConfigOut, status_code=status.HTTP_201_CREATED)
 async def create_provider(
     body: ProviderConfigCreate,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> ProviderConfigOut:
     """Create a tenant provider row (metadata only until api_key is PATCHed)."""
@@ -1423,7 +1294,7 @@ async def list_providers(
 async def update_provider(
     provider_id: str,
     body: ProviderConfigUpdate,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     db: AsyncSession = Depends(get_db),
 ) -> ProviderConfigOut:
     """Update provider config; ``api_key`` is write-only and never echoed."""

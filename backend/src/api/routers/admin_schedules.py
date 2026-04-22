@@ -63,6 +63,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.routers.admin import require_admin, router
 from src.api.routers.admin_bulk_ops import _operator_subject_dep
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.api.routers.admin_emergency import (
     _DETAIL_TENANT_NOT_FOUND,
     _emit_audit,
@@ -459,7 +460,7 @@ async def list_scan_schedules(
 )
 async def create_scan_schedule(
     body: ScanScheduleCreateRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),
@@ -547,7 +548,7 @@ async def create_scan_schedule(
 async def update_scan_schedule(
     schedule_id: UUID,
     body: ScanScheduleUpdateRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),
@@ -652,7 +653,7 @@ async def update_scan_schedule(
 )
 async def delete_scan_schedule(
     schedule_id: UUID,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),
@@ -715,7 +716,7 @@ async def delete_scan_schedule(
 async def run_scan_schedule_now(
     schedule_id: UUID,
     body: ScanScheduleRunNowRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),

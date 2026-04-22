@@ -74,6 +74,7 @@ from src.api.routers.admin_findings import (
     _admin_role_dep,
     _admin_tenant_dep,
 )
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.api.schemas import (
     EmergencyAuditTrailItem,
     EmergencyAuditTrailResponse,
@@ -293,7 +294,7 @@ def _emit_audit(
 )
 async def emergency_stop_all(
     body: EmergencyStopAllRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     operator_subject: str = Depends(_operator_subject_dep),
     kill_switch: KillSwitchService = Depends(_kill_switch_dep),
@@ -401,7 +402,7 @@ async def emergency_stop_all(
 )
 async def emergency_resume_all(
     body: EmergencyResumeAllRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     operator_subject: str = Depends(_operator_subject_dep),
     kill_switch: KillSwitchService = Depends(_kill_switch_dep),
@@ -470,7 +471,7 @@ async def emergency_resume_all(
 )
 async def emergency_throttle(
     body: EmergencyThrottleRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),

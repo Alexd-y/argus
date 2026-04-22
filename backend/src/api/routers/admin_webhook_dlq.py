@@ -36,6 +36,7 @@ from src.api.routers.admin import require_admin
 from src.api.routers.admin_bulk_ops import _operator_subject_dep
 from src.api.routers.admin_emergency import _emit_audit
 from src.api.routers.admin_findings import _admin_role_dep, _admin_tenant_dep
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.api.schemas import (
     WebhookDlqAbandonRequest,
     WebhookDlqAbandonResponse,
@@ -342,7 +343,7 @@ async def list_webhook_dlq(
 async def replay_webhook_dlq(
     entry_id: UUID,
     body: WebhookDlqReplayRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),
@@ -497,7 +498,7 @@ async def replay_webhook_dlq(
 async def abandon_webhook_dlq(
     entry_id: UUID,
     body: WebhookDlqAbandonRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     role: str = Depends(_admin_role_dep),
     role_tenant: str | None = Depends(_admin_tenant_dep),
     operator_subject: str = Depends(_operator_subject_dep),

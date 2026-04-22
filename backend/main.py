@@ -38,6 +38,7 @@ import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail
 import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
 from src.api.admin import mfa as admin_mfa_router  # admin MFA endpoints (C7-T03)
 from src.api.routers import admin_webhook_dlq  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
+from src.auth.admin_dependencies import log_mfa_enforcement_state
 
 from src.api.routers.recon import recon_router
 from src.auth.admin_users import bootstrap_admin_user_if_configured
@@ -77,6 +78,16 @@ async def lifespan(_app: FastAPI):
             "admin_bootstrap_skipped",
             extra={
                 "event": "argus.auth.admin_bootstrap.skipped",
+                "error_type": type(e).__name__,
+            },
+        )
+    try:
+        log_mfa_enforcement_state()
+    except Exception as e:
+        logger.warning(
+            "admin_mfa_enforcement_log_failed",
+            extra={
+                "event": "argus.auth.admin_mfa.enforcement_log_failed",
                 "error_type": type(e).__name__,
             },
         )

@@ -17,7 +17,8 @@ import logging
 from fastapi import Depends, Header, Request, status
 from sqlalchemy import String, cast, select, update
 
-from src.api.routers.admin import require_admin, router
+from src.api.routers.admin import router
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.auth.admin_sessions import SessionPrincipal
 from src.api.schemas import (
     AdminBulkFindingSuppressRequest,
@@ -75,7 +76,7 @@ async def _operator_subject_dep(
 )
 async def admin_bulk_cancel_scans(
     body: AdminBulkScanCancelRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     operator_subject: str = Depends(_operator_subject_dep),
 ) -> AdminBulkScanCancelResponse:
     """Cancel many scans in one request. Idempotent: already-terminal scans are skipped."""
@@ -178,7 +179,7 @@ async def admin_bulk_cancel_scans(
 )
 async def admin_bulk_suppress_findings(
     body: AdminBulkFindingSuppressRequest,
-    _: None = Depends(require_admin),
+    _: None = Depends(require_admin_mfa_passed),
     operator_subject: str = Depends(_operator_subject_dep),
 ) -> AdminBulkFindingSuppressResponse:
     """Mark many findings as suppressed (false positive). Idempotent if already suppressed."""
