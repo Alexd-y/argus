@@ -240,6 +240,7 @@ async def enroll_totp(
     *,
     subject: str,
     secret: str,
+    backup_codes: list[str] | None = None,
 ) -> None:
     """Persist a Fernet-encrypted TOTP secret; leave MFA disabled.
 
@@ -254,6 +255,13 @@ async def enroll_totp(
     intervention. ``mfa_enabled`` is forced to ``False`` defensively
     so a partial overwrite cannot leave the account in a broken state
     (enrolled with the new secret but enabled against the old one).
+
+    When *backup_codes* is provided (C7-T03 stateless 2-step flow), the
+    bcrypt hashes are persisted in the same ``UPDATE`` as the secret.
+    The router returns the plaintext codes to the admin once and
+    :func:`confirm_enrollment` may then be called without re-providing
+    them. Passing ``None`` preserves the legacy contract where the
+    router (or DAO unit tests) re-supplies the codes at confirm time.
     """
     canonical = _normalize_subject(subject)
     if not secret or not secret.strip():
@@ -274,12 +282,22 @@ async def enroll_totp(
         )
         raise AdminMfaError("totp_secret_encrypt_failed") from None
 
+    persisted_backup_hashes: list[str] | None
+    if backup_codes is None:
+        persisted_backup_hashes = None
+    else:
+        if not backup_codes:
+            raise AdminMfaError("backup_codes_required")
+        persisted_backup_hashes = [
+            _bcrypt_hash(_normalize_backup_code(c)) for c in backup_codes
+        ]
+
     stmt = (
         update(AdminUser)
         .where(AdminUser.subject == canonical)
         .values(
             mfa_secret_encrypted=ciphertext,
-            mfa_backup_codes_hash=None,
+            mfa_backup_codes_hash=persisted_backup_hashes,
             mfa_enabled=False,
         )
     )
@@ -301,6 +319,7 @@ async def enroll_totp(
             "event": "argus.mfa.enroll.pending",
             "subject": canonical,
             "previous_enabled": state.enabled,
+            "backup_codes_persisted": persisted_backup_hashes is not None,
         },
     )
 
@@ -310,19 +329,24 @@ async def confirm_enrollment(
     *,
     subject: str,
     totp_code: str,
-    generated_codes: list[str],
+    generated_codes: list[str] | None = None,
 ) -> None:
     """Verify the first TOTP code and finish enrolment atomically.
 
     Step 2 of the enrolment ceremony. The router passes the 6-digit code
-    typed by the admin AND the plaintext backup codes returned by
-    :func:`generate_backup_codes` so the response can show them once.
+    typed by the admin. ``generated_codes`` is optional:
+
+    * ``None`` (C7-T03 default) — the codes were already persisted at
+      :func:`enroll_totp` time. The DAO refuses if no hashes are on the
+      row (``backup_codes_required``) so a programmer cannot enable MFA
+      against an empty backup-code array.
+    * ``list[str]`` (legacy DAO contract) — the bcrypt hashes of the
+      provided codes replace any prior backup codes in a single
+      ``UPDATE``.
 
     On success:
-      * ``mfa_enabled`` is set to ``True``
-      * The bcrypt hashes of *generated_codes* replace any prior backup
-        codes in a single ``UPDATE`` (no half-flipped state visible to
-        another transaction).
+      * ``mfa_enabled`` is set to ``True``;
+      * backup-code hashes are written iff *generated_codes* is provided.
 
     On failure (bad code, no pending enrolment, decrypt error) the row
     is untouched and an :class:`AdminMfaError` is raised — the router
@@ -330,7 +354,7 @@ async def confirm_enrollment(
     """
     canonical = _normalize_subject(subject)
     code = _normalize_totp_code(totp_code)
-    if not generated_codes:
+    if generated_codes is not None and not generated_codes:
         raise AdminMfaError("backup_codes_required")
 
     state = await _load_state(db, canonical)
@@ -360,15 +384,28 @@ async def confirm_enrollment(
         )
         raise AdminMfaError("totp_invalid")
 
-    backup_hashes = [_bcrypt_hash(_normalize_backup_code(c)) for c in generated_codes]
+    if generated_codes is None:
+        # Stateless 2-step flow (C7-T03): the codes were persisted at
+        # ``enroll_totp`` time. Refuse if the row carries none — the
+        # admin would otherwise be enrolled without recovery codes.
+        if not state.backup_codes_hash:
+            raise AdminMfaError("backup_codes_required")
+        update_values: dict[str, object] = {"mfa_enabled": True}
+        emitted_count = len(state.backup_codes_hash)
+    else:
+        backup_hashes = [
+            _bcrypt_hash(_normalize_backup_code(c)) for c in generated_codes
+        ]
+        update_values = {
+            "mfa_enabled": True,
+            "mfa_backup_codes_hash": backup_hashes,
+        }
+        emitted_count = len(backup_hashes)
 
     stmt = (
         update(AdminUser)
         .where(AdminUser.subject == canonical)
-        .values(
-            mfa_enabled=True,
-            mfa_backup_codes_hash=backup_hashes,
-        )
+        .values(**update_values)
     )
     try:
         await db.execute(stmt)
@@ -387,7 +424,7 @@ async def confirm_enrollment(
         extra={
             "event": "argus.mfa.confirm.succeeded",
             "subject": canonical,
-            "backup_codes_count": len(backup_hashes),
+            "backup_codes_count": emitted_count,
         },
     )
 
