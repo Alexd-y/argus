@@ -16,6 +16,26 @@
   --accent-dim: #8b44d4;
   --secondary: #393A84;
   --highlight: #E3CAFE;
+  /*
+   * `--accent-strong` and `--on-accent` are the WCAG 2.1 AA-compliant
+   * primary-button pair (ISS-T26-001 Option A foundation).
+   *
+   * Existing pairing — `bg-[var(--accent)] text-[var(--bg-primary)]`
+   * (`#A655F7` over `#0a0a0a`) — measured at 4.20:1 by axe-core on the
+   * audit-logs "Verify chain integrity" CTA, below the AA 4.5:1 threshold
+   * for normal text.
+   *
+   * Replacement pair `bg-[var(--accent-strong)] text-[var(--on-accent)]`
+   * (`#6B2EBE` + `#FAFAFA`) measures 7.29:1 — clears AA (4.5:1) and AAA
+   * (7:1) with margin to absorb sub-pixel rasterization drift.
+   *
+   * `--accent` is intentionally retained for borders, focus rings, glow
+   * effects and decorative/brand surfaces; component migration to the new
+   * pair is tracked separately under ISS-T26-001 (see also
+   * `ai_docs/architecture/design-tokens.md`).
+   */
+  --accent-strong: #6B2EBE;
+  --on-accent: #FAFAFA;
   
   /* Text */
   --text-primary: #f5f5f5;

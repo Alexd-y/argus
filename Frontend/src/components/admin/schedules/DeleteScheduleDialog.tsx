@@ -220,7 +220,7 @@ export function DeleteScheduleDialog({
               disabled={!canSubmit}
               aria-disabled={!canSubmit}
               aria-describedby={submitHelpId}
-              className="rounded border border-red-500 bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-red-500 bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="delete-schedule-confirm"
             >
               {isPending ? "Удаляем…" : "Удалить"}

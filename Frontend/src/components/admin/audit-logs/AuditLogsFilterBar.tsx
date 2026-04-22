@@ -215,7 +215,7 @@ export function AuditLogsFilterBar({
           onClick={onVerifyChain}
           disabled={disabled || verifying}
           aria-busy={verifying}
-          className="rounded border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg-primary)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-[var(--accent-strong)] bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="audit-verify-chain"
         >
           {verifying ? "Проверяем…" : "Verify chain integrity"}

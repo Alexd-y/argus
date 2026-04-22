@@ -280,7 +280,7 @@ export function ResumeAllDialog({
               disabled={!canSubmit}
               aria-disabled={!canSubmit}
               aria-describedby={submitHelpId}
-              className="rounded border border-amber-500 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-amber-600 bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="resume-all-dialog-confirm"
             >
               {isPending ? "Снимаем…" : "Resume all scans"}

@@ -367,7 +367,7 @@ export function PerTenantThrottleDialog({
               disabled={!canSubmit}
               aria-disabled={!canSubmit}
               aria-describedby={submitHelpId}
-              className="rounded border border-amber-500 bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-amber-500 bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="throttle-dialog-confirm"
             >
               {isPending ? "Применяем…" : "Throttle tenant"}

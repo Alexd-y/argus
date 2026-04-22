@@ -270,7 +270,7 @@ export function GlobalKillSwitchClient({
           <button
             type="button"
             onClick={() => setResumeOpen(true)}
-            className="w-full rounded border border-amber-500 bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none sm:w-auto"
+            className="w-full rounded border border-amber-600 bg-amber-700 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none sm:w-auto"
             data-testid="global-kill-switch-open-resume"
           >
             Resume all scans

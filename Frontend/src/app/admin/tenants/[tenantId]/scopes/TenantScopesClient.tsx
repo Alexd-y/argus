@@ -341,7 +341,7 @@ export function TenantScopesClient({
               type="button"
               disabled={isPending}
               onClick={addTarget}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             >
               Add target
             </button>
@@ -487,7 +487,7 @@ export function TenantScopesClient({
                           type="button"
                           disabled={isPending}
                           onClick={saveEdit}
-                          className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50"
+                          className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50"
                         >
                           Save
                         </button>

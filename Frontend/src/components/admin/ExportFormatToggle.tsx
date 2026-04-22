@@ -182,7 +182,7 @@ export function ExportFormatToggle({
           disabled={downloadDisabled}
           aria-label={FORMAT_PRESENTATION[format].aria}
           data-testid="export-format-download"
-          className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg-primary)] transition hover:opacity-90 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+          className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] transition hover:opacity-90 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
         >
           {busy ? "Скачивание…" : `Скачать ${FORMAT_PRESENTATION[format].label}`}
         </button>

@@ -273,7 +273,7 @@ function AdminLlmBody() {
             </select>
             <button
               type="button"
-              className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50"
+              className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50"
               disabled={!tenantId || missingKeys.length === 0 || busyId !== null}
               onClick={addProvider}
             >
@@ -427,7 +427,7 @@ function AdminLlmBody() {
                 </button>
                 <button
                   type="button"
-                  className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50"
+                  className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50"
                   onClick={saveEdit}
                   disabled={busyId !== null}
                 >

@@ -234,7 +234,7 @@ export function CronExpressionField({
           disabled={disabled}
           className={`px-2 py-1 text-xs ${
             inputMode === "quick"
-              ? "bg-[var(--bg-tertiary)] text-[var(--accent)]"
+              ? "bg-[var(--accent-strong)] text-[var(--on-accent)]"
               : "text-[var(--text-secondary)]"
           }`}
           data-testid={`cron-tab-quick-${mode}`}
@@ -249,7 +249,7 @@ export function CronExpressionField({
           disabled={disabled}
           className={`px-2 py-1 text-xs ${
             inputMode === "raw"
-              ? "bg-[var(--bg-tertiary)] text-[var(--accent)]"
+              ? "bg-[var(--accent-strong)] text-[var(--on-accent)]"
               : "text-[var(--text-secondary)]"
           }`}
           data-testid={`cron-tab-raw-${mode}`}

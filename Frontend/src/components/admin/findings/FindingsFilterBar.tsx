@@ -220,7 +220,7 @@ export function FindingsFilterBar({
                   key={sev}
                   className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs transition focus-within:ring-2 focus-within:ring-[var(--accent)] ${
                     checked
-                      ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--bg-primary)]"
+                      ? "border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--on-accent)]"
                       : "border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:border-[var(--accent)]"
                   }`}
                 >
@@ -260,7 +260,7 @@ export function FindingsFilterBar({
                   key={mode}
                   className={`inline-flex cursor-pointer items-center gap-1 border-l border-[var(--border)] px-2 py-1 text-xs transition first:border-l-0 focus-within:ring-2 focus-within:ring-[var(--accent)] ${
                     checked
-                      ? "bg-[var(--accent)] text-[var(--bg-primary)]"
+                      ? "bg-[var(--accent-strong)] text-[var(--on-accent)]"
                       : "bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                   title={STATUS_MODE_HINT[mode]}

@@ -318,7 +318,7 @@ export function PerTenantThrottleClient({
           <button
             type="button"
             data-testid="throttle-open-dialog"
-            className="rounded bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => {
               setActionError(null);
               setActionInfo(null);
@@ -540,7 +540,7 @@ function ResumeConfirmDialog({
           </button>
           <button
             type="button"
-            className="rounded border border-amber-500 bg-amber-600 px-3 py-1.5 text-xs font-medium text-white"
+            className="rounded border border-amber-600 bg-amber-700 px-3 py-1.5 text-xs font-medium text-white"
             onClick={onConfirm}
             data-testid="throttle-resume-confirm"
           >

@@ -536,7 +536,7 @@ export function ScheduleEditorDialog({
               disabled={!canSubmit}
               aria-disabled={!canSubmit}
               aria-describedby={submitHelpId}
-              className="rounded border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-[var(--accent-strong)] bg-[var(--accent-strong)] px-3 py-1.5 text-xs font-medium text-[var(--on-accent)] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="schedule-editor-submit"
             >
               {isPending

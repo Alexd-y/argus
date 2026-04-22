@@ -262,18 +262,6 @@ test.describe("admin a11y — route audits", () => {
     context,
     page,
   }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // `bg-amber-600 text-white` on the per-tenant throttle CTA scores
-    // 3.19:1, below the WCAG 2 AA threshold of 4.5:1. The same token
-    // pair is reused by other "destructive but reversible" actions
-    // (kill-switch, run-now), so the fix belongs to the design-system
-    // remediation pass — not this T36 task. Removing the annotation
-    // is criterion (c) on ISS-T26-001.
-    test.fail(
-      true,
-      "ISS-T26-001: bg-amber-600 throttle CTA contrast = 3.19:1, need 4.5:1",
-    );
-
     await seedAdminSession(context, "admin");
     await page.goto("/admin/operations");
     await waitForRouteReady(page);
@@ -290,16 +278,6 @@ test.describe("admin a11y — route audits", () => {
     context,
     page,
   }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // `bg-[var(--accent)] text-white` on the "Создать расписание" CTA
-    // scores 3.98:1; same accent-on-dark family the audit-logs banner
-    // already gates with `test.fail()`. Removing the annotation is
-    // criterion (c) on ISS-T26-001.
-    test.fail(
-      true,
-      "ISS-T26-001: bg-[var(--accent)] CTA contrast = 3.98:1, need 4.5:1",
-    );
-
     await seedAdminSession(context, "super-admin");
     await page.goto("/admin/schedules");
     await waitForRouteReady(page);
@@ -313,14 +291,6 @@ test.describe("admin a11y — route audits", () => {
   });
 
   test("schedules (admin) — pinned tenant", async ({ context, page }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // Same `bg-[var(--accent)] text-white` CTA failure as the
-    // super-admin variant; gated under the same issue.
-    test.fail(
-      true,
-      "ISS-T26-001: bg-[var(--accent)] CTA contrast = 3.98:1, need 4.5:1",
-    );
-
     await seedAdminSession(context, "admin");
     await page.goto("/admin/schedules");
     await waitForRouteReady(page);
@@ -373,28 +343,6 @@ test.describe("admin a11y — interactive states", () => {
     context,
     page,
   }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md
-    //
-    // The "Verify chain integrity" button uses the brand `--accent`
-    // background with `--bg-primary` text, yielding a contrast ratio
-    // of 4.20:1 (WCAG AA threshold for normal text is 4.5:1). The
-    // same token combo is reused by ≥6 other admin primary CTAs, so
-    // the right fix is a design-system token change (Option A in
-    // ISS-T26-001) rather than a per-component override. We surface
-    // the failure in CI via `test.fail()` so:
-    //   - the test still runs (gate cannot be silently bypassed),
-    //   - axe still scans the rendered banner DOM,
-    //   - the moment design lands the token fix, this test starts
-    //     "failing" with "passed unexpectedly", forcing whoever ships
-    //     the fix to remove this `test.fail()` annotation.
-    //
-    // Remove this `test.fail` block AFTER ISS-T26-001 acceptance
-    // criterion (a) is met.
-    test.fail(
-      true,
-      "ISS-T26-001: --accent button contrast = 4.20:1, need 4.5:1",
-    );
-
     await seedAdminSession(context, "super-admin");
     await page.goto("/admin/audit-logs");
     await waitForRouteReady(page);
@@ -433,19 +381,6 @@ test.describe("admin a11y — interactive states", () => {
   });
 
   test("operations: STOP-ALL dialog open", async ({ context, page }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // The dialog itself uses `bg-red-600` which passes WCAG 2 AA, but
-    // axe scans the full `<main>` region and the parent
-    // `/admin/operations` page (super-admin layout) keeps the
-    // PerTenantThrottle panel visible alongside the global kill-switch.
-    // The throttle CTA (`bg-amber-600 text-white` = 3.19:1) is the
-    // failing node — same root-cause family as the other ISS-T26-001
-    // entries.
-    test.fail(
-      true,
-      "ISS-T26-001: throttle CTA remains visible behind STOP-ALL dialog (3.19:1)",
-    );
-
     await seedAdminSession(context, "super-admin");
     await page.goto("/admin/operations");
     await waitForRouteReady(page);
@@ -462,15 +397,6 @@ test.describe("admin a11y — interactive states", () => {
     context,
     page,
   }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // Same `bg-amber-600 text-white` confirm CTA family as the route
-    // audit. The throttle dialog opens onto the operations page that
-    // also fails — both surfaces share the design-system token issue.
-    test.fail(
-      true,
-      "ISS-T26-001: bg-amber-600 throttle confirm CTA contrast = 3.19:1",
-    );
-
     await seedAdminSession(context, "admin");
     await page.goto("/admin/operations");
     await waitForRouteReady(page);
@@ -484,16 +410,6 @@ test.describe("admin a11y — interactive states", () => {
   });
 
   test("schedules: editor dialog open", async ({ context, page }) => {
-    // KNOWN FAILURE — see ai_docs/develop/issues/ISS-T26-001.md.
-    // The active cron-mode tab uses `text-[var(--accent)]` on
-    // `bg-[var(--bg-tertiary)]` and the editor "Сохранить" CTA uses
-    // `bg-[var(--accent)] text-white` — both fall in the same
-    // accent-on-dark family already tracked under ISS-T26-001.
-    test.fail(
-      true,
-      "ISS-T26-001: editor tab + CTA accent-on-dark contrast < 4.5:1",
-    );
-
     await seedAdminSession(context, "admin");
     await page.goto("/admin/schedules");
     await waitForRouteReady(page);

@@ -195,7 +195,7 @@ function TenantsAdminBody() {
               type="button"
               onClick={openCreate}
               disabled={isPending}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:opacity-50"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:opacity-50"
             >
               New tenant
             </button>
@@ -333,7 +333,7 @@ function TenantsAdminBody() {
             <button
               type="button"
               disabled={isPending}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               onClick={() => submitCreate()}
             >
               Create
@@ -389,7 +389,7 @@ function TenantsAdminBody() {
             <button
               type="button"
               disabled={isPending}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
               onClick={() => submitEdit()}
             >
               Save
@@ -423,7 +423,7 @@ function TenantsAdminBody() {
             <button
               type="button"
               disabled={isPending}
-              className="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none"
+              className="rounded bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none"
               onClick={() => confirmDelete()}
             >
               Delete

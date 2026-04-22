@@ -310,7 +310,7 @@ export function SchedulesClient({
           <button
             type="button"
             onClick={handleCreate}
-            className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             disabled={
               !canMutate ||
               (isSuperAdmin && tenantOptions.length === 0 && !tenantsLoaded)
