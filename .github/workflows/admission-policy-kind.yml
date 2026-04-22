@@ -1,0 +1,259 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# T44 (Cycle 6 Batch 5, ARG-054) — Kyverno admission policy kind CI gate.
+# ──────────────────────────────────────────────────────────────────────────────
+# Validates that the ARG-054 Kyverno ClusterPolicy (T42) deny-lists unsigned
+# images and accepts cosign-signed digest-pinned images. Provides supply-chain
+# regression coverage BEFORE production rollout.
+#
+# Negative fixture: `nginx:1.27.0` — Docker-Hub image without Cosign signature
+# AND without sha256 digest — fails on BOTH policy checks simultaneously.
+#
+# Positive fixture: built and signed in this workflow itself via cosign keyless
+# (GHA OIDC) — `ghcr.io/${{ github.repository_owner }}/argus-policy-fixture`.
+# Pinned to the workflow's commit SHA so each PR rebuilds its own fixture.
+#
+# Plan: ai_docs/develop/plans/2026-04-22-argus-cycle6-b5.md (T44)
+# Source-of-truth policy YAML: infra/kyverno/cluster-policy-require-signed-images.yaml (T42)
+# Helm-rendered copy:          infra/helm/argus/templates/kyverno-cluster-policy.yaml (T43)
+
+name: Admission policy (Kyverno + kind)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "infra/kyverno/**"
+      - "infra/helm/argus/templates/kyverno-cluster-policy.yaml"
+      - "infra/helm/argus/values*.yaml"
+      - "infra/scripts/check_policy_drift.sh"
+      - "infra/scripts/build_policy_fixture.sh"
+      - ".github/workflows/admission-policy-kind.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/kyverno/**"
+      - "infra/helm/argus/templates/kyverno-cluster-policy.yaml"
+      - "infra/helm/argus/values*.yaml"
+      - "infra/scripts/check_policy_drift.sh"
+      - "infra/scripts/build_policy_fixture.sh"
+      - ".github/workflows/admission-policy-kind.yml"
+  workflow_dispatch: {}
+
+# Least-privilege at workflow level. `packages: write` is required to push the
+# positive fixture image to GHCR; `id-token: write` is required for cosign
+# keyless signing via the ambient GitHub Actions OIDC token.
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+# Cancel queued PR runs when a new push lands on the same ref so re-pushes
+# don't queue forever; keep main / dispatch runs serialised so one always
+# finishes before the next starts.
+concurrency:
+  group: admission-policy-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  KIND_VERSION: v0.24.0
+  KIND_K8S_VERSION: v1.31.0
+  KYVERNO_CHART_VERSION: 3.6.4
+  COSIGN_RELEASE: v3.0.5
+  POLICY_NAME: argus-require-signed-images
+  FIXTURE_REPO: ghcr.io/${{ github.repository_owner }}/argus-policy-fixture
+  NEGATIVE_IMAGE: nginx:1.27.0
+
+jobs:
+  policy-test:
+    name: Kyverno policy-test on kind k8s ${{ env.KIND_K8S_VERSION }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kind ${{ env.KIND_VERSION }} (k8s ${{ env.KIND_K8S_VERSION }})
+        uses: helm/kind-action@v1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          node_image: kindest/node:${{ env.KIND_K8S_VERSION }}
+          cluster_name: argus-policy-test
+          wait: 90s
+
+      - name: Set up helm v3.14.4 (matches helm-validation.yml)
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install Kyverno chart ${{ env.KYVERNO_CHART_VERSION }}
+        run: |
+          set -euo pipefail
+          helm repo add kyverno https://kyverno.github.io/kyverno/
+          helm repo update
+          helm install kyverno kyverno/kyverno \
+            --version "${KYVERNO_CHART_VERSION}" \
+            --namespace kyverno \
+            --create-namespace \
+            --wait \
+            --timeout 5m
+
+      - name: Apply ARGUS ClusterPolicy
+        run: |
+          set -euo pipefail
+          kubectl apply -f infra/kyverno/cluster-policy-require-signed-images.yaml
+
+          # Kyverno emits a `Ready` condition on ClusterPolicy in recent
+          # chart versions, but the controller may take a few seconds to
+          # reconcile after `apply`. Poll for up to 2 minutes; fall back to
+          # a presence + Spec OK check if the condition never surfaces (some
+          # builds expose readiness only via the `policyController` deployment).
+          ready=""
+          for attempt in $(seq 1 24); do
+            ready="$(kubectl get clusterpolicy "${POLICY_NAME}" \
+              -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
+            if [[ "${ready}" == "True" ]]; then
+              echo "ClusterPolicy ${POLICY_NAME} reports Ready=True after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for ${POLICY_NAME} Ready condition (attempt ${attempt}/24); current=${ready:-<none>}"
+            sleep 5
+          done
+          if [[ "${ready}" != "True" ]]; then
+            echo "::warning::ClusterPolicy ${POLICY_NAME} did not surface Ready=True within 2m; falling back to presence check"
+            kubectl get clusterpolicy "${POLICY_NAME}" >/dev/null
+          fi
+          kubectl get clusterpolicy "${POLICY_NAME}" -o yaml
+
+      - name: Install Cosign ${{ env.COSIGN_RELEASE }}
+        uses: sigstore/cosign-installer@v4.1.0
+        with:
+          cosign-release: ${{ env.COSIGN_RELEASE }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push positive fixture image
+        id: build
+        run: |
+          set -euo pipefail
+
+          # Resolve the current digest of the distroless static base by
+          # pulling the image and inspecting its RepoDigests. Avoids a
+          # hardcoded digest that goes stale and silently breaks the gate
+          # weeks later — the fixture is never deployed (only --dry-run=server
+          # admission), so "latest distroless static" is the right contract.
+          DISTROLESS_REPO="gcr.io/distroless/static-debian12"
+          docker pull "${DISTROLESS_REPO}"
+          DISTROLESS_DIGEST="$(docker inspect --format '{{ index .RepoDigests 0 }}' "${DISTROLESS_REPO}")"
+          echo "Resolved distroless base: ${DISTROLESS_DIGEST}"
+
+          mkdir -p fixture
+          # Distroless static has no shell and no /usr/bin/true; the entrypoint
+          # below is purely declarative — the container is never executed.
+          cat > fixture/Dockerfile <<EOF
+          FROM ${DISTROLESS_DIGEST}
+          ENTRYPOINT ["/sleep"]
+          CMD ["infinity"]
+          EOF
+
+          IMG_REF="${FIXTURE_REPO}:${GITHUB_SHA}"
+          docker build -t "${IMG_REF}" fixture/
+          docker push "${IMG_REF}"
+
+          DIGEST_REF="$(docker inspect --format '{{ index .RepoDigests 0 }}' "${IMG_REF}")"
+          echo "image_digest=${DIGEST_REF}" >> "${GITHUB_OUTPUT}"
+          echo "Pushed positive fixture: ${DIGEST_REF}"
+
+      - name: Cosign-sign positive fixture (keyless via GHA OIDC)
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${{ steps.build.outputs.image_digest }}"
+
+      - name: Drift check (inline ClusterPolicy vs standalone YAML)
+        run: |
+          set -euo pipefail
+          bash infra/scripts/check_policy_drift.sh
+
+      - name: Negative deploy MUST be denied (unsigned tag-only image)
+        id: negative
+        run: |
+          set +e
+          OUT="$(kubectl run policy-test-negative \
+            --image="${NEGATIVE_IMAGE}" \
+            --restart=Never \
+            --dry-run=server -o yaml 2>&1)"
+          RC=$?
+          set -e
+          printf '%s\n' "${OUT}" >> kubectl-negative.log
+          if [[ "${RC}" -eq 0 ]]; then
+            echo "::error::Negative test FAILED — unsigned image ${NEGATIVE_IMAGE} was accepted by admission"
+            exit 1
+          fi
+          if ! printf '%s' "${OUT}" | grep -q "${POLICY_NAME}"; then
+            echo "::error::Denied (rc=${RC}) but rejection did not cite ${POLICY_NAME}; see kubectl-negative.log artefact"
+            exit 1
+          fi
+          echo "Negative test PASSED — policy correctly denied ${NEGATIVE_IMAGE}"
+
+      - name: Positive deploy MUST succeed (signed + digest)
+        run: |
+          set -euo pipefail
+          kubectl run policy-test-positive \
+            --image="${{ steps.build.outputs.image_digest }}" \
+            --restart=Never \
+            --dry-run=server -o yaml \
+            > kubectl-positive.log
+          echo "Positive test PASSED — policy correctly allowed signed+digest fixture"
+
+      - name: Helm template validation (policy.enabled toggle)
+        run: |
+          set -euo pipefail
+          # When policy.enabled=false the chart MUST NOT render the
+          # ClusterPolicy. When policy.enabled=true exactly one document
+          # must be emitted. The `|| echo 0` pattern makes grep's no-match
+          # exit code (1) safe under `set -o pipefail`.
+          helm dependency build infra/helm/argus
+
+          count_off="$(helm template ./infra/helm/argus --set policy.enabled=false \
+            | grep -c '^kind: ClusterPolicy$' || echo 0)"
+          if [[ "${count_off}" -ne 0 ]]; then
+            echo "::error::policy.enabled=false produced ${count_off} ClusterPolicy documents (expected 0)"
+            exit 1
+          fi
+
+          count_on="$(helm template ./infra/helm/argus --set policy.enabled=true \
+            | grep -c '^kind: ClusterPolicy$' || echo 0)"
+          if [[ "${count_on}" -ne 1 ]]; then
+            echo "::error::policy.enabled=true produced ${count_on} ClusterPolicy documents (expected 1)"
+            exit 1
+          fi
+          echo "Helm template policy toggle: OK (off=${count_off}, on=${count_on})"
+
+      - name: Collect Kyverno + kube events for forensics
+        if: always()
+        run: |
+          set +e
+          kubectl get events --all-namespaces -o wide > kube-events.log 2>&1
+          kubectl logs -n kyverno -l app.kubernetes.io/component=admission-controller --tail=500 \
+            > kyverno-admission.log 2>&1
+          kubectl get clusterpolicy "${POLICY_NAME}" -o yaml > clusterpolicy.yaml 2>&1
+          kubectl get pods -n kyverno -o wide > kyverno-pods.log 2>&1
+
+      - name: Upload artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admission-policy-kind-logs
+          path: |
+            kubectl-*.log
+            kube-events.log
+            kyverno-admission.log
+            kyverno-pods.log
+            clusterpolicy.yaml
+          if-no-files-found: ignore
+          retention-days: 14

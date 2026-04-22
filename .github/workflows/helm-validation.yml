@@ -148,3 +148,116 @@ jobs:
           path: kubeconform-logs/
           if-no-files-found: ignore
           retention-days: 14
+
+  # T44 (Cycle 6 Batch 5, ARG-054) — Helm `policy.enabled` toggle gate.
+  # Renders the chart with both `policy.enabled=false` (default) and
+  # `policy.enabled=true` to assert that:
+  #   * the disabled render emits ZERO ClusterPolicy documents (no accidental
+  #     leak of the supply-chain admission gate into existing overlays);
+  #   * the enabled render emits EXACTLY ONE ClusterPolicy document AND that
+  #     document validates against the Kyverno CRD schema (Kyverno's CRD
+  #     isn't in kubeconform's defaults, so the schema URL is added explicitly);
+  #   * the inline template (templates/kyverno-cluster-policy.yaml) is
+  #     byte-equal to the standalone source-of-truth YAML (T42), enforced
+  #     by infra/scripts/check_policy_drift.sh.
+  #
+  # This job is independent of the `kubeconform` matrix to keep failure modes
+  # isolated — a Kyverno CRD outage on datreeio's catalogue should NOT block
+  # the dev/staging/prod overlay validation matrix.
+  policy-render-validation:
+    name: Helm policy.enabled toggle + Kyverno CRD validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: hashFiles('infra/helm/argus/Chart.yaml') != ''
+    permissions:
+      contents: read
+
+    env:
+      KUBECONFORM_VERSION: v0.6.7
+      # Kyverno's ClusterPolicy schema lives in the datreeio CRDs catalogue;
+      # adding it as an extra `--schema-location` lets kubeconform validate
+      # the rendered ClusterPolicy without needing a live cluster.
+      KYVERNO_CRD_SCHEMA: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/kyverno.io/clusterpolicy_v1.json
+      CRDS_CATALOGUE: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helm v3.14.4
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install kubeconform ${{ env.KUBECONFORM_VERSION }} (pinned, never :latest)
+        run: |
+          set -euo pipefail
+          curl -sSL \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: helm dependency build (offline-friendly, respects Chart.lock)
+        run: |
+          set -euo pipefail
+          helm dependency build infra/helm/argus
+
+      - name: Render with policy.enabled=false (must emit 0 ClusterPolicy docs)
+        run: |
+          set -euo pipefail
+          count="$(helm template argus infra/helm/argus --set policy.enabled=false \
+            | grep -c '^kind: ClusterPolicy$' || echo 0)"
+          if [[ "${count}" -ne 0 ]]; then
+            echo "::error::policy.enabled=false rendered ${count} ClusterPolicy docs (expected 0)"
+            exit 1
+          fi
+          echo "policy.enabled=false: OK (0 ClusterPolicy documents)"
+
+      - name: Render with policy.enabled=true and validate Kyverno CRD schema
+        run: |
+          set -euo pipefail
+          count="$(helm template argus infra/helm/argus --set policy.enabled=true \
+            | grep -c '^kind: ClusterPolicy$' || echo 0)"
+          if [[ "${count}" -ne 1 ]]; then
+            echo "::error::policy.enabled=true rendered ${count} ClusterPolicy docs (expected 1)"
+            exit 1
+          fi
+
+          # Validate the rendered policy against the Kyverno CRD schema. The
+          # `--skip CustomResourceDefinition` mirrors helm_kubeconform.sh — the
+          # chart references CRDs via the catalogue but does not author them.
+          helm template argus infra/helm/argus --set policy.enabled=true \
+            | kubeconform \
+                --strict \
+                --summary \
+                --output json \
+                --kubernetes-version 1.31.0 \
+                --skip CustomResourceDefinition \
+                --schema-location default \
+                --schema-location "${CRDS_CATALOGUE}" \
+                --schema-location "${KYVERNO_CRD_SCHEMA}" \
+                -
+          echo "policy.enabled=true: OK (1 ClusterPolicy document, schema-valid)"
+
+      - name: Drift check (inline template vs standalone YAML)
+        run: |
+          set -euo pipefail
+          bash infra/scripts/check_policy_drift.sh
+
+      - name: Append job summary (always)
+        if: always()
+        run: |
+          set +e
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## Helm policy toggle + Kyverno CRD validation — PASSED"
+            else
+              echo "## Helm policy toggle + Kyverno CRD validation — FAILED"
+            fi
+            echo
+            echo "Renders validated:"
+            echo "  - policy.enabled=false (expect 0 ClusterPolicy)"
+            echo "  - policy.enabled=true  (expect 1 ClusterPolicy, Kyverno CRD schema-valid)"
+            echo
+            echo "Drift check (inline template ↔ standalone YAML): see step output"
+          } >> "${GITHUB_STEP_SUMMARY}"
