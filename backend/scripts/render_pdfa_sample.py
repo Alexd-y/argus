@@ -1,5 +1,13 @@
 """ARG-058 / B6-T01 — Render a deterministic PDF/A-2u sample report.
 
+ARG-058-followup / C7-T02 (Wave 2) — extends the original B6-T01 renderer
+with five named PDF/A-2u acceptance fixtures (``basic`` / ``cyrillic`` /
+``longtable`` / ``images`` / ``per_tenant``) consumed by the
+``pdfa-validation`` GitHub Actions matrix. Backwards-compatible:
+``--fixture-variant=basic`` (the new default) preserves the original
+tier-template render byte-for-byte so the existing CI artefacts stay
+identical until a different variant is explicitly requested.
+
 Used by the ``pdfa-validation`` GitHub Actions workflow to feed
 ``verapdf-cli`` a representative PDF for compliance gating, and locally
 by developers verifying the LaTeX preamble changes do not regress the
@@ -24,6 +32,7 @@ Usage (PowerShell):
 
     python -m scripts.render_pdfa_sample `
       --tier midgard `
+      --fixture-variant basic `
       --output build/pdfa-sample.pdf
 
     # Validate locally (requires Docker):
@@ -41,9 +50,14 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
+import struct
 import sys
+import tempfile
+import zlib
 from collections.abc import Sequence
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
@@ -55,11 +69,22 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
+from src.db.models import PDF_ARCHIVAL_FORMAT_DEFAULT  # noqa: E402 — sys.path edit above.
 from src.reports.pdf_backend import (  # noqa: E402 — sys.path edit above.
     LatexBackend,
     render_latex_template,
     render_pdfa_xmpdata,
     resolve_latex_template_path,
+)
+from src.reports.tenant_pdf_format import (  # noqa: E402 — sys.path edit above.
+    resolve_tenant_pdf_archival_format,
+)
+from tests.fixtures.pdfa_variants import (  # noqa: E402 — sys.path edit above.
+    PNG_TOKEN_1,
+    PNG_TOKEN_2,
+    VARIANTS,
+    PDFAVariant,
+    get_variant,
 )
 
 logger = logging.getLogger("argus.render_pdfa_sample")
@@ -80,6 +105,15 @@ _FIXTURE_WATERMARK = "fixture-pdfa-2u"
 _FIXTURE_TENANT = "argus-fixture"
 _FIXTURE_SCAN = "scan-fixture-pdfa"
 _FIXTURE_TARGET = "https://example.invalid"
+
+# ARG-058-followup / C7-T02 — markers used by ``_inject_*`` helpers.
+# Stable, structured, easy to grep in PR review and verapdf forensics.
+_VARIANT_BODY_BEGIN = "% --- BEGIN ARGUS variant body ({variant}) ---"
+_VARIANT_BODY_END = "% --- END ARGUS variant body ({variant}) ---"
+_PER_TENANT_PREAMBLE_MARKER = (
+    "% ARGUS per-tenant resolver: tenant_id={tenant_id} "
+    "resolved_format={resolved_format}"
+)
 
 
 def _build_fixture_context(tier: str, scan_completed_at: str) -> dict[str, Any]:
@@ -205,12 +239,295 @@ def _build_fixture_context(tier: str, scan_completed_at: str) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Deterministic 1×1 sRGB PNG generator
+# ---------------------------------------------------------------------------
+#
+# The ``images`` variant embeds two raster images via ``\includegraphics``.
+# Pillow is NOT a direct dependency in backend/requirements*.txt (it ships
+# transitively under WeasyPrint via uv.lock, but the CI workflow only
+# installs Jinja2 — see .github/workflows/pdfa-validation.yml). To stay
+# zero-dep we synthesise valid PNG bytes from stdlib (``struct`` + ``zlib``).
+#
+# The PNGs are 1×1 RGB with an explicit ``sRGB`` chunk so they match the
+# OutputIntent registered by ``pdfx`` via ``colorprofiles`` (sRGB
+# IEC61966-2.1) — verapdf rule 6.2.4-1 fails on raster images whose
+# colour-space conflicts with the document's OutputIntent.
+
+
+def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
+    """Build one PNG chunk: ``length || type || data || crc32(type+data)``."""
+    length = struct.pack(">I", len(data))
+    crc = struct.pack(">I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
+    return length + chunk_type + data + crc
+
+
+def _write_deterministic_png(
+    path: Path, *, red: int, green: int, blue: int
+) -> Path:
+    """Write a deterministic 1×1 sRGB PNG to *path* using stdlib only.
+
+    Args:
+        path: Destination filename (parent must already exist).
+        red, green, blue: RGB sample values clamped to 0..255.
+
+    Returns:
+        *path* for caller convenience (chaining-friendly).
+
+    The chunk layout is the bare minimum a PDF/A-2u-clean rendering
+    pipeline needs:
+
+    * ``IHDR`` — width=1, height=1, bit_depth=8, colour_type=2 (RGB),
+      no interlace, no filter, no compression flags beyond the default.
+    * ``sRGB`` — rendering-intent byte 0 (perceptual). pdfx emits a
+      perceptual OutputIntent so the embedded raster matches.
+    * ``IDAT`` — zlib-compressed scanline (1 filter byte + 3 RGB bytes).
+    * ``IEND`` — required terminator chunk.
+    """
+    if not all(0 <= v <= 255 for v in (red, green, blue)):
+        raise ValueError(
+            f"PNG colour samples must be in 0..255; got "
+            f"r={red} g={green} b={blue}"
+        )
+
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(
+        ">IIBBBBB",
+        1,  # width
+        1,  # height
+        8,  # bit depth
+        2,  # colour type: RGB
+        0,  # compression method
+        0,  # filter method
+        0,  # interlace method
+    )
+    srgb = bytes([0])  # rendering intent: perceptual
+    raw = bytes([0]) + bytes([red, green, blue])  # scanline filter byte + RGB
+    idat = zlib.compress(raw, level=9)
+
+    payload = (
+        signature
+        + _png_chunk(b"IHDR", ihdr)
+        + _png_chunk(b"sRGB", srgb)
+        + _png_chunk(b"IDAT", idat)
+        + _png_chunk(b"IEND", b"")
+    )
+    path.write_bytes(payload)
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Per-tenant resolver wrapper
+# ---------------------------------------------------------------------------
+
+
+def _resolve_per_tenant_format(tenant_id: str, override: str | None) -> str:
+    """Synchronous wrapper around :func:`resolve_tenant_pdf_archival_format`.
+
+    Builds a transient in-memory aiosqlite session (no migrations / seeds)
+    and runs the async resolver under :func:`asyncio.run`. The transient
+    session has no ``Tenant`` row for *tenant_id*, so the real resolver
+    returns ``PDF_ARCHIVAL_FORMAT_DEFAULT`` (``"standard"``); we surface
+    *override* as a final fallback so the per-tenant variant still embeds
+    the intended ``"pdfa-2u"`` literal in the LaTeX preamble for verapdf
+    to inspect.
+
+    In unit tests :func:`resolve_tenant_pdf_archival_format` is patched
+    directly (its name is bound at this module's top level), so the
+    in-memory session machinery is never actually exercised — the mock
+    intercepts the call and returns whatever the test wants.
+
+    Args:
+        tenant_id: Tenant identifier passed straight to the resolver.
+        override: Variant-level fallback used when the resolver returns
+            the default. ``None`` → fall back to
+            ``PDF_ARCHIVAL_FORMAT_DEFAULT``.
+    """
+    try:
+        from sqlalchemy.ext.asyncio import (  # noqa: PLC0415 — local import.
+            AsyncSession,
+            create_async_engine,
+        )
+    except ImportError:
+        # CI workflow only installs Jinja2; sqlalchemy is in
+        # backend/requirements.txt but the workflow opts out for speed.
+        # Fall back to the variant override and surface a structured log
+        # so the gate run is auditable.
+        logger.warning(
+            "tenant_resolver_skipped_no_sqlalchemy",
+            extra={"event": "tenant_resolver_skipped_no_sqlalchemy"},
+        )
+        return override or PDF_ARCHIVAL_FORMAT_DEFAULT
+
+    async def _run() -> str:
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            future=True,
+        )
+        try:
+            async with AsyncSession(engine) as session:
+                resolved = await resolve_tenant_pdf_archival_format(
+                    session, tenant_id,
+                )
+        finally:
+            await engine.dispose()
+        # Honour the variant override when the in-memory DB has no
+        # Tenant row for ``tenant_id`` — otherwise the LaTeX preamble
+        # would always read "standard" and the per_tenant variant
+        # would not exercise the pdfa-2u code path verapdf is meant
+        # to police.
+        if resolved == PDF_ARCHIVAL_FORMAT_DEFAULT and override:
+            return override
+        return resolved
+
+    try:
+        return asyncio.run(_run())
+    except (ImportError, ModuleNotFoundError):
+        # aiosqlite missing → resolve cannot run a real session.
+        logger.warning(
+            "tenant_resolver_skipped_no_aiosqlite",
+            extra={"event": "tenant_resolver_skipped_no_aiosqlite"},
+        )
+        return override or PDF_ARCHIVAL_FORMAT_DEFAULT
+
+
+# ---------------------------------------------------------------------------
+# LaTeX source mutation helpers
+# ---------------------------------------------------------------------------
+
+
+def _inject_variant_body(
+    latex_source: str, body: str, variant_name: str
+) -> str:
+    """Insert *body* immediately before ``\\end{document}``.
+
+    The inserted block is wrapped in BEGIN/END comment markers so a
+    forensic reader (``less``, ``grep -n``, verapdf rule violation
+    snippets) can locate the variant content unambiguously when the
+    fixture later regresses.
+    """
+    end_marker = "\\end{document}"
+    if end_marker not in latex_source:
+        raise RuntimeError(
+            f"latex_source for variant {variant_name!r} is missing "
+            f"\\end{{document}} marker; cannot inject body block"
+        )
+    block = (
+        f"\n{_VARIANT_BODY_BEGIN.format(variant=variant_name)}\n"
+        f"{body}\n"
+        f"{_VARIANT_BODY_END.format(variant=variant_name)}\n"
+    )
+    return latex_source.replace(end_marker, block + end_marker, 1)
+
+
+def _inject_resolved_format(
+    latex_source: str, tenant_id: str, resolved_format: str
+) -> str:
+    """Insert a preamble comment recording the per-tenant resolved format.
+
+    The marker lives between ``\\documentclass`` and ``\\begin{document}``
+    so verapdf and forensic readers see it in the preamble. The format is
+    structured-as-comment so it cannot affect compilation, but it IS
+    grep-able for both unit-test assertions and human review.
+    """
+    begin_marker = "\\begin{document}"
+    if begin_marker not in latex_source:
+        raise RuntimeError(
+            "latex_source missing \\begin{document} marker; cannot inject "
+            "per-tenant resolved format comment"
+        )
+    block = (
+        _PER_TENANT_PREAMBLE_MARKER.format(
+            tenant_id=tenant_id, resolved_format=resolved_format
+        )
+        + "\n"
+    )
+    return latex_source.replace(begin_marker, block + begin_marker, 1)
+
+
+def _build_latex_source_for_variant(
+    *,
+    tier: str,
+    variant: PDFAVariant,
+    scan_completed_at: str,
+    tenant_id: str | None,
+    image_paths: tuple[Path, Path] | None,
+) -> str:
+    """Render the LaTeX source for *variant* and apply variant-specific edits.
+
+    Pure function (no filesystem writes other than what the underlying
+    Jinja2 environment does). Extracted from :func:`main` so unit tests
+    can pin a SHA-256 over the resulting LaTeX string and fail loudly
+    on any drift in the renderer's composition logic.
+
+    Args:
+        tier: Tier whose ``main.tex.j2`` provides the base LaTeX shell.
+        variant: One of :data:`tests.fixtures.pdfa_variants.VARIANTS`.
+        scan_completed_at: Deterministic ISO-8601 timestamp baked into
+            the rendered preamble (drives ``SOURCE_DATE_EPOCH``).
+        tenant_id: Optional override for the per-tenant resolver path.
+            Falls back to ``variant.tenant_id`` when ``None``.
+        image_paths: Required for the ``images`` variant; ignored for
+            every other variant. Two pre-generated PNG paths (caller
+            owns the tempdir lifecycle).
+
+    Returns:
+        Final LaTeX source ready to hand to
+        :meth:`LatexBackend.render` via ``latex_template_content``.
+    """
+    context = _build_fixture_context(tier, scan_completed_at)
+    latex_source = render_latex_template(tier, context)
+
+    body = variant.latex_body
+
+    if variant.name == "images":
+        if image_paths is None or len(image_paths) != 2:
+            raise RuntimeError(
+                "images variant requires exactly 2 pre-generated PNG paths "
+                "via image_paths=(p1, p2)"
+            )
+        body = body.replace(PNG_TOKEN_1, image_paths[0].as_posix())
+        body = body.replace(PNG_TOKEN_2, image_paths[1].as_posix())
+
+    if variant.name == "per_tenant":
+        # Resolver is consulted ONLY when --tenant-id is set OR the
+        # variant carries a default tenant_id. The CLI passes the flag
+        # straight through; if both are None we still resolve against
+        # the variant default so the preamble carries an audit trail.
+        tid = tenant_id or variant.tenant_id or _FIXTURE_TENANT
+        resolved_format = _resolve_per_tenant_format(
+            tid, variant.tenant_format_override,
+        )
+        logger.info(
+            "per_tenant_format_resolved",
+            extra={
+                "event": "per_tenant_format_resolved",
+                "tenant_id": tid,
+                "resolved_format": resolved_format,
+                "variant_override": variant.tenant_format_override,
+            },
+        )
+        latex_source = _inject_resolved_format(
+            latex_source, tid, resolved_format,
+        )
+
+    # Basic variant: no body injection — preserves byte-for-byte the
+    # pre-C7-T02 LaTeX source so the existing CI artefacts and any
+    # downstream snapshot consumers stay green.
+    if variant.name != "basic":
+        latex_source = _inject_variant_body(
+            latex_source, body, variant.name,
+        )
+
+    return latex_source
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="render_pdfa_sample",
         description=(
-            "Render a deterministic PDF/A-2u sample report for the "
-            "verapdf CI gate (B6-T01)."
+            "Render a deterministic PDF/A-2u sample report for the verapdf "
+            "CI gate (B6-T01 / C7-T02 fixture matrix)."
         ),
     )
     parser.add_argument(
@@ -218,9 +535,27 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=_KNOWN_TIERS,
         default="midgard",
         help=(
-            "Tier template to render. ``midgard`` is the default because "
-            "it is the smallest preamble and is therefore the fastest "
-            "smoke-test surface for the CI gate."
+            "Tier template providing the base LaTeX shell. ``midgard`` is "
+            "the smallest preamble and the default smoke-test surface."
+        ),
+    )
+    parser.add_argument(
+        "--fixture-variant",
+        choices=sorted(VARIANTS),
+        default="basic",
+        help=(
+            "Named PDF/A acceptance fixture (C7-T02). ``basic`` (default) "
+            "is byte-identical to the pre-C7-T02 render; non-basic variants "
+            "inject a variant-specific body block before \\end{document}."
+        ),
+    )
+    parser.add_argument(
+        "--tenant-id",
+        default=None,
+        help=(
+            "Tenant identifier passed to "
+            "``resolve_tenant_pdf_archival_format`` for the ``per_tenant`` "
+            "variant. Ignored for every other variant."
         ),
     )
     parser.add_argument(
@@ -261,6 +596,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     tier: str = args.tier
     output: Path = args.output
     scan_completed_at: str = args.scan_completed_at
+    fixture_variant: str = args.fixture_variant
+    tenant_id_arg: str | None = args.tenant_id
+
+    # ``argparse`` already validates ``choices`` so this lookup cannot
+    # raise — but using ``get_variant`` keeps the failure path uniform
+    # with code that imports the registry directly (e.g. tests).
+    variant = get_variant(fixture_variant)
 
     template_path = resolve_latex_template_path(tier)
     if template_path is None:
@@ -272,57 +614,95 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    context = _build_fixture_context(tier, scan_completed_at)
-    try:
-        latex_source = render_latex_template(tier, context)
-        xmpdata_source = render_pdfa_xmpdata(tier, context)
-    except Exception as exc:  # noqa: BLE001 — surface as exit code 1.
-        logger.error(
-            "template_render_failed",
-            extra={
-                "event": "template_render_failed",
-                "tier": tier,
-                "error_type": type(exc).__name__,
-            },
-        )
-        return 1
+    # ExitStack guarantees the optional images-tempdir is cleaned up
+    # on every exit path below (success, render failure, exception).
+    with ExitStack() as stack:
+        image_paths: tuple[Path, Path] | None = None
+        if variant.name == "images":
+            tmpdir_str = stack.enter_context(
+                tempfile.TemporaryDirectory(prefix="argus-pdfa-png-")
+            )
+            tmpdir = Path(tmpdir_str)
+            png1 = _write_deterministic_png(
+                tmpdir / "argus-fixture-1.png",
+                red=200, green=60, blue=60,
+            )
+            png2 = _write_deterministic_png(
+                tmpdir / "argus-fixture-2.png",
+                red=60, green=120, blue=200,
+            )
+            image_paths = (png1, png2)
+            logger.info(
+                "pdfa_images_generated",
+                extra={
+                    "event": "pdfa_images_generated",
+                    "tmpdir": str(tmpdir),
+                    "png1": png1.as_posix(),
+                    "png2": png2.as_posix(),
+                },
+            )
 
-    backend = LatexBackend()
-    if not backend.is_available():
-        logger.error(
-            "latex_backend_unavailable",
-            extra={"event": "latex_backend_unavailable"},
-        )
-        return 1
+        try:
+            latex_source = _build_latex_source_for_variant(
+                tier=tier,
+                variant=variant,
+                scan_completed_at=scan_completed_at,
+                tenant_id=tenant_id_arg,
+                image_paths=image_paths,
+            )
+            xmpdata_source = render_pdfa_xmpdata(
+                tier, _build_fixture_context(tier, scan_completed_at),
+            )
+        except Exception as exc:  # noqa: BLE001 — surface as exit code 1.
+            logger.error(
+                "template_render_failed",
+                extra={
+                    "event": "template_render_failed",
+                    "tier": tier,
+                    "fixture_variant": variant.name,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            return 1
 
-    ok = backend.render(
-        html_content="",  # ignored when latex_template_content is set
-        output_path=output,
-        scan_completed_at=scan_completed_at,
-        latex_template_content=latex_source,
-        pdfa_mode=True,
-        xmpdata_content=xmpdata_source,
-    )
-    if not ok or not output.exists() or output.stat().st_size == 0:
-        logger.error(
-            "pdfa_render_failed",
+        backend = LatexBackend()
+        if not backend.is_available():
+            logger.error(
+                "latex_backend_unavailable",
+                extra={"event": "latex_backend_unavailable"},
+            )
+            return 1
+
+        ok = backend.render(
+            html_content="",  # ignored when latex_template_content is set
+            output_path=output,
+            scan_completed_at=scan_completed_at,
+            latex_template_content=latex_source,
+            pdfa_mode=True,
+            xmpdata_content=xmpdata_source,
+        )
+        if not ok or not output.exists() or output.stat().st_size == 0:
+            logger.error(
+                "pdfa_render_failed",
+                extra={
+                    "event": "pdfa_render_failed",
+                    "tier": tier,
+                    "fixture_variant": variant.name,
+                    "output": str(output),
+                },
+            )
+            return 1
+
+        logger.info(
+            "pdfa_render_ok",
             extra={
-                "event": "pdfa_render_failed",
+                "event": "pdfa_render_ok",
                 "tier": tier,
+                "fixture_variant": variant.name,
                 "output": str(output),
+                "size_bytes": output.stat().st_size,
             },
         )
-        return 1
-
-    logger.info(
-        "pdfa_render_ok",
-        extra={
-            "event": "pdfa_render_ok",
-            "tier": tier,
-            "output": str(output),
-            "size_bytes": output.stat().st_size,
-        },
-    )
     return 0
 
 
