@@ -390,8 +390,9 @@ def test_collect_offences_failed_rule_carries_failed_checks_count() -> None:
     offences = _collect_offences(inner, frozenset(), strict_warnings=True)
 
     by_id = {o.rule_id: o for o in offences}
-    # Clause 6.2.4.3 testNumber=4 has 2 DeviceGray failures in the live capture.
-    assert by_id["6.2.4.3-4"].count == 2
+    # Clause 6.2.4.3 testNumber=4 has failedChecks=1 in the live capture
+    # (single DeviceGray reference; only one PDDeviceGray object emitted).
+    assert by_id["6.2.4.3-4"].count == 1
     # The other three each have 1 failed check.
     assert by_id["6.6.2.1-1"].count == 1
     assert by_id["6.2.11.4.1-1"].count == 1

@@ -8,16 +8,19 @@ schema parser in `backend/scripts/_verapdf_assert.py`.
 
 | File | Source |
 | ---- | ------ |
-| `verapdf_real_noncompliant.xml` | **Live capture**: `docker run --rm -v ./:/data verapdf/cli --format xml --flavour 2u /data/basic.pdf` against a `reportlab`-generated PDF, verapdf-cli **1.28.1**. |
-| `verapdf_real_compliant.xml` | **Hand-crafted** against the live noncompliant capture above: same envelope, `isCompliant="true"`, no failed `<rule>` elements (verapdf only lists failed rules in the default `<details>` block — passed rules are aggregated in count attributes only). Counts updated to all-passed. |
-| `verapdf_real_warning.xml` | **Hand-crafted** against the live envelope: one `<rule status="warning">` representing a policy-validation soft check. Standard PDF/A profiles in 1.28.x rarely emit `warning`, but our parser must handle it because policy / WCAG profiles do. |
-| `verapdf_real_parse_failure.xml` | **Live capture** of a malformed PDF (truncated minimal PDF) — verapdf emits `<taskException>` instead of `<validationReport>`. |
+| `verapdf_real_noncompliant.xml` | **Live capture**: `docker run --rm -v ./:/data verapdf/cli:v1.28.2 --format xml --flavour 2u /data/sample.pdf` against a `reportlab`-generated PDF (4 failed rules: stream EOL, DeviceGray w/o OutputIntent, missing XMP metadata, unembedded font). |
+| `verapdf_real_compliant.xml` | **Hand-crafted** against the live noncompliant envelope above: same `<report>/<jobs>/<job>/<validationReport>` shape, `isCompliant="true"`, empty `<details>` block (verapdf only lists failed rules in the default `<details>`; passed rules are aggregated in the `passedRules` / `passedChecks` count attributes only — confirmed against the docs at https://docs.verapdf.org/cli/validation/). |
+| `verapdf_real_warning.xml` | **Hand-crafted** against the live envelope: one `<rule status="warning">` representing a policy-validation soft check. Standard PDF/A profiles in 1.28.x rarely emit `warning` (it surfaces mostly in policy / WCAG profiles), but the parser must handle it defensively because a future PDF/A profile bump could add warning-tier checks. |
+| `verapdf_real_parse_failure.xml` | **Hand-crafted** mirroring the live capture of a truncated/malformed PDF — verapdf emits `<taskException type="PARSE">` instead of `<validationReport>`. The parser surfaces the `<exceptionMessage>` so operators see the upstream reason, not a generic "missing" diagnostic. |
 
-The CI workflow pins `verapdf-cli 1.24.1`, but the MRR schema has been
-stable across the 1.24.x → 1.30.x range; the 1.28.1 captures here are
-forward and backward compatible with the pinned CI version. See the
-schema reference linked from `backend/scripts/_verapdf_assert.py`'s
-module docstring for the full element layout.
+The CI workflow pins `verapdf/cli:v1.24.1` (env `VERAPDF_IMAGE` in
+`.github/workflows/pdfa-validation.yml`); the MRR schema has been
+stable across the 1.24.x → 1.30.x range, so the 1.28.x captures here
+are forward and backward compatible with the pinned CI version. See
+the schema reference linked from `backend/scripts/_verapdf_assert.py`'s
+module docstring for the full element layout, and the live verapdf
+docs example at https://docs.verapdf.org/cli/validation/ for an
+authoritative envelope example.
 
 ## How to regenerate the live captures
 
