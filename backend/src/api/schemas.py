@@ -1299,3 +1299,125 @@ class IntelligenceShodanSummary(BaseModel):
     open_ports: list[int] = Field(default_factory=list)
     vulns: list[str] = Field(default_factory=list)
     services: list[IntelligenceShodanServiceItem] = Field(default_factory=list)
+
+
+# --- Webhook DLQ admin (T39, ARG-053) ---
+
+WEBHOOK_DLQ_REASON_MIN_LEN: int = 10
+WEBHOOK_DLQ_REASON_MAX_LEN: int = 500
+
+WebhookDlqTriageStatus = Literal["pending", "replayed", "abandoned"]
+
+
+class WebhookDlqEntryItem(BaseModel):
+    """One DLQ row projected for the operator console (T39, ARG-053).
+
+    ``target_url_hash`` is the 64-hex sha256 of the original webhook URL;
+    the raw URL (which carries the secret webhook token) NEVER leaves
+    the database. The frontend treats the hash as an opaque identifier
+    for cross-row correlation.
+    """
+
+    id: UUID
+    tenant_id: UUID
+    adapter_name: str
+    event_type: str
+    event_id: str
+    target_url_hash: str
+    attempt_count: int = Field(ge=0)
+    last_error_code: str
+    last_status_code: int | None = None
+    next_retry_at: datetime | None = None
+    created_at: datetime
+    replayed_at: datetime | None = None
+    abandoned_at: datetime | None = None
+    abandoned_reason: str | None = None
+    triage_status: WebhookDlqTriageStatus
+
+
+class WebhookDlqListResponse(BaseModel):
+    """GET /admin/webhooks/dlq — paginated DLQ list."""
+
+    items: list[WebhookDlqEntryItem]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    offset: int = Field(ge=0)
+
+
+class WebhookDlqReplayRequest(BaseModel):
+    """POST /admin/webhooks/dlq/{entry_id}/replay — body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        ...,
+        min_length=WEBHOOK_DLQ_REASON_MIN_LEN,
+        max_length=WEBHOOK_DLQ_REASON_MAX_LEN,
+        description=(
+            "Operator-supplied free-text justification (10..500 chars) "
+            "recorded in the audit trail."
+        ),
+    )
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < WEBHOOK_DLQ_REASON_MIN_LEN:
+            raise ValueError(
+                f"reason must contain at least {WEBHOOK_DLQ_REASON_MIN_LEN} "
+                "non-whitespace characters"
+            )
+        return normalized
+
+
+class WebhookDlqReplayResponse(BaseModel):
+    """202 — replay processed (success OR failure).
+
+    ``success=True`` + ``message_code='replay_succeeded'`` flips the row
+    to terminal ``replayed`` state. ``success=False`` +
+    ``message_code='replay_failed'`` increments ``attempt_count`` and
+    leaves the row in the DLQ for the next operator / beat retry.
+    """
+
+    entry_id: UUID
+    success: bool
+    attempt_count: int = Field(ge=0)
+    new_status: Literal["replayed", "pending"]
+    audit_id: UUID
+    message_code: Literal["replay_succeeded", "replay_failed"]
+
+
+class WebhookDlqAbandonRequest(BaseModel):
+    """POST /admin/webhooks/dlq/{entry_id}/abandon — body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(
+        ...,
+        min_length=WEBHOOK_DLQ_REASON_MIN_LEN,
+        max_length=WEBHOOK_DLQ_REASON_MAX_LEN,
+        description=(
+            "Operator-supplied free-text justification (10..500 chars) "
+            "recorded in the audit trail."
+        ),
+    )
+
+    @field_validator("reason")
+    @classmethod
+    def _normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < WEBHOOK_DLQ_REASON_MIN_LEN:
+            raise ValueError(
+                f"reason must contain at least {WEBHOOK_DLQ_REASON_MIN_LEN} "
+                "non-whitespace characters"
+            )
+        return normalized
+
+
+class WebhookDlqAbandonResponse(BaseModel):
+    """200 — row marked abandoned with ``abandoned_reason='operator'``."""
+
+    entry_id: UUID
+    new_status: Literal["abandoned"]
+    audit_id: UUID

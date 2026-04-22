@@ -35,6 +35,7 @@ import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / 
 import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
 import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
 import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
+from src.api.routers import admin_webhook_dlq  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
 
 from src.api.routers.recon import recon_router
 from src.cache.scan_knowledge_base import get_knowledge_base
@@ -117,6 +118,7 @@ app.include_router(reports.router, prefix="/api/v1")
 app.include_router(sandbox.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
+app.include_router(admin_webhook_dlq.router)
 app.include_router(cache.router, prefix="/api/v1")
 app.include_router(internal_va.router, prefix="/api/v1")
 app.include_router(recon_router, prefix="/api/v1")
