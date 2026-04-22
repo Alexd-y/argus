@@ -154,24 +154,36 @@ jobs:
           # instead of hiding behind a 200-line latexmk log later.
           python -c "import jinja2, sqlalchemy, pydantic, pydantic_settings; print('jinja2', jinja2.__version__); print('sqlalchemy', sqlalchemy.__version__); print('pydantic', pydantic.VERSION)"
 
-      # C7-T02 follow-up (DEBUG-5): the per_tenant matrix leg actually
-      # exercises ``resolve_tenant_pdf_archival_format`` against an
-      # in-memory aiosqlite SQLAlchemy session (see
+      # C7-T02 follow-up (DEBUG-5, Option A): the per_tenant matrix leg
+      # now actually exercises ``resolve_tenant_pdf_archival_format``
+      # against an in-memory aiosqlite SQLAlchemy session (see
       # ``_resolve_per_tenant_format`` in backend/scripts/render_pdfa_sample.py).
-      # Pin matches backend/pyproject.toml ``aiosqlite>=0.19`` dev dep.
-      # If aiosqlite is absent the script raises loudly (no silent fallback)
-      # so this leg goes red, surfacing the missing install at the gate
-      # instead of hiding behind a "tenant_resolver_skipped" warning.
+      # Before this fix the resolver was wrapped in a ``try/except
+      # ImportError`` that silently fell back to the variant override
+      # whenever sqlalchemy / aiosqlite were missing, which the CI
+      # workflow always was. The matrix leg therefore was a smoke test
+      # of the LaTeX preamble, not of the resolver - the reviewer
+      # correctly flagged this as a CRITICAL coverage gap.
+      #
+      # The fix is two-sided: the renderer raises loudly on missing
+      # imports, AND this step installs the missing driver so the
+      # leg actually runs. Pin mirrors the ``aiosqlite>=0.19`` dev
+      # extra in backend/pyproject.toml.
       - name: Install per-tenant async-DB deps (aiosqlite)
         if: matrix.fixture == 'per_tenant'
         run: |
           set -euo pipefail
+          # ``backend/pyproject.toml`` declares aiosqlite under
+          # ``[project.optional-dependencies]`` as a quoted TOML string.
+          # Strip the surrounding quotes + trailing comma so ``pip install``
+          # gets the bare PEP 508 spec.
           aiosqlite_pin="$(grep -iE '^[[:space:]]*"?aiosqlite' backend/pyproject.toml | head -n1 \
             | sed -E 's/^[[:space:]]*"?(aiosqlite[^"]*)"?,?$/\1/')"
           if [[ -z "${aiosqlite_pin}" ]]; then
             aiosqlite_pin="aiosqlite>=0.19"
           fi
           pip install "${aiosqlite_pin}"
+          python -c "import aiosqlite; print('aiosqlite', aiosqlite.__version__)"
 
       # TeX Live ``-extra`` carries pdfx, colorprofiles, etoolbox, ragged2e,
       # array, longtable, booktabs, datetime2, parskip, fancyhdr; the
