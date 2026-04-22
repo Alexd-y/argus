@@ -204,10 +204,15 @@ def patch_async_session_factory(
     The new auth modules grab the factory by attribute (``from src.db.session
     import async_session_factory``); a single ``monkeypatch.setattr`` per
     import site is enough to keep the patch local to the test.
+
+    C7-T03 note — ``require_admin`` and its session resolver moved from
+    ``src.api.routers.admin`` to ``src.auth.admin_dependencies`` so the
+    new ``require_admin_mfa_passed`` gate could depend on it without a
+    circular import. The factory pointer follows the implementation.
     """
     for module_path in (
         "src.auth.admin_users.async_session_factory",
-        "src.api.routers.admin.async_session_factory",
+        "src.auth.admin_dependencies.async_session_factory",
     ):
         monkeypatch.setattr(module_path, session_factory)
 
@@ -328,7 +333,7 @@ async def admin_app(
         "src.auth.admin_users.async_session_factory", session_factory
     )
     monkeypatch.setattr(
-        "src.api.routers.admin.async_session_factory", session_factory
+        "src.auth.admin_dependencies.async_session_factory", session_factory
     )
 
     from fastapi import FastAPI
