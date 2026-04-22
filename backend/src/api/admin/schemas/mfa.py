@@ -282,8 +282,17 @@ class MFAStatusResponse(BaseModel):
     )
 
 
-class MFARegenerateBackupCodesResponse(BaseModel):
-    """``POST /backup-codes/regenerate`` response — fresh plaintext codes ONCE."""
+class BackupCodesRegenerateResponse(BaseModel):
+    """``POST /backup-codes/regenerate`` response — fresh plaintext codes ONCE.
+
+    Renamed from the pre-spec ``MFARegenerateBackupCodesResponse`` to match
+    the canonical envelope name in
+    ``ai_docs/develop/issues/ISS-T20-003-phase2.md`` §Phase 2a Option 1
+    (the dashboard contract pivots on ``BackupCodesRegenerateResponse``).
+    The ``generated_at`` field was added in the same spec revision so the
+    operator UI can timestamp the "you just rotated codes" toast without
+    a follow-up ``GET /status`` round-trip.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -296,16 +305,24 @@ class MFARegenerateBackupCodesResponse(BaseModel):
             "The admin MUST store them out-of-band before navigating away."
         ),
     )
+    generated_at: datetime = Field(
+        ...,
+        description=(
+            "Server-clock UTC timestamp at which the new code batch was "
+            "minted. Provided so the UI can render an audit-correlatable "
+            '"rotated at" stamp alongside the one-shot plaintext list.'
+        ),
+    )
 
 
 __all__ = [
+    "BackupCodesRegenerateResponse",
     "MFAConfirmRequest",
     "MFAConfirmResponse",
     "MFADisableRequest",
     "MFADisableResponse",
     "MFAEnrollRequest",
     "MFAEnrollResponse",
-    "MFARegenerateBackupCodesResponse",
     "MFAStatusResponse",
     "MFAVerifyRequest",
     "MFAVerifyResponse",

@@ -77,13 +77,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.admin.schemas.mfa import (
+    BackupCodesRegenerateResponse,
     MFAConfirmRequest,
     MFAConfirmResponse,
     MFADisableRequest,
     MFADisableResponse,
     MFAEnrollRequest,
     MFAEnrollResponse,
-    MFARegenerateBackupCodesResponse,
     MFAStatusResponse,
     MFAVerifyRequest,
     MFAVerifyResponse,
@@ -126,10 +126,14 @@ _VERIFY_RATE_LIMIT_LRU_CAP: Final[int] = 4096
 _VERIFY_RATE_LIMIT_PER_MINUTE_DEFAULT: Final[int] = 5
 
 #: Generic error responses — bounded taxonomy the SIEM can pivot on.
+#: Spec reference: ``ai_docs/develop/plans/2026-04-22-argus-cycle7.md``
+#: §C7-T03 mandates a *single* ``mfa_verify_failed`` detail (HTTP 401)
+#: for every "wrong second factor" path so the SOC's SIEM rule is one
+#: line, not three; and so a brute-force probe cannot fingerprint which
+#: of the two credential types (TOTP / backup code) was wrong.
 _DETAIL_AUTH_REQUIRED: Final[str] = "Authentication required"
 _DETAIL_INVALID_TOTP: Final[str] = "invalid_totp"
-_DETAIL_INVALID_BACKUP: Final[str] = "invalid_backup_code"
-_DETAIL_INVALID_PROOF: Final[str] = "invalid_mfa_proof"
+_DETAIL_MFA_VERIFY_FAILED: Final[str] = "mfa_verify_failed"
 _DETAIL_MFA_NOT_ENABLED: Final[str] = "mfa_not_enabled"
 _DETAIL_MFA_ALREADY_ENABLED: Final[str] = "mfa_already_enabled"
 _DETAIL_NO_PENDING: Final[str] = "no_pending_enrollment"
@@ -637,8 +641,7 @@ async def _verify_one_credential(
     "/verify",
     response_model=MFAVerifyResponse,
     responses={
-        400: {"description": "Invalid TOTP / backup code"},
-        401: {"description": "Authentication required"},
+        401: {"description": "Authentication required OR invalid MFA proof"},
         429: {"description": "Too many MFA verify attempts; honour Retry-After"},
     },
 )
@@ -698,9 +701,13 @@ async def admin_mfa_verify(
                 "path": path,
             },
         )
+        # 401 (not 400) — wrong second-factor proof is an authentication
+        # failure, not a malformed request. Single ``mfa_verify_failed``
+        # detail (no per-path differentiation) so a brute-forcer cannot
+        # tell whether they tried a TOTP vs backup-code on a typo path.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_DETAIL_INVALID_TOTP if path == "totp" else _DETAIL_INVALID_BACKUP,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_DETAIL_MFA_VERIFY_FAILED,
         )
 
     try:
@@ -748,14 +755,19 @@ async def admin_mfa_verify(
 # ---------------------------------------------------------------------------
 
 
-async def _verify_fresh_proof_or_400(
+async def _verify_fresh_proof_or_401(
     db: AsyncSession,
     *,
     subject: str,
     totp_code: str | None,
     backup_code: str | None,
 ) -> None:
-    """Verify a fresh TOTP / backup-code proof or raise HTTP 400."""
+    """Verify a fresh TOTP / backup-code proof or raise HTTP 401.
+
+    Spec reference: ``ai_docs/develop/plans/2026-04-22-argus-cycle7.md``
+    §C7-T03 — wrong second-factor proof is an *authentication* failure
+    (HTTP 401 ``mfa_verify_failed``), not a malformed-body 400.
+    """
     try:
         verified, _path = await _verify_one_credential(
             db,
@@ -785,8 +797,8 @@ async def _verify_fresh_proof_or_400(
             },
         )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_DETAIL_INVALID_PROOF,
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_DETAIL_MFA_VERIFY_FAILED,
         )
 
 
@@ -794,8 +806,7 @@ async def _verify_fresh_proof_or_400(
     "/disable",
     response_model=MFADisableResponse,
     responses={
-        400: {"description": "Invalid MFA proof"},
-        401: {"description": "Authentication required"},
+        401: {"description": "Authentication required OR invalid MFA proof"},
         409: {"description": "MFA is not enabled for this account"},
     },
 )
@@ -822,7 +833,7 @@ async def admin_mfa_disable(
             detail=_DETAIL_MFA_NOT_ENABLED,
         )
 
-    await _verify_fresh_proof_or_400(
+    await _verify_fresh_proof_or_401(
         db,
         subject=subject,
         totp_code=body.totp_code,
@@ -869,10 +880,9 @@ async def admin_mfa_disable(
 
 @router.post(
     "/backup-codes/regenerate",
-    response_model=MFARegenerateBackupCodesResponse,
+    response_model=BackupCodesRegenerateResponse,
     responses={
-        400: {"description": "Invalid MFA proof"},
-        401: {"description": "Authentication required"},
+        401: {"description": "Authentication required OR invalid MFA proof"},
         409: {"description": "MFA is not enabled for this account"},
     },
 )
@@ -880,7 +890,7 @@ async def admin_mfa_regenerate_backup_codes(
     body: MFADisableRequest,
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> MFARegenerateBackupCodesResponse:
+) -> BackupCodesRegenerateResponse:
     """Mint a fresh batch of backup codes; the prior batch is invalidated.
 
     Reuses :class:`MFADisableRequest` for the proof body (same XOR shape
@@ -899,7 +909,7 @@ async def admin_mfa_regenerate_backup_codes(
             detail=_DETAIL_MFA_NOT_ENABLED,
         )
 
-    await _verify_fresh_proof_or_400(
+    await _verify_fresh_proof_or_401(
         db,
         subject=subject,
         totp_code=body.totp_code,
@@ -933,6 +943,7 @@ async def admin_mfa_regenerate_backup_codes(
         _raise_internal()
         raise AssertionError("unreachable")  # pragma: no cover
 
+    now = datetime.now(tz=timezone.utc)
     logger.info(
         "admin_mfa_backup_regenerate",
         extra={
@@ -941,7 +952,9 @@ async def admin_mfa_regenerate_backup_codes(
             "backup_codes_count": len(plaintext),
         },
     )
-    return MFARegenerateBackupCodesResponse(backup_codes=plaintext)
+    return BackupCodesRegenerateResponse(
+        backup_codes=plaintext, generated_at=now
+    )
 
 
 # ---------------------------------------------------------------------------
