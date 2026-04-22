@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+import { ADMIN_AUTH_MODES, type AdminAuthMode } from "@/lib/adminAuth";
 import { AdminAuthProvider } from "@/services/admin/AdminAuthContext";
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
+
+import { LogoutButton } from "./LogoutButton";
 
 const NAV = [
   { href: "/admin", label: "Dashboard" },
@@ -17,6 +21,25 @@ const NAV = [
   { href: "/admin/llm", label: "LLM" },
   { href: "/admin/system", label: "System" },
 ] as const;
+
+/**
+ * Read the auth mode from the BUNDLED `NEXT_PUBLIC_ADMIN_AUTH_MODE` env.
+ * This runs in the browser too — it's purely a UX gate (which controls
+ * to render). Real RBAC sits server-side in `serverSession.ts`.
+ *
+ * Hand-rolled parse rather than importing from `lib/adminAuth.ts` is
+ * deliberate: the Next.js compiler swaps `process.env.NEXT_PUBLIC_*`
+ * for literals in the client bundle. Indirecting through a function
+ * import would prevent that substitution; we'd ship the env-resolution
+ * code into every client bundle for a single boolean.
+ */
+function readAuthMode(): AdminAuthMode {
+  const raw = process.env.NEXT_PUBLIC_ADMIN_AUTH_MODE?.trim().toLowerCase();
+  if (raw && (ADMIN_AUTH_MODES as readonly string[]).includes(raw)) {
+    return raw as AdminAuthMode;
+  }
+  return "auto";
+}
 
 function ForbiddenChrome({ children }: { children: React.ReactNode }) {
   return (
@@ -37,9 +60,29 @@ function ForbiddenChrome({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Bare passthrough used by `/admin/login` so the login screen renders
+ * standalone (no sidebar, no route guard). The login page is the ONE
+ * legitimate anonymous surface inside `/admin/*`; bouncing it through
+ * `AdminRouteGuard` would create a redirect loop.
+ */
+function LoginChrome({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      {children}
+    </div>
+  );
+}
+
 function AdminChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isForbidden = pathname === "/admin/forbidden";
+  const isLogin = pathname === "/admin/login";
+  const showLogout = readAuthMode() !== "cookie";
+
+  if (isLogin) {
+    return <LoginChrome>{children}</LoginChrome>;
+  }
 
   if (isForbidden) {
     return <ForbiddenChrome>{children}</ForbiddenChrome>;
@@ -90,6 +133,12 @@ function AdminChrome({ children }: { children: React.ReactNode }) {
               <span className="truncate text-[var(--text-secondary)]">
                 {pathname.replace(/^\/admin/, "") || "dashboard"}
               </span>
+            </div>
+            <div
+              className="flex items-center gap-2"
+              data-testid="admin-user-menu"
+            >
+              {showLogout ? <LogoutButton /> : null}
             </div>
           </header>
           <nav

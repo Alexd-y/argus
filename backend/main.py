@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.api.routers import (
     admin,
+    admin_auth,
     auth,
     cache,
     findings,
@@ -38,6 +39,7 @@ import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRU
 from src.api.routers import admin_webhook_dlq  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
 
 from src.api.routers.recon import recon_router
+from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
@@ -66,6 +68,16 @@ async def lifespan(_app: FastAPI):
     except Exception as e:
         logger.warning(
             "Startup migrations skipped: %s", type(e).__name__, exc_info=False
+        )
+    try:
+        await bootstrap_admin_user_if_configured()
+    except Exception as e:
+        logger.warning(
+            "admin_bootstrap_skipped",
+            extra={
+                "event": "argus.auth.admin_bootstrap.skipped",
+                "error_type": type(e).__name__,
+            },
         )
     try:
         get_knowledge_base().warm_cache()
@@ -112,6 +124,7 @@ app.include_router(metrics.router)
 app.include_router(providers_health.router)
 app.include_router(queues_health.router)
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 app.include_router(findings.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")

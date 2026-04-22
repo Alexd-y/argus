@@ -69,6 +69,7 @@ function makeTenant(over: Partial<AdminTenant> = {}): AdminTenant {
     rate_limit_rpm: over.rate_limit_rpm ?? null,
     scope_blacklist: over.scope_blacklist ?? null,
     retention_days: over.retention_days ?? null,
+    pdf_archival_format: over.pdf_archival_format ?? "standard",
     created_at: over.created_at ?? "2026-04-01T00:00:00Z",
     updated_at: over.updated_at ?? "2026-04-01T00:00:00Z",
   };

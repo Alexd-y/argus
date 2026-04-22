@@ -265,6 +265,17 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "requires_docker_e2e: needs the full docker-compose.e2e.yml stack (ARG-047 capstone)",
     )
+    # B6-T04 marker — kind-cluster integration tests under tests/integration/k8s/.
+    # The k8s subtree's own conftest auto-tags every item with this marker AND
+    # adds a skipif gate when KIND_CLUSTER_NAME is missing. Declared here so
+    # `pytest --strict-markers` is happy when CI invokes `pytest -m requires_kind`.
+    config.addinivalue_line(
+        "markers",
+        "requires_kind: needs a live kind cluster + kubectl on PATH "
+        "(skipped by default; opt-in via KIND_CLUSTER_NAME env or "
+        "pytest -m requires_kind; CI workflow .github/workflows/kev-hpa-kind.yml "
+        "provisions the cluster)",
+    )
     # ARG-038 marker — declared here for IDE discovery; mirrored in pyproject.toml + pytest.ini.
     config.addinivalue_line(
         "markers",

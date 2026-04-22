@@ -616,6 +616,91 @@ const DLQ_SEED: ReadonlyArray<DlqRow> = [
   },
 ];
 
+// ──────────────────────────────────────────────────────────────────────
+// B6-T09 (ISS-T20-003 Phase 1 frontend) — admin auth surface mock
+//
+// Five distinct subjects so the E2E suite can prove audit subject
+// uniqueness (acceptance criterion (b)). The plaintext "passwords"
+// here are NOT bcrypt hashes — the mock skips the slow KDF entirely
+// because:
+//   * Real cryptographic verification adds ~250 ms per login attempt
+//     and bloats deterministic tests with no security gain (the mock
+//     binds to 127.0.0.1 only, never sees production traffic).
+//   * The contract under test is "frontend forwards (subject, password)
+//     server-side and forwards Set-Cookie back" — the mock's job is to
+//     respond predictably, not to mirror bcrypt's CPU cost.
+//
+// `super-admin` here aligns with the backend's role taxonomy
+// (operator | admin | super-admin). Subjects come from a frozen list
+// rather than being parameterised so test failures point to a single
+// canonical source-of-truth.
+// ──────────────────────────────────────────────────────────────────────
+
+type AdminUserRow = {
+  readonly subject: string;
+  readonly password: string;
+  readonly role: "operator" | "admin" | "super-admin";
+  readonly tenantId: string | null;
+};
+
+const ADMIN_USERS: ReadonlyArray<AdminUserRow> = Object.freeze([
+  {
+    subject: "alice.admin@argus.test",
+    password: "alice-correct-horse",
+    role: "admin",
+    tenantId: MOCK_TENANT_ID,
+  },
+  {
+    subject: "bob.operator@argus.test",
+    password: "bob-correct-horse",
+    role: "operator",
+    tenantId: MOCK_TENANT_ID,
+  },
+  {
+    subject: "carol.super@argus.test",
+    password: "carol-correct-horse",
+    role: "super-admin",
+    tenantId: null,
+  },
+  {
+    subject: "dave.admin@argus.test",
+    password: "dave-correct-horse",
+    role: "admin",
+    tenantId: MOCK_SECONDARY_TENANT_ID,
+  },
+  {
+    subject: "eve.operator@argus.test",
+    password: "eve-correct-horse",
+    role: "operator",
+    tenantId: MOCK_SECONDARY_TENANT_ID,
+  },
+]);
+
+type AdminSessionRow = {
+  readonly id: string;
+  readonly subject: string;
+  readonly role: AdminUserRow["role"];
+  readonly tenantId: string | null;
+  readonly expiresAt: number;
+};
+
+type LoginThrottleRow = {
+  count: number;
+  firstAttemptAt: number;
+};
+
+const ADMIN_SESSION_TTL_MS = 60 * 60 * 1000;
+/**
+ * Mirror of the backend's per-IP rate-limit (5 attempts / 60 s before
+ * 429). Kept in sync with the constants in `admin_auth.py`. Keeping
+ * the policy here keeps the E2E suite self-contained: tests can drive
+ * the limiter to 429 by issuing 6 invalid logins from the same IP.
+ */
+const ADMIN_LOGIN_RATE_LIMIT_MAX = 5;
+const ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const ADMIN_LOGIN_RETRY_AFTER_S = 60;
+const ADMIN_SESSION_COOKIE = "argus.admin.session";
+
 type ThrottleRow = {
   tenant_id: string;
   reason: string;
@@ -643,6 +728,12 @@ type MockState = {
   emergencyAudit: EmergencyAuditRow[];
   auditCounter: number;
   dlqEntries: DlqRow[];
+  // ── B6-T09 admin auth state (per-mock-process; reset between specs).
+  adminSessions: Map<string, AdminSessionRow>;
+  /** Per-source-IP login attempt counter (sliding window). */
+  loginThrottles: Map<string, LoginThrottleRow>;
+  /** Strictly-monotonic counter so each session id is unique even at sub-ms login rates. */
+  sessionCounter: number;
 };
 
 function freshState(): MockState {
@@ -655,6 +746,9 @@ function freshState(): MockState {
     emergencyAudit: [],
     auditCounter: 0,
     dlqEntries: DLQ_SEED.map((e) => ({ ...e })),
+    adminSessions: new Map(),
+    loginThrottles: new Map(),
+    sessionCounter: 0,
   };
 }
 
@@ -1913,6 +2007,254 @@ function headerValue(
   return "";
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// B6-T09 — admin auth: login / logout / whoami
+//
+// Contract mirrors `backend/src/api/routers/admin_auth.py`:
+//   * 401 + generic detail on bad creds (NO enumeration on subject)
+//   * 429 + Retry-After when per-IP attempts exceed the cap
+//   * `Set-Cookie: argus.admin.session=<id>; Path=/; HttpOnly; Secure;
+//     SameSite=Strict; Max-Age=<ttl>` on success
+//   * whoami honours either the cookie or `Authorization: Bearer <id>`
+//
+// The mock identifies the source IP from `X-Forwarded-For` (the front-
+// end forwards it) and falls back to the socket address. This matches
+// the real router's per-IP throttle key.
+// ──────────────────────────────────────────────────────────────────────
+
+function deriveSourceIp(
+  req: IncomingMessage,
+  headers: IncomingMessage["headers"],
+): string {
+  const fwd = headerValue(headers, "x-forwarded-for");
+  if (fwd !== "") {
+    // First hop wins, mirroring the backend.
+    const first = fwd.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const socket = req.socket?.remoteAddress;
+  return typeof socket === "string" && socket !== "" ? socket : "127.0.0.1";
+}
+
+function pruneLoginThrottle(rec: LoginThrottleRow | undefined): LoginThrottleRow | undefined {
+  if (!rec) return undefined;
+  if (Date.now() - rec.firstAttemptAt > ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS) {
+    return undefined;
+  }
+  return rec;
+}
+
+function recordLoginAttempt(ip: string): { exceeded: boolean } {
+  const existing = pruneLoginThrottle(mockState.loginThrottles.get(ip));
+  if (!existing) {
+    mockState.loginThrottles.set(ip, { count: 1, firstAttemptAt: Date.now() });
+    return { exceeded: false };
+  }
+  existing.count += 1;
+  mockState.loginThrottles.set(ip, existing);
+  return { exceeded: existing.count > ADMIN_LOGIN_RATE_LIMIT_MAX };
+}
+
+function clearLoginThrottle(ip: string): void {
+  mockState.loginThrottles.delete(ip);
+}
+
+function nextSessionId(): string {
+  mockState.sessionCounter += 1;
+  // Length-stable, URL-safe id. The backend uses `secrets.token_urlsafe`,
+  // shape doesn't matter for the mock as long as it's opaque + unique.
+  const counter = mockState.sessionCounter.toString(16).padStart(16, "0");
+  const ts = Date.now().toString(36);
+  return `mock_${counter}_${ts}`;
+}
+
+function findAdminUser(subject: string, password: string): AdminUserRow | null {
+  // O(N) over the small, frozen seed list — fine for tests; the real
+  // backend uses a database lookup + bcrypt.
+  for (const user of ADMIN_USERS) {
+    if (user.subject === subject && user.password === password) return user;
+  }
+  return null;
+}
+
+function readSessionFromRequest(headers: IncomingMessage["headers"]): string | null {
+  const cookieHeader = headerValue(headers, "cookie");
+  if (cookieHeader !== "") {
+    for (const piece of cookieHeader.split(";")) {
+      const [name, ...rest] = piece.trim().split("=");
+      if (name === ADMIN_SESSION_COOKIE && rest.length > 0) {
+        const value = rest.join("=").trim();
+        if (value) return value;
+      }
+    }
+  }
+  const auth = headerValue(headers, "authorization");
+  if (auth.toLowerCase().startsWith("bearer ")) {
+    const token = auth.slice(7).trim();
+    if (token) return token;
+  }
+  return null;
+}
+
+function setSessionCookieHeader(
+  res: ServerResponse,
+  status: number,
+  body: JsonValue,
+  cookieValue: string,
+  maxAgeSeconds: number,
+): void {
+  // Manually serialise so we can set the precise attribute set the real
+  // backend ships with (HttpOnly + Secure + SameSite=Strict + Path=/).
+  // Secure is fine to advertise even on the loopback mock — the front-
+  // end re-emits the cookie with whatever flags we send, and tests run
+  // against `http://` so the browser will simply ignore Secure. In
+  // session-mode CI on `https://` it will be honoured.
+  const setCookie = `${ADMIN_SESSION_COOKIE}=${cookieValue}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
+  const text = JSON.stringify(body);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text).toString(),
+    "Set-Cookie": setCookie,
+  });
+  res.end(text);
+}
+
+function clearSessionCookieHeader(
+  res: ServerResponse,
+  status: number,
+  body: JsonValue,
+): void {
+  const setCookie = `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+  const text = JSON.stringify(body);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text).toString(),
+    "Set-Cookie": setCookie,
+  });
+  res.end(text);
+}
+
+function writeRateLimited(res: ServerResponse, retryAfterSeconds: number): void {
+  const text = JSON.stringify({ detail: "rate_limited" });
+  res.writeHead(429, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text).toString(),
+    "Retry-After": String(retryAfterSeconds),
+  });
+  res.end(text);
+}
+
+async function handleAdminLogin(
+  req: IncomingMessage,
+  body: string,
+  res: ServerResponse,
+): Promise<void> {
+  const ip = deriveSourceIp(req, req.headers);
+  let parsed: { subject?: unknown; password?: unknown };
+  try {
+    parsed = JSON.parse(body) as typeof parsed;
+  } catch {
+    // Even malformed bodies count toward the throttle so the brute-
+    // forcer doesn't get free retries by sending garbage.
+    const { exceeded } = recordLoginAttempt(ip);
+    if (exceeded) {
+      writeRateLimited(res, ADMIN_LOGIN_RETRY_AFTER_S);
+      return;
+    }
+    writeJson(res, 401, { detail: "invalid_credentials" });
+    return;
+  }
+
+  const subject =
+    typeof parsed.subject === "string" ? parsed.subject.trim() : "";
+  const password = typeof parsed.password === "string" ? parsed.password : "";
+
+  if (subject === "" || password === "") {
+    const { exceeded } = recordLoginAttempt(ip);
+    if (exceeded) {
+      writeRateLimited(res, ADMIN_LOGIN_RETRY_AFTER_S);
+      return;
+    }
+    writeJson(res, 401, { detail: "invalid_credentials" });
+    return;
+  }
+
+  const user = findAdminUser(subject, password);
+  if (!user) {
+    const { exceeded } = recordLoginAttempt(ip);
+    if (exceeded) {
+      writeRateLimited(res, ADMIN_LOGIN_RETRY_AFTER_S);
+      return;
+    }
+    writeJson(res, 401, { detail: "invalid_credentials" });
+    return;
+  }
+
+  // Successful login wipes the per-IP throttle so a legitimate user
+  // who fat-fingered once doesn't stay limited.
+  clearLoginThrottle(ip);
+
+  const sessionId = nextSessionId();
+  const expiresAtMs = Date.now() + ADMIN_SESSION_TTL_MS;
+  mockState.adminSessions.set(sessionId, {
+    id: sessionId,
+    subject: user.subject,
+    role: user.role,
+    tenantId: user.tenantId,
+    expiresAt: expiresAtMs,
+  });
+
+  setSessionCookieHeader(
+    res,
+    200,
+    {
+      role: user.role,
+      tenant_id: user.tenantId,
+      expires_at: new Date(expiresAtMs).toISOString(),
+    },
+    sessionId,
+    Math.floor(ADMIN_SESSION_TTL_MS / 1000),
+  );
+}
+
+function handleAdminLogout(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  const sessionId = readSessionFromRequest(req.headers);
+  if (sessionId !== null) {
+    mockState.adminSessions.delete(sessionId);
+  }
+  clearSessionCookieHeader(res, 200, { status: "logged_out" });
+}
+
+function handleAdminWhoami(
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
+  const sessionId = readSessionFromRequest(req.headers);
+  if (sessionId === null) {
+    writeJson(res, 401, { detail: "unauthenticated" });
+    return;
+  }
+  const session = mockState.adminSessions.get(sessionId);
+  if (!session) {
+    writeJson(res, 401, { detail: "unauthenticated" });
+    return;
+  }
+  if (session.expiresAt <= Date.now()) {
+    mockState.adminSessions.delete(sessionId);
+    writeJson(res, 401, { detail: "session_expired" });
+    return;
+  }
+  writeJson(res, 200, {
+    subject: session.subject,
+    role: session.role,
+    tenant_id: session.tenantId,
+    expires_at: new Date(session.expiresAt).toISOString(),
+  });
+}
+
 async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = parseUrl(req);
   const method = (req.method ?? "GET").toUpperCase();
@@ -2067,6 +2409,23 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
     return;
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // B6-T09 — admin auth: login / logout / whoami
+  // ──────────────────────────────────────────────────────────────────
+  if (path === "/api/v1/auth/admin/login" && method === "POST") {
+    const body = await readBody(req);
+    await handleAdminLogin(req, body, res);
+    return;
+  }
+  if (path === "/api/v1/auth/admin/logout" && method === "POST") {
+    handleAdminLogout(req, res);
+    return;
+  }
+  if (path === "/api/v1/auth/admin/whoami" && method === "GET") {
+    handleAdminWhoami(req, res);
+    return;
+  }
+
   // Mock-only state-reset endpoint. Lives outside `/admin/*` so the real
   // backend never has a route there even if a stale BACKEND_URL config
   // accidentally pointed at production. The mock requires no body.
@@ -2201,3 +2560,24 @@ export const MOCK_DLQ_SENTINELS = {
   storeUnavailable: DLQ_SENTINEL_STORE_UNAVAILABLE,
   forbidden: DLQ_SENTINEL_FORBIDDEN,
 } as const;
+
+/**
+ * B6-T09 admin auth rate-limit constants exported for tests that want
+ * to drive the limiter to 429 deterministically.
+ */
+export const MOCK_ADMIN_LOGIN_RATE_LIMIT = {
+  maxAttempts: ADMIN_LOGIN_RATE_LIMIT_MAX,
+  windowSeconds: Math.floor(ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS / 1000),
+  retryAfterSeconds: ADMIN_LOGIN_RETRY_AFTER_S,
+} as const;
+
+/** Alias of the backend-issued session cookie name (kept so callers don't import the const). */
+export const MOCK_ADMIN_SESSION_COOKIE = ADMIN_SESSION_COOKIE;
+
+/**
+ * Frozen seed of admin login fixtures consumed by `admin-auth.spec.ts`.
+ * Acceptance criterion (b) — "5 different logins → 5 different audit
+ * subjects" — is met by the cardinality of this list, so callers should
+ * iterate it directly rather than hard-coding a count.
+ */
+export const MOCK_ADMIN_USERS: ReadonlyArray<AdminUserRow> = ADMIN_USERS;

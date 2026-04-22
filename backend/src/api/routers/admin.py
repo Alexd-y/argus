@@ -6,22 +6,42 @@ import csv
 import io
 import ipaddress
 import json
+import logging
 import os
 import re
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+logger = logging.getLogger(__name__)
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import String, cast, or_, select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
 
+from src.auth.admin_sessions import (
+    SessionPrincipal,
+    redact_session_id,
+    resolve_session,
+)
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import (
+    PDF_ARCHIVAL_FORMAT_VALUES,
     AuditLog,
+    PdfArchivalFormat,
     Policy,
     ProviderConfig,
     Subscription,
@@ -29,10 +49,11 @@ from src.db.models import (
     Tenant,
     UsageMetering,
     User,
+    gen_uuid,
 )
+from src.db.session import async_session_factory, get_db
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 from src.policy.scope import ScopeEngine, ScopeRule
-from src.db.session import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -318,12 +339,82 @@ def _audit_row_export_dict(row: AuditLog) -> dict[str, Any]:
 
 admin_key_header = APIKeyHeader(name="X-Admin-Key", auto_error=False)
 
+#: Cookie carrying the new CSPRNG admin session id (mirrors admin_auth router).
+_ADMIN_SESSION_COOKIE = "argus.admin.session"
 
-async def require_admin(
-    _request: Request,
-    admin_key: str | None = Depends(admin_key_header),
-) -> None:
-    """Require admin auth. Secure by default: deny when ADMIN_API_KEY not set (except DEBUG)."""
+#: Bearer prefix in the ``Authorization`` header (case-insensitive comparison).
+_BEARER_PREFIX_LOWER = "bearer "
+
+#: Generic 401 detail for the new session-mode rejections — never leaks the
+#: failure reason. The legacy fallback path keeps the historic
+#: ``"Invalid X-Admin-Key"`` detail to avoid breaking existing test contracts.
+_SESSION_AUTH_DETAIL = "Authentication required"
+
+
+def _bearer_session_from_authorization(authorization: str | None) -> str | None:
+    """Extract a session id from ``Authorization: Bearer <session>``."""
+    if not authorization:
+        return None
+    raw = authorization.strip()
+    if len(raw) < len(_BEARER_PREFIX_LOWER):
+        return None
+    if raw[: len(_BEARER_PREFIX_LOWER)].lower() != _BEARER_PREFIX_LOWER:
+        return None
+    candidate = raw[len(_BEARER_PREFIX_LOWER) :].strip()
+    return candidate or None
+
+
+def _extract_session_id(request: Request) -> str | None:
+    """Return the presented session id (cookie wins over bearer) or ``None``."""
+    cookie_value = request.cookies.get(_ADMIN_SESSION_COOKIE)
+    if cookie_value:
+        return cookie_value
+    return _bearer_session_from_authorization(request.headers.get("authorization"))
+
+
+async def _try_resolve_admin_session(
+    request: Request,
+) -> SessionPrincipal | None:
+    """Resolve the session against the DB in a self-contained transaction.
+
+    A dedicated ``async_session_factory()`` scope keeps the resolver out of
+    the route's own ``get_db`` lifecycle: the sliding-window ``UPDATE`` is
+    committed even when the route handler aborts mid-flight (4xx / 5xx),
+    so a long-lived browser session does not silently expire because of an
+    unrelated business-logic failure further down the dependency chain.
+    """
+    session_id = _extract_session_id(request)
+    if not session_id:
+        return None
+    try:
+        async with async_session_factory() as db:
+            principal = await resolve_session(
+                db,
+                session_id=session_id,
+                ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+            await db.commit()
+            return principal
+    except SQLAlchemyError:
+        logger.exception(
+            "admin_session_resolve_db_error",
+            extra={
+                "event": "argus.auth.admin_session.resolve_db_error",
+                "session_id_prefix": redact_session_id(session_id),
+            },
+        )
+        return None
+
+
+def _legacy_admin_key_check(admin_key: str | None) -> None:
+    """Enforce the legacy ``X-Admin-Key`` shim — historic error wording.
+
+    Preserves the exact ``"Invalid X-Admin-Key"`` 401 detail and the
+    ``"ADMIN_API_KEY not configured"`` 403 detail because numerous existing
+    unit tests assert on the literal strings (search references in
+    ``backend/tests/unit/api/test_admin_*``).
+    """
     expected = settings.admin_api_key
     if not expected:
         if settings.debug:
@@ -339,6 +430,50 @@ async def require_admin(
         )
 
 
+async def require_admin(
+    request: Request,
+    admin_key: str | None = Depends(admin_key_header),
+) -> None:
+    """Dual-mode admin gate (ISS-T20-003 Phase 1 backend, B6-T08).
+
+    Supports three modes via :data:`settings.admin_auth_mode`:
+
+    * ``"cookie"`` — *legacy* path only. Accepts the ``X-Admin-Key`` shim
+      and rejects everything else. Kept for the bridge window before the
+      frontend (B6-T09) is migrated.
+    * ``"session"`` — *new* path only. Accepts the ``argus.admin.session``
+      cookie or an ``Authorization: Bearer <session>`` header. Returns 401
+      with the generic :data:`_SESSION_AUTH_DETAIL` for every miss
+      (no enumeration).
+    * ``"both"`` (default) — try the new session first; if the resolver
+      returns ``None`` (no cookie, expired, revoked) **and** the caller
+      supplied an ``X-Admin-Key``, fall back to the legacy shim. Falls
+      through to the legacy code path on missing session, so existing
+      ``X-Admin-Key`` clients keep working without code change.
+
+    On a successful session resolve the principal is stashed at
+    ``request.state.admin_session`` so downstream dependencies (for
+    example :func:`src.api.routers.admin_bulk_ops._operator_subject_dep`)
+    can use the *real* operator subject for audit attribution instead of
+    the best-effort ``X-Operator-Subject`` header.
+    """
+    mode = settings.admin_auth_mode
+
+    if mode in ("session", "both"):
+        principal = await _try_resolve_admin_session(request)
+        if principal is not None:
+            request.state.admin_session = principal
+            return
+
+    if mode == "session":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_SESSION_AUTH_DETAIL,
+        )
+
+    _legacy_admin_key_check(admin_key)
+
+
 # --- Schemas ---
 
 _MAX_SCOPE_BLACKLIST_ENTRIES: int = 200
@@ -350,12 +485,15 @@ _TENANT_RETENTION_DAYS_MAX: int = 3650
 
 
 class TenantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     exports_sarif_junit_enabled: bool = False
     rate_limit_rpm: int | None = None
     scope_blacklist: list[str] | None = None
     retention_days: int | None = None
+    pdf_archival_format: PdfArchivalFormat = "standard"
     created_at: datetime
     updated_at: datetime
 
@@ -378,6 +516,11 @@ class TenantPatch(BaseModel):
         ge=_TENANT_RETENTION_DAYS_MIN,
         le=_TENANT_RETENTION_DAYS_MAX,
     )
+    #: Closed taxonomy mirroring ``Tenant.pdf_archival_format``
+    #: (``"standard"`` | ``"pdfa-2u"``). Pydantic ``Literal`` rejects any
+    #: unknown value with HTTP 422, so the CHECK constraint at the DB layer
+    #: is a defence-in-depth guard, not the primary validator.
+    pdf_archival_format: PdfArchivalFormat | None = None
 
     @field_validator("scope_blacklist", mode="before")
     @classmethod
@@ -522,6 +665,70 @@ class HealthDashboardOut(BaseModel):
 # --- Tenants ---
 
 
+async def _tenants_operator_subject(
+    request: Request,
+    x_operator_subject: str | None = Header(None, alias="X-Operator-Subject"),
+) -> str:
+    """Resolve the operator subject for tenant-update audit attribution.
+
+    Mirrors :func:`src.api.routers.admin_bulk_ops._operator_subject_dep`:
+
+    1. Real ``SessionPrincipal`` from the new cookie-session flow takes
+       precedence (set on ``request.state.admin_session`` by
+       :func:`require_admin`).
+    2. Best-effort ``X-Operator-Subject`` header for the legacy
+       ``X-Admin-Key`` shim (informational only — header is unauthenticated).
+    3. ``"admin_api"`` fallback so audit rows never store ``NULL``.
+
+    Cap at 256 chars to stay under the ``audit_logs.user_id`` and details
+    field length budget.
+    """
+    principal = getattr(request.state, "admin_session", None)
+    if isinstance(principal, SessionPrincipal):
+        return principal.subject[:256]
+    if x_operator_subject and x_operator_subject.strip():
+        return x_operator_subject.strip()[:256]
+    return "admin_api"
+
+
+def _emit_tenant_field_audit(
+    db: AsyncSession,
+    *,
+    tenant_id: str,
+    field: str,
+    old: object,
+    new: object,
+    operator_subject: str,
+) -> None:
+    """Emit one ``AuditLog`` row per *changed* tenant field.
+
+    We deliberately do **not** snapshot the full Tenant row in ``details``
+    (B6-T02 constraint: "never include the tenant data itself"). Each row
+    captures only ``field``/``old``/``new``, the operator hash, and a
+    deterministic resource pointer back at the tenant.
+
+    Caller MUST only invoke this when ``old != new`` to avoid noise.
+    """
+    audit_id = gen_uuid()
+    db.add(
+        AuditLog(
+            id=audit_id,
+            tenant_id=tenant_id,
+            user_id=None,
+            action="tenant_update",
+            resource_type="tenant",
+            resource_id=tenant_id,
+            details={
+                "field": field,
+                "old": old,
+                "new": new,
+                "operator_user_id_hash": user_id_hash(operator_subject),
+            },
+            ip_address=None,
+        )
+    )
+
+
 @router.get("/tenants", response_model=list[TenantOut])
 async def list_tenants(
     _: None = Depends(require_admin),
@@ -572,9 +779,18 @@ async def patch_tenant(
     tenant_id: str,
     body: TenantPatch,
     _: None = Depends(require_admin),
+    operator_subject: str = Depends(_tenants_operator_subject),
     db: AsyncSession = Depends(get_db),
 ) -> TenantOut:
-    """Update tenant metadata (limits, blacklist, retention, SARIF/JUnit opt-in)."""
+    """Update tenant metadata (limits, blacklist, retention, SARIF/JUnit opt-in,
+    PDF archival format).
+
+    Emits one ``AuditLog`` row per *changed* field via
+    :func:`_emit_tenant_field_audit`. ``pdf_archival_format`` is validated by
+    Pydantic ``Literal`` (HTTP 422 on bad input) and re-checked at the DB layer
+    via the ``ck_tenants_pdf_archival_format`` CHECK constraint (defence in
+    depth — see Alembic 029).
+    """
     updates = body.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(
@@ -587,13 +803,18 @@ async def patch_tenant(
     tenant = result.scalar_one_or_none()
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
+
+    audit_changes: list[tuple[str, object, object]] = []
+
     if "name" in updates:
         if updates["name"] is None:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="name cannot be null",
             )
-        tenant.name = updates["name"]
+        if tenant.name != updates["name"]:
+            audit_changes.append(("name", tenant.name, updates["name"]))
+            tenant.name = updates["name"]
     if "exports_sarif_junit_enabled" in updates:
         ev = updates["exports_sarif_junit_enabled"]
         if ev is None:
@@ -601,13 +822,77 @@ async def patch_tenant(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="exports_sarif_junit_enabled cannot be null",
             )
-        tenant.exports_sarif_junit_enabled = ev
+        if tenant.exports_sarif_junit_enabled != ev:
+            audit_changes.append(
+                ("exports_sarif_junit_enabled", tenant.exports_sarif_junit_enabled, ev)
+            )
+            tenant.exports_sarif_junit_enabled = ev
     if "rate_limit_rpm" in updates:
-        tenant.rate_limit_rpm = updates["rate_limit_rpm"]
+        if tenant.rate_limit_rpm != updates["rate_limit_rpm"]:
+            audit_changes.append(
+                ("rate_limit_rpm", tenant.rate_limit_rpm, updates["rate_limit_rpm"])
+            )
+            tenant.rate_limit_rpm = updates["rate_limit_rpm"]
     if "scope_blacklist" in updates:
-        tenant.scope_blacklist = updates["scope_blacklist"]
+        if tenant.scope_blacklist != updates["scope_blacklist"]:
+            audit_changes.append(
+                (
+                    "scope_blacklist",
+                    tenant.scope_blacklist,
+                    updates["scope_blacklist"],
+                )
+            )
+            tenant.scope_blacklist = updates["scope_blacklist"]
     if "retention_days" in updates:
-        tenant.retention_days = updates["retention_days"]
+        if tenant.retention_days != updates["retention_days"]:
+            audit_changes.append(
+                ("retention_days", tenant.retention_days, updates["retention_days"])
+            )
+            tenant.retention_days = updates["retention_days"]
+    if "pdf_archival_format" in updates:
+        new_format = updates["pdf_archival_format"]
+        if new_format is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="pdf_archival_format cannot be null",
+            )
+        if new_format not in PDF_ARCHIVAL_FORMAT_VALUES:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "pdf_archival_format must be one of "
+                    f"{list(PDF_ARCHIVAL_FORMAT_VALUES)}"
+                ),
+            )
+        if tenant.pdf_archival_format != new_format:
+            audit_changes.append(
+                (
+                    "pdf_archival_format",
+                    tenant.pdf_archival_format,
+                    new_format,
+                )
+            )
+            tenant.pdf_archival_format = new_format
+
+    for field, old, new in audit_changes:
+        _emit_tenant_field_audit(
+            db,
+            tenant_id=tenant_id,
+            field=field,
+            old=old,
+            new=new,
+            operator_subject=operator_subject,
+        )
+        logger.info(
+            "admin.tenant_update",
+            extra={
+                "event": "argus.admin.tenant_update",
+                "tenant_hash": tenant_hash(tenant_id),
+                "user_id_hash": user_id_hash(operator_subject),
+                "field": field,
+            },
+        )
+
     await db.flush()
     await db.refresh(tenant)
     return TenantOut.model_validate(tenant)

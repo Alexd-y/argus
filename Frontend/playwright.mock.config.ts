@@ -82,6 +82,13 @@ export default defineConfig({
       NEXT_PUBLIC_BACKEND_URL: BACKEND_URL,
       NEXT_PUBLIC_MCP_ENABLED: "false",
       NEXT_TELEMETRY_DISABLED: "1",
+      // T27 was written against the legacy cookie shim (loginAs() seeds
+      // role/tenant/subject cookies). Pin the mode here so a future
+      // change to the default (`auto`) cannot silently re-route those
+      // tests through whoami round-trips against a mock that doesn't
+      // know the seeded operator. The session-mode contract has its
+      // own dedicated suite in `playwright.session.config.ts`.
+      NEXT_PUBLIC_ADMIN_AUTH_MODE: "cookie",
     },
   },
 });

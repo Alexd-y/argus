@@ -163,6 +163,7 @@ markers = [
     "requires_oast: needs a live OAST listener (interactsh) (skipped by default in dev)",
     "requires_docker: union marker — any test that needs the Docker test-stack (skipped by default in dev)",
     "requires_docker_e2e: ARG-047 e2e capstone tests — need the full docker-compose.e2e.yml stack (juice-shop + ARGUS + prometheus); skipped by default. Enable with ``pytest -m requires_docker_e2e`` or via the ``e2e-full-scan`` CI workflow.",
+    "requires_kind: B6-T04 — needs a live kind cluster + kubectl on PATH (skipped by default; opt-in via KIND_CLUSTER_NAME env or ``pytest -m requires_kind``; CI workflow .github/workflows/kev-hpa-kind.yml provisions the cluster)",
     "mutates_catalog: test legitimately mutates the signed catalog (MUST use tmp_path copy — read_only_catalog fixture chmods production catalog to 0o444 for the session, so this marker is documentation-only)",
     "requires_latex: needs a working ``latexmk`` toolchain on PATH (skipped by default in dev; CI runs the LaTeX job separately for ARG-036)",
 ]

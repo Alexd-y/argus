@@ -1,10 +1,11 @@
 """ARGUS Backend — configuration from environment."""
 
+import logging
 import os
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -218,6 +219,134 @@ class Settings(BaseSettings):
 
     # Admin API — when set, admin endpoints require X-Admin-Key header
     admin_api_key: str | None = None
+
+    # ISS-T20-003 Phase 1 (B6-T08) — bcrypt admin + cookie-session.
+    # ``admin_auth_mode`` controls the dual-mode :func:`require_admin`:
+    #   * ``cookie`` — legacy ``X-Admin-Key`` shim only;
+    #   * ``session`` — new cookie-session only (rejects the legacy header);
+    #   * ``both`` — cookie-session first, fall back to ``X-Admin-Key`` shim
+    #                (default during the migration window).
+    admin_auth_mode: Literal["cookie", "session", "both"] = Field(
+        default="both",
+        validation_alias=AliasChoices("ADMIN_AUTH_MODE", "admin_auth_mode"),
+    )
+    # Session lifetime in seconds (sliding window; 12 h by default).
+    admin_session_ttl_seconds: int = Field(
+        default=43200,
+        ge=60,
+        validation_alias=AliasChoices(
+            "ADMIN_SESSION_TTL_SECONDS", "admin_session_ttl_seconds"
+        ),
+    )
+    # Per-IP login-rate-limit knobs (token-bucket; 10 req/min by default).
+    admin_login_rate_limit_per_minute: int = Field(
+        default=10,
+        ge=1,
+        validation_alias=AliasChoices(
+            "ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE",
+            "admin_login_rate_limit_per_minute",
+        ),
+    )
+    # ISS-T20-003 hardening (Alembic 030) — server-side HMAC pepper used to
+    # hash admin session ids at rest:
+    #   ``session_token_hash = sha256(pepper || raw_token)``.
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    # When unset AND ``admin_auth_mode`` ∈ {session, both}, session-mode logins
+    # refuse with HTTP 503 and the resolver returns ``None``; cookie-mode keeps
+    # working as the fail-safe so a forgotten config knob never bricks admin
+    # access entirely.
+    admin_session_pepper: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ADMIN_SESSION_PEPPER", "admin_session_pepper"
+        ),
+    )
+    # Grace-window toggles for the 030 → 031 migration window (one TTL = 12h):
+    #   * ``write_legacy`` keeps populating the raw ``session_id`` column on
+    #     create_session so a deploy rollback does not break in-flight tokens;
+    #   * ``read_legacy`` lets ``resolve_session`` fall back to a raw lookup
+    #     and opportunistically backfill ``session_token_hash`` on the row.
+    # Both default ON; flip to OFF after two TTL windows have elapsed in prod
+    # and run Alembic 031 to drop the legacy column.
+    admin_session_legacy_raw_write: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ADMIN_SESSION_LEGACY_RAW_WRITE",
+            "admin_session_legacy_raw_write",
+        ),
+    )
+    admin_session_legacy_raw_fallback: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ADMIN_SESSION_LEGACY_RAW_FALLBACK",
+            "admin_session_legacy_raw_fallback",
+        ),
+    )
+    # Optional bootstrap admin — populated idempotently on app startup. The
+    # password hash MUST be a pre-computed bcrypt hash (passlib format,
+    # rounds >= 12). Plaintext is NEVER accepted, never logged, and never
+    # written to disk by the bootstrap path.
+    admin_bootstrap_subject: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ADMIN_BOOTSTRAP_SUBJECT", "admin_bootstrap_subject"
+        ),
+    )
+    admin_bootstrap_password_hash: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ADMIN_BOOTSTRAP_PASSWORD_HASH", "admin_bootstrap_password_hash"
+        ),
+    )
+    admin_bootstrap_role: Literal["operator", "admin", "super-admin"] = Field(
+        default="super-admin",
+        validation_alias=AliasChoices(
+            "ADMIN_BOOTSTRAP_ROLE", "admin_bootstrap_role"
+        ),
+    )
+    admin_bootstrap_tenant_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ADMIN_BOOTSTRAP_TENANT_ID", "admin_bootstrap_tenant_id"
+        ),
+    )
+
+    @field_validator("admin_auth_mode", mode="before")
+    @classmethod
+    def normalize_admin_auth_mode(cls, v: object) -> str:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return "both"
+        s = str(v).strip().lower()
+        if s in ("cookie", "session", "both"):
+            return s
+        return "both"
+
+    @field_validator(
+        "admin_session_legacy_raw_write",
+        "admin_session_legacy_raw_fallback",
+        mode="before",
+    )
+    @classmethod
+    def coerce_admin_session_legacy_bool(cls, v: object) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("admin_bootstrap_role", mode="before")
+    @classmethod
+    def normalize_admin_bootstrap_role(cls, v: object) -> str:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return "super-admin"
+        s = str(v).strip().lower()
+        if s in ("super_admin", "superadmin", "super-admin"):
+            return "super-admin"
+        if s in ("admin", "operator"):
+            return s
+        return "super-admin"
 
     # Recon Module (Phase 8)
     recon_tools_timeout: int = 300
@@ -601,6 +730,73 @@ class Settings(BaseSettings):
         if not (1 <= v <= 65_535):
             raise ValueError(f"MCP_HTTP_PORT must be in 1..65535, got {v}")
         return v
+
+    @model_validator(mode="after")
+    def _enforce_production_admin_auth(self) -> Self:
+        """B6-T09 / ISS-T20-003 — fail-fast on unsafe admin auth in production.
+
+        Triggered ONLY when ``ENVIRONMENT=production`` (case-insensitive).
+        Two invariants:
+
+        * ``ADMIN_AUTH_MODE`` MUST be ``session``. The ``cookie`` and
+          ``both`` modes fall back to the legacy ``X-Admin-Key`` shim, which
+          relies on client-writable cookies for role/tenant — safe only in
+          dev where the operator is already trusted. Letting it ride into
+          production would let any visitor mint themselves an admin role.
+
+        * ``ADMIN_SESSION_PEPPER`` MUST be non-empty when sessions are
+          enabled. The pepper is the HMAC key used to hash session ids at
+          rest (Alembic 030); without it the resolver hard-fails with
+          HTTP 503 and admin access is bricked.
+
+        On violation we log CRITICAL with structured fields and call
+        ``SystemExit(1)`` so the process aborts at boot — long before any
+        request ever lands. Both failure paths are silent in dev / staging
+        / tests because they only fire when ``ENVIRONMENT=production``.
+        """
+        env = os.getenv("ENVIRONMENT", "").strip().lower()
+        if env != "production":
+            return self
+
+        logger = logging.getLogger("src.core.config")
+
+        if self.admin_auth_mode != "session":
+            logger.critical(
+                "admin_auth_mode_unsafe_for_production",
+                extra={
+                    "event": "argus.config.admin_auth_mode_unsafe_for_production",
+                    "admin_auth_mode": self.admin_auth_mode,
+                    "environment": env,
+                    "remediation": (
+                        "Set ADMIN_AUTH_MODE=session in production. "
+                        "The cookie/both modes are dev-only shims "
+                        "(B6-T09 / ISS-T20-003)."
+                    ),
+                },
+            )
+            raise SystemExit(1)
+
+        if (
+            self.admin_auth_mode in ("session", "both")
+            and not self.admin_session_pepper.strip()
+        ):
+            logger.critical(
+                "admin_session_pepper_missing_in_production",
+                extra={
+                    "event": "argus.config.admin_session_pepper_missing",
+                    "admin_auth_mode": self.admin_auth_mode,
+                    "environment": env,
+                    "remediation": (
+                        "Generate ADMIN_SESSION_PEPPER with: "
+                        'python -c "import secrets; '
+                        'print(secrets.token_urlsafe(48))" '
+                        "(B6-T09 / ISS-T20-003)."
+                    ),
+                },
+            )
+            raise SystemExit(1)
+
+        return self
 
     @property
     def celery_broker(self) -> str:

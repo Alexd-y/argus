@@ -14,10 +14,11 @@ from __future__ import annotations
 import hashlib
 import logging
 
-from fastapi import Depends, Header, status
+from fastapi import Depends, Header, Request, status
 from sqlalchemy import String, cast, select, update
 
 from src.api.routers.admin import require_admin, router
+from src.auth.admin_sessions import SessionPrincipal
 from src.api.schemas import (
     AdminBulkFindingSuppressRequest,
     AdminBulkFindingSuppressResponse,
@@ -40,8 +41,27 @@ def _sorted_ids_fingerprint(ids: list[str]) -> str:
 
 
 async def _operator_subject_dep(
+    request: Request,
     x_operator_subject: str | None = Header(None, alias="X-Operator-Subject"),
 ) -> str:
+    """Resolve the operator subject for audit attribution.
+
+    Order of precedence (ISS-T20-003 Phase 1, B6-T08):
+
+    1. ``request.state.admin_session`` set by :func:`require_admin` when the
+       new cookie-session flow authenticates the request — this is the only
+       *trustworthy* source because the subject is bound to a verified
+       bcrypt + CSPRNG session row.
+    2. ``X-Operator-Subject`` header — best-effort attribution kept for the
+       legacy ``X-Admin-Key`` shim (``ADMIN_AUTH_MODE=cookie`` and the
+       ``both``-mode fallback). Never trust the header for compliance
+       decisions; the audit log captures it as "claimed", not "verified".
+    3. The literal ``"admin_api"`` sentinel when no signal is available.
+    """
+    principal = getattr(request.state, "admin_session", None)
+    if isinstance(principal, SessionPrincipal):
+        return principal.subject[:256]
+
     if x_operator_subject and x_operator_subject.strip():
         return x_operator_subject.strip()[:256]
     return "admin_api"

@@ -38,13 +38,37 @@ function readRoleFromStorage(): AdminRole | null {
   return parseAdminRole(sessionStorage.getItem(ADMIN_ROLE_STORAGE_KEY));
 }
 
+function readRoleFromCookie(): AdminRole | null {
+  if (typeof document === "undefined") return null;
+  const raw = document.cookie ?? "";
+  if (raw === "") return null;
+  for (const part of raw.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const name = part.slice(0, eq).trim();
+    if (name !== ADMIN_ROLE_COOKIE) continue;
+    try {
+      return parseAdminRole(decodeURIComponent(part.slice(eq + 1).trim()));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function readRoleFromDevEnv(): AdminRole | null {
   if (typeof process === "undefined") return null;
   return parseAdminRole(process.env.NEXT_PUBLIC_ADMIN_DEV_ROLE);
 }
 
 function resolveRole(): AdminRole | null {
-  return readRoleFromStorage() ?? readRoleFromDevEnv();
+  // Cookie comes BEFORE sessionStorage so the session-mode login flow
+  // (B6-T09) — which writes the role cookie from the server action —
+  // hydrates without a client round-trip even if sessionStorage is
+  // empty (private window, fresh tab).
+  return (
+    readRoleFromStorage() ?? readRoleFromCookie() ?? readRoleFromDevEnv()
+  );
 }
 
 function writeRoleCookie(role: AdminRole | null): void {
