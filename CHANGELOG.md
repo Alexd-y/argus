@@ -6,6 +6,15 @@ All notable changes to ARGUS platform are documented in this file.
 
 - **Security (SEC-001):** sanitized `infra/.env.example` provider placeholders — operators must still rotate keys and purge git history.
 
+### Batch 5 orchestration — Webhook DLQ + Kyverno admission (2026-04-22)
+
+- **Persistent webhook DLQ (T37–T41, ARG-053):** Alembic `027_webhook_dlq.py` (revision **027**, not roadmap label 025 — chain after `026_scan_schedules`); `webhook_dlq_entries` + RLS; DAO `webhook_dlq_persistence.py`; admin routes `/admin/webhooks/dlq` (list / replay / abandon); Celery beat `argus.notifications.webhook_dlq_replay`; frontend `/admin/webhooks/dlq` (filters, dialogs, mock E2E support).
+- **Supply-chain admission (T42–T44, ARG-054):** Kyverno `ClusterPolicy` `argus-require-signed-images` under `infra/kyverno/`; Helm opt-in `policy.enabled` + `templates/kyverno-cluster-policy.yaml`; CI `admission-policy-kind.yml` (kind + signed fixture vs unsigned negative); `helm-validation.yml` job for policy render + Kyverno CRD schema check.
+- **Operator runbooks (T45):** `docs/admission-policy.md` (EN, DevOps) + `docs/webhook-dlq.md` (RU, on-call).
+- **Tests verified (closeout):** backend DLQ-focused pytest suites green; `npx tsc --noEmit` in `Frontend/` green.
+- **Known gates:** [ISS-T20-003](ai_docs/develop/issues/ISS-T20-003.md) (JWT/session before public launch); [ISS-T26-001](ai_docs/develop/issues/ISS-T26-001.md) (design-token contrast / axe for admin surfaces).
+- **Sign-off:** [`ai_docs/develop/reports/2026-04-22-cycle6-batch5-implementation.md`](ai_docs/develop/reports/2026-04-22-cycle6-batch5-implementation.md) + [`ai_docs/develop/issues/ISS-cycle6-batch5-carry-over.md`](ai_docs/develop/issues/ISS-cycle6-batch5-carry-over.md).
+
 ### Batch 4 orchestration — Operations UI: Kill-switch + Schedules (2026-04-22)
 
 - **Per-scan kill-switch UI (T28):** typed scan-ID confirmation + reason textarea; mock 202 + a11y `role="alert"` for reason validation; `56b6818` + `85b7943`.
