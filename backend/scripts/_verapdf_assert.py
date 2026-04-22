@@ -103,7 +103,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
+
+# C7-T02 follow-up (DEBUG-4): the compliance gate's audit trail MUST be
+# transport-secure. Allow-list entries point at internal ticket trackers
+# (Argus, GitHub) — accepting plaintext http:// would let a tampered
+# response (e.g. captive proxy injecting a "ticket exists" page) pass the
+# audit step. Restrict to TLS only; future-proof by reading from a single
+# allow-set instead of inlining "https" everywhere.
+_ALLOWED_TICKET_URL_SCHEMES: Final[frozenset[str]] = frozenset({"https"})
 
 #: verapdf's XML report (Machine-Readable Report / MRR) uses no
 #: namespace prefixes for the elements we care about (``report``,
@@ -163,6 +172,14 @@ def _parse_allow_list(raw: Sequence[str]) -> list[_AllowEntry]:
     rule id is rejected so operators cannot quietly accept warnings
     without a paper trail. A malformed entry exits with code 2 (tooling
     problem), which is distinct from a PDF non-conformance (code 1).
+
+    URL scheme policy (C7-T02 follow-up, DEBUG-4):
+        Only ``https://`` is accepted. Plaintext ``http://`` is rejected
+        because the compliance audit trail must be transport-secure — a
+        tampered response over plain HTTP could falsify the existence /
+        contents of the linked ticket. Other schemes (``file://``,
+        ``ftp://``, ``javascript:``, etc.) are rejected for the same
+        reason and to remove a phishing surface from CI logs.
     """
     if not raw:
         return []
@@ -180,14 +197,26 @@ def _parse_allow_list(raw: Sequence[str]) -> list[_AllowEntry]:
                     "'6.1.5:https://argus.example.com/tickets/ARG-099'); "
                     "exit-2"
                 )
-            if not (
-                tail.startswith("http://") or tail.startswith("https://")
-            ):
+            ticket_url = tail.strip()
+            # urlsplit handles edge cases regex cannot: scheme
+            # case-insensitivity (HTTP:// == http://), userinfo segments
+            # (https://user:pass@host), and ipv6 hosts ([::1]). It never
+            # raises - returns empty fields for nonsense input.
+            split = urlsplit(ticket_url)
+            if not split.scheme or not split.netloc:
                 raise SystemExit(
                     f"--allow-warnings entry {token!r} ticket URL must be "
-                    "absolute (http:// or https://); exit-2"
+                    "absolute (https://host/path); exit-2"
                 )
-            entries.append(_AllowEntry(rule_id=head.strip(), ticket_url=tail.strip()))
+            scheme = split.scheme.lower()
+            if scheme not in _ALLOWED_TICKET_URL_SCHEMES:
+                allowed = ", ".join(sorted(_ALLOWED_TICKET_URL_SCHEMES))
+                raise SystemExit(
+                    f"--allow-warnings entry {token!r} uses scheme "
+                    f"{scheme!r}; only {allowed} is accepted to keep the "
+                    "compliance audit trail transport-secure; exit-2"
+                )
+            entries.append(_AllowEntry(rule_id=head.strip(), ticket_url=ticket_url))
     return entries
 
 

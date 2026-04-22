@@ -166,6 +166,59 @@ def test_parse_allow_list_relative_url_rejected() -> None:
     assert "exit-2" in msg
 
 
+def test_parse_allow_list_http_rejected() -> None:
+    """Plaintext ``http://`` ⇒ exit-2 (TLS-only audit trail, DEBUG-4)."""
+    with pytest.raises(SystemExit) as exc:
+        _parse_allow_list(["6.1.5-3:http://argus.example.com/tickets/ARG-099"])
+
+    msg = str(exc.value)
+    # Diagnostic must name the offending scheme + state the policy
+    # so an operator can self-correct without grepping the source.
+    assert "http" in msg
+    assert "https" in msg
+    assert "transport-secure" in msg
+    assert "exit-2" in msg
+
+
+def test_parse_allow_list_http_uppercase_rejected() -> None:
+    """``HTTP://`` (case-insensitive) ⇒ same exit-2 as lowercase."""
+    with pytest.raises(SystemExit) as exc:
+        _parse_allow_list(["6.1.5-3:HTTP://argus.example.com/ARG-099"])
+
+    msg = str(exc.value)
+    # urlsplit normalises scheme; rejection must fire regardless of case
+    # so an operator cannot bypass the gate by SHOUTING at it.
+    assert "http" in msg.lower()
+    assert "exit-2" in msg
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "ftp://argus.example.com/ARG-099",
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "data:text/plain;base64,SGVsbG8=",
+    ],
+)
+def test_parse_allow_list_non_https_schemes_rejected(bad_url: str) -> None:
+    """Non-https schemes (file/ftp/javascript/data) ⇒ exit-2.
+
+    The compliance-gate audit trail is a CI artefact — accepting any
+    non-HTTPS scheme would either link to an attacker-controlled
+    resource (ftp), exfiltrate runner state (file), or smuggle XSS
+    payloads into log viewers (javascript / data).
+    """
+    with pytest.raises(SystemExit) as exc:
+        _parse_allow_list([f"6.1.5-3:{bad_url}"])
+
+    msg = str(exc.value)
+    assert "exit-2" in msg
+    # Either the scheme rejection or the absolute-URL rejection
+    # (file:/// has no netloc); both close the same hole.
+    assert "https" in msg or "absolute" in msg
+
+
 def test_parse_allow_list_whitespace_only_token_ignored() -> None:
     """Empty / whitespace tokens between commas are skipped, not errors."""
     raw = [
