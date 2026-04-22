@@ -203,6 +203,10 @@ export function PerTenantThrottleDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
+        // keep: border-amber-500/60 is a decorative dialog-frame stroke,
+        // not a text-bearing fill. `--warning-strong` is intentionally
+        // fill-only (see ai_docs/architecture/design-tokens.md §3.5);
+        // the warning-action token pair lives on the confirm button.
         className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-amber-500/60 bg-[var(--bg-secondary)] p-5 text-[var(--text-primary)] shadow-2xl"
         data-testid="throttle-dialog"
       >
@@ -367,7 +371,12 @@ export function PerTenantThrottleDialog({
               disabled={!canSubmit}
               aria-disabled={!canSubmit}
               aria-describedby={submitHelpId}
-              className="rounded border border-amber-500 bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              // C7-T08: warning-action fill migrated to design-token pair
+              // (`bg-amber-700 text-white` → `bg-[var(--warning-strong)]
+              // text-[var(--on-warning)]`). border-amber-500 +
+              // focus-visible:ring-amber-400 are decorative accents,
+              // not text-bearing surfaces — see design-tokens.md §3.5.
+              className="rounded border border-amber-500 bg-[var(--warning-strong)] px-3 py-1.5 text-xs font-medium text-[var(--on-warning)] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="throttle-dialog-confirm"
             >
               {isPending ? "Применяем…" : "Throttle tenant"}
