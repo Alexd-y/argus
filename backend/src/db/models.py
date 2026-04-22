@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -196,6 +197,76 @@ class ScanSchedule(Base):
             f"<ScanSchedule id={self.id!r} tenant_id={self.tenant_id!r} "
             f"name={self.name!r} enabled={self.enabled!r}>"
         )
+
+
+class WebhookDlqEntry(Base):
+    """Webhook DLQ entry — one failed-after-retry delivery (T37 / ARG-053).
+
+    Persistent dead-letter store for webhook deliveries that exhausted the
+    retry budget inside ``NotifierBase.send_with_retry``. Backs the
+    ``/admin/webhooks/dlq`` admin surface (T39) and the daily
+    ``argus.notifications.webhook_dlq_replay`` Celery beat task (T40).
+
+    Idempotency key: ``(tenant_id, adapter_name, event_id)`` — re-enqueueing
+    the same logical delivery is a no-op (UNIQUE violation surfaces as a
+    silent merge in the DAO layer T38).
+
+    The target URL is never persisted in clear; ``target_url_hash`` stores
+    ``hash_target(url)`` from
+    ``backend/src/mcp/services/notifications/_base.py``.
+    """
+
+    __tablename__ = "webhook_dlq_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    adapter_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_error_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    last_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    replayed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    abandoned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    abandoned_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "adapter_name",
+            "event_id",
+            name="uq_webhook_dlq_tenant_adapter_event",
+        ),
+        Index(
+            "ix_webhook_dlq_tenant_status",
+            "tenant_id",
+            "abandoned_at",
+            "replayed_at",
+        ),
+        Index("ix_webhook_dlq_created_at", "created_at"),
+    )
 
 
 class ScanStep(Base):
