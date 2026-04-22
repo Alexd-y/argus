@@ -50,8 +50,10 @@ on:
   pull_request:
     branches: [main, develop]
     paths:
+      - "infra/helm/argus/Chart.yaml"
       - "infra/helm/argus/templates/hpa-celery-worker-kev.yaml"
       - "infra/helm/argus/templates/prometheus-adapter-rules.yaml"
+      - "infra/helm/argus/templates/prometheusrule-kev-hpa.yaml"
       - "infra/helm/argus/values.yaml"
       - "infra/helm/argus/values-prod.yaml"
       - "backend/tests/integration/k8s/**"
@@ -59,8 +61,10 @@ on:
   push:
     branches: [main]
     paths:
+      - "infra/helm/argus/Chart.yaml"
       - "infra/helm/argus/templates/hpa-celery-worker-kev.yaml"
       - "infra/helm/argus/templates/prometheus-adapter-rules.yaml"
+      - "infra/helm/argus/templates/prometheusrule-kev-hpa.yaml"
       - "infra/helm/argus/values.yaml"
       - "infra/helm/argus/values-prod.yaml"
       - "backend/tests/integration/k8s/**"
@@ -301,6 +305,20 @@ jobs:
             --command -- \
             sh -c "printf '# TYPE argus_celery_queue_depth gauge\nargus_celery_queue_depth{queue=\"argus.scans\",namespace=\"${ARGUS_NAMESPACE}\"} 0\n' | curl --silent --show-error --fail --max-time 10 -X POST --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/queue_depth_seed"
 
+          # Also seed a KEV-listed finding sample so the scrape-verification
+          # step downstream has a deterministic series to assert against
+          # BEFORE the pytest burst starts pushing real load. Job label is
+          # distinct from the burst (`kev_burst_test`) so the verification
+          # delete at end-of-step does not race the pytest counter.
+          kubectl run kev-hpa-kev-seed \
+            --namespace "${ARGUS_NAMESPACE}" \
+            --rm \
+            --restart=Never \
+            --image=curlimages/curl:8.11.0 \
+            --quiet \
+            --command -- \
+            sh -c "printf '# TYPE argus_findings_emitted_total counter\nargus_findings_emitted_total{kev_listed=\"true\",tier=\"opensource\",severity=\"critical\",namespace=\"${ARGUS_NAMESPACE}\"} 1\n' | curl --silent --show-error --fail --max-time 10 -X POST --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/kev_scrape_verification"
+
       - name: Render & apply placeholder argus-celery Deployment (pause image)
         run: |
           set -euo pipefail
@@ -386,7 +404,131 @@ jobs:
             sleep 3
           done
 
-      - name: Run KEV-aware HPA pytest suite
+      - name: KEV-HPA scrape verification
+        # C7-T06 Wave 1 — End-to-end scrape pipeline assertion BEFORE the
+        # scale-roundtrip pytest. Three independent assertions on the live
+        # cluster, each with bounded retry (no naked `sleep N`):
+        #
+        #   1. Prometheus has scraped the SOURCE counter
+        #      `argus_findings_emitted_total{kev_listed="true"}` from the
+        #      pushgateway (>=1 sample, value >0).
+        #   2. The DERIVED external metric `argus_kev_findings_emit_rate_5m`
+        #      is exposed via `external.metrics.k8s.io/v1beta1` (the
+        #      contract surface the HPA actually consumes).
+        #   3. The HPA `argus-celery-kev` reports a numeric desiredReplicas
+        #      (i.e. it computed a recommendation from the metric — the
+        #      "target replicas" the HPA aims at, equivalent to a
+        #      hypothetical `argus_kev_hpa_target_replicas` gauge).
+        #
+        # Notes for plan reviewers:
+        #   * The plan references `argus_kev_active_findings_total` and
+        #     `argus_kev_hpa_target_replicas` as canonical metric names.
+        #     The actual metric names in this codebase are
+        #     `argus_findings_emitted_total{kev_listed="true"}` (source)
+        #     and `argus_kev_findings_emit_rate_5m` (derived). We use the
+        #     real names as authorised by the plan ("if the metric name is
+        #     different, read services/metrics.py and use the actual name").
+        #   * No port-forward / background process is used — the kubectl
+        #     APIServer proxy (`/api/v1/namespaces/.../services/.../proxy`)
+        #     is the deterministic path to Prometheus from CI without
+        #     racing on background PIDs.
+        run: |
+          set -euo pipefail
+          mkdir -p kind-diagnostics
+
+          PROM_PROXY_PATH="/api/v1/namespaces/${MONITORING_NAMESPACE}/services/prometheus-server:80/proxy/api/v1"
+          # URL-encoded: argus_findings_emitted_total{kev_listed="true"}
+          KEV_SOURCE_QUERY="argus_findings_emitted_total%7Bkev_listed%3D%22true%22%7D"
+
+          # ── Assertion 1: source counter samples reach Prometheus ───────
+          echo "==> Assertion 1: Prometheus has at least one sample for the KEV source counter"
+          kev_source_response=""
+          for attempt in $(seq 1 30); do
+            kev_source_response="$(kubectl get --raw \
+              "${PROM_PROXY_PATH}/query?query=${KEV_SOURCE_QUERY}" 2>/dev/null || true)"
+            if [[ -n "${kev_source_response}" ]] \
+              && echo "${kev_source_response}" | jq -e '.status == "success"' >/dev/null 2>&1 \
+              && echo "${kev_source_response}" | jq -e '.data.result | length > 0' >/dev/null 2>&1; then
+              echo "Prometheus returned ${kev_source_response} after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for KEV source counter samples in Prometheus (attempt ${attempt}/30)"
+            sleep 3
+          done
+          echo "${kev_source_response:-{}}" \
+            > kind-diagnostics/prometheus-kev-source-counter.json
+          echo "${kev_source_response:-}" \
+            | jq -e '.status == "success" and (.data.result | length > 0)' >/dev/null \
+            || { echo "::error::KEV source counter argus_findings_emitted_total{kev_listed=\"true\"} returned no samples after 90s"; exit 1; }
+
+          # ── Assertion 2: derived rate metric exposed via external.metrics ─
+          echo "==> Assertion 2: argus_kev_findings_emit_rate_5m exposed via external.metrics.k8s.io"
+          kev_derived_response=""
+          for attempt in $(seq 1 30); do
+            kev_derived_response="$(kubectl get --raw \
+              "/apis/external.metrics.k8s.io/v1beta1/namespaces/${ARGUS_NAMESPACE}/argus_kev_findings_emit_rate_5m" \
+              2>/dev/null || true)"
+            if [[ -n "${kev_derived_response}" ]] \
+              && echo "${kev_derived_response}" | jq -e '.items | length > 0' >/dev/null 2>&1; then
+              echo "external.metrics returned ${kev_derived_response} after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for argus_kev_findings_emit_rate_5m on external.metrics.k8s.io (attempt ${attempt}/30)"
+            sleep 3
+          done
+          echo "${kev_derived_response:-{}}" \
+            > kind-diagnostics/external-metric-kev-rate-prebuild.json
+          echo "${kev_derived_response:-}" \
+            | jq -e '.items | length > 0' >/dev/null \
+            || { echo "::error::argus_kev_findings_emit_rate_5m has zero items on external.metrics.k8s.io after 90s"; exit 1; }
+
+          # ── Assertion 3: HPA computed a numeric desiredReplicas ─────────
+          echo "==> Assertion 3: HPA argus-celery-kev reports a numeric desiredReplicas (= the 'target replicas' the HPA aims at)"
+          desired=""
+          for attempt in $(seq 1 30); do
+            desired="$(kubectl get hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev \
+              -o jsonpath='{.status.desiredReplicas}' 2>/dev/null || true)"
+            if [[ -n "${desired}" ]] && [[ "${desired}" =~ ^[0-9]+$ ]] && [[ "${desired}" -ge 1 ]]; then
+              echo "HPA argus-celery-kev reports desiredReplicas=${desired} after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for HPA desiredReplicas to be numeric (attempt ${attempt}/30); current=${desired:-<empty>}"
+            sleep 3
+          done
+          if [[ -z "${desired}" ]] || ! [[ "${desired}" =~ ^[0-9]+$ ]] || [[ "${desired}" -lt 1 ]]; then
+            kubectl describe hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev \
+              > kind-diagnostics/hpa-describe-scrape-verification.log 2>&1 || true
+            echo "::error::HPA argus-celery-kev did not surface a numeric desiredReplicas within 90s"
+            exit 1
+          fi
+          kubectl describe hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev \
+            > kind-diagnostics/hpa-describe-scrape-verification.log 2>&1 || true
+
+          # ── Best-effort cleanup of the pre-seed sample ─────────────────
+          # Removes ONLY the verification job — the pytest pushes to a
+          # different job (`kev_burst_test`) so the burst is unaffected.
+          kubectl run kev-hpa-kev-seed-cleanup \
+            --namespace "${ARGUS_NAMESPACE}" \
+            --rm \
+            --restart=Never \
+            --image=curlimages/curl:8.11.0 \
+            --quiet \
+            --command -- \
+            sh -c "curl --silent --show-error --fail --max-time 10 -X DELETE http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/kev_scrape_verification" \
+            || echo "::warning::kev_scrape_verification pushgateway job cleanup failed (non-fatal)"
+
+          echo "==> KEV-HPA scrape verification PASSED"
+
+      - name: KEV-HPA scale-up roundtrip
+        # C7-T06 Wave 1 — Renamed from "Run KEV-aware HPA pytest suite".
+        # The pytest IS the scale-up roundtrip: it pushes a synthetic KEV
+        # burst (200 findings) into the pushgateway, then polls
+        # `kubectl get hpa argus-celery-kev -o jsonpath='{.status.desiredReplicas}'`
+        # until it scales up >= 4 replicas, then drains the burst and
+        # confirms the HPA collapses back to MIN within the trimmed
+        # stabilization window. Renaming consolidates the required-status
+        # check on a single, descriptive step name (see C7-T06 report:
+        # branch protection rename consideration applies).
         env:
           KIND_CLUSTER_NAME: ${{ env.KIND_CLUSTER }}
           ARGUS_KIND_NAMESPACE: ${{ env.ARGUS_NAMESPACE }}
