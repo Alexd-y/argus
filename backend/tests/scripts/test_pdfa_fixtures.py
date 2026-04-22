@@ -1,4 +1,4 @@
-"""C7-T02 / ARG-058-followup — unit tests for ``tests/fixtures/pdfa_variants``.
+"""C7-T02 / ARG-058-followup — unit tests for ``scripts._pdfa_fixtures``.
 
 Pins the public surface of the closed-taxonomy variant registry so a
 future contributor cannot quietly add / drop / rename a variant without
@@ -23,6 +23,13 @@ validated by these assertions. Without them, a contributor could swap
 the longtable variant's body for a one-line paragraph and the renderer
 would happily compile a PDF that no longer exercises the longtable
 bookmark cluster, defeating the purpose of the matrix.
+
+C7-T02 follow-up (DEBUG-3)
+--------------------------
+Originally lived under ``backend/tests/fixtures/test_pdfa_variants.py``
+testing ``tests/fixtures/pdfa_variants``. The SUT moved next to its
+production consumer (:mod:`scripts.render_pdfa_sample`) to fix a
+dependency-inversion violation; the test file moved alongside.
 """
 
 from __future__ import annotations
@@ -33,14 +40,14 @@ from typing import Final
 
 import pytest
 
-from src.db.models import PDF_ARCHIVAL_FORMAT_VALUES
-from tests.fixtures.pdfa_variants import (
+from scripts._pdfa_fixtures import (
     PDFAVariant,
     PNG_TOKEN_1,
     PNG_TOKEN_2,
     VARIANTS,
     get_variant,
 )
+from src.db.models import PDF_ARCHIVAL_FORMAT_VALUES
 
 # Closed taxonomy of variant names. Mirrors the matrix in
 # ``.github/workflows/pdfa-validation.yml`` — adding / removing a variant

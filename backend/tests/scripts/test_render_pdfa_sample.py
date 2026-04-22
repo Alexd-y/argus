@@ -38,6 +38,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from scripts._pdfa_fixtures import (
+    PNG_TOKEN_1,
+    PNG_TOKEN_2,
+    VARIANTS,
+    get_variant,
+)
 from scripts.render_pdfa_sample import (
     _build_latex_source_for_variant,
     _inject_resolved_format,
@@ -46,12 +52,6 @@ from scripts.render_pdfa_sample import (
     _png_chunk,
     _write_deterministic_png,
     main,
-)
-from tests.fixtures.pdfa_variants import (
-    PNG_TOKEN_1,
-    PNG_TOKEN_2,
-    VARIANTS,
-    get_variant,
 )
 
 # ---------------------------------------------------------------------------

@@ -79,7 +79,12 @@ from src.reports.pdf_backend import (  # noqa: E402 — sys.path edit above.
 from src.reports.tenant_pdf_format import (  # noqa: E402 — sys.path edit above.
     resolve_tenant_pdf_archival_format,
 )
-from tests.fixtures.pdfa_variants import (  # noqa: E402 — sys.path edit above.
+
+# C7-T02 follow-up (DEBUG-3): variants live next to the script under
+# ``backend/scripts/_pdfa_fixtures.py``. Production code MUST NOT import
+# from ``tests/`` — moving the registry alongside its consumer fixes the
+# original dependency-inversion violation flagged by the reviewer.
+from scripts._pdfa_fixtures import (  # noqa: E402 — sys.path edit above.
     PNG_TOKEN_1,
     PNG_TOKEN_2,
     VARIANTS,
@@ -462,7 +467,7 @@ def _build_latex_source_for_variant(
 
     Args:
         tier: Tier whose ``main.tex.j2`` provides the base LaTeX shell.
-        variant: One of :data:`tests.fixtures.pdfa_variants.VARIANTS`.
+        variant: One of :data:`scripts._pdfa_fixtures.VARIANTS`.
         scan_completed_at: Deterministic ISO-8601 timestamp baked into
             the rendered preamble (drives ``SOURCE_DATE_EPOCH``).
         tenant_id: Optional override for the per-tenant resolver path.

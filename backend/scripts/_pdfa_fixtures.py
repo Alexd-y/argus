@@ -15,16 +15,28 @@ workflow against ``verapdf-cli``. Each variant defines:
 Why a dedicated module
 ----------------------
 The renderer (``backend/scripts/render_pdfa_sample.py``) and the unit
-tests under ``backend/tests/scripts/`` and ``backend/tests/fixtures/``
-both consume the same canonical variant set. Centralising the data
-prevents drift — adding a new variant here automatically becomes
-available as a CLI flag value, a workflow matrix entry (manual edit),
-and a parametrisation for the renderer/fixture tests.
+tests under ``backend/tests/scripts/`` both consume the same canonical
+variant set. Centralising the data prevents drift — adding a new
+variant here automatically becomes available as a CLI flag value, a
+workflow matrix entry (manual edit), and a parametrisation for the
+renderer/fixture tests.
 
-The module is import-safe in both the CLI runtime (``backend/`` on
-``sys.path``) and under pytest collection (``backend/tests/fixtures``
-relative); it has no runtime side effects beyond constructing a small
-immutable mapping.
+C7-T02 follow-up (DEBUG-3 — dependency inversion fix)
+-----------------------------------------------------
+Originally lived under ``backend/tests/fixtures/pdfa_variants.py``.
+Production code (the renderer) imported from a test path, inverting
+the dependency direction. The module now lives next to its primary
+consumer (:mod:`scripts.render_pdfa_sample`) so the import flows
+``tests/ → scripts/ → src/`` instead of the inverted
+``scripts/ → tests/ → src/``. The leading underscore in the module
+name (``_pdfa_fixtures``) signals "internal helper of the
+:mod:`scripts.render_pdfa_sample` CLI" and discourages reuse outside
+the gate's matrix.
+
+The module is import-safe both at CLI runtime (``backend/`` on
+``sys.path`` after :mod:`scripts.render_pdfa_sample` injects the
+project root) and under pytest collection; it has no runtime side
+effects beyond constructing a small immutable mapping.
 
 Security
 ~~~~~~~~
@@ -199,7 +211,7 @@ _LATEX_BODY_PER_TENANT: Final[str] = (
 # (1) this dict, (2) the ``--fixture-variant`` CLI ``choices`` derived
 # from ``list(VARIANTS.keys())``, (3) the workflow matrix in
 # ``.github/workflows/pdfa-validation.yml``, AND (4) the cardinality
-# guard in ``backend/tests/fixtures/test_pdfa_variants.py`` that asserts
+# guard in ``backend/tests/scripts/test_pdfa_fixtures.py`` that asserts
 # the public surface is exactly five variants.
 
 VARIANTS: Final[dict[str, PDFAVariant]] = {
