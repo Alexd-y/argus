@@ -3,9 +3,59 @@
 Replaces the brittle ``grep 'isCompliant="false"'`` shell pipeline that
 shipped with B6-T01 with a deterministic XML parser. The B6-T01 gate
 only failed on hard non-conformance; this hardening also blocks any
-``warningRules`` entry not on an explicit allow-list — so a regression
-that downgrades a clean PDF/A-2u output to "compliant with warnings"
-cannot silently land on ``main``.
+``warning`` rule not on an explicit allow-list — so a regression that
+downgrades a clean PDF/A-2u output to "compliant with warnings" cannot
+silently land on ``main``.
+
+verapdf XML schema (Machine-Readable Report, MRR)
+-------------------------------------------------
+Targets ``verapdf-cli 1.24.1`` (CI workflow pin) and forward-compatible
+with at least 1.28.x and 1.30.x — verified against real fixtures
+captured under ``backend/tests/scripts/fixtures/``. The MRR layout is::
+
+    <report>
+      <buildInformation>
+        <releaseDetails id="core" version="1.28.1" .../>
+        ...
+      </buildInformation>
+      <jobs>
+        <job>
+          <item size="..."><name>/data/sample.pdf</name></item>
+          <validationReport jobEndStatus="normal"
+                            profileName="PDF/A-2U validation profile"
+                            statement="..."
+                            isCompliant="true|false">
+            <details passedRules="N" failedRules="M"
+                     passedChecks="..." failedChecks="...">
+              <rule specification="ISO 19005-2:2011" clause="6.6.2.1"
+                    testNumber="1" status="failed|passed|warning"
+                    failedChecks="1">
+                <description>...</description>
+                <object>PDDocument</object>
+                <test>containsMetadata == true</test>
+                <check status="failed">
+                  <context>root/document[0]</context>
+                  <errorMessage>...</errorMessage>
+                </check>
+              </rule>
+              ...
+            </details>
+          </validationReport>
+          <!-- OR <taskException> on parse failure -->
+        </job>
+      </jobs>
+      <batchSummary totalJobs="1" failedToParse="0" encrypted="0"
+                    outOfMemory="0" veraExceptions="0">
+        <validationReports compliant="0" nonCompliant="1"
+                           failedJobs="0">1</validationReports>
+        ...
+      </batchSummary>
+    </report>
+
+Schema source: official verapdf MRR documented at
+https://github.com/veraPDF/veraPDF-library/wiki/Machine-Readable-Reports
+and cross-checked against a live ``verapdf-cli`` 1.28.1 run captured
+into ``backend/tests/scripts/fixtures/verapdf_real_noncompliant.xml``.
 
 Design invariants
 -----------------
@@ -15,11 +65,14 @@ Design invariants
 * **Allow-list MUST link to a tracked ticket.** Every entry in
   ``--allow-warnings`` is parsed as ``<rule_id>:<ticket_url>``. A bare
   rule id is rejected — operators must explicitly take ownership of
-  every accepted warning, with a paper trail.
+  every accepted warning, with a paper trail. The rule_id format is
+  ``<clause>-<testNumber>`` (e.g. ``6.1.7.1-2``) — derived from the
+  verapdf ``<rule>`` element's ``clause`` and ``testNumber`` attributes.
 * **Empty / malformed report → fail.** A zero-byte XML, a parse error,
-  or a missing ``<validationReport>`` root is treated as a CI blocker
-  rather than "no findings"; otherwise a verapdf failure mode that
-  produces no output (e.g. OOM) would silently mark the gate green.
+  a wrong root tag, or a missing inner ``<validationReport>`` element
+  is treated as a CI blocker rather than "no findings"; otherwise a
+  verapdf failure mode that produces no output (e.g. OOM, parse
+  failure) would silently mark the gate green.
 * **Structured failure summary.** Every failed / warned rule is printed
   on its own ``::error::`` annotation line with the rule id, profile
   clause, and a count, so the GitHub Actions PR check shows a pivotable
@@ -52,13 +105,22 @@ from pathlib import Path
 from typing import Final
 from xml.etree import ElementTree as ET
 
-#: verapdf's XML report uses no namespace prefixes for the elements we
-#: care about (``validationReport``, ``rule``, ``check``); pin a literal
-#: empty namespace to keep XPath queries simple. If verapdf upgrades to
-#: namespaced elements in a future release the parser fails fast on the
-#: missing root, and the upgrade procedure documented in
-#: ``ai_docs/develop/architecture/pdfa-acceptance.md`` kicks in.
-_REPORT_ROOT: Final[str] = "validationReport"
+#: verapdf's XML report (Machine-Readable Report / MRR) uses no
+#: namespace prefixes for the elements we care about (``report``,
+#: ``validationReport``, ``rule``, ``check``); we keep XPath queries
+#: literal so a verapdf upgrade that adds a namespace fails fast on
+#: the missing root rather than silently mis-parsing the new format.
+#:
+#: The OUTER root is ``<report>``. The actual validation verdict lives
+#: at ``report/jobs/job/validationReport`` — see :func:`_load_report`
+#: for the lookup logic and the module docstring for the full schema.
+_REPORT_ROOT: Final[str] = "report"
+
+#: Inner element carrying the ``isCompliant`` verdict + the ``<rule>``
+#: list. Located via ``root.find(f".//{_VALIDATION_REPORT_TAG}")`` to
+#: tolerate verapdf inserting additional wrappers between ``<job>`` and
+#: ``<validationReport>`` in a future release.
+_VALIDATION_REPORT_TAG: Final[str] = "validationReport"
 
 #: Status attribute values verapdf emits on each ``<rule>`` block; we
 #: refuse anything we don't recognise so a schema bump doesn't silently
@@ -130,7 +192,33 @@ def _parse_allow_list(raw: Sequence[str]) -> list[_AllowEntry]:
 
 
 def _load_report(path: Path) -> ET.Element:
-    """Return the verapdf root element; raise on empty / malformed input."""
+    """Return the inner ``<validationReport>`` element from a verapdf MRR file.
+
+    The verapdf-cli MRR layout (verified against a live 1.28.1 run, and
+    documented in the module docstring) places the verdict-bearing
+    ``<validationReport>`` element at ``report/jobs/job/validationReport``
+    — NOT at the XML root. The B6-T01 implementation assumed the
+    inverted layout and silently failed every real run; the fix below
+    walks the real schema explicitly and surfaces a precise diagnostic
+    when the structure deviates.
+
+    Failure modes (all exit-1, with a structured stderr message):
+
+    * File missing / zero-byte (covers verapdf OOM where the redirect
+      target is created but never written).
+    * Non-well-formed XML (covers truncated / interrupted runs).
+    * Wrong outer root tag (covers a verapdf upgrade that renames
+      ``<report>`` to something else).
+    * Inner ``<validationReport>`` missing — usually because verapdf
+      hit a ``<taskException>`` (parse failure / encrypted / OOM); the
+      inner exception message is forwarded so the operator sees the
+      verapdf reason instead of "unknown".
+
+    Returning the inner element keeps the downstream helpers
+    (:func:`_is_compliant`, :func:`_collect_offences`) agnostic about
+    the surrounding envelope — the verapdf MRR can grow new sibling
+    blocks (build info, batch summary) without us having to chase them.
+    """
     if not path.exists():
         raise SystemExit(f"verapdf report missing: {path}; exit-1")
     if path.stat().st_size == 0:
@@ -149,18 +237,39 @@ def _load_report(path: Path) -> ET.Element:
             f"root (got <{root.tag if root is not None else 'EMPTY'}>); "
             "exit-1"
         )
-    return root
+    validation_report = root.find(f".//{_VALIDATION_REPORT_TAG}")
+    if validation_report is None:
+        # Diagnose the most common cause: verapdf could not parse the
+        # PDF and emitted <taskException> instead of <validationReport>.
+        # Forward the upstream message so the operator sees "encrypted",
+        # "can not locate xref table", etc., instead of just "missing".
+        task_exc = root.find(".//taskException")
+        if task_exc is not None:
+            inner = (
+                task_exc.findtext("exceptionMessage") or "no exceptionMessage"
+            ).strip()
+            raise SystemExit(
+                f"verapdf report at {path} contains no "
+                f"<{_VALIDATION_REPORT_TAG}> — verapdf raised "
+                f"{inner!r}; exit-1"
+            )
+        raise SystemExit(
+            f"verapdf report at {path} contains no "
+            f"<{_VALIDATION_REPORT_TAG}> element under <{_REPORT_ROOT}>; "
+            "exit-1"
+        )
+    return validation_report
 
 
-def _is_compliant(root: ET.Element) -> bool | None:
+def _is_compliant(validation_report: ET.Element) -> bool | None:
     """Return the explicit ``isCompliant`` verdict or ``None`` if missing.
 
-    verapdf emits ``isCompliant="true"|"false"`` on a child element
-    (``<jobs><job><validationReport>``); the attribute is the
-    authoritative verdict and a missing attribute should never happen
-    with a well-formed report.
+    The attribute lives on the inner ``<validationReport>`` element
+    located by :func:`_load_report` (NOT on the outer ``<report>``
+    root). A missing attribute should never happen with a well-formed
+    report and surfaces as ``None`` so the caller can fail loud.
     """
-    raw = root.attrib.get("isCompliant")
+    raw = validation_report.attrib.get("isCompliant")
     if raw == "true":
         return True
     if raw == "false":
@@ -168,29 +277,63 @@ def _is_compliant(root: ET.Element) -> bool | None:
     return None
 
 
+def _rule_id(rule: ET.Element) -> str:
+    """Derive a stable rule id from a verapdf ``<rule>`` element.
+
+    verapdf does not emit a single ``id`` attribute; the canonical PDF/A
+    rule identifier is the pair ``(clause, testNumber)`` (e.g. clause
+    ``6.1.7.1`` test ``2`` ⇒ ``6.1.7.1-2``). We render it as
+    ``<clause>-<testNumber>`` so both halves of an allow-list entry
+    (``rule_id:ticket_url``) and the structured ``::error::`` annotation
+    pivot on the same canonical identifier.
+
+    Falls back gracefully when one half is missing — clause-only,
+    then testNumber-only, then ``"unknown"`` — so a future schema bump
+    that drops one attribute does not make the entire collector
+    silently classify rules as ``"unknown"``.
+    """
+    clause = rule.attrib.get("clause", "").strip()
+    test_number = rule.attrib.get("testNumber", "").strip()
+    if clause and test_number:
+        return f"{clause}-{test_number}"
+    if clause:
+        return clause
+    if test_number:
+        return f"test-{test_number}"
+    return "unknown"
+
+
 def _collect_offences(
-    root: ET.Element, allow_ids: frozenset[str], strict_warnings: bool
+    validation_report: ET.Element,
+    allow_ids: frozenset[str],
+    strict_warnings: bool,
 ) -> list[_RuleOffence]:
     """Walk ``<rule>`` entries and return everything that should fail the gate.
 
+    Operates on the inner ``<validationReport>`` returned by
+    :func:`_load_report`. The verapdf MRR places ``<rule>`` elements
+    flat under ``<details>`` (NOT grouped under ``<failedRules>`` /
+    ``<passedRules>`` — that's a documentation myth from older verapdf
+    docs); ``iter("rule")`` walks them in document order.
+
     A rule is an "offence" if:
 
-    * status == "failed" (always blocks).
-    * status == "warning" AND ``strict_warnings`` is on AND the rule is
-      not in ``allow_ids``.
+    * ``status == "failed"`` (always blocks; PDF/A profiles use this for
+      every non-conformance regardless of strict mode).
+    * ``status == "warning"`` AND ``strict_warnings`` is on AND the
+      rule_id is not in ``allow_ids``. The standard PDF/A profiles in
+      verapdf 1.28.x rarely emit ``"warning"`` (it shows up mostly in
+      policy / WCAG profiles) — but we handle it defensively because a
+      future verapdf release could add warning-tier checks to PDF/A.
 
-    Unknown statuses surface as offences too — better to fail loudly
-    than to silently mis-classify a future verapdf release.
+    Unknown statuses surface as ``"unknown:<status>"`` offences — better
+    to fail loudly than to silently mis-classify a future verapdf
+    release that adds (e.g.) ``"skipped"`` or ``"manual"``.
     """
     offences: list[_RuleOffence] = []
-    for rule in root.iter("rule"):
+    for rule in validation_report.iter("rule"):
         status = rule.attrib.get("status", "").strip().lower()
-        rule_id = (
-            rule.attrib.get("specification", "").strip()
-            or rule.attrib.get("clause", "").strip()
-            or rule.attrib.get("id", "").strip()
-            or "unknown"
-        )
+        rule_id = _rule_id(rule)
         clause = rule.attrib.get("clause", "").strip() or rule_id
         count_attr = rule.attrib.get("failedChecks", "0")
         try:
@@ -298,12 +441,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        root = _load_report(args.report)
+        validation_report = _load_report(args.report)
     except SystemExit as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
 
-    verdict = _is_compliant(root)
+    verdict = _is_compliant(validation_report)
     if verdict is None:
         sys.stderr.write(
             "::error::verapdf XML report does not carry an isCompliant verdict\n"
@@ -311,7 +454,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     allow_ids = frozenset(entry.rule_id for entry in allow)
-    offences = _collect_offences(root, allow_ids, args.strict_warnings)
+    offences = _collect_offences(
+        validation_report, allow_ids, args.strict_warnings,
+    )
 
     if not verdict:
         sys.stderr.write(
