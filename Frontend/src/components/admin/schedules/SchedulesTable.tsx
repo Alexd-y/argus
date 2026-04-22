@@ -215,6 +215,10 @@ export function SchedulesTable({
                               ? "Расписание отключено"
                               : "Запустить вне очереди"
                           }
+                          // keep: outline trigger uses lighter amber-500
+                          // tones as a visual cue. The warning-action fill
+                          // (`--warning-strong`) lives on the confirm CTA
+                          // inside RunNowDialog — see design-tokens.md §3.5.
                           className="rounded border border-amber-500/60 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-amber-500/10 focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                           data-testid={`schedule-run-now-${s.id}`}
                         >

@@ -67,6 +67,10 @@ function shortEventId(value: string): string {
 
 function statusBadgeClass(status: WebhookDlqTriageStatus): string {
   switch (status) {
+    // keep: amber-500 chip for `pending` is triage-status categorisation
+    // (paired with emerald `replayed` + zinc `abandoned`). It is a state
+    // indicator, not a warning-action fill — `--warning-strong` applies
+    // to confirm CTAs only (see design-tokens.md §3.5).
     case "pending":
       return "border border-amber-400/60 bg-amber-500/10 text-amber-100";
     case "replayed":

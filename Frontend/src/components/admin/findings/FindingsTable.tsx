@@ -57,6 +57,11 @@ import {
 const ROW_HEIGHT_PX = 44;
 const OVERSCAN = 8;
 
+// keep: severity-coding ladder (critical/high/medium/low/info). The
+// `medium` row uses yellow-500 as part of the 5-tone palette, paired
+// with red/orange/blue/slate. It is a status indicator, not a
+// warning-action fill — `--warning-strong` is reserved for confirm
+// CTAs (see ai_docs/architecture/design-tokens.md §3.5).
 const SEVERITY_PRESENTATION: Readonly<Record<FindingSeverity, {
   readonly label: string;
   readonly icon: string;

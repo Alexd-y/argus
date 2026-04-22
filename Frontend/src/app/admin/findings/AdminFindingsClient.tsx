@@ -196,6 +196,11 @@ function bannerToneClass(tone: BulkActionBanner["tone"]): string {
     return "border-emerald-500/60 bg-emerald-500/10 text-emerald-200";
   }
   if (tone === "warning") {
+    // keep: result banner is a 3-tone family (success/warning/error)
+    // using soft `*-500/10` tints. The yellow-500 entry is paired with
+    // emerald + red as a status palette, not a warning-action fill.
+    // `--warning-strong` is reserved for confirm CTAs (see
+    // ai_docs/architecture/design-tokens.md §3.5).
     return "border-yellow-500/60 bg-yellow-500/10 text-yellow-200";
   }
   return "border-red-500/60 bg-red-500/10 text-red-200";

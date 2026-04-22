@@ -64,6 +64,10 @@ const EVENT_BADGE_CLASS: Readonly<Record<EmergencyAuditEventType, string>> = {
     "border-red-500/60 bg-red-500/10 text-red-200",
   "emergency.resume_all":
     "border-emerald-500/60 bg-emerald-500/10 text-emerald-200",
+  // keep: amber-500 chip for `emergency.throttle` is event categorisation
+  // (paired with red for stop_all + emerald for resume_all). It is a
+  // status-coding cue, not a warning-action fill — `--warning-strong`
+  // applies to confirm CTAs only (see design-tokens.md §3.5).
   "emergency.throttle":
     "border-amber-500/60 bg-amber-500/10 text-amber-200",
 };

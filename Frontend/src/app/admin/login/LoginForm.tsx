@@ -260,6 +260,10 @@ export function LoginForm() {
           role="status"
           aria-live="polite"
           data-testid="admin-login-rate-limited"
+          // keep: rate-limited notice is `role="status"` (informational
+          // throttle countdown), not a warning action. The amber-500 tint
+          // is a soft attention cue. `--warning-strong` is reserved for
+          // text-on-fill confirm CTAs only — see design-tokens.md §3.5.
           className="rounded-md border border-amber-300/60 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
         >
           {rateLimitedMessage}
