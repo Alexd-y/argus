@@ -36,7 +36,26 @@
    */
   --accent-strong: #6B2EBE;
   --on-accent: #FAFAFA;
-  
+  /*
+   * `--warning-strong` and `--on-warning` are the WCAG 2.1 AA-compliant
+   * warning-button pair (ISS-T26-001 Option A foundation, finalised by
+   * C7-T08).
+   *
+   * `bg-amber-600` (`#D97706`) measured 3.94:1 against `#FFFFFF` text on
+   * the throttle / run-now confirm CTAs — fails AA. The amber-700
+   * (`#B45309`) replacement clears AA at ~5.0:1 against `#FFFFFF` and
+   * ~4.81:1 against `#FAFAFA`.
+   *
+   * `#FAFAFA` is preferred over pure `#FFFFFF` for parity with
+   * `--on-accent` (suppresses harsh pure-white glare on dark UIs).
+   *
+   * The token catalog and pair-with rules live in
+   * `ai_docs/architecture/design-tokens.md` §1.5 and §3. Surface
+   * migration is tracked under ISS-T26-001 follow-up + C7-T08.
+   */
+  --warning-strong: #B45309;
+  --on-warning: #FAFAFA;
+
   /* Text */
   --text-primary: #f5f5f5;
   --text-secondary: #a3a3a3;

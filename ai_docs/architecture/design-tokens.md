@@ -67,15 +67,18 @@ combined with for text rendering.
 
 ### 1.5 Status
 
-| Token       | Hex       | Use                                       |
-| ----------- | --------- | ----------------------------------------- |
-| `--success` | `#22c55e` | Success banners, "ok" badges, healthy chips |
-| `--warning` | `#eab308` | Warning banners, attention chips           |
-| `--error`   | `#ef4444` | Destructive states, error banners          |
+| Token              | Hex       | Use                                                                                            | Pair-with (text)            |
+| ------------------ | --------- | ---------------------------------------------------------------------------------------------- | --------------------------- |
+| `--success`        | `#22c55e` | Success banners, "ok" badges, healthy chips                                                    | (decorative; not for text-on-fill) |
+| `--warning`        | `#eab308` | Warning banners, attention chips (decorative tint — use `--warning-strong` for text-on-fill)   | (decorative)                |
+| `--warning-strong` | `#B45309` | **Warning action fill** for confirm CTAs that block tenant traffic (throttle, run-now, etc.)   | `--on-warning` only         |
+| `--on-warning`     | `#FAFAFA` | Foreground text/icon color rendered on top of `--warning-strong`                               | (use only on `--warning-strong`) |
+| `--error`          | `#ef4444` | Destructive states, error banners                                                              | (decorative)                |
 
-> Note: status tokens currently follow Tailwind's standard palette and
-> may not all clear AA on every surface; specific failing pairs are
-> tracked under ISS-T26-001 (see §3 below).
+> Note: `--warning` and `--success` follow Tailwind's standard palette
+> and may not all clear AA when used as a text-bearing fill — the
+> `--warning-strong` / `--on-warning` pair was introduced specifically
+> to give warning CTAs an AA-clean alternative (see §3.5).
 
 ---
 
@@ -91,13 +94,14 @@ formula `(L_lighter + 0.05) / (L_darker + 0.05)`. Thresholds:
 
 ### 2.1 Verified pairs (text-on-surface)
 
-| Foreground       | Background        | Ratio         | AA (4.5) | ≥ 5    | AAA (7) | Notes                                              |
-| ---------------- | ----------------- | ------------- | :------: | :----: | :-----: | -------------------------------------------------- |
-| `--on-accent`    | `--accent-strong` | **7.29 : 1**  |   PASS   |  PASS  |  PASS   | **Option A primary-button pair** (this commit)     |
-| `--on-accent`    | `--bg-primary`    | 18.97 : 1     |   PASS   |  PASS  |  PASS   | Sanity — `--on-accent` is safe on any dark surface |
-| `--text-primary` | `--bg-primary`    | 18.10 : 1     |   PASS   |  PASS  |  PASS   | Default body text                                  |
-| `--text-muted`   | `--bg-primary`    | 5.77 : 1      |   PASS   |  PASS  |  FAIL   | Bumped from `#525252` → `#8a8a8a` in T26           |
-| `--text-muted`   | `--bg-tertiary`   | 4.69 : 1      |   PASS   |  FAIL  |  FAIL   | Smallest acceptable surface for muted text         |
+| Foreground       | Background         | Ratio         | AA (4.5) | ≥ 5    | AAA (7) | Notes                                              |
+| ---------------- | ------------------ | ------------- | :------: | :----: | :-----: | -------------------------------------------------- |
+| `--on-accent`    | `--accent-strong`  | **7.29 : 1**  |   PASS   |  PASS  |  PASS   | **Option A primary-button pair** (this commit)     |
+| `--on-accent`    | `--bg-primary`     | 18.97 : 1     |   PASS   |  PASS  |  PASS   | Sanity — `--on-accent` is safe on any dark surface |
+| `--on-warning`   | `--warning-strong` | **4.81 : 1**  |   PASS   |  FAIL  |  FAIL   | **Warning button pair** (C7-T08 follow-up)         |
+| `--text-primary` | `--bg-primary`     | 18.10 : 1     |   PASS   |  PASS  |  PASS   | Default body text                                  |
+| `--text-muted`   | `--bg-primary`     | 5.77 : 1      |   PASS   |  PASS  |  FAIL   | Bumped from `#525252` → `#8a8a8a` in T26           |
+| `--text-muted`   | `--bg-tertiary`    | 4.69 : 1      |   PASS   |  FAIL  |  FAIL   | Smallest acceptable surface for muted text         |
 
 ### 2.2 Failing / forbidden pairs (do not use for text)
 
@@ -107,6 +111,7 @@ formula `(L_lighter + 0.05) / (L_darker + 0.05)`. Thresholds:
 | `--text-primary` | `--accent`        | 3.82 : 1     |  FAIL  | Use `--accent-strong` + `--on-accent`               |
 | `--accent-strong`| `--bg-primary`    | 2.60 : 1     |  FAIL  | `--accent-strong` is a **fill**, not a text color   |
 | `--accent-strong`| `--bg-tertiary`   | 2.29 : 1     |  FAIL  | Same — never use `--accent-strong` as a text token  |
+| `text-white`     | `bg-amber-600`    | 3.94 : 1     |  FAIL  | Use `bg-[var(--warning-strong)] text-[var(--on-warning)]` (C7-T08) |
 
 *Rounded-down axe-core measurement after sub-pixel composite, originally
 4.20 : 1; mathematical pair ratio is 4.96 : 1. Either way it is below
@@ -140,7 +145,7 @@ assert round(contrast('#FAFAFA', '#6B2EBE'), 2) == 7.29
 
 ---
 
-## 3. `--accent-strong` / `--on-accent` — Option A foundation
+## 3. `--accent-strong` / `--on-accent` + `--warning-strong` / `--on-warning` — Option A foundation
 
 ### 3.1 Why these tokens exist
 
@@ -212,6 +217,65 @@ ISS-T26-001 §Acceptance criteria):
    reviewed and explicitly approved by design.
 3. `Frontend/tests/e2e/admin-axe.spec.ts` removes the `test.fail`
    annotations referencing ISS-T26-001 on the 7 affected scenarios.
+
+### 3.5 Warning-strong migration status (C7-T08)
+
+`--warning-strong` + `--on-warning` cover the warning-action CTA family
+(throttle / run-now / resume confirm buttons). The audit cycle sequence
+is:
+
+1. **B6-T07 (Cycle 6 Batch 6)** — switched three confirm buttons from
+   `bg-amber-600` (3.94 : 1, fails AA) to `bg-amber-700` (≈ 5.0 : 1,
+   passes AA) using **raw Tailwind utilities**:
+   `Frontend/src/app/admin/operations/GlobalKillSwitchClient.tsx`,
+   `Frontend/src/app/admin/operations/PerTenantThrottleClient.tsx`,
+   `Frontend/src/components/admin/operations/ResumeAllDialog.tsx`.
+   Borders harmonised `border-amber-500` → `border-amber-600` on those
+   three. AA was achieved but the **token-name uniformity** was left
+   for follow-up (see ISS-cycle7-carry-over.md §ISS-T26-001 follow-up).
+2. **C7-T08 (Cycle 7)** — surfaces the missing `--warning-strong` /
+   `--on-warning` token definitions in `Frontend/src/app/globals.css`
+   (the design-system catalog had documented them since B6-T06 but the
+   CSS landing was incomplete). Migrates the **two** remaining warning
+   confirm buttons that were not part of the B6 batch:
+     * `Frontend/src/components/admin/operations/PerTenantThrottleDialog.tsx`
+     * `Frontend/src/components/admin/schedules/RunNowDialog.tsx`
+   Replacement on each is `bg-amber-700 text-white` →
+   `bg-[var(--warning-strong)] text-[var(--on-warning)]`. The existing
+   `border-amber-500` and `focus-visible:ring-amber-400` are left in
+   place — they are decorative accents around the fill, not text-bearing
+   surfaces, and `--warning-strong` is intentionally a **fill-only**
+   token (mirrors `--accent-strong` policy).
+
+Audit command (run from repo root):
+
+```pwsh
+rg amber-600 Frontend/src/app/admin/
+```
+
+Should return only the documented exceptions (B6-migrated borders on
+GlobalKillSwitchClient + PerTenantThrottleClient — out of scope for
+C7-T08 per the cycle's hard rule "do not touch B6 surfaces unless they
+regressed").
+
+Three explicitly **out-of-scope** classes that still legitimately use
+amber-* in admin paths:
+
+* **Severity coding** (`yellow-500/15` for "medium" rows in
+  `FindingsTable`, `AdminFindingsClient`, `AuditLogsTable`,
+  `EmergencyAuditTrail`'s throttle event chip, `DlqTable`'s pending
+  badge). These are status categorisation, not warning fills.
+* **Outline triggers** (`SchedulesTable.tsx`'s inline "Run now" button,
+  `PerTenantThrottleClient.tsx`'s outline "Resume now" button). The
+  warning fill lives inside the dialog they open; the trigger uses a
+  lighter amber stroke as a visual cue.
+* **Modal frame strokes** (`border-amber-500/60` on dialog containers
+  for throttle / run-now / resume). The frame is a decorative cue, not
+  a text-bearing fill — only the confirm CTA inside is required to use
+  the token pair.
+
+Each of these is annotated with an inline `// keep:` comment in the
+source so future contributors do not over-migrate.
 
 ---
 
