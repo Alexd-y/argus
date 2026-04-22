@@ -1,24 +1,39 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # B6-T01 (Cycle 6 Batch 6, ARG-058) — PDF/A-2u verapdf compliance gate.
+# ARG-058-followup / C7-T02 (Cycle 7) — zero-warning hardening + 5-variant
+# fixture matrix. Now drives backend/scripts/_verapdf_assert.py to fail on
+# ANY warning rule outside the explicit allow-list (empty here), instead of
+# the brittle ``grep 'isCompliant="false"'`` pipeline shipped with B6-T01.
 # ──────────────────────────────────────────────────────────────────────────────
-# Renders a deterministic sample report through the production LaTeX backend
-# with ``REPORT_PDFA_MODE=1`` (forces ``pdflatex`` + ``pdfx`` + ``colorprofiles``
-# + XMP metadata) and validates the result against the PDF/A-2u profile via
-# the official ``verapdf-cli`` Docker image. Job fails fast on any
-# non-conformance so a regression in the LaTeX preamble (missing OutputIntent,
-# unmapped glyphs, broken XMP) cannot reach ``main``.
+# For each named fixture (basic / cyrillic / longtable / images / per_tenant)
+# the job renders a deterministic sample report through the production LaTeX
+# backend with ``REPORT_PDFA_MODE=1`` (forces ``pdflatex`` + ``pdfx`` +
+# ``colorprofiles`` + XMP metadata) and validates the result against the
+# PDF/A-2u profile via the official ``verapdf-cli`` Docker image.
+#
+# Why a 5-variant matrix instead of one render?
+# * Each variant exercises a distinct PDF/A-2u rule cluster: Cyrillic glyph
+#   coverage (T2A / lmodern), longtable bookmarks across page breaks,
+#   embedded raster OutputIntent matching, per-tenant flag plumbing.
+# * ``fail-fast: false`` so a regression in any single cluster surfaces as
+#   an independent red check in the PR UI — you don't have to re-run after
+#   the first failure to see the rest.
 #
 # Determinism contract: the renderer pins ``SOURCE_DATE_EPOCH`` from
 # ``--scan-completed-at`` (default 2024-01-01T00:00:00Z) so the output PDF
 # byte-stable across runners.
 #
-# Plan:        ai_docs/develop/plans/2026-04-22-argus-cycle6-b6.md (B6-T01)
+# Plan:        ai_docs/develop/plans/2026-04-22-argus-cycle7.md (C7-T02)
 # Renderer:    backend/scripts/render_pdfa_sample.py
+# Asserter:    backend/scripts/_verapdf_assert.py (frozen contract — see
+#              backend/tests/scripts/test_verapdf_assert.py for the 26
+#              cases that pin its behaviour).
+# Variants:    backend/tests/fixtures/pdfa_variants.py
 # Templates:   backend/templates/reports/_latex/{midgard,asgard,valhalla}/main.tex.j2
 # Preamble:    backend/templates/reports/_latex/_preamble/pdfa.tex.j2
 # XMP source:  backend/templates/reports/_latex/_preamble/pdfa.xmpdata.j2
 
-name: PDF/A-2u validation (verapdf)
+name: PDF/A-2u validation (verapdf, zero-warning)
 
 on:
   pull_request:
@@ -51,28 +66,33 @@ concurrency:
 env:
   # Pin the verapdf release so an upstream behaviour change cannot
   # silently flip the gate's verdict between PRs. Bump deliberately.
+  # ARG-058-followup / C7-T02: this PR is NOT a verapdf upgrade — pin
+  # is unchanged from the B6-T01 baseline.
   VERAPDF_IMAGE: verapdf/verapdf-cli:1.24.1
   PDFA_FLAVOUR: "2u"
   # Deterministic timestamp baked into the sample PDF (drives
   # SOURCE_DATE_EPOCH in the renderer). Changing this regenerates the
   # PDF byte stream — keep stable unless the PDF/A profile bumps.
   SAMPLE_SCAN_COMPLETED_AT: "2024-01-01T00:00:00+00:00"
+  # Tier providing the base LaTeX shell for every fixture leg. ``midgard``
+  # is the smallest preamble — keeps the matrix turnaround under 5 min.
+  PDFA_TIER: "midgard"
 
 jobs:
   pdfa-gate:
-    # Matrix per tier — each (asgard / midgard / valhalla) main.tex.j2
-    # carries a slightly different preamble (longtable usage, datetime2,
-    # ragged2e, array). Running them in parallel surfaces a regression in
-    # ANY tier as a separate red check in the PR UI instead of hiding
-    # behind the first failure. Acceptance criterion (a) explicitly
-    # requires verapdf-clean for ALL three tiers.
-    name: "PDF/A-2u verapdf gate (${{ matrix.tier }})"
+    # Matrix per FIXTURE — each (basic / cyrillic / longtable / images /
+    # per_tenant) variant injects a distinct LaTeX body block on top of
+    # the shared midgard preamble. Running them in parallel surfaces a
+    # regression in ANY variant as a separate red check in the PR UI
+    # instead of hiding behind the first failure. Acceptance criterion
+    # (a) explicitly requires verapdf-clean for ALL five variants.
+    name: "PDF/A-2u gate (${{ matrix.fixture }}, zero-warning)"
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        tier: [midgard, asgard, valhalla]
+        fixture: [basic, cyrillic, longtable, images, per_tenant]
 
     steps:
       - name: Checkout
@@ -86,6 +106,10 @@ jobs:
       # ``render_pdfa_sample.py`` only needs Jinja2 from the prod
       # requirements set; installing the full ``requirements.txt`` would
       # pull asyncpg / weasyprint / etc. and cost ~3 minutes for nothing.
+      # The ``per_tenant`` leg's resolver call falls back to the variant
+      # override when sqlalchemy / aiosqlite are absent (see
+      # ``_resolve_per_tenant_format`` in backend/scripts/render_pdfa_sample.py),
+      # so the minimal install is sufficient for every matrix leg.
       - name: Install minimal Python deps (Jinja2 only)
         run: |
           set -euo pipefail
@@ -125,7 +149,7 @@ jobs:
           kpsewhich pdfx.sty
           kpsewhich colorprofiles.sty
 
-      - name: "Render PDF/A-2u sample (${{ matrix.tier }} tier)"
+      - name: "Render PDF/A-2u sample (fixture=${{ matrix.fixture }})"
         working-directory: backend
         env:
           # Belt-and-braces: even though the script always passes
@@ -133,27 +157,36 @@ jobs:
           # the gate's mode and matches how operators run the renderer
           # locally.
           REPORT_PDFA_MODE: "1"
-          TIER: ${{ matrix.tier }}
+          FIXTURE: ${{ matrix.fixture }}
+          # ``--tenant-id acme`` is wired ONLY on the per_tenant leg —
+          # every other variant ignores --tenant-id (see argparse routing
+          # in render_pdfa_sample.py). Empty string for non-per_tenant
+          # legs is harmless because bash word-splits an empty argument
+          # into zero tokens.
+          TENANT_ARGS: ${{ matrix.fixture == 'per_tenant' && '--tenant-id acme' || '' }}
         run: |
           set -euo pipefail
           mkdir -p build
+          # shellcheck disable=SC2086 — TENANT_ARGS is intentionally word-split
           python -m scripts.render_pdfa_sample \
-            --tier "${TIER}" \
-            --output "build/pdfa-sample-${TIER}.pdf" \
+            --tier "${PDFA_TIER}" \
+            --fixture-variant "${FIXTURE}" \
+            --output "build/${FIXTURE}.pdf" \
             --scan-completed-at "${SAMPLE_SCAN_COMPLETED_AT}" \
+            ${TENANT_ARGS} \
             --verbose
 
       - name: Inspect rendered PDF
         working-directory: backend
         env:
-          TIER: ${{ matrix.tier }}
+          FIXTURE: ${{ matrix.fixture }}
         run: |
           set -euo pipefail
-          ls -lh "build/pdfa-sample-${TIER}.pdf"
+          ls -lh "build/${FIXTURE}.pdf"
           # ``head -c 8`` shows the PDF magic + version (e.g. %PDF-1.5);
           # if the renderer mis-fired we see HTML/TeX log noise instead.
-          head -c 8 "build/pdfa-sample-${TIER}.pdf" | xxd
-          file "build/pdfa-sample-${TIER}.pdf"
+          head -c 8 "build/${FIXTURE}.pdf" | xxd
+          file "build/${FIXTURE}.pdf"
 
       # The verapdf container runs as a non-root UID; mount the output
       # directory world-writable so it can drop the XML report next to
@@ -162,7 +195,7 @@ jobs:
         id: verapdf
         working-directory: backend
         env:
-          TIER: ${{ matrix.tier }}
+          FIXTURE: ${{ matrix.fixture }}
         run: |
           set -euo pipefail
           mkdir -p build/verapdf
@@ -172,43 +205,36 @@ jobs:
             "${VERAPDF_IMAGE}" \
             --format xml \
             --flavour "${PDFA_FLAVOUR}" \
-            "/data/pdfa-sample-${TIER}.pdf" \
-            > "build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
-          echo "verapdf XML report written to build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
+            "/data/${FIXTURE}.pdf" \
+            > "build/verapdf/${FIXTURE}.verapdf.xml"
+          echo "verapdf XML report written to build/verapdf/${FIXTURE}.verapdf.xml"
 
-      - name: Assert verapdf reports compliance
+      - name: Assert verapdf compliance (zero-warning)
         working-directory: backend
         env:
-          TIER: ${{ matrix.tier }}
+          FIXTURE: ${{ matrix.fixture }}
         run: |
           set -euo pipefail
-          # Parse the verapdf XML — ``isCompliant`` is the authoritative
-          # field. We grep instead of pulling in xmllint to keep the
-          # workflow self-contained on a vanilla ubuntu runner.
-          xml_path="build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
+          xml_path="build/verapdf/${FIXTURE}.verapdf.xml"
           if [[ ! -s "${xml_path}" ]]; then
             echo "::error::verapdf XML report is empty (${xml_path})"
             exit 1
           fi
-          if grep -q 'isCompliant="false"' "${xml_path}"; then
-            echo "::error title=PDF/A-${PDFA_FLAVOUR} NON-CONFORMANCE (${TIER})::verapdf reports tier=${TIER} as NON-CONFORMANT to PDF/A-${PDFA_FLAVOUR}"
-            grep -E '<(failedRules|ruleStatus|description)' "${xml_path}" || true
-            exit 1
-          fi
-          if ! grep -q 'isCompliant="true"' "${xml_path}"; then
-            echo "::error::verapdf XML report does not contain an isCompliant verdict"
-            head -n 80 "${xml_path}"
-            exit 1
-          fi
-          echo "verapdf gate PASSED — tier=${TIER} is PDF/A-${PDFA_FLAVOUR} conformant."
+          # Empty allow-list = zero-warning gate. The asserter exits 1
+          # on any failed rule OR any warning rule (because --strict-warnings
+          # is the default in _verapdf_assert.py); structured ::error::
+          # annotations make the failure pivotable in the PR UI.
+          python scripts/_verapdf_assert.py \
+            --report "${xml_path}" \
+            --allow-warnings ""
 
       - name: Upload verapdf report + sample PDF
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pdfa-validation-${{ matrix.tier }}-${{ github.run_attempt }}
+          name: pdfa-validation-${{ matrix.fixture }}-${{ github.run_attempt }}
           path: |
-            backend/build/pdfa-sample-${{ matrix.tier }}.pdf
-            backend/build/verapdf/pdfa-sample-${{ matrix.tier }}.verapdf.xml
+            backend/build/${{ matrix.fixture }}.pdf
+            backend/build/verapdf/${{ matrix.fixture }}.verapdf.xml
           if-no-files-found: warn
           retention-days: 30
