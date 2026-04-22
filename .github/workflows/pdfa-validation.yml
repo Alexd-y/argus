@@ -1,0 +1,214 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# B6-T01 (Cycle 6 Batch 6, ARG-058) — PDF/A-2u verapdf compliance gate.
+# ──────────────────────────────────────────────────────────────────────────────
+# Renders a deterministic sample report through the production LaTeX backend
+# with ``REPORT_PDFA_MODE=1`` (forces ``pdflatex`` + ``pdfx`` + ``colorprofiles``
+# + XMP metadata) and validates the result against the PDF/A-2u profile via
+# the official ``verapdf-cli`` Docker image. Job fails fast on any
+# non-conformance so a regression in the LaTeX preamble (missing OutputIntent,
+# unmapped glyphs, broken XMP) cannot reach ``main``.
+#
+# Determinism contract: the renderer pins ``SOURCE_DATE_EPOCH`` from
+# ``--scan-completed-at`` (default 2024-01-01T00:00:00Z) so the output PDF
+# byte-stable across runners.
+#
+# Plan:        ai_docs/develop/plans/2026-04-22-argus-cycle6-b6.md (B6-T01)
+# Renderer:    backend/scripts/render_pdfa_sample.py
+# Templates:   backend/templates/reports/_latex/{midgard,asgard,valhalla}/main.tex.j2
+# Preamble:    backend/templates/reports/_latex/_preamble/pdfa.tex.j2
+# XMP source:  backend/templates/reports/_latex/_preamble/pdfa.xmpdata.j2
+
+name: PDF/A-2u validation (verapdf)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "backend/src/reports/**"
+      - "backend/templates/reports/_latex/**"
+      - "backend/scripts/render_pdfa_sample.py"
+      - ".github/workflows/pdfa-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/src/reports/**"
+      - "backend/templates/reports/_latex/**"
+      - "backend/scripts/render_pdfa_sample.py"
+      - ".github/workflows/pdfa-validation.yml"
+  workflow_dispatch: {}
+
+# Read-only by design — verapdf runs locally via Docker and we never push
+# any artefact back to the registry. No GHCR/OIDC needed.
+permissions:
+  contents: read
+
+# Cancel queued PR runs when a new push lands on the same ref so re-pushes
+# don't queue forever; keep main/dispatch runs serialised.
+concurrency:
+  group: pdfa-validation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pin the verapdf release so an upstream behaviour change cannot
+  # silently flip the gate's verdict between PRs. Bump deliberately.
+  VERAPDF_IMAGE: verapdf/verapdf-cli:1.24.1
+  PDFA_FLAVOUR: "2u"
+  # Deterministic timestamp baked into the sample PDF (drives
+  # SOURCE_DATE_EPOCH in the renderer). Changing this regenerates the
+  # PDF byte stream — keep stable unless the PDF/A profile bumps.
+  SAMPLE_SCAN_COMPLETED_AT: "2024-01-01T00:00:00+00:00"
+
+jobs:
+  pdfa-gate:
+    # Matrix per tier — each (asgard / midgard / valhalla) main.tex.j2
+    # carries a slightly different preamble (longtable usage, datetime2,
+    # ragged2e, array). Running them in parallel surfaces a regression in
+    # ANY tier as a separate red check in the PR UI instead of hiding
+    # behind the first failure. Acceptance criterion (a) explicitly
+    # requires verapdf-clean for ALL three tiers.
+    name: "PDF/A-2u verapdf gate (${{ matrix.tier }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        tier: [midgard, asgard, valhalla]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ``render_pdfa_sample.py`` only needs Jinja2 from the prod
+      # requirements set; installing the full ``requirements.txt`` would
+      # pull asyncpg / weasyprint / etc. and cost ~3 minutes for nothing.
+      - name: Install minimal Python deps (Jinja2 only)
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # Resolve the version that backend/requirements.txt pins so the
+          # CI render mirrors the production environment exactly.
+          jinja_pin="$(grep -iE '^[[:space:]]*Jinja2' backend/requirements.txt | head -n1)"
+          if [[ -z "${jinja_pin}" ]]; then
+            jinja_pin="Jinja2>=3.1.0"
+          fi
+          pip install "${jinja_pin}"
+
+      # TeX Live ``-extra`` carries pdfx, colorprofiles, etoolbox, ragged2e,
+      # array, longtable, booktabs, datetime2, parskip, fancyhdr; the
+      # ``-recommended`` set carries lmodern; ``-lang-cyrillic`` provides
+      # T2A glyphs the templates rely on for tenant-supplied Russian text.
+      # Pin nothing here — Ubuntu's TeX Live release is stable enough that
+      # a bump can only loosen the gate, never tighten it (verapdf is the
+      # actual contract enforcer).
+      - name: Install TeX Live (latex-extra + cyrillic + lmodern)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            latexmk \
+            texlive-latex-base \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-lang-cyrillic \
+            texlive-pictures
+          latexmk -version
+          pdflatex --version | head -n1
+          # Sanity-check that pdfx is reachable; missing the package is the
+          # most common cause of a silent PDF/A regression and we want a
+          # crisp error message instead of a 200-line latexmk log later.
+          kpsewhich pdfx.sty
+          kpsewhich colorprofiles.sty
+
+      - name: "Render PDF/A-2u sample (${{ matrix.tier }} tier)"
+        working-directory: backend
+        env:
+          # Belt-and-braces: even though the script always passes
+          # ``pdfa_mode=True`` directly, exporting the env var documents
+          # the gate's mode and matches how operators run the renderer
+          # locally.
+          REPORT_PDFA_MODE: "1"
+          TIER: ${{ matrix.tier }}
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          python -m scripts.render_pdfa_sample \
+            --tier "${TIER}" \
+            --output "build/pdfa-sample-${TIER}.pdf" \
+            --scan-completed-at "${SAMPLE_SCAN_COMPLETED_AT}" \
+            --verbose
+
+      - name: Inspect rendered PDF
+        working-directory: backend
+        env:
+          TIER: ${{ matrix.tier }}
+        run: |
+          set -euo pipefail
+          ls -lh "build/pdfa-sample-${TIER}.pdf"
+          # ``head -c 8`` shows the PDF magic + version (e.g. %PDF-1.5);
+          # if the renderer mis-fired we see HTML/TeX log noise instead.
+          head -c 8 "build/pdfa-sample-${TIER}.pdf" | xxd
+          file "build/pdfa-sample-${TIER}.pdf"
+
+      # The verapdf container runs as a non-root UID; mount the output
+      # directory world-writable so it can drop the XML report next to
+      # the input PDF. ``--flavour 2u`` matches the renderer's profile.
+      - name: Run verapdf-cli (PDF/A-2u flavour)
+        id: verapdf
+        working-directory: backend
+        env:
+          TIER: ${{ matrix.tier }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/verapdf
+          chmod -R 0777 build
+          docker run --rm \
+            -v "$(pwd)/build:/data:rw" \
+            "${VERAPDF_IMAGE}" \
+            --format xml \
+            --flavour "${PDFA_FLAVOUR}" \
+            "/data/pdfa-sample-${TIER}.pdf" \
+            > "build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
+          echo "verapdf XML report written to build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
+
+      - name: Assert verapdf reports compliance
+        working-directory: backend
+        env:
+          TIER: ${{ matrix.tier }}
+        run: |
+          set -euo pipefail
+          # Parse the verapdf XML — ``isCompliant`` is the authoritative
+          # field. We grep instead of pulling in xmllint to keep the
+          # workflow self-contained on a vanilla ubuntu runner.
+          xml_path="build/verapdf/pdfa-sample-${TIER}.verapdf.xml"
+          if [[ ! -s "${xml_path}" ]]; then
+            echo "::error::verapdf XML report is empty (${xml_path})"
+            exit 1
+          fi
+          if grep -q 'isCompliant="false"' "${xml_path}"; then
+            echo "::error title=PDF/A-${PDFA_FLAVOUR} NON-CONFORMANCE (${TIER})::verapdf reports tier=${TIER} as NON-CONFORMANT to PDF/A-${PDFA_FLAVOUR}"
+            grep -E '<(failedRules|ruleStatus|description)' "${xml_path}" || true
+            exit 1
+          fi
+          if ! grep -q 'isCompliant="true"' "${xml_path}"; then
+            echo "::error::verapdf XML report does not contain an isCompliant verdict"
+            head -n 80 "${xml_path}"
+            exit 1
+          fi
+          echo "verapdf gate PASSED — tier=${TIER} is PDF/A-${PDFA_FLAVOUR} conformant."
+
+      - name: Upload verapdf report + sample PDF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdfa-validation-${{ matrix.tier }}-${{ github.run_attempt }}
+          path: |
+            backend/build/pdfa-sample-${{ matrix.tier }}.pdf
+            backend/build/verapdf/pdfa-sample-${{ matrix.tier }}.verapdf.xml
+          if-no-files-found: warn
+          retention-days: 30

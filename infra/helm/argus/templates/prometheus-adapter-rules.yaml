@@ -1,0 +1,77 @@
+{{- /*
+B6-T03 (Cycle 6 Batch 6, T49 / D-5) — Prometheus Adapter custom-metrics rules.
+
+Renders ONLY when `.Values.prometheusAdapter.enabled` is true. The chart does
+NOT install the Prometheus Adapter itself (see the comment block above the
+`prometheusAdapter` key in `values.yaml` for rationale); operators install
+the adapter once per cluster and reference this ConfigMap via the adapter's
+`--config` flag.
+
+The ConfigMap holds `external.rules` (Prometheus Adapter v0.11+ schema) for
+two custom-metric series:
+
+  * argus_celery_queue_depth — depth gauge backfilled by the Celery beat
+    task `argus.metrics.queue_depth_refresh` (every 15s on the `argus.intel`
+    queue). Drives the existing celery HPA scaling target wired in
+    `templates/hpa.yaml`.
+
+  * argus_kev_findings_emit_rate_5m — derived rate of
+    `argus_findings_emitted_total{kev_listed="true"}` over a 5m window.
+    Source counter exists in `backend/src/core/observability.py` as part of
+    the locked 9-family catalogue; the adapter computes the rate so the
+    HPA evaluation is a single int per scrape window (no client-side
+    PromQL needed).
+
+The ConfigMap data shape matches the adapter's `--config` file schema —
+operators load it via `--config=/etc/adapter/config.yaml` typically by
+mounting this ConfigMap onto the adapter Pod's filesystem.
+*/ -}}
+{{- if .Values.prometheusAdapter.enabled }}
+{{- $cmName := .Values.prometheusAdapter.configMap.name | default (printf "%s-prometheus-adapter-rules" (include "argus.fullname" .)) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $cmName }}
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics-rules
+    {{- with .Values.prometheusAdapter.configMap.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    argus.dev/source: "B6-T03 (Cycle 6 Batch 6, T49)"
+    argus.dev/contract: |
+      External metrics exposed via this ConfigMap (consumed by Prometheus
+      Adapter, surfaced through external.metrics.k8s.io/v1beta1):
+        - argus_celery_queue_depth        → celery HPA scale-target
+        - argus_kev_findings_emit_rate_5m → KEV-aware HPA scale-target (B6-T04)
+data:
+  config.yaml: |
+    externalRules:
+      {{- if .Values.prometheusAdapter.rules.queueDepth.enabled }}
+      - seriesQuery: {{ .Values.prometheusAdapter.rules.queueDepth.seriesQuery | quote }}
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: '^argus_celery_queue_depth$'
+          as: {{ .Values.prometheusAdapter.rules.queueDepth.externalMetricName | quote }}
+        metricsQuery: {{ .Values.prometheusAdapter.rules.queueDepth.metricsQuery | quote }}
+      {{- end }}
+      {{- if .Values.prometheusAdapter.rules.kevEmitRate.enabled }}
+      - seriesQuery: {{ .Values.prometheusAdapter.rules.kevEmitRate.seriesQuery | quote }}
+        resources:
+          overrides:
+            namespace:
+              resource: namespace
+            pod:
+              resource: pod
+        name:
+          matches: '^argus_findings_emitted_total$'
+          as: {{ .Values.prometheusAdapter.rules.kevEmitRate.externalMetricName | quote }}
+        metricsQuery: {{ .Values.prometheusAdapter.rules.kevEmitRate.metricsQuery | quote }}
+      {{- end }}
+{{- end }}

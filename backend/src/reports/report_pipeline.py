@@ -25,6 +25,7 @@ from src.reports.report_data_validation import (
     report_validation_failure_payload,
     validate_report_data,
 )
+from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -258,6 +259,13 @@ async def run_generate_report_pipeline(
             return {"status": "failed", "report_id": report_id, "error": "validation_failed"}
 
         generated: dict[str, str] = {}
+        # B6-T02 / T48 — resolve once per pipeline run; ``generate_pdf`` is the
+        # only consumer (HTML/JSON/CSV ignore the flag) but we lift the lookup
+        # out of the per-format branch to keep a single async query at the
+        # top of the loop.
+        tenant_pdf_format = await resolve_tenant_pdf_archival_format(
+            session, tenant_id
+        )
         for fmt in fmt_list:
             if fmt == "html":
                 content = generate_html(
@@ -270,6 +278,7 @@ async def run_generate_report_pipeline(
                     report_data,
                     jinja_context=built.template_context,
                     tier=tier_str,
+                    pdf_archival_format=tenant_pdf_format,
                 )
             elif fmt == "json":
                 content = generate_json(report_data, jinja_context=built.template_context)

@@ -1063,11 +1063,92 @@ def _render_branded_pdf_html(template_path: Path, context: dict[str, Any]) -> st
     return template.render(context)
 
 
+# B6-T02 / T48 — closed taxonomy for ``Tenant.pdf_archival_format``.
+# Mirrored from ``src.db.models.PDF_ARCHIVAL_FORMAT_VALUES`` to avoid an
+# import cycle (``generators`` is at the bottom of the import graph and
+# ``models`` already pulls in ``owasp_top10_2025``).
+_PDF_ARCHIVAL_FORMAT_STANDARD = "standard"
+_PDF_ARCHIVAL_FORMAT_PDFA_2U = "pdfa-2u"
+_PDFA_ENV_VAR = "REPORT_PDFA_MODE"
+_PDFA_ENV_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _resolve_pdfa_mode(
+    *,
+    pdf_archival_format: str | None,
+    report_id: str | None,
+    tenant_id: str | None,
+) -> bool:
+    """Decide whether to engage PDF/A-2u rendering for a single report.
+
+    Precedence (B6-T02 / T48 / D-4):
+
+    1. Per-tenant ``pdf_archival_format`` — authoritative when supplied.
+       ``"pdfa-2u"`` → ``True``; ``"standard"`` → ``False`` (env ignored,
+       warning logged once so test ops can spot stale ``REPORT_PDFA_MODE``).
+    2. ``REPORT_PDFA_MODE`` env var — *only* honoured when the caller did
+       not pass ``pdf_archival_format`` (legacy/test paths where there is
+       no Tenant row). Treated as a global testing override.
+
+    Unknown taxonomy values fall back to the env path with a warning so a
+    schema-drift bug never silently changes a production tenant's archival
+    format.
+    """
+    import os
+
+    env_raw = os.environ.get(_PDFA_ENV_VAR, "").strip().lower()
+    env_pdfa_mode = env_raw in _PDFA_ENV_TRUTHY
+
+    if pdf_archival_format is None:
+        return env_pdfa_mode
+
+    fmt = pdf_archival_format.strip().lower()
+    if fmt == _PDF_ARCHIVAL_FORMAT_PDFA_2U:
+        if env_raw and not env_pdfa_mode:
+            logger.warning(
+                "pdfa_mode_env_ignored_per_tenant_override",
+                extra={
+                    "event": "argus.report.pdfa_mode_env_ignored",
+                    "report_id": report_id,
+                    "tenant_id_set": bool(tenant_id),
+                    "tenant_format": fmt,
+                    "env_value_truthy": env_pdfa_mode,
+                },
+            )
+        return True
+
+    if fmt == _PDF_ARCHIVAL_FORMAT_STANDARD:
+        if env_pdfa_mode:
+            logger.warning(
+                "pdfa_mode_env_ignored_per_tenant_override",
+                extra={
+                    "event": "argus.report.pdfa_mode_env_ignored",
+                    "report_id": report_id,
+                    "tenant_id_set": bool(tenant_id),
+                    "tenant_format": fmt,
+                    "env_value_truthy": True,
+                },
+            )
+        return False
+
+    logger.warning(
+        "pdfa_mode_unknown_tenant_format",
+        extra={
+            "event": "argus.report.pdfa_mode_unknown_tenant_format",
+            "report_id": report_id,
+            "tenant_id_set": bool(tenant_id),
+            "tenant_format": fmt,
+        },
+    )
+    return env_pdfa_mode
+
+
 def generate_pdf(
     data: ReportData,
     *,
     jinja_context: dict[str, Any] | None = None,
     tier: str | None = None,
+    pdf_archival_format: str | None = None,
 ) -> bytes:
     """ARG-036 — Branded, deterministic PDF dispatched through ``pdf_backend``.
 
@@ -1082,10 +1163,35 @@ def generate_pdf(
     3. Hand the HTML + ``scan_completed_at`` to the backend, which writes the
        PDF to a tempfile we then read back as ``bytes``.
 
+    PDF/A-2u archival mode (B6-T02 / T48 / D-4)
+    -------------------------------------------
+    The decision to render in PDF/A-2u mode follows a strict precedence:
+
+    1. **Per-tenant** ``pdf_archival_format`` — when the caller supplies
+       ``"pdfa-2u"`` (resolved from the ``Tenant`` row in the async layer)
+       PDF/A-2u is engaged unconditionally.
+    2. **Per-tenant** ``pdf_archival_format == "standard"`` — PDF/A-2u is
+       disabled unconditionally, and the ``REPORT_PDFA_MODE`` env var is
+       *ignored* (with a single warning log per render so test environments
+       that still set the env get a visible nudge).
+    3. **Env override** ``REPORT_PDFA_MODE`` — used only when the caller
+       does NOT pass ``pdf_archival_format`` (i.e. the legacy/test path
+       where there is no tenant context). Treated as a *testing-only*
+       knob — production code paths should always pass the per-tenant
+       value resolved by ``ReportService``.
+
+    Rationale: the per-tenant flag is the source of truth in production.
+    A global env override is unsafe in multi-tenant deployments because it
+    silently flips every tenant's archival format at once. Keeping the env
+    available behind the "no tenant context" gate preserves the
+    single-process LaTeX backend tests that pre-date B6-T02.
+
     Backwards compatibility
     -----------------------
-    * Function signature is **unchanged** — callers
-      (``report_service``, ``report_pipeline``) get drop-in behaviour.
+    * Function signature is **additive** — the new ``pdf_archival_format``
+      keyword argument defaults to ``None`` so legacy callers
+      (``generate_html`` flows, unit tests, the Phase-1 stub) keep their
+      existing behaviour.
     * If the branded template directory is not present (older deployment)
       we fall back to the legacy HTML used by :func:`generate_html`. The
       legacy path keeps shipping reports while operators roll out the new
@@ -1102,10 +1208,16 @@ def generate_pdf(
         WeasyPrintBackend,
         get_active_backend,
         render_latex_template,
+        render_pdfa_xmpdata,
         resolve_latex_template_path,
     )
 
     tier_str = tier or "midgard"
+    pdfa_mode = _resolve_pdfa_mode(
+        pdf_archival_format=pdf_archival_format,
+        report_id=data.report_id,
+        tenant_id=data.tenant_id,
+    )
     branded_template = _resolve_branded_pdf_template_path(tier_str)
     ctx_for_latex: dict[str, Any] | None = None
 
@@ -1144,6 +1256,8 @@ def generate_pdf(
     # the Phase-1 stub via ``latex_template_content=None``. This keeps
     # the PDF pipeline alive even if a tier template has a Jinja2 bug.
     latex_template_source: str | None = None
+    xmpdata_source: str | None = None
+    effective_pdfa_mode = False
     if isinstance(backend, LatexBackend):
         if resolve_latex_template_path(tier_str) is not None:
             latex_ctx = ctx_for_latex
@@ -1151,10 +1265,12 @@ def generate_pdf(
                 latex_ctx = _build_branded_pdf_context(
                     data, jinja_context, tier=tier_str
                 )
+            # ARG-058 — propagate the flag into the Jinja context so the
+            # shared ``_preamble/pdfa.tex.j2`` fragment can switch between
+            # the standard hyperref preamble and the pdfx PDF/A-2u stack.
+            latex_ctx = {**latex_ctx, "pdfa_mode": pdfa_mode}
             try:
-                latex_template_source = render_latex_template(
-                    tier_str, latex_ctx
-                )
+                latex_template_source = render_latex_template(tier_str, latex_ctx)
             except Exception as exc:  # noqa: BLE001 — template errors must not 503.
                 logger.warning(
                     "latex_template_render_failed",
@@ -1165,6 +1281,21 @@ def generate_pdf(
                     },
                 )
                 latex_template_source = None
+            if pdfa_mode and latex_template_source is not None:
+                try:
+                    xmpdata_source = render_pdfa_xmpdata(tier_str, latex_ctx)
+                    effective_pdfa_mode = True
+                except Exception as exc:  # noqa: BLE001 — fall back to non-PDFA.
+                    logger.warning(
+                        "pdfa_xmpdata_render_failed",
+                        extra={
+                            "event": "pdfa_xmpdata_render_failed",
+                            "tier": tier_str,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    xmpdata_source = None
+                    effective_pdfa_mode = False
 
     if isinstance(backend, DisabledBackend):
         # Mirror the previous contract: callers expect a clear failure they can
@@ -1193,6 +1324,8 @@ def generate_pdf(
             scan_completed_at=data.created_at or "",
             base_url=base_url,
             latex_template_content=latex_template_source,
+            pdfa_mode=effective_pdfa_mode,
+            xmpdata_content=xmpdata_source,
         )
         if not ok or not output_path.exists() or output_path.stat().st_size == 0:
             logger.error(

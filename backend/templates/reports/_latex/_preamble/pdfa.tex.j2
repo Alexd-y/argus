@@ -1,0 +1,57 @@
+{# ============================================================================
+   ARG-058 / B6-T01 — Shared PDF/A-2u preamble fragment.
+
+   Loaded by all three tier templates (asgard / midgard / valhalla) via
+   ``{% include '_preamble/pdfa.tex.j2' %}`` at the top of each ``main.tex.j2``.
+
+   Behaviour
+   ---------
+   * ``pdfa_mode = True``  → activates the PDF/A-2u stack:
+     - ``pdfx`` package with ``[a-2u]`` flag (Unicode mapping required by 2u).
+     - ``colorprofiles`` is auto-loaded by pdfx and used to embed the
+       sRGB IEC61966-2.1 ICC profile that ships bundled with TeX Live 2024+.
+     - hyperref is loaded by pdfx with the ``pdfa`` flag, hence we
+       ``\PassOptionsToPackage`` the link-style options BEFORE pdfx loads.
+     - ``\hypersetup{pdfa}`` enforces PDF/A-safe link/bookmark behaviour.
+     - XMP metadata is sourced from the sibling ``report.xmpdata`` file
+       written next to ``report.tex`` by ``LatexBackend.render`` when
+       ``pdfa_mode=True`` — pdfx looks up that file by basename automatically.
+   * ``pdfa_mode = False`` (default) → loads vanilla hyperref + bookmark.
+     Byte-identical to the pre-ARG-058 preamble, so the existing renders
+     (and snapshot tests) stay green.
+
+   Why colorprofiles instead of vendoring a binary ICC blob?
+   ---------------------------------------------------------
+   * Keeps the repository free of binary assets (license provenance audits
+     for sRGB ICC blobs vary by source — Adobe, ICC, or TeX Live's MIT
+     bundle each have nuance).
+   * ``colorprofiles`` ships ``sRGB-IEC61966-2.1`` inside TeX Live
+     under the LPPL — already shipped on every TeX Live runner.
+   * ``pdfx`` autoloads ``colorprofiles`` and emits the OutputIntent as
+     ``GTS_PDFA1`` per ISO-19005-2 § 6.2.2.1.
+
+   Determinism contract
+   --------------------
+   * ``LatexBackend.render`` exports ``SOURCE_DATE_EPOCH`` derived from
+     ``scan_completed_at`` so pdfTeX writes deterministic
+     ``/CreationDate``, ``/ModDate``, ``/ID`` arrays and pdfx writes a
+     deterministic XMP ``xmp:CreateDate`` / ``xmp:ModifyDate``.
+   * Temp paths are NOT leaked because ``latexmk`` is invoked with
+     ``-output-directory=<tmpdir>`` and the resulting ``report.pdf`` is
+     copied OUT — the tempdir name never appears inside the PDF metadata
+     (pdfx + lualatex/pdftex use ``\jobname`` only, which we set to ``report``).
+   ============================================================================ #}
+{% if pdfa_mode | default(false) %}
+% --- BEGIN PDF/A-2u preamble (ARG-058) -------------------------------------
+% pdfx must be loaded BEFORE hyperref so it can pre-configure the package
+% with the pdfa flag. We propagate the link-style options forward so the
+% generated bookmarks/links are visually identical to the non-PDF/A path.
+\PassOptionsToPackage{hidelinks,bookmarks=true,bookmarksopen=true,bookmarksdepth=2}{hyperref}
+\usepackage[a-2u,mathxmp]{pdfx}
+\usepackage{bookmark}
+\hypersetup{pdfa}
+% --- END PDF/A-2u preamble (ARG-058) ---------------------------------------
+{% else %}
+\usepackage[hidelinks,bookmarks=true,bookmarksopen=true,bookmarksdepth=2]{hyperref}
+\usepackage{bookmark}
+{% endif %}

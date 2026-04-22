@@ -1,0 +1,805 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/argus-active-pentest/argus/blob/main/backend/tests/snapshots/network_policy_skip_baseline.json",
+  "$comment": "B6-T05 (Cycle 6 batch 6, T52) — frozen skip baseline for the C18 ratchet test ('every-tool-has-network-policy-or-justified-skip'). Each entry documents WHY a tool_id has no static or helm-templated NetworkPolicy YAML pinning its egress; the runtime sandbox driver still renders a NetworkPolicy v1 manifest at job-submission time via src.sandbox.network_policies.render_networkpolicy_manifest. Adding a new tool requires either (a) extending the static infra YAML coverage so the tool drops out of this baseline naturally, or (b) appending a new entry here with an explicit reason + approved_in marker. CI fails loudly when a new tool falls into neither bucket. Removing an entry is BLOCKING (the test fails if a baseline tool_id is no longer in the catalog) — this defends against silent drift where a renamed YAML leaves a stale skip.",
+  "schema_version": "1.0.0",
+  "version": "1.0",
+  "task": "B6-T05 (Cycle 6 batch 6, T52)",
+  "cycle": "6",
+  "generated_by": "B6-T05 worker (frozen snapshot — DO NOT regenerate without explicit baseline-bump PR)",
+  "generated_at": "2026-04-22T00:00:00Z",
+  "skip_count": 157,
+  "tool_count_at_freeze": 157,
+  "covered_count_at_freeze": 0,
+  "coverage_sources": [
+    "infra/k8s/networkpolicies/*.yaml (static cluster manifests)",
+    "infra/helm/argus/templates/*.yaml (chart templates with kind: NetworkPolicy)"
+  ],
+  "skips": [
+    {
+      "tool_id": "amass_passive",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "apktool",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "aquatone",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "arachni",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "arjun",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "assetfinder",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "bandit",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "binwalk",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "bloodhound_python",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "censys",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "chaos",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "checkov",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "chrome_csp_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "clairvoyance",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "cloud_metadata_check",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "cloudsploit",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "cmsmap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "cookie_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "cors_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "crackmapexec",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "crt_sh",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dalfox",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "detect_secrets",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dirsearch",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dnsrecon",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dnsx",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dockle",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "droopescan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "enum4linux_ng",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-smb' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "evil_winrm",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "eyewitness",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "favfreak",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "feroxbuster",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ffuf_dir",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ffuf_param",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ffuf_vhost",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "fierce",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "findomain",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gau",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ghauri",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "github_search",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gitleaks",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gobuster_auth",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gobuster_dir",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gopherus",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gospider",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "gowitness",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "graphql_cop",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "graphw00f",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "grpcurl_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "grype",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "hakrawler",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "hash_analyzer",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "hashcat",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "hashid",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "httpx",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "hydra",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ike_scan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "impacket_examples",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "impacket_secretsdump",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "inql",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "interactsh_client",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'oast-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "jadx",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "jarm",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "jenkins_enum",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "john",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "joomscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "jsql",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "katana",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kerbrute",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kics",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kiterunner",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kube_bench",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kube_hunter",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "kxss",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ldapsearch",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "linkfinder",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "magescan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "masscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "medusa",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "mkcert_verify",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "mobsf_api",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "mongodb_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "naabu",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ncrack",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nextjs_check",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nikto",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nmap_tcp_full",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nmap_tcp_top",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nmap_udp",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-udp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nmap_version",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nmap_vuln",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nosqlmap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ntlmrelayx",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "nuclei",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "oast_dns_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'oast-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "oastify_client",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'oast-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "onesixtyone",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "openapi_scanner",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ophcrack",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "otx_alienvault",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "pacu",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "paramspider",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "patator",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "playwright_runner",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "playwright_xss_verify",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "postman_newman",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "prowler",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "puppeteer_screens",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "radare2_info",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "redis_cli_probe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "responder",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "rpcclient_enum",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-smb' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "rustscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "scoutsuite",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "secretfinder",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "securitytrails",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "semgrep",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "shodan_cli",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "skipfish",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "smbclient",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "smbmap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-smb' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "snmp_check",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "snmpwalk",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'auth-bruteforce' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "spring_boot_actuator",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "sqlmap_confirm",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "sqlmap_safe",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ssl_enum_ciphers",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "sslscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "sslyze",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "ssrfmap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'oast-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "subfinder",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "subjs",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "syft",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "terrascan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "testssl",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "tfsec",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "theharvester",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "tlsx",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'tls-handshake' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "tplmap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "trivy_fs",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "trivy_image",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "trufflehog",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "unicornscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-udp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "urlscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "w3af_console",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "wapiti",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "wappalyzer_cli",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "waybackurls",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "webanalyze",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "wfuzz",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "whatweb",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "whois_rdap",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "wpscan",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "xsser",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "xsstrike",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "zap_baseline",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "B6-T05"
+    }
+  ]
+}

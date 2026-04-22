@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Final, Literal
 
 from sqlalchemy import (
     JSON,
@@ -20,9 +20,20 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, validates
 
 from src.owasp_top10_2025 import findings_owasp_category_check_sql
+
+#: Closed taxonomy for ``Tenant.pdf_archival_format`` (B6-T02 / T48 / D-4).
+#: Mirrored verbatim in the Alembic 029 ``CHECK`` constraint and the admin
+#: ``TenantPatch`` Pydantic schema. A single source of truth keeps the three
+#: layers in lock-step.
+PdfArchivalFormat = Literal["standard", "pdfa-2u"]
+PDF_ARCHIVAL_FORMAT_VALUES: Final[tuple[PdfArchivalFormat, ...]] = (
+    "standard",
+    "pdfa-2u",
+)
+PDF_ARCHIVAL_FORMAT_DEFAULT: Final[PdfArchivalFormat] = "standard"
 
 # PK/FK ids: VARCHAR(36) per Alembic 001 — ORM must use String(36), not dialect UUID, or UPDATEs get
 # ::uuid binds and Postgres raises: operator does not exist (character varying = uuid).
@@ -61,10 +72,49 @@ class Tenant(Base):
     scope_blacklist: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     #: Optional data retention override in days (null = platform default).
     retention_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: PDF archival format selector (B6-T02 / T48 / D-4).
+    #:
+    #: ``'standard'`` (default) keeps the existing WeasyPrint / legacy LaTeX
+    #: render path. ``'pdfa-2u'`` opts the tenant into PDF/A-2u archival
+    #: rendering — see ``backend/src/reports/generators.py`` for precedence
+    #: rules and ``backend/templates/reports/_latex/_preamble/pdfa.tex.j2``
+    #: for the preamble injection.
+    #:
+    #: Mirrored by the Alembic 029 ``CHECK`` constraint on the same column.
+    pdf_archival_format: Mapped[PdfArchivalFormat] = mapped_column(
+        String(16),
+        nullable=False,
+        default=PDF_ARCHIVAL_FORMAT_DEFAULT,
+        server_default=PDF_ARCHIVAL_FORMAT_DEFAULT,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    __table_args__ = (
+        CheckConstraint(
+            "pdf_archival_format IN ('standard', 'pdfa-2u')",
+            name="ck_tenants_pdf_archival_format",
+        ),
+    )
+
+    @validates("pdf_archival_format")
+    def _validate_pdf_archival_format(self, _key: str, value: object) -> PdfArchivalFormat:
+        """Reject taxonomy violations at the ORM layer.
+
+        SQLAlchemy ``@validates`` fires on attribute assignment, *before* the
+        DB roundtrip. We surface a clean ``ValueError`` here so a misuse from
+        Python code (e.g. seed scripts, fixtures) fails fast with a readable
+        message — without depending on the dialect-specific CHECK constraint
+        violation that Postgres / SQLite would otherwise return.
+        """
+        if value not in PDF_ARCHIVAL_FORMAT_VALUES:
+            allowed = ", ".join(repr(v) for v in PDF_ARCHIVAL_FORMAT_VALUES)
+            raise ValueError(
+                f"pdf_archival_format must be one of {{{allowed}}}, got {value!r}"
+            )
+        return value  # type: ignore[return-value]
 
 
 class User(Base):
@@ -657,3 +707,126 @@ class Screenshot(Base):
     url_or_email: Mapped[str] = mapped_column(String(2048), nullable=True)
     content_type: Mapped[str] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AdminUser(Base):
+    """Admin / operator account — cross-tenant by design (ISS-T20-003 Phase 1).
+
+    This table is intentionally separate from :class:`User` (which is a
+    tenant-scoped end-user with JWT credentials). AdminUser rows authenticate
+    operators, admins, and super-admins of the ARGUS console itself; they are
+    never end-users of a tenant, and they are NOT subject to tenant RLS — the
+    super-admin role MUST be able to act across tenants for triage, emergency
+    stop, and audit-log forensics.
+
+    Password hashes are bcrypt at rest (rounds >= 12) and are produced
+    out-of-band (operator workflow); the bootstrap path
+    (``ADMIN_BOOTSTRAP_SUBJECT`` + ``ADMIN_BOOTSTRAP_PASSWORD_HASH``) only
+    accepts a *pre-hashed* value so plaintext credentials never appear in the
+    runtime environment, the audit log, or the Alembic chain.
+
+    ``mfa_secret`` is reserved for Phase 2 (TOTP enrolment); Phase 1 leaves it
+    nullable so the column shape is forward-compatible.
+    """
+
+    __tablename__ = "admin_users"
+
+    #: Canonical admin identifier (typically an email). PRIMARY KEY — there is
+    #: exactly one row per admin subject across the entire deployment.
+    subject: Mapped[str] = mapped_column(String(255), primary_key=True)
+    #: bcrypt hash of the admin password (passlib format, rounds >= 12).
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Closed taxonomy: operator | admin | super-admin (mirrors X-Admin-Role).
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Optional tenant pin for operator/admin roles. ``NULL`` = super-admin
+    #: (cross-tenant authority).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Phase 2 reservation — TOTP secret for MFA enrolment. Always ``NULL`` in
+    #: Phase 1; column is present so future migrations are additive only.
+    mfa_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    #: Soft-delete marker. When non-NULL, ``verify_credentials`` MUST refuse
+    #: the row even if the password matches — the operator was off-boarded.
+    disabled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class AdminSession(Base):
+    """Authenticated admin/operator session — cross-tenant (ISS-T20-003 Phase 1).
+
+    Backs the cookie-based admin session introduced as the canonical admin
+    auth surface (Phase 1, dual-mode). Session IDs are CSPRNG-generated
+    URL-safe base64 strings (~64 chars from ``secrets.token_urlsafe(48)``);
+    they are random, opaque, and looked up via ``hmac.compare_digest`` to
+    avoid timing oracles on the equality check.
+
+    Cross-tenant by design — RLS is intentionally NOT enabled on this table.
+    Sessions belong to operators, not tenants; the ``tenant_id`` column is
+    a *role context* hint (matches ``admin_users.tenant_id``) and not a
+    tenant-isolation key. Enforcing RLS here would silently break the
+    super-admin login flow whose role is itself cross-tenant.
+
+    ``ip_hash`` and ``user_agent_hash`` are sha256 fingerprints (no salt
+    needed — they are non-PII surrogates of forensic value, not tenant-scoped
+    metric labels). The raw IP / user-agent never hit the database.
+
+    Sliding-window TTL: ``resolve_session`` extends ``expires_at`` and
+    ``last_used_at`` to ``now() + ADMIN_SESSION_TTL_SECONDS`` on every
+    successful resolution so an active operator never gets logged out
+    mid-flow. ``revoked_at`` is tombstone-only — once set, the session is
+    permanently invalid.
+    """
+
+    __tablename__ = "admin_sessions"
+
+    #: URL-safe base64 session id — opaque, CSPRNG-generated.
+    #:
+    #: Stays PRIMARY KEY during the 030 → 031 grace window so a deploy
+    #: rollback does not invalidate live tokens. New writes mirror the raw
+    #: token here only when ``ADMIN_SESSION_LEGACY_RAW_WRITE=true`` (default
+    #: ON). After two TTL windows (≥24 h) in production set the flag OFF and
+    #: run Alembic 031 to drop this column; ``session_token_hash`` then
+    #: becomes the sole primary key.
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: At-rest hash ``sha256(ADMIN_SESSION_PEPPER || raw_token)``. Hex digest,
+    #: 64 chars. UNIQUE-indexed; primary lookup column for resolve / revoke
+    #: after Alembic 030 (ISS-T20-003 hardening — defeat replay-from-DB-leak).
+    #: NULL only for pre-030 rows backfilled when ``ADMIN_SESSION_PEPPER`` was
+    #: unset; such rows are unreachable from the hash path and invalidate
+    #: after one TTL window.
+    session_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    #: Admin subject (matches ``admin_users.subject``); kept denormalized so
+    #: revocation lookups never need a join.
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Closed taxonomy: operator | admin | super-admin.
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Optional tenant pin (matches admin_users.tenant_id; super-admin → NULL).
+    tenant_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_used_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    #: sha256 fingerprint of the client IP at session creation (forensic only).
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: sha256 fingerprint of the User-Agent at session creation (forensic only).
+    user_agent_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Tombstone — set on logout, admin revoke, or password change. Once set,
+    #: ``resolve_session`` MUST refuse the row.
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_admin_sessions_subject_revoked", "subject", "revoked_at"),
+        Index("ix_admin_sessions_expires_at", "expires_at"),
+    )

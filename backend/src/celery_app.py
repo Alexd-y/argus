@@ -31,6 +31,10 @@ app = Celery(
         "src.celery.tasks.intel_refresh",
         # T40 (Cycle 6 Batch 5, ARG-053) — daily webhook DLQ replay + auto-abandon.
         "src.celery.tasks.webhook_dlq_replay",
+        # B6-T03 (Cycle 6 Batch 6, T49 / D-5) — 15s gauge backfill for
+        # argus_celery_queue_depth so the existing prod celery HPA
+        # has a real series to scale on. Routed onto argus.intel.
+        "src.celery.metrics_updater",
         # T33 — operator-managed scan_schedules; the trigger task is
         # scheduled dynamically via celery-redbeat (see redbeat block below).
         "src.scheduling.scan_trigger",
@@ -68,6 +72,10 @@ app.conf.update(
         # so they cannot starve scan / report queues during a scheduled run.
         "argus.intel.epss_refresh": {"queue": "argus.intel"},
         "argus.intel.kev_refresh": {"queue": "argus.intel"},
+        # B6-T03 (Cycle 6 Batch 6, T49 / D-5) — co-locates the queue-depth
+        # refresh with the other beat-driven housekeeping so a single beat
+        # process can fan it out without contention with hot scan queues.
+        "argus.metrics.queue_depth_refresh": {"queue": "argus.intel"},
         # T40 (Cycle 6 Batch 5, ARG-053) — webhook DLQ housekeeping (and any
         # future notification beat / on-demand replay tasks) lands on its own
         # dedicated queue so a slow upstream cannot starve the scan / report

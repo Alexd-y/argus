@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/argus-active-pentest/argus/blob/main/backend/tests/snapshots/helm_prod_cosign_baseline.json",
+  "$comment": "B6-T05 (Cycle 6 batch 6, T52) — frozen baseline of the supply-chain assertions the C17 ratchet test enforces against the rendered prod Helm overlay (`helm template argus infra/helm/argus -f infra/helm/argus/values-prod.yaml`). Bumping any expected count requires an explicit edit + worker-report rationale (no silent rewrites). The baseline is the single source of truth for what the prod overlay MUST emit; the test fails loudly when the rendered manifest drifts below the floor (a regressed deployment dropped its cosign init container, an image lost its digest pinning, etc.).",
+  "schema_version": "1.0.0",
+  "task": "B6-T05 (Cycle 6 batch 6, T52)",
+  "cycle": "6",
+  "generated_by": "B6-T05 worker (frozen snapshot — DO NOT regenerate without explicit baseline-bump PR)",
+  "generated_at": "2026-04-22T00:00:00Z",
+  "helm_chart_path": "infra/helm/argus",
+  "helm_values_overlay": "infra/helm/argus/values-prod.yaml",
+  "fake_digest_used_for_render": "sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+  "argus_image_repository_prefixes": [
+    "ghcr.io/your-org/argus-"
+  ],
+  "argus_deployments_expected": [
+    "argus-backend",
+    "argus-celery",
+    "argus-frontend",
+    "argus-mcp"
+  ],
+  "expected_argus_image_count_min": 4,
+  "expected_cosign_verify_init_count_min": 4,
+  "cosign_verify_init_image_repository": "gcr.io/projectsigstore/cosign",
+  "cosign_pin_annotation_prefix": "argus.image.digest/",
+  "required_assertions": [
+    "every Pod-spec container/initContainer image whose repository starts with one of `argus_image_repository_prefixes` MUST be in `<repository>@sha256:<digest>` form (no bare tags, no placeholder digest)",
+    "no ARGUS-owned image MAY render with the all-zero placeholder digest `sha256:0000000000000000000000000000000000000000000000000000000000000000` (the chart helper `argus.imageRef` already fails the render in production env, but C17 pins the invariant on the rendered output too)",
+    "each ARGUS Deployment in `argus_deployments_expected` MUST carry at least one cosign supply-chain attestation: either (a) an init container whose image repository is `cosign_verify_init_image_repository`, OR (b) a Pod-template annotation whose key starts with `cosign_pin_annotation_prefix` pinning the verified digest",
+    "the rendered manifest MUST contain at least `expected_argus_image_count_min` ARGUS-owned images and at least `expected_cosign_verify_init_count_min` cosign verify init containers (one per ARGUS deployment)",
+    "the prod overlay MUST set `cosign.verify.enabled=true` (covered statically by chart helper `argus.cosignAssertProd` which fails the render otherwise; C17 cross-checks the helper's fail-closed behaviour by asserting cosign init containers are emitted in the rendered output)"
+  ],
+  "rationale": "The Helm chart already enforces these invariants at render time via the `argus.cosignAssertProd` and `argus.imageRef` helpers (see `infra/helm/argus/templates/_helpers.tpl`). C17 is the regression-blocking gate that proves those helpers ARE wired to the prod overlay end-to-end and that the rendered output the cluster actually applies meets the supply-chain floor. A subtle template edit (e.g. dropping the `argus.cosignVerifyInit` include from `backend-deployment.yaml`) would silently bypass the helpers but still leave the helpers themselves intact; only an end-to-end assertion against the rendered output catches that drift class.",
+  "skip_when": "C17 gracefully skips (pytest.skip) when the `helm` binary is not on PATH OR when chart subchart deps are unbuilt. CI installs helm and runs `helm dependency build` before invoking pytest so the gate is exercised on every PR (see `.github/workflows/helm-validation.yml`)."
+}

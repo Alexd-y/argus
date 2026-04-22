@@ -261,3 +261,331 @@ jobs:
             echo
             echo "Drift check (inline template ↔ standalone YAML): see step output"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  # B6-T03 (Cycle 6 Batch 6, T49 / D-5) — prometheusAdapter toggle gate.
+  # Renders the chart with both `prometheusAdapter.enabled=false` (default)
+  # and `prometheusAdapter.enabled=true` to assert that:
+  #   * the disabled render emits ZERO ConfigMap documents matching the
+  #     adapter rules name (no accidental leak into existing overlays);
+  #   * the enabled render emits EXACTLY ONE ConfigMap, that ConfigMap is
+  #     valid YAML, contains `data.config.yaml`, and embeds both the
+  #     `argus_celery_queue_depth` and `argus_kev_findings_emit_rate_5m`
+  #     externalRules entries the prod celery + KEV-aware HPAs depend on;
+  #   * the rendered manifest stream still passes kubeconform schema
+  #     validation (catches accidental schema drift on the ConfigMap).
+  prometheus-adapter-render-validation:
+    name: Helm prometheusAdapter toggle + ConfigMap shape
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: hashFiles('infra/helm/argus/Chart.yaml') != ''
+    permissions:
+      contents: read
+
+    env:
+      KUBECONFORM_VERSION: v0.6.7
+      CRDS_CATALOGUE: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helm v3.14.4
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install kubeconform ${{ env.KUBECONFORM_VERSION }} (pinned, never :latest)
+        run: |
+          set -euo pipefail
+          curl -sSL \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Install yq v4 (mikefarah) for ConfigMap shape assertions
+        run: |
+          set -euo pipefail
+          YQ_VERSION="v4.44.3"
+          curl -sSL \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+            -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: helm dependency build (offline-friendly, respects Chart.lock)
+        run: |
+          set -euo pipefail
+          helm dependency build infra/helm/argus
+
+      - name: Render with prometheusAdapter.enabled=false (must emit 0 adapter ConfigMaps)
+        run: |
+          set -euo pipefail
+          # The adapter ConfigMap is named `<release>-prometheus-adapter-rules`
+          # by default; check by the well-known suffix to stay robust against
+          # `fullnameOverride` shenanigans in dev overlays.
+          count="$(helm template argus infra/helm/argus --set prometheusAdapter.enabled=false \
+            | yq eval-all 'select(.kind == "ConfigMap" and (.metadata.name | test("prometheus-adapter-rules$")))' - \
+            | grep -c '^kind: ConfigMap$' || echo 0)"
+          if [[ "${count}" -ne 0 ]]; then
+            echo "::error::prometheusAdapter.enabled=false rendered ${count} adapter ConfigMaps (expected 0)"
+            exit 1
+          fi
+          echo "prometheusAdapter.enabled=false: OK (0 adapter ConfigMaps)"
+
+      - name: Render with prometheusAdapter.enabled=true and assert ConfigMap shape
+        run: |
+          set -euo pipefail
+          rendered="$(mktemp)"
+          helm template argus infra/helm/argus --set prometheusAdapter.enabled=true \
+            > "${rendered}"
+
+          count="$(yq eval-all 'select(.kind == "ConfigMap" and (.metadata.name | test("prometheus-adapter-rules$")))' "${rendered}" \
+            | grep -c '^kind: ConfigMap$' || echo 0)"
+          if [[ "${count}" -ne 1 ]]; then
+            echo "::error::prometheusAdapter.enabled=true rendered ${count} adapter ConfigMaps (expected 1)"
+            exit 1
+          fi
+
+          adapter_cm="$(yq eval-all 'select(.kind == "ConfigMap" and (.metadata.name | test("prometheus-adapter-rules$")))' "${rendered}")"
+
+          # Embedded config.yaml must be parseable AND carry both rules.
+          inner="$(echo "${adapter_cm}" | yq eval '.data["config.yaml"]' -)"
+          if [[ -z "${inner}" || "${inner}" == "null" ]]; then
+            echo "::error::adapter ConfigMap missing data.config.yaml"
+            exit 1
+          fi
+
+          # Each rule's externalMetricName must surface — those names are the
+          # contract the HPAs scale on. A typo here silently degrades the
+          # cluster to CPU-only scaling.
+          if ! echo "${inner}" | yq eval '.externalRules[].name.as' - | grep -qx 'argus_celery_queue_depth'; then
+            echo "::error::adapter ConfigMap missing externalRules entry for argus_celery_queue_depth"
+            exit 1
+          fi
+          if ! echo "${inner}" | yq eval '.externalRules[].name.as' - | grep -qx 'argus_kev_findings_emit_rate_5m'; then
+            echo "::error::adapter ConfigMap missing externalRules entry for argus_kev_findings_emit_rate_5m"
+            exit 1
+          fi
+
+          echo "prometheusAdapter.enabled=true: OK (1 ConfigMap, both rules present)"
+
+          # Validate the entire rendered manifest stream against kubeconform
+          # so a future regression on the ConfigMap shape (or any sibling
+          # resource) fails the gate before it lands in dev/staging/prod.
+          kubeconform \
+            --strict \
+            --summary \
+            --output json \
+            --kubernetes-version 1.31.0 \
+            --skip CustomResourceDefinition \
+            --schema-location default \
+            --schema-location "${CRDS_CATALOGUE}" \
+            "${rendered}"
+
+      - name: Append job summary (always)
+        if: always()
+        run: |
+          set +e
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## Helm prometheusAdapter toggle + ConfigMap shape — PASSED"
+            else
+              echo "## Helm prometheusAdapter toggle + ConfigMap shape — FAILED"
+            fi
+            echo
+            echo "Renders validated:"
+            echo "  - prometheusAdapter.enabled=false (expect 0 adapter ConfigMaps)"
+            echo "  - prometheusAdapter.enabled=true  (expect 1 ConfigMap, both rules: argus_celery_queue_depth + argus_kev_findings_emit_rate_5m)"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # B6-T04 (Cycle 6 Batch 6, T50 + T51 / D-3, D-7) — KEV-aware HPA toggle gate.
+  # Renders the chart across the cartesian product of the two boolean toggles
+  # `prometheusAdapter.enabled` × `autoscaling.kevAware.enabled` and asserts:
+  #   * Disabled (default OFF/OFF) emits 0 KEV-aware HPA documents.
+  #   * Adapter-only (ON/OFF)       emits 0 KEV-aware HPA documents — the
+  #     adapter rules ConfigMap landing alone must NEVER bring the HPA along.
+  #   * Aware-only (OFF/ON)         emits 0 KEV-aware HPA documents — the
+  #     guard MUST refuse to render when the external metrics ConfigMap is
+  #     absent (otherwise the HPA would loop on FailedGetExternalMetric in
+  #     production).
+  #   * Both enabled (ON/ON)        emits EXACTLY 1 KEV-aware HPA document
+  #     AND the document validates against autoscaling/v2 schema with the
+  #     two External metric tracks (`argus_kev_findings_emit_rate_5m` and
+  #     `argus_celery_queue_depth`) and the R3 anti-thrash policy
+  #     (scaleDown.stabilizationWindowSeconds=300, scaleUp +100%/30s,
+  #     scaleDown -50%/60s).
+  #
+  # This is the render-only counterpart to `.github/workflows/kev-hpa-kind.yml`
+  # — together they cover schema correctness (this gate, fast) and runtime
+  # behavior (kind gate, slower).
+  kev-aware-hpa-render-validation:
+    name: Helm autoscaling.kevAware toggle + HPA shape
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: hashFiles('infra/helm/argus/Chart.yaml') != ''
+    permissions:
+      contents: read
+
+    env:
+      KUBECONFORM_VERSION: v0.6.7
+      CRDS_CATALOGUE: https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+      HPA_NAME_SUFFIX: celery-kev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install helm v3.14.4
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Install kubeconform ${{ env.KUBECONFORM_VERSION }} (pinned, never :latest)
+        run: |
+          set -euo pipefail
+          curl -sSL \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: Install yq v4 (mikefarah) for HPA shape assertions
+        run: |
+          set -euo pipefail
+          YQ_VERSION="v4.44.3"
+          curl -sSL \
+            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+            -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: helm dependency build (offline-friendly, respects Chart.lock)
+        run: |
+          set -euo pipefail
+          helm dependency build infra/helm/argus
+
+      - name: Cartesian toggle gate (4 renders × kev-aware HPA count)
+        run: |
+          set -euo pipefail
+          # Helper: renders the chart with the given toggles and prints the
+          # number of HPA documents whose name ends in `-celery-kev`.
+          render_count() {
+            local prom_adapter="$1"
+            local kev_aware="$2"
+            helm template argus infra/helm/argus \
+              --set "prometheusAdapter.enabled=${prom_adapter}" \
+              --set "autoscaling.kevAware.enabled=${kev_aware}" \
+              | yq eval-all 'select(.kind == "HorizontalPodAutoscaler" and (.metadata.name | test("'"${HPA_NAME_SUFFIX}"'$")))' - \
+              | grep -c '^kind: HorizontalPodAutoscaler$' || echo 0
+          }
+
+          declare -A expected
+          expected["false:false"]=0
+          expected["true:false"]=0
+          expected["false:true"]=0
+          expected["true:true"]=1
+
+          fail=0
+          for combo in "false:false" "true:false" "false:true" "true:true"; do
+            adapter="${combo%%:*}"
+            aware="${combo##*:}"
+            actual="$(render_count "${adapter}" "${aware}")"
+            want="${expected[${combo}]}"
+            if [[ "${actual}" -ne "${want}" ]]; then
+              echo "::error::prometheusAdapter.enabled=${adapter} autoscaling.kevAware.enabled=${aware} rendered ${actual} kev-aware HPAs (expected ${want})"
+              fail=1
+            else
+              echo "OK: prometheusAdapter=${adapter} kevAware=${aware} → ${actual} kev-aware HPA(s)"
+            fi
+          done
+
+          if [[ "${fail}" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Render with both toggles ON and assert HPA shape (R3 anti-thrash policy)
+        run: |
+          set -euo pipefail
+          rendered="$(mktemp)"
+          helm template argus infra/helm/argus \
+            --set prometheusAdapter.enabled=true \
+            --set autoscaling.kevAware.enabled=true \
+            > "${rendered}"
+
+          hpa="$(yq eval-all 'select(.kind == "HorizontalPodAutoscaler" and (.metadata.name | test("'"${HPA_NAME_SUFFIX}"'$")))' "${rendered}")"
+          if [[ -z "${hpa}" ]]; then
+            echo "::error::No KEV-aware HPA document found in fully-enabled render"
+            exit 1
+          fi
+
+          # R3 invariant — scale-down stabilization window MUST be 300s.
+          stab="$(echo "${hpa}" | yq eval '.spec.behavior.scaleDown.stabilizationWindowSeconds' -)"
+          if [[ "${stab}" != "300" ]]; then
+            echo "::error::scaleDown.stabilizationWindowSeconds=${stab}, expected 300 (R3 anti-thrash invariant)"
+            exit 1
+          fi
+
+          # External metric tracks MUST include both KEV emit rate and queue depth.
+          metrics="$(echo "${hpa}" | yq eval '.spec.metrics[] | select(.type == "External") | .external.metric.name' -)"
+          if ! echo "${metrics}" | grep -qx 'argus_kev_findings_emit_rate_5m'; then
+            echo "::error::HPA missing External metric track 'argus_kev_findings_emit_rate_5m'"
+            exit 1
+          fi
+          if ! echo "${metrics}" | grep -qx 'argus_celery_queue_depth'; then
+            echo "::error::HPA missing External metric track 'argus_celery_queue_depth'"
+            exit 1
+          fi
+
+          # Scale-up policy MUST be +100% per 30s (acceptance criterion R3).
+          su_value="$(echo "${hpa}" | yq eval '.spec.behavior.scaleUp.policies[] | select(.type == "Percent") | .value' -)"
+          su_period="$(echo "${hpa}" | yq eval '.spec.behavior.scaleUp.policies[] | select(.type == "Percent") | .periodSeconds' -)"
+          if [[ "${su_value}" != "100" || "${su_period}" != "30" ]]; then
+            echo "::error::scaleUp policy expected +100%/30s, got +${su_value}%/${su_period}s"
+            exit 1
+          fi
+
+          # Scale-down policy MUST be -50% per 60s (acceptance criterion R3).
+          sd_value="$(echo "${hpa}" | yq eval '.spec.behavior.scaleDown.policies[] | select(.type == "Percent") | .value' -)"
+          sd_period="$(echo "${hpa}" | yq eval '.spec.behavior.scaleDown.policies[] | select(.type == "Percent") | .periodSeconds' -)"
+          if [[ "${sd_value}" != "50" || "${sd_period}" != "60" ]]; then
+            echo "::error::scaleDown policy expected -50%/60s, got -${sd_value}%/${sd_period}s"
+            exit 1
+          fi
+
+          echo "HPA shape: OK (stabilizationWindow=300s, +100%/30s up, -50%/60s down, both External metric tracks present)"
+
+          # Validate the rendered manifest stream against kubeconform so a
+          # future regression on the autoscaling/v2 schema fails the gate
+          # before it lands in dev/staging/prod.
+          kubeconform \
+            --strict \
+            --summary \
+            --output json \
+            --kubernetes-version 1.31.0 \
+            --skip CustomResourceDefinition \
+            --schema-location default \
+            --schema-location "${CRDS_CATALOGUE}" \
+            "${rendered}"
+
+      - name: Append job summary (always)
+        if: always()
+        run: |
+          set +e
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## Helm autoscaling.kevAware toggle + HPA shape — PASSED"
+            else
+              echo "## Helm autoscaling.kevAware toggle + HPA shape — FAILED"
+            fi
+            echo
+            echo "Cartesian toggle matrix validated:"
+            echo "  - prometheusAdapter=false × kevAware=false → 0 HPA"
+            echo "  - prometheusAdapter=true  × kevAware=false → 0 HPA"
+            echo "  - prometheusAdapter=false × kevAware=true  → 0 HPA (guard against orphaned HPA)"
+            echo "  - prometheusAdapter=true  × kevAware=true  → 1 HPA"
+            echo
+            echo "R3 anti-thrash invariants asserted on the fully-enabled render:"
+            echo "  - scaleDown.stabilizationWindowSeconds = 300"
+            echo "  - scaleUp policy = +100% per 30s"
+            echo "  - scaleDown policy = -50% per 60s"
+            echo "  - External metric tracks: argus_kev_findings_emit_rate_5m + argus_celery_queue_depth"
+          } >> "${GITHUB_STEP_SUMMARY}"

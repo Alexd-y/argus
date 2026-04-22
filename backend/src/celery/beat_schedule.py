@@ -1,4 +1,4 @@
-"""ARG-044 / T40 — Celery beat schedule registry.
+"""ARG-044 / T40 / B6-T03 — Celery beat schedule registry.
 
 Centralises beat schedules so the wiring is in one place rather than
 scattered across task modules. Imported once at module-load time by
@@ -18,6 +18,10 @@ Current schedule:
   ``DLQ_MAX_AGE_DAYS`` (14d). Routed to the dedicated
   ``argus.notifications`` queue so it cannot starve scan / report queues
   during a sweep.
+* ``argus.metrics.queue_depth_refresh`` — every 15s (B6-T03, Cycle 6
+  Batch 6, T49 / D-5). Backfills the ``argus_celery_queue_depth`` Gauge
+  the prod celery HPA scales on. Routed onto ``argus.intel`` so it
+  shares the beat-driven housekeeping pool with EPSS / KEV refresh.
 
 Adding a new schedule: define a constant below and append it to
 ``BEAT_SCHEDULE``. Keep names dotted (``argus.<area>.<task>``) so the
@@ -26,6 +30,7 @@ queue routing in :mod:`src.celery_app` can target them by prefix.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 try:
@@ -34,11 +39,31 @@ except ImportError:  # pragma: no cover — celery is a runtime dependency
     crontab = None  # type: ignore[assignment]
 
 
+#: Refresh cadence for the queue-depth gauge — short enough to react
+#: within one HPA stabilization window (default 30 s upstream) but long
+#: enough that the per-tick cost (~9 Redis LLEN round-trips) is negligible.
+QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS: int = 15
+
+
 def _schedule(hour: int, minute: int) -> Any:
     """Return a daily-at-HH:MM crontab schedule (``None`` if Celery missing)."""
     if crontab is None:
         return None
     return crontab(hour=hour, minute=minute)
+
+
+def _interval(seconds: int) -> Any:
+    """Return a ``timedelta`` schedule (``None`` if Celery is missing).
+
+    Celery accepts ``timedelta`` instances directly in beat schedules;
+    they are converted internally to a ``schedules.schedule`` instance
+    by ``celery.beat.Scheduler``. Wrapping the call gives the same
+    ``None`` fall-through as :func:`_schedule` so this module stays
+    importable in slim test images that stub Celery away.
+    """
+    if crontab is None:
+        return None
+    return timedelta(seconds=seconds)
 
 
 BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
@@ -59,6 +84,16 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": "argus.notifications.webhook_dlq_replay",
         "schedule": _schedule(hour=6, minute=0),
         "options": {"queue": "argus.notifications"},
+    },
+    # B6-T03 (Cycle 6 Batch 6, T49 / D-5) — 15s gauge backfill so
+    # ``argus_celery_queue_depth`` (consumed by the prod celery HPA via
+    # the Prometheus Adapter rule shipped alongside this batch) has a
+    # live source. Routed onto ``argus.intel`` so a misconfigured worker
+    # pool cannot let it starve the hot scan queues.
+    "argus.metrics.queue_depth_refresh": {
+        "task": "argus.metrics.queue_depth_refresh",
+        "schedule": _interval(seconds=QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS),
+        "options": {"queue": "argus.intel"},
     },
 }
 
@@ -83,5 +118,6 @@ def apply_beat_schedule(app: Any) -> None:
 
 __all__ = [
     "BEAT_SCHEDULE",
+    "QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS",
     "apply_beat_schedule",
 ]

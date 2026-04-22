@@ -1,0 +1,448 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# B6-T04 (Cycle 6 Batch 6, T50 + T51 / D-3, D-7) — KEV-aware HPA kind CI gate.
+# ──────────────────────────────────────────────────────────────────────────────
+# Validates the KEV-aware celery worker HPA end-to-end on a live `kind` cluster:
+#
+#     pushgateway  →  Prometheus  →  Prometheus Adapter  →
+#         external.metrics.k8s.io/v1beta1  →  HPA  →  Deployment scale
+#
+# Provisioning order (each step waits for the previous one to be healthy):
+#   1. kind cluster (Kubernetes 1.31).
+#   2. prometheus-community/prometheus (single Pod, scrapes pushgateway every
+#      5s — short window so the Adapter's 5m rate window populates fast).
+#   3. prometheus-community/prometheus-pushgateway (synthetic-burst entry point
+#      the test posts ``argus_findings_emitted_total`` increments to;
+#      ``fullnameOverride`` is pinned to ``prometheus-pushgateway`` so the test
+#      file's hardcoded service URL resolves without an extra env override).
+#   4. prometheus-community/prometheus-adapter wired with the SAME externalRules
+#      the chart's ``templates/prometheus-adapter-rules.yaml`` ships in prod —
+#      the CI rules drop the ``pod!=""`` selector because pushgateway samples
+#      have no pod label, but every other dimension matches production.
+#   5. Placeholder ``argus-celery`` Deployment in ``argus-test`` (pause image —
+#      HPA only inspects ``spec.replicas``, never the running pods).
+#   6. Render & apply the chart's ``templates/hpa-celery-worker-kev.yaml`` via
+#      ``helm template --show-only`` so we exercise the EXACT YAML production
+#      will land (no manual translation drift).
+#   7. ``pytest backend/tests/integration/k8s/test_kev_aware_hpa.py -v`` runs
+#      with ``KIND_CLUSTER_NAME`` exported so the suite's collection-time
+#      skipif gate flips ON.
+#
+# Why pushgateway + full Prometheus instead of a stub APIService:
+#   * The HPA control-loop semantics (``ScalingActive`` condition, behavior
+#     stabilizationWindow, multi-metric union-max) only surface against a real
+#     ``external.metrics.k8s.io`` aggregated APIServer. A hand-rolled stub
+#     would have to re-implement that control plane to keep the gate honest.
+#   * The Prometheus Adapter's ``rate(<<.Series>>[5m])`` translation IS the
+#     contract the chart ships — exercising it on real data catches schema /
+#     PromQL drift the helm-validation kubeconform gate cannot see.
+#
+# Path filters scope the workflow to chart + test + workflow changes only —
+# the average PR (backend / Frontend code) skips the gate. Pinned chart
+# versions match the production overlay (no ``:latest``).
+#
+# Plan: ai_docs/develop/plans/2026-04-22-argus-cycle6-b6.md (B6-T04, T50+T51).
+# Sibling render-only gate: helm-validation.yml::kev-aware-hpa-render-validation
+# (toggle gate for the chart). This workflow is the runtime counterpart.
+
+name: KEV-aware HPA (kind)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "infra/helm/argus/templates/hpa-celery-worker-kev.yaml"
+      - "infra/helm/argus/templates/prometheus-adapter-rules.yaml"
+      - "infra/helm/argus/values.yaml"
+      - "infra/helm/argus/values-prod.yaml"
+      - "backend/tests/integration/k8s/**"
+      - ".github/workflows/kev-hpa-kind.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/helm/argus/templates/hpa-celery-worker-kev.yaml"
+      - "infra/helm/argus/templates/prometheus-adapter-rules.yaml"
+      - "infra/helm/argus/values.yaml"
+      - "infra/helm/argus/values-prod.yaml"
+      - "backend/tests/integration/k8s/**"
+      - ".github/workflows/kev-hpa-kind.yml"
+  workflow_dispatch: {}
+
+# Least-privilege at workflow level — the gate is read-only against the
+# repository and never publishes artifacts to GHCR.
+permissions:
+  contents: read
+
+# Cancel queued PR runs when a new push lands; keep main / dispatch runs
+# serialised so one always finishes before the next starts.
+concurrency:
+  group: kev-hpa-kind-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Kind / Kubernetes (must match admission-policy-kind.yml so we share runner
+  # warm-cache for the kind binary download).
+  KIND_VERSION: v0.24.0
+  KIND_K8S_VERSION: v1.31.0
+  KIND_CLUSTER: argus-kev-hpa
+  HELM_VERSION: "v3.14.4"
+  PYTHON_VERSION: "3.12"
+  # prometheus-community chart pins (sourced from
+  # https://github.com/prometheus-community/helm-charts/releases). Bump
+  # together — every adapter version is tied to a Prometheus / pushgateway
+  # API surface compatibility window.
+  PROMETHEUS_CHART_VERSION: "25.27.0"
+  PUSHGATEWAY_CHART_VERSION: "2.15.0"
+  ADAPTER_CHART_VERSION: "4.11.0"
+  # Namespaces — `monitoring` mirrors the kube-prometheus-stack convention so
+  # the test's hardcoded `prometheus-pushgateway.monitoring` URL resolves.
+  ARGUS_NAMESPACE: argus-test
+  MONITORING_NAMESPACE: monitoring
+
+jobs:
+  kev-hpa-kind:
+    name: KEV-aware HPA on kind k8s ${{ env.KIND_K8S_VERSION }}
+    runs-on: ubuntu-latest
+    # Worst-case: setup ~3m + Prometheus stack ready ~3m + scale-up wait 60s
+    # + scale-down wait 330s (stabilizationWindow + buffer) + teardown ~30s
+    # ≈ 12-13 min. 25 min cap leaves head-room for runner cold-starts.
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up kind ${{ env.KIND_VERSION }} (k8s ${{ env.KIND_K8S_VERSION }})
+        uses: helm/kind-action@v1
+        with:
+          version: ${{ env.KIND_VERSION }}
+          node_image: kindest/node:${{ env.KIND_K8S_VERSION }}
+          cluster_name: ${{ env.KIND_CLUSTER }}
+          wait: 90s
+
+      - name: Set up helm ${{ env.HELM_VERSION }} (matches helm-validation.yml)
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install pytest (standalone — no backend deps required)
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          # Pin to the matrix the backend uses (see backend/requirements.txt /
+          # pyproject.toml). Standalone install avoids the heavy backend
+          # dependency tree — the test only shells out to kubectl.
+          python -m pip install "pytest==8.3.3"
+          python -m pytest --version
+
+      - name: Create namespaces
+        run: |
+          set -euo pipefail
+          kubectl create namespace "${ARGUS_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create namespace "${MONITORING_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Add prometheus-community helm repo
+        run: |
+          set -euo pipefail
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+      - name: Install Prometheus chart ${{ env.PROMETHEUS_CHART_VERSION }} (single Pod, scrapes pushgateway)
+        run: |
+          set -euo pipefail
+          # Minimal install — disable Alertmanager / kube-state-metrics /
+          # node-exporter so the kind cluster stays under 1 GiB RAM. The
+          # test only needs the Prometheus server's /api/v1/query path
+          # surfaced to the Adapter.
+          cat > /tmp/prometheus-values.yaml <<'EOF'
+          alertmanager:
+            enabled: false
+          kube-state-metrics:
+            enabled: false
+          prometheus-node-exporter:
+            enabled: false
+          prometheus-pushgateway:
+            enabled: false  # Installed separately below for explicit naming.
+          server:
+            global:
+              scrape_interval: 5s
+              scrape_timeout: 4s
+              evaluation_interval: 5s
+            persistentVolume:
+              enabled: false
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 768Mi
+            extraScrapeConfigs: |
+              - job_name: pushgateway
+                honor_labels: true
+                static_configs:
+                  - targets: ["prometheus-pushgateway.monitoring.svc.cluster.local:9091"]
+          serverFiles:
+            prometheus.yml: {}
+          EOF
+          helm install prometheus prometheus-community/prometheus \
+            --version "${PROMETHEUS_CHART_VERSION}" \
+            --namespace "${MONITORING_NAMESPACE}" \
+            --values /tmp/prometheus-values.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Install Pushgateway chart ${{ env.PUSHGATEWAY_CHART_VERSION }} (fullname pinned)
+        run: |
+          set -euo pipefail
+          # `fullnameOverride` pins the Service name to `prometheus-pushgateway`
+          # so the test file's hardcoded URL
+          # (`prometheus-pushgateway.monitoring.svc.cluster.local:9091`) hits
+          # without an extra env override.
+          helm install pushgateway prometheus-community/prometheus-pushgateway \
+            --version "${PUSHGATEWAY_CHART_VERSION}" \
+            --namespace "${MONITORING_NAMESPACE}" \
+            --set fullnameOverride=prometheus-pushgateway \
+            --set persistentVolume.enabled=false \
+            --set serviceAccount.create=true \
+            --wait \
+            --timeout 3m
+
+      - name: Install Prometheus Adapter chart ${{ env.ADAPTER_CHART_VERSION }} (mirrors chart externalRules)
+        run: |
+          set -euo pipefail
+          # Adapter rules MUST mirror infra/helm/argus/templates/prometheus-adapter-rules.yaml
+          # in semantics. The CI variant relaxes the `pod!=""` selector
+          # because pushgateway-pushed samples have no pod label — every
+          # other dimension (metric name, rate window, label-matchers
+          # substitution) matches production exactly.
+          cat > /tmp/adapter-values.yaml <<'EOF'
+          prometheus:
+            url: http://prometheus-server.monitoring.svc.cluster.local
+            port: 80
+          rules:
+            default: false
+            external:
+              - seriesQuery: 'argus_findings_emitted_total{kev_listed="true"}'
+                resources:
+                  overrides:
+                    namespace:
+                      resource: namespace
+                name:
+                  matches: '^argus_findings_emitted_total$'
+                  as: 'argus_kev_findings_emit_rate_5m'
+                metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[5m]))'
+              - seriesQuery: 'argus_celery_queue_depth'
+                resources:
+                  overrides:
+                    namespace:
+                      resource: namespace
+                name:
+                  matches: '^argus_celery_queue_depth$'
+                  as: 'argus_celery_queue_depth'
+                metricsQuery: 'sum(<<.Series>>{<<.LabelMatchers>>}) by (queue)'
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          EOF
+          helm install prometheus-adapter prometheus-community/prometheus-adapter \
+            --version "${ADAPTER_CHART_VERSION}" \
+            --namespace "${MONITORING_NAMESPACE}" \
+            --values /tmp/adapter-values.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Wait for external.metrics.k8s.io APIService to become Available
+        run: |
+          set -euo pipefail
+          # The Adapter registers an APIService for external metrics on
+          # startup, but registration is async. Poll up to 2m so the HPA
+          # has a fully-resolved external metrics endpoint to talk to.
+          for attempt in $(seq 1 24); do
+            status="$(kubectl get apiservice v1beta1.external.metrics.k8s.io \
+              -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)"
+            if [[ "${status}" == "True" ]]; then
+              echo "v1beta1.external.metrics.k8s.io is Available after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for external.metrics.k8s.io APIService (attempt ${attempt}/24); current=${status:-<none>}"
+            sleep 5
+          done
+          if [[ "${status:-}" != "True" ]]; then
+            kubectl describe apiservice v1beta1.external.metrics.k8s.io || true
+            echo "::error::external.metrics.k8s.io APIService never reported Available=True within 2m"
+            exit 1
+          fi
+
+      - name: Pre-seed pushgateway with both metrics (HPA needs a sample for every external metric to clear FailedGetExternalMetric)
+        run: |
+          set -euo pipefail
+          # Push a static `argus_celery_queue_depth{queue="argus.scans"}=0`
+          # so the HPA's queue-depth metric track has a sample from t=0.
+          # Without this, the HPA reports `FailedGetExternalMetric` for
+          # the queue-depth track and `ScalingActive=False` until the
+          # Adapter's first scrape — adding 30-90s of jitter to the
+          # scale-up assertion.
+          kubectl run kev-hpa-seed \
+            --namespace "${ARGUS_NAMESPACE}" \
+            --rm \
+            --restart=Never \
+            --image=curlimages/curl:8.11.0 \
+            --quiet \
+            --command -- \
+            sh -c "printf '# TYPE argus_celery_queue_depth gauge\nargus_celery_queue_depth{queue=\"argus.scans\",namespace=\"${ARGUS_NAMESPACE}\"} 0\n' | curl --silent --show-error --fail --max-time 10 -X POST --data-binary @- http://prometheus-pushgateway.monitoring.svc.cluster.local:9091/metrics/job/queue_depth_seed"
+
+      - name: Render & apply placeholder argus-celery Deployment (pause image)
+        run: |
+          set -euo pipefail
+          # The HPA only reads `spec.replicas` — the Pod doesn't need to
+          # actually run any payload. `registry.k8s.io/pause` is the
+          # canonical no-op image (~700 KiB) and is already cached on
+          # GitHub Actions runners.
+          cat > /tmp/argus-celery-placeholder.yaml <<'EOF'
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: argus-celery
+            labels:
+              app.kubernetes.io/name: argus
+              app.kubernetes.io/component: celery-worker
+              argus.dev/source: B6-T04 kind CI placeholder
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: argus
+                app.kubernetes.io/component: celery-worker
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: argus
+                  app.kubernetes.io/component: celery-worker
+              spec:
+                containers:
+                  - name: pause
+                    image: registry.k8s.io/pause:3.10
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 16Mi
+                      limits:
+                        cpu: 50m
+                        memory: 32Mi
+          EOF
+          kubectl apply --namespace "${ARGUS_NAMESPACE}" -f /tmp/argus-celery-placeholder.yaml
+          kubectl rollout status --namespace "${ARGUS_NAMESPACE}" deployment/argus-celery --timeout=2m
+
+      - name: Render & apply ARGUS HPA template (helm template --show-only)
+        run: |
+          set -euo pipefail
+          # `helm dependency build` populates Chart.lock pins so subchart
+          # references resolve. We use `--show-only` to render JUST the
+          # HPA template — sidesteps the heavy Postgres/Redis/MinIO subchart
+          # rendering (those would never deploy in this kind cluster anyway).
+          helm dependency build infra/helm/argus
+
+          rendered=/tmp/hpa-celery-worker-kev.yaml
+          helm template argus infra/helm/argus \
+            --namespace "${ARGUS_NAMESPACE}" \
+            --set prometheusAdapter.enabled=true \
+            --set autoscaling.kevAware.enabled=true \
+            --show-only templates/hpa-celery-worker-kev.yaml \
+            > "${rendered}"
+
+          if ! grep -q '^kind: HorizontalPodAutoscaler$' "${rendered}"; then
+            echo "::error::Rendered template did not contain a HorizontalPodAutoscaler manifest"
+            cat "${rendered}"
+            exit 1
+          fi
+
+          kubectl apply --namespace "${ARGUS_NAMESPACE}" -f "${rendered}"
+          kubectl get hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev -o yaml
+
+      - name: Wait for HPA to populate ScaleStatus (currentReplicas != <unknown>)
+        run: |
+          set -euo pipefail
+          # HPA needs ~1 metric scrape window before status.currentReplicas
+          # becomes a number. Give it 90s — generous for the 5s scrape
+          # interval + 5m rate window's first useful sample.
+          for attempt in $(seq 1 30); do
+            current="$(kubectl get hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev \
+              -o jsonpath='{.status.currentReplicas}' 2>/dev/null || true)"
+            if [[ -n "${current}" && "${current}" != "0" ]]; then
+              echo "HPA argus-celery-kev reports currentReplicas=${current} after ${attempt} attempt(s)"
+              break
+            fi
+            echo "Waiting for HPA currentReplicas to populate (attempt ${attempt}/30); current=${current:-<empty>}"
+            sleep 3
+          done
+
+      - name: Run KEV-aware HPA pytest suite
+        env:
+          KIND_CLUSTER_NAME: ${{ env.KIND_CLUSTER }}
+          ARGUS_KIND_NAMESPACE: ${{ env.ARGUS_NAMESPACE }}
+          ARGUS_KIND_HPA_NAME: argus-celery-kev
+          ARGUS_KIND_PUSHGATEWAY_SERVICE: prometheus-pushgateway.monitoring
+          ARGUS_KIND_PUSHGATEWAY_PORT: "9091"
+          # Trim the scale-down wait in CI — production stabilization stays
+          # at 300s (validated by the helm-validation render gate). 90s is
+          # long enough to verify the HPA collapses back to minReplicas
+          # without burning runner minutes.
+          ARGUS_KIND_STABILIZATION_WINDOW_SECONDS: "90"
+        run: |
+          set -euo pipefail
+          # `--no-header` keeps the GHA log readable; `-v` per task spec.
+          pytest backend/tests/integration/k8s/test_kev_aware_hpa.py -v --no-header
+
+      - name: Collect cluster forensics (pods, hpa, events, logs)
+        if: always()
+        run: |
+          set +e
+          mkdir -p kind-diagnostics
+          kubectl get pods --all-namespaces -o wide          > kind-diagnostics/pods-all.log 2>&1
+          kubectl get hpa --all-namespaces -o yaml           > kind-diagnostics/hpa-all.yaml 2>&1
+          kubectl describe hpa --namespace "${ARGUS_NAMESPACE}" argus-celery-kev > kind-diagnostics/hpa-describe.log 2>&1
+          kubectl get events --all-namespaces --sort-by=.lastTimestamp > kind-diagnostics/events.log 2>&1
+          kubectl logs --namespace "${MONITORING_NAMESPACE}" -l app.kubernetes.io/name=prometheus-adapter --tail=500 > kind-diagnostics/adapter.log 2>&1
+          kubectl logs --namespace "${MONITORING_NAMESPACE}" -l app.kubernetes.io/name=prometheus-pushgateway --tail=200 > kind-diagnostics/pushgateway.log 2>&1
+          kubectl logs --namespace "${MONITORING_NAMESPACE}" -l app=prometheus,component=server --tail=200 > kind-diagnostics/prometheus.log 2>&1
+          kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/${ARGUS_NAMESPACE}/argus_kev_findings_emit_rate_5m" > kind-diagnostics/external-metric-kev.json 2>&1
+          kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/${ARGUS_NAMESPACE}/argus_celery_queue_depth" > kind-diagnostics/external-metric-queue-depth.json 2>&1
+
+      - name: Upload diagnostics artefact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kev-hpa-kind-diagnostics
+          path: kind-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Append job summary
+        if: always()
+        run: |
+          set +e
+          {
+            if [[ "${{ job.status }}" == "success" ]]; then
+              echo "## KEV-aware HPA kind gate — PASSED"
+            else
+              echo "## KEV-aware HPA kind gate — FAILED"
+            fi
+            echo
+            echo "Cluster:    \`${KIND_CLUSTER}\` (k8s \`${KIND_K8S_VERSION}\`)"
+            echo "Namespace:  \`${ARGUS_NAMESPACE}\`"
+            echo "HPA name:   \`argus-celery-kev\`"
+            echo "Adapter:    prometheus-adapter \`${ADAPTER_CHART_VERSION}\`"
+            echo "Prometheus: \`${PROMETHEUS_CHART_VERSION}\` + pushgateway \`${PUSHGATEWAY_CHART_VERSION}\`"
+            echo
+            echo "Diagnostics uploaded as \`kev-hpa-kind-diagnostics\` (HPA describe, events, adapter logs, raw external-metric responses)."
+          } >> "${GITHUB_STEP_SUMMARY}"

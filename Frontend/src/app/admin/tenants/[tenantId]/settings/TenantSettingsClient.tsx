@@ -10,6 +10,13 @@ import {
   updateTenant,
   type AdminTenant,
 } from "@/app/admin/tenants/actions";
+import {
+  PDF_ARCHIVAL_FORMAT_DEFAULT,
+  PDF_ARCHIVAL_FORMAT_LABELS,
+  PDF_ARCHIVAL_FORMAT_VALUES,
+  isPdfArchivalFormat,
+  type PdfArchivalFormat,
+} from "@/app/admin/tenants/types";
 
 const RATE_MIN = 1;
 const RATE_MAX = 50_000;
@@ -26,6 +33,9 @@ function normalizeTenant(t: AdminTenant): AdminTenant {
     rate_limit_rpm: t.rate_limit_rpm ?? null,
     scope_blacklist: t.scope_blacklist ?? null,
     retention_days: t.retention_days ?? null,
+    pdf_archival_format: isPdfArchivalFormat(t.pdf_archival_format)
+      ? t.pdf_archival_format
+      : PDF_ARCHIVAL_FORMAT_DEFAULT,
   };
 }
 
@@ -44,12 +54,19 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
   const [retentionInput, setRetentionInput] = useState(() =>
     initial.retention_days != null ? String(initial.retention_days) : "",
   );
+  const [pdfArchivalFormat, setPdfArchivalFormat] = useState<PdfArchivalFormat>(
+    () =>
+      isPdfArchivalFormat(initial.pdf_archival_format)
+        ? initial.pdf_archival_format
+        : PDF_ARCHIVAL_FORMAT_DEFAULT,
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const rateLabelId = useId();
   const blacklistLabelId = useId();
   const retentionLabelId = useId();
+  const archivalFormatLabelId = useId();
 
   const inputClass =
     "mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-secondary)]";
@@ -60,6 +77,7 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
     setRateInput(n.rate_limit_rpm != null ? String(n.rate_limit_rpm) : "");
     setBlacklistText((n.scope_blacklist ?? []).join("\n"));
     setRetentionInput(n.retention_days != null ? String(n.retention_days) : "");
+    setPdfArchivalFormat(n.pdf_archival_format);
   }, []);
 
   const saveRate = () => {
@@ -144,6 +162,34 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
     });
   };
 
+  const savePdfArchivalFormat = (next: PdfArchivalFormat) => {
+    setError(null);
+    setMessage(null);
+    if (!isPdfArchivalFormat(next)) {
+      setError("Unknown PDF archival format.");
+      return;
+    }
+    if (next === tenant.pdf_archival_format) {
+      return;
+    }
+    setPdfArchivalFormat(next);
+    startTransition(async () => {
+      try {
+        const updated = await updateTenant(tenantId, {
+          pdf_archival_format: next,
+        });
+        applyTenant(updated);
+        setMessage(
+          `PDF archival format saved (${PDF_ARCHIVAL_FORMAT_LABELS[next].en}).`,
+        );
+        router.refresh();
+      } catch (e) {
+        setPdfArchivalFormat(tenant.pdf_archival_format);
+        setError(tenantActionErrorMessage(e));
+      }
+    });
+  };
+
   return (
     <AdminRouteGuard minimumRole="admin">
       <div className="space-y-6">
@@ -210,7 +256,7 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
               type="button"
               disabled={isPending}
               onClick={saveRate}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             >
               Save rate limit
             </button>
@@ -241,7 +287,7 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
               type="button"
               disabled={isPending}
               onClick={saveBlacklist}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             >
               Save blacklist
             </button>
@@ -275,11 +321,67 @@ export function TenantSettingsClient({ tenantId, initial }: Props) {
               type="button"
               disabled={isPending}
               onClick={saveRetention}
-              className="rounded bg-[var(--accent)] px-3 py-2 text-sm font-medium text-[var(--bg-primary)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
+              className="rounded bg-[var(--accent-strong)] px-3 py-2 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
             >
               Save retention
             </button>
           </div>
+        </section>
+
+        <section
+          aria-labelledby={archivalFormatLabelId}
+          className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] p-4 space-y-3"
+          data-testid="pdf-archival-format-section"
+        >
+          <h2
+            id={archivalFormatLabelId}
+            className="text-base font-medium text-[var(--text-primary)]"
+          >
+            PDF archival format · Формат PDF-архивации
+          </h2>
+          <p className="text-sm text-[var(--text-muted)]">
+            {PDF_ARCHIVAL_FORMAT_LABELS[pdfArchivalFormat].descriptionEn}
+            <br />
+            <span className="text-[var(--text-muted)]">
+              {PDF_ARCHIVAL_FORMAT_LABELS[pdfArchivalFormat].descriptionRu}
+            </span>
+          </p>
+          <fieldset
+            className="space-y-2"
+            disabled={isPending}
+            data-testid="pdf-archival-format-fieldset"
+          >
+            <legend className="sr-only">PDF archival format</legend>
+            {PDF_ARCHIVAL_FORMAT_VALUES.map((value) => {
+              const labels = PDF_ARCHIVAL_FORMAT_LABELS[value];
+              const checked = pdfArchivalFormat === value;
+              return (
+                <label
+                  key={value}
+                  className="flex items-start gap-3 rounded border border-[var(--border)] bg-[var(--bg-primary)] p-3 cursor-pointer hover:border-[var(--accent)] focus-within:border-[var(--accent)]"
+                  data-testid={`pdf-archival-format-option-${value}`}
+                >
+                  <input
+                    type="radio"
+                    name="pdf_archival_format"
+                    value={value}
+                    checked={checked}
+                    disabled={isPending}
+                    onChange={() => savePdfArchivalFormat(value)}
+                    className="mt-1"
+                  />
+                  <span className="flex-1">
+                    <span className="block text-sm font-medium text-[var(--text-primary)]">
+                      {labels.en}
+                    </span>
+                    <span className="block text-xs text-[var(--text-muted)]">
+                      {labels.ru}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </fieldset>
         </section>
 
         <p className="text-xs text-[var(--text-muted)]">

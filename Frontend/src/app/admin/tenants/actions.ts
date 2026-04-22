@@ -1,6 +1,7 @@
 "use server";
 
 import { callAdminBackendJson } from "@/lib/serverAdminBackend";
+import type { PdfArchivalFormat } from "@/app/admin/tenants/types";
 
 export type AdminTenant = {
   id: string;
@@ -9,6 +10,7 @@ export type AdminTenant = {
   rate_limit_rpm: number | null;
   scope_blacklist: string[] | null;
   retention_days: number | null;
+  pdf_archival_format: PdfArchivalFormat;
   created_at: string;
   updated_at: string;
 };
@@ -21,6 +23,7 @@ export type TenantPatchBody = {
   rate_limit_rpm?: number | null;
   scope_blacklist?: string[] | null;
   retention_days?: number | null;
+  pdf_archival_format?: PdfArchivalFormat;
 };
 
 function assertOk<T>(

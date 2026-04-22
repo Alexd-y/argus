@@ -76,6 +76,7 @@ from src.reports.junit_generator import generate_junit
 from src.reports.replay_command_sanitizer import SanitizeContext
 from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.sarif_generator import generate_sarif
+from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.tier_classifier import classify_for_tier
 from src.reports.valhalla_tier_renderer import (
     BusinessContext,
@@ -178,9 +179,15 @@ class ReportService:
                     scan_id=scan_id,
                     report_id=report_id,
                 )
+                pdf_archival_format = await resolve_tenant_pdf_archival_format(
+                    session, tenant_id
+                )
 
             return self.render_bundle(
-                data, tier=normalized_tier, fmt=normalized_fmt
+                data,
+                tier=normalized_tier,
+                fmt=normalized_fmt,
+                pdf_archival_format=pdf_archival_format,
             )
 
     def render_bundle(
@@ -192,6 +199,7 @@ class ReportService:
         presigner: Callable[[str], str | None] | None = None,
         sanitize_context: SanitizeContext | None = None,
         business_context: BusinessContext | None = None,
+        pdf_archival_format: str | None = None,
     ) -> ReportBundle:
         """Render an in-memory ``ReportData`` to a :class:`ReportBundle`.
 
@@ -214,6 +222,11 @@ class ReportService:
         composite ``severity × exploitability × business_value``,
         remediation roadmap P0..P3). ``business_context`` is optional;
         when ``None`` every asset weighs ``1.0``.
+
+        ``pdf_archival_format`` (B6-T02 / T48) is forwarded verbatim to
+        :func:`generators.generate_pdf` so the PDF-only branch can decide
+        whether to engage the PDF/A-2u LaTeX preamble. ``None`` keeps the
+        env-only legacy behaviour for direct test callers.
         """
         normalized_tier = self._coerce_tier(tier)
         normalized_fmt = self._coerce_format(fmt)
@@ -243,6 +256,7 @@ class ReportService:
             tier=normalized_tier,
             asgard_assembly=asgard_assembly,
             valhalla_assembly=valhalla_assembly,
+            pdf_archival_format=pdf_archival_format,
         )
         return ReportBundle.from_content(
             tier=normalized_tier,
@@ -419,6 +433,7 @@ class ReportService:
         tier: ReportTier,
         asgard_assembly: AsgardSectionAssembly | None = None,
         valhalla_assembly: ValhallaSectionAssembly | None = None,
+        pdf_archival_format: str | None = None,
     ) -> bytes:
         try:
             jinja_context = self._build_jinja_context(
@@ -434,7 +449,12 @@ class ReportService:
             if fmt is ReportFormat.HTML:
                 return generate_html(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.PDF:
-                return generate_pdf(data, tier=tier.value, jinja_context=jinja_context)
+                return generate_pdf(
+                    data,
+                    tier=tier.value,
+                    jinja_context=jinja_context,
+                    pdf_archival_format=pdf_archival_format,
+                )
             if fmt is ReportFormat.SARIF:
                 return generate_sarif(data, tool_version=self._tool_version)
             if fmt is ReportFormat.JUNIT:

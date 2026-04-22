@@ -1,0 +1,131 @@
+{{- /*
+B6-T04 (Cycle 6 Batch 6, T50 + T51 / D-3, D-7) — KEV-aware Celery worker HPA.
+
+Renders ONLY when BOTH of these are true:
+  * `.Values.prometheusAdapter.enabled` — the external-metrics rule
+    ConfigMap shipped by `templates/prometheus-adapter-rules.yaml` (B6-T03)
+    must be live, otherwise the `external.metrics.k8s.io` API would not
+    surface the series this HPA scales on.
+  * `.Values.autoscaling.kevAware.enabled` — operator opt-in. Off by
+    default in `values.yaml`; production overlay (`values-prod.yaml`)
+    flips it on.
+
+This is a SECOND HPA on the same `<release>-celery` Deployment as
+`templates/hpa.yaml`. Kubernetes union-semantics apply when more than one
+HPA targets the same ScaleTargetRef:
+
+    desiredReplicas = max(scale_recommendation_cpu_hpa,
+                          scale_recommendation_kev_hpa)
+
+This is intentional belt-and-braces — the existing CPU-based HPA
+(`templates/hpa.yaml`) keeps the worker pool sized for *general* load,
+while this HPA reacts specifically to KEV-listed finding bursts and
+scan-queue backpressure (the two events that, empirically, cause SLO
+breaches in production scan windows).
+
+Two external metrics drive the scaling decision:
+
+  1. `argus_kev_findings_emit_rate_5m` — 5-minute rate of
+     `argus_findings_emitted_total{kev_listed="true"}`, exposed as an
+     external metric by the Prometheus Adapter rule shipped in B6-T03.
+     Per-replica target `kevEmitRateTarget` (default 1.0/s) — once the
+     5-minute rate per replica exceeds 1 finding per second sustained,
+     the HPA recommends a scale-up.
+
+  2. `argus_celery_queue_depth{queue="argus.scans"}` — depth of the
+     hot scan queue (the only queue whose backlog directly throttles
+     KEV remediation throughput). Per-replica target `queueDepthTarget`
+     (default 50) — selects the metric down to the `argus.scans` label
+     via `metric.selector.matchLabels` so the HPA does not double-count
+     the housekeeping queues (`argus.intel`, `argus.notifications`).
+
+Behavior policies (per acceptance criterion R3 — anti-thrashing):
+
+  * scaleUp:  100% step every 30s — fast catch-up under burst.
+  * scaleDown: 50% step every 60s, with a 5-minute stabilization window
+    that smooths the per-tick jitter the external-metric series carries
+    after a burst tail. This is the explicit roadmap mandate to prevent
+    the HPA from oscillating between min/max as KEV findings arrive in
+    bursts followed by quiet windows.
+
+Acceptance criteria recap:
+  (a) Second HPA on Deployment <release>-celery (union-max with hpa.yaml).
+  (b) scaleDown.stabilizationWindowSeconds = 300 (anti-thrash).
+  (c) scaleUp policy: +100% every 30s; scaleDown policy: -50% every 60s.
+  (d) kind integration test (`backend/tests/integration/k8s/test_kev_aware_hpa.py`)
+      pushes a KEV burst via Prometheus pushgateway and asserts the HPA
+      scales above minReplicas, then back down after the stabilization
+      window elapses.
+*/ -}}
+{{- if and .Values.prometheusAdapter.enabled .Values.autoscaling.kevAware.enabled }}
+{{- $kev := .Values.autoscaling.kevAware -}}
+{{- $minReplicas := int (default 2 $kev.minReplicas) -}}
+{{- $maxReplicas := int (default 20 $kev.maxReplicas) -}}
+{{- if lt $maxReplicas $minReplicas -}}
+{{- fail (printf "autoscaling.kevAware.maxReplicas (%d) must be >= minReplicas (%d)" $maxReplicas $minReplicas) -}}
+{{- end -}}
+{{- $emitMetric := default "argus_kev_findings_emit_rate_5m" .Values.prometheusAdapter.rules.kevEmitRate.externalMetricName -}}
+{{- $depthMetric := default "argus_celery_queue_depth" .Values.prometheusAdapter.rules.queueDepth.externalMetricName -}}
+{{- $queueLabel := default "argus.scans" $kev.queueDepthQueueLabel -}}
+{{- $emitTarget := default 1 $kev.kevEmitRateTarget -}}
+{{- $depthTarget := default 50 $kev.queueDepthTarget -}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "argus.fullname" . }}-celery-kev
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+    argus.dev/hpa-variant: kev-aware
+  annotations:
+    argus.dev/source: "B6-T04 (Cycle 6 Batch 6, T50 + T51)"
+    argus.dev/contract: |
+      Second HPA on Deployment <release>-celery (union-max with hpa.yaml).
+      External metrics:
+        - {{ $emitMetric }} (avgValue {{ $emitTarget }}/replica)
+        - {{ $depthMetric }}{queue="{{ $queueLabel }}"} (avgValue {{ $depthTarget }}/replica)
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "argus.fullname" . }}-celery
+  minReplicas: {{ $minReplicas }}
+  maxReplicas: {{ $maxReplicas }}
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: {{ $emitMetric | quote }}
+        target:
+          type: AverageValue
+          averageValue: {{ $emitTarget | quote }}
+    - type: External
+      external:
+        metric:
+          name: {{ $depthMetric | quote }}
+          selector:
+            matchLabels:
+              queue: {{ $queueLabel | quote }}
+        target:
+          type: AverageValue
+          averageValue: {{ $depthTarget | quote }}
+  behavior:
+    scaleUp:
+      # No stabilization window on scale-up — react to KEV bursts immediately.
+      # The 30s policy granularity is the smallest the API allows without
+      # tight-loop oscillation against the adapter scrape window (15-30s).
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      # 5-minute stabilization window per R3 — smooths the metric tail
+      # after a burst so the HPA does not flap between max and min.
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+      selectPolicy: Min
+{{- end }}

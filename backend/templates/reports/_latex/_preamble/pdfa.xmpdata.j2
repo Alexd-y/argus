@@ -1,0 +1,31 @@
+{# ============================================================================
+   ARG-058 / B6-T01 — XMP metadata template consumed by the ``pdfx`` package.
+
+   Rendered by ``LatexBackend.render`` to ``<tmpdir>/report.xmpdata`` whenever
+   ``pdfa_mode=True``. pdfx auto-discovers the file by basename (must equal
+   ``\jobname.xmpdata``) and serialises the keys below into the PDF/A-2u
+   XMP metadata stream embedded in the document catalog.
+
+   Keep keys in sync with ``hypersetup{pdftitle=...}`` in each tier template:
+   pdfx writes the XMP, hyperref writes the legacy /Info dictionary; the two
+   MUST match for verapdf to accept the file as PDF/A-2u compliant.
+
+   Context inputs (defaults provided so the template never crashes when
+   the caller forgets a key):
+     * ``tier``         — "asgard" | "midgard" | "valhalla".
+     * ``tier_label``   — human-readable tier name for the title.
+     * ``tenant_id``    — opaque tenant identifier (for keywords only).
+     * ``scan_id``      — opaque scan identifier (for keywords only).
+     * ``creator``      — fixed by the renderer to the cycle ID for stability.
+     * ``language``     — defaults to "en-US"; override via Jinja context.
+   ============================================================================ #}
+\Title{ARGUS Security Posture Report --- {{ tier_label | default('Tier') }}}
+\Author{ARGUS}
+\Subject{Security assessment report (tier={{ tier | default('midgard') }})}
+\Keywords{security, pentest, vulnerability, ARGUS, tier:{{ tier | default('midgard') }}}
+\Creator{ {{- creator | default('ARGUS Cycle 6') -}} }
+\Producer{LaTeX with pdfx (PDF/A-2u)}
+\Language{ {{- language | default('en-US') -}} }
+\Org{ARGUS}
+\Copyrighted{True}
+\CopyrightText{Confidential. ARGUS internal report.}

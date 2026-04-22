@@ -201,6 +201,66 @@ prometheus:
     labels:
       release: kube-prometheus-stack
 
+# ── Prometheus Adapter custom-metrics rules (B6-T03 / T49) ──────────────────
+# Default OFF. Renders ONLY a `ConfigMap` containing `external.rules` that
+# Prometheus Adapter consumes to expose two custom-metrics-API series:
+#   * argus_celery_queue_depth      → drives the existing celery HPA
+#     (`hpa.celery.customMetrics`) — backfilled by the Celery beat task
+#     `argus.metrics.queue_depth_refresh` shipped in Cycle 6 Batch 6.
+#   * argus_kev_findings_emit_rate_5m → derived rate of
+#     `argus_findings_emitted_total{kev_listed="true"}` over a 5m window;
+#     drives the KEV-aware celery HPA (B6-T04).
+#
+# IMPORTANT: This chart does NOT install the Prometheus Adapter itself.
+# Operators install it once per cluster (Helm: `prometheus-community/prometheus-adapter`,
+# kubectl: `kubectl apply -f https://github.com/kubernetes-sigs/prometheus-adapter/...`)
+# and reference the rules ConfigMap rendered here via the adapter's
+# `--config` flag (typically wired through the adapter's own `values.yaml`
+# `rules.existing` field). Decoupling the adapter's lifecycle from this
+# chart's lifecycle is intentional — the adapter is cluster-scoped
+# infrastructure and should be owned by the platform / SRE workflow,
+# not by a per-tenant ARGUS release.
+#
+# Minimum versions:
+#   * Prometheus Adapter v0.11.2+  (external metrics rules schema v1)
+#   * Kubernetes v1.27+            (matches Chart.yaml::kubeVersion floor)
+#
+# Toggle to `true` when:
+#   * Prometheus is scraping the ARGUS `/metrics` endpoint (ServiceMonitor on
+#     `prometheus.serviceMonitor.enabled`), AND
+#   * the Prometheus Adapter is installed and configured to load this
+#     ConfigMap as an additional rules source.
+prometheusAdapter:
+  enabled: false
+  # ConfigMap metadata. The adapter's `--config` reference must point at
+  # this ConfigMap by name (default: `<release>-prometheus-adapter-rules`).
+  configMap:
+    # When non-empty, the rendered ConfigMap is force-named to this string
+    # (lets operators override to match an existing cluster convention).
+    name: ""
+    # Extra labels merged onto the rendered ConfigMap. Use this to add
+    # the discovery label your Prometheus Adapter expects, e.g.:
+    #   { "app.kubernetes.io/component": "metrics-rules" }
+    labels: {}
+  rules:
+    # Per-rule overrides for the queue-depth gauge. The metric name itself
+    # MUST match the Prometheus series emitted by the backend (do NOT rename
+    # without also updating `backend/src/celery/metrics_updater.py`).
+    queueDepth:
+      enabled: true
+      seriesQuery: 'argus_celery_queue_depth{namespace!="",pod!=""}'
+      # External-metric resource exposed via `kubectl get --raw
+      # /apis/external.metrics.k8s.io/v1beta1/namespaces/<ns>/argus_celery_queue_depth`
+      externalMetricName: argus_celery_queue_depth
+      metricsQuery: 'sum(<<.Series>>{<<.LabelMatchers>>}) by (queue)'
+    kevEmitRate:
+      enabled: true
+      seriesQuery: 'argus_findings_emitted_total{namespace!="",kev_listed="true"}'
+      externalMetricName: argus_kev_findings_emit_rate_5m
+      # 5-minute rate keeps the HPA reaction window short while smoothing
+      # the per-finding noise that would otherwise oscillate the autoscaler.
+      metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[5m]))'
+
 otelInstrumentation:
   enabled: false
   endpoint: http://otel-collector.observability.svc:4317
@@ -223,6 +283,53 @@ hpa:
       enabled: false
       metricName: argus_celery_queue_depth
       averageValue: "50"
+
+# ── KEV-aware autoscaling (B6-T04 / T50 + T51) ──────────────────────────────
+# Second HPA on the celery-worker Deployment that scales on EXTERNAL metrics
+# exposed by the Prometheus Adapter (`templates/prometheus-adapter-rules.yaml`).
+# Kubernetes union-semantics: when this HPA AND the CPU-based hpa.yaml HPA both
+# target the same Deployment, `desiredReplicas = max(cpu_recommendation,
+# kev_recommendation)`. The two HPAs are belt-and-braces — CPU keeps the pool
+# sized for general load, KEV-aware reacts to KEV-listed finding bursts and
+# scan-queue backpressure (the two events that, empirically, breach SLOs in
+# production scan windows).
+#
+# Renders ONLY when BOTH:
+#   * `prometheusAdapter.enabled` is true (otherwise the external-metrics
+#     ConfigMap is absent and the HPA would loop on `FailedGetExternalMetric`);
+#   * `autoscaling.kevAware.enabled` is true (operator opt-in).
+#
+# Anti-thrash policy is hard-coded in the template (R3 mandate):
+#   * scaleUp:   +100% per 30s, no stabilization window (immediate burst response)
+#   * scaleDown: -50% per 60s, stabilizationWindowSeconds = 300
+autoscaling:
+  kevAware:
+    # Master toggle. Off by default; production overlay flips on. CI gate
+    # (`helm-validation.yml::kev-aware-hpa-render-validation`) asserts the
+    # disabled render emits 0 HPAs and the enabled render emits exactly 1.
+    enabled: false
+    # Floor — must always have at least this many celery workers when the
+    # KEV-aware HPA is in control. Should be >= the existing hpa.celery
+    # minReplicas to avoid the union-max collapsing below the CPU floor.
+    minReplicas: 2
+    # Ceiling — caps blast radius during a sustained KEV publication burst.
+    # Tune up in prod if your scan-queue throughput requires it.
+    maxReplicas: 20
+    # Per-replica target rate of KEV-listed finding emissions over a 5m
+    # window. Surfaced via the `argus_kev_findings_emit_rate_5m` external
+    # metric (rule shipped in B6-T03). Reaching 1 KEV finding per second
+    # per replica sustained for ≥5m triggers a scale-up recommendation.
+    kevEmitRateTarget: 1
+    # Per-replica target depth of the `argus.scans` queue (the only queue
+    # whose backlog directly throttles KEV remediation throughput). Surfaced
+    # via the `argus_celery_queue_depth` external metric — selector label
+    # `queue=argus.scans` filters out housekeeping queues. Reaching 50
+    # in-flight scan tasks per replica triggers a scale-up recommendation.
+    queueDepthTarget: 50
+    # Label value the queue-depth selector matches against. Override only
+    # if your deployment renames the hot queue (`KNOWN_QUEUES` in
+    # `backend/src/celery/metrics_updater.py` is the source of truth).
+    queueDepthQueueLabel: argus.scans
 
 # ── pod disruption budgets ───────────────────────────────────────────────────
 pdb:

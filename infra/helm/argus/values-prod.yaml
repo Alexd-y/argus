@@ -96,6 +96,26 @@ prometheus:
     interval: 15s
     namespace: monitoring
 
+# B6-T03 (T49 / D-5) — production exposes the queue-depth gauge AND the
+# KEV-rate derived metric to the cluster-wide Prometheus Adapter so the
+# existing celery HPA (`hpa.celery.customMetrics`) and the KEV-aware
+# HPA (B6-T04) both have a real series to scale on. The adapter itself
+# is provisioned out-of-band (one per cluster); this overlay only ships
+# the rules ConfigMap the adapter consumes via its `--config` flag.
+prometheusAdapter:
+  enabled: true
+  configMap:
+    labels:
+      # Discovery label the platform's Prometheus Adapter chart uses to
+      # find additional rules ConfigMaps cluster-wide. Adjust here if your
+      # ops standard differs (e.g. `metrics.adapter/role: rules`).
+      app.kubernetes.io/managed-by-rules: prometheus-adapter
+  rules:
+    queueDepth:
+      enabled: true
+    kevEmitRate:
+      enabled: true
+
 otelInstrumentation:
   enabled: true
   endpoint: http://otel-collector.observability.svc:4317
@@ -116,6 +136,33 @@ hpa:
       enabled: true
       metricName: argus_celery_queue_depth
       averageValue: "50"
+
+# B6-T04 (T50 + T51 / D-3, D-7) — production flips the KEV-aware HPA on so the
+# celery worker pool reacts to KEV-listed finding bursts AND scan-queue
+# backpressure in addition to the CPU recommendation from the base hpa.celery.
+# Two HPAs targeting the same Deployment compose with union-max semantics
+# (Kubernetes picks the higher recommended replica count).
+#
+# Tuned values vs the chart default (which is opt-OFF for safety):
+#   * minReplicas raised from 2 → 4 to match hpa.celery.minReplicas — keeps
+#     the union floor at 4 so a quiet CPU window cannot pin the pool below
+#     the production warm-pool target.
+#   * maxReplicas raised from 20 → 40 to match hpa.celery.maxReplicas — gives
+#     the KEV burst path the same headroom the CPU path already has.
+#   * kevEmitRateTarget kept at 1.0/s — the production KEV ingestion rate
+#     during a typical CISA bulletin spike is 0.5–2 findings/s sustained;
+#     this target triggers a scale-up at the low end of that band so the
+#     pool grows BEFORE the queue starts to back up.
+#   * queueDepthTarget kept at 50 — matches hpa.celery.customMetrics so the
+#     two queue-driven recommendations agree on the trip point.
+autoscaling:
+  kevAware:
+    enabled: true
+    minReplicas: 4
+    maxReplicas: 40
+    kevEmitRateTarget: 1
+    queueDepthTarget: 50
+    queueDepthQueueLabel: argus.scans
 
 pdb:
   enabled: true

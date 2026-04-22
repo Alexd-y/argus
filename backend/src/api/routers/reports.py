@@ -52,6 +52,7 @@ from src.reports.report_service import (
     ReportNotFoundError,
     ReportService,
 )
+from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.storage import download as storage_download
 from src.reports.storage import exists as storage_exists
 from src.reports.storage import get_presigned_url
@@ -401,7 +402,15 @@ async def download_report(
                 )
             content = generate_valhalla_sections_csv(report_data, jinja_context=jctx)
         elif fmt == "pdf":
-            content = generate_pdf(report_data, jinja_context=jctx, tier=tier_str)
+            tenant_pdf_format = await resolve_tenant_pdf_archival_format(
+                session, t_id
+            )
+            content = generate_pdf(
+                report_data,
+                jinja_context=jctx,
+                tier=tier_str,
+                pdf_archival_format=tenant_pdf_format,
+            )
         elif fmt == "html":
             content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
         elif fmt == "json":
