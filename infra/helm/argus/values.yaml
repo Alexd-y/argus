@@ -146,6 +146,19 @@ cosign:
       publicKeyConfigKey: "cosign.pub"
     extraArgs: []
 
+# ── Admission policy (Kyverno ClusterPolicy require-signed-images) ───────────
+# When enabled, the chart renders the Kyverno ClusterPolicy that requires
+# every Pod's image to be Cosign-signed (GHA OIDC keyless) AND digest-pinned.
+# Default: false — flipping this to `true` BLOCKS unsigned images cluster-wide,
+# so it must be opt-in. CI sets it to `true` for the policy-test job (T44).
+# Mirrors the `cosign.verify.enabled` opt-in pattern (init-container side).
+#
+# Source-of-truth standalone YAML lives at infra/kyverno/cluster-policy-require-signed-images.yaml;
+# the chart inlines an identical copy in templates/kyverno-cluster-policy.yaml
+# and infra/scripts/check_policy_drift.sh enforces the two stay in sync.
+policy:
+  enabled: false
+
 # ── networking ───────────────────────────────────────────────────────────────
 service:
   type: ClusterIP

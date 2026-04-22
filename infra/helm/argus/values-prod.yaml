@@ -180,3 +180,9 @@ minio:
   metrics:
     serviceMonitor:
       enabled: true
+
+# Production overlay flips supply-chain admission gate ON. All production
+# images are Cosign-signed via the cycle-4 sign_images.sh pipeline; the
+# kind CI gate (T44) keeps regression coverage on every PR.
+policy:
+  enabled: true
