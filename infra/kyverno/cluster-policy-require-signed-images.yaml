@@ -1,0 +1,62 @@
+# T42 (Cycle 6 Batch 5, ARG-054) — ARGUS supply-chain admission gate.
+#
+# Blocks any workload whose images are not (a) Cosign-signed via GitHub
+# Actions OIDC keyless attestation against the ARGUS organisation AND
+# (b) referenced by an immutable @sha256:<digest>. Tag-only and unsigned
+# images are denied at admission time.
+#
+# Toggled per-environment via Helm flag `policy.enabled` (T43); CI gate
+# `policy-test` (T44) verifies that the policy denies unsigned and accepts
+# signed-with-digest fixtures on a kind cluster.
+#
+# Plan: ai_docs/develop/plans/2026-04-22-argus-cycle6-b5.md (T42 + decision §6 D-5).
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: argus-require-signed-images
+  annotations:
+    policies.kyverno.io/title: "ARGUS — require Cosign-signed images with digest"
+    policies.kyverno.io/category: Software Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.16.0
+    policies.kyverno.io/description: >-
+      Closes ARG-054. Every workload image must (a) be signed by Sigstore
+      Cosign keyless attestation issued via GitHub Actions OIDC for the
+      ARGUS organisation, and (b) reference a sha256 digest. Tag-only
+      references are immutable-vulnerable and are rejected.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: verify-cosign-signed
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Job
+                - CronJob
+      verifyImages:
+        - imageReferences:
+            - "*"
+          required: true
+          verifyDigest: true
+          mutateDigest: false
+          attestors:
+            - count: 1
+              entries:
+                # Replace `ARGUS-org/ARGUS` with the actual GitHub org/repo
+                # before enabling in production. The regex matches every
+                # workflow path under `.github/workflows/` of that repo.
+                - keyless:
+                    subject: "https://github.com/ARGUS-org/ARGUS/.github/workflows/.+"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: "https://rekor.sigstore.dev"
