@@ -48,8 +48,21 @@ gunicorn.ctl
 
 # Local orchestration / scratch workspaces
 orch-*/
+.claude/
 
 # AI/Cursor prompt files (workspace artifacts, not source code)
 *_cursor_prompt*.md
 cursor_prompt_*.md
 strix_argus_*.md
+
+# Local smoke / nuclei / hash artifacts (per-run scratch)
+backend/cycle*_b*_test_results.txt
+backend/cycle*_b*_mypy.txt
+backend/*_hashes.txt
+backend/nuclei_findings.jsonl
+backend/smoke_loop_results.txt
+argus_validate_results.json
+Frontend/cycle*_b*_tsc.txt
+Frontend/cycle*_b*_vitest.txt
+Frontend/cycle*_b*_eslint.txt
+infra/helm/argus/cycle*_b*_helm_lint.txt
