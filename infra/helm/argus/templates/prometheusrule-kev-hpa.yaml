@@ -1,0 +1,250 @@
+{{- /*
+C7-T06 (Cycle 7) — KEV-aware HPA Prometheus alerting rules.
+
+Renders a single PrometheusRule (monitoring.coreos.com/v1) that defines five
+alerts covering the operational surface of the KEV-aware HPA shipped in
+Cycle 6 Batch 6 (`templates/hpa-celery-worker-kev.yaml`):
+
+  1. KEVHPATargetMetricMissing  (critical) — source counter absent >5m.
+  2. KEVHPAScalingStuck         (warning)  — current != desired for >15m.
+  3. KEVHPAFlappingDetected     (warning)  — replica changes >5 in 30m.
+  4. KEVHPAReachedCeiling       (warning)  — current == max for >10m.
+  5. KEVHPAMetricLatencyHigh    (warning)  — scrape p99 > 30s for 10m.
+
+Render gating
+-------------
+This rule is gated by `.Values.kevHpa.alerts.enabled` (default true). Disable
+when:
+  * the cluster does not have `prometheus-operator` CRDs installed
+    (the PrometheusRule kind would be unrecognised), OR
+  * the operator wants to silence the alerts during a controlled rollback.
+
+Environment scoping (no paging on staging)
+------------------------------------------
+Each alert carries a `labels.environment` derived from `.Values.config.environment`.
+Alertmanager is the source of truth for paging policy — production routes
+filter on `environment="production"` so staging deployments emit alerts (visible
+in Prometheus / Grafana) WITHOUT paging on-call. See
+`docs/operations/kev-hpa-runbook.md` for the canonical Alertmanager route
+template.
+
+Metric-name discrepancy with C7-T06 plan
+----------------------------------------
+The plan references `argus_kev_active_findings_total` and
+`argus_kev_hpa_target_replicas` as canonical names. The actual metric chain
+in this codebase is:
+
+  * SOURCE counter (scraped by Prometheus from the backend `/metrics` endpoint
+    via ServiceMonitor): `argus_findings_emitted_total{kev_listed="true"}`.
+  * DERIVED external metric (synthesised by Prometheus Adapter from the
+    source counter, consumed by the HPA): `argus_kev_findings_emit_rate_5m`.
+  * HPA "target replicas" surface: `kube_horizontalpodautoscaler_status_desired_replicas`
+    from kube-state-metrics — the HPA's computed recommendation.
+
+The plan explicitly authorises substitution ("if the metric name is different,
+read services/metrics.py and use the actual name"). We use the real names
+throughout; the runbook documents the mapping.
+
+Required out-of-cluster prerequisites
+-------------------------------------
+  * prometheus-operator (PrometheusRule CRD).
+  * kube-state-metrics (`kube_horizontalpodautoscaler_*` series).
+  * ServiceMonitor on the backend (`prometheus.serviceMonitor.enabled=true`)
+    or equivalent scrape config that brings `argus_findings_emitted_total`
+    into Prometheus.
+*/ -}}
+{{- if .Values.kevHpa.alerts.enabled }}
+{{- $hpaName := printf "%s-celery-kev" (include "argus.fullname" .) -}}
+{{- $env := default "dev" .Values.config.environment -}}
+{{- $sourceMetric := default "argus_findings_emitted_total" .Values.kevHpa.alerts.sourceMetricName -}}
+{{- $absentWindow := default "5m" .Values.kevHpa.alerts.absentForWindow -}}
+{{- $stuckFor := default "15m" .Values.kevHpa.alerts.stuckFor -}}
+{{- $flapWindow := default "30m" .Values.kevHpa.alerts.flapWindow -}}
+{{- $flapThreshold := default 5 .Values.kevHpa.alerts.flapThreshold -}}
+{{- $ceilingFor := default "10m" .Values.kevHpa.alerts.ceilingFor -}}
+{{- $latencyFor := default "10m" .Values.kevHpa.alerts.latencyFor -}}
+{{- $latencyWindow := default "10m" .Values.kevHpa.alerts.latencyWindow -}}
+{{- $latencyThresholdSeconds := default 30 .Values.kevHpa.alerts.latencyThresholdSeconds -}}
+{{- $runbookUrl := default "https://github.com/your-org/ARGUS/blob/main/docs/operations/kev-hpa-runbook.md" .Values.kevHpa.alerts.runbookUrl -}}
+{{- $additionalLabels := default (dict) .Values.kevHpa.alerts.additionalLabels -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "argus.fullname" . }}-kev-hpa-alerts
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+    argus.dev/alert-group: kev-hpa
+    {{- with .Values.prometheus.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  annotations:
+    argus.dev/source: "C7-T06 (Cycle 7) — KEV-aware HPA production rollout signals"
+    argus.dev/runbook: {{ $runbookUrl | quote }}
+spec:
+  groups:
+    - name: argus.kev-hpa
+      interval: 30s
+      rules:
+        # ─────────────────────────────────────────────────────────────────
+        # 1) KEVHPATargetMetricMissing — pages SRE if the source counter
+        #    that underpins `argus_kev_findings_emit_rate_5m` (the HPA's
+        #    external metric) has been absent for >5m. When this fires,
+        #    the HPA is scaling blindly and will fall back to its CPU
+        #    sibling, which does NOT react to KEV bursts.
+        # ─────────────────────────────────────────────────────────────────
+        - alert: KEVHPATargetMetricMissing
+          expr: |
+            absent_over_time({{ $sourceMetric }}{kev_listed="true"}[{{ $absentWindow }}])
+          for: {{ $absentWindow }}
+          labels:
+            severity: critical
+            team: sre
+            service: argus-scan-worker
+            environment: {{ $env | quote }}
+            argus_alert_group: kev-hpa
+            {{- range $k, $v := $additionalLabels }}
+            {{ $k }}: {{ $v | quote }}
+            {{- end }}
+          annotations:
+            summary: "KEV-HPA target metric absent for {{ $absentWindow }}"
+            description: |
+              The Prometheus source counter `{{ $sourceMetric }}{kev_listed="true"}`
+              has been absent for {{ $absentWindow }} in environment `{{ $env }}`.
+              The KEV-aware HPA `{{ $hpaName }}` cannot compute a target
+              recommendation while the source series is missing — it is now
+              effectively unscaled (CPU-only sibling HPA still active).
+              Investigate: backend ServiceMonitor health, `/metrics` endpoint,
+              or backend pod restarts. See runbook §"KEVHPATargetMetricMissing".
+            runbook_url: {{ printf "%s#kevhpatargetmetricmissing" $runbookUrl | quote }}
+
+        # ─────────────────────────────────────────────────────────────────
+        # 2) KEVHPAScalingStuck — pages if HPA has been desiring a different
+        #    replica count from the current count for >15m. Indicates a
+        #    rollout that cannot proceed: usually quota exhaustion, PDB
+        #    blocking eviction, or readiness-probe failure on new replicas.
+        # ─────────────────────────────────────────────────────────────────
+        - alert: KEVHPAScalingStuck
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler="{{ $hpaName }}"}
+              !=
+            kube_horizontalpodautoscaler_status_desired_replicas{horizontalpodautoscaler="{{ $hpaName }}"}
+          for: {{ $stuckFor }}
+          labels:
+            severity: warning
+            team: sre
+            service: argus-scan-worker
+            environment: {{ $env | quote }}
+            argus_alert_group: kev-hpa
+            {{- range $k, $v := $additionalLabels }}
+            {{ $k }}: {{ $v | quote }}
+            {{- end }}
+          annotations:
+            summary: "KEV-HPA `{{ $hpaName }}` scaling stuck for {{ $stuckFor }}"
+            description: |
+              HPA `{{ $hpaName }}` in environment `{{ $env }}` has been
+              reporting `currentReplicas != desiredReplicas` for {{ $stuckFor }}.
+              Common root causes: ResourceQuota exhausted, PodDisruptionBudget
+              blocking scale-down, scheduler pressure (no node fits new pods),
+              readiness-probe failure on new replicas. See runbook
+              §"KEVHPAScalingStuck".
+            runbook_url: {{ printf "%s#kevhpascalingstuck" $runbookUrl | quote }}
+
+        # ─────────────────────────────────────────────────────────────────
+        # 3) KEVHPAFlappingDetected — pages if HPA replica count changed
+        #    >5 times in the last 30m. Almost always indicates the
+        #    `behavior.scaleDown.stabilizationWindowSeconds` is too short
+        #    for the operator's metric variance, or the source metric has
+        #    a sub-window oscillation.
+        # ─────────────────────────────────────────────────────────────────
+        - alert: KEVHPAFlappingDetected
+          expr: |
+            changes(kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler="{{ $hpaName }}"}[{{ $flapWindow }}])
+              > {{ $flapThreshold }}
+          for: 5m
+          labels:
+            severity: warning
+            team: sre
+            service: argus-scan-worker
+            environment: {{ $env | quote }}
+            argus_alert_group: kev-hpa
+            {{- range $k, $v := $additionalLabels }}
+            {{ $k }}: {{ $v | quote }}
+            {{- end }}
+          annotations:
+            summary: "KEV-HPA `{{ $hpaName }}` flapping ({{ $flapThreshold }}+ replica changes in {{ $flapWindow }})"
+            description: |
+              HPA `{{ $hpaName }}` in environment `{{ $env }}` has changed
+              `currentReplicas` more than {{ $flapThreshold }} times in the
+              last {{ $flapWindow }}. The anti-thrash stabilization window
+              (default 5m on scaleDown) may be too short for the metric
+              variance, or the source metric has a sub-window oscillation.
+              See runbook §"KEVHPAFlappingDetected".
+            runbook_url: {{ printf "%s#kevhpaflappingdetected" $runbookUrl | quote }}
+
+        # ─────────────────────────────────────────────────────────────────
+        # 4) KEVHPAReachedCeiling — pages if HPA hit `maxReplicas` for
+        #    >10m, signalling resource exhaustion. The HPA cannot scale
+        #    further and the workload is throttled by the cap.
+        # ─────────────────────────────────────────────────────────────────
+        - alert: KEVHPAReachedCeiling
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler="{{ $hpaName }}"}
+              ==
+            kube_horizontalpodautoscaler_spec_max_replicas{horizontalpodautoscaler="{{ $hpaName }}"}
+          for: {{ $ceilingFor }}
+          labels:
+            severity: warning
+            team: sre
+            service: argus-scan-worker
+            environment: {{ $env | quote }}
+            argus_alert_group: kev-hpa
+            {{- range $k, $v := $additionalLabels }}
+            {{ $k }}: {{ $v | quote }}
+            {{- end }}
+          annotations:
+            summary: "KEV-HPA `{{ $hpaName }}` pinned at maxReplicas for {{ $ceilingFor }}"
+            description: |
+              HPA `{{ $hpaName }}` in environment `{{ $env }}` has been at
+              its `maxReplicas` ceiling for {{ $ceilingFor }}. Scan-worker
+              throughput is capped — KEV remediation latency may breach SLO.
+              Consider: raising `autoscaling.kevAware.maxReplicas`, scaling
+              the underlying node pool, or investigating queue backpressure
+              upstream. See runbook §"KEVHPAReachedCeiling".
+            runbook_url: {{ printf "%s#kevhpareachedceiling" $runbookUrl | quote }}
+
+        # ─────────────────────────────────────────────────────────────────
+        # 5) KEVHPAMetricLatencyHigh — pages if Prometheus scrape latency
+        #    of the backend ARGUS service > 30s p99 over 10m. Slow scrapes
+        #    starve the Adapter's rate window and the HPA reacts late.
+        # ─────────────────────────────────────────────────────────────────
+        - alert: KEVHPAMetricLatencyHigh
+          expr: |
+            quantile_over_time(0.99,
+              scrape_duration_seconds{
+                service=~".*argus.*",
+                endpoint=~"metrics.*"
+              }[{{ $latencyWindow }}]
+            ) > {{ $latencyThresholdSeconds }}
+          for: {{ $latencyFor }}
+          labels:
+            severity: warning
+            team: sre
+            service: argus-scan-worker
+            environment: {{ $env | quote }}
+            argus_alert_group: kev-hpa
+            {{- range $k, $v := $additionalLabels }}
+            {{ $k }}: {{ $v | quote }}
+            {{- end }}
+          annotations:
+            summary: "ARGUS metrics scrape p99 > {{ $latencyThresholdSeconds }}s for {{ $latencyFor }}"
+            description: |
+              Prometheus p99 scrape duration for ARGUS `/metrics` endpoints
+              has exceeded {{ $latencyThresholdSeconds }}s for {{ $latencyFor }}
+              in environment `{{ $env }}`. Slow scrapes starve the Adapter's
+              5m rate window — the HPA `{{ $hpaName }}` will react late to
+              KEV bursts. Investigate: backend CPU saturation, /metrics
+              registry size, or network path latency. See runbook
+              §"KEVHPAMetricLatencyHigh".
+            runbook_url: {{ printf "%s#kevhpametriclatencyhigh" $runbookUrl | quote }}
+{{- end }}

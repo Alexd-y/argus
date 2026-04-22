@@ -331,6 +331,67 @@ autoscaling:
     # `backend/src/celery/metrics_updater.py` is the source of truth).
     queueDepthQueueLabel: argus.scans
 
+# ── KEV-HPA Prometheus alerting (C7-T06) ────────────────────────────────────
+# PrometheusRule (`templates/prometheusrule-kev-hpa.yaml`) ships five alerts
+# that watch the operational surface of the KEV-aware HPA:
+#
+#   1. KEVHPATargetMetricMissing  — source counter absent.
+#   2. KEVHPAScalingStuck         — current != desired replicas.
+#   3. KEVHPAFlappingDetected     — replica oscillation.
+#   4. KEVHPAReachedCeiling       — HPA pinned at maxReplicas.
+#   5. KEVHPAMetricLatencyHigh    — Prometheus scrape latency too high.
+#
+# Default ON. Disable when:
+#   * the cluster does NOT have prometheus-operator CRDs installed (the
+#     PrometheusRule kind would be unrecognised at apply time), OR
+#   * an operator wants to silence alerts during a controlled rollback.
+#
+# Environment scoping (no paging on staging)
+# ------------------------------------------
+# Each alert carries an `environment: <config.environment>` label. Production
+# Alertmanager routes filter on `environment="production"` so staging deploys
+# emit alerts (visible in Prometheus / Grafana) WITHOUT paging on-call.
+# See `docs/operations/kev-hpa-runbook.md` for the canonical Alertmanager
+# route template.
+kevHpa:
+  alerts:
+    enabled: true
+    # Source counter scraped by Prometheus from the backend `/metrics` endpoint.
+    # Underpins `argus_kev_findings_emit_rate_5m` (the HPA's external metric).
+    # Override only if the backend metric registry renames it; in lock-step,
+    # update `backend/src/core/observability.py::record_finding_emitted`.
+    sourceMetricName: argus_findings_emitted_total
+    # `for:` window for KEVHPATargetMetricMissing AND the absent_over_time
+    # window in the expression. They are intentionally identical so the
+    # alert fires the moment the counter has been missing for one full
+    # absent-window — no double-debouncing.
+    absentForWindow: 5m
+    # Window for KEVHPAScalingStuck. 15m is the production default — long
+    # enough to absorb a genuine multi-stage rollout, short enough to catch
+    # a stuck scale-up before the KEV remediation SLO breaches.
+    stuckFor: 15m
+    # Flap detection: how many replica changes within `flapWindow` are
+    # considered abnormal. The chart's anti-thrash defaults
+    # (`scaleDown.stabilizationWindowSeconds=300`) keep typical churn well
+    # below 5 changes per 30m, so a breach signals genuine pathology.
+    flapWindow: 30m
+    flapThreshold: 5
+    # Window for KEVHPAReachedCeiling. 10m bridges the gap between a brief
+    # KEV burst (acceptable to hit the cap) and sustained throttling.
+    ceilingFor: 10m
+    # Latency envelope for the backend /metrics scrape. p99 > 30s for 10m
+    # signals that the Adapter's 5m rate window is starved.
+    latencyFor: 10m
+    latencyWindow: 10m
+    latencyThresholdSeconds: 30
+    # Runbook URL embedded into every alert's `runbook_url` annotation.
+    # Override per-fork; the default points at the canonical upstream.
+    runbookUrl: "https://github.com/your-org/ARGUS/blob/main/docs/operations/kev-hpa-runbook.md"
+    # Extra labels merged onto every alert. Use this to attach Alertmanager
+    # routing keys (e.g. `alertroute: "primary-pager"`) without forking the
+    # template.
+    additionalLabels: {}
+
 # ── pod disruption budgets ───────────────────────────────────────────────────
 pdb:
   enabled: true
