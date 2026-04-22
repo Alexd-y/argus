@@ -1,4 +1,4 @@
-"""ARG-044 — Celery beat schedule registry.
+"""ARG-044 / T40 — Celery beat schedule registry.
 
 Centralises beat schedules so the wiring is in one place rather than
 scattered across task modules. Imported once at module-load time by
@@ -12,6 +12,12 @@ Current schedule:
 * ``argus.intel.kev_refresh`` — daily at 05:00 UTC (one hour after EPSS
   so a single Celery beat container can sequence them on a single core
   without contention).
+* ``argus.notifications.webhook_dlq_replay`` — daily at 06:00 UTC (T40,
+  Cycle 6 Batch 5, ARG-053). Replays every DLQ row whose
+  ``next_retry_at`` has elapsed and auto-abandons rows older than
+  ``DLQ_MAX_AGE_DAYS`` (14d). Routed to the dedicated
+  ``argus.notifications`` queue so it cannot starve scan / report queues
+  during a sweep.
 
 Adding a new schedule: define a constant below and append it to
 ``BEAT_SCHEDULE``. Keep names dotted (``argus.<area>.<task>``) so the
@@ -45,6 +51,14 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": "argus.intel.kev_refresh",
         "schedule": _schedule(hour=5, minute=0),
         "options": {"queue": "argus.intel"},
+    },
+    # T40 (Cycle 6 Batch 5, ARG-053) — daily DLQ replay + auto-abandon @ 14d.
+    # Scheduled one hour after KEV refresh so the three intel + notification
+    # housekeeping tasks can share a single beat container without contention.
+    "argus.notifications.webhook_dlq_replay": {
+        "task": "argus.notifications.webhook_dlq_replay",
+        "schedule": _schedule(hour=6, minute=0),
+        "options": {"queue": "argus.notifications"},
     },
 }
 

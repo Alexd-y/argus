@@ -29,6 +29,8 @@ app = Celery(
         "src.recon.jobs.runner",
         # ARG-044 — daily EPSS / KEV intelligence refresh.
         "src.celery.tasks.intel_refresh",
+        # T40 (Cycle 6 Batch 5, ARG-053) — daily webhook DLQ replay + auto-abandon.
+        "src.celery.tasks.webhook_dlq_replay",
         # T33 — operator-managed scan_schedules; the trigger task is
         # scheduled dynamically via celery-redbeat (see redbeat block below).
         "src.scheduling.scan_trigger",
@@ -66,6 +68,11 @@ app.conf.update(
         # so they cannot starve scan / report queues during a scheduled run.
         "argus.intel.epss_refresh": {"queue": "argus.intel"},
         "argus.intel.kev_refresh": {"queue": "argus.intel"},
+        # T40 (Cycle 6 Batch 5, ARG-053) — webhook DLQ housekeeping (and any
+        # future notification beat / on-demand replay tasks) lands on its own
+        # dedicated queue so a slow upstream cannot starve the scan / report
+        # queues during the daily 06:00 UTC sweep.
+        "argus.notifications.*": {"queue": "argus.notifications"},
         # T33 — scheduled scans fire onto the same queue as ad-hoc scans
         # so the existing worker pool drains them with no extra config.
         "argus.scheduling.run_scheduled_scan": {"queue": "argus.scans"},
