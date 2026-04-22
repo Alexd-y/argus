@@ -606,3 +606,213 @@ kubectl -n argus logs -f deploy/argus-backend \
 kubectl -n argus logs -f deploy/argus-backend `
   | Select-String -Pattern '"event":"argus\.auth\.admin_'
 ```
+
+---
+
+## 10. MFA enrollment & enforcement (C7-T03)
+
+> Cycle 7 deliverable, mounted at `/api/v1/admin/auth/mfa/*`. Foundation (DAO + Fernet keyring + Alembic 032) ships with C7-T01; the HTTP surface and the super-admin policy gate ship with C7-T03. Audience: SRE on-call + admin operators rolling out MFA to a fresh deployment.
+
+### 10.1 Endpoint reference
+
+All endpoints sit under `/api/v1/admin/auth/mfa/*`, return JSON, and require an authenticated admin session (the existing `require_admin` gate — same auth modes as the rest of the admin surface). Successful proofs additionally stamp `admin_sessions.mfa_passed_at` so the new `require_admin_mfa_passed` gate (§10.3) accepts the same session for sensitive routes.
+
+| Method | Path | Body / params | Success (2xx) | Failure surface |
+| ------ | ---- | ------------- | ------------- | --------------- |
+| `POST` | `/admin/auth/mfa/enroll` | _none_ | `200 MFAEnrollResponse` — `secret_uri` (otpauth://), `qr_data_uri=null`, `backup_codes` (returned ONCE) | `409 mfa_already_enabled`, `429` (per-user+IP burst) |
+| `POST` | `/admin/auth/mfa/confirm` | `{ "totp_code": "NNNNNN" }` | `200 MFAConfirmResponse` — `enabled=true`, `enabled_at`. Atomically calls `mark_session_mfa_passed` so the operator does not need a separate verify hop after enrolling. | `400 invalid_totp` / `400 no_pending_enrollment`, `409 mfa_already_enabled`, `429` |
+| `POST` | `/admin/auth/mfa/verify` | `{ "totp_code": "NNNNNN" }` **or** `{ "backup_code": "..." }` (XOR enforced by Pydantic) | `200 MFAVerifyResponse` — `verified=true`, `mfa_passed_at`, `remaining_backup_codes` | `401 mfa_verify_failed` (single detail across both paths so a brute-forcer cannot tell TOTP-typo vs backup-code-typo apart), `409 mfa_not_enabled`, `429` |
+| `POST` | `/admin/auth/mfa/disable` | Same XOR proof as `/verify` | `200 MFADisableResponse` — `disabled=true`, `disabled_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
+| `GET` | `/admin/auth/mfa/status` | _none_ | `200 MFAStatusResponse` — `enabled`, `enrolled_at`, `remaining_backup_codes`, `mfa_passed_for_session` | `401` (unauthenticated) |
+| `POST` | `/admin/auth/mfa/backup-codes/regenerate` | Same XOR proof as `/verify` | `200 BackupCodesRegenerateResponse` — fresh `backup_codes` (ONCE) + `generated_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
+
+Curl walk-through (replace `<HOST>` and `<COOKIE>`):
+
+```bash
+# 1. Enroll — captures the otpauth URI + first 10 backup codes (last time you see them).
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/enroll" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "Accept: application/json"
+# {
+#   "secret_uri": "otpauth://totp/ARGUS:operator-1?secret=...&issuer=ARGUS",
+#   "qr_data_uri": null,
+#   "backup_codes": ["1a2b-3c4d-5e6f", ...]
+# }
+
+# 2. Confirm — paste the 6-digit code from your authenticator app.
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/confirm" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "content-type: application/json" \
+  -d '{"totp_code":"123456"}'
+
+# 3. Re-verify on subsequent sessions (TOTP).
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/verify" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "content-type: application/json" \
+  -d '{"totp_code":"123456"}'
+
+# 4. Re-verify with a backup code (consumed on success — single use).
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/verify" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "content-type: application/json" \
+  -d '{"backup_code":"1a2b-3c4d-5e6f"}'
+
+# 5. Snapshot.
+curl -sS "https://<HOST>/api/v1/admin/auth/mfa/status" \
+  -b "argus.admin.session=<COOKIE>"
+# {"enabled":true,"enrolled_at":"...","remaining_backup_codes":9,"mfa_passed_for_session":true}
+
+# 6. Mint a fresh batch of backup codes (prior batch is invalidated server-side).
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/backup-codes/regenerate" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "content-type: application/json" \
+  -d '{"totp_code":"123456"}'
+
+# 7. Disable (requires a fresh proof; same XOR shape as /verify).
+curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/disable" \
+  -b "argus.admin.session=<COOKIE>" \
+  -H "content-type: application/json" \
+  -d '{"totp_code":"123456"}'
+```
+
+> **No `qr_data_uri` payload yet.** The backend deliberately returns `null` because no QR generator (`qrcode`, `segno`, …) is pinned in `backend/requirements.txt`. The frontend (C7-T04) renders the `secret_uri` itself with `qrcode.react` so the server bundle stays slim. Operators using curl can paste the otpauth URI into any TOTP app supporting URI import, or transcribe the `secret=` parameter into manual-entry mode.
+
+### 10.2 Bounded error taxonomy
+
+The endpoints emit a small, deliberately bounded set of `detail` codes so the SIEM, the FE, and the runbook agree on a single vocabulary. None of them carry PII, role names, or secret material.
+
+| HTTP | `detail` | Meaning | Operator response |
+| ---- | -------- | ------- | ----------------- |
+| 400 | `invalid_totp` | `/confirm` received a code that did not match the pending seed (or was outside the ±1 step skew window). | Re-check device clock skew; retry. |
+| 400 | `no_pending_enrollment` | `/confirm` was called but there is no pending TOTP secret to confirm. | Call `/enroll` first. |
+| 401 | `Authentication required` | Underlying admin gate denied the request (no cookie / expired / revoked). | Log in again. |
+| 401 | `mfa_verify_failed` | `/verify`, `/disable`, or `/backup-codes/regenerate` got a wrong TOTP **or** wrong backup code. Single detail across both paths so a brute-forcer cannot fingerprint which proof type they typed wrong. | Retry with a fresh code; if you exhausted backup codes, file an incident (§10.5). |
+| 409 | `mfa_already_enabled` | `/enroll` or `/confirm` called on an account that is already enrolled. | Use `/verify` instead, or `/disable` first if you want a fresh enrolment. |
+| 409 | `mfa_not_enabled` | `/disable` or `/backup-codes/regenerate` called on an account without MFA. | No-op — account is already in the desired state. |
+| 429 | _Too Many Requests_ | Per-user-and-IP token bucket exhausted (5 req/min/user/IP). `Retry-After` header set. | Honour `Retry-After`; do not loop. |
+| 500 | `Internal Server Error` | Unhandled exception path (DB error, etc.). Stack trace stays in the structured app log; the response body carries no detail. | Pull the matching `argus.auth.admin_mfa.*_failed` log line for triage. |
+
+### 10.3 Super-admin enforcement gate (`require_admin_mfa_passed`)
+
+Sensitive admin routes (mutating tenant / target / provider / cache / DR state — full table in `ai_docs/changelog/CHANGELOG.md` C7-T03 entry) hang off `require_admin_mfa_passed` instead of `require_admin`. The gate runs **after** `require_admin` succeeds and adds two checks:
+
+1. **Enrolment gate.** If the operator's role is in `settings.admin_mfa_enforce_roles` (env-driven, default `super-admin`) and `admin_users.mfa_enabled = false`, the gate raises:
+
+   ```http
+   HTTP/1.1 403 Forbidden
+   X-MFA-Enrollment-Required: true
+   Content-Type: application/json
+
+   {"detail": "mfa_enrollment_required"}
+   ```
+
+   The frontend reads `X-MFA-Enrollment-Required` to decide whether to show an enrolment wizard vs. a re-auth prompt.
+
+2. **Re-authentication freshness gate.** If the operator IS enrolled but `admin_sessions.mfa_passed_at` is NULL or older than `ADMIN_MFA_REAUTH_WINDOW_SECONDS` (default 12 h, matches `ADMIN_SESSION_TTL_SECONDS` so MFA is re-prompted at most once per session), the gate raises:
+
+   ```http
+   HTTP/1.1 401 Unauthorized
+   X-MFA-Required: true
+   Content-Type: application/json
+
+   {"detail": "mfa_required"}
+   ```
+
+The gate intentionally degrades to a no-op on **two** paths:
+
+- The `ADMIN_MFA_ENFORCE_ROLES` CSV is empty. A one-shot WARNING is logged at process start (`argus.auth.admin_mfa.enforcement_disabled` via `log_mfa_enforcement_state`) so an operator-induced misconfiguration cannot silently disable the control.
+- The request authenticated via the legacy `X-Admin-Key` shim (no `SessionPrincipal` on `request.state` — therefore no `mfa_passed_at` to consult). Switch `ADMIN_AUTH_MODE` away from `both` to close this bypass once the FE is fully on session-mode.
+
+### 10.4 Tuning the enforcement set
+
+`ADMIN_MFA_ENFORCE_ROLES` is a CSV of role names (canonical hyphen form, e.g. `super-admin,admin`). The parser also accepts the underscore form (`super_admin` → `super-admin`). Examples:
+
+| Value | Effect |
+| ----- | ------ |
+| `super-admin` (default) | Only super-admins are forced into MFA; tenant-scoped admins keep their existing surface. |
+| `super-admin,admin` | Both super-admins and tenant admins must enrol + reauth. Recommended endpoint state once admins have walked through enrolment. |
+| `` (empty) | Gate disabled. Logged as WARNING at startup. **Do not ship to production with this value.** |
+
+Roll-out guidance:
+
+1. Start with `ADMIN_MFA_ENFORCE_ROLES=super-admin` and announce a 2-week enrolment window in the operator channel.
+2. Once every super-admin is enrolled (verify via `SELECT subject FROM admin_users WHERE role='super-admin' AND mfa_enabled=true`), broaden to `super-admin,admin` and repeat.
+3. Per-pod restart picks up the new value (`Settings` parses on boot via `parse_admin_mfa_enforce_roles` in `backend/src/core/config.py:396`); a `kubectl -n argus rollout restart deploy/argus-backend` is sufficient.
+4. Confirm post-deploy:
+
+   ```bash
+   kubectl -n argus logs --since=2m deploy/argus-backend \
+     | jq -c 'select(.event == "argus.auth.admin_mfa.enforcement_enabled")'
+   # {"event":"argus.auth.admin_mfa.enforcement_enabled","enforced_roles":["super-admin"], ...}
+   ```
+
+For the Fernet keyring used to encrypt TOTP seeds at rest, follow the rotation cookbook inline in [`backend/.env.example`](../../backend/.env.example) under the `ADMIN_MFA_KEYRING` block (do **not** duplicate the procedure here — `.env.example` is the source of truth; this runbook only points at it).
+
+### 10.5 Incident playbook — super-admin lost MFA device
+
+**Trigger.** Super-admin reports loss / theft / wipe of their TOTP authenticator and they have already exhausted their backup codes.
+
+**Goal.** Restore the operator to a usable login state without disabling MFA across the fleet, in a way that is fully audit-trailed.
+
+**Preferred path — DBA-assisted backup-code regeneration.**
+
+1. Out-of-band identity check (Slack DM + a control question only the human operator could answer; do NOT accept request via the operator's email if the lost device is a phone — assume the email account is also lost).
+2. Open a change ticket; link this runbook section.
+3. From a backend pod REPL, mint a fresh batch of backup codes for the operator without holding their TOTP. This bypasses the verify-proof requirement of `/backup-codes/regenerate` and is the reason the path is DBA-only:
+
+   ```python
+   import asyncio
+   from src.db.session import async_session_factory
+   from src.auth.admin_mfa import regenerate_backup_codes
+
+   async def issue():
+       async with async_session_factory() as db:
+           plaintext = await regenerate_backup_codes(db, subject="<lost-device-operator>")
+           await db.commit()
+           return plaintext
+
+   for code in asyncio.run(issue()):
+       print(code)
+   ```
+
+4. Hand the printed codes back to the operator over the same out-of-band channel (the `regenerate_backup_codes` DAO returns plaintext exactly once; the call commits bcrypt hashes server-side — there is no second chance to read them).
+5. Operator uses one of the new codes to call `/admin/auth/mfa/verify`, then `/admin/auth/mfa/disable` (proof body), then `/admin/auth/mfa/enroll` against the new device.
+6. Record the chain (ticket, who minted, who consumed) in `ai_docs/operations/incident-log.md`.
+
+**Fallback path — temporary `mfa_enabled=false` toggle (DO NOT prefer).**
+
+Only acceptable when the DAO bypass above also fails (e.g. the operator's row is missing or corrupt). Trade-off: the operator is unauthenticated against the MFA gate for the whole window between SQL flip and re-enrolment, so any concurrent compromise of their cookie can move freely through the sensitive surface.
+
+```sql
+-- 1. Capture pre-flip state for the audit trail.
+SELECT subject, role, mfa_enabled, updated_at
+FROM   admin_users
+WHERE  subject = '<lost-device-operator>';
+
+-- 2. Disable MFA for the operator. Wrap in a transaction so the AuditLog
+--    INSERT below is in the same unit of work.
+BEGIN;
+UPDATE admin_users
+SET    mfa_enabled = false,
+       mfa_secret_encrypted = NULL,
+       mfa_backup_codes_hash = NULL,
+       updated_at = NOW()
+WHERE  subject = '<lost-device-operator>'
+RETURNING subject, mfa_enabled;
+
+-- 3. Tombstone every active session for the operator so the next request
+--    forces a fresh login (the gate would otherwise still see a stale
+--    mfa_passed_at row from before the flip).
+UPDATE admin_sessions
+SET    revoked_at = NOW()
+WHERE  subject     = '<lost-device-operator>'
+  AND  revoked_at  IS NULL;
+COMMIT;
+```
+
+After the SQL flip:
+- Notify the operator out-of-band; they MUST log in fresh and immediately walk through `/admin/auth/mfa/enroll` + `/confirm`.
+- Append to `ai_docs/operations/incident-log.md`: who flipped, the change-ticket link, expected re-enrolment deadline (≤ 24 h).
+- Add a follow-up calendar reminder to verify `mfa_enabled = true` on the operator within 24 h. If they have not re-enrolled, mass-revoke their sessions again (§4.4) until they do.
+
+**Why backup-code regeneration is preferred.** It keeps `mfa_enabled = true` for the operator at all times, so the policy gate never lets the account through a sensitive route without a fresh proof. The SQL flip leaves a window where the operator is effectively non-MFA — exactly the surface the gate exists to close.

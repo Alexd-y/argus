@@ -6,6 +6,73 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ## [Unreleased]
 
+### Cycle 7 — C7-T03 MFA endpoints + super-admin enforcement (2026-04-23)
+
+#### Added — admin MFA HTTP surface (`/api/v1/admin/auth/mfa/*`)
+- **Pydantic schemas** `backend/src/api/admin/schemas/mfa.py` — `MFAEnrollResponse`, `MFAConfirmRequest`, `MFAConfirmResponse`, `MFAVerifyRequest`, `MFAVerifyResponse`, `MFADisableRequest`, `MFADisableResponse`, `MFAStatusResponse`, `BackupCodesRegenerateResponse`. All carry `ConfigDict(extra="forbid")`; `MFAVerifyRequest` / `MFADisableRequest` enforce a `model_validator(after)` `totp_code XOR backup_code` shape so the verify-path proof can never be ambiguous.
+- **Router** `backend/src/api/admin/mfa.py` (mounted at `/admin/auth/mfa` → `/api/v1/admin/auth/mfa` after the global prefix in `main.py`). Six endpoints:
+  - `POST /enroll` → mints TOTP seed + plaintext backup codes (returned ONCE). Returns 409 `mfa_already_enabled` when the user is already enrolled. `qr_data_uri=None` deliberately — no `qrcode` / `segno` library is pinned in `backend/requirements.txt`; the frontend renders the otpauth URI itself (TODO referenced in module docstring).
+  - `POST /confirm` → finalises the enrolment with a 6-digit TOTP, atomically calls `mark_session_mfa_passed` so the operator does not have to re-verify before their next sensitive action.
+  - `POST /verify` → step-up auth via TOTP **or** backup code (XOR enforced by Pydantic). Bad proof → **401 `mfa_verify_failed`** (single detail across both proof paths so a brute-forcer cannot fingerprint TOTP vs backup-code typos).
+  - `POST /disable` → requires fresh proof in body; bad proof → **401 `mfa_verify_failed`**.
+  - `GET /status` → current `enabled / enrolled_at / remaining_backup_codes / mfa_passed_for_session` snapshot.
+  - `POST /backup-codes/regenerate` → invalidates the prior batch and returns a fresh plaintext list ONCE plus a `generated_at` timestamp.
+- **Rate limiting** — per-`(subject, ip)` token bucket (5 attempts / minute) on `/verify`, `/confirm`, `/disable`, `/backup-codes/regenerate`. Uses an in-process LRU-bounded dict; the same token-bucket math as `_LoginRateLimiter` in `admin_auth.py`. Out-of-process backplane is on the C7-T04 backlog (multi-pod buckets share state via Redis).
+- **Audit-log surface** — every action emits a structured `argus.auth.admin_mfa.<action>` log line via `structlog.get_logger`. Events: `enroll`, `enroll_failed`, `confirm`, `confirm_failed`, `verify_success`, `verify_failure`, `disable`, `disable_failed`, `backup_regenerate`, `status`. Subject is logged; secret material (TOTP seed, raw backup codes, hashes) is **never** logged.
+- **Error envelope discipline** — all failures return RFC 7807-style JSON via the existing global exception handlers in `src/core/exception_handlers.py`. Stack traces never leave the server; unhandled paths surface as `500 Internal Server Error` with no body details.
+
+#### Added — `require_admin_mfa_passed` policy gate
+- New module `backend/src/auth/admin_dependencies.py` — single source of truth for both `require_admin` (lifted out of `src/api/routers/admin.py` to break the would-be circular import with the new gate) and the new MFA gate. The router module re-exports both names for backwards compatibility.
+- Gate decision tree (each step short-circuits):
+  1. Empty `ADMIN_MFA_ENFORCE_ROLES` → no-op (logged once at startup as WARNING via `log_mfa_enforcement_state` in `main.py:lifespan`).
+  2. Legacy `X-Admin-Key` shim (no `SessionPrincipal` on `request.state`) → no-op (no `mfa_passed_at` to consult).
+  3. Operator role outside enforcement set → no-op.
+  4. `mfa_enabled = False` on a target role → **HTTP 403 `mfa_enrollment_required`** + `X-MFA-Enrollment-Required: true`.
+  5. `mfa_passed_at` NULL or older than `ADMIN_MFA_REAUTH_WINDOW_SECONDS` → **HTTP 401 `mfa_required`** + `X-MFA-Required: true`.
+  6. Otherwise → pass-through.
+- Both detail strings are machine codes (snake_case, no PII, no role names) so the FE can branch on them without parsing English.
+
+#### Changed — sensitive admin routes migrated to `require_admin_mfa_passed`
+Every POST / PUT / PATCH / DELETE that mutates user / tenant / role / secret state now sits behind the new gate. Read-only metrics / status / list endpoints stay on `require_admin`.
+
+| File | Route | Method | Why |
+| ---- | ----- | ------ | --- |
+| `api/routers/admin.py` | `/admin/tenants` | POST | tenant create |
+| `api/routers/admin.py` | `/admin/tenants/{tenant_id}` | PATCH / DELETE | tenant mutate / delete |
+| `api/routers/admin.py` | `/admin/tenants/{tenant_id}/targets` | POST | scope mutate |
+| `api/routers/admin.py` | `/admin/tenants/{tenant_id}/targets/{target_id}` | PATCH / DELETE | scope mutate / delete |
+| `api/routers/admin.py` | `/admin/providers` | POST | LLM provider record create |
+| `api/routers/admin.py` | `/admin/providers/{provider_id}` | PATCH | LLM provider secret material (`api_key`) |
+| `api/routers/admin_bulk_ops.py` | `/admin/bulk/cancel-scans` | POST | bulk job cancellation |
+| `api/routers/admin_bulk_ops.py` | `/admin/bulk/suppress-findings` | POST | bulk finding suppression |
+| `api/routers/admin_emergency.py` | `/admin/system/emergency/stop` | POST | DR / kill-switch |
+| `api/routers/admin_emergency.py` | `/admin/system/emergency/resume` | POST | DR / kill-switch |
+| `api/routers/admin_emergency.py` | `/admin/system/emergency/throttle` | POST | DR throttle write |
+| `api/routers/admin_schedules.py` | `/admin/scan-schedules` | POST | schedule create |
+| `api/routers/admin_schedules.py` | `/admin/scan-schedules/{schedule_id}` | PATCH / DELETE | schedule mutate / delete |
+| `api/routers/admin_schedules.py` | `/admin/scan-schedules/{schedule_id}/run-now` | POST | side-effecting trigger |
+| `api/routers/admin_webhook_dlq.py` | `/admin/webhook-dlq/{entry_id}/replay` | POST | re-emits webhook traffic |
+| `api/routers/admin_webhook_dlq.py` | `/admin/webhook-dlq/{entry_id}/abandon` | POST | drops queued events |
+| `api/routers/cache.py` | `/cache` | DELETE | global cache invalidation |
+| `api/routers/cache.py` | `/cache/key/{key:path}` | DELETE | targeted cache invalidation |
+| `api/routers/cache.py` | `/cache/tool-ttls` | PUT | cache policy mutate |
+| `api/routers/cache.py` | `/cache/warm` | POST | side-effecting cache prime |
+| `api/routers/internal_va.py` | `/internal/va-tools/enqueue` | POST | enqueues sandbox VA work |
+
+The `/admin/auth/mfa/*` endpoints themselves stay on `require_admin` — gating them on `require_admin_mfa_passed` would make first-time enrolment impossible.
+
+#### Documented
+- `docs/operations/admin-sessions.md` §10 — new "MFA enrollment & enforcement" section: 6-endpoint table with curl examples, `401 mfa_required` / `403 mfa_enrollment_required` envelopes, `X-MFA-Required` / `X-MFA-Enrollment-Required` header semantics, how to flip `ADMIN_MFA_ENFORCE_ROLES`, link out to the existing Fernet rotation cookbook in `backend/.env.example`, and the lost-MFA-device incident playbook (DBA-assisted SQL recovery — backup codes preferred over `mfa_enabled=false` toggle).
+- `backend/.env.example` already pins `ADMIN_MFA_ENFORCE_ROLES=super-admin` (added in C7-T01 for the foundation work) — no further env-var changes required.
+
+#### Hard-rule compliance
+- No new pip dependencies (no `qrcode`/`segno` — frontend renders otpauth URIs).
+- mypy `--strict` clean and ruff clean for every new/touched file.
+- Per-user-and-IP rate limiting (not just per-IP).
+- Pydantic-only request validation; no manual `if request.x is None`.
+- Stack traces never leave the server; bounded snake_case `detail` taxonomy for SIEM correlation.
+- C7-T01 DAO / crypto / migration files were not touched in waves 2–4.
+
 ### Cycle 7 — C7-T08 Amber-700 surface uniformity (2026-04-22)
 
 #### Added — `--warning-strong` + `--on-warning` foundation tokens
