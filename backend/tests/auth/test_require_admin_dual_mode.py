@@ -54,9 +54,17 @@ async def gated_app(
     test can assert that a successful session resolve populated the
     principal exactly once (and that the legacy fallback path leaves the
     state untouched).
+
+    C7-T03 note — ``require_admin`` and its session resolver moved from
+    ``src.api.routers.admin`` to ``src.auth.admin_dependencies`` so the
+    new ``require_admin_mfa_passed`` gate could depend on it without a
+    circular import. The monkeypatch site follows the implementation;
+    the symbol is still re-exported from the old module so the public
+    ``from src.api.routers.admin import require_admin`` import keeps
+    working unchanged.
     """
     monkeypatch.setattr(
-        "src.api.routers.admin.async_session_factory", session_factory
+        "src.auth.admin_dependencies.async_session_factory", session_factory
     )
 
     app = FastAPI()
