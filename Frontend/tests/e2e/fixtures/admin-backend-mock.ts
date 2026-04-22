@@ -33,6 +33,17 @@
  *   - `?_test_name_conflict=true` on `POST /admin/scan-schedules` returns
  *     409 + `detail: "schedule_name_conflict"` regardless of the actual
  *     in-memory state so T36 can exercise the editor's error mapping.
+ *   - T41 webhook DLQ (admin/webhooks/dlq) — sentinel entry ids deterministically
+ *     trigger every member of `WEBHOOK_DLQ_FAILURE_TAXONOMY`:
+ *       - 11111111-aaaa-bbbb-cccc-000000000001 → 404 dlq_entry_not_found
+ *       - 11111111-aaaa-bbbb-cccc-000000000002 → 409 already_replayed
+ *       - 11111111-aaaa-bbbb-cccc-000000000003 → 409 already_abandoned
+ *       - 11111111-aaaa-bbbb-cccc-000000000004 → 202 success=false (replay_failed)
+ *       - 11111111-aaaa-bbbb-cccc-000000000005 → 422 validation_failed
+ *       - 11111111-aaaa-bbbb-cccc-000000000006 → 500 server_error
+ *       - 11111111-aaaa-bbbb-cccc-000000000007 → 503 store_unavailable
+ *       - 11111111-aaaa-bbbb-cccc-000000000008 → 403 forbidden
+ *       - any other UUID → success path
  *
  * Mock-only control endpoint (NOT served by real FastAPI):
  *   - `POST /api/v1/__test__/reset` clears the per-suite in-memory state
@@ -433,6 +444,178 @@ const SCHEDULES_SEED: ReadonlyArray<ScheduleRow> = [
   },
 ];
 
+// ──────────────────────────────────────────────────────────────────────
+// T41 — webhook DLQ seed data + sentinel ids.
+// Each sentinel id deterministically triggers a single error code from
+// `WEBHOOK_DLQ_FAILURE_TAXONOMY` so the Playwright + Vitest suites can
+// exercise every branch without timing-dependent mocks.
+// ──────────────────────────────────────────────────────────────────────
+
+const DLQ_SENTINEL_NOT_FOUND = "11111111-aaaa-bbbb-cccc-000000000001";
+const DLQ_SENTINEL_ALREADY_REPLAYED = "11111111-aaaa-bbbb-cccc-000000000002";
+const DLQ_SENTINEL_ALREADY_ABANDONED = "11111111-aaaa-bbbb-cccc-000000000003";
+const DLQ_SENTINEL_REPLAY_FAILED = "11111111-aaaa-bbbb-cccc-000000000004";
+const DLQ_SENTINEL_VALIDATION = "11111111-aaaa-bbbb-cccc-000000000005";
+const DLQ_SENTINEL_SERVER_ERROR = "11111111-aaaa-bbbb-cccc-000000000006";
+const DLQ_SENTINEL_STORE_UNAVAILABLE = "11111111-aaaa-bbbb-cccc-000000000007";
+const DLQ_SENTINEL_FORBIDDEN = "11111111-aaaa-bbbb-cccc-000000000008";
+
+type DlqRow = {
+  id: string;
+  tenant_id: string;
+  adapter_name: string;
+  event_type: string;
+  event_id: string;
+  target_url_hash: string;
+  attempt_count: number;
+  last_error_code: string;
+  last_status_code: number | null;
+  next_retry_at: string | null;
+  created_at: string;
+  replayed_at: string | null;
+  abandoned_at: string | null;
+  abandoned_reason: string | null;
+};
+
+const DLQ_SEED: ReadonlyArray<DlqRow> = [
+  {
+    id: DLQ_SENTINEL_NOT_FOUND,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "slack",
+    event_type: "scan.completed",
+    event_id: "evt_dlq_not_found_0001",
+    target_url_hash:
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 5,
+    last_error_code: "http_502",
+    last_status_code: 502,
+    next_retry_at: null,
+    created_at: "2026-04-20T08:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_ALREADY_REPLAYED,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "linear",
+    event_type: "finding.created",
+    event_id: "evt_dlq_already_replay_0002",
+    target_url_hash:
+      "1023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 3,
+    last_error_code: "http_500",
+    last_status_code: 500,
+    next_retry_at: null,
+    created_at: "2026-04-20T09:00:00Z",
+    replayed_at: "2026-04-21T10:00:00Z",
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_ALREADY_ABANDONED,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "jira",
+    event_type: "finding.suppressed",
+    event_id: "evt_dlq_already_abandon_0003",
+    target_url_hash:
+      "2023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 7,
+    last_error_code: "http_403",
+    last_status_code: 403,
+    next_retry_at: null,
+    created_at: "2026-04-20T10:00:00Z",
+    replayed_at: null,
+    abandoned_at: "2026-04-21T11:00:00Z",
+    abandoned_reason: "operator",
+  },
+  {
+    id: DLQ_SENTINEL_REPLAY_FAILED,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "slack",
+    event_type: "scan.completed",
+    event_id: "evt_dlq_replay_fail_0004",
+    target_url_hash:
+      "3023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 2,
+    last_error_code: "timeout",
+    last_status_code: null,
+    next_retry_at: null,
+    created_at: "2026-04-20T11:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_VALIDATION,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "linear",
+    event_type: "finding.created",
+    event_id: "evt_dlq_validation_0005",
+    target_url_hash:
+      "4023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 1,
+    last_error_code: "http_400",
+    last_status_code: 400,
+    next_retry_at: null,
+    created_at: "2026-04-20T12:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_SERVER_ERROR,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "jira",
+    event_type: "scan.failed",
+    event_id: "evt_dlq_server_err_0006",
+    target_url_hash:
+      "5023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 4,
+    last_error_code: "http_500",
+    last_status_code: 500,
+    next_retry_at: null,
+    created_at: "2026-04-20T13:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_STORE_UNAVAILABLE,
+    tenant_id: MOCK_TENANT_ID,
+    adapter_name: "slack",
+    event_type: "scan.started",
+    event_id: "evt_dlq_store_unav_0007",
+    target_url_hash:
+      "6023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 6,
+    last_error_code: "connection_reset",
+    last_status_code: null,
+    next_retry_at: null,
+    created_at: "2026-04-20T14:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+  {
+    id: DLQ_SENTINEL_FORBIDDEN,
+    tenant_id: MOCK_SECONDARY_TENANT_ID,
+    adapter_name: "linear",
+    event_type: "tenant.created",
+    event_id: "evt_dlq_forbidden_0008",
+    target_url_hash:
+      "7023456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    attempt_count: 8,
+    last_error_code: "http_403",
+    last_status_code: 403,
+    next_retry_at: null,
+    created_at: "2026-04-20T15:00:00Z",
+    replayed_at: null,
+    abandoned_at: null,
+    abandoned_reason: null,
+  },
+];
+
 type ThrottleRow = {
   tenant_id: string;
   reason: string;
@@ -459,6 +642,7 @@ type MockState = {
   schedules: ScheduleRow[];
   emergencyAudit: EmergencyAuditRow[];
   auditCounter: number;
+  dlqEntries: DlqRow[];
 };
 
 function freshState(): MockState {
@@ -470,6 +654,7 @@ function freshState(): MockState {
     schedules: SCHEDULES_SEED.map((s) => ({ ...s })),
     emergencyAudit: [],
     auditCounter: 0,
+    dlqEntries: DLQ_SEED.map((e) => ({ ...e })),
   };
 }
 
@@ -1414,6 +1599,320 @@ function handleScheduleRunNow(
   });
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// T41 — webhook DLQ list / replay / abandon
+// ──────────────────────────────────────────────────────────────────────
+
+function deriveTriageStatus(
+  row: DlqRow,
+): "pending" | "replayed" | "abandoned" {
+  if (row.replayed_at !== null) return "replayed";
+  if (row.abandoned_at !== null) return "abandoned";
+  return "pending";
+}
+
+function projectDlqRow(row: DlqRow): JsonValue {
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    adapter_name: row.adapter_name,
+    event_type: row.event_type,
+    event_id: row.event_id,
+    target_url_hash: row.target_url_hash,
+    attempt_count: row.attempt_count,
+    last_error_code: row.last_error_code,
+    last_status_code: row.last_status_code,
+    next_retry_at: row.next_retry_at,
+    created_at: row.created_at,
+    replayed_at: row.replayed_at,
+    abandoned_at: row.abandoned_at,
+    abandoned_reason: row.abandoned_reason,
+    triage_status: deriveTriageStatus(row),
+  };
+}
+
+function handleDlqList(
+  url: URL,
+  headers: IncomingMessage["headers"],
+  res: ServerResponse,
+): void {
+  const role = headerValue(headers, "x-admin-role");
+  if (role !== "admin" && role !== "super-admin") {
+    writeJson(res, 403, { detail: "forbidden" });
+    return;
+  }
+  const tenantHeader = headerValue(headers, "x-admin-tenant");
+  if (role === "admin" && !tenantHeader) {
+    writeJson(res, 403, { detail: "tenant_required" });
+    return;
+  }
+
+  const statusFilter = url.searchParams.get("status");
+  const adapterFilter = url.searchParams.get("adapter_name")?.trim() ?? "";
+  const createdAfter = url.searchParams.get("created_after");
+  const createdBefore = url.searchParams.get("created_before");
+  const offset = Math.max(
+    0,
+    Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0,
+  );
+  const limit = Math.min(
+    200,
+    Math.max(1, Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50),
+  );
+
+  let items = mockState.dlqEntries.slice();
+  // admin → strict tenant scope; super-admin honours optional filter.
+  if (role === "admin") {
+    items = items.filter((row) => row.tenant_id === tenantHeader);
+  } else if (tenantHeader) {
+    items = items.filter((row) => row.tenant_id === tenantHeader);
+  }
+  if (statusFilter === "pending" || statusFilter === "replayed" || statusFilter === "abandoned") {
+    items = items.filter((row) => deriveTriageStatus(row) === statusFilter);
+  }
+  if (adapterFilter !== "") {
+    items = items.filter((row) => row.adapter_name === adapterFilter);
+  }
+  if (createdAfter) {
+    const ts = Date.parse(createdAfter);
+    if (!Number.isNaN(ts)) {
+      items = items.filter((row) => Date.parse(row.created_at) >= ts);
+    }
+  }
+  if (createdBefore) {
+    const ts = Date.parse(createdBefore);
+    if (!Number.isNaN(ts)) {
+      items = items.filter((row) => Date.parse(row.created_at) <= ts);
+    }
+  }
+
+  const total = items.length;
+  const sliced = items.slice(offset, offset + limit);
+  writeJson(res, 200, {
+    items: sliced.map(projectDlqRow),
+    total,
+    limit,
+    offset,
+  });
+}
+
+function parseDlqMutationBody(
+  body: string,
+  res: ServerResponse,
+): { reason: string } | null {
+  let parsed: { reason?: unknown };
+  try {
+    parsed = JSON.parse(body) as { reason?: unknown };
+  } catch {
+    writeJson(res, 400, { detail: "invalid_json" });
+    return null;
+  }
+  const reason =
+    typeof parsed.reason === "string" ? parsed.reason.trim() : "";
+  if (reason.length < 10 || reason.length > 500) {
+    writeJson(res, 422, { detail: "validation_failed" });
+    return null;
+  }
+  return { reason };
+}
+
+function handleDlqReplay(
+  entryId: string,
+  body: string,
+  headers: IncomingMessage["headers"],
+  res: ServerResponse,
+): void {
+  const role = headerValue(headers, "x-admin-role");
+  if (role !== "admin" && role !== "super-admin") {
+    writeJson(res, 403, { detail: "forbidden" });
+    return;
+  }
+  const tenantHeader = headerValue(headers, "x-admin-tenant");
+  if (role === "admin" && !tenantHeader) {
+    writeJson(res, 403, { detail: "tenant_required" });
+    return;
+  }
+
+  // Body validation runs FIRST so the deterministic-validation sentinel
+  // works for any reason (the reason is what's invalid, not the id).
+  // For all other sentinels the body must be valid to surface the
+  // sentinel's intended status code.
+  const parsedBody = parseDlqMutationBody(body, res);
+  if (parsedBody === null) return;
+
+  switch (entryId) {
+    case DLQ_SENTINEL_NOT_FOUND:
+      writeJson(res, 404, { detail: "dlq_entry_not_found" });
+      return;
+    case DLQ_SENTINEL_ALREADY_REPLAYED:
+      writeJson(res, 409, { detail: "already_replayed" });
+      return;
+    case DLQ_SENTINEL_ALREADY_ABANDONED:
+      writeJson(res, 409, { detail: "already_abandoned" });
+      return;
+    case DLQ_SENTINEL_VALIDATION:
+      writeJson(res, 422, { detail: "validation_failed" });
+      return;
+    case DLQ_SENTINEL_SERVER_ERROR:
+      writeJson(res, 500, { detail: "server_error" });
+      return;
+    case DLQ_SENTINEL_STORE_UNAVAILABLE:
+      writeJson(res, 503, { detail: "store_unavailable" });
+      return;
+    case DLQ_SENTINEL_FORBIDDEN:
+      writeJson(res, 403, { detail: "forbidden" });
+      return;
+    case DLQ_SENTINEL_REPLAY_FAILED: {
+      const idx = mockState.dlqEntries.findIndex((row) => row.id === entryId);
+      if (idx >= 0) {
+        const row = mockState.dlqEntries[idx];
+        mockState.dlqEntries[idx] = {
+          ...row,
+          attempt_count: row.attempt_count + 1,
+          last_error_code: "http_500",
+          last_status_code: 500,
+        };
+      }
+      const target = mockState.dlqEntries[idx] ?? mockState.dlqEntries[0];
+      writeJson(res, 202, {
+        entry_id: entryId,
+        success: false,
+        attempt_count: target.attempt_count,
+        new_status: "pending",
+        audit_id: nextAuditId(),
+        message_code: "replay_failed",
+      });
+      return;
+    }
+    default: {
+      const idx = mockState.dlqEntries.findIndex((row) => row.id === entryId);
+      if (idx < 0) {
+        writeJson(res, 404, { detail: "dlq_entry_not_found" });
+        return;
+      }
+      const row = mockState.dlqEntries[idx];
+      // Tenant scope check for admin (mock parity with backend).
+      if (role === "admin" && row.tenant_id !== tenantHeader) {
+        writeJson(res, 404, { detail: "dlq_entry_not_found" });
+        return;
+      }
+      if (row.replayed_at !== null) {
+        writeJson(res, 409, { detail: "already_replayed" });
+        return;
+      }
+      if (row.abandoned_at !== null) {
+        writeJson(res, 409, { detail: "already_abandoned" });
+        return;
+      }
+      const replayedAt = nowIso();
+      mockState.dlqEntries[idx] = {
+        ...row,
+        attempt_count: row.attempt_count + 1,
+        replayed_at: replayedAt,
+      };
+      writeJson(res, 202, {
+        entry_id: entryId,
+        success: true,
+        attempt_count: row.attempt_count + 1,
+        new_status: "replayed",
+        audit_id: nextAuditId(),
+        message_code: "replay_succeeded",
+      });
+      return;
+    }
+  }
+}
+
+function handleDlqAbandon(
+  entryId: string,
+  body: string,
+  headers: IncomingMessage["headers"],
+  res: ServerResponse,
+): void {
+  const role = headerValue(headers, "x-admin-role");
+  if (role !== "admin" && role !== "super-admin") {
+    writeJson(res, 403, { detail: "forbidden" });
+    return;
+  }
+  const tenantHeader = headerValue(headers, "x-admin-tenant");
+  if (role === "admin" && !tenantHeader) {
+    writeJson(res, 403, { detail: "tenant_required" });
+    return;
+  }
+
+  const parsedBody = parseDlqMutationBody(body, res);
+  if (parsedBody === null) return;
+
+  switch (entryId) {
+    case DLQ_SENTINEL_NOT_FOUND:
+      writeJson(res, 404, { detail: "dlq_entry_not_found" });
+      return;
+    case DLQ_SENTINEL_ALREADY_REPLAYED:
+      writeJson(res, 409, { detail: "already_replayed" });
+      return;
+    case DLQ_SENTINEL_ALREADY_ABANDONED:
+      writeJson(res, 409, { detail: "already_abandoned" });
+      return;
+    case DLQ_SENTINEL_VALIDATION:
+      writeJson(res, 422, { detail: "validation_failed" });
+      return;
+    case DLQ_SENTINEL_SERVER_ERROR:
+      writeJson(res, 500, { detail: "server_error" });
+      return;
+    case DLQ_SENTINEL_STORE_UNAVAILABLE:
+      writeJson(res, 503, { detail: "store_unavailable" });
+      return;
+    case DLQ_SENTINEL_FORBIDDEN:
+      writeJson(res, 403, { detail: "forbidden" });
+      return;
+    default: {
+      const idx = mockState.dlqEntries.findIndex((row) => row.id === entryId);
+      if (idx < 0) {
+        writeJson(res, 404, { detail: "dlq_entry_not_found" });
+        return;
+      }
+      const row = mockState.dlqEntries[idx];
+      if (role === "admin" && row.tenant_id !== tenantHeader) {
+        writeJson(res, 404, { detail: "dlq_entry_not_found" });
+        return;
+      }
+      if (row.replayed_at !== null) {
+        writeJson(res, 409, { detail: "already_replayed" });
+        return;
+      }
+      if (row.abandoned_at !== null) {
+        writeJson(res, 409, { detail: "already_abandoned" });
+        return;
+      }
+      const abandonedAt = nowIso();
+      mockState.dlqEntries[idx] = {
+        ...row,
+        abandoned_at: abandonedAt,
+        abandoned_reason: "operator",
+      };
+      writeJson(res, 200, {
+        entry_id: entryId,
+        new_status: "abandoned",
+        audit_id: nextAuditId(),
+      });
+      return;
+    }
+  }
+}
+
+function headerValue(
+  headers: IncomingMessage["headers"],
+  name: string,
+): string {
+  const raw = headers[name];
+  if (typeof raw === "string") return raw.trim();
+  if (Array.isArray(raw) && raw.length > 0) {
+    const first = raw[0];
+    return typeof first === "string" ? first.trim() : "";
+  }
+  return "";
+}
+
 async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = parseUrl(req);
   const method = (req.method ?? "GET").toUpperCase();
@@ -1544,6 +2043,30 @@ async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void
     return;
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // T41 — webhook DLQ list / replay / abandon
+  // ──────────────────────────────────────────────────────────────────
+  if (path === "/api/v1/admin/webhooks/dlq" && method === "GET") {
+    handleDlqList(url, req.headers, res);
+    return;
+  }
+  const dlqReplayMatch = path.match(
+    /^\/api\/v1\/admin\/webhooks\/dlq\/([^/]+)\/replay$/,
+  );
+  if (dlqReplayMatch && method === "POST") {
+    const body = await readBody(req);
+    handleDlqReplay(dlqReplayMatch[1], body, req.headers, res);
+    return;
+  }
+  const dlqAbandonMatch = path.match(
+    /^\/api\/v1\/admin\/webhooks\/dlq\/([^/]+)\/abandon$/,
+  );
+  if (dlqAbandonMatch && method === "POST") {
+    const body = await readBody(req);
+    handleDlqAbandon(dlqAbandonMatch[1], body, req.headers, res);
+    return;
+  }
+
   // Mock-only state-reset endpoint. Lives outside `/admin/*` so the real
   // backend never has a route there even if a stale BACKEND_URL config
   // accidentally pointed at production. The mock requires no body.
@@ -1655,4 +2178,26 @@ export const MOCK_SCHEDULES = {
     name: "Beta tenant cron",
     tenantId: MOCK_SECONDARY_TENANT_ID,
   },
+} as const;
+
+/**
+ * Stable DLQ sentinel ids exported for the T41 Vitest + Playwright
+ * suites. Each id deterministically triggers ONE member of
+ * `WEBHOOK_DLQ_FAILURE_TAXONOMY` on both the replay and abandon routes;
+ * the list endpoint returns all eight rows interleaved with the seed.
+ *
+ * NB: `notFound` lives in the seed too — listing it back exercises the
+ * "cross-tenant existence-leak" path when the caller's `X-Admin-Tenant`
+ * doesn't match. The mock follows the backend's contract: a missing
+ * row and a cross-tenant probe both return 404 `dlq_entry_not_found`.
+ */
+export const MOCK_DLQ_SENTINELS = {
+  notFound: DLQ_SENTINEL_NOT_FOUND,
+  alreadyReplayed: DLQ_SENTINEL_ALREADY_REPLAYED,
+  alreadyAbandoned: DLQ_SENTINEL_ALREADY_ABANDONED,
+  replayFailed: DLQ_SENTINEL_REPLAY_FAILED,
+  validationFailed: DLQ_SENTINEL_VALIDATION,
+  serverError: DLQ_SENTINEL_SERVER_ERROR,
+  storeUnavailable: DLQ_SENTINEL_STORE_UNAVAILABLE,
+  forbidden: DLQ_SENTINEL_FORBIDDEN,
 } as const;
