@@ -58,6 +58,37 @@ _OVERRIDE_MAP: dict[str, tuple[str, str, str]] = {
     "perplexity": ("PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
 }
 
+# Sentinel base_url for Google Gemini (OpenAI-compatible path not used).
+_GEMINI_ROUTE_SENTINEL = "__argus_gemini__"
+
+# Universal fallback order after task-specific primaries from ROUTING_TABLE.
+# Missing keys are skipped; HTTP/auth errors try the next provider (see call_llm_for_task).
+_GLOBAL_LLM_FALLBACK_CHAIN: tuple[tuple[str, str, str], ...] = (
+    ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "openai/gpt-4o-mini"),
+    ("KIMI_API_KEY", "https://api.moonshot.cn", "moonshot-v1-8k"),
+    ("PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
+    ("OPENAI_API_KEY", "https://api.openai.com", "gpt-4o-mini"),
+    ("DEEPSEEK_API_KEY", "https://api.deepseek.com", "deepseek-chat"),
+    ("GOOGLE_API_KEY", _GEMINI_ROUTE_SENTINEL, "gemini-1.5-flash"),
+)
+
+
+def _merge_route_with_global_chain(route_attempts: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    """Append universal fallbacks without duplicating env keys already used by the route.
+
+    Route-defined attempts may include the same env key twice (e.g. Perplexity sonar-pro → sonar);
+    those are preserved. Global entries are only added for keys that never appear in the route list.
+    """
+    keys_in_route = {env_key for env_key, _, _ in route_attempts}
+    out = list(route_attempts)
+    for entry in _GLOBAL_LLM_FALLBACK_CHAIN:
+        env_key = entry[0]
+        if env_key in keys_in_route:
+            continue
+        keys_in_route.add(env_key)
+        out.append(entry)
+    return out
+
 ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
     LLMTask.EXECUTIVE_SUMMARY: LLMRoute(
         provider_env_key="OPENROUTER_API_KEY",
@@ -182,6 +213,26 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
 }
 
 
+async def _call_gemini_route(
+    *,
+    prompt: str,
+    system_prompt: str | None,
+    model: str,
+) -> LLMTaskResponse:
+    """Gemini uses generateContent, not OpenAI-compatible chat completions."""
+    from src.llm.adapters import GeminiAdapter
+
+    adapter = GeminiAdapter()
+    text = await adapter.call(prompt, system_prompt=system_prompt, model=model)
+    return LLMTaskResponse(
+        text=text,
+        provider="GOOGLE_API_KEY",
+        model=model,
+        prompt_tokens=0,
+        completion_tokens=0,
+    )
+
+
 async def _call_route(
     route_env_key: str,
     route_base_url: str,
@@ -267,13 +318,19 @@ async def call_llm_for_task(
     if route is None:
         route = ROUTING_TABLE[LLMTask.ORCHESTRATION]
 
-    attempts = _build_attempts(route)
+    attempts = _merge_route_with_global_chain(_build_attempts(route))
 
     last_error: Exception | None = None
     for env_key, base_url, model in attempts:
         if not _get_key(env_key):
             continue
         try:
+            if base_url == _GEMINI_ROUTE_SENTINEL:
+                return await _call_gemini_route(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    model=model,
+                )
             return await _call_route(
                 route_env_key=env_key,
                 route_base_url=base_url,
