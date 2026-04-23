@@ -9,11 +9,14 @@
  *
  * Why parse error messages instead of raw axe output?
  *   The existing spec calls `expect(violations, msg).toEqual([])`. Per the
- *   wave-09 hard rules, we MUST NOT modify that spec, so we also can't
- *   add a `testInfo.attach('axe-violations.json', …)` hook. The spec's
- *   assertion message is deterministically formatted as
- *   `[<scenario>] axe violations:\n<JSON.stringify(violations, null, 2)>`
- *   — a stable contract this parser relies on.
+ *   wave-09 hard rules, we MUST NOT modify that spec's behaviour, so we
+ *   also can't add a `testInfo.attach('axe-violations.json', …)` hook.
+ *   The spec's assertion message is deterministically formatted as
+ *   `[<scenario>] <VIOLATION_MARKER>\n<JSON.stringify(violations, null, 2)>`
+ *   — a stable contract this parser relies on. The exact magic strings
+ *   (VIOLATION_MARKER, SUMMARY_TOTAL_LINE_PREFIX, …) live in
+ *   `./axe-report-contract.mjs` so the parser, the spec, and the
+ *   workflow `awk` anchor cannot drift independently (see DEBUG-1).
  *
  * Stdlib-only: `node:fs`, `node:path`. No npm deps, no network, no
  * filesystem writes outside the `--summary` argument path.
@@ -39,7 +42,11 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const VIOLATION_MARKER = "axe violations:";
+import {
+  VIOLATION_MARKER,
+  SUMMARY_TOTAL_LINE_PREFIX,
+} from "./axe-report-contract.mjs";
+
 const DEFAULT_REPORT = "./axe-report/results.json";
 const DEFAULT_SUMMARY = "./axe-summary.md";
 
@@ -84,7 +91,7 @@ function collectErrorMessages(result) {
 }
 
 /**
- * Find the JSON array that follows the `axe violations:` marker in an
+ * Find the JSON array that follows the `VIOLATION_MARKER` in an
  * assertion message and parse it. Returns `null` if the marker is
  * absent (test failed for a non-axe reason) or the slice is invalid.
  *
@@ -251,7 +258,8 @@ function main() {
   lines.push("# Admin axe-core nightly scan");
   lines.push("");
   lines.push(`**Run:** ${isoNow}`);
-  lines.push(`**Total violations:** ${totalViolations}`);
+  // NOTE: format consumed by .github/workflows/admin-axe-cron.yml awk anchor — keep stable.
+  lines.push(`${SUMMARY_TOTAL_LINE_PREFIX} ${totalViolations}`);
   lines.push("");
 
   if (totalViolations === 0) {

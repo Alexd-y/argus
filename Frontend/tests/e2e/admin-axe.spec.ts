@@ -25,6 +25,9 @@ import AxeBuilder from "@axe-core/playwright";
 import {
   MOCK_TENANT_PRIMARY,
 } from "./fixtures/admin-backend-mock";
+// Single source of truth shared with `scripts/parse-axe-report.mjs` and
+// `.github/workflows/admin-axe-cron.yml` — see DEBUG-1 follow-up.
+import { VIOLATION_MARKER } from "../../scripts/axe-report-contract.mjs";
 
 type AdminRole = "admin" | "super-admin";
 
@@ -110,7 +113,7 @@ async function expectNoAxeViolations(
   const results = await builder.analyze();
   expect(
     results.violations,
-    `[${scenarioName}] axe violations:\n${JSON.stringify(
+    `[${scenarioName}] ${VIOLATION_MARKER}\n${JSON.stringify(
       results.violations.map((v) => ({
         id: v.id,
         impact: v.impact,
