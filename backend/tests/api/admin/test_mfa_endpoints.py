@@ -453,7 +453,7 @@ async def _force_mfa_passed_at(
 
 
 # ===========================================================================
-# Section A — POST /admin/auth/mfa/enroll  (≥4 cases)
+# Section A — POST /auth/admin/mfa/enroll  (≥4 cases)
 # ===========================================================================
 
 
@@ -522,7 +522,7 @@ class TestMFAEnroll:
 
 
 # ===========================================================================
-# Section B — POST /admin/auth/mfa/confirm  (≥5 cases)
+# Section B — POST /auth/admin/mfa/confirm  (≥5 cases)
 # ===========================================================================
 
 
@@ -631,7 +631,7 @@ class TestMFAConfirm:
 
 
 # ===========================================================================
-# Section C — POST /admin/auth/mfa/verify  (≥7 cases)
+# Section C — POST /auth/admin/mfa/verify  (≥7 cases)
 # ===========================================================================
 
 
@@ -769,7 +769,7 @@ class TestMFAVerify:
 
 
 # ===========================================================================
-# Section D — POST /admin/auth/mfa/disable  (≥3 cases)
+# Section D — POST /auth/admin/mfa/disable  (≥3 cases)
 # ===========================================================================
 
 
@@ -830,7 +830,7 @@ class TestMFADisable:
 
 
 # ===========================================================================
-# Section E — GET /admin/auth/mfa/status  (≥3 cases)
+# Section E — GET /auth/admin/mfa/status  (≥3 cases)
 # ===========================================================================
 
 
@@ -901,7 +901,7 @@ class TestMFAStatus:
 
 
 # ===========================================================================
-# Section F — POST /admin/auth/mfa/backup-codes/regenerate  (≥3 cases)
+# Section F — POST /auth/admin/mfa/backup-codes/regenerate  (≥3 cases)
 # ===========================================================================
 
 

@@ -611,26 +611,31 @@ kubectl -n argus logs -f deploy/argus-backend `
 
 ## 10. MFA enrollment & enforcement (C7-T03)
 
-> Cycle 7 deliverable, mounted at `/api/v1/admin/auth/mfa/*`. Foundation (DAO + Fernet keyring + Alembic 032) ships with C7-T01; the HTTP surface and the super-admin policy gate ship with C7-T03. Audience: SRE on-call + admin operators rolling out MFA to a fresh deployment.
+> Cycle 7 deliverable, mounted at `/api/v1/auth/admin/mfa/*` (matches the
+> sibling `admin_auth.py` router prefix `"/auth/admin"` — auth-domain
+> first, admin-namespace nested). Foundation (DAO + Fernet keyring +
+> Alembic 032) ships with C7-T01; the HTTP surface and the super-admin
+> policy gate ship with C7-T03. Audience: SRE on-call + admin operators
+> rolling out MFA to a fresh deployment.
 
 ### 10.1 Endpoint reference
 
-All endpoints sit under `/api/v1/admin/auth/mfa/*`, return JSON, and require an authenticated admin session (the existing `require_admin` gate — same auth modes as the rest of the admin surface). Successful proofs additionally stamp `admin_sessions.mfa_passed_at` so the new `require_admin_mfa_passed` gate (§10.3) accepts the same session for sensitive routes.
+All endpoints sit under `/api/v1/auth/admin/mfa/*`, return JSON, and require an authenticated admin session (the existing `require_admin` gate — same auth modes as the rest of the admin surface). Successful proofs additionally stamp `admin_sessions.mfa_passed_at` so the new `require_admin_mfa_passed` gate (§10.3) accepts the same session for sensitive routes.
 
 | Method | Path | Body / params | Success (2xx) | Failure surface |
 | ------ | ---- | ------------- | ------------- | --------------- |
-| `POST` | `/admin/auth/mfa/enroll` | _none_ | `200 MFAEnrollResponse` — `secret_uri` (otpauth://), `qr_data_uri=null`, `backup_codes` (returned ONCE) | `409 mfa_already_enabled`, `429` (per-user+IP burst) |
-| `POST` | `/admin/auth/mfa/confirm` | `{ "totp_code": "NNNNNN" }` | `200 MFAConfirmResponse` — `enabled=true`, `enabled_at`. Atomically calls `mark_session_mfa_passed` so the operator does not need a separate verify hop after enrolling. | `400 invalid_totp` / `400 no_pending_enrollment`, `409 mfa_already_enabled`, `429` |
-| `POST` | `/admin/auth/mfa/verify` | `{ "totp_code": "NNNNNN" }` **or** `{ "backup_code": "..." }` (XOR enforced by Pydantic) | `200 MFAVerifyResponse` — `verified=true`, `mfa_passed_at`, `remaining_backup_codes` | `401 mfa_verify_failed` (single detail across both paths so a brute-forcer cannot tell TOTP-typo vs backup-code-typo apart), `409 mfa_not_enabled`, `429` |
-| `POST` | `/admin/auth/mfa/disable` | Same XOR proof as `/verify` | `200 MFADisableResponse` — `disabled=true`, `disabled_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
-| `GET` | `/admin/auth/mfa/status` | _none_ | `200 MFAStatusResponse` — `enabled`, `enrolled_at`, `remaining_backup_codes`, `mfa_passed_for_session` | `401` (unauthenticated) |
-| `POST` | `/admin/auth/mfa/backup-codes/regenerate` | Same XOR proof as `/verify` | `200 BackupCodesRegenerateResponse` — fresh `backup_codes` (ONCE) + `generated_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
+| `POST` | `/auth/admin/mfa/enroll` | _none_ | `200 MFAEnrollResponse` — `secret_uri` (otpauth://), `qr_data_uri=null`, `backup_codes` (returned ONCE) | `409 mfa_already_enabled`, `429` (per-user+IP burst) |
+| `POST` | `/auth/admin/mfa/confirm` | `{ "totp_code": "NNNNNN" }` | `200 MFAConfirmResponse` — `enabled=true`, `enabled_at`. Atomically calls `mark_session_mfa_passed` so the operator does not need a separate verify hop after enrolling. | `400 invalid_totp` / `400 no_pending_enrollment`, `409 mfa_already_enabled`, `429` |
+| `POST` | `/auth/admin/mfa/verify` | `{ "totp_code": "NNNNNN" }` **or** `{ "backup_code": "..." }` (XOR enforced by Pydantic) | `200 MFAVerifyResponse` — `verified=true`, `mfa_passed_at`, `remaining_backup_codes` | `401 mfa_verify_failed` (single detail across both paths so a brute-forcer cannot tell TOTP-typo vs backup-code-typo apart), `409 mfa_not_enabled`, `429` |
+| `POST` | `/auth/admin/mfa/disable` | Same XOR proof as `/verify` | `200 MFADisableResponse` — `disabled=true`, `disabled_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
+| `GET` | `/auth/admin/mfa/status` | _none_ | `200 MFAStatusResponse` — `enabled`, `enrolled_at`, `remaining_backup_codes`, `mfa_passed_for_session` | `401` (unauthenticated) |
+| `POST` | `/auth/admin/mfa/backup-codes/regenerate` | Same XOR proof as `/verify` | `200 BackupCodesRegenerateResponse` — fresh `backup_codes` (ONCE) + `generated_at` | `401 mfa_verify_failed`, `409 mfa_not_enabled`, `429` |
 
 Curl walk-through (replace `<HOST>` and `<COOKIE>`):
 
 ```bash
 # 1. Enroll — captures the otpauth URI + first 10 backup codes (last time you see them).
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/enroll" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/enroll" \
   -b "argus.admin.session=<COOKIE>" \
   -H "Accept: application/json"
 # {
@@ -640,36 +645,36 @@ curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/enroll" \
 # }
 
 # 2. Confirm — paste the 6-digit code from your authenticator app.
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/confirm" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/confirm" \
   -b "argus.admin.session=<COOKIE>" \
   -H "content-type: application/json" \
   -d '{"totp_code":"123456"}'
 
 # 3. Re-verify on subsequent sessions (TOTP).
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/verify" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/verify" \
   -b "argus.admin.session=<COOKIE>" \
   -H "content-type: application/json" \
   -d '{"totp_code":"123456"}'
 
 # 4. Re-verify with a backup code (consumed on success — single use).
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/verify" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/verify" \
   -b "argus.admin.session=<COOKIE>" \
   -H "content-type: application/json" \
   -d '{"backup_code":"1a2b-3c4d-5e6f"}'
 
 # 5. Snapshot.
-curl -sS "https://<HOST>/api/v1/admin/auth/mfa/status" \
+curl -sS "https://<HOST>/api/v1/auth/admin/mfa/status" \
   -b "argus.admin.session=<COOKIE>"
 # {"enabled":true,"enrolled_at":"...","remaining_backup_codes":9,"mfa_passed_for_session":true}
 
 # 6. Mint a fresh batch of backup codes (prior batch is invalidated server-side).
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/backup-codes/regenerate" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/backup-codes/regenerate" \
   -b "argus.admin.session=<COOKIE>" \
   -H "content-type: application/json" \
   -d '{"totp_code":"123456"}'
 
 # 7. Disable (requires a fresh proof; same XOR shape as /verify).
-curl -sS -X POST "https://<HOST>/api/v1/admin/auth/mfa/disable" \
+curl -sS -X POST "https://<HOST>/api/v1/auth/admin/mfa/disable" \
   -b "argus.admin.session=<COOKIE>" \
   -H "content-type: application/json" \
   -d '{"totp_code":"123456"}'
@@ -776,7 +781,7 @@ For the Fernet keyring used to encrypt TOTP seeds at rest, follow the rotation c
    ```
 
 4. Hand the printed codes back to the operator over the same out-of-band channel (the `regenerate_backup_codes` DAO returns plaintext exactly once; the call commits bcrypt hashes server-side — there is no second chance to read them).
-5. Operator uses one of the new codes to call `/admin/auth/mfa/verify`, then `/admin/auth/mfa/disable` (proof body), then `/admin/auth/mfa/enroll` against the new device.
+5. Operator uses one of the new codes to call `/auth/admin/mfa/verify`, then `/auth/admin/mfa/disable` (proof body), then `/auth/admin/mfa/enroll` against the new device.
 6. Record the chain (ticket, who minted, who consumed) in `ai_docs/operations/incident-log.md`.
 
 **Fallback path — temporary `mfa_enabled=false` toggle (DO NOT prefer).**
@@ -811,7 +816,7 @@ COMMIT;
 ```
 
 After the SQL flip:
-- Notify the operator out-of-band; they MUST log in fresh and immediately walk through `/admin/auth/mfa/enroll` + `/confirm`.
+- Notify the operator out-of-band; they MUST log in fresh and immediately walk through `/auth/admin/mfa/enroll` + `/confirm`.
 - Append to `ai_docs/operations/incident-log.md`: who flipped, the change-ticket link, expected re-enrolment deadline (≤ 24 h).
 - Add a follow-up calendar reminder to verify `mfa_enabled = true` on the operator within 24 h. If they have not re-enrolled, mass-revoke their sessions again (§4.4) until they do.
 

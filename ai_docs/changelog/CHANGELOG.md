@@ -8,9 +8,9 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ### Cycle 7 — C7-T03 MFA endpoints + super-admin enforcement (2026-04-23)
 
-#### Added — admin MFA HTTP surface (`/api/v1/admin/auth/mfa/*`)
+#### Added — admin MFA HTTP surface (`/api/v1/auth/admin/mfa/*`)
 - **Pydantic schemas** `backend/src/api/admin/schemas/mfa.py` — `MFAEnrollResponse`, `MFAConfirmRequest`, `MFAConfirmResponse`, `MFAVerifyRequest`, `MFAVerifyResponse`, `MFADisableRequest`, `MFADisableResponse`, `MFAStatusResponse`, `BackupCodesRegenerateResponse`. All carry `ConfigDict(extra="forbid")`; `MFAVerifyRequest` / `MFADisableRequest` enforce a `model_validator(after)` `totp_code XOR backup_code` shape so the verify-path proof can never be ambiguous.
-- **Router** `backend/src/api/admin/mfa.py` (mounted at `/admin/auth/mfa` → `/api/v1/admin/auth/mfa` after the global prefix in `main.py`). Six endpoints:
+- **Router** `backend/src/api/admin/mfa.py` (mounted at `/auth/admin/mfa` → `/api/v1/auth/admin/mfa` after the global prefix in `main.py`; matches the sibling `admin_auth.py` router prefix `"/auth/admin"` — auth-domain first, admin-namespace nested). Six endpoints:
   - `POST /enroll` → mints TOTP seed + plaintext backup codes (returned ONCE). Returns 409 `mfa_already_enabled` when the user is already enrolled. `qr_data_uri=None` deliberately — no `qrcode` / `segno` library is pinned in `backend/requirements.txt`; the frontend renders the otpauth URI itself (TODO referenced in module docstring).
   - `POST /confirm` → finalises the enrolment with a 6-digit TOTP, atomically calls `mark_session_mfa_passed` so the operator does not have to re-verify before their next sensitive action.
   - `POST /verify` → step-up auth via TOTP **or** backup code (XOR enforced by Pydantic). Bad proof → **401 `mfa_verify_failed`** (single detail across both proof paths so a brute-forcer cannot fingerprint TOTP vs backup-code typos).
@@ -59,7 +59,7 @@ Every POST / PUT / PATCH / DELETE that mutates user / tenant / role / secret sta
 | `api/routers/cache.py` | `/cache/warm` | POST | side-effecting cache prime |
 | `api/routers/internal_va.py` | `/internal/va-tools/enqueue` | POST | enqueues sandbox VA work |
 
-The `/admin/auth/mfa/*` endpoints themselves stay on `require_admin` — gating them on `require_admin_mfa_passed` would make first-time enrolment impossible.
+The `/auth/admin/mfa/*` endpoints themselves stay on `require_admin` — gating them on `require_admin_mfa_passed` would make first-time enrolment impossible.
 
 #### Documented
 - `docs/operations/admin-sessions.md` §10 — new "MFA enrollment & enforcement" section: 6-endpoint table with curl examples, `401 mfa_required` / `403 mfa_enrollment_required` envelopes, `X-MFA-Required` / `X-MFA-Enrollment-Required` header semantics, how to flip `ADMIN_MFA_ENFORCE_ROLES`, link out to the existing Fernet rotation cookbook in `backend/.env.example`, and the lost-MFA-device incident playbook (DBA-assisted SQL recovery — backup codes preferred over `mfa_enabled=false` toggle).
