@@ -973,10 +973,17 @@ class TestMFAVerifyRateLimit:
     async def test_sixth_wrong_totp_attempt_returns_429(
         self, mfa_client: AsyncClient, session_factory: Any
     ) -> None:
-        """G1 — 5 wrong TOTPs are 401, the 6th is 429 with Retry-After."""
+        """G1 — 5 wrong TOTPs are 401, the 6th is 429 with Retry-After.
+
+        DEBUG-1 follow-up — ``/confirm`` now also consumes from the
+        same per-(subject, IP) bucket, so the enrol+confirm helper
+        burns 1 token. Reset the limiter between setup and the
+        rate-limit assertion so the budget under test starts fresh.
+        """
         await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
         await _login(mfa_client, subject=_SUBJECT_ADMIN)
         await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
+        mfa_router._reset_verify_rate_limiter_for_tests()
 
         body = {"totp_code": "000000"}
         statuses = [
@@ -1046,6 +1053,93 @@ class TestMFAVerifyRateLimit:
             _MFA_PREFIX + "/verify", json={"totp_code": "000000"}
         )
         assert after.status_code == 401, after.text  # bucket refilled → 401, not 429
+
+    async def test_confirm_rate_limited_after_5_attempts(
+        self, mfa_client: AsyncClient, session_factory: Any
+    ) -> None:
+        """G4 — DEBUG-1 follow-up: 6 wrong /confirm codes → the 6th 429s.
+
+        Brute-forcing /confirm against a pending enrolment would otherwise
+        let an attacker test 60 codes/minute against the 6-digit TOTP
+        seed. With the shared per-(subject, IP) bucket, attempts 1–5 hit
+        the in-handler 400 ``invalid_totp`` path and the 6th lands at
+        429 with ``Retry-After``.
+        """
+        await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
+        await _login(mfa_client, subject=_SUBJECT_ADMIN)
+        await mfa_client.post(_MFA_PREFIX + "/enroll", json={})
+
+        body = {"totp_code": "000000"}
+        statuses = [
+            (await mfa_client.post(_MFA_PREFIX + "/confirm", json=body)).status_code
+            for _ in range(5)
+        ]
+        assert statuses == [400] * 5, statuses
+
+        sixth = await mfa_client.post(_MFA_PREFIX + "/confirm", json=body)
+        assert sixth.status_code == 429, sixth.text
+        assert sixth.headers.get("Retry-After") is not None
+        assert int(sixth.headers["Retry-After"]) >= 1
+
+    async def test_disable_rate_limited_after_5_attempts(
+        self, mfa_client: AsyncClient, session_factory: Any
+    ) -> None:
+        """G5 — DEBUG-1 follow-up: 6 wrong /disable proofs → the 6th 429s.
+
+        Worst-case abuse path: a stolen-cookie attacker brute-forces the
+        6-digit TOTP space against /disable to permanently strip MFA
+        from the account. The shared bucket makes the 6th attempt 429
+        with ``Retry-After`` set so the brute-forcer hits a hard ceiling
+        instead of running unbounded.
+        """
+        await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
+        await _login(mfa_client, subject=_SUBJECT_ADMIN)
+        await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
+        mfa_router._reset_verify_rate_limiter_for_tests()
+
+        body = {"totp_code": "000000"}
+        statuses = [
+            (await mfa_client.post(_MFA_PREFIX + "/disable", json=body)).status_code
+            for _ in range(5)
+        ]
+        assert statuses == [401] * 5, statuses
+
+        sixth = await mfa_client.post(_MFA_PREFIX + "/disable", json=body)
+        assert sixth.status_code == 429, sixth.text
+        assert sixth.headers.get("Retry-After") is not None
+        assert int(sixth.headers["Retry-After"]) >= 1
+
+    async def test_regenerate_rate_limited_after_5_attempts(
+        self, mfa_client: AsyncClient, session_factory: Any
+    ) -> None:
+        """G6 — DEBUG-1 follow-up: 6 wrong regen proofs → the 6th 429s.
+
+        Same threat model as /disable: a stolen cookie + brute-forced
+        TOTP would otherwise let the attacker mint a fresh batch of
+        backup codes (silently invalidating the operator's printed list).
+        """
+        await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
+        await _login(mfa_client, subject=_SUBJECT_ADMIN)
+        await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
+        mfa_router._reset_verify_rate_limiter_for_tests()
+
+        body = {"totp_code": "000000"}
+        statuses = [
+            (
+                await mfa_client.post(
+                    _MFA_PREFIX + "/backup-codes/regenerate", json=body
+                )
+            ).status_code
+            for _ in range(5)
+        ]
+        assert statuses == [401] * 5, statuses
+
+        sixth = await mfa_client.post(
+            _MFA_PREFIX + "/backup-codes/regenerate", json=body
+        )
+        assert sixth.status_code == 429, sixth.text
+        assert sixth.headers.get("Retry-After") is not None
+        assert int(sixth.headers["Retry-After"]) >= 1
 
 
 # ===========================================================================

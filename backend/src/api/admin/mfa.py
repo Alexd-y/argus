@@ -23,12 +23,14 @@ Security invariants
   401 ``Authentication required`` on miss). The principal carries the
   calling admin subject — clients cannot enrol or modify a *different*
   account from this surface.
-* **Per-user rate limit on /verify.** A token-bucket limiter keyed on
-  ``(subject, source-IP)`` caps verify attempts at 5/min/user (default;
-  configurable via ``ADMIN_MFA_VERIFY_RATE_LIMIT_PER_MINUTE``). Defends
-  against brute-forcing the 6-digit TOTP space — at 5/min the expected
-  time-to-hit on a random 6-digit code is ~3.8 hours, well above the
-  30-second TOTP step.
+* **Per-user rate limit on /verify, /confirm, /disable,
+  /backup-codes/regenerate.** A token-bucket limiter keyed on
+  ``(subject, source-IP)`` caps sensitive-MFA attempts at 5/min/user.
+  Defends against brute-forcing the 6-digit TOTP space (or the 16-char
+  backup-code namespace) — at 5/min the expected time-to-hit on a
+  random 6-digit code is ~3.8 hours, well above the 30-second TOTP
+  step. The same bucket is shared across all four endpoints so an
+  attacker cannot side-step the cap by alternating handlers.
 * **No secret material in logs.** TOTP codes, backup codes (plaintext
   or hash), and the Fernet ciphertext NEVER cross the structured-log
   boundary. Every event uses ``argus.auth.admin_mfa.*`` with bounded,
@@ -328,6 +330,37 @@ def _reset_verify_rate_limiter_for_tests() -> None:
     _VERIFY_RATE_LIMITER = None
 
 
+async def _acquire_verify_token(request: Request, subject: str) -> None:
+    """Consume one token from the per-(subject, IP) verify bucket or 429.
+
+    Shared across :func:`admin_mfa_verify`, :func:`admin_mfa_confirm`,
+    :func:`admin_mfa_disable`, and :func:`admin_mfa_regenerate_backup_codes`
+    so brute-force attempts that alternate between handlers (e.g. wrong
+    TOTP on /verify, then wrong proof on /disable) all draw from the
+    same 5/min/user cap. Raises HTTP 429 with ``Retry-After`` (always
+    >= 1) and emits ``argus.auth.admin_mfa.verify_rate_limited`` for the
+    SOC's SIEM rule.
+    """
+    client_ip = _client_ip(request)
+    limiter = await _get_verify_rate_limiter()
+    allowed, retry_after = await limiter.acquire(key=(subject, client_ip))
+    if allowed:
+        return
+    logger.info(
+        "admin_mfa_verify_rate_limited",
+        extra={
+            "event": "argus.auth.admin_mfa.verify_rate_limited",
+            "subject": subject,
+            "retry_after_seconds": round(retry_after, 3),
+        },
+    )
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail="Too many MFA verify attempts. Please try again later.",
+        headers={"Retry-After": str(max(1, int(retry_after) + 1))},
+    )
+
+
 # ---------------------------------------------------------------------------
 # DB read helpers.
 #
@@ -538,10 +571,12 @@ async def admin_mfa_enroll(
         400: {"description": "Invalid TOTP or no pending enrolment"},
         401: {"description": "Authentication required"},
         409: {"description": "MFA is already enabled for this account"},
+        429: {"description": "Too many MFA verify attempts; honour Retry-After"},
     },
 )
 async def admin_mfa_confirm(
     body: MFAConfirmRequest,
+    request: Request,
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFAConfirmResponse:
@@ -558,6 +593,8 @@ async def admin_mfa_confirm(
     by ``/enroll`` for the same condition.
     """
     subject = session.principal.subject
+
+    await _acquire_verify_token(request, subject)
 
     snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
     if snapshot is None:
@@ -691,24 +728,8 @@ async def admin_mfa_verify(
     ``/status`` already reports for the calling session.
     """
     subject = session.principal.subject
-    client_ip = _client_ip(request)
 
-    limiter = await _get_verify_rate_limiter()
-    allowed, retry_after = await limiter.acquire(key=(subject, client_ip))
-    if not allowed:
-        logger.info(
-            "admin_mfa_verify_rate_limited",
-            extra={
-                "event": "argus.auth.admin_mfa.verify_rate_limited",
-                "subject": subject,
-                "retry_after_seconds": round(retry_after, 3),
-            },
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many MFA verify attempts. Please try again later.",
-            headers={"Retry-After": str(max(1, int(retry_after) + 1))},
-        )
+    await _acquire_verify_token(request, subject)
 
     snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
     if snapshot is None:
@@ -863,10 +884,12 @@ async def _verify_fresh_proof_or_401(
     responses={
         401: {"description": "Authentication required OR invalid MFA proof"},
         409: {"description": "MFA is not enabled for this account"},
+        429: {"description": "Too many MFA verify attempts; honour Retry-After"},
     },
 )
 async def admin_mfa_disable(
     body: MFADisableRequest,
+    request: Request,
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> MFADisableResponse:
@@ -874,9 +897,15 @@ async def admin_mfa_disable(
 
     Even with a fresh ``mfa_passed_at`` on the session, the admin MUST
     re-prove possession in the request body — disable is privileged
-    enough that we never trust session state alone.
+    enough that we never trust session state alone. The same per-(subject,
+    IP) rate-limit bucket as ``/verify`` throttles brute-force attempts
+    against the proof body — disable without throttle is the worst-case
+    abuse path because a stolen cookie + 6-digit TOTP brute could
+    permanently strip MFA from the account.
     """
     subject = session.principal.subject
+
+    await _acquire_verify_token(request, subject)
 
     snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
     if snapshot is None:
@@ -939,10 +968,12 @@ async def admin_mfa_disable(
     responses={
         401: {"description": "Authentication required OR invalid MFA proof"},
         409: {"description": "MFA is not enabled for this account"},
+        429: {"description": "Too many MFA verify attempts; honour Retry-After"},
     },
 )
 async def admin_mfa_regenerate_backup_codes(
     body: MFADisableRequest,
+    request: Request,
     session: Annotated[_MfaSession, Depends(require_admin_session_principal)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> BackupCodesRegenerateResponse:
@@ -953,6 +984,8 @@ async def admin_mfa_regenerate_backup_codes(
     consistent "fresh proof required" envelope across both ops.
     """
     subject = session.principal.subject
+
+    await _acquire_verify_token(request, subject)
 
     snapshot = await _load_admin_mfa_snapshot(db, subject=subject)
     if snapshot is None:

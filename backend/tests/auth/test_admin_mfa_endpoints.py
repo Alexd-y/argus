@@ -613,10 +613,19 @@ async def test_verify_with_unknown_backup_code_returns_401_mfa_verify_failed(
 async def test_verify_rate_limit_trips_at_sixth_wrong_attempt_with_retry_after(
     mfa_client: AsyncClient, session_factory: Any
 ) -> None:
-    """Per-(subject, IP) bucket caps verify attempts at 5/min — the 6th 429s."""
+    """Per-(subject, IP) bucket caps verify attempts at 5/min — the 6th 429s.
+
+    DEBUG-1 follow-up — ``/confirm`` now also draws from the same per-
+    ``(subject, IP)`` bucket as ``/verify`` (see
+    :func:`admin_mfa_router._acquire_verify_token`), so the
+    enrol-and-confirm helper used in setup burns one token before the
+    rate-limit assertion loop. Reset the limiter between setup and the
+    body of the test so the 5/min budget under test starts fresh.
+    """
     await _seed_admin(session_factory, subject=_SUBJECT_ADMIN)
     await _login(mfa_client, subject=_SUBJECT_ADMIN)
     await _enroll_and_confirm(mfa_client, subject=_SUBJECT_ADMIN)
+    admin_mfa_router._reset_verify_rate_limiter_for_tests()
 
     body = {"totp_code": "000000"}
     statuses: list[int] = []
