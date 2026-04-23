@@ -794,20 +794,20 @@ async def mark_session_mfa_passed(
 
     Implementation note — identity-map invariant
     --------------------------------------------
-    A bulk ``UPDATE`` (``Session.execute(update(AdminSession)…)``) does
-    NOT reliably propagate through SQLAlchemy's identity map for cached
-    :class:`AdminSession` instances when the WHERE clause uses a
-    non-primary-key column (``session_token_hash`` here, not
-    ``session_id``). Even ``synchronize_session="fetch"`` silently leaves
-    the cached attribute stale, which means the very next
-    ``session.get(AdminSession, sid)`` returns the pre-write value and
-    the router would mis-gate the MFA window.
+    A bulk ``UPDATE`` (``Session.execute(update(AdminSession)…)``) is
+    historically risky for refresh propagation through SQLAlchemy's
+    identity map for cached :class:`AdminSession` instances; even with
+    ``synchronize_session="fetch"`` the cached attribute can drift from
+    the persisted value, which means the very next
+    ``session.get(AdminSession, token_hash)`` returns the pre-write
+    value and the router would mis-gate the MFA window.
 
-    To keep the contract "after this call, any read in the same session
-    sees the new ``mfa_passed_at``" we load through the ORM
-    (``select(AdminSession)``), assign on the loaded instance, and let
-    the unit-of-work emit the UPDATE on flush. The ORM's natural change
-    tracker keeps the cached row consistent with the persisted row.
+    Post-031 (``session_token_hash`` is now the primary key) the bulk
+    update is safer than it used to be, but we keep the load-+-flush
+    pattern below because it preserves the contract "after this call,
+    any read in the same session sees the new ``mfa_passed_at``"
+    without depending on a synchronisation strategy that has historically
+    been quirky on SQLite.
     """
     if not session_token_hash or not session_token_hash.strip():
         logger.warning(

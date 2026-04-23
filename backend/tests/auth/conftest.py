@@ -97,13 +97,17 @@ _REVISION: str = "028"
 #: directly because 029 touches an unrelated ``tenants`` table that the
 #: admin tests never reference.
 _REVISION_030: str = "030"
+#: Alembic 031 (C7-T07) drops the legacy raw ``session_id`` column and
+#: promotes ``session_token_hash`` to the sole PK. The ORM
+#: ``AdminSession`` model declares only ``session_token_hash``; without
+#: applying 031 the SQLite schema still carries the old ``session_id``
+#: NOT-NULL PK and every ``create_session`` flush blows up on the missing
+#: kw-only argument.
+_REVISION_031: str = "031"
 #: Alembic 032 (C7-T01) adds the admin-MFA columns (``mfa_enabled``,
 #: ``mfa_secret_encrypted``, ``mfa_backup_codes_hash``) to ``admin_users``
-#: and ``mfa_passed_at`` to ``admin_sessions``. The ORM models declared
-#: in :mod:`src.db.models` already reference these columns, so the
-#: 028→030→032 chain is the *only* SQLite shape that keeps every
-#: ``admin_users`` / ``admin_sessions`` flush legal during a test run.
-#: (031 lands later in C7-T07 and rebases 032 to ``Revises: 031``.)
+#: and ``mfa_passed_at`` to ``admin_sessions``. Rebased to ``Revises: 031``
+#: in C7-T07; the chain is now 028 → 030 → 031 → 032.
 _REVISION_032: str = "032"
 
 
@@ -121,23 +125,26 @@ def _load_revision_module(revision: str = _REVISION) -> Any:
 
 
 def _apply_admin_sessions_schema_sync(conn: Any) -> None:
-    """Apply 028 → 030 → 032 ``upgrade()`` — yields the post-032 admin schema.
+    """Apply 028 → 030 → 031 → 032 ``upgrade()`` — yields the post-032 schema.
 
     Skipping 029 is intentional: it only touches ``tenants.pdf_archival_format``
     and the auth tests never touch that table, so a partial chain keeps the
     fixture deterministic and Postgres-free.
 
-    032 (C7-T01) adds the MFA columns required by the ORM
-    (``mfa_enabled`` / ``mfa_secret_encrypted`` / ``mfa_backup_codes_hash``
-    on ``admin_users`` and ``mfa_passed_at`` on ``admin_sessions``). Without
-    this hop, every ``AdminUser`` / ``AdminSession`` flush hits
-    ``OperationalError: no such column`` because the ORM model declares
-    columns the 030 schema does not yet have.
+    030 (Cycle 6) adds ``session_token_hash``; 031 (C7-T07) drops the legacy
+    ``session_id`` column and promotes ``session_token_hash`` to PK; 032
+    (C7-T01) adds the MFA columns required by the ORM (``mfa_enabled`` /
+    ``mfa_secret_encrypted`` / ``mfa_backup_codes_hash`` on ``admin_users``
+    and ``mfa_passed_at`` on ``admin_sessions``). Without each hop, every
+    ``AdminUser`` / ``AdminSession`` flush hits ``OperationalError: no such
+    column`` (or "NOT NULL constraint failed: session_id" if 031 is skipped)
+    because the ORM model and the on-disk schema would diverge.
     """
     ctx = MigrationContext.configure(conn)
     with Operations.context(ctx):
         _load_revision_module(_REVISION).upgrade()
         _load_revision_module(_REVISION_030).upgrade()
+        _load_revision_module(_REVISION_031).upgrade()
         _load_revision_module(_REVISION_032).upgrade()
 
 

@@ -1,4 +1,4 @@
-"""Admin session lifecycle — create / revoke / resolve (ISS-T20-003 Phase 1).
+"""Admin session lifecycle — create / revoke / resolve (ISS-T20-003 Phase 1+2c).
 
 Design invariants
 -----------------
@@ -35,18 +35,16 @@ Design invariants
   (``X-Admin-Key`` shim) keeps working so a forgotten config knob never
   bricks admin access entirely.
 
-Grace window (Alembic 030 → 031)
---------------------------------
-For the duration of one full TTL after the 030 deploy:
-
-* ``create_session`` mirrors the raw token into ``session_id`` when
-  ``ADMIN_SESSION_LEGACY_RAW_WRITE=true`` (default), so a deploy rollback
-  does not invalidate live cookies.
-* ``resolve_session`` falls back to a legacy ``session_id`` lookup when the
-  hash lookup misses AND ``ADMIN_SESSION_LEGACY_RAW_FALLBACK=true``
-  (default), then opportunistically backfills ``session_token_hash`` on the
-  row. Two TTL windows after deploy: flip both flags OFF, run Alembic 031
-  to drop ``session_id``.
+Post Alembic 031 — single resolution path
+-----------------------------------------
+The 030 → 031 grace window has been closed (C7-T07 / ISS-T20-003 Phase 2c).
+The legacy raw ``session_id`` column is dropped; ``session_token_hash`` is
+the sole primary key. Both code paths previously gated by
+``ADMIN_SESSION_LEGACY_RAW_WRITE`` / ``ADMIN_SESSION_LEGACY_RAW_FALLBACK``
+have been removed: ``create_session`` writes only the hash, ``revoke_session``
+and ``resolve_session`` look up only by hash, and there is no opportunistic
+backfill. Any session minted before Alembic 030 (``session_token_hash``
+NULL) was unreachable post-031 and must be re-issued.
 """
 
 from __future__ import annotations
@@ -57,9 +55,7 @@ import logging
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Final
-
-from typing import cast
+from typing import Any, Final, cast
 
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -220,12 +216,7 @@ async def create_session(
     now = _utcnow()
     expires_at = now + timedelta(seconds=ttl)
 
-    legacy_raw_value = (
-        session_id if settings.admin_session_legacy_raw_write else token_hash
-    )
-
     row = AdminSession(
-        session_id=legacy_raw_value,
         session_token_hash=token_hash,
         subject=canonical_subject,
         role=canonical_role,
@@ -247,7 +238,6 @@ async def create_session(
             "role": canonical_role,
             "tenant_id_present": canonical_tenant is not None,
             "ttl_seconds": ttl,
-            "legacy_raw_write": settings.admin_session_legacy_raw_write,
         },
     )
     return session_id, row
@@ -264,48 +254,33 @@ async def revoke_session(
     missing or already revoked. Idempotent — calling twice on the same id
     is a no-op on the second call. Callers commit the transaction.
 
-    Looks up the row via ``session_token_hash`` first; falls back to the
-    legacy ``session_id`` column when the hash lookup misses AND grace-window
-    fallback is enabled (covers tokens minted before Alembic 030).
+    Lookup is by ``session_token_hash`` only — the legacy raw ``session_id``
+    column was dropped in Alembic 031 (C7-T07 / ISS-T20-003 Phase 2c). When
+    the pepper is unset (so no hash can be computed) the call is a safe
+    no-op so a misconfigured deploy does not crash the request loop.
     """
-    if not session_id:
+    if not session_id or not is_session_pepper_configured():
+        return False
+
+    try:
+        token_hash = hash_session_token(session_id)
+    except ValueError:
         return False
 
     now = _utcnow()
-    revoked = False
-
-    if is_session_pepper_configured():
-        try:
-            token_hash = hash_session_token(session_id)
-        except ValueError:
-            token_hash = None
-        if token_hash is not None:
-            stmt = (
-                update(AdminSession)
-                .where(
-                    AdminSession.session_token_hash == token_hash,
-                    AdminSession.revoked_at.is_(None),
-                )
-                .values(revoked_at=now)
-            )
-            # ``cast``: SQLAlchemy 2.x returns ``Result[Any]`` from
-            # ``execute()``, but UPDATE statements always materialise a
-            # ``CursorResult`` whose ``.rowcount`` reports affected rows.
-            # Mypy needs the down-cast to see the attribute.
-            result = cast(CursorResult, await db.execute(stmt))
-            revoked = (result.rowcount or 0) > 0
-
-    if not revoked and settings.admin_session_legacy_raw_fallback:
-        stmt = (
-            update(AdminSession)
-            .where(
-                AdminSession.session_id == session_id,
-                AdminSession.revoked_at.is_(None),
-            )
-            .values(revoked_at=now)
+    stmt = (
+        update(AdminSession)
+        .where(
+            AdminSession.session_token_hash == token_hash,
+            AdminSession.revoked_at.is_(None),
         )
-        result = cast(CursorResult, await db.execute(stmt))
-        revoked = (result.rowcount or 0) > 0
+        .values(revoked_at=now)
+    )
+    # ``cast``: SQLAlchemy 2.x returns ``Result[Any]`` from ``execute()``,
+    # but UPDATE statements always materialise a ``CursorResult`` whose
+    # ``.rowcount`` reports affected rows. Mypy needs the down-cast.
+    result = cast(CursorResult[Any], await db.execute(stmt))
+    revoked = (result.rowcount or 0) > 0
 
     logger.info(
         "admin_session_revoked",
@@ -348,7 +323,7 @@ async def resolve_session(
     ttl = ttl_seconds if ttl_seconds is not None else settings.admin_session_ttl_seconds
     now = _utcnow()
 
-    row, matched_via = await _lookup_session_row(db, session_id)
+    row = await _lookup_session_row(db, session_id)
     if row is None:
         logger.info(
             "admin_session_resolve_miss",
@@ -384,23 +359,10 @@ async def resolve_session(
         return None
 
     new_expires_at = now + timedelta(seconds=ttl)
-    update_values: dict[str, object] = {
-        "last_used_at": now,
-        "expires_at": new_expires_at,
-    }
-
-    backfilled_hash = False
-    if matched_via == "legacy" and is_session_pepper_configured():
-        try:
-            update_values["session_token_hash"] = hash_session_token(session_id)
-            backfilled_hash = True
-        except ValueError:
-            pass
-
     update_stmt = (
         update(AdminSession)
-        .where(AdminSession.session_id == row.session_id)
-        .values(**update_values)
+        .where(AdminSession.session_token_hash == row.session_token_hash)
+        .values(last_used_at=now, expires_at=new_expires_at)
     )
     await db.execute(update_stmt)
 
@@ -411,8 +373,6 @@ async def resolve_session(
             "session_id_prefix": redact_session_id(session_id),
             "role": row.role,
             "tenant_id_present": row.tenant_id is not None,
-            "matched_via": matched_via,
-            "backfilled_hash": backfilled_hash,
         },
     )
 
@@ -428,59 +388,42 @@ async def resolve_session(
 
 async def _lookup_session_row(
     db: AsyncSession, session_id: str
-) -> tuple[AdminSession | None, str]:
-    """Return ``(row, matched_via)`` — primary hash lookup with legacy fallback.
+) -> AdminSession | None:
+    """Return the session row matching *session_id*, or ``None``.
 
-    ``matched_via`` is one of ``"hash"`` (Alembic 030 path),
-    ``"legacy"`` (raw ``session_id`` column hit during the grace window), or
-    ``"miss"`` (no row).
+    Lookup is by ``session_token_hash`` only — the legacy raw ``session_id``
+    column was dropped in Alembic 031. Returns ``None`` when the pepper is
+    unset (resolver is then permanently miss-only by construction) or when
+    no row matches.
 
-    Defence-in-depth: ``hmac.compare_digest`` re-validates equality against
-    whichever column the row was matched on, so an ORM-cache or dialect
-    quirk cannot turn a coincidental hit into a timing oracle.
+    Defence-in-depth: ``hmac.compare_digest`` re-validates equality of the
+    persisted hash against the freshly computed hash, so an ORM-cache or
+    dialect quirk cannot turn a coincidental hit into a timing oracle.
     """
-    if is_session_pepper_configured():
-        try:
-            token_hash = hash_session_token(session_id)
-        except ValueError:
-            token_hash = None
-        if token_hash is not None:
-            stmt = select(AdminSession).where(
-                AdminSession.session_token_hash == token_hash
-            )
-            row = (await db.execute(stmt)).scalar_one_or_none()
-            if row is not None:
-                if row.session_token_hash and hmac.compare_digest(
-                    row.session_token_hash, token_hash
-                ):
-                    return row, "hash"
-                logger.warning(
-                    "admin_session_resolve_mismatch",
-                    extra={
-                        "event": "argus.auth.admin_session.resolve_mismatch",
-                        "session_id_prefix": redact_session_id(session_id),
-                        "matched_via": "hash",
-                    },
-                )
-                return None, "miss"
-
-    if settings.admin_session_legacy_raw_fallback:
-        stmt = select(AdminSession).where(AdminSession.session_id == session_id)
-        row = (await db.execute(stmt)).scalar_one_or_none()
-        if row is not None:
-            if row.session_id and hmac.compare_digest(row.session_id, session_id):
-                return row, "legacy"
-            logger.warning(
-                "admin_session_resolve_mismatch",
-                extra={
-                    "event": "argus.auth.admin_session.resolve_mismatch",
-                    "session_id_prefix": redact_session_id(session_id),
-                    "matched_via": "legacy",
-                },
-            )
-            return None, "miss"
-
-    return None, "miss"
+    if not is_session_pepper_configured():
+        return None
+    try:
+        token_hash = hash_session_token(session_id)
+    except ValueError:
+        return None
+    stmt = select(AdminSession).where(
+        AdminSession.session_token_hash == token_hash
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        return None
+    if row.session_token_hash and hmac.compare_digest(
+        row.session_token_hash, token_hash
+    ):
+        return row
+    logger.warning(
+        "admin_session_resolve_mismatch",
+        extra={
+            "event": "argus.auth.admin_session.resolve_mismatch",
+            "session_id_prefix": redact_session_id(session_id),
+        },
+    )
+    return None
 
 
 def _ensure_aware(dt: datetime) -> datetime:

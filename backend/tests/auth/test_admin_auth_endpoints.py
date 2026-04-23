@@ -27,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
+from src.auth.admin_sessions import hash_session_token
 from src.auth.admin_users import hash_password
 from src.core.config import settings
 from src.db.models import AdminSession, AdminUser
@@ -240,7 +241,7 @@ async def test_logout_revokes_session_and_clears_cookie(
     assert "Max-Age=0" in deletion or "expires=Thu, 01 Jan 1970" in deletion.lower()
 
     async with session_factory() as s:
-        row = await s.get(AdminSession, session_id)
+        row = await s.get(AdminSession, hash_session_token(session_id))
         assert row is not None
         assert row.revoked_at is not None, (
             "logout MUST tombstone the session row in admin_sessions"
@@ -337,7 +338,7 @@ async def test_whoami_with_expired_session_returns_401(
     assert session_id and login.status_code == 200
 
     async with session_factory() as s:
-        row = await s.get(AdminSession, session_id)
+        row = await s.get(AdminSession, hash_session_token(session_id))
         assert row is not None
         row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=10)
         await s.commit()

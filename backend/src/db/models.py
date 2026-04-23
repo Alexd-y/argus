@@ -807,23 +807,22 @@ class AdminSession(Base):
 
     __tablename__ = "admin_sessions"
 
-    #: URL-safe base64 session id — opaque, CSPRNG-generated.
+    #: At-rest hash ``HMAC-SHA256(ADMIN_SESSION_PEPPER, raw_token)``. Hex digest,
+    #: 64 chars. PRIMARY KEY since Alembic 031 (C7-T07 / ISS-T20-003 Phase 2c).
     #:
-    #: Stays PRIMARY KEY during the 030 → 031 grace window so a deploy
-    #: rollback does not invalidate live tokens. New writes mirror the raw
-    #: token here only when ``ADMIN_SESSION_LEGACY_RAW_WRITE=true`` (default
-    #: ON). After two TTL windows (≥24 h) in production set the flag OFF and
-    #: run Alembic 031 to drop this column; ``session_token_hash`` then
-    #: becomes the sole primary key.
-    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    #: At-rest hash ``sha256(ADMIN_SESSION_PEPPER || raw_token)``. Hex digest,
-    #: 64 chars. UNIQUE-indexed; primary lookup column for resolve / revoke
-    #: after Alembic 030 (ISS-T20-003 hardening — defeat replay-from-DB-leak).
-    #: NULL only for pre-030 rows backfilled when ``ADMIN_SESSION_PEPPER`` was
-    #: unset; such rows are unreachable from the hash path and invalidate
-    #: after one TTL window.
-    session_token_hash: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, unique=True, index=True
+    #: The raw CSPRNG token (``secrets.token_urlsafe(48)``) never persists —
+    #: only its keyed digest does. A DB dump or read-only SQLi cannot be
+    #: replayed without the (server-side, non-persisted) pepper. Equality is
+    #: re-validated in the resolver via ``hmac.compare_digest`` so an
+    #: ORM-cache or dialect quirk cannot turn a coincidental hit into a
+    #: timing oracle.
+    #:
+    #: History: introduced as nullable + UNIQUE-indexed in Alembic 030
+    #: (Cycle 6 / Batch 6). The legacy raw ``session_id`` PK column was
+    #: dropped and ``session_token_hash`` promoted to PK in Alembic 031
+    #: (Cycle 7 / C7-T07).
+    session_token_hash: Mapped[str] = mapped_column(
+        String(64), primary_key=True
     )
     #: Admin subject (matches ``admin_users.subject``); kept denormalized so
     #: revocation lookups never need a join.

@@ -120,7 +120,7 @@ from src.db.session import get_db  # noqa: E402
 
 _BACKEND_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 _VERSIONS_DIR: Final[Path] = _BACKEND_ROOT / "alembic" / "versions"
-_MIGRATION_CHAIN: Final[tuple[str, ...]] = ("028", "030", "032")
+_MIGRATION_CHAIN: Final[tuple[str, ...]] = ("028", "030", "031", "032")
 
 _PASSWORD: Final[str] = "Tr0ub4dor&3-not-the-real-one"
 _SUBJECT_ADMIN: Final[str] = "c7-t03-admin@argus.example"
@@ -153,8 +153,12 @@ def _load_revision_module(revision: str) -> Any:
 
 
 def _apply_admin_mfa_schema_sync(conn: Any) -> None:
-    """Apply 028 → 030 → 032 in order. 029 (tenants column) is skipped
-    intentionally because no admin/MFA test references the tenants table.
+    """Apply 028 → 030 → 031 → 032 in order. 029 (tenants column) is
+    skipped intentionally because no admin/MFA test references the
+    tenants table. 031 drops the legacy ``admin_sessions.session_id``
+    column and promotes ``session_token_hash`` to PK NOT NULL — required
+    so the ORM-side INSERTs (which no longer mention ``session_id``)
+    don't trip the SQLite NOT NULL constraint left over from 028.
     """
     ctx = MigrationContext.configure(conn)
     with Operations.context(ctx):

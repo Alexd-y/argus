@@ -26,6 +26,7 @@ from src.auth.admin_sessions import (
     SessionPrincipal,
     create_session,
     generate_session_id,
+    hash_session_token,
     redact_session_id,
     resolve_session,
     revoke_session,
@@ -50,7 +51,10 @@ async def test_create_session_returns_id_and_persisted_row(session) -> None:
 
     assert isinstance(session_id, str)
     assert len(session_id) >= 60, "session id must carry >256 bits of entropy"
-    assert row.session_id == session_id
+    expected_hash = hash_session_token(session_id)
+    assert row.session_token_hash == expected_hash, (
+        "row PK must be the keyed at-rest digest, never the raw token"
+    )
     assert row.subject == "alice@example.com"
     assert row.role == "admin"
     assert row.tenant_id is None
@@ -60,8 +64,8 @@ async def test_create_session_returns_id_and_persisted_row(session) -> None:
     )
     assert row.user_agent_hash and "argus-tests" not in row.user_agent_hash
 
-    fetched = await session.get(AdminSession, session_id)
-    assert fetched is not None and fetched.session_id == session_id
+    fetched = await session.get(AdminSession, expected_hash)
+    assert fetched is not None and fetched.session_token_hash == expected_hash
 
 
 async def test_create_session_normalizes_role_aliases(session) -> None:
@@ -177,7 +181,7 @@ async def test_resolve_session_extends_ttl_sliding_window(session) -> None:
     await session.commit()
     assert principal is not None
 
-    refreshed = await session.get(AdminSession, sid)
+    refreshed = await session.get(AdminSession, hash_session_token(sid))
     assert refreshed is not None
     assert _ensure_aware(refreshed.expires_at) > _ensure_aware(initial_expires), (
         "sliding window: resolve must push expires_at forward"
@@ -225,7 +229,7 @@ async def test_resolve_session_returns_none_for_expired(session) -> None:
     )
     await session.commit()
 
-    fetched = await session.get(AdminSession, sid)
+    fetched = await session.get(AdminSession, hash_session_token(sid))
     assert fetched is not None
     fetched.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     await session.commit()
@@ -279,7 +283,7 @@ async def test_revoke_session_sets_revoked_at_timestamp(session) -> None:
     await revoke_session(session, session_id=sid)
     await session.commit()
 
-    fetched = await session.get(AdminSession, sid)
+    fetched = await session.get(AdminSession, hash_session_token(sid))
     assert fetched is not None
     assert fetched.revoked_at is not None
 
@@ -326,7 +330,7 @@ async def test_ip_and_ua_are_hashed_not_stored_plaintext(session) -> None:
     )
     await session.commit()
 
-    fetched = await session.get(AdminSession, sid)
+    fetched = await session.get(AdminSession, hash_session_token(sid))
     assert fetched is not None
     assert "198.51.100.42" not in fetched.ip_hash
     assert "Mozilla" not in fetched.user_agent_hash

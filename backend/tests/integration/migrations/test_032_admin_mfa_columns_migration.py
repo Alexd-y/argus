@@ -58,7 +58,7 @@ _BACKEND_ROOT: Path = Path(__file__).resolve().parents[3]
 _VERSIONS_DIR: Path = _BACKEND_ROOT / "alembic" / "versions"
 
 _REVISION = "032"
-_DOWN_REVISION = "030"
+_DOWN_REVISION = "031"
 _REVISION_028 = "028"
 _REVISION_030 = "030"
 
@@ -230,8 +230,15 @@ def _seed_pre_032_admin_session(
 def sqlite_engine() -> Iterator[Engine]:
     """In-memory sync SQLite engine with revisions 028 + 030 applied.
 
-    Yields the engine pre-loaded with the post-030 admin schema (the
-    canonical pre-032 baseline) so each test starts at a known shape.
+    Deliberately stops at 030 (NOT 031) so the test fixtures retain the
+    legacy ``session_id`` column that ``_seed_pre_032_admin_session``
+    writes to. The 032 upgrade adds MFA columns regardless of whether
+    031 has run — column-add operations on ``admin_users`` /
+    ``admin_sessions`` are independent of the ``session_id`` PK shape —
+    so this stub fixture proves the additive-only migration is robust
+    against the rollback shape (admin running 030 → 032 directly during
+    a partial deploy).
+
     Skipping 029 is intentional — same rationale as
     ``backend/tests/auth/conftest.py``: 029 only touches an unrelated
     ``tenants`` column and is not required to load 030 or 032.
@@ -257,15 +264,15 @@ def sqlite_engine() -> Iterator[Engine]:
 
 
 def test_032_revision_metadata_pinned() -> None:
-    """``revision='032'`` chains off ``030`` (031 lands later in C7-T07)."""
+    """``revision='032'`` chains off ``031`` (rebased in Cycle 7 / C7-T07)."""
     module = _load_revision_module(_REVISION)
     assert module.revision == _REVISION, (
         f"032 migration must declare revision={_REVISION!r}, "
         f"got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
-        f"032 migration must chain off {_DOWN_REVISION!r} until C7-T07 lands "
-        "031 — got " + repr(module.down_revision)
+        f"032 migration must chain off {_DOWN_REVISION!r} (post C7-T07 rebase); "
+        f"got {module.down_revision!r}"
     )
     assert module.branch_labels is None, "032 must not introduce a branch label"
     assert module.depends_on is None, "032 must not depend on another revision"

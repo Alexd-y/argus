@@ -64,8 +64,15 @@ _EXPECTED_USERS_COLUMNS: dict[str, bool] = {
     "disabled_at": True,
 }
 
+# 028 originally created ``session_id`` as the PK; Alembic 031 (Cycle 7 /
+# C7-T07) dropped that column and promoted ``session_token_hash`` (added in
+# 030) to the sole PK. The migration-side schema check below
+# (``test_upgrade_creates_admin_sessions_table``) still validates the
+# post-028 column shape — including ``session_id`` — directly via
+# ``inspect()`` against the freshly upgraded SQLite engine. The ORM-mirror
+# spec only carries the columns that survive in the live :class:`AdminSession`
+# model so this dict stays in sync with what the ORM exposes today.
 _EXPECTED_SESSIONS_COLUMNS: dict[str, bool] = {
-    "session_id": False,
     "subject": False,
     "role": False,
     "tenant_id": True,
@@ -159,13 +166,25 @@ def test_028_has_upgrade_and_downgrade_callables() -> None:
 
 
 def test_028_orm_admin_users_matches_spec() -> None:
-    """``AdminUser`` ORM must mirror the migration column-by-column."""
+    """``AdminUser`` ORM must mirror the migration column-by-column.
+
+    Columns added in *later* migrations (e.g. ``mfa_enabled`` /
+    ``mfa_secret_encrypted`` / ``mfa_backup_codes_hash`` in revision 032)
+    are excluded from this assertion — each subsequent migration carries
+    its own ``test_<rev>_orm_*_matches_spec`` test that pins its own
+    contract. Without this scoping the 028 test would fail every time a
+    new column lands on the table.
+    """
     from src.db.models import AdminUser
 
     assert AdminUser.__tablename__ == _USERS_TABLE
     table = cast(sa.Table, AdminUser.__table__)
 
-    column_shapes = {c.name: c.nullable for c in table.columns}
+    column_shapes = {
+        c.name: c.nullable
+        for c in table.columns
+        if c.name in _EXPECTED_USERS_COLUMNS
+    }
     assert column_shapes == _EXPECTED_USERS_COLUMNS, (
         f"AdminUser column shape drifted from spec:\n"
         f"  expected: {_EXPECTED_USERS_COLUMNS}\n"
@@ -201,9 +220,13 @@ def test_028_orm_admin_sessions_matches_spec() -> None:
         f"  got:      {column_shapes}"
     )
 
+    # 028 declared ``session_id`` as the PK; Alembic 031 (C7-T07) dropped
+    # ``session_id`` and promoted ``session_token_hash`` to the sole PK.
+    # The schema-side test below verifies the 028 PK shape on a freshly
+    # upgraded DB; the ORM-side assertion tracks the *current* model.
     pk = {col.name for col in table.primary_key.columns}
-    assert pk == {"session_id"}, (
-        f"AdminSession PK must be (session_id,), got {pk}"
+    assert pk == {"session_token_hash"}, (
+        f"AdminSession PK (post-031) must be (session_token_hash,), got {pk}"
     )
 
 

@@ -36,7 +36,12 @@ from fastapi import Depends, FastAPI, Request
 
 from src.api.routers.admin import require_admin
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
-from src.auth.admin_sessions import SessionPrincipal, create_session, revoke_session
+from src.auth.admin_sessions import (
+    SessionPrincipal,
+    create_session,
+    hash_session_token,
+    revoke_session,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -309,10 +314,11 @@ async def test_mode_both_session_resolve_slides_window(
     """Successful session resolution updates ``last_used_at`` (sliding window)."""
     sid = await _provision_session(session_factory)
 
+    token_hash = hash_session_token(sid)
     async with session_factory() as s:
         from src.db.models import AdminSession
 
-        row = await s.get(AdminSession, sid)
+        row = await s.get(AdminSession, token_hash)
         assert row is not None
         before = row.last_used_at
 
@@ -323,7 +329,7 @@ async def test_mode_both_session_resolve_slides_window(
     async with session_factory() as s:
         from src.db.models import AdminSession
 
-        row = await s.get(AdminSession, sid)
+        row = await s.get(AdminSession, token_hash)
         assert row is not None
         after = row.last_used_at
 

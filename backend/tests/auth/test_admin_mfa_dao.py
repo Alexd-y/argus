@@ -784,7 +784,7 @@ async def test_mark_session_mfa_passed_stamps_timestamp(
     await session.commit()
     after_ts = datetime.now(tz=timezone.utc)
 
-    refreshed = await session.get(AdminSession, sid)
+    refreshed = await session.get(AdminSession, token_hash)
     assert refreshed is not None
     assert refreshed.mfa_passed_at is not None, (
         "mark_session_mfa_passed must stamp mfa_passed_at"

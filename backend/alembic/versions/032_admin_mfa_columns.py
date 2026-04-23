@@ -1,7 +1,7 @@
 """Admin MFA columns — TOTP secret + backup codes + session mfa_passed_at.
 
 Revision ID: 032
-Revises: 030
+Revises: 031
 Create Date: 2026-04-22
 
 ARG-062 / Cycle 7 / C7-T01 / ISS-T20-003 Phase 2a Option 1.
@@ -24,11 +24,14 @@ application code (``Settings.admin_mfa_enforce_roles``), not at the DB layer
 
 Sequencing note (down_revision)
 -------------------------------
-The C7 plan sketch says ``Revises: 031`` but Cycle 7 task ``C7-T07`` (which
-creates the ``031_drop_legacy_admin_session_id`` migration) is scheduled for
-a later wave. Keeping ``032 → 030`` here is the only correct chain on
-``main`` today; ``C7-T07`` will rebase ``032`` to ``Revises: 031`` once
-``031`` lands. This avoids shipping a broken migration head.
+Rebased to ``Revises: 031`` in Cycle 7 / C7-T07 once
+``031_drop_legacy_admin_session_id`` landed. The MFA columns are
+schema-additive only (one boolean + two nullable columns on ``admin_users``,
+one nullable timestamp on ``admin_sessions``) and do not touch the
+``session_token_hash`` PK or the dropped ``session_id`` column, so the
+chain order (031 → 032) is independent of the column shape changes — but
+the canonical chain ordering matters for ``alembic heads`` + the
+production deploy story.
 
 Idempotency
 -----------
@@ -59,7 +62,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "032"
-down_revision: str | None = "030"
+down_revision: str | None = "031"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

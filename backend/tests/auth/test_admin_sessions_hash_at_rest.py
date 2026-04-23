@@ -3,7 +3,7 @@
 Critical follow-up tests for B6-T08: defends the contract that the raw
 CSPRNG bearer token NEVER reaches the database. Every persistence /
 resolve / revoke path must round-trip through
-``sha256(ADMIN_SESSION_PEPPER || raw_token)``; a database dump under a
+``HMAC-SHA256(ADMIN_SESSION_PEPPER, raw_token)``; a database dump under a
 different pepper must be fully unreplayable.
 
 Coverage matrix
@@ -15,21 +15,26 @@ Coverage matrix
    instead of crashing the request loop.
 4. A row inserted with a hash computed under a *different* pepper is
    unreachable — i.e. simulates the DB-leak attack.
-5. The 030 → 031 grace window: legacy rows (``session_token_hash`` NULL,
-   ``session_id`` populated with the raw token) resolve via the legacy
-   fallback, opportunistically backfill on first hit, and disable cleanly
-   when ``admin_session_legacy_raw_fallback=False``.
-6. ``revoke_session`` works through both the hash path and the legacy
-   fallback path.
+5. ``revoke_session`` works via the (now sole) hash path.
+6. Module surface contract: ``is_session_pepper_configured`` reflects
+   the live setting and the public helpers stay re-exported.
+
+History note
+------------
+Tests for the 030 → 031 grace-window legacy fallback path were removed in
+Cycle 7 / C7-T07 once Alembic 031 dropped the legacy ``session_id`` column
+and ``ADMIN_SESSION_LEGACY_RAW_*`` flags. The "no legacy path" invariant is
+now asserted by ``test_admin_sessions_no_legacy_path`` (positive AND
+negative coverage of the cleanup).
 
 Test isolation
 --------------
 Every test pulls the per-test ``session`` fixture from
 ``backend/tests/auth/conftest.py`` (in-memory aiosqlite + revisions
-028 + 030 applied). The pepper defaults to the deterministic value set
-in conftest; tests that need to flip it use ``monkeypatch`` against the
-``settings`` singleton — which is *exactly* how the production resolver
-reads it, so the toggle stays representative.
+028 + 030 + 031 + 032 applied). The pepper defaults to the deterministic
+value set in conftest; tests that need to flip it use ``monkeypatch``
+against the ``settings`` singleton — which is *exactly* how the
+production resolver reads it, so the toggle stays representative.
 """
 
 from __future__ import annotations
@@ -73,43 +78,10 @@ def _expected_hash(pepper: str, raw_token: str) -> str:
     ).hexdigest()
 
 
-async def _insert_legacy_row(
-    session,
-    *,
-    raw_session_id: str,
-    subject: str = "legacy@example.com",
-    role: str = "admin",
-    ttl_seconds: int = 3600,
-) -> None:
-    """Write a row that mimics a pre-030 token: only ``session_id`` populated.
-
-    Bypasses ``create_session`` on purpose — the migration's grace-window
-    fallback is the ONLY path through which such a row can appear, and
-    the resolver must still accept it for one TTL after the deploy.
-    """
-    now = datetime.now(timezone.utc)
-    await session.execute(
-        insert(AdminSession).values(
-            session_id=raw_session_id,
-            session_token_hash=None,
-            subject=subject,
-            role=role,
-            tenant_id=None,
-            created_at=now,
-            expires_at=now + timedelta(seconds=ttl_seconds),
-            last_used_at=now,
-            ip_hash="0" * 64,
-            user_agent_hash="0" * 64,
-            revoked_at=None,
-        )
-    )
-    await session.commit()
-
-
-async def _fetch_row(session, *, session_id: str) -> AdminSession | None:
-    """Force a cache-bypassing reload so ``session_token_hash`` updates land."""
+async def _fetch_row_by_hash(session, *, token_hash: str) -> AdminSession | None:
+    """Force a cache-bypassing reload so post-update column values land."""
     session.expire_all()
-    stmt = select(AdminSession).where(AdminSession.session_id == session_id)
+    stmt = select(AdminSession).where(AdminSession.session_token_hash == token_hash)
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
@@ -152,7 +124,7 @@ def test_hash_session_token_differs_for_different_pepper(
 
 
 async def test_create_session_persists_token_hash(session) -> None:
-    """The persisted row must carry ``sha256(pepper + raw_token)``."""
+    """The persisted row must carry ``HMAC-SHA256(pepper, raw_token)``."""
     raw_token, row = await create_session(
         session,
         subject="alice@example.com",
@@ -167,7 +139,7 @@ async def test_create_session_persists_token_hash(session) -> None:
     assert len(row.session_token_hash) == 64, "sha256 hex digest is 64 chars"
     assert row.session_token_hash == _expected_hash(
         _DEFAULT_TEST_PEPPER, raw_token
-    ), "session_token_hash must equal sha256(pepper + raw_token)"
+    ), "session_token_hash must equal HMAC-SHA256(pepper, raw_token)"
     assert row.session_token_hash != raw_token, (
         "raw token and hash must never coincide"
     )
@@ -223,7 +195,6 @@ async def test_pepper_missing_resolver_returns_none_gracefully(
     await session.commit()
 
     monkeypatch.setattr(settings, "admin_session_pepper", "")
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", False)
 
     principal = await resolve_session(session, session_id=raw_token)
     assert principal is None, (
@@ -251,7 +222,6 @@ async def test_db_leak_attack_with_different_pepper_fails(
     now = datetime.now(timezone.utc)
     await session.execute(
         insert(AdminSession).values(
-            session_id=digest_under_alt_pepper,
             session_token_hash=digest_under_alt_pepper,
             subject="victim@example.com",
             role="admin",
@@ -267,7 +237,6 @@ async def test_db_leak_attack_with_different_pepper_fails(
     await session.commit()
 
     monkeypatch.setattr(settings, "admin_session_pepper", _DEFAULT_TEST_PEPPER)
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", False)
 
     principal = await resolve_session(session, session_id=raw_token)
     assert principal is None, (
@@ -277,96 +246,7 @@ async def test_db_leak_attack_with_different_pepper_fails(
 
 
 # ---------------------------------------------------------------------------
-# 5. Grace-window fallback: legacy rows + opportunistic backfill
-# ---------------------------------------------------------------------------
-
-
-async def test_legacy_raw_fallback_hits_when_hash_missing(
-    session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A pre-030 row (``session_token_hash`` NULL) resolves via the legacy path."""
-    raw_session_id = "legacy-grace-window-token-must-still-resolve"
-    await _insert_legacy_row(session, raw_session_id=raw_session_id)
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", True)
-
-    principal = await resolve_session(session, session_id=raw_session_id)
-    await session.commit()
-
-    assert principal is not None
-    assert principal.subject == "legacy@example.com"
-
-
-async def test_legacy_raw_fallback_disabled_rejects_old_row(
-    session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """With the grace flag flipped OFF, legacy rows are unreachable.
-
-    This is the "two-TTL deadline" state — by the time we run Alembic 031
-    the operator MUST have flipped the fallback off, otherwise the
-    legacy column drop will silently sever every active session.
-    """
-    raw_session_id = "legacy-token-after-grace-window-closes"
-    await _insert_legacy_row(session, raw_session_id=raw_session_id)
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", False)
-
-    principal = await resolve_session(session, session_id=raw_session_id)
-    assert principal is None, (
-        "legacy fallback OFF + no hash on row → resolver must miss"
-    )
-
-
-async def test_opportunistic_backfill_runs_once_per_legacy_row(
-    session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """First legacy hit backfills ``session_token_hash``; second hit uses it.
-
-    Verifies the resolver upgrades a pre-030 row in place on first
-    contact so subsequent traffic skips the legacy fallback entirely
-    — that's how the grace window actually shrinks instead of dragging
-    every active session along forever.
-    """
-    raw_session_id = "legacy-token-for-backfill-verification"
-    await _insert_legacy_row(session, raw_session_id=raw_session_id)
-    monkeypatch.setattr(settings, "admin_session_pepper", _DEFAULT_TEST_PEPPER)
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", True)
-
-    pre_row = await _fetch_row(session, session_id=raw_session_id)
-    assert pre_row is not None
-    assert pre_row.session_token_hash is None, (
-        "test pre-condition: legacy row starts with NULL hash"
-    )
-
-    first = await resolve_session(session, session_id=raw_session_id)
-    await session.commit()
-    assert first is not None, "first resolve must hit via legacy fallback"
-
-    after_first = await _fetch_row(session, session_id=raw_session_id)
-    assert after_first is not None
-    expected_hash = _expected_hash(_DEFAULT_TEST_PEPPER, raw_session_id)
-    assert after_first.session_token_hash == expected_hash, (
-        "first resolve must opportunistically backfill session_token_hash"
-    )
-
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", False)
-    second = await resolve_session(session, session_id=raw_session_id)
-    await session.commit()
-    assert second is not None, (
-        "after backfill the row resolves via the hash path — fallback OFF "
-        "must NOT prevent the second hit"
-    )
-
-    after_second = await _fetch_row(session, session_id=raw_session_id)
-    assert after_second is not None
-    assert after_second.session_token_hash == expected_hash, (
-        "second resolve must not perturb the (already-backfilled) hash"
-    )
-
-
-# ---------------------------------------------------------------------------
-# 6. revoke_session — both code paths
+# 5. revoke_session — hash path
 # ---------------------------------------------------------------------------
 
 
@@ -387,7 +267,9 @@ async def test_revoke_session_works_via_hash(session) -> None:
 
     assert revoked is True
 
-    row = await _fetch_row(session, session_id=raw_token)
+    row = await _fetch_row_by_hash(
+        session, token_hash=hash_session_token(raw_token)
+    )
     assert row is not None, (
         "revoke is tombstone-only — the row must remain for audit"
     )
@@ -399,29 +281,8 @@ async def test_revoke_session_works_via_hash(session) -> None:
     )
 
 
-async def test_revoke_session_works_via_legacy_fallback(
-    session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A pre-030 legacy row revokes via the ``session_id`` fallback path."""
-    raw_session_id = "legacy-token-to-be-revoked"
-    await _insert_legacy_row(session, raw_session_id=raw_session_id)
-    monkeypatch.setattr(settings, "admin_session_legacy_raw_fallback", True)
-
-    revoked = await revoke_session(session, session_id=raw_session_id)
-    await session.commit()
-    assert revoked is True, (
-        "legacy row must revoke via the session_id fallback during the grace "
-        "window"
-    )
-
-    row = await _fetch_row(session, session_id=raw_session_id)
-    assert row is not None, "tombstone preserves the row for audit"
-    assert row.revoked_at is not None
-
-
 # ---------------------------------------------------------------------------
-# 7. Module surface contract — ``is_session_pepper_configured`` reflects state
+# 6. Module surface contract — ``is_session_pepper_configured`` reflects state
 # ---------------------------------------------------------------------------
 
 
@@ -439,11 +300,6 @@ def test_is_session_pepper_configured_reflects_settings(
     assert is_session_pepper_configured() is False, (
         "whitespace-only pepper carries zero entropy — must read as missing"
     )
-
-
-# ---------------------------------------------------------------------------
-# 8. Module re-exports stay public surface
-# ---------------------------------------------------------------------------
 
 
 def test_module_exports_hash_helpers() -> None:
