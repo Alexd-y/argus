@@ -6,6 +6,205 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-04-22 — Cycle 7 (Admin auth Phase 2 + PDF/A + KEV-HPA)
+
+Cycle 7 завершил **Phase 2 admin-auth hardening** (TOTP MFA + backend-managed keyring + rate-limiting + 24 sensitive routes gated), **PDF/A production-grade gate** (zero-warning enforcement, per-tenant flag path, fixture variants), **KEV-aware HPA prod rollout signals** (PrometheusRule alerts, verification script, staging soak doc), и **three operator runbooks** (admin-sessions, kev-hpa-rollout, admin-axe-cron). Four critical production gates **CLOSED** (ISS-T20-003 Phase 1+2, ISS-T26-001 Phase 1, ARG-058, ARG-059). One task (**C7-T04 MFA frontend**) explicitly deferred to Cycle 8 (blocker-free; backend stable).
+
+**Chart version bump:** 0.1.1 → 0.1.2 (C7-T06 KEV-HPA alerts).
+
+### C7-T01 — MFA backend foundation (Alembic 032 + DAO + Fernet keyring)
+
+#### Added
+- **Alembic 032** — `admin_users` columns: `mfa_enabled` (BOOL DEFAULT FALSE), `mfa_secret_encrypted` (BYTEA), `mfa_backup_codes_hash` (TEXT[] bcrypt-hashed). `admin_sessions.mfa_passed_at` (TIMESTAMPTZ) for re-auth window enforcement.
+- **DAO layer** `backend/src/auth/admin_mfa.py` — enroll_totp, verify_totp, consume_backup_code, disable_mfa, regenerate_backup_codes, mark_session_mfa_passed.
+- **Fernet crypto** `backend/src/auth/_mfa_crypto.py` — MultiFernet keyring (zero-downtime key rotation), per-operator TOTP secret encryption/decryption.
+- **Backup codes** — 10 single-use codes per operator (16 chars, alphabet [0-9A-HJ-NP-Z], ≥80 bits entropy), bcrypt cost 12, atomic CAS UPDATE for consumption.
+- **Dependencies** — `pyotp==2.9.0` (BSD license, no transitives) for TOTP generation.
+- **Configuration** — `ADMIN_MFA_KEYRING` (csv of Fernet keys), `ADMIN_MFA_REAUTH_WINDOW_SECONDS=43200` (12h), `ADMIN_MFA_ENFORCE_ROLES=["super_admin"]`.
+- **Tests** — 16+ cases (DAO, crypto, migration validation), coverage ≥90%.
+
+#### Architecture
+- **Option 1 (TOTP)** chosen per ISS-T20-003-phase2.md §Trade-off (self-contained, testable, rollbackable; Option 2 OIDC deferred to procurement).
+- **Keyring rotation** — new key prepended; opportunistic re-encryption on next verify call; old key dropped after observation window.
+- **Backup-code race fix** — CAS UPDATE prevents lost-update race on concurrent consume attempts.
+
+---
+
+### C7-T02 — PDF/A acceptance hardening (zero-warning gate + fixture variants + per-tenant path)
+
+#### Added
+- **Zero-warning verapdf enforcement** — workflow now fails on any warning rule UNLESS explicitly allow-listed with ticket link.
+- **Fixture variants** — Cyrillic (T2A glyphs), longtable (≥3 pages), images (sRGB ICC embedded), per-tenant flag path (dynamic resolution from tenants.pdf_archival_format).
+- **Workflow matrix** — 3 tiers × 4 variants + 1 per-tenant = 13 jobs; runtime ≤25m, all passing.
+- **verapdf assertion script** `backend/scripts/_verapdf_assert.py` — structured XML parser (replaces grep), flags warnings and errors with exit codes.
+- **Per-tenant integration test** `test_pdfa_per_tenant_path.py` — exercises `tenants.pdf_archival_format='pdfa-2u'` → `ReportService.generate_pdf` → `LatexBackend(pdfa_mode=True)` end-to-end.
+- **Design doc** `ai_docs/develop/architecture/pdfa-acceptance.md` — fixture rationale, allow-list policy, escalation path.
+- **Tests** — 12+ pytest cases, fixture variant coverage.
+
+#### Changed
+- `.github/workflows/pdfa-validation.yml` — extended matrix, zero-warning assertion logic.
+
+#### Documented
+- Trust boundary note in `_verapdf_assert.py` (no user-controllable allow-list paths).
+
+---
+
+### C7-T03 — MFA endpoints + super-admin enforcement (6 endpoints, 24 sensitive routes gated)
+
+#### Added
+- **HTTP MFA surface** `/api/v1/auth/admin/mfa/*` — 6 endpoints:
+  - `POST /enroll` → mints TOTP seed + 10 backup codes (plaintext once).
+  - `POST /confirm` → validates first TOTP code, sets `mfa_enabled=true`.
+  - `POST /verify` → step-up auth (TOTP XOR backup code), issues session cookie, marks `mfa_passed_at`.
+  - `POST /disable` → requires fresh proof, clears MFA.
+  - `GET /status` → current enrollment status snapshot.
+  - `POST /backup-codes/regenerate` → invalidates old batch, returns new batch once.
+- **Pydantic schemas** `mfa.py` — MFAEnrollResponse, MFAConfirmRequest/Response, MFAVerifyRequest/Response (XOR enforcement), MFADisableRequest/Response, MFAStatusResponse, BackupCodesRegenerateResponse.
+- **`require_admin_mfa_passed` gate** — enforces MFA re-auth window (12h TTL) on super-admin + enforce-role operators. Decision tree: no-op if role not in enforcement set; 403 if not enrolled; 401 if not verified or expired.
+- **24 sensitive routes gated** — all POST/PUT/PATCH/DELETE mutating tenant/user/provider/schedule/webhook/cache/emergency endpoints now sit behind `require_admin_mfa_passed`.
+- **Rate-limiting** — 5 verify attempts / 5 minutes per `(subject, ip)` token (in-memory LRU; Redis upgrade → Cycle 8).
+- **Audit-log surface** — structured events: `argus.auth.admin_mfa.{enroll, confirm, verify_success, disable, backup_regenerate, status_read}` + failure variants + gate violations.
+- **Tests** — 20+ cases (endpoint contract, gate enforcement, rate-limit, backup-code replay protection), coverage ≥90%.
+
+#### Changed
+- **Login response shape** — two-step flow for MFA-enabled users: `POST /login` returns `{status: "mfa_required", mfa_token}` (no Set-Cookie); frontend redirects to verify page.
+
+#### Documented
+- `docs/operations/admin-sessions.md` §10 — MFA enrollment, enforcement, incident playbook.
+
+---
+
+### C7-T05 — Admin-sessions operator runbook
+
+#### Added
+- **`docs/operations/admin-sessions.md`** (600+ lines) — canonical runbook covering:
+  1. Session lifecycle (TTL 12h, sliding window, token shape, cookie attributes)
+  2. Login procedure (bcrypt, rate-limit, reverse-proxy trust)
+  3. MFA (enrollment, verification, backup codes, lost-device recovery)
+  4. Logout & revocation (endpoints, force-revoke, beat-prune, audit)
+  5. Audit-trail queries (SQL cookbook for forensics)
+  6. Pepper rotation procedure (pre-flight, step-by-step, validation, rollback, emergency)
+  7. Pre-Alembic-031 checklist (three pre-flight signals, two-TTL observation)
+- Linked from `README.md` Operations section.
+
+#### Gate enforcement
+- **Pre-flight gate for C7-T07:** Runbook MUST merge before destructive migration 031. PR description verification gate in C7-T07 rejects merge without runbook link.
+
+---
+
+### C7-T06 — KEV-aware HPA prod rollout signals (alerts + verify script + soak doc)
+
+#### Added
+- **PrometheusRule** `prometheus-rules-kev-hpa.yaml` (NEW) — 2 alerts:
+  - `ArgusKevHpaMetricMissing` — fires if `argus_celery_queue_depth` OR `argus_findings_emitted_total{kev_listed="true"}` absent >5m.
+  - `ArgusKevHpaScaleStuck` — fires if HPA replica count at maxReplicas >30m.
+- **Verification script** `scripts/verify-kev-hpa-scrape.sh` — operator smoke test validates both metrics non-empty in last 5m via Prometheus API.
+- **Staging soak doc** `docs/operations/kev-hpa-rollout.md` (250+ lines) — pre-deploy checklist, deploy sequence, staging soak (1-2 weeks observation), prod cutover, rollback procedure.
+- **Helm unittest** — KEV-HPA alert rules validation.
+- **Backend contract test** `test_kev_hpa_prod_signals.py` — Celery queue_depth metric emission verification.
+- **Tests** — 4+ cases (alert firing simulation, script validation).
+
+#### Changed
+- `infra/helm/argus/Chart.yaml` — version 0.1.1 → 0.1.2 (alerting rules + unittest).
+- `.github/workflows/kev-hpa-kind.yml` — extended с alert-firing test.
+- `values-prod.yaml` — comment block referencing rollout doc for operator discoverability.
+
+#### Documented
+- Sequencing decision: C7-T02 lands first (24h soak), then C7-T06 (per user constraint to avoid overlapping infra changes).
+
+---
+
+### C7-T07 — Alembic 031 + legacy session_id resolver cleanup + flag removal
+
+#### Removed
+- **Legacy raw-`session_id` resolver branch** — `_lookup_session_row` is now hash-only query; `create_session` no longer mirrors raw token; `revoke_session` no longer falls back; opportunistic backfill gone.
+- **`admin_session_legacy_raw_write` / `admin_session_legacy_raw_fallback` settings** + validator from `backend/src/core/config.py`. Both env names silently ignored by Pydantic.
+- **Flag entries from `.env.example`** — replaced with removal note.
+- **4 legacy-fallback tests** — contract no longer applies (intentional removal).
+
+#### Added
+- **Alembic 031** — forward-only destructive migration:
+  - Best-effort backfill of straggler `session_token_hash` rows.
+  - Best-effort purge of unhashable orphan rows.
+  - Drop `ix_admin_sessions_token_hash` UNIQUE index.
+  - Drop `admin_sessions.session_id` column.
+  - Promote `session_token_hash` to PRIMARY KEY NOT NULL.
+  - Dialect-aware (SQLite batch_alter_table, Postgres direct ALTER).
+  - Idempotent over column existence.
+- **`downgrade()` best-effort schema rollback** — re-adds `session_id` column (tokens unrecoverable; raw bearer tokens are one-way HMAC). Emergency rollback via restore-from-backup + force-revoke + redeploy 030.
+- **Migration test suite** `test_031_drop_legacy_admin_session_id_migration.py` — upgrade/downgrade, schema validation, idempotence.
+- **Regression test suite** `test_admin_sessions_no_legacy_path.py` (8 cases) — proves legacy branch structurally absent: no `session_id` column ORM, `session_token_hash` sole PK, Settings clean, resolver single-path, tampering fails closed.
+
+#### Changed
+- **ORM model** `backend/src/db/models.py::AdminSession` — `session_token_hash` now PRIMARY KEY NOT NULL; `session_id` declaration gone.
+- **Alembic 032** (from C7-T01) — rebased to `down_revision = "031"` (chain: 028 → 030 → 031 → 032).
+
+#### Pre-flight gate (PR description requirements)
+- Pre-flight signal screenshot (three signals green across two TTL windows = 24h).
+- Link to merged C7-T05 runbook.
+- Rollback rehearsal note (verified staging downgrade-and-revert).
+
+#### Operator note
+- Post-deploy, any session created **before** Alembic 030 is unreachable. Plan session rotation: `UPDATE admin_sessions SET revoked_at = NOW() WHERE expires_at > NOW()`.
+
+---
+
+### C7-T08 — Amber-700 surface uniformity audit + `--warning-strong` tokens
+
+#### Added
+- **Foundation tokens** — `--warning-strong: #B45309` (Tailwind amber-700, 4.81:1 WCAG AA vs white), `--on-warning: #FAFAFA`.
+- **Confirm-CTA migrations** — PerTenantThrottleDialog, RunNowDialog → `bg-[var(--warning-strong)] text-[var(--on-warning)]`.
+- **Vitest regression sentinel** — `WarningStrongMigration.test.tsx` (4 tests) pins token pair, fails on rollback to failing-AA amber-600.
+- **Documented KEEP exceptions** — 7 surfaces (badge, trigger, banner, chip, etc.) retain amber/yellow for design reasons (not CTAs). Each has inline `// keep:` comment.
+
+#### Changed
+- `ai_docs/develop/architecture/design-tokens.md` §3.5 — new section documenting C7-T08 status, B6 prep, token landing, migrations, KEEP list.
+
+#### Result
+- **0 residuals** — audit complete, no additional migrations needed. Amber-700 usage now uniformly token-attributed.
+
+---
+
+### C7-T09 — Admin axe-core periodic cron + dedupe-aware issue routing
+
+#### Added
+- **Nightly workflow** `.github/workflows/admin-axe-cron.yml` (NEW) — daily 03:17 UTC cron re-runs `admin-axe.spec.ts` against `main`. Manual `workflow_dispatch` available. Concurrency: no overlap.
+- **Auto-issue filing** — on regression: GitHub issue auto-filed with dedup (rolling issue if multi-day regression). Title: `[axe-core] Nightly admin a11y scan: <N> violations on <YYYY-MM-DD>`.
+- **Artefact upload** — axe-report/ (HTML + JSON), axe-summary.md, axe-stdout.log (30-day retention).
+- **Stdlib-only parser** `Frontend/scripts/parse-axe-report.mjs` — Node ESM (no `qrcode` dep bloat), pure fs + path, aggregates per-rule (worst-impact wins), writes Markdown summary, exit codes 0/1 (clean/fail).
+- **Parser unit tests** `__tests__/parse-axe-report.test.mjs` (4 cases) — subprocess spawning, argv → exit-code contract.
+- **Issue template** `.github/ISSUE_TEMPLATE/admin-axe-violation.md` — severity ladder, triage checklist.
+- **Operator runbook** `docs/operations/admin-axe-cron.md` (80+ lines) — severity ladder, false-positive suppression, cron-itself failure runbook.
+- **Tests** — 4+ parser cases, workflow validation.
+
+#### Documented
+- Severity ladder: critical/serious = 5 business days, moderate = 10, minor = next sprint.
+- False-positive suppression example (disableRules with three sign-off requirements).
+- Slack/Teams webhook wiring (intentionally not configured today; SLACK_AXE_WEBHOOK secret optional).
+
+#### Hard-rule compliance
+- No new npm dependencies (parser stdlib-only; tests use node:test).
+- Existing `admin-axe.spec.ts` NOT touched (per hard rule — CI wiring only).
+
+---
+
+### Production gates status
+
+| Gate | Status | Evidence |
+|------|--------|----------|
+| **ISS-T20-003 Phase 1+2** | ✅ CLOSED | Alembic 032 (MFA columns), 031 (legacy cleanup), endpoints, gate, runbook, legacy code removed |
+| **ISS-T26-001 Phase 1** | ✅ CLOSED | Amber-700 audit complete (0 residuals), axe-core cron deployed |
+| **ARG-058 PDF/A archival** | ✅ CLOSED | Production-grade verapdf gate (zero-warning, fixtures, per-tenant path) |
+| **ARG-059 KEV-aware HPA** | ✅ CLOSED | Prod rollout signals (alerts, verify script, soak doc, rollback) |
+
+---
+
+### Deferred to Cycle 8
+
+- **C7-T04 — MFA frontend** (enroll + verify + backup-codes modal + middleware) — blocker-free; backend stable. Cycle 8 foundation task.
+
+---
+
 ### Cycle 7 — C7-T07 Legacy admin session resolver cleanup (2026-04-23)
 
 Closes the 030 → 031 grace window opened in Cycle 6 / Batch 6 (`crit-hash`). ARGUS is pre-production and migration 030 backfilled every live `session_token_hash` row, so the audit decision was a **single-stage delete now** (no 2-stage rollout). Aligns the runtime, schema, config, and tests with `ISS-T20-003-phase2.md` §Phase 2c — now flipped to **DONE**.
