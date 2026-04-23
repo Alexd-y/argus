@@ -232,14 +232,25 @@ spec:
         # 5) KEVHPAMetricLatencyHigh — pages if Prometheus scrape latency
         #    of the backend ARGUS service > 30s p99 over 10m. Slow scrapes
         #    starve the Adapter's rate window and the HPA reacts late.
+        #
+        #    PromQL semantics (C7-T06 follow-up DEBUG-2): the expression
+        #    computes `quantile_over_time(0.99, ...[10m])` PER (job,instance)
+        #    series (i.e. per-pod p99 across the 10m window), then wraps it
+        #    in `max by (service)` so the alert fires when ANY pod of an
+        #    argus service breaches the latency budget. The per-pod identity
+        #    is preserved on the inner series for triage — see the runbook
+        #    `topk(5, scrape_duration_seconds{...})` query for pinpointing
+        #    the offending replica.
         # ─────────────────────────────────────────────────────────────────
         - alert: KEVHPAMetricLatencyHigh
           expr: |
-            quantile_over_time(0.99,
-              scrape_duration_seconds{
-                service=~".*argus.*",
-                endpoint=~"metrics.*"
-              }[{{ $latencyWindow }}]
+            max by (service) (
+              quantile_over_time(0.99,
+                scrape_duration_seconds{
+                  service=~".*argus.*",
+                  endpoint=~"metrics.*"
+                }[{{ $latencyWindow }}]
+              )
             ) > {{ $latencyThresholdSeconds }}
           for: {{ $latencyFor }}
           labels:
@@ -252,14 +263,19 @@ spec:
             {{ $k }}: {{ $v | quote }}
             {{- end }}
           annotations:
-            summary: "ARGUS metrics scrape p99 > {{ $latencyThresholdSeconds }}s for {{ $latencyFor }}"
+            summary: "ARGUS scrape p99 > {{ $latencyThresholdSeconds }}s on at least one pod"
             description: |
-              Prometheus p99 scrape duration for ARGUS `/metrics` endpoints
-              has exceeded {{ $latencyThresholdSeconds }}s for {{ $latencyFor }}
-              in environment `{{ $env }}`. Slow scrapes starve the Adapter's
-              5m rate window — the HPA `{{ $hpaName }}` will react late to
-              KEV bursts. Investigate: backend CPU saturation, /metrics
-              registry size, or network path latency. See runbook
-              §"KEVHPAMetricLatencyHigh".
+              At least one ARGUS pod's per-(job,instance) p99 scrape duration
+              over a {{ $latencyWindow }} window has exceeded
+              {{ $latencyThresholdSeconds }}s for {{ $latencyFor }} in
+              environment `{{ $env }}` (the alert is `max by (service)` over
+              the per-pod p99, so a single misbehaving replica trips it).
+              Slow scrapes starve the Adapter's 5m rate window — the HPA
+              `{{ $hpaName }}` will react late to KEV bursts. To pinpoint
+              the offending pod, run the runbook's `topk(5,
+              scrape_duration_seconds{...})` query against the in-cluster
+              Prometheus (see runbook §"KEVHPAMetricLatencyHigh"). Likely
+              root causes: backend CPU saturation, /metrics registry size
+              growth, or network path latency.
             runbook_url: {{ printf "%s#kevhpametriclatencyhigh" $runbookUrl | quote }}
 {{- end }}

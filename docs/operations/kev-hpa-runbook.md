@@ -465,20 +465,30 @@ kubectl get --raw \
 
 ### KEVHPAMetricLatencyHigh
 
-**Severity**: `warning`. **For**: 10m. **Expression**: `quantile_over_time(0.99, scrape_duration_seconds{service=~".*argus.*", endpoint=~"metrics.*"}[10m]) > 30`.
+**Severity**: `warning`. **For**: 10m. **Expression**: `max by (service) (quantile_over_time(0.99, scrape_duration_seconds{service=~".*argus.*", endpoint=~"metrics.*"}[10m])) > 30`.
+
+**Semantics — per-pod, surfaced per-service.** The inner `quantile_over_time` computes a 99th-percentile scrape duration over the 10-minute window for EACH `(job, instance)` series — i.e. per Prometheus scrape target, which in this chart means per backend pod. The outer `max by (service)` then collapses to the worst pod inside each `service` label so the alert fires the moment ANY pod's p99 breaches 30s, while the `service` label preserves enough identity for routing without spamming once-per-pod alerts. **Implication for triage**: a single misbehaving replica (CPU-pinned, memory-pressured, or stuck on a slow `/metrics` collector) trips the alert — start by identifying the offending pod, not by reasoning about a service-wide aggregate.
 
 **Page-time SRE checklist:**
 
 ```bash
-# 1. Per-target scrape duration (find the offending pod).
+# 1. Per-target scrape duration — pinpoint the offending pod (this is the
+#    SAME inner series the alert wraps in `max by (service)`, sorted to
+#    surface the top 5 worst offenders).
+kubectl exec -n monitoring deploy/prometheus -- promtool query instant \
+  'topk(5, scrape_duration_seconds{service=~".*argus.*", endpoint=~"metrics.*"})'
+
+# 1a. (alternative — same query against the HTTP API if `promtool` is not
+#      on the Prometheus pod's PATH or you prefer JSON for scripting).
 kubectl get --raw \
-  '/api/v1/namespaces/monitoring/services/prometheus-server:80/proxy/api/v1/query?query=topk(5,scrape_duration_seconds%7Bservice%3D~%22.%2Aargus.%2A%22%7D)' \
+  '/api/v1/namespaces/monitoring/services/prometheus-server:80/proxy/api/v1/query?query=topk(5,scrape_duration_seconds%7Bservice%3D~%22.%2Aargus.%2A%22%2Cendpoint%3D~%22metrics.%2A%22%7D)' \
   | jq '.data.result'
 
-# 2. Backend pod CPU / memory.
+# 2. Backend pod CPU / memory — focus on the pod identified in step 1.
 kubectl top pods -n argus-prod -l app.kubernetes.io/component=backend
 
-# 3. /metrics registry size (sample one pod).
+# 3. /metrics registry size on the offending pod (line count is a fast
+#    proxy for cardinality — a sudden jump usually means a label exploded).
 POD="$(kubectl get pod -n argus-prod -l app.kubernetes.io/component=backend -o jsonpath='{.items[0].metadata.name}')"
 kubectl exec -n argus-prod "${POD}" -- wget -qO- http://localhost:9100/metrics | wc -l
 

@@ -25,6 +25,9 @@
 #      coupling assertion required by C7-T06 Wave 3.
 #   7. The HPA-targeting alerts (Stuck/Flapping/Ceiling) reference the
 #      `argus-celery-kev` HPA name produced by the chart helpers.
+#   8. The KEVHPAMetricLatencyHigh expression is wrapped in
+#      `max by (service)` so the alert fires on the worst-pod per-service
+#      p99 — a single bad replica trips it (C7-T06 follow-up DEBUG-2).
 #
 # Per-test `set:` blocks explicitly enable the two upstream pipeline gates
 # for every positive case. We do NOT rely on a suite-level `set:` so each
@@ -265,6 +268,32 @@ tests:
           pattern: horizontalpodautoscaler="argus-celery-kev"
 
   # ─────────────────────────────────────────────────────────────────────
+  # 4a) KEVHPAMetricLatencyHigh aggregates per-pod p99 with `max by (service)`
+  #     so the alert fires on the worst replica rather than collapsing to a
+  #     single per-(job,instance) series. C7-T06 follow-up DEBUG-2 — kept
+  #     as a `contains` assertion to avoid pinning the entire expression.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: KEVHPAMetricLatencyHigh wraps quantile_over_time in max by (service)
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
+    asserts:
+      - matchRegex:
+          path: spec.groups[0].rules[4].expr
+          pattern: max by \(service\)
+      - matchRegex:
+          path: spec.groups[0].rules[4].expr
+          pattern: quantile_over_time\(0\.99,
+      - matchRegex:
+          path: spec.groups[0].rules[4].annotations.summary
+          pattern: at least one pod
+      # Tolerant of YAML literal-block wrapping between `topk(5,` and the
+      # series name (the description text is folded across two lines).
+      - matchRegex:
+          path: spec.groups[0].rules[4].annotations.description
+          pattern: topk\(5,\s+scrape_duration_seconds
+
+  # ─────────────────────────────────────────────────────────────────────
   # 5) Environment scoping — production overlay must propagate to alert
   #    labels so Alertmanager routes can filter on `environment="production"`
   #    to keep staging quiet.
@@ -313,9 +342,12 @@ tests:
       kevHpa.alerts.latencyThresholdSeconds: 60
       kevHpa.alerts.latencyWindow: 15m
     asserts:
+      # `\)+` tolerates the post-DEBUG-2 wrapping of `quantile_over_time(...)`
+      # in `max by (service) (...)` which adds one extra closing paren
+      # between the window literal and the threshold.
       - matchRegex:
           path: spec.groups[0].rules[4].expr
-          pattern: \[15m\]\s*\)\s*>\s*60
+          pattern: \[15m\](\s*\))+\s*>\s*60
 
   - it: additionalLabels merge into every alert (Alertmanager routing extension)
     set:
