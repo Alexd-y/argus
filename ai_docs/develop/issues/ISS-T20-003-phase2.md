@@ -4,9 +4,10 @@
 **Parent:** ISS-T20-003 (full session-based admin auth)
 **Owner:** Backend / Auth + Frontend / Admin console + Ops
 **Source task:** Phase 1 completed in Cycle 6 Batch 6 (B6-T08, B6-T09, +crit-hash)
-**Status:** **PENDING** — deferred from Phase 1 to Cycle 7
+**Status:** **PARTIAL** — Phase 2a (MFA, C7-T01/T03) and Phase 2c (grace-window cleanup, C7-T07) shipped Cycle 7; Phase 2b (operator runbook) shipped Cycle 7 / C7-T05.
 **Priority:** HIGH (completes the admin auth refactor; Phase 1 is production-safe but partial)
 **Date filed:** 2026-04-22
+**Last updated:** 2026-04-23 (Phase 2c marked DONE — see §Phase 2c below)
 
 ---
 
@@ -122,6 +123,18 @@ OIDC integration with Azure AD / Auth0 / Google Workspace / Keycloak. Backend tr
 
 ### Phase 2c — Grace-window cleanup (Alembic 031)
 
+> **STATUS — DONE (Cycle 7 / C7-T07, 2026-04-23).**
+>
+> Single-stage delete decision (audit in the C7-T07 Wave 2 commit message): ARGUS is pre-production, no live deploy holds raw `session_id` rows worth a 2-stage rollout. Deliverables shipped:
+>
+> - ✅ Alembic 031 — `backend/alembic/versions/031_drop_legacy_admin_session_id.py` — backfills straggler `session_token_hash` rows when the pepper is configured, purges unhashable orphans (best-effort; the resolver had already stopped serving them), drops the `admin_sessions.session_id` column and its supporting index, promotes `session_token_hash` to PK NOT NULL. Forward-only — `downgrade()` is a no-op (raw token material cannot be reconstructed from the hash; rollback procedure for emergencies remains the §Phase 2c block below).
+> - ✅ Code cleanup — `backend/src/auth/admin_sessions.py` lost the `legacy_raw_value` branch in `create_session`, the legacy-fallback branch in `revoke_session` / `_lookup_session_row`, and the opportunistic backfill. `backend/src/db/models.py::AdminSession` declares `session_token_hash` as `primary_key=True, nullable=False` and no longer carries a `session_id` column.
+> - ✅ Config + env cleanup — `backend/src/core/config.py` lost both `admin_session_legacy_raw_*` settings and their `coerce_admin_session_legacy_bool` validator. `backend/.env.example` replaced the two flag lines with a removal note pointing back to this issue.
+> - ✅ Test cleanup — `backend/tests/auth/test_admin_sessions_hash_at_rest.py` dropped the four legacy-fallback cases. New `backend/tests/auth/test_admin_sessions_no_legacy_path.py` proves the branch is structurally absent (no `session_id` column on the model, no flag on Settings, hash-only resolver, no raw fallback when pepper is missing). New `backend/tests/integration/migrations/test_031_drop_legacy_admin_session_id_migration.py` covers schema drop + PK promotion + straggler backfill + unhashable purge + 030-precondition refusal.
+> - ✅ Runbook — `docs/operations/admin-sessions.md` §3 / §4.2 / §5.1 / §8 updated; the Configuration table no longer lists the flags; the migration tracker flips them to **Removed**.
+>
+> Pre-flight signals from the table below are preserved for archival / future audits, but no longer block deployment — the schema and code state they were guarding has already been collapsed.
+
 This is the **concrete acceptance work** for criterion (f). Phase 2c is independent of Phase 2a/2b and can ship in any Cycle ≥ 7 once production has soaked.
 
 **Pre-flight signals (operator MUST verify before running 031):**
@@ -193,9 +206,9 @@ This rollback path **deliberately costs all live sessions** — better than runn
 
 ## Acceptance criteria
 
-- (d) ✅ MFA enforcement — Phase 2a Option 1 (or 2) shipped; super-admin endpoints require a second factor; ≥10 unit/integration tests cover enroll / verify / replay-block / disable.
-- (e) ✅ Runbook — `docs/operations/admin-sessions.md` published, linked from `README.md` Operations section, reviewed by Ops.
-- (f) ✅ Alembic 031 — runs cleanly against staging snapshot; pre-flight signal table all green; legacy code paths fully removed; full pytest+vitest+E2E suites green post-cleanup.
+- (d) ✅ MFA enforcement — Phase 2a Option 1 (or 2) shipped; super-admin endpoints require a second factor; ≥10 unit/integration tests cover enroll / verify / replay-block / disable. **DONE — Cycle 7 / C7-T01 + C7-T03.**
+- (e) ✅ Runbook — `docs/operations/admin-sessions.md` published, linked from `README.md` Operations section, reviewed by Ops. **DONE — Cycle 7 / C7-T05.**
+- (f) ✅ Alembic 031 — runs cleanly against staging snapshot; pre-flight signal table all green; legacy code paths fully removed; full pytest+vitest+E2E suites green post-cleanup. **DONE — Cycle 7 / C7-T07 (2026-04-23).**
 - (g) ✅ No new pre-existing test failures attributable to Phase 2 work (regression-free).
 
 ---

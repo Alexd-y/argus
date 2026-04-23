@@ -1,18 +1,18 @@
 # Admin Sessions — Operator Runbook
 
-> Owner: SRE on-call. Last reviewed: 2026-04-22.
+> Owner: SRE on-call. Last reviewed: 2026-04-23.
 
-Self-sufficient runbook for the admin-session subsystem (ISS-T20-003 Phase 1, shipped Cycle 6 / Batch 6). Audience: on-call SRE with shell access to a backend pod and the primary Postgres, no familiarity with the auth code assumed. Every cited path, function, and column has been verified against `main` at the date above; if `main` and this file disagree, the repository wins — patch this file in the same commit.
+Self-sufficient runbook for the admin-session subsystem (ISS-T20-003 Phase 1, shipped Cycle 6 / Batch 6; Phase 2c grace-window cleanup shipped Cycle 7 / C7-T07 — see §8). Audience: on-call SRE with shell access to a backend pod and the primary Postgres, no familiarity with the auth code assumed. Every cited path, function, and column has been verified against `main` at the date above; if `main` and this file disagree, the repository wins — patch this file in the same commit.
 
 ---
 
 ## 1. Overview & threat model summary
 
-The admin-session subsystem authenticates operator/admin/super-admin humans for the ARGUS admin surface. Login mints a CSPRNG-opaque token (`secrets.token_urlsafe(48)`, ~64 chars), hands it to the browser as the `argus.admin.session` cookie (HttpOnly, Secure, SameSite=Strict, path=`/`), and stores its keyed at-rest hash in `admin_sessions.session_token_hash`. Every subsequent admin request resolves the cookie back to a row, validates expiry/revocation, and slides the TTL forward.
+The admin-session subsystem authenticates operator/admin/super-admin humans for the ARGUS admin surface. Login mints a CSPRNG-opaque token (`secrets.token_urlsafe(48)`, ~64 chars), hands it to the browser as the `argus.admin.session` cookie (HttpOnly, Secure, SameSite=Strict, path=`/`), and stores its keyed at-rest hash in `admin_sessions.session_token_hash` — the **sole primary key** of the table since Alembic 031 (C7-T07). Every subsequent admin request resolves the cookie back to a row, validates expiry/revocation, and slides the TTL forward.
 
 **Trust boundary.** The raw token never leaves the browser cookie jar (HttpOnly blocks JS reads; SameSite=Strict blocks cross-site send). The server only ever stores `HMAC-SHA256(ADMIN_SESSION_PEPPER, raw_token)`. A Postgres-only compromise (DB dump, replica leak, backup theft) yields hashes that are forgery-useless without the application-side pepper. Conversely, a pepper-only leak does not by itself reveal session tokens — the attacker must also carry a live cookie from a victim browser. Both halves must leak together for a session to be replayable. The pepper rotation in §5 is the kill-switch for the second case.
 
-Design history: [`ai_docs/develop/issues/ISS-T20-003.md`](../../ai_docs/develop/issues/ISS-T20-003.md) (Phase 1 — what shipped) and [`ai_docs/develop/issues/ISS-T20-003-phase2.md`](../../ai_docs/develop/issues/ISS-T20-003-phase2.md) (Phase 2 — MFA, dual-pepper rotation, Alembic 031 cleanup).
+Design history: [`ai_docs/develop/issues/ISS-T20-003.md`](../../ai_docs/develop/issues/ISS-T20-003.md) (Phase 1 — what shipped) and [`ai_docs/develop/issues/ISS-T20-003-phase2.md`](../../ai_docs/develop/issues/ISS-T20-003-phase2.md) (Phase 2 — MFA, dual-pepper rotation, Alembic 031 cleanup — Phase 2c shipped C7-T07 / Cycle 7).
 
 ---
 
@@ -59,7 +59,7 @@ sequenceDiagram
 
 | Layer | File | Responsibility |
 | ----- | ---- | -------------- |
-| Backend DAO | `backend/src/auth/admin_sessions.py` | Token mint (`generate_session_id`, line 124), at-rest hash (`hash_session_token`, line 134), `create_session` (line 188), `revoke_session` (line 256), `resolve_session` (line 321), redaction helper `redact_session_id` (line 113), grace-window dispatcher `_lookup_session_row` (line 429). |
+| Backend DAO | `backend/src/auth/admin_sessions.py` | Token mint (`generate_session_id`), at-rest hash (`hash_session_token`), `create_session` (hash-only writer post-C7-T07), `revoke_session` (hash-only lookup), `resolve_session` (hash-only resolver), redaction helper `redact_session_id`, single-path lookup `_lookup_session_row` (no legacy raw fallback after C7-T07). |
 | Backend HTTP | `backend/src/api/routers/admin_auth.py` | `POST /auth/admin/login` (`admin_login`, line 322), `POST /auth/admin/logout` (`admin_logout`, line 415), `GET /auth/admin/whoami` (`admin_whoami`, line 462), cookie helpers `_set_session_cookie` (line 236) / `_clear_session_cookie` (line 263), per-IP token-bucket `_LoginRateLimiter` (line 121). |
 | Backend credentials | `backend/src/auth/admin_users.py` | `verify_credentials` (line 180) — bcrypt + constant-time burn cycle (`_burn_dummy_cycle`, line 124); bootstrap `bootstrap_admin_user_if_configured` (line 266). |
 | Backend config | `backend/src/core/config.py` | All `admin_*` settings (lines 224–349) and the production `model_validator` `_enforce_production_admin_auth` (line 848). |
@@ -67,7 +67,7 @@ sequenceDiagram
 | Frontend boot guard | `Frontend/instrumentation.ts` | `register` hook (line 34) — refuses to start the FE if `NEXT_PUBLIC_ADMIN_AUTH_MODE != session` and `NODE_ENV=production`. |
 | DB schema | `backend/src/db/models.py` | `AdminUser` (line 713), `AdminSession` (line 782). |
 | Migration | `backend/alembic/versions/030_hash_admin_session_ids.py` | Added `session_token_hash` column, backfilled `HMAC-SHA256(ADMIN_SESSION_PEPPER, session_id)` for live rows, indexed UNIQUE. |
-| Cleanup migration | `backend/alembic/versions/031_drop_legacy_admin_session_id.py` | **NOT YET PRESENT — planned in C7-T07** (drops the raw `session_id` column, promotes `session_token_hash` to PK). |
+| Cleanup migration | `backend/alembic/versions/031_drop_legacy_admin_session_id.py` | **Shipped C7-T07 / ISS-T20-003 Phase 2c.** Backfills straggler `session_token_hash` rows when the pepper is configured, purges unhashable orphans (best-effort; safe on a fresh schema), drops the raw `session_id` column + its index, and promotes `session_token_hash` to PK NOT NULL. Forward-only — `downgrade()` is a no-op (the raw token material cannot be reconstructed from the hash). |
 
 ### 2.3 Database tables (current shape)
 
@@ -90,8 +90,7 @@ sequenceDiagram
 
 | Column | Type | Notes |
 | ------ | ---- | ----- |
-| `session_id` | varchar(64) PK | **Legacy raw token** during 030→031 grace window. After C7-T07 drops out. |
-| `session_token_hash` | varchar(64) UNIQUE INDEX NULL | `HMAC-SHA256(pepper, raw_token)` hex. Primary lookup column. |
+| `session_token_hash` | varchar(64) PK NOT NULL | `HMAC-SHA256(pepper, raw_token)` hex digest. **Sole primary key** since Alembic 031 (C7-T07). |
 | `subject` | varchar(255) | Denormalized from `admin_users` so revocation joins are unnecessary. |
 | `role` | varchar(32) | |
 | `tenant_id` | varchar(36) NULL | |
@@ -103,7 +102,7 @@ sequenceDiagram
 | `revoked_at` | timestamptz NULL | Tombstone — once set, row is permanently invalid. |
 | `mfa_passed_at` | timestamptz NULL | Phase 2 (C7-T01) — last successful TOTP/backup-code re-auth. |
 
-Indexes: `ix_admin_sessions_subject_revoked (subject, revoked_at)`, `ix_admin_sessions_expires_at (expires_at)`, plus the unique on `session_token_hash`.
+Indexes: `ix_admin_sessions_subject_revoked (subject, revoked_at)`, `ix_admin_sessions_expires_at (expires_at)`. The pre-031 unique index on `session_token_hash` was dropped together with the legacy `session_id` column when `session_token_hash` was promoted to primary key (uniqueness is now enforced by the PK constraint itself).
 
 ---
 
@@ -117,13 +116,11 @@ All variables are loaded by `Settings` in `backend/src/core/config.py`. The prod
 | `ADMIN_SESSION_TTL_SECONDS` | yes | `43200` (12 h) | Field constraint `gt=0` (line 234) | Sliding window — every successful `resolve_session` extends the row to `now() + this`. Treat as "max idle gap before a re-login is required". |
 | `ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE` | yes | `5` | Field constraint `ge=1` (line 242) | Per-source-IP token bucket; bucket size = burst = `per_minute`; refill = `per_minute / 60` tok/s. LRU-capped at 4096 IPs (`backend/src/api/routers/admin_auth.py:87`). |
 | `ADMIN_SESSION_PEPPER` | **prod: required, ≥32 chars** | `""` (empty) | `_enforce_production_admin_auth` (line 848 → 893) | Secret-grade. Hashes session tokens at rest. Empty value disables session auth at runtime (`is_session_pepper_configured`, line 129). Rotation procedure in §5. |
-| `ADMIN_SESSION_LEGACY_RAW_WRITE` | no | `true` | `coerce_admin_session_legacy_bool` (line 443) | Grace-window flag (Alembic 030). When `true`, `create_session` mirrors the raw token in `admin_sessions.session_id` so a deploy rollback to pre-030 code can still resolve. **Set `false`** ≥ 24 h (= 2 × TTL window) before C7-T07 / Alembic 031 ships. |
-| `ADMIN_SESSION_LEGACY_RAW_FALLBACK` | no | `true` | `coerce_admin_session_legacy_bool` (line 443) | Grace-window flag. When `true`, `_lookup_session_row` falls back to a raw `session_id` lookup if the hash misses. Same drain procedure as `_WRITE`. |
 | `ADMIN_MFA_KEYRING` | Phase 2 (C7-T01) | `""` | `validate_admin_mfa_keyring` (line 351) | CSV of base64 Fernet keys, **newest first**. Encrypts `admin_users.mfa_secret_encrypted`. |
 | `ADMIN_MFA_REAUTH_WINDOW_SECONDS` | Phase 2 | `43200` | Field constraint `gt=0` (line 329) | How long a recent MFA challenge counts as "fresh" before sensitive admin actions re-prompt. |
 | `ADMIN_MFA_ENFORCE_ROLES` | Phase 2 | `["super-admin", "admin"]` | `parse_admin_mfa_enforce_roles` (line 396) | CSV. Roles in this list MUST complete MFA on login. |
 
-> **Naming note.** Earlier drafts of C7-T05 referenced `ADMIN_SESSION_LEGACY_RAW_LOOKUP` and `ADMIN_SESSION_LEGACY_RAW_DEADLINE`. The flags actually shipped are `ADMIN_SESSION_LEGACY_RAW_WRITE` and `ADMIN_SESSION_LEGACY_RAW_FALLBACK` (above). The "deadline" is a calendar date, not an env var: **2026-06-21** (60 days after Phase 1 deploy, per `ai_docs/develop/issues/ISS-T20-003.md:11`). Cleanup is tracked in §8.
+> **Removed in C7-T07 (Cycle 7, ISS-T20-003 Phase 2c — 2026-04-23).** The grace-window toggles `ADMIN_SESSION_LEGACY_RAW_WRITE` and `ADMIN_SESSION_LEGACY_RAW_FALLBACK` no longer exist. Setting them in the env is a no-op (Pydantic ignores unknown env keys). Alembic 031 dropped the `admin_sessions.session_id` column the flags were guarding; the resolver looks up sessions by HMAC hash exclusively. Sessions minted before Alembic 030 are unreachable post-031 and must be re-issued — see §8.
 
 Production self-check from a backend pod:
 
@@ -131,7 +128,6 @@ Production self-check from a backend pod:
 # Windows PowerShell on a jump host (or `kubectl exec ...`)
 $envs = @(
   "ADMIN_AUTH_MODE", "ADMIN_SESSION_PEPPER", "ADMIN_SESSION_TTL_SECONDS",
-  "ADMIN_SESSION_LEGACY_RAW_WRITE", "ADMIN_SESSION_LEGACY_RAW_FALLBACK",
   "ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE"
 )
 foreach ($e in $envs) {
@@ -144,7 +140,6 @@ foreach ($e in $envs) {
 ```bash
 # Linux equivalent
 for v in ADMIN_AUTH_MODE ADMIN_SESSION_PEPPER ADMIN_SESSION_TTL_SECONDS \
-         ADMIN_SESSION_LEGACY_RAW_WRITE ADMIN_SESSION_LEGACY_RAW_FALLBACK \
          ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE; do
   if [ "$v" = "ADMIN_SESSION_PEPPER" ] && [ -n "${!v}" ]; then
     printf '%-40s = <set, len=%d>\n' "$v" "${#!v}"
@@ -176,7 +171,7 @@ done
 `resolve_session` (`backend/src/auth/admin_sessions.py:321`) is the single resolver:
 
 1. Recompute `token_hash = HMAC-SHA256(pepper, cookie_value)`.
-2. `_lookup_session_row` (line 429) — `SELECT … WHERE session_token_hash = :hash`, then re-validate equality with `hmac.compare_digest` to defeat any ORM/dialect timing oracle. Falls back to a raw `session_id` lookup only when the hash misses **and** `ADMIN_SESSION_LEGACY_RAW_FALLBACK=true` (grace window for pre-030 rows).
+2. `_lookup_session_row` — `SELECT … WHERE session_token_hash = :hash`, then re-validate equality with `hmac.compare_digest` to defeat any ORM/dialect timing oracle. Hash-only since C7-T07 (Alembic 031); the legacy raw `session_id` fallback was removed together with the column.
 3. Reject if `revoked_at IS NOT NULL` — logs `argus.auth.admin_session.resolve_miss` with `reason="revoked"` (line 367).
 4. Reject if `expires_at <= now()` — logs `reason="expired"` (line 379).
 5. UPDATE `last_used_at = now()`, `expires_at = now() + ttl` (sliding window — see 4.3). Returns a `SessionPrincipal` (subject, role, tenant_id, expires_at, created_at, last_used_at).
@@ -276,7 +271,7 @@ After mass revoke: open the audit-log channel (§5), drop a one-line entry refer
 
 ### 5.1 Why rotate
 
-`ADMIN_SESSION_PEPPER` is the keying material for `HMAC-SHA256` over every admin session token. **A pepper leak is a forge primitive**: an attacker who steals the pepper and a copy of `admin_sessions.session_token_hash` can compute a raw token whose hash matches a live row, then plant it in a victim cookie jar (or just use the corresponding `session_id` raw column during the 030→031 grace window). Rotate immediately on any of:
+`ADMIN_SESSION_PEPPER` is the keying material for `HMAC-SHA256` over every admin session token. **A pepper leak is a forge primitive**: an attacker who steals the pepper and a copy of `admin_sessions.session_token_hash` can compute a raw token whose hash matches a live row, then plant it in a victim cookie jar. (Pre-C7-T07 deployments also exposed an `admin_sessions.session_id` raw-token mirror during the 030→031 grace window — that column was dropped in Alembic 031, see §8.) Rotate immediately on any of:
 
 - Suspected secrets-store compromise (Vault, sealed secret, env-var leak).
 - Departure of an operator who held production env-var read access.
@@ -543,14 +538,13 @@ This is the production guard `_enforce_production_admin_auth` (`backend/src/core
 | Item | Status | Reference |
 | ---- | ------ | --------- |
 | Alembic 030 — add `session_token_hash`, backfill HMAC, index UNIQUE | **Shipped** (Cycle 6 / Batch 6) | `backend/alembic/versions/030_hash_admin_session_ids.py` |
-| Grace-window flag `ADMIN_SESSION_LEGACY_RAW_WRITE` | **Live**, default `true` | `backend/src/core/config.py:271` |
-| Grace-window flag `ADMIN_SESSION_LEGACY_RAW_FALLBACK` | **Live**, default `true` | `backend/src/core/config.py:278` |
-| Grace-window deadline | **2026-06-21** (60 days post Phase 1) | `ai_docs/develop/issues/ISS-T20-003.md:11` |
-| Pre-flight gate: flip both `_WRITE` and `_FALLBACK` to `false` ≥ 24 h before C7-T07 | **Pending** | `ai_docs/develop/plans/2026-04-22-argus-cycle7.md:73` |
-| Alembic 031 — drop `session_id` raw column, promote `session_token_hash` to PK, remove both flags | **Planned** (C7-T07) | `ai_docs/develop/plans/2026-04-22-argus-cycle7.md:721` |
+| Alembic 031 — drop `session_id` raw column, promote `session_token_hash` to PK NOT NULL | **Shipped** (Cycle 7 / C7-T07, 2026-04-23) | `backend/alembic/versions/031_drop_legacy_admin_session_id.py` |
+| `ADMIN_SESSION_LEGACY_RAW_WRITE` / `ADMIN_SESSION_LEGACY_RAW_FALLBACK` flags | **Removed** (Cycle 7 / C7-T07) | Removed from `backend/src/core/config.py` and `backend/.env.example`; presence is asserted absent by `backend/tests/auth/test_admin_sessions_no_legacy_path.py`. |
+| Legacy raw-fallback resolver branch in `_lookup_session_row` | **Removed** (Cycle 7 / C7-T07) | `backend/src/auth/admin_sessions.py` — single hash-based lookup path. |
 | Periodic prune job for tombstoned + expired rows | **Not implemented**; manual cleanup or future Celery beat task | `backend/src/celery/beat_schedule.py` (verified — no admin-session task) |
+| Dual-pepper rolling rotation (`ADMIN_SESSION_PEPPER_NEXT`) | **Planned** (Phase 2) | `ai_docs/develop/issues/ISS-T20-003-phase2.md` |
 
-The C7-T07 PR cannot merge without (a) a screenshot of the pre-flight signal table from staging Prometheus, all green, (b) a link to this runbook, and (c) confirmation that `ADMIN_SESSION_LEGACY_RAW_FALLBACK=false` has been deployed in staging for at least one TTL window. SREs running the rollout: do not flip the flag and immediately call C7-T07 done — wait the full TTL window so live sessions drain.
+Post-C7-T07 operator note: any session minted before Alembic 030 was already unreachable in the resolver (no `session_token_hash` to look up against); after Alembic 031 those rows are also schema-orphaned (the `session_id` column is gone) and may be safely deleted. Run a one-off `DELETE FROM admin_sessions WHERE revoked_at IS NULL AND expires_at < now()` after deploy to reclaim the storage.
 
 ---
 

@@ -261,27 +261,12 @@ class Settings(BaseSettings):
             "ADMIN_SESSION_PEPPER", "admin_session_pepper"
         ),
     )
-    # Grace-window toggles for the 030 → 031 migration window (one TTL = 12h):
-    #   * ``write_legacy`` keeps populating the raw ``session_id`` column on
-    #     create_session so a deploy rollback does not break in-flight tokens;
-    #   * ``read_legacy`` lets ``resolve_session`` fall back to a raw lookup
-    #     and opportunistically backfill ``session_token_hash`` on the row.
-    # Both default ON; flip to OFF after two TTL windows have elapsed in prod
-    # and run Alembic 031 to drop the legacy column.
-    admin_session_legacy_raw_write: bool = Field(
-        default=True,
-        validation_alias=AliasChoices(
-            "ADMIN_SESSION_LEGACY_RAW_WRITE",
-            "admin_session_legacy_raw_write",
-        ),
-    )
-    admin_session_legacy_raw_fallback: bool = Field(
-        default=True,
-        validation_alias=AliasChoices(
-            "ADMIN_SESSION_LEGACY_RAW_FALLBACK",
-            "admin_session_legacy_raw_fallback",
-        ),
-    )
+    # NOTE — ``ADMIN_SESSION_LEGACY_RAW_WRITE`` /
+    # ``ADMIN_SESSION_LEGACY_RAW_FALLBACK`` (the 030 → 031 grace-window
+    # toggles) were removed in Cycle 7 / C7-T07 (ISS-T20-003 Phase 2c)
+    # alongside Alembic 031 dropping ``admin_sessions.session_id``. The
+    # resolver now looks up by ``session_token_hash`` only; sessions
+    # minted before Alembic 030 are unreachable and must be re-issued.
     # Optional bootstrap admin — populated idempotently on app startup. The
     # password hash MUST be a pre-computed bcrypt hash (passlib format,
     # rounds >= 12). Plaintext is NEVER accepted, never logged, and never
@@ -433,21 +418,6 @@ class Settings(BaseSettings):
         if s in ("cookie", "session", "both"):
             return s
         return "both"
-
-    @field_validator(
-        "admin_session_legacy_raw_write",
-        "admin_session_legacy_raw_fallback",
-        mode="before",
-    )
-    @classmethod
-    def coerce_admin_session_legacy_bool(cls, v: object) -> bool:
-        if v is None or v == "":
-            return True
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            return v.strip().lower() in {"true", "1", "yes", "on"}
-        return bool(v)
 
     @field_validator("admin_bootstrap_role", mode="before")
     @classmethod
