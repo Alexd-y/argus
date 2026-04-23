@@ -18,6 +18,12 @@ services:
     ports:
       - "6379:6379"
 
+  # Worker must see the same /app source as backend in dev; the base image alone
+  # stays stale until rebuild. Mount ../backend so LLM/router fixes apply after restart.
+  worker:
+    volumes:
+      - ../backend:/app
+
   backend:
     command:
       - uvicorn
