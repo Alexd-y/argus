@@ -1076,6 +1076,22 @@ async def admin_mfa_status(
         snapshot.backup_codes_count if snapshot.enabled else None
     )
 
+    # Audit-log the read so the SOC can correlate `/status` polls with
+    # `/verify` / `/disable` traffic. Carries no secret material; counts
+    # of remaining codes / freshness flags are non-sensitive (the
+    # operator already knows them — the log just lets the reviewer see
+    # the same picture).
+    logger.info(
+        "admin_mfa_status_read",
+        extra={
+            "event": "argus.auth.admin_mfa.status_read",
+            "subject": subject,
+            "enabled": snapshot.enabled,
+            "remaining_backup_codes": remaining,
+            "mfa_passed_for_session": fresh,
+        },
+    )
+
     return MFAStatusResponse(
         enabled=snapshot.enabled,
         enrolled_at=None,  # see schema docstring (follow-up Alembic 03N)
