@@ -148,6 +148,56 @@ exclude = '''
 exclude_dirs = ["tests", "alembic"]
 skips = ["B101"]  # assert_used in tests
 
+[tool.coverage.run]
+# `src` is the import-prefix used by the test suite (see
+# `backend/tests/conftest.py:41` -- it inserts `BACKEND_DIR` on
+# sys.path so every test imports as `src.<module>`). Pinning the
+# source root here keeps the coverage line-mapping single-rooted
+# regardless of which working directory `pytest --cov` is launched
+# from.
+source = ["src"]
+branch = false
+relative_files = true
+# C7-T03 follow-up DEBUG-5 — opt into Python 3.12's PEP 669
+# `sys.monitoring` core. The legacy `sys.settrace` core (the
+# coverage 7.x default) drops the trace function inside async
+# coroutines that FastAPI's dependency-injection plumbing awaits,
+# so route handler BODIES register as missing even though the test
+# client receives a real 2xx/4xx response from them. Empirically
+# this is the difference between 50% and 77% on
+# `src/api/admin/mfa.py` for the unchanged C7-T03 endpoint suite
+# (43 tests, all green). `sysmon` instruments at the bytecode level
+# — async coroutines are captured identically to sync function
+# bodies, so the report finally reflects what the tests actually
+# exercise. Requires Python 3.12+ (already pinned via
+# `requires-python = ">=3.12"`) and coverage>=7.4 (`pytest-cov 7.0.0`
+# ships coverage 7.13.x — verified locally).
+core = "sysmon"
+
+[tool.coverage.paths]
+# Canonicalise alternative on-disk representations of the same module
+# back to a single key so a coverage run from `repo/` and a coverage
+# run from `repo/backend/` (or from CI, which sometimes mounts the
+# repo at `/workspace/backend/`) all aggregate into one report
+# instead of producing two half-covered ghosts of the same file.
+source = [
+    "src/",
+    "backend/src/",
+    "*/backend/src/",
+]
+
+[tool.coverage.report]
+# Trim noise from the `Missing` column: these patterns are intentional
+# unreachable / type-checking branches that should never execute at
+# runtime, so reporting them as gaps is misleading.
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    'raise AssertionError\("unreachable"\)',
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
