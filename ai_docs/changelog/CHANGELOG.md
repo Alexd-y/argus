@@ -6,6 +6,56 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ## [Unreleased]
 
+### Cycle 7 — C7-T07 Legacy admin session resolver cleanup (2026-04-23)
+
+Closes the 030 → 031 grace window opened in Cycle 6 / Batch 6 (`crit-hash`). ARGUS is pre-production and migration 030 backfilled every live `session_token_hash` row, so the audit decision was a **single-stage delete now** (no 2-stage rollout). Aligns the runtime, schema, config, and tests with `ISS-T20-003-phase2.md` §Phase 2c — now flipped to **DONE**.
+
+#### Removed
+- **Legacy raw-`session_id` resolver branch** in `backend/src/auth/admin_sessions.py` — `_lookup_session_row` is now a single hash-based query; `create_session` no longer mirrors the raw token into a `session_id` column; `revoke_session` no longer falls back to raw lookups; the opportunistic `session_token_hash` backfill that used to run on a legacy hit is gone.
+- **`admin_session_legacy_raw_write` / `admin_session_legacy_raw_fallback` settings** + their `coerce_admin_session_legacy_bool` validator from `backend/src/core/config.py`. Both env names are now silently ignored by Pydantic — operators who still ship them in their `.env` see no behaviour change beyond a no-op.
+- **`ADMIN_SESSION_LEGACY_RAW_WRITE` / `ADMIN_SESSION_LEGACY_RAW_FALLBACK`** entries from `backend/.env.example`, replaced by a removal note pointing at this changelog entry and the issue tracker.
+- **Dual-mode regression tests** — the four `test_admin_sessions_hash_at_rest.py` cases that exercised the legacy fallback (`test_legacy_raw_fallback_hits_when_hash_missing`, `test_legacy_raw_fallback_disabled_rejects_old_row`, `test_opportunistic_backfill_runs_once_per_legacy_row`, `test_revoke_session_works_via_legacy_fallback`) and the `_insert_legacy_row` helper they relied on. The contract no longer applies — there is nothing left to fall back to.
+
+#### Added — Alembic 031
+- New migration **`backend/alembic/versions/031_drop_legacy_admin_session_id.py`** (`down_revision = "030"`, `revision = "031"`):
+  1. Best-effort backfill of straggler `session_token_hash` rows when `ADMIN_SESSION_PEPPER` is configured (re-applies the same HMAC-SHA256 hex digest used by `hash_session_token` in the runtime).
+  2. Best-effort purge of unhashable orphan rows (no `session_id`, no `session_token_hash`) — these were already unreachable via the resolver; they would block the NOT NULL promotion below.
+  3. Drop the `ix_admin_sessions_session_token_hash` UNIQUE index (uniqueness moves to the PK constraint).
+  4. Drop the `admin_sessions.session_id` column.
+  5. Promote `admin_sessions.session_token_hash` to **PRIMARY KEY NOT NULL**.
+- **Forward-only — `downgrade()` is intentionally a no-op.** The raw token material cannot be reconstructed from the hash; rolling back would create a schema-shaped hole that the runtime has nothing to fill. Emergency rollback procedure stays the §Phase 2c block in `ISS-T20-003-phase2.md` (alembic-downgrade + force-revoke + redeploy with the column re-pinned).
+- Dialect-aware: uses `op.batch_alter_table` for SQLite (recreates the table) and direct `ALTER TABLE` statements for Postgres. Idempotent over column existence — re-running the migration on an already-031-shaped database is a no-op.
+
+#### Added — schema & ORM updates
+- `backend/src/db/models.py::AdminSession` — `session_token_hash` is now `Mapped[str] = mapped_column(String(64), primary_key=True)` (NOT NULL via the PK constraint); the `session_id` column declaration is gone. Docstrings updated to reflect "PK since Alembic 031 (C7-T07 / ISS-T20-003 Phase 2c)".
+- `backend/src/auth/admin_mfa.py::mark_session_mfa_passed` — the "identity-map invariant" docstring updated to name `session_token_hash` as the lookup key (the load-and-flush pattern is unchanged; only the wording moved).
+- Alembic `032_admin_mfa_columns.py` rebased to `down_revision = "031"` so the chain reads `028 → 030 → 031 → 032`. The 032 migration body is unchanged (still adds the MFA columns); only its parent pointer moved.
+
+#### Added — test coverage for the post-031 invariants
+- New unit suite **`backend/tests/auth/test_admin_sessions_no_legacy_path.py`** (8 cases) — proves the legacy branch is structurally absent: no `session_id` column on the ORM, `session_token_hash` is the sole PK, the live SQLite schema has no `session_id` column, `Settings` has no `admin_session_legacy_raw_*` flags, `create_session` does not accept a `session_id` kwarg and only writes `session_token_hash`, legacy-shape rows cannot be inserted via the ORM or raw SQL, the resolver only looks up by hash (a tampered hash misses), and the resolver fails closed (returns `None`) when the pepper is unset — there is no legacy fallback to take its place. Plus a source-level regex sweep that asserts no live code path under `backend/src/` references `settings.admin_session_legacy_raw_*` anymore.
+- New migration suite **`backend/tests/integration/migrations/test_031_drop_legacy_admin_session_id_migration.py`** — covers `028 → 030 → 031` upgrade, schema-after assertions (no `session_id`, no orphan index, `session_token_hash` PK NOT NULL), data preservation for hashed rows, purge of unhashable orphans, idempotent re-run, and the precondition refusal when 030 has not been applied.
+- Updated callers that used to look `AdminSession` up by `session_id`:
+  - `backend/tests/auth/conftest.py` — apply 031 in the synchronous schema bootstrap (`028 → 030 → 031 → 032`).
+  - `backend/tests/auth/test_admin_sessions_crud.py` — switch the row identity assertions and `session.get(AdminSession, …)` calls to `hash_session_token(sid)`.
+  - `backend/tests/auth/test_admin_mfa_dao.py` — same `session.get` switch.
+  - `backend/tests/integration/migrations/test_032_admin_mfa_columns_migration.py` — `_DOWN_REVISION = "031"`; the seed fixture deliberately stops at 030 (so the seed-by-`session_id` shape still works) and proves 032 is robust to running on a partially-migrated schema.
+  - `backend/tests/integration/migrations/test_028_admin_sessions_migration.py` — the **ORM-side** assertions track the post-031 model (PK is `session_token_hash`, no `session_id`); the migration-side checks for what 028 originally created are unchanged.
+
+#### Documented
+- `docs/operations/admin-sessions.md` — §1 / §2.2 / §2.3 / §3 / §4.2 / §5.1 / §8 updated. Configuration table no longer lists the two flags; the migration tracker flips them to **Removed**; the resolver write-up is single-path; the pepper rotation rationale loses the "or just use the corresponding `session_id` raw column during the grace window" caveat. New post-C7-T07 operator note in §8 about reclaiming storage from sessions minted before 030.
+- `backend/.env.example` — `ADMIN_SESSION_PEPPER` rotation block rewritten to reflect that rotation is now strictly invalidating (no zero-downtime path until the dual-pepper accepter lands in Phase 2). The two flag lines collapse to a single removal-note paragraph.
+- `ai_docs/develop/issues/ISS-T20-003-phase2.md` — top-of-file status flipped from `PENDING` to `PARTIAL` (Phase 2a, 2b, 2c all done); §Phase 2c gets a new **STATUS — DONE** preamble enumerating every deliverable and the single-stage decision rationale; acceptance criteria (d), (e), (f) marked **DONE** with the matching cycle / task IDs.
+
+#### Operator note
+Post-deploy, the resolver only services HMAC-SHA256-hashed lookups. Any session created **before** Alembic 030 has been schema-orphaned by 031 and is unreachable. Plan a session rotation for affected users (the `UPDATE admin_sessions SET revoked_at = NOW() WHERE expires_at > NOW()` mass-revoke from §4.5 of the runbook is the cleanest cutover). No frontend changes required — the cookie name (`argus.admin.session`) and shape are unchanged; the only touched surface is server-side resolution.
+
+#### Hard-rule compliance
+- No new pip / npm dependencies.
+- No changes outside `backend/src/auth/`, `backend/src/db/models.py`, `backend/src/core/config.py`, `backend/.env.example`, `backend/alembic/versions/031_*` + `032_*`, `backend/tests/auth/`, `backend/tests/integration/migrations/`, `docs/operations/admin-sessions.md`, `ai_docs/develop/issues/ISS-T20-003-phase2.md`, and this changelog. C7-T03 / C7-T06 / C7-T09 surfaces untouched.
+- `git grep -i "legacy.*session\|session_legacy_raw" backend/src/` — only the historical comment in `backend/src/core/config.py` and the documenting docstring in `backend/src/auth/admin_sessions.py` remain (both explicitly note the removal). Zero live code references.
+- `pytest backend/tests/auth/ backend/tests/api/admin/ -q` — green; legacy-fallback test count drops by 4 (the four cases listed under **Removed**).
+- `mypy --strict` and `ruff check` clean for every touched file.
+
 ### Cycle 7 — C7-T09 Admin axe-core nightly cron (2026-04-23)
 
 #### Added — nightly accessibility regression scan
