@@ -22,7 +22,7 @@ the same per-test ``async_sessionmaker``.
 The parent ``backend/tests/api/admin/conftest.py`` exposes an ``engine``
 fixture that applies Alembic 027 (webhook DLQ) only — that schema does
 not include ``admin_users``/``admin_sessions``/MFA columns. We override
-``engine`` here with a 028 → 030 → 032 chain that yields the post-C7-T01
+``engine`` here with a 028 → 030 → 031 → 032 chain that yields the post-C7-T01
 shape required by the ORM. Several autouse fixtures from the parent
 conftest (``_patch_router_session``, ``_admin_api_key``) target unrelated
 modules; we shadow them with no-ops so this suite is hermetic.
@@ -136,7 +136,7 @@ _OTPAUTH_SECRET_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z2-7]{16,}$")
 
 
 # ---------------------------------------------------------------------------
-# Schema bootstrap — apply the 028 → 030 → 032 chain against in-memory SQLite.
+# Schema bootstrap — apply the 028 → 030 → 031 → 032 chain against in-memory SQLite.
 # ---------------------------------------------------------------------------
 
 
@@ -190,7 +190,7 @@ def override_auth() -> Iterator[None]:
 
 
 # ---------------------------------------------------------------------------
-# Override `engine` from the parent conftest — apply 028+030+032, not 027.
+# Override `engine` from the parent conftest — apply 028+030+031+032, not 027.
 # ---------------------------------------------------------------------------
 
 

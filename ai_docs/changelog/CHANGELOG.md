@@ -20,10 +20,10 @@ Closes the 030 → 031 grace window opened in Cycle 6 / Batch 6 (`crit-hash`). A
 - New migration **`backend/alembic/versions/031_drop_legacy_admin_session_id.py`** (`down_revision = "030"`, `revision = "031"`):
   1. Best-effort backfill of straggler `session_token_hash` rows when `ADMIN_SESSION_PEPPER` is configured (re-applies the same HMAC-SHA256 hex digest used by `hash_session_token` in the runtime).
   2. Best-effort purge of unhashable orphan rows (no `session_id`, no `session_token_hash`) — these were already unreachable via the resolver; they would block the NOT NULL promotion below.
-  3. Drop the `ix_admin_sessions_session_token_hash` UNIQUE index (uniqueness moves to the PK constraint).
+  3. Drop the `ix_admin_sessions_token_hash` UNIQUE index (uniqueness moves to the PK constraint).
   4. Drop the `admin_sessions.session_id` column.
   5. Promote `admin_sessions.session_token_hash` to **PRIMARY KEY NOT NULL**.
-- **Forward-only — `downgrade()` is intentionally a no-op.** The raw token material cannot be reconstructed from the hash; rolling back would create a schema-shaped hole that the runtime has nothing to fill. Emergency rollback procedure stays the §Phase 2c block in `ISS-T20-003-phase2.md` (alembic-downgrade + force-revoke + redeploy with the column re-pinned).
+- **`downgrade()` is a best-effort schema rollback** — re-adds `session_id` populated with placeholder values derived from `session_token_hash`; raw bearer tokens are unrecoverable since HMAC-SHA256 is one-way. See the migration docstring (`backend/alembic/versions/031_drop_legacy_admin_session_id.py:40-46`) for full data-loss caveats. Operators executing `alembic downgrade 031` must rotate every admin session immediately after. Emergency rollback procedure for a populated DB stays the §Phase 2c block in `ISS-T20-003-phase2.md` (restore-from-backup + force-revoke + redeploy with the column re-pinned).
 - Dialect-aware: uses `op.batch_alter_table` for SQLite (recreates the table) and direct `ALTER TABLE` statements for Postgres. Idempotent over column existence — re-running the migration on an already-031-shaped database is a no-op.
 
 #### Added — schema & ORM updates
