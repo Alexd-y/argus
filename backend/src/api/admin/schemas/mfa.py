@@ -34,10 +34,10 @@ Invariants enforced by this module
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Final
+from datetime import datetime, timedelta
+from typing import Annotated, Final
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 #: TOTP code regex — exactly 6 ASCII digits. The DAO normaliser strips
 #: spaces (``"123 456"``) but the public API contract is the canonical
@@ -50,6 +50,51 @@ _TOTP_CODE_PATTERN: Final[str] = r"^\d{6}$"
 #: normaliser then uppercases + strips. Length bounded to 32 chars to
 #: cap the worst case (``XXXX XXXX XXXX XXXX`` with extra whitespace).
 _BACKUP_CODE_PATTERN: Final[str] = r"^[0-9A-HJ-NP-Z\- ]{16,32}$"
+
+
+# ---------------------------------------------------------------------------
+# Aware-UTC datetime guard (DEBUG-7 — C7-T03 follow-up).
+#
+# Every C7-T03 response model carries at least one timestamp field
+# (``enabled_at``, ``mfa_passed_at``, ``disabled_at``, ``enrolled_at``,
+# ``generated_at``). The router computes them as
+# ``datetime.now(tz=timezone.utc)`` so the wire format is always
+# ISO 8601 with an explicit ``+00:00`` offset.
+#
+# A naive datetime would still serialise (Pydantic emits the ISO string
+# without a tz suffix), but the FE's ``Date`` constructor reads such a
+# value as *local* time, silently shifting MFA freshness checks by the
+# operator's tz offset. The validator below fails fast at construction
+# so a regression here surfaces in tests rather than as a UX bug after
+# deploy.
+# ---------------------------------------------------------------------------
+
+
+def _ensure_aware_utc(value: datetime) -> datetime:
+    """Reject naive datetimes; reject offsets other than UTC.
+
+    Run as an ``AfterValidator`` on every datetime response field. The
+    router code path constructs these models with
+    ``datetime.now(tz=timezone.utc)`` so the validator is a no-op in
+    happy-path serialisation and a hard fail on any regression that
+    threads an OS-local ``datetime.now()`` (or a ``datetime.utcnow()``,
+    which is naive even though the name implies otherwise) into the
+    response.
+    """
+    if value.tzinfo is None:
+        raise ValueError("datetime must be timezone-aware UTC; got naive")
+    if value.utcoffset() != timedelta(0):
+        raise ValueError(
+            "datetime must be UTC (+00:00); got offset "
+            f"{value.utcoffset()!r}"
+        )
+    return value
+
+
+#: Annotated alias used on every response timestamp field — keeps the
+#: validator wiring DRY and makes the constraint visible at the field
+#: definition site without re-importing :func:`AfterValidator` there.
+AwareUtcDatetime = Annotated[datetime, AfterValidator(_ensure_aware_utc)]
 
 
 class MFAEnrollRequest(BaseModel):
@@ -125,7 +170,7 @@ class MFAConfirmResponse(BaseModel):
         ...,
         description="Always ``True`` on a 200 — the row was flipped to enabled.",
     )
-    enabled_at: datetime = Field(
+    enabled_at: AwareUtcDatetime = Field(
         ...,
         description=(
             "Server-clock UTC timestamp at which the row was flipped to "
@@ -174,7 +219,7 @@ class MFAVerifyResponse(BaseModel):
         ...,
         description="Always ``True`` on a 200; mirrors the HTTP status for clients.",
     )
-    mfa_passed_at: datetime = Field(
+    mfa_passed_at: AwareUtcDatetime = Field(
         ...,
         description=(
             "Server-clock UTC timestamp written onto the calling session's "
@@ -236,7 +281,7 @@ class MFADisableResponse(BaseModel):
         ...,
         description="Always ``True`` on a 200 — the row was wiped.",
     )
-    disabled_at: datetime = Field(
+    disabled_at: AwareUtcDatetime = Field(
         ...,
         description="Server-clock UTC timestamp at which the row was wiped.",
     )
@@ -254,7 +299,7 @@ class MFAStatusResponse(BaseModel):
             "(``admin_users.mfa_enabled`` is True)."
         ),
     )
-    enrolled_at: datetime | None = Field(
+    enrolled_at: AwareUtcDatetime | None = Field(
         default=None,
         description=(
             "Reserved for future use. The current schema (Alembic 032) "
@@ -305,7 +350,7 @@ class BackupCodesRegenerateResponse(BaseModel):
             "The admin MUST store them out-of-band before navigating away."
         ),
     )
-    generated_at: datetime = Field(
+    generated_at: AwareUtcDatetime = Field(
         ...,
         description=(
             "Server-clock UTC timestamp at which the new code batch was "
@@ -316,6 +361,7 @@ class BackupCodesRegenerateResponse(BaseModel):
 
 
 __all__ = [
+    "AwareUtcDatetime",
     "BackupCodesRegenerateResponse",
     "MFAConfirmRequest",
     "MFAConfirmResponse",
