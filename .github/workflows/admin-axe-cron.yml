@@ -15,14 +15,21 @@
 # * `workflow_dispatch`  — manual / ad-hoc rerun (e.g. operator triage after
 #                          a regression issue is auto-filed).
 #
-# Failure routing (Wave 2 — added in same job)
-# --------------------------------------------
+# Failure routing (Wave 2)
+# ------------------------
 # A non-zero parser exit (axe violations > 0) does NOT fail any required
 # status check on `main` — `schedule:` triggers are independent of branch
-# protection. Instead, the failure step uses `gh issue create` (default
-# `GITHUB_TOKEN`) with a single rolling issue per regression: dedupe by
-# title prefix `[axe-core] Nightly admin a11y scan:` so a multi-day
-# regression accumulates comments on one issue, not a fresh issue per day.
+# protection. Instead, the dedicated `file_axe_issue` step (gated on
+# `steps.parse_axe.outcome == 'failure'`) uses the `gh` CLI with the
+# default `GITHUB_TOKEN` to keep a single rolling issue per regression:
+# dedupe by title prefix `[axe-core] Nightly admin a11y scan:` so a
+# multi-day regression accumulates comments on one issue, not a fresh
+# issue per day. Issue template skeleton: `.github/ISSUE_TEMPLATE/
+# admin-axe-violation.md`.
+#
+# Required labels (`a11y`, `regression`, `cycle-followup`) are created
+# idempotently via `gh label create … || true` so the workflow doesn't
+# explode on first-ever run in a fresh fork.
 #
 # Why a separate workflow (vs. a new project in `playwright.a11y.config.ts`)
 # -------------------------------------------------------------------------
@@ -156,3 +163,124 @@ jobs:
             ${{ env.AXE_STDOUT_LOG }}
           if-no-files-found: warn
           retention-days: 30
+
+      # ────────────────────────────────────────────────────────────────────
+      # Wave 2 — Failure routing
+      # ────────────────────────────────────────────────────────────────────
+      # Only triggers when the parser step exits non-zero (i.e. real axe
+      # violations or a malformed report). Any earlier infra failure
+      # (npm ci, browser install, etc.) skips this step — those are NOT
+      # accessibility regressions and should be diagnosed via the
+      # workflow-run logs, not auto-filed.
+      - name: Ensure issue labels exist (idempotent)
+        if: failure() && steps.parse_axe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Each label is created with `|| true` so a pre-existing label
+          # (very common — these are conventional repo-wide labels)
+          # doesn't break the failure-routing path.
+          gh label create a11y \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color "0E8A16" \
+            --description "Accessibility (WCAG / axe-core) defects" \
+            2>/dev/null || true
+          gh label create regression \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color "D93F0B" \
+            --description "Regression of previously-shipped behaviour" \
+            2>/dev/null || true
+          gh label create cycle-followup \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color "FBCA04" \
+            --description "Follow-up work tracked against a cycle deliverable" \
+            2>/dev/null || true
+
+      - name: File / update axe regression issue (dedupe-aware)
+        id: file_axe_issue
+        if: failure() && steps.parse_axe.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: Frontend
+        # Single rolling issue per ongoing regression:
+        # 1. List open issues labelled `a11y`, filter by title prefix.
+        # 2. If a match exists → comment on it (today's count + run link).
+        # 3. Otherwise → open a fresh issue using the same title prefix
+        #    so tomorrow's run finds and dedupes against it.
+        # Issue body: first 200 lines of `axe-summary.md` + a footer
+        # linking back to the workflow run for full artefacts. We cap
+        # at 200 lines because GitHub silently truncates very long
+        # bodies and a 200-line cap keeps the issue browsable on mobile.
+        run: |
+          set -euo pipefail
+
+          DATE_UTC="$(date -u +%Y-%m-%d)"
+
+          # Extract violation count from the parser's summary; the parser
+          # writes `**Total violations:** <N>` as a deterministic
+          # one-line marker so we can grab it with awk and avoid pulling
+          # in jq/yq just for one integer.
+          if [[ -f axe-summary.md ]]; then
+            VIOLATIONS="$(awk '/^\*\*Total violations:\*\*/{print $3; exit}' axe-summary.md || echo "?")"
+          else
+            VIOLATIONS="?"
+          fi
+          # Empty/whitespace-only fallback (defensive).
+          [[ -z "${VIOLATIONS}" ]] && VIOLATIONS="?"
+
+          TITLE="[axe-core] Nightly admin a11y scan: ${VIOLATIONS} violations on ${DATE_UTC}"
+          BODY_FILE="$(mktemp)"
+
+          if [[ -f axe-summary.md ]]; then
+            head -n 200 axe-summary.md > "${BODY_FILE}"
+          else
+            {
+              echo "# Admin axe-core nightly scan"
+              echo
+              echo "The parser did not produce \`axe-summary.md\` — likely a"
+              echo "malformed Playwright JSON report. See the workflow logs."
+            } > "${BODY_FILE}"
+          fi
+
+          {
+            echo
+            echo "---"
+            echo
+            echo "* **Workflow run:** ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "* **Auto-filed by:** \`.github/workflows/admin-axe-cron.yml\`"
+            echo "* **Triage runbook:** \`docs/operations/admin-axe-cron.md\`"
+            echo "* **Dedupe key:** title prefix \`[axe-core] Nightly admin a11y scan:\` — do not edit."
+          } >> "${BODY_FILE}"
+
+          # Dedupe lookup. `// empty` makes jq print nothing (instead of
+          # the literal string "null") when no open issue matches, so
+          # the bash `-n` check below behaves as expected.
+          EXISTING="$(gh issue list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --label a11y \
+            --state open \
+            --limit 100 \
+            --json number,title \
+            --jq '[.[] | select(.title | startswith("[axe-core] Nightly admin a11y scan:"))][0].number // empty')"
+
+          if [[ -n "${EXISTING}" ]]; then
+            echo "Dedupe match: open issue #${EXISTING} — appending comment."
+            gh issue comment "${EXISTING}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --body-file "${BODY_FILE}"
+            echo "issue_number=${EXISTING}" >> "${GITHUB_OUTPUT}"
+            echo "issue_action=commented" >> "${GITHUB_OUTPUT}"
+          else
+            echo "No dedupe target — opening a new issue."
+            NEW_URL="$(gh issue create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${TITLE}" \
+              --body-file "${BODY_FILE}" \
+              --label a11y \
+              --label regression \
+              --label cycle-followup)"
+            echo "Opened: ${NEW_URL}"
+            echo "issue_url=${NEW_URL}" >> "${GITHUB_OUTPUT}"
+            echo "issue_action=created" >> "${GITHUB_OUTPUT}"
+          fi
