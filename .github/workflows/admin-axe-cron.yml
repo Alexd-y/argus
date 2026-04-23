@@ -1,0 +1,158 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# C7-T09 (Cycle 7) — Admin axe-core nightly accessibility regression scan.
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Re-runs the admin-only axe-core suite (`Frontend/tests/e2e/admin-axe.spec.ts`)
+# on a daily schedule against the current HEAD of the default branch. The
+# push/PR axe gates only fire on direct `Frontend/` changes; this cron catches
+# silent regressions where an unrelated PR reverts a design token (e.g.
+# C7-T08's `--warning-strong`) without touching the Frontend tree.
+#
+# Triggers
+# --------
+# * `schedule`           — daily at 03:17 UTC. Avoids the 00 / 06 / 12 / 18 UTC
+#                          hot-windows where most other ARGUS workflows fire.
+# * `workflow_dispatch`  — manual / ad-hoc rerun (e.g. operator triage after
+#                          a regression issue is auto-filed).
+#
+# Failure routing (Wave 2 — added in same job)
+# --------------------------------------------
+# A non-zero parser exit (axe violations > 0) does NOT fail any required
+# status check on `main` — `schedule:` triggers are independent of branch
+# protection. Instead, the failure step uses `gh issue create` (default
+# `GITHUB_TOKEN`) with a single rolling issue per regression: dedupe by
+# title prefix `[axe-core] Nightly admin a11y scan:` so a multi-day
+# regression accumulates comments on one issue, not a fresh issue per day.
+#
+# Why a separate workflow (vs. a new project in `playwright.a11y.config.ts`)
+# -------------------------------------------------------------------------
+# * Schedule semantics — push/PR axe runs are conditional on path filters,
+#   `cron:` is unconditional. Mixing the two in one workflow file would
+#   make path-filter logic awkward and risk skipping the nightly when the
+#   PR-only paths-filter shorthand is reused.
+# * Concurrency isolation — manual `workflow_dispatch` should never cancel
+#   an in-flight scheduled run (`cancel-in-progress: false`). The PR gate
+#   has the opposite preference and shouldn't share concurrency state.
+#
+# Why no manual `next build` / `next start` + curl polling
+# --------------------------------------------------------
+# `playwright.a11y.config.ts` already spawns its own Next.js dev server
+# pointed at the in-memory admin-backend mock (`tests/e2e/admin-axe.global-
+# setup.ts`). Reusing the same config that `npm run test:e2e:a11y` uses
+# locally keeps CI byte-equivalent to the developer loop and removes the
+# "build a separate frontend service in CI" failure mode entirely.
+#
+# Artefact discipline
+# -------------------
+# * `axe-report/`     — Playwright HTML + JSON output, traces, screenshots.
+# * `axe-summary.md`  — markdown summary produced by the parser.
+# * `axe-stdout.log`  — raw stdout/stderr from the playwright run.
+# Retained 30 days — long enough to triage a multi-day regression but not
+# so long it bloats the repo's artefact storage budget.
+#
+# Plan: ai_docs/develop/plans/2026-04-22-argus-cycle7.md (§C7-T09).
+# Triage runbook: docs/operations/admin-axe-cron.md (added in Wave 4).
+
+name: Admin axe-core nightly
+
+on:
+  schedule:
+    # 03:17 UTC daily — off-peak window (avoids 00 / 06 / 12 / 18 UTC).
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write   # required by the `gh issue create` failure-routing step.
+
+concurrency:
+  # Never cancel an in-flight nightly when an operator manually triggers
+  # an ad-hoc rerun — the manual run will queue behind the scheduled one
+  # and pick up whatever fix the operator just landed.
+  group: admin-axe-cron
+  cancel-in-progress: false
+
+env:
+  # Workspace-relative paths shared across the run + failure-routing steps.
+  AXE_REPORT_DIR: Frontend/axe-report
+  AXE_SUMMARY: Frontend/axe-summary.md
+  AXE_STDOUT_LOG: Frontend/axe-stdout.log
+
+jobs:
+  axe-scan:
+    name: Admin axe-core nightly scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20 (matches sibling Frontend workflows)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - name: Install Frontend deps (npm ci — lockfile-only)
+        working-directory: Frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium (axe-core needs only one engine)
+        working-directory: Frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run admin axe-core suite (a11y config — own dev server + mock backend)
+        # The existing `playwright.a11y.config.ts` spawns its own Next.js
+        # dev server pointed at the in-memory admin-backend mock (see
+        # `tests/e2e/admin-axe.global-setup.ts`). No real backend, no
+        # `next build`, no curl polling — Playwright's `webServer.url`
+        # IS the bounded health check (180 s timeout in the config).
+        # Reusing the same config that `npm run test:e2e:a11y` uses keeps
+        # local + CI behaviour byte-equivalent.
+        #
+        # `PLAYWRIGHT_JSON_OUTPUT_NAME` / `PLAYWRIGHT_HTML_REPORT` write
+        # the report files into our artefact dir. Reporters are forced
+        # via CLI (`--reporter=html,json,line`) so they replace the
+        # config's CI-default `"github"` reporter and we get a parseable
+        # JSON for the parser step. We deliberately tee + drop the
+        # playwright exit code: the parser is the single source of truth
+        # for "did the scan pass?" — the parser exits 1 only on
+        # `violations.length > 0` (a missing / empty report file also
+        # escalates via the parser's malformed-input branch).
+        working-directory: Frontend
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: axe-report/results.json
+          PLAYWRIGHT_HTML_REPORT: axe-report/html
+        run: |
+          set +e
+          mkdir -p axe-report
+          npx playwright test \
+            --config playwright.a11y.config.ts \
+            --reporter=html,json,line \
+            2>&1 | tee axe-stdout.log
+          true
+
+      - name: Parse axe-core JSON report (exit 1 on any violation)
+        id: parse_axe
+        working-directory: Frontend
+        # `scripts/parse-axe-report.mjs` ships in Wave 3. Stdlib-only
+        # (`node:fs`, `node:path`) — no extra deps, no network. Exit 1 =>
+        # at least one violation across all admin routes scanned.
+        run: |
+          node scripts/parse-axe-report.mjs \
+            axe-report/results.json \
+            axe-summary.md
+
+      - name: Upload axe artefacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-axe-cron-${{ github.run_id }}
+          path: |
+            ${{ env.AXE_REPORT_DIR }}
+            ${{ env.AXE_SUMMARY }}
+            ${{ env.AXE_STDOUT_LOG }}
+          if-no-files-found: warn
+          retention-days: 30
