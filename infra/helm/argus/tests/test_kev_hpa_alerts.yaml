@@ -8,8 +8,11 @@
 #
 # Coverage matrix
 # ---------------
-#   1. `kevHpa.alerts.enabled=true` (default) renders 5 alerts in 1 group.
-#   2. `kevHpa.alerts.enabled=false` renders zero PrometheusRule documents.
+#   1. Positive: full KEV pipeline enabled (kevHpa.alerts + prometheusAdapter +
+#      autoscaling.kevAware all true) renders 5 alerts in 1 group.
+#   2. Negative: any of the THREE pipeline gates flipped off renders zero
+#      PrometheusRule documents (C7-T06 follow-up DEBUG-1 — avoid
+#      KEVHPATargetMetricMissing firing on chart defaults).
 #   3. Every alert carries a `runbook_url` annotation pointing at the runbook.
 #   4. Every alert carries a `severity` label in {critical, warning}.
 #   5. Every alert carries a `team: sre`, `service: argus-scan-worker`, and
@@ -22,6 +25,11 @@
 #      coupling assertion required by C7-T06 Wave 3.
 #   7. The HPA-targeting alerts (Stuck/Flapping/Ceiling) reference the
 #      `argus-celery-kev` HPA name produced by the chart helpers.
+#
+# Per-test `set:` blocks explicitly enable the two upstream pipeline gates
+# for every positive case. We do NOT rely on a suite-level `set:` so each
+# test reads as a self-contained spec — a future maintainer adding a new
+# test cannot accidentally inherit hidden defaults.
 
 suite: kev-hpa-alerts
 templates:
@@ -32,9 +40,12 @@ release:
 
 tests:
   # ─────────────────────────────────────────────────────────────────────
-  # 1) Default render — 5 alerts in 1 group.
+  # 1) Default-positive render — full pipeline ON, 5 alerts in 1 group.
   # ─────────────────────────────────────────────────────────────────────
-  - it: renders one PrometheusRule with five alerts when alerts are enabled (default)
+  - it: renders one PrometheusRule with five alerts when the full KEV pipeline is enabled
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - hasDocuments:
           count: 1
@@ -58,13 +69,41 @@ tests:
           count: 5
 
   # ─────────────────────────────────────────────────────────────────────
-  # 2) Disabled toggle — zero documents (the only-rendered template
-  #    is gated by `{{- if .Values.kevHpa.alerts.enabled }}`, so the
-  #    output stream must be empty).
+  # 2) Negative — alerts toggle off (rest of pipeline irrelevant).
   # ─────────────────────────────────────────────────────────────────────
-  - it: renders zero documents when alerts are disabled
+  - it: renders zero documents when alerts are explicitly disabled
     set:
       kevHpa.alerts.enabled: false
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 2a) Negative — Prometheus Adapter off (no source for the external
+  #     metric, so alerting on it would be a guaranteed false positive).
+  #     C7-T06 follow-up DEBUG-1.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: renders zero documents when prometheusAdapter is disabled
+    set:
+      kevHpa.alerts.enabled: true
+      prometheusAdapter.enabled: false
+      autoscaling.kevAware.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  # ─────────────────────────────────────────────────────────────────────
+  # 2b) Negative — KEV-aware HPA off (the alerting surface watches an
+  #     HPA that does not exist, so the rule must not render).
+  #     C7-T06 follow-up DEBUG-1.
+  # ─────────────────────────────────────────────────────────────────────
+  - it: renders zero documents when autoscaling.kevAware is disabled
+    set:
+      kevHpa.alerts.enabled: true
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: false
     asserts:
       - hasDocuments:
           count: 0
@@ -73,6 +112,9 @@ tests:
   # 3) Each alert has a stable identity — name, severity, runbook_url.
   # ─────────────────────────────────────────────────────────────────────
   - it: KEVHPATargetMetricMissing has critical severity, runbook_url, team, service, environment
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - equal:
           path: spec.groups[0].rules[0].alert
@@ -98,6 +140,9 @@ tests:
           path: spec.groups[0].rules[0].annotations.description
 
   - it: KEVHPAScalingStuck has warning severity, runbook_url, team, service, environment
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - equal:
           path: spec.groups[0].rules[1].alert
@@ -119,6 +164,9 @@ tests:
           pattern: kev-hpa-runbook\.md#kevhpascalingstuck$
 
   - it: KEVHPAFlappingDetected has warning severity, runbook_url, team, service, environment
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - equal:
           path: spec.groups[0].rules[2].alert
@@ -140,6 +188,9 @@ tests:
           pattern: kev-hpa-runbook\.md#kevhpaflappingdetected$
 
   - it: KEVHPAReachedCeiling has warning severity, runbook_url, team, service, environment
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - equal:
           path: spec.groups[0].rules[3].alert
@@ -161,6 +212,9 @@ tests:
           pattern: kev-hpa-runbook\.md#kevhpareachedceiling$
 
   - it: KEVHPAMetricLatencyHigh has warning severity, runbook_url, team, service, environment
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - equal:
           path: spec.groups[0].rules[4].alert
@@ -187,12 +241,18 @@ tests:
   #    into Prometheus; the rule references it by exact name).
   # ─────────────────────────────────────────────────────────────────────
   - it: KEVHPATargetMetricMissing expression references the source counter scraped via the backend ServiceMonitor
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - matchRegex:
           path: spec.groups[0].rules[0].expr
           pattern: argus_findings_emitted_total\{kev_listed="true"\}
 
   - it: HPA-targeting alerts reference the chart-rendered HPA name (argus-celery-kev)
+    set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
     asserts:
       - matchRegex:
           path: spec.groups[0].rules[1].expr
@@ -211,6 +271,8 @@ tests:
   # ─────────────────────────────────────────────────────────────────────
   - it: production environment label propagates to every alert (Alertmanager routing key)
     set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
       config.environment: production
     asserts:
       - equal:
@@ -235,6 +297,8 @@ tests:
   # ─────────────────────────────────────────────────────────────────────
   - it: flapThreshold value override propagates into the KEVHPAFlappingDetected expression
     set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
       kevHpa.alerts.flapThreshold: 9
       kevHpa.alerts.flapWindow: 45m
     asserts:
@@ -244,6 +308,8 @@ tests:
 
   - it: latencyThresholdSeconds override propagates into the KEVHPAMetricLatencyHigh expression
     set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
       kevHpa.alerts.latencyThresholdSeconds: 60
       kevHpa.alerts.latencyWindow: 15m
     asserts:
@@ -253,6 +319,8 @@ tests:
 
   - it: additionalLabels merge into every alert (Alertmanager routing extension)
     set:
+      prometheusAdapter.enabled: true
+      autoscaling.kevAware.enabled: true
       kevHpa.alerts.additionalLabels.alertroute: primary-pager
     asserts:
       - equal:

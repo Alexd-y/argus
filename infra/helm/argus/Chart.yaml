@@ -8,7 +8,7 @@ description: |
   references in deployments use immutable @sha256 digests with an
   optional Cosign verify-init container (mandatory in prod values).
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "v1.0.0-cycle5"
 kubeVersion: ">=1.27.0-0"
 
@@ -37,6 +37,8 @@ annotations:
       description: Initial production Helm chart for ARGUS Cycle 5 (ARG-045)
     - kind: added
       description: PrometheusRule for KEV-aware HPA (5 alerts) — Cycle 7 C7-T06
+    - kind: changed
+      description: KEV-HPA PrometheusRule now AND-gated on prometheusAdapter.enabled and autoscaling.kevAware.enabled (avoids KEVHPATargetMetricMissing firing on chart defaults) — Cycle 7 C7-T06 follow-up
 
 dependencies:
   - name: postgresql

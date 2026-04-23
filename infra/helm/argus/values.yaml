@@ -355,6 +355,11 @@ autoscaling:
 # route template.
 kevHpa:
   alerts:
+    # Master toggle for the KEV-HPA PrometheusRule. NOTE: the rule only
+    # renders if `prometheusAdapter.enabled` AND `autoscaling.kevAware.enabled`
+    # are also true — gating to the live KEV pipeline avoids
+    # KEVHPATargetMetricMissing firing continuously on dev/staging clusters
+    # that ship the chart at defaults (adapter + KEV-aware HPA both off).
     enabled: true
     # Source counter scraped by Prometheus from the backend `/metrics` endpoint.
     # Underpins `argus_kev_findings_emit_rate_5m` (the HPA's external metric).

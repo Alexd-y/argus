@@ -110,7 +110,7 @@ All Helm values live under `autoscaling.kevAware` (HPA itself), `prometheusAdapt
 
 | Key | Default | Description |
 | --- | ------- | ----------- |
-| `enabled` | `true` | Renders the PrometheusRule. Disable when prometheus-operator CRDs are absent OR during a controlled rollback. |
+| `enabled` | `true` | Master toggle. The PrometheusRule renders only when this AND `prometheusAdapter.enabled` AND `autoscaling.kevAware.enabled` are all true (see §3.4 for the rationale). Disable when prometheus-operator CRDs are absent OR during a controlled rollback. |
 | `sourceMetricName` | `argus_findings_emitted_total` | Source counter referenced by KEVHPATargetMetricMissing. Override only if the backend metric registry renames it. |
 | `absentForWindow` | `5m` | `for:` AND `absent_over_time` window for KEVHPATargetMetricMissing. |
 | `stuckFor` | `15m` | `for:` window for KEVHPAScalingStuck. |
@@ -123,9 +123,26 @@ All Helm values live under `autoscaling.kevAware` (HPA itself), `prometheusAdapt
 | `runbookUrl` | (this file) | Embedded into every alert's `runbook_url` annotation. |
 | `additionalLabels` | `{}` | Merged into every alert's labels (use for Alertmanager routing keys). |
 
-### 3.4 Environment scoping (no paging on staging)
+### 3.4 Alert routing and chart-side render gate (no false positives on dev/staging)
 
-Every alert carries an `environment: <Values.config.environment>` label. The production Alertmanager route MUST filter on `environment="production"` so staging deploys emit alerts visible in Prometheus / Grafana WITHOUT paging on-call. Sample Alertmanager route:
+Two layers keep the alerts off the wrong pager:
+
+1. **Chart-side render gate (silences the rule entirely).** The PrometheusRule
+   only renders when ALL THREE chart toggles are true:
+   `kevHpa.alerts.enabled` (default `true`) AND `prometheusAdapter.enabled`
+   (default `false`) AND `autoscaling.kevAware.enabled` (default `false`).
+   Dev/staging clusters that ship the chart at defaults emit zero
+   PrometheusRule documents, so `KEVHPATargetMetricMissing` cannot fire on a
+   cluster where the source counter is genuinely absent because the KEV
+   pipeline was never wired up. To enable the alerts on staging, flip all
+   three (mirroring production) — see §4.2 for the exact `--set` flags.
+2. **Alertmanager-side environment routing (lets the rule fire visibly without paging).**
+   Every alert carries an `environment: <Values.config.environment>` label.
+   The production Alertmanager route MUST filter on `environment="production"`
+   so staging deploys with the full pipeline enabled emit alerts visible in
+   Prometheus / Grafana WITHOUT paging on-call.
+
+Sample Alertmanager route:
 
 ```yaml
 route:

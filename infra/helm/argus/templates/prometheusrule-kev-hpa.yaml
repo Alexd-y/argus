@@ -13,11 +13,26 @@ Cycle 6 Batch 6 (`templates/hpa-celery-worker-kev.yaml`):
 
 Render gating
 -------------
-This rule is gated by `.Values.kevHpa.alerts.enabled` (default true). Disable
-when:
-  * the cluster does not have `prometheus-operator` CRDs installed
-    (the PrometheusRule kind would be unrecognised), OR
-  * the operator wants to silence the alerts during a controlled rollback.
+This rule is gated by an AND of THREE chart toggles, all of which must be
+true for the PrometheusRule to render:
+
+  * `.Values.kevHpa.alerts.enabled`            (default true)
+  * `.Values.prometheusAdapter.enabled`        (default false — adapter rules
+    ConfigMap is the source of `argus_kev_findings_emit_rate_5m`)
+  * `.Values.autoscaling.kevAware.enabled`     (default false — the actual
+    KEV-aware HPA whose surface these alerts watch)
+
+The AND-gate is deliberate. A cluster that has prometheus-operator installed
+and applies the chart at default values would otherwise render the rule
+WITHOUT the underlying KEV pipeline being wired up, and
+`KEVHPATargetMetricMissing` would fire continuously because the source
+counter is genuinely absent. The gate ties the alerting surface to the
+production-grade pipeline it watches; disabling either of the upstream
+toggles silences the alert family in lock-step.
+
+Operators may still disable the alert family explicitly via
+`kevHpa.alerts.enabled=false` (e.g. during a controlled rollback while the
+KEV pipeline stays on).
 
 Environment scoping (no paging on staging)
 ------------------------------------------
@@ -53,7 +68,7 @@ Required out-of-cluster prerequisites
     or equivalent scrape config that brings `argus_findings_emitted_total`
     into Prometheus.
 */ -}}
-{{- if .Values.kevHpa.alerts.enabled }}
+{{- if and .Values.kevHpa.alerts.enabled .Values.prometheusAdapter.enabled .Values.autoscaling.kevAware.enabled }}
 {{- $hpaName := printf "%s-celery-kev" (include "argus.fullname" .) -}}
 {{- $env := default "dev" .Values.config.environment -}}
 {{- $sourceMetric := default "argus_findings_emitted_total" .Values.kevHpa.alerts.sourceMetricName -}}
