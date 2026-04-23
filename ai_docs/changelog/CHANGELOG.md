@@ -6,6 +6,39 @@ All notable changes to the ARGUS project are documented in this file. This proje
 
 ## [Unreleased]
 
+### Cycle 7 — C7-T09 Admin axe-core nightly cron (2026-04-23)
+
+#### Added — nightly accessibility regression scan
+- New workflow [`.github/workflows/admin-axe-cron.yml`](../../.github/workflows/admin-axe-cron.yml) — runs `Frontend/tests/e2e/admin-axe.spec.ts` against the current `main` daily at **03:17 UTC** (off-peak window, avoids the 00 / 06 / 12 / 18 UTC hot ones used by sibling crons). Manual `workflow_dispatch` available for ad-hoc operator reruns.
+- Reuses the existing `playwright.a11y.config.ts` (own Next.js dev server + in-memory admin-backend mock) — no `next build`, no `curl` polling, no real backend service. CI is byte-equivalent to `npm run test:e2e:a11y` locally.
+- Concurrency group `admin-axe-cron` with `cancel-in-progress: false` — a manual run never cancels an in-flight nightly.
+- Permissions scoped tightly: `contents: read` + `issues: write`. Token is the default `GITHUB_TOKEN`; no PAT, no third-party action, no fabricated `secrets.*` references.
+- Artefact upload (`actions/upload-artifact@v4`, `if: always()`, 30-day retention) — `axe-report/` (HTML + JSON), `axe-summary.md`, `axe-stdout.log`.
+
+#### Added — dedupe-aware GitHub-issue routing on regression
+- New "Ensure issue labels exist" step idempotently creates `a11y` / `regression` / `cycle-followup` labels via `gh label create … || true` so the workflow doesn't fail on first run in a fresh fork.
+- New "File / update axe regression issue" step gated on `steps.parse_axe.outcome == 'failure'` — only fires on real axe violations or a malformed report. Infra failures (`npm ci`, Playwright install, etc.) skip this step entirely; those are diagnosed via the workflow log, not auto-filed as a11y bugs.
+- Dedupe contract: lists open issues labelled `a11y`, matches on title prefix `[axe-core] Nightly admin a11y scan:`. If a match exists, comments on the rolling issue (multi-day regression = single issue + timeline of nightly comments). Otherwise opens a fresh one.
+- Issue title format: `[axe-core] Nightly admin a11y scan: <N> violations on <YYYY-MM-DD>`. Body: first 200 lines of `axe-summary.md` + a footer linking back to the workflow run.
+- New issue template [`.github/ISSUE_TEMPLATE/admin-axe-violation.md`](../../.github/ISSUE_TEMPLATE/admin-axe-violation.md) — classic GitHub schema with `name` / `about` / `title` / `labels` / `assignees` front-matter, severity-ladder pointer into the runbook, and a triage checklist.
+
+#### Added — stdlib-only JSON report parser
+- New [`Frontend/scripts/parse-axe-report.mjs`](../../Frontend/scripts/parse-axe-report.mjs) — pure-Node ESM, only `node:fs` + `node:path`. Reads a Playwright JSON report, walks the suite tree, and extracts axe violation payloads from the embedded assertion messages (the existing spec calls `expect(violations, msg).toEqual([])`; the C7-T09 hard rules forbid modifying the spec, so the message format is treated as a stable contract — balanced-bracket extraction, robust to trailing `Expected:` / `Received:` footers).
+- Aggregates per-rule (worst-impact wins on collision so the operator-visible severity matches the SLA ladder) and per-route (one row per failing spec). Writes a Markdown summary in the format consumed by the issue-routing step (`**Total violations:** <N>` is the awk anchor).
+- Exit codes: `0` = clean, `1` = at least one violation OR a malformed/missing report. Stderr is a single human-readable line on error — never a stack trace (per the project rule on error-handling).
+- New unit tests [`Frontend/scripts/__tests__/parse-axe-report.test.mjs`](../../Frontend/scripts/__tests__/parse-axe-report.test.mjs) — 4 cases via `node:test` (stdlib, Node ≥ 18). Spawns the parser as a subprocess so the argv → exit-code contract is exercised end-to-end. Verified locally with `node --test` (4/4 pass).
+
+#### Documented
+- New operator runbook [`docs/operations/admin-axe-cron.md`](../../docs/operations/admin-axe-cron.md) — purpose & schedule, local reproduction (PowerShell + POSIX), severity ladder (`critical` / `serious` = 5 business days, `moderate` = 10, `minor` = next sprint), false-positive suppression (`disableRules` example with three hard sign-off requirements), Slack/Teams webhook wiring (intentionally not wired today — `SLACK_AXE_WEBHOOK` secret not provisioned), and a cron-itself failure runbook (npm ci / Playwright install / parser malformed-JSON / `gh` label-not-found / Actions-disabled-after-60-days-of-inactivity).
+
+#### Hard-rule compliance
+- No new pip / npm dependencies (parser is stdlib-only; tests use `node:test` which is built in to Node ≥ 18).
+- `Frontend/tests/e2e/admin-axe.spec.ts` was NOT touched (per hard rule — this is CI wiring, not a test rewrite).
+- `gh` invocations rely on the default `GITHUB_TOKEN` (no `secrets.GH_PAT` fabrication).
+- Workflow does NOT mark `main` as failing — `schedule:` triggers are independent of branch protection. The auto-filed issue is the single failure signal.
+- Job `name:` field (`Admin axe-core nightly scan`) does not collide with any existing required-status-check name in the repo.
+- Out-of-scope workflows (`kev-hpa-kind.yml`, `pdfa-validation.yml`, `helm-validation.yml`) untouched.
+
 ### Cycle 7 — C7-T03 MFA endpoints + super-admin enforcement (2026-04-23)
 
 #### Added — admin MFA HTTP surface (`/api/v1/auth/admin/mfa/*`)
