@@ -544,18 +544,33 @@ async def consume_backup_code(
 ) -> bool:
     """Spend one backup code; returns ``True`` iff a hash was removed.
 
-    Concurrency model:
-      * Postgres — the implicit transaction promotes the ``UPDATE`` to a
-        row-level lock; two concurrent consumers cannot both win because
-        only one can hold the lock at a time and the second observes the
-        already-shrunk array.
-      * SQLite (tests) — connection-serialised by default, so the same
-        invariant holds with no extra plumbing.
+    Concurrency model — Compare-and-Swap UPDATE
+    ------------------------------------------
+    The original implementation did a SELECT (no ``FOR UPDATE``) followed
+    by an UPDATE-by-PK that wrote the post-state computed in Python.
+    Under Postgres' default ``READ COMMITTED`` isolation level, two
+    concurrent ``/verify`` calls with the same backup code could both:
+
+      1. observe identical ``backup_codes_hash`` snapshots in their
+         respective ``_load_state`` SELECTs (the SELECTs do not lock);
+      2. compute the same ``new_value`` array (one slot removed);
+      3. issue UPDATEs that the engine serialises but that BOTH succeed
+         — both rowcount=1, both return ``True``.
+
+    That is a single-use violation: the same backup code authenticates
+    two requests. To eliminate the race we add a CAS predicate to the
+    ``WHERE`` clause: ``mfa_backup_codes_hash = <pre_state>``. Whichever
+    UPDATE the engine commits first changes the column; the second
+    UPDATE's predicate no longer matches, ``rowcount`` becomes 0, and
+    the loser returns ``False`` so the caller treats the code as
+    invalid. The CAS is portable across Postgres ``ARRAY(String)`` and
+    SQLite ``JSON`` (``with_variant`` in :class:`AdminUser`) — both
+    support array/JSON equality as a ``WHERE`` predicate.
 
     Always sweeps the entire hash array (even after a match is found) so
-    the wall-clock cost of a *valid* code does not depend on its position
-    — eliminates a position-leak side channel against an attacker who can
-    measure response timing.
+    the wall-clock cost of a *valid* code does not depend on its
+    position — eliminates a position-leak side channel against an
+    attacker who can measure response timing.
     """
     try:
         canonical = _normalize_subject(subject)
@@ -600,22 +615,48 @@ async def consume_backup_code(
         )
         return False
 
-    remaining = [h for i, h in enumerate(state.backup_codes_hash) if i != matched_index]
+    pre_hashes = list(state.backup_codes_hash)
+    remaining = [h for i, h in enumerate(pre_hashes) if i != matched_index]
     new_value: list[str] | None = remaining if remaining else None
 
     stmt = (
         update(AdminUser)
-        .where(AdminUser.subject == canonical)
+        .where(
+            AdminUser.subject == canonical,
+            # CAS: only land if the persisted array still matches the
+            # snapshot we computed against. A concurrent consumer that
+            # already shrunk the array will make this predicate miss
+            # (rowcount=0) and we will report failure to the caller.
+            AdminUser.mfa_backup_codes_hash == pre_hashes,
+        )
         .values(mfa_backup_codes_hash=new_value)
     )
     try:
-        await db.execute(stmt)
+        result: CursorResult = cast(CursorResult, await db.execute(stmt))
     except SQLAlchemyError:
         logger.exception(
             "admin_mfa_backup_db_error",
             extra={
                 "event": "argus.mfa.backup.db_error",
                 "subject": canonical,
+            },
+        )
+        return False
+
+    if result.rowcount != 1:
+        # Lost-update race: another consumer mutated the array between
+        # our SELECT and our UPDATE. Treat as "code not valid" so the
+        # double-spend defence holds. SOC alerts on
+        # `argus.mfa.backup.cas_lost` to spot abuse patterns (a high
+        # rate suggests a brute-forcer racing the same code in
+        # parallel) — the per-(subject, IP) verify limiter at the
+        # router layer should catch the brute-force before this fires.
+        logger.warning(
+            "admin_mfa_backup_cas_lost",
+            extra={
+                "event": "argus.mfa.backup.cas_lost",
+                "subject": canonical,
+                "rowcount": int(result.rowcount or 0),
             },
         )
         return False

@@ -515,6 +515,122 @@ async def test_consume_backup_code_with_unknown_code_does_not_modify_row(
 
 
 # ---------------------------------------------------------------------------
+# (8a) consume_backup_code — Compare-and-Swap concurrency guard.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_backup_code_concurrent_consume_only_one_succeeds(
+    session_factory: Any,
+    mfa_keyring: MfaKeyring,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Two consumers seeing identical pre-state → CAS lets exactly one win.
+
+    DEBUG-3 (cycle-7-T03 follow-up). Reproduces the
+    ``READ COMMITTED`` race that the original implementation allowed:
+
+      1. Caller A loads ``backup_codes_hash = [h₀, h₁, …, h₉]``.
+      2. Caller B loads the same array (no row lock on either SELECT).
+      3. Both compute the post-state ``[h₁, …, h₉]``.
+      4. Without CAS: both UPDATEs land, both return ``True`` →
+         single-use violation.
+
+    To force step 1 + 2 deterministically (single-connection SQLite +
+    sync bcrypt would otherwise serialise the consumers and the second
+    SELECT would observe the post-commit state, masking the race) we
+    monkey-patch :func:`admin_mfa_module._load_state` to replay the
+    same captured snapshot for both calls. The CAS predicate
+    (``WHERE mfa_backup_codes_hash = <pre_state>``) then makes the
+    second UPDATE see ``rowcount = 0``, log
+    ``argus.mfa.backup.cas_lost`` and return ``False``.
+
+    Post-conditions
+    ---------------
+    * Exactly one of ``(winner_a, winner_b)`` is ``True``.
+    * The persisted array shrinks by exactly one slot (proving the
+      winner's UPDATE landed and the loser's did NOT add a second
+      mutation on top).
+    * The loser logs the ``cas_lost`` SIEM event.
+    """
+    async with session_factory() as setup:
+        await _seed_admin(setup)
+        _, codes = await _enrol_and_confirm(setup)
+
+    target = codes[0]
+
+    async with session_factory() as snapshot:
+        cached = await admin_mfa_module._load_state(snapshot, _SUBJECT)
+
+    cached_hashes = list(cached.backup_codes_hash)
+
+    real_load_state = admin_mfa_module._load_state
+
+    async def _frozen_load_state(
+        session_arg: AsyncSession,
+        subject: str,
+    ) -> admin_mfa_module._MfaState:
+        # Force every consumer to see the same pre-state, simulating two
+        # concurrent SELECTs under READ COMMITTED that observed the row
+        # before either UPDATE committed.
+        if subject == _SUBJECT:
+            return admin_mfa_module._MfaState(
+                subject=cached.subject,
+                enabled=cached.enabled,
+                secret_encrypted=cached.secret_encrypted,
+                backup_codes_hash=list(cached_hashes),
+            )
+        return await real_load_state(session_arg, subject)
+
+    monkeypatch.setattr(admin_mfa_module, "_load_state", _frozen_load_state)
+
+    async def attempt() -> bool:
+        async with session_factory() as s:
+            r = await consume_backup_code(s, subject=_SUBJECT, code=target)
+            await s.commit()
+            return r
+
+    import asyncio as _asyncio
+
+    with caplog.at_level(logging.WARNING):
+        results = await _asyncio.gather(attempt(), attempt())
+
+    winners = [r for r in results if r is True]
+    losers = [r for r in results if r is False]
+    assert len(winners) == 1 and len(losers) == 1, (
+        "CAS must let EXACTLY one concurrent consumer win and reject the "
+        f"other (anti-double-spend); got results={results!r}"
+    )
+
+    async with session_factory() as inspect:
+        row = await inspect.get(AdminUser, _SUBJECT)
+        assert row is not None
+        persisted = list(row.mfa_backup_codes_hash or [])
+    assert len(persisted) == len(cached_hashes) - 1, (
+        "winner's UPDATE must shrink the array by exactly one slot — "
+        f"pre={len(cached_hashes)} post={len(persisted)} "
+        "(if both UPDATEs landed, the loser's would re-write the same "
+        "post-state on top of the winner's, masking the bug; with CAS "
+        "the loser does NOT write at all)"
+    )
+
+    cas_lost_records = _records_with_event(
+        caplog.records, "argus.mfa.backup.cas_lost"
+    )
+    assert len(cas_lost_records) == 1, (
+        "loser MUST emit a single `argus.mfa.backup.cas_lost` SIEM "
+        f"warning so SOC can alert on race patterns; got "
+        f"{len(cas_lost_records)} record(s)"
+    )
+
+    for raw in codes:
+        assert raw not in caplog.text, (
+            "concurrent consume must NOT log the candidate raw code"
+        )
+
+
+# ---------------------------------------------------------------------------
 # (9) disable_mfa — wipes columns + emits structured event.
 # ---------------------------------------------------------------------------
 
