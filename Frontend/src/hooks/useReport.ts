@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getReportByTarget, getReportById } from "@/lib/reports";
+import {
+  getReportByTarget,
+  getReportById,
+  REPORT_PAGE_REQUIRES_TARGET_OR_ID,
+} from "@/lib/reports";
 import { getSafeErrorMessage } from "@/lib/api";
 import type { Report } from "@/lib/types";
 
@@ -20,7 +24,7 @@ export function useReport(target: string | null, id: string | null): UseReportRe
   const fetchReport = useCallback(async () => {
     if (!target && !id) {
       setLoading(false);
-      setError("No target or report ID provided");
+      setError(REPORT_PAGE_REQUIRES_TARGET_OR_ID);
       return;
     }
 

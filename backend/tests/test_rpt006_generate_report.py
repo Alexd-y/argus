@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -89,9 +90,10 @@ async def test_run_generate_report_pipeline_success(monkeypatch: pytest.MonkeyPa
 
     exec_results = [
         ExecScalar(report),
-        MagicMock(),
-        ExecScalar(None),
-        MagicMock(),
+        MagicMock(),  # processing → generation_status
+        ExecScalar(None),  # tenant pdf_archival_format lookup
+        ExecScalar(None),  # ReportObject upsert select
+        MagicMock(),  # ready → generation_status
     ]
 
     session = MagicMock()
@@ -179,10 +181,11 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
 
     exec_results = [
         ExecScalar(report),
-        MagicMock(),
-        ExecScalar(None),
-        ExecScalar(None),
-        MagicMock(),
+        MagicMock(),  # processing
+        ExecScalar(None),  # tenant pdf_archival_format
+        ExecScalar(None),  # upsert csv
+        ExecScalar(None),  # upsert valhalla_sections csv
+        MagicMock(),  # ready
     ]
 
     session = MagicMock()
@@ -248,9 +251,8 @@ async def test_run_generate_report_pipeline_validation_failure_skips_upload(
 
     exec_results = [
         ExecScalar(report),
-        MagicMock(),
-        ExecScalar(None),
-        MagicMock(),
+        MagicMock(),  # processing
+        MagicMock(),  # validation failure → generation_status failed
     ]
     session = MagicMock()
     session.execute = AsyncMock(side_effect=exec_results)
@@ -270,3 +272,147 @@ async def test_run_generate_report_pipeline_validation_failure_skips_upload(
     assert out["status"] == "failed"
     assert out.get("error") == "validation_failed"
     assert upload_called == []
+
+
+@pytest.mark.asyncio
+async def test_run_generate_report_pipeline_success_emits_structured_completion_log(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """RPT-001: completion path logs one INFO event with operator-safe structured ``extra``."""
+    import src.reports.report_pipeline as rp
+    from src.reports.data_collector import ScanReportData
+    from src.services.reporting import ReportContextBuildResult
+
+    report = SimpleNamespace(
+        id="rep-log",
+        tenant_id="ten-log",
+        scan_id="scan-log",
+        tier="midgard",
+        requested_formats=None,
+    )
+    built = ReportContextBuildResult(
+        scan_report_data=ScanReportData(scan_id="scan-log", tenant_id="ten-log", findings=[]),
+        template_context={
+            "report_quality": {
+                "coverage_label": "full",
+                "tool_health": "healthy",
+                "warnings": ["w1", "w2"],
+            },
+        },
+        ai_section_results={"executive_summary": {"status": "ok", "text": "summary text"}},
+    )
+
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+        return built
+
+    monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
+    monkeypatch.setattr(rp, "generate_html", lambda *args, **kwargs: b"<html/>")
+
+    session = MagicMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            ExecScalar(report),
+            MagicMock(),
+            ExecScalar(None),
+            ExecScalar(None),
+            MagicMock(),
+        ]
+    )
+    session.commit = AsyncMock()
+
+    with caplog.at_level(logging.INFO, logger="src.reports.report_pipeline"):
+        out = await run_generate_report_pipeline(
+            session,
+            report_id="rep-log",
+            tenant_id="ten-log",
+            scan_id_hint=None,
+            formats=["html"],
+            upload_fn=lambda *a, **k: "ten-log/scan-log/reports/midgard/rep-log.html",
+            ensure_bucket_fn=lambda: True,
+            redis_client=MagicMock(),
+        )
+
+    assert out["status"] == "completed"
+    rec = next(r for r in caplog.records if r.getMessage() == "report_generation_completed")
+    assert getattr(rec, "event", None) == "report_generation_completed"
+    assert getattr(rec, "report_id", None) == "rep-log"
+    assert getattr(rec, "tenant_id", None) == "ten-log"
+    assert getattr(rec, "scan_id", None) == "scan-log"
+    assert getattr(rec, "tier", None) == "midgard"
+    assert getattr(rec, "formats_n", None) == 1
+    assert getattr(rec, "coverage_label", None) == "full"
+    assert getattr(rec, "tool_health", None) == "healthy"
+    assert getattr(rec, "warnings_n", None) == 2
+    assert getattr(rec, "full_valhalla", None) is None
+
+
+@pytest.mark.asyncio
+async def test_run_generate_report_pipeline_valhalla_completion_log_includes_full_flag(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """RPT-001: Valhalla completion log carries ``full_valhalla`` when present in template context."""
+    import src.reports.report_pipeline as rp
+    from src.reports.data_collector import ScanReportData
+    from src.reports.valhalla_report_context import ValhallaReportContext
+    from src.services.reporting import ReportContextBuildResult
+
+    report = SimpleNamespace(
+        id="rep-vlog",
+        tenant_id="ten-v",
+        scan_id="scan-v",
+        tier="valhalla",
+        requested_formats=None,
+    )
+    vctx = ValhallaReportContext(full_valhalla=True).model_dump(mode="json")
+    built = ReportContextBuildResult(
+        scan_report_data=ScanReportData(scan_id="scan-v", tenant_id="ten-v", findings=[]),
+        template_context={
+            "tier": "valhalla",
+            "valhalla_context": vctx,
+            "report_quality": {
+                "coverage_label": "partial",
+                "tool_health": "healthy",
+                "warnings": [],
+            },
+            "scan_artifacts": {"status": "skipped", "phase_blocks": []},
+            "ai_sections": {},
+            "recon_summary": {},
+        },
+        ai_section_results={},
+    )
+
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+        return built
+
+    monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
+    monkeypatch.setattr(rp, "generate_html", lambda *args, **kwargs: b"<html/>")
+
+    session = MagicMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            ExecScalar(report),
+            MagicMock(),
+            ExecScalar(None),
+            ExecScalar(None),
+            MagicMock(),
+        ]
+    )
+    session.commit = AsyncMock()
+
+    with caplog.at_level(logging.INFO, logger="src.reports.report_pipeline"):
+        out = await run_generate_report_pipeline(
+            session,
+            report_id="rep-vlog",
+            tenant_id="ten-v",
+            scan_id_hint=None,
+            formats=["html"],
+            upload_fn=lambda *a, **k: "k",
+            ensure_bucket_fn=lambda: True,
+            redis_client=MagicMock(),
+        )
+
+    assert out["status"] == "completed"
+    rec = next(r for r in caplog.records if r.getMessage() == "report_generation_completed")
+    assert getattr(rec, "tier", None) == "valhalla"
+    assert getattr(rec, "full_valhalla", None) is True
+    assert getattr(rec, "warnings_n", None) == 0

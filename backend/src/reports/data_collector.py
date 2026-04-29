@@ -55,6 +55,10 @@ from src.recon.stage_object_download import StageObjectFetchError
 from src.reports.finding_dedup import deduplicate_findings
 from src.reports.finding_quality_filter import filter_valid_findings
 from src.reports.finding_severity_normalizer import normalize_findings_severity
+from src.reports.report_quality_gate import (
+    apply_security_header_table_gap_to_findings,
+    normalize_findings_for_report,
+)
 from src.reports.valhalla_report_context import (
     OutdatedComponentRow,
     RobotsSitemapMergedSummaryModel,
@@ -258,9 +262,15 @@ class FindingRow(BaseModel):
     description: str | None = None
     cwe: str | None = None
     cvss: float | None = None
+    cvss_score: float | None = None
+    cvss_vector: str | None = None
+    exploit_demonstrated: bool = False
+    exploit_summary: str | None = None
     owasp_category: str | None = None
     proof_of_concept: dict[str, Any] | None = None
     confidence: str = "likely"
+    validation_status: str = "unverified"
+    evidence_quality: str = "none"
     evidence_type: str | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
@@ -347,13 +357,14 @@ def _scan_row_from_orm(row: ScanModel) -> ScanRowData:
 
 
 def _report_row_from_orm(row: ReportModel) -> ReportRowSlice:
+    # ORM defaults (e.g. midgard/ready) apply on INSERT; in-memory / detached rows may still be None.
     return ReportRowSlice(
         id=row.id,
         tenant_id=row.tenant_id,
         target=row.target,
         scan_id=row.scan_id,
-        tier=row.tier,
-        generation_status=row.generation_status,
+        tier=row.tier or "midgard",
+        generation_status=row.generation_status or "ready",
         template_version=row.template_version,
         prompt_version=row.prompt_version,
         summary=row.summary,
@@ -588,10 +599,24 @@ class ReportDataCollector:
                     "scan_id": sid,
                 },
             )
+            # Scan row may be absent (stale link, mocked DB, or GC) while the report row
+            # still holds canonical target/summary for export (JSON/API contract).
+            missing_scan_report: ReportRowSlice | None = None
+            if report_id:
+                r_only = await session.execute(
+                    select(ReportModel).where(
+                        cast(ReportModel.id, String) == report_id,
+                        cast(ReportModel.tenant_id, String) == tid,
+                    )
+                )
+                r_orm_only = r_only.scalar_one_or_none()
+                if r_orm_only:
+                    missing_scan_report = _report_row_from_orm(r_orm_only)
             return ScanReportData(
                 scan_id=sid,
                 tenant_id=tid,
                 scan=None,
+                report=missing_scan_report,
                 valhalla_context=ValhallaReportContext(),
                 tech_stack=None,
                 tool_runs=[],
@@ -720,9 +745,8 @@ class ReportDataCollector:
 
         findings = deduplicate_findings(findings)
         findings = filter_valid_findings(findings)
+        findings = normalize_findings_for_report(findings)
         findings = normalize_findings_severity(findings)
-
-        owasp_summary = build_owasp_summary_from_counts(owasp_counts_from_finding_rows(findings))
 
         s1 = StageArtifactsBundle()
         s2 = StageArtifactsBundle()
@@ -762,6 +786,7 @@ class ReportDataCollector:
             for row in tr_orm_rows
             if str(row.tool_name or "").strip()
         ]
+        scan_opts = scan_data.options if isinstance(scan_data.options, dict) else None
         valhalla_ctx = build_valhalla_report_context(
             tenant_id=tid,
             scan_id=sid,
@@ -779,7 +804,11 @@ class ReportDataCollector:
             trivy_enabled=bool(settings.trivy_enabled),
             harvester_enabled=bool(settings.harvester_enabled),
             tool_run_summaries=tool_run_status_tuples or None,
+            scan_options=scan_opts,
         )
+
+        findings = apply_security_header_table_gap_to_findings(findings, valhalla_ctx)
+        owasp_summary = build_owasp_summary_from_counts(owasp_counts_from_finding_rows(findings))
 
         exploit_dump: dict[str, Any] | None = None
         for row in phase_outputs:

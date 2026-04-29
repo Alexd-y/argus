@@ -43,13 +43,13 @@ def test_findings_table_owasp_column_and_compliance_asgard() -> None:
     )
     rows = findings_rows_for_jinja(data)
     html = render_findings_table_html("asgard", rows)
-    assert "OWASP Top 10:2025 Compliance" in html
+    assert "OWASP Top 10:2025 compliance mapping" in html
     assert "owasp-compliance-table" in html
-    assert "Категория OWASP" in html
+    assert "OWASP Category" in html
     assert ">A05<" in html or "A05" in html
-    assert "Инъекции" in html
+    assert "Injection" in html
     assert "owasp-compliance-warn" in html
-    assert "owasp-compliance-0" in html
+    assert "owasp-compliance-not-assessed" in html
 
 
 def test_findings_table_owasp_hidden_midgard() -> None:
@@ -70,8 +70,8 @@ def test_findings_table_owasp_hidden_midgard() -> None:
     )
     rows = findings_rows_for_jinja(data)
     html = render_findings_table_html("midgard", rows)
-    assert "OWASP Top 10:2025 Compliance" not in html
-    assert "Категория OWASP" not in html
+    assert "OWASP Top 10:2025 compliance mapping" not in html
+    assert "OWASP Category" not in html
 
 
 def test_findings_table_poc_valhalla_shows_curl_js_parameter_payload() -> None:
@@ -128,7 +128,7 @@ def test_findings_table_poc_midgard_tier_note_only() -> None:
     )
     rows = findings_rows_for_jinja(data)
     html = render_findings_table_html("midgard", rows)
-    assert "Подробности PoC доступны" in html
+    assert "PoC details are available" in html
     assert "curl x" not in html
 
 

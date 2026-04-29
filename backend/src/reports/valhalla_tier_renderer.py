@@ -215,6 +215,7 @@ _CWE_TO_OWASP_2025: Final[dict[str, str]] = {
     "CWE-1004": "A02",
     "CWE-1032": "A02",
     "CWE-1174": "A02",
+    "CWE-693": "A02",
     # A03 — Software Supply Chain Failures
     "CWE-829": "A03",
     "CWE-830": "A03",
@@ -344,7 +345,6 @@ _CWE_TO_OWASP_2025: Final[dict[str, str]] = {
     "CWE-613": "A07",
     "CWE-620": "A07",
     "CWE-640": "A07",
-    "CWE-693": "A07",
     "CWE-798": "A07",  # Hardcoded credentials
     "CWE-940": "A07",
     "CWE-1216": "A07",
@@ -1100,6 +1100,8 @@ def valhalla_assembly_to_jinja_context(
     base = dict(base_context or {})
     base["tier"] = "valhalla"
     base["valhalla_executive_report"] = assembly.model_dump(mode="json")
+    # Same ordering as the assembly model — HTML/PDF/JSON all stay in lockstep.
+    base["valhalla_executive_section_order"] = list(VALHALLA_EXECUTIVE_SECTION_ORDER)
     return base
 
 

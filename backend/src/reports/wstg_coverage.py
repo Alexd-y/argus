@@ -268,6 +268,9 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
     "patator": [
         "WSTG-ATHN-02", "WSTG-ATHN-03", "WSTG-ATHN-07",
     ],
+    "rate_limit_signal": [
+        "WSTG-ATHN-03",
+    ],
     "trivy": [
         "WSTG-INFO-09", "WSTG-CONF-02",
     ],
@@ -288,6 +291,8 @@ _TOOL_ALIASES: dict[str, str] = {
     "dns-recon": "dnsrecon",
     "jwt-tool": "jwt_tool",
     "jwtool": "jwt_tool",
+    "rate-limit-signal": "rate_limit_signal",
+    "rate_limit": "rate_limit_signal",
     "git-leaks": "gitleaks",
     "git_leaks": "gitleaks",
     "truffle-hog": "trufflehog",
@@ -307,6 +312,24 @@ _TOOL_ALIASES: dict[str, str] = {
     "wp-scan": "wpscan",
     "sub_jack": "subjack",
     "sub-jack": "subjack",
+}
+
+_TOOL_EVIDENCE_IDS: dict[str, str] = {
+    "whatweb": "EV-TECH-001",
+    "wappalyzer": "EV-TECH-001",
+    "httpx": "EV-HDR-001",
+    "curl": "EV-HDR-001",
+    "nikto": "EV-HDR-001",
+    "testssl": "EV-TLS-001",
+    "testssl.sh": "EV-TLS-001",
+    "sslscan": "EV-TLS-001",
+    "sslyze": "EV-TLS-001",
+    "nmap": "EV-PORT-001",
+    "naabu": "EV-PORT-001",
+    "masscan": "EV-PORT-001",
+    "theharvester": "EV-EMAIL-001",
+    "trivy": "EV-SCA-001",
+    "rate_limit_signal": "EV-AUTH-001",
 }
 
 _MIN_TOOLS_FULL_COVERAGE = 2
@@ -378,6 +401,7 @@ def build_wstg_coverage(
             wstg_to_covering_tools.setdefault(wstg_id, set()).add(tool_key)
 
     categories: dict[str, dict[str, int]] = {}
+    category_evidence: dict[str, set[str]] = {}
     tests_output: list[dict[str, Any]] = []
 
     for tc in _WSTG_TESTS:
@@ -389,6 +413,11 @@ def build_wstg_coverage(
         })
         cat_bucket["total"] += 1
         cat_bucket[status] += 1
+        if status != "not_covered":
+            for tool in covering:
+                evidence_id = _TOOL_EVIDENCE_IDS.get(tool)
+                if evidence_id:
+                    category_evidence.setdefault(tc.category, set()).add(evidence_id)
 
         tests_output.append({
             "id": tc.id,
@@ -410,6 +439,7 @@ def build_wstg_coverage(
         by_category[cat_name] = {
             **counts,
             "percentage": (effective / cat_total * 100) if cat_total else 0.0,
+            "evidence_ids": sorted(category_evidence.get(cat_name, set())),
         }
 
     effective_total = covered + partial * 0.5

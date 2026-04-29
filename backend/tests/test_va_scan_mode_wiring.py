@@ -9,24 +9,23 @@ import pytest
 # ---------------------------------------------------------------------------
 
 class TestScanModeWiring:
-    """FIX-001 — scan_mode is extracted from scan_options via the priority chain:
-    scanType > scan_mode > "standard" default.
-    """
+    """FIX-001 — canonical scan_mode wins over legacy scanType."""
 
     @staticmethod
     def _extract_scan_mode(scan_options: dict | None) -> str:
         """Mirror the extraction logic used in handlers.run_vuln_analysis."""
-        return (
-            (scan_options or {}).get("scanType")
-            or (scan_options or {}).get("scan_mode")
-            or "standard"
-        )
+        from src.orchestration.handlers import _normalize_scan_mode_for_va
+
+        return _normalize_scan_mode_for_va(scan_options)
 
     def test_scan_type_key_deep(self) -> None:
         assert self._extract_scan_mode({"scanType": "deep"}) == "deep"
 
     def test_scan_mode_key_aggressive(self) -> None:
-        assert self._extract_scan_mode({"scan_mode": "aggressive"}) == "aggressive"
+        assert self._extract_scan_mode({"scan_mode": "aggressive"}) == "deep"
+
+    def test_lab_scan_mode_uses_deep_tool_planning(self) -> None:
+        assert self._extract_scan_mode({"scan_mode": "lab", "scanType": "lab"}) == "deep"
 
     def test_empty_dict_defaults_to_standard(self) -> None:
         assert self._extract_scan_mode({}) == "standard"
@@ -34,8 +33,8 @@ class TestScanModeWiring:
     def test_none_defaults_to_standard(self) -> None:
         assert self._extract_scan_mode(None) == "standard"
 
-    def test_scan_type_takes_precedence_over_scan_mode(self) -> None:
-        result = self._extract_scan_mode({"scanType": "deep", "scan_mode": "standard"})
+    def test_scan_mode_takes_precedence_over_scan_type(self) -> None:
+        result = self._extract_scan_mode({"scanType": "quick", "scan_mode": "deep"})
         assert result == "deep"
 
     def test_falsy_scan_type_falls_through_to_scan_mode(self) -> None:
@@ -45,6 +44,41 @@ class TestScanModeWiring:
     def test_both_empty_strings_fall_through_to_default(self) -> None:
         result = self._extract_scan_mode({"scanType": "", "scan_mode": ""})
         assert result == "standard"
+
+    def test_lab_scan_mode_autofills_per_scan_allowed_targets(self) -> None:
+        from src.api.routers.scans import _sync_scan_depth_options
+
+        result = _sync_scan_depth_options(
+            {"scan_approval_flags": {"sqlmap": True}},
+            "lab",
+            target="https://glomsoposten.vercel.app/signin",
+        )
+
+        assert result["lab_allowed_targets"] == [
+            "https://glomsoposten.vercel.app",
+            "localhost",
+            "127.0.0.1",
+        ]
+        assert (
+            result["argus_lab_allowed_targets"]
+            == "https://glomsoposten.vercel.app,localhost,127.0.0.1"
+        )
+        assert result["scan_approval_flags"]["commix"] is True
+
+    def test_lab_allowed_targets_ignore_boolean_placeholders(self) -> None:
+        from src.api.routers.scans import _merge_lab_allowed_targets
+
+        result = _merge_lab_allowed_targets(
+            "true",
+            "https://glomsoposten.vercel.app/path",
+            "localhost,127.0.0.1",
+        )
+
+        assert result == [
+            "https://glomsoposten.vercel.app",
+            "localhost",
+            "127.0.0.1",
+        ]
 
 
 # ---------------------------------------------------------------------------

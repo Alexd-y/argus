@@ -203,7 +203,7 @@ async def run_recon_planned_tool_gather(
                 block = st_tool_results.get(key)
                 if isinstance(block, dict):
                     stdout = block.get("stdout")
-                    if isinstance(stdout, str) and stdout.strip():
+                    if isinstance(stdout, str) and len(stdout) > 0:
                         try:
                             await asyncio.to_thread(raw_sink.upload_text, key, stdout)
                         except Exception:

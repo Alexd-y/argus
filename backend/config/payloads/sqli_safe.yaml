@@ -1,0 +1,23 @@
+family_id: sqli_safe
+description: >-
+  Inert string markers for SQL injection surface detection (no boolean/time payloads).
+cwe_ids: [89]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: canary_a
+    template: "ARGUS_SQLI_SAFE_CANARY_A"
+    confidence: suspected
+    notes: Alphanumeric sentinel only.
+  - id: canary_b
+    template: "ARGUS_SQLI_SAFE_CANARY_B"
+    confidence: suspected
+    notes: Second sentinel for differential-free comparison.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

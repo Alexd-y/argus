@@ -40,6 +40,7 @@ class TestRpt004PromptRegistry:
             "exploit_chains",
             "remediation_stages",
             "zero_day_potential",
+            "cost_summary",
         }
         assert REPORT_AI_SECTION_KEYS == expected
 
@@ -50,7 +51,7 @@ class TestRpt004PromptRegistry:
         )
         assert "penetration testing report" in system.lower()
         assert "finding" in user and "xss" in user
-        assert version.startswith("vhq009-")
+        assert version.startswith("vhq015-")
 
 
 class TestRpt004CacheKey:

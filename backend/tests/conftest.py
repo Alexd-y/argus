@@ -73,6 +73,8 @@ _OFFLINE_PATH_PREFIXES: Final[tuple[str, ...]] = (
     "reports/",
     "recon/",
     "storage/",
+    # P2-010 — pure inventory / planner / argv / quality-gate fixtures (no live OAST/DB).
+    "active_injection/",
 )
 
 # Path prefixes that ALWAYS require a full Docker stack (Postgres + Redis at
@@ -118,6 +120,10 @@ _OFFLINE_FILE_NAMES: Final[frozenset[str]] = frozenset(
         # stale (the YAML edits invalidated 16 entries until the operator
         # re-runs ``python -m scripts.tools_sign sign-all``).
         "test_arg058_dual_listed_migration.py",
+        # VAL-001 — pure ``report_quality_gate`` / FindingRow fixtures; no app DB broker.
+        "test_report_quality_gate.py",
+        # RPT-006 — mocked AsyncSession / MinIO upload / Redis client; Celery app import only for route registry.
+        "test_rpt006_generate_report.py",
     }
 )
 
@@ -133,8 +139,7 @@ _RE_REDIS: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 _RE_OAST: Final[re.Pattern[str]] = re.compile(
-    r"\binteractsh(?!.*Fake)|OAST_LISTENER_URL|oast_callback_url|"
-    r"oast_token\b|RealOASTListener",
+    r"\binteractsh(?!.*Fake)|OAST_LISTENER_URL|oast_callback_url|" r"oast_token\b|RealOASTListener",
     re.IGNORECASE,
 )
 

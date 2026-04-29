@@ -6,7 +6,7 @@
         {% if st and st.strip() %}
             {{ st | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>Use stack-neutral controls until the technology stack is verified: application middleware, reverse proxy or WAF rules, identity provider settings, monitoring, and repeatable validation evidence.</p>
         {% endif %}
     </div>
     <h3>Priority Roadmap</h3>
@@ -15,7 +15,7 @@
         {% if road and road.strip() %}
             {{ road | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>Prioritize remediation by validated severity, evidence quality, and exposed attack surface. Inconclusive areas require follow-up testing before risk acceptance.</p>
         {% endif %}
     </div>
     <h3>Responsible Parties and Timelines</h3>
@@ -53,13 +53,13 @@
 </section>
 
 <section class="valhalla-zero-day panel" id="zero-day-potential">
-    <h2>Zero-Day Potential</h2>
+    <h2>Novel Vulnerability Indication</h2>
     <div class="ai-slot-body">
         {% set zd = ai_sections.get("zero_day_potential") if ai_sections is defined else "" %}
         {% if zd and zd.strip() %}
             {{ zd | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>Novel vulnerability indication: Not indicated. No novel vulnerability class was demonstrated in the collected evidence.</p>
         {% endif %}
     </div>
 </section>
@@ -72,16 +72,17 @@
         {% if ca and ca.strip() %}
             {{ ca | md | safe }}
         {% else %}
-            <p>This penetration test identified the vulnerabilities detailed in the findings section above. The severity distribution and recommended remediation priorities are outlined in the Remediation section. Refer to the Executive Summary for an overview of the key business risks.</p>
+            <p>This report is limited to the evidence-backed findings and documented coverage limitations. Missing or failed assessment areas must be treated as inconclusive, not as clean security results.</p>
         {% endif %}
     </div>
     <h3>Hardening Recommendations</h3>
+    <p class="meta"><strong>HTTP security headers (stack-neutral):</strong> prefer a strict <strong>Content-Security-Policy</strong>, <strong>X-Content-Type-Options: nosniff</strong>, <strong>Referrer-Policy</strong>, a deliberate <strong>Permissions-Policy</strong>, framing control via <strong>CSP <code>frame-ancestors</code></strong> (or <code>X-Frame-Options</code> as a transitional measure), <strong>Strict-Transport-Security</strong> for HTTPS sites, and where appropriate <strong>Cross-Origin-Opener-Policy</strong> / <strong>Cross-Origin-Resource-Policy</strong>. Avoid legacy browser XSS filter headers (deprecated). Verify with <code>curl -sS -D- -o /dev/null &lt;url&gt;</code> (or equivalent) and review redirects.</p>
     <div class="ai-slot-body">
         {% set hd = ai_sections.get("hardening_recommendations") if ai_sections is defined else "" %}
         {% if hd and hd.strip() %}
             {{ hd | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>Apply stack-neutral hardening based on verified findings and parsed technical evidence. Avoid framework-specific examples unless the stack is confirmed.</p>
         {% endif %}
     </div>
     <h3>Remediation Steps and Production Readiness</h3>
@@ -90,7 +91,7 @@
         {% if rs and rs.strip() %}
             {{ rs | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>Each remediation item should be verified with repeatable requests, timestamps, and raw request/response evidence where applicable.</p>
         {% endif %}
     </div>
     <h3>Additional Vulnerability Descriptions</h3>
@@ -99,7 +100,7 @@
         {% if vd and vd.strip() %}
             {{ vd | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>No additional vulnerability narrative is available beyond the evidence-backed findings table and technical sections.</p>
         {% endif %}
     </div>
 </section>

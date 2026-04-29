@@ -1,0 +1,23 @@
+family_id: graphql_safe
+description: >-
+  Whitespace-only or curriculum names for GraphQL safety drills (no nested resolvers).
+cwe_ids: [20]
+owasp_top10:
+  - 'A04:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: curriculum_name
+    template: "argusGraphqlSafeCurriculum"
+    confidence: suspected
+    notes: Single GraphQL name token; not a live query document.
+  - id: underscore_marker
+    template: "__argusGraphqlSafeCurriculum__"
+    confidence: suspected
+    notes: Underscore-delimited marker for parser drills (non-empty after strip).
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

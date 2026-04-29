@@ -3,7 +3,18 @@
 {% if vc.mandatory_sections is defined and section_key in vc.mandatory_sections %}
 {% set env = vc.mandatory_sections[section_key] %}
 {% if env.status != 'completed' %}
-<p class="meta valhalla-mandatory-status"><strong>Data status ({{ section_key }}):</strong> {{ env.status | e }}{% if env.reason %} — {{ env.reason | e }}{% endif %}</p>
+{% set labels = {
+    "completed_with_fallback": "completed with fallback",
+    "partial": "partial",
+    "parsed_from_fallback": "parsed from fallback",
+    "no_observed_items_after_parsing": "no observed items after parsing",
+    "parser_error": "parser error",
+    "not_assessed": "not assessed",
+    "not_executed": "not executed",
+    "no_data": "no data"
+} %}
+{% set display_status = labels.get(env.status, env.status) %}
+<p class="meta valhalla-mandatory-status"><strong>Data status ({{ section_key }}):</strong> {{ display_status | e }}{% if env.reason %} — {{ env.reason | e }}{% endif %}</p>
 {% endif %}
 {% endif %}
 {%- endmacro %}

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% set scan_label = scan_id | default("scan") %}
+    {% set target_label = recon_summary.target_url if recon_summary is defined and recon_summary.target_url else scan_label %}
+    <title>ARGUS Security Report - {{ target_label }}</title>
+    <style>
+        :root {
+            --bg: #0a0c10;
+            --surface: #111318;
+            --surface2: #1a1d24;
+            --surface3: #0f1116;
+            --border: #252830;
+            --border2: #333743;
+            --accent: #00ff9d;
+            --accent2: #ff3e6c;
+            --accent3: #ffd700;
+            --text: #e8eaf0;
+            --text-muted: #8d94a3;
+            --text-dim: #666c7a;
+            --crit: #ff3e6c;
+            --high: #ff6b2b;
+            --med: #ffd700;
+            --low: #00c8ff;
+            --info: #a0a8b8;
+            --font-head: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --font-mono: "Consolas", "Courier New", monospace;
+        }
+
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code {
+            background: #06070a;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--accent);
+            padding: 0.08rem 0.28rem;
+            word-break: break-word;
+        }
+        pre {
+            background: #06070a;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: #d5d8e0;
+            overflow-x: auto;
+            padding: 0.85rem 1rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .app-header {
+            align-items: center;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 16px;
+            padding: 18px 32px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .app-header h1 {
+            color: var(--accent);
+            font-family: var(--font-head);
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1;
+            margin: 0;
+        }
+        .app-header h1 span { color: var(--text-muted); }
+        .app-header .subtitle {
+            border-left: 2px solid var(--border);
+            color: var(--text-muted);
+            font-size: 11px;
+            padding-left: 16px;
+        }
+        .app-header .header-meta {
+            align-items: center;
+            color: var(--text-muted);
+            display: flex;
+            gap: 10px;
+            margin-left: auto;
+            min-width: 0;
+        }
+        .status-dot {
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 6px var(--accent);
+            flex: 0 0 auto;
+            height: 6px;
+            width: 6px;
+        }
+        .tier-badge {
+            background: rgba(0, 255, 157, 0.08);
+            border: 1px solid rgba(0, 255, 157, 0.28);
+            border-radius: 4px;
+            color: var(--accent);
+            display: inline-block;
+            font-size: 10px;
+            letter-spacing: 1px;
+            padding: 3px 8px;
+            text-transform: uppercase;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+        #sidebar {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            flex: 0 0 240px;
+            height: calc(100vh - 61px);
+            overflow-y: auto;
+            padding: 24px 0;
+            position: sticky;
+            top: 61px;
+        }
+        .nav-section-label {
+            color: var(--text-dim);
+            font-size: 9px;
+            letter-spacing: 2px;
+            padding: 8px 20px 4px;
+            text-transform: uppercase;
+        }
+        .nav-item {
+            align-items: center;
+            border-left: 2px solid transparent;
+            color: var(--text-muted);
+            display: flex;
+            font-size: 11px;
+            gap: 10px;
+            padding: 8px 20px;
+        }
+        .nav-item:hover {
+            background: var(--surface2);
+            color: var(--text);
+            text-decoration: none;
+        }
+        .nav-num {
+            align-items: center;
+            background: var(--border);
+            border-radius: 3px;
+            color: var(--text-muted);
+            display: flex;
+            flex: 0 0 auto;
+            font-size: 9px;
+            height: 18px;
+            justify-content: center;
+            width: 18px;
+        }
+        .nav-item:hover .nav-num {
+            background: rgba(0, 255, 157, 0.2);
+            color: var(--accent);
+        }
+
+        #form-area {
+            flex: 1;
+            max-width: 1120px;
+            min-width: 0;
+            padding: 32px 40px 48px;
+        }
+        .report-kicker {
+            border-bottom: 1px solid var(--border);
+            color: var(--text-muted);
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+        }
+        .report-kicker strong { color: var(--text); }
+
+        h2 {
+            color: var(--text);
+            font-family: var(--font-head);
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.25;
+            margin: 0 0 0.85rem;
+        }
+        h3 {
+            color: var(--accent);
+            font-family: var(--font-head);
+            font-size: 15px;
+            font-weight: 700;
+            margin: 1.25rem 0 0.45rem;
+        }
+        h4 {
+            color: var(--text);
+            font-size: 12px;
+            letter-spacing: 1px;
+            margin: 1rem 0 0.35rem;
+            text-transform: uppercase;
+        }
+        p { margin: 0.35rem 0 0.75rem; }
+        ul, ol { margin: 0.35rem 0 0.9rem 1.25rem; padding: 0; }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin: 0 0 18px;
+            padding: 22px;
+            page-break-inside: avoid;
+        }
+        .panel > h2:first-child {
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+        }
+        .meta, .muted {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .empty {
+            color: var(--text-dim);
+            font-style: italic;
+        }
+        .desc {
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        table {
+            background: var(--surface3);
+            border: 1px solid var(--border);
+            border-collapse: collapse;
+            margin: 0.6rem 0 1rem;
+            width: 100%;
+        }
+        th, td {
+            border: 1px solid var(--border);
+            padding: 0.55rem 0.7rem;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background: var(--surface2);
+            color: var(--text-muted);
+            font-size: 10px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.018); }
+
+        .sev-critical, .severity-badge.critical {
+            color: var(--crit);
+            font-weight: 800;
+        }
+        .sev-high, .severity-badge.high {
+            color: var(--high);
+            font-weight: 800;
+        }
+        .sev-medium, .severity-badge.medium {
+            color: var(--med);
+            font-weight: 800;
+        }
+        .sev-low, .severity-badge.low {
+            color: var(--low);
+            font-weight: 800;
+        }
+        .sev-info, .severity-badge.info {
+            color: var(--info);
+            font-weight: 800;
+        }
+        .severity-badge {
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            display: inline-block;
+            font-size: 10px;
+            letter-spacing: 0.8px;
+            padding: 2px 7px;
+            text-transform: uppercase;
+        }
+
+        .valhalla-executive table:first-of-type tbody tr:nth-child(1) td,
+        .count-box.crit { color: var(--crit); }
+        .valhalla-executive table:first-of-type tbody tr:nth-child(2) td,
+        .count-box.high { color: var(--high); }
+        .valhalla-executive table:first-of-type tbody tr:nth-child(3) td,
+        .count-box.med { color: var(--med); }
+        .valhalla-executive table:first-of-type tbody tr:nth-child(4) td,
+        .count-box.low { color: var(--low); }
+        .valhalla-executive table:first-of-type tbody tr:nth-child(5) td,
+        .count-box.info { color: var(--info); }
+
+        .ai-slot-body {
+            color: var(--text);
+            margin: 0.25rem 0 0.9rem;
+            overflow-wrap: anywhere;
+            white-space: normal;
+            word-break: break-word;
+        }
+        .ai-slot-body h1, .ai-slot-body h2, .ai-slot-body h3, .ai-slot-body h4 {
+            margin-top: 0.8em;
+            margin-bottom: 0.4em;
+        }
+        .ai-slot-body code {
+            color: var(--accent3);
+            font-size: 0.9em;
+        }
+        .ai-slot-body pre,
+        pre.ai-slot-body {
+            color: #d5d8e0;
+            white-space: pre-wrap;
+        }
+
+        .owasp-compliance { margin: 1rem 0 1.25rem; }
+        .owasp-compliance-heading {
+            border-bottom: none;
+            color: var(--text);
+            font-size: 1rem;
+            margin: 0 0 0.5rem;
+        }
+        .owasp-compliance-table { font-size: 0.9rem; margin-top: 0.35rem; }
+        .owasp-compliance-table th.owasp-compliance-count-col {
+            text-align: center;
+            width: 8rem;
+        }
+        .owasp-compliance-table td.owasp-compliance-presence {
+            font-weight: 700;
+            text-align: center;
+        }
+        tr.owasp-compliance-0 td.owasp-compliance-presence { color: var(--accent); }
+        tr.owasp-compliance-warn td.owasp-compliance-presence { color: var(--med); }
+        tr.owasp-compliance-high td.owasp-compliance-presence { color: var(--crit); }
+        .owasp-finding-cell { font-size: 0.9rem; }
+        .owasp-finding-label { color: var(--text-muted); }
+
+        .valhalla-coverage-sections,
+        .findings-main-table {
+            font-size: 0.78rem;
+            table-layout: fixed;
+        }
+        .valhalla-findings .findings-main-table th:nth-child(4),
+        .valhalla-findings .findings-main-table td.desc,
+        .findings-main-table code {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .poc-row td {
+            background: #080a0d;
+            border-left: 3px solid var(--accent);
+        }
+        .finding-poc {
+            border-top: 1px solid var(--border);
+            margin-top: 0.5rem;
+            padding: 0.5rem 0 0;
+        }
+        .finding-poc-title {
+            color: var(--text);
+            font-size: 0.9rem;
+            margin: 0 0 0.35rem;
+        }
+        .finding-poc-block {
+            background: #000;
+            border: 1px solid var(--border2);
+            border-radius: 4px;
+            color: #d5d8e0;
+            font-size: 0.78rem;
+            margin: 0.25rem 0;
+            padding: 0.55rem 0.65rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .finding-poc-screenshot-thumb img {
+            border: 1px solid var(--border);
+            display: block;
+            margin-top: 0.35rem;
+        }
+
+        .valhalla-exec {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            margin: 0 0 18px;
+            padding: 22px;
+        }
+        .valhalla-exec .summary-card,
+        .valhalla-exec .roadmap-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .valhalla-exec .meta-grid dt,
+        .valhalla-exec .roadmap-card .phase-id {
+            color: var(--accent3);
+        }
+        .valhalla-exec .meta-grid dd,
+        .valhalla-exec p {
+            color: var(--text);
+        }
+        .valhalla-exec .counts-pill {
+            border: 1px solid currentColor;
+            border-radius: 4px;
+        }
+
+        .active-web-scan,
+        .valhalla-evidence-inventory {
+            page-break-inside: auto;
+        }
+        .scan-artifacts-table td,
+        .scan-artifacts-table th {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        .rpt-footer {
+            align-items: center;
+            background: #000;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            display: flex;
+            font-size: 10px;
+            justify-content: space-between;
+            padding: 14px 32px;
+        }
+
+        @media (max-width: 900px) {
+            .app-header {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 8px;
+                position: static;
+            }
+            .app-header .subtitle {
+                border-left: none;
+                padding-left: 0;
+            }
+            .app-header .header-meta { margin-left: 0; }
+            .main-container { flex-direction: column; }
+            #sidebar {
+                border-bottom: 1px solid var(--border);
+                border-right: none;
+                flex: none;
+                height: auto;
+                position: static;
+                width: 100%;
+            }
+            #form-area {
+                padding: 22px 16px 34px;
+            }
+            table {
+                display: block;
+                overflow-x: auto;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                color: #111;
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+            .app-header, #sidebar, .rpt-footer {
+                position: static;
+            }
+            .main-container { display: block; }
+            #sidebar { display: none; }
+            #form-area {
+                max-width: none;
+                padding: 18mm;
+            }
+            .panel, .valhalla-exec {
+                background: #fff;
+                border-color: #ccc;
+                color: #111;
+            }
+            table, th, td { border-color: #bbb; }
+            th { background: #f2f2f2; color: #111; }
+            pre, code {
+                background: #f7f7f7;
+                color: #111;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="app" class="valhalla-secreport">
+    <header class="app-header">
+        <h1>ARGUS <span>Security Report</span></h1>
+        {% set header_title = (valhalla_context.valhalla_engagement_title if valhalla_context is defined and valhalla_context.valhalla_engagement_title is defined and valhalla_context.valhalla_engagement_title else (report_quality.report_mode_label if report_quality is defined and report_quality.report_mode_label is defined and report_quality.report_mode_label else "Valhalla Security Assessment")) %}
+        <div class="subtitle">{{ header_title | e }}</div>
+        <div class="header-meta">
+            <span class="tier-badge">{{ tier | default("valhalla") }}</span>
+            <span>{{ (report_quality.coverage_label | capitalize) if report_quality is defined and report_quality.coverage_label is defined else "Evidence-bound" }} coverage</span>
+            <span class="status-dot" aria-hidden="true"></span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <nav id="sidebar" aria-label="Report sections">
+            <div class="nav-section-label">Report</div>
+            <a class="nav-item" href="#valhalla-title"><span class="nav-num">01</span>Title</a>
+            <a class="nav-item" href="#executive-summary"><span class="nav-num">02</span>Executive Summary</a>
+            <a class="nav-item" href="#objectives"><span class="nav-num">03</span>Objectives</a>
+            <a class="nav-item" href="#scope"><span class="nav-num">04</span>Scope</a>
+            <a class="nav-item" href="#methodology"><span class="nav-num">05</span>Methodology</a>
+            <a class="nav-item" href="#results-overview"><span class="nav-num">06</span>Results</a>
+            <a class="nav-item" href="#data-coverage"><span class="nav-num">07</span>Data Coverage</a>
+            <div class="nav-section-label">Technical</div>
+            <a class="nav-item" href="#threat-modeling"><span class="nav-num">08</span>Threat Model</a>
+            <a class="nav-item" href="#findings"><span class="nav-num">09</span>Findings</a>
+            <a class="nav-item" href="#active-web-scan"><span class="nav-num">10</span>Active Scan</a>
+            <a class="nav-item" href="#exploitation"><span class="nav-num">11</span>Exploit Chain</a>
+            <a class="nav-item" href="#remediation-priority"><span class="nav-num">12</span>Roadmap</a>
+            <a class="nav-item" href="#zero-day-potential"><span class="nav-num">13</span>Novelty</a>
+            <div class="nav-section-label">Back matter</div>
+            <a class="nav-item" href="#valhalla-executive-report"><span class="nav-num">14</span>Business Lens</a>
+            <a class="nav-item" href="#evidence-inventory"><span class="nav-num">15</span>Evidence</a>
+        </nav>
+
+        <main id="form-area" class="report-area rpt-body">
+            {% set tier_hint = tier_stubs.get(tier) if tier_stubs is defined else none %}
+            <div class="report-kicker">
+                <strong>{{ target_label }}</strong>
+                {% if tier_hint %}
+                    <span> / {{ tier_hint.label }} ({{ tier_hint.focus }})</span>
+                {% endif %}
+            </div>
+            {% block report_body %}{% endblock %}
+        </main>
+    </div>
+
+    <footer class="rpt-footer">
+        <span>ARGUS Valhalla</span>
+        <span>{{ scan_label }}</span>
+    </footer>
+</div>
+</body>
+</html>

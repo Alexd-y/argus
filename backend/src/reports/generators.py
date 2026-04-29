@@ -34,9 +34,65 @@ from src.reports.finding_metadata import (
     normalize_evidence_refs,
     normalize_evidence_type,
 )
+from src.reports.report_quality_gate import score_evidence_quality, validation_status_for_quality
 from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 logger = logging.getLogger(__name__)
+
+# Valhalla HTML: OWASP Top 10:2021 label for Security Misconfiguration (internal id remains 2025 A02).
+VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE = "A05:2021"
+_VALHALLA_OWASP_2021_DISPLAY: dict[str, tuple[str, str, str]] = {
+    "A01": (
+        "A01:2021",
+        "Broken Access Control",
+        "Access control enforcement failures such as unauthorized access to data or functions.",
+    ),
+    "A02": (
+        "A05:2021",
+        "Security Misconfiguration",
+        "Missing, incomplete, or unsafe security configuration, including HTTP security response headers.",
+    ),
+    "A03": (
+        "A06:2021",
+        "Vulnerable and Outdated Components",
+        "Known-vulnerable, unsupported, or outdated software components.",
+    ),
+    "A04": (
+        "A02:2021",
+        "Cryptographic Failures",
+        "Weaknesses in cryptographic design, TLS configuration, or protection of sensitive data in transit or at rest.",
+    ),
+    "A05": (
+        "A03:2021",
+        "Injection",
+        "Untrusted input interpreted as commands, queries, templates, or other executable syntax.",
+    ),
+    "A06": (
+        "A04:2021",
+        "Insecure Design",
+        "Design-level weaknesses that require changes to security architecture or control design.",
+    ),
+    "A07": (
+        "A07:2021",
+        "Identification and Authentication Failures",
+        "Authentication, session, credential, lockout, or rate-limiting control weaknesses.",
+    ),
+    "A08": (
+        "A08:2021",
+        "Software and Data Integrity Failures",
+        "Integrity weaknesses in software updates, CI/CD, deserialization, or trusted data flows.",
+    ),
+    "A09": (
+        "A09:2021",
+        "Security Logging and Monitoring Failures",
+        "Insufficient logging, monitoring, alerting, or incident visibility.",
+    ),
+    "A10": (
+        "A10:2021",
+        "Server-Side Request Forgery",
+        "Server-side requests to unintended destinations caused by insufficient validation.",
+    ),
+}
 
 # VHL-005 — Valhalla JSON/CSV section keys (aligned with Report Valhalla / template context).
 VALHALLA_SECTIONS_CSV_FORMAT = "valhalla_sections.csv"
@@ -59,10 +115,15 @@ _VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
     "outdated_components",
     "emails",
     "ssl_tls",
+    "ssl_tls_table_rows",
     "headers",
+    "security_headers_table_rows",
     "dependencies",
     "risk_matrix",
     "critical_vulns",
+    "full_valhalla",
+    "evidence_inventory",
+    "tool_health_summary",
     "threat_modeling_ref",
     "findings",
     "exploit_chains_text",
@@ -170,16 +231,52 @@ def _timeline_row_to_entry(row: TimelineRow) -> TimelineEntry:
     )
 
 
+_VALIDATION_STATUS_VALUES = {"missing", "unverified", "partially_validated", "validated"}
+_EVIDENCE_QUALITY_VALUES = {"none", "weak", "moderate", "strong"}
+
+
+def _normalize_validation_status(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    return value if value in _VALIDATION_STATUS_VALUES else "unverified"
+
+
+def _normalize_evidence_quality(raw: Any) -> str:
+    value = str(raw or "").strip().lower()
+    return value if value in _EVIDENCE_QUALITY_VALUES else "none"
+
+
+def _effective_evidence_quality(finding: Any) -> str:
+    quality = _normalize_evidence_quality(getattr(finding, "evidence_quality", None))
+    if quality == "none":
+        quality = score_evidence_quality(finding)
+    return quality
+
+
+def _effective_validation_status(finding: Any, quality: str) -> str:
+    status = _normalize_validation_status(getattr(finding, "validation_status", None))
+    if status in {"missing", "unverified"} and quality in {"moderate", "strong"}:
+        status = validation_status_for_quality(quality)
+    return status
+
+
 def _finding_row_to_schema(row: FindingRow) -> Finding:
+    quality = _effective_evidence_quality(row)
+    cv = row.cvss_score if row.cvss_score is not None else row.cvss
     return Finding(
         severity=row.severity,
         title=row.title,
         description=row.description or "",
         cwe=row.cwe,
-        cvss=row.cvss,
+        cvss=cv,
+        cvss_score=cv,
+        cvss_vector=row.cvss_vector,
+        exploit_demonstrated=bool(getattr(row, "exploit_demonstrated", False)),
+        exploit_summary=getattr(row, "exploit_summary", None),
         owasp_category=parse_owasp_category(row.owasp_category),
         proof_of_concept=row.proof_of_concept,
         confidence=normalize_confidence(row.confidence, default="likely"),
+        validation_status=_effective_validation_status(row, quality),
+        evidence_quality=quality,
         evidence_type=normalize_evidence_type(row.evidence_type),
         evidence_refs=normalize_evidence_refs(row.evidence_refs),
         reproducible_steps=row.reproducible_steps,
@@ -350,7 +447,11 @@ def build_report_data_from_db(
                 title=f.title,
                 description=f.description or "",
                 cwe=f.cwe,
-                cvss=f.cvss,
+                cvss=getattr(f, "cvss_score", None) or f.cvss,
+                cvss_score=getattr(f, "cvss_score", None) or f.cvss,
+                cvss_vector=getattr(f, "cvss_vector", None),
+                exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
+                exploit_summary=getattr(f, "exploit_summary", None),
                 owasp_category=parse_owasp_category(f.owasp_category),
                 proof_of_concept=f.proof_of_concept
                 if isinstance(f.proof_of_concept, dict)
@@ -358,6 +459,11 @@ def build_report_data_from_db(
                 confidence=normalize_confidence(
                     getattr(f, "confidence", None), default="likely"
                 ),
+                validation_status=_effective_validation_status(
+                    f,
+                    _effective_evidence_quality(f),
+                ),
+                evidence_quality=_effective_evidence_quality(f),
                 evidence_type=normalize_evidence_type(
                     getattr(f, "evidence_type", None)
                 ),
@@ -416,7 +522,11 @@ def build_report_data_from_scan_findings(
                 title=f.title,
                 description=f.description or "",
                 cwe=f.cwe,
-                cvss=f.cvss,
+                cvss=getattr(f, "cvss_score", None) or f.cvss,
+                cvss_score=getattr(f, "cvss_score", None) or f.cvss,
+                cvss_vector=getattr(f, "cvss_vector", None),
+                exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
+                exploit_summary=getattr(f, "exploit_summary", None),
                 owasp_category=parse_owasp_category(f.owasp_category),
                 proof_of_concept=f.proof_of_concept
                 if isinstance(f.proof_of_concept, dict)
@@ -424,6 +534,11 @@ def build_report_data_from_scan_findings(
                 confidence=normalize_confidence(
                     getattr(f, "confidence", None), default="likely"
                 ),
+                validation_status=_effective_validation_status(
+                    f,
+                    _effective_evidence_quality(f),
+                ),
+                evidence_quality=_effective_evidence_quality(f),
                 evidence_type=normalize_evidence_type(
                     getattr(f, "evidence_type", None)
                 ),
@@ -462,44 +577,94 @@ def build_owasp_compliance_rows(
     findings: list[dict[str, Any]],
     *,
     owasp_summary: Mapping[str, OwaspCategorySummaryEntry] | None = None,
+    wstg_coverage: Mapping[str, Any] | None = None,
+    use_valhalla_owasp_2021_misconfig_labels: bool = False,
 ) -> list[dict[str, Any]]:
     """
     One row per A01..A10 with finding counts and a CSS hint class (0 → good, 1–2 → warn, 3+ → high).
     Merges description and remediation hints from ``owasp_summary`` or ``build_owasp_summary_from_counts`` (OWASP-002).
-    Keys: ``category_id``, ``title``, ``findings_present``, ``count``, ``row_class``.
+    Keys: ``category_id``, ``title``, ``assessed``, ``assessment_result``, ``findings_present``, ``count``, ``row_class``.
+    When ``use_valhalla_owasp_2021_misconfig_labels``, the internal A02 (Security Misconfiguration) row also sets
+    ``display_category_code`` to ``A05:2021`` for user-facing text (OWASP Top 10:2021 naming).
     """
     counts: dict[str, int] = dict.fromkeys(OWASP_TOP10_2025_CATEGORY_IDS, 0)
+    evidence_by_category: dict[str, list[str]] = {cid: [] for cid in OWASP_TOP10_2025_CATEGORY_IDS}
     for row in findings:
         oc = row.get("owasp_category")
         if isinstance(oc, str) and oc in counts:
             counts[oc] += 1
+            ev = row.get("evidence_ids") or row.get("evidence_refs") or row.get("id") or row.get("finding_id")
+            ev_items: list[str] = []
+            if isinstance(ev, list):
+                ev_items = [str(x)[:80] for x in ev if str(x).strip()]
+            elif ev:
+                ev_items = [str(ev)[:80]]
+            for item in ev_items[:4]:
+                if item not in evidence_by_category[oc]:
+                    evidence_by_category[oc].append(item)
     entries = _resolve_owasp_summary_for_rows(counts, owasp_summary)
+    coverage_pct = 0.0
+    if isinstance(wstg_coverage, Mapping):
+        try:
+            coverage_pct = float(wstg_coverage.get("coverage_percentage") or 0.0)
+        except (TypeError, ValueError):
+            coverage_pct = 0.0
+    low_wstg_coverage = coverage_pct < 70.0
     out: list[dict[str, Any]] = []
     for cid in OWASP_TOP10_2025_CATEGORY_IDS:
         n = counts[cid]
-        if n == 0:
+        if n == 0 and low_wstg_coverage:
+            row_class = "owasp-compliance-not-assessed"
+        elif n == 0:
             row_class = "owasp-compliance-0"
         elif n <= 2:
             row_class = "owasp-compliance-warn"
         else:
             row_class = "owasp-compliance-high"
         ent = entries.get(cid)
-        description = ent.description if ent else ""
-        how_short = ent.how_to_fix_short if ent else None
-        description_hover = (how_short or "").strip()
-        title_en = OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
-        out.append(
-            {
-                "category_id": cid,
-                "title": title_en,
-                "description": description,
-                "description_hover": description_hover,
-                "has_findings": n > 0,
-                "findings_present": "Yes" if n > 0 else "No",
-                "count": n,
-                "row_class": row_class,
-            }
-        )
+        if use_valhalla_owasp_2021_misconfig_labels:
+            display_code, title_en, description = _VALHALLA_OWASP_2021_DISPLAY.get(
+                cid,
+                (cid, OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid), ent.description if ent else ""),
+            )
+            description_hover = ""
+            title_ru = ""
+        else:
+            description = ent.description if ent else ""
+            how_short = ent.how_to_fix_short if ent else None
+            description_hover = (how_short or "").strip()
+            title_en = OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
+            title_ru = ent.title_ru if ent else ""
+            display_code = cid
+        if n > 0:
+            assessed = "Yes" if use_valhalla_owasp_2021_misconfig_labels else "Assessed"
+            result = "Finding present"
+            findings_present = str(n) if n > 0 else "0"
+        elif low_wstg_coverage:
+            assessed = "No" if use_valhalla_owasp_2021_misconfig_labels else "Not assessed"
+            result = "Not assessed"
+            findings_present = "Not assessed"
+        else:
+            assessed = "Yes" if use_valhalla_owasp_2021_misconfig_labels else "Assessed"
+            result = "No finding observed" if use_valhalla_owasp_2021_misconfig_labels else "No finding after assessment"
+            findings_present = "0"
+        row_out: dict[str, Any] = {
+            "category_id": cid,
+            "title": title_en,
+            "title_ru": title_ru,
+            "description": description,
+            "description_hover": description_hover,
+            "has_findings": n > 0,
+            "assessed": assessed,
+            "assessment_result": result,
+            "findings_present": findings_present,
+            "count": n,
+            "row_class": row_class,
+            "evidence_ids": evidence_by_category.get(cid, [])[:8],
+        }
+        if use_valhalla_owasp_2021_misconfig_labels:
+            row_out["display_category_code"] = display_code
+        out.append(row_out)
     return out
 
 
@@ -561,12 +726,18 @@ def _finding_to_dict(
     tenant_id: str | None = None,
     scan_id: str | None = None,
 ) -> dict[str, Any]:
+    quality = _effective_evidence_quality(f)
+    validation_status = _effective_validation_status(f, quality)
     d: dict[str, Any] = {
         "severity": f.severity,
         "title": f.title,
         "description": f.description,
         "cwe": f.cwe,
         "cvss": f.cvss,
+        "confidence": getattr(f, "confidence", None),
+        "validation_status": validation_status,
+        "evidence_quality": quality,
+        "evidence_refs": list(getattr(f, "evidence_refs", []) or []),
     }
     oc = getattr(f, "owasp_category", None)
     if oc is not None:
@@ -660,6 +831,56 @@ def _jinja_active_web_scan(jinja_context: dict[str, Any] | None) -> dict[str, An
     return block if isinstance(block, dict) else {}
 
 
+def _threat_modeling_ref_for_valhalla_export(vc: dict[str, Any]) -> dict[str, Any]:
+    """Customer Valhalla JSON bundle: formatted excerpts only (no raw phase blobs or tenant ids)."""
+    tm = vc.get("threat_model")
+    excerpt = ""
+    phase = "threat_modeling"
+    api_hint = ""
+    if isinstance(tm, dict):
+        excerpt = str(tm.get("excerpt") or "")[:12000]
+        phase = str(tm.get("phase") or "threat_modeling")[:128]
+        api_hint = str(tm.get("api_hint") or "")[:2048]
+    return {
+        "threat_model": {
+            "excerpt": excerpt,
+            "phase": phase,
+            "api_hint": api_hint,
+        },
+        "threat_model_excerpt": str(vc.get("threat_model_excerpt") or "")[:12000],
+        "threat_model_phase_link": str(vc.get("threat_model_phase_link") or "")[:2048],
+        "exploitation_post_excerpt": str(vc.get("exploitation_post_excerpt") or "")[:12000],
+    }
+
+
+def _exploitation_phases_for_valhalla_export(exploitation: list[Any] | None) -> list[dict[str, str]]:
+    """Drop raw output_data (vuln_analysis / threat_model JSON) from the Valhalla bundle."""
+    out: list[dict[str, str]] = []
+    for p in exploitation or []:
+        if not isinstance(p, dict):
+            continue
+        ph = str(p.get("phase") or "").strip()
+        if ph:
+            out.append({"phase": ph[:80]})
+    return out
+
+
+def _raw_artifacts_stub_for_valhalla_export(raw_artifacts: list[Any] | None) -> list[dict[str, Any]]:
+    """Replace inline raw artifact bodies with a count (VH-009 — no raw dumps in customer JSON)."""
+    n = len(raw_artifacts) if isinstance(raw_artifacts, list) else 0
+    if n <= 0:
+        return []
+    return [
+        {
+            "artifact_count": n,
+            "note": (
+                "Raw artifact bodies are omitted from the Valhalla export bundle; "
+                "use scan artifact listings or storage-backed downloads where enabled."
+            ),
+        }
+    ]
+
+
 def _tier_from_jinja(jinja_context: dict[str, Any] | None) -> str:
     if not jinja_context:
         return ""
@@ -715,9 +936,11 @@ def build_valhalla_report_payload(
     appendices = _canonical_json_nested(
         {
             "recon_summary": recon,
-            "exploitation": exploitation,
+            "exploitation": _exploitation_phases_for_valhalla_export(exploitation),
             "scan_artifacts": ctx.get("scan_artifacts"),
-            "raw_artifacts": data.raw_artifacts,
+            "raw_artifacts": _raw_artifacts_stub_for_valhalla_export(
+                data.raw_artifacts if isinstance(data.raw_artifacts, list) else None
+            ),
             "ai_sections_supplemental": {
                 k: str(v or "")
                 for k, v in sorted(ai.items())
@@ -744,12 +967,19 @@ def build_valhalla_report_payload(
         "robots_txt_analysis": vc.get("robots_txt_analysis"),
         "sitemap_analysis": vc.get("sitemap_analysis"),
     }
-    threat_modeling_ref = {
-        "threat_model": vc.get("threat_model"),
-        "threat_model_excerpt": vc.get("threat_model_excerpt"),
-        "threat_model_phase_link": vc.get("threat_model_phase_link"),
-        "exploitation_post_excerpt": vc.get("exploitation_post_excerpt"),
-    }
+    threat_modeling_ref = _threat_modeling_ref_for_valhalla_export(vc)
+    ssl_tls_table_rows = vc.get("ssl_tls_table_rows")
+    if not isinstance(ssl_tls_table_rows, list):
+        ssl_tls_table_rows = []
+    security_headers_table_rows = vc.get("security_headers_table_rows")
+    if not isinstance(security_headers_table_rows, list):
+        security_headers_table_rows = []
+    evidence_inv = vc.get("evidence_inventory")
+    if not isinstance(evidence_inv, list):
+        evidence_inv = []
+    tool_health = vc.get("tool_health_summary")
+    if not isinstance(tool_health, list):
+        tool_health = []
     return {
         "title_meta": _canonical_json_nested(title_meta),
         "executive_summary_counts": _canonical_json_nested(exec_counts),
@@ -761,10 +991,15 @@ def build_valhalla_report_payload(
         ),
         "emails": _canonical_json_nested(vc.get("leaked_emails") or []),
         "ssl_tls": _canonical_json_nested(vc.get("ssl_tls_analysis") or {}),
+        "ssl_tls_table_rows": _canonical_json_nested(ssl_tls_table_rows),
         "headers": _canonical_json_nested(vc.get("security_headers_analysis") or {}),
+        "security_headers_table_rows": _canonical_json_nested(security_headers_table_rows),
         "dependencies": _canonical_json_nested(vc.get("dependency_analysis") or []),
         "risk_matrix": _canonical_json_nested(vc.get("risk_matrix") or {}),
         "critical_vulns": _canonical_json_nested(vc.get("critical_vulns") or []),
+        "full_valhalla": bool(vc.get("full_valhalla")),
+        "evidence_inventory": _canonical_json_nested(evidence_inv),
+        "tool_health_summary": _canonical_json_nested(tool_health),
         "threat_modeling_ref": _canonical_json_nested(threat_modeling_ref),
         "findings": findings_canon,
         "exploit_chains_text": exploit_chains_text,
@@ -954,13 +1189,13 @@ def generate_html(
     tier: str | None = None,
 ) -> bytes:
     """RPT-008 — Tiered Jinja2 HTML (autoescape). Pass ``jinja_context`` from Report pipeline when available."""
-    from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
+    from src.reports.jinja_minimal_context import offline_minimal_jinja_context_from_report_data
     from src.reports.template_env import render_tier_report_html
 
     ctx = (
         jinja_context
         if jinja_context is not None
-        else minimal_jinja_context_from_report_data(data, tier or "midgard")
+        else offline_minimal_jinja_context_from_report_data(data, tier or "midgard")
     )
     eff_tier = str(ctx.get("tier") or tier or "midgard")
     ctx = {**ctx, "tier": eff_tier}
@@ -1021,12 +1256,12 @@ def _build_branded_pdf_context(
     tier: str,
 ) -> dict[str, Any]:
     """Decorate ``base_context`` with ARG-036 fields the branded templates need."""
-    from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
+    from src.reports.jinja_minimal_context import offline_minimal_jinja_context_from_report_data
 
     ctx: dict[str, Any] = (
         dict(base_context)
         if base_context is not None
-        else minimal_jinja_context_from_report_data(data, tier)
+        else offline_minimal_jinja_context_from_report_data(data, tier)
     )
     ctx.setdefault("tier", tier)
     ctx.setdefault("target", data.target or "")

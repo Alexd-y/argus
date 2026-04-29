@@ -1,0 +1,23 @@
+family_id: ldapi_safe
+description: >-
+  LDAP-safe literal placeholders (no metacharacters; filter grammar drills only).
+cwe_ids: [90]
+owasp_top10:
+  - 'A07:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: literal_a
+    template: "ARGUS_LDAP_SAFE_LITERAL_A"
+    confidence: suspected
+    notes: Alphanumeric literal only.
+  - id: literal_b
+    template: "ARGUS_LDAP_SAFE_LITERAL_B"
+    confidence: suspected
+    notes: Companion literal for pairing checks.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

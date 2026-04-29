@@ -3,22 +3,30 @@
 {% set opts = scan.options if scan and scan.options is mapping else {} %}
 {% set cust_email = opts.get("customer_email") or opts.get("report_customer_email") or "" %}
 {% set work_start = (scan.created_at if scan else none) or (report.created_at if report else none) %}
+{% set vc0 = valhalla_context if valhalla_context is defined else none %}
+{% set engagement = vc0.valhalla_engagement_title if vc0 and vc0.valhalla_engagement_title is defined and vc0.valhalla_engagement_title else "Valhalla Automated Security Assessment" %}
 <section class="valhalla-title-page panel" id="valhalla-title">
     <h2>Title Page</h2>
-    <p><strong>Report title:</strong> Web Application Penetration Test Report — {{ target or "No data" }}</p>
-    <p><strong>Date / start time:</strong> {% if work_start %}{{ work_start }}{% else %}No data{% endif %}</p>
+    <p><strong>Report title:</strong> {{ engagement | e }}{% if target %} — {{ target | e }}{% else %} — target not specified{% endif %}</p>
+    <p><strong>Date / start time:</strong> {% if work_start %}{{ work_start }}{% else %}not specified{% endif %}</p>
     <p><strong>Performed by:</strong> {{ report_executor_display_name | default("Security Assessment Provider") | e }}</p>
-    <p><strong>Client:</strong> {{ target or "No data" }}{% if cust_email %} — {{ cust_email | e }}{% endif %}</p>
+    <p><strong>Client:</strong> {{ target or "target not specified" }}{% if cust_email %} — {{ cust_email | e }}{% endif %}</p>
 </section>
 
 <section class="valhalla-executive panel" id="executive-summary">
     <h2>Executive Summary</h2>
+    {% if vc0 and vc0.wstg_execution_degraded %}
+    <p class="report-warning"><strong>Execution note:</strong> WSTG-aligned coverage is below 70% or is otherwise incomplete. This is <strong>not</strong> a comprehensive manual penetration test; results are limited to the executed methodology and available evidence.</p>
+    {% endif %}
+    {% if vc0 and vc0.wstg_coverage_zero_executed %}
+    <p class="report-warning">OWASP WSTG coverage in this run is 0% of the mapped catalog — this does <strong>not</strong> represent a full-scope application penetration test; treat unassessed areas as unknown risk.</p>
+    {% endif %}
     <div class="ai-slot-body">
         {% set exec_ai = ai_sections.get("executive_summary_valhalla") if ai_sections is defined else "" %}
         {% if exec_ai and exec_ai.strip() %}
             {{ exec_ai | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p class="empty">Executive summary text was not generated; use the findings table, coverage section, and evidence inventory as the source of truth.</p>
         {% endif %}
     </div>
     {% set sev = severity_counts if severity_counts is defined else {} %}
@@ -46,19 +54,37 @@
         </tbody>
     </table>
 
+    <h3>Compliance and OWASP mapping</h3>
     {% if owasp_compliance_rows is defined %}
         {% include "partials/owasp_compliance_table.html.j2" %}
     {% endif %}
-
-    <h3>Data Breach Detection</h3>
     <div class="ai-slot-body">
-        {% set breach = ai_sections.get("compliance_check") if ai_sections is defined else "" %}
-        {% if breach and breach.strip() %}
-            {{ breach | md | safe }}
+        {% set comp_ai = ai_sections.get("compliance_check") if ai_sections is defined else "" %}
+        {% if comp_ai and comp_ai.strip() %}
+            <h4>Compliance narrative (AI)</h4>
+            {{ comp_ai | md | safe }}
         {% else %}
-            <p>No data</p>
+            <p class="meta"><small>Additional compliance narrative is generated when AI sections are available.</small></p>
         {% endif %}
     </div>
+
+    <h3>Credential Exposure Check (HIBP Pwned Passwords)</h3>
+    <p class="meta"><small>Aggregate-only k-anonymity checks against the HIBP Pwned Passwords corpus; no plaintext credentials are stored in the report.</small></p>
+    {% if hibp_pwned_password_summary is defined and hibp_pwned_password_summary %}
+        {% set hbe = hibp_pwned_password_summary %}
+        <table>
+            <tbody>
+                <tr><th scope="row">Sample values checked (API responses)</th><td>{{ hbe.checks_run | default(0) | int }}</td></tr>
+                <tr><th scope="row">Matches in Pwned Passwords corpus</th><td>{{ hbe.pwned_count | default(0) | int }}</td></tr>
+                <tr><th scope="row">Exposure signal</th><td>{{ hbe.data_breach_password_exposure | default("—") | e }}</td></tr>
+            </tbody>
+        </table>
+        {% if hbe.breach_signal_note %}
+            <p>{{ hbe.breach_signal_note | e }}</p>
+        {% endif %}
+    {% else %}
+        <p class="empty">No HIBP aggregate was produced. This is not evidence that credentials are or are not exposed in public credential corpora.</p>
+    {% endif %}
 
     <h3>Key Business Risks</h3>
     <div class="ai-slot-body">
@@ -66,7 +92,7 @@
         {% if br and br.strip() %}
             {{ br | md | safe }}
         {% else %}
-            <p>No data</p>
+            <p>Business risk is limited to evidence-backed findings and documented coverage gaps.</p>
         {% endif %}
     </div>
 
@@ -76,7 +102,7 @@
         {% if pr and pr.strip() %}
             {{ pr | md | safe }}
         {% else %}
-            <p>No data</p>
+            <p>Prioritize validated findings first, then schedule follow-up testing for inconclusive areas.</p>
         {% endif %}
     </div>
 </section>

@@ -272,7 +272,8 @@ def test_risk_matrix_cia_and_likelihood_vhq003() -> None:
     assert "c3" in by_key[("medium", "low")].finding_ids
 
 
-def test_critical_vulns_cvss7_and_secondary_signal_vhq004() -> None:
+def test_critical_vulns_val003_exploit_validated_strong_vhq004() -> None:
+    """VAL-003: critical_vulns only for critical/CVSS≥9 *and* exploit_demonstrated + validated + strong evidence."""
     ctx = build_valhalla_report_context(
         tenant_id="t",
         scan_id="s",
@@ -299,17 +300,28 @@ def test_critical_vulns_cvss7_and_secondary_signal_vhq004() -> None:
             },
             {"id": "v3", "severity": "medium", "title": "Minor", "cvss": 4.0},
             {"id": "v4", "severity": "high", "title": "No signal", "cvss": 8.0, "description": "Generic text only."},
+            {
+                "id": "v_ok",
+                "severity": "critical",
+                "title": "RCE proven",
+                "cvss": 9.0,
+                "description": "Controlled validation in an isolated test environment.",
+                "exploit_demonstrated": True,
+                "validation_status": "validated",
+                "evidence_quality": "strong",
+            },
         ],
         report_technologies=None,
         fetch_raw_bodies=False,
     )
     ids = {v.vuln_id for v in ctx.critical_vulns}
-    assert ids == {"v1", "v2"}
-    xss = next(v for v in ctx.critical_vulns if v.vuln_id == "v2")
-    assert xss.title == "XSS"
-    assert xss.severity == "high"
-    assert xss.cvss == 7.2
-    assert xss.exploit_available is True
+    assert ids == {"v_ok"}
+    ok = next(v for v in ctx.critical_vulns if v.vuln_id == "v_ok")
+    assert ok.title == "RCE proven"
+    assert ok.severity == "critical"
+    assert ok.cvss == 9.0
+    assert ok.exploit_demonstrated is True
+    assert ok.exploit_available is True
 
 
 def test_build_risk_matrix_export() -> None:
@@ -343,13 +355,15 @@ def test_mandatory_sections_coverage_and_harvester_flag() -> None:
         "security_headers_analysis",
         "robots_sitemap_analysis",
         "leaked_emails",
+        "port_exposure",
     }
     assert set(ctx.coverage.sections.keys()) == expected_keys
+    assert ctx.mandatory_sections.port_exposure.status in {"completed", "partial", "no_data"}
     assert ctx.coverage.feature_flags["HARVESTER_ENABLED"] is False
     assert ctx.coverage.feature_flags["INCLUDE_MINIO"] is False
     assert "recon" in ctx.coverage.phases_executed
-    assert ctx.mandatory_sections.leaked_emails.status == "not_executed"
-    assert "HARVESTER_ENABLED=false" in ctx.mandatory_sections.leaked_emails.reason
+    assert ctx.mandatory_sections.leaked_emails.status == "no_observed_items_after_parsing"
+    assert "Email-capable" in ctx.mandatory_sections.leaked_emails.reason
     assert ctx.robots_sitemap_analysis.robots_txt.found is False
     assert ctx.robots_sitemap_analysis.merged.robots_found is False
     assert ctx.coverage.tool_errors_summary
@@ -401,19 +415,54 @@ def test_raw_tool_empty_stdout_errors_drive_partial_statuses() -> None:
             fetch_raw_bodies=True,
             harvester_enabled=True,
             trivy_enabled=True,
+            tool_run_summaries=[("whatweb", "failed")],
         )
 
-    assert ctx.mandatory_sections.tech_stack_structured.status == "partial"
-    assert ctx.mandatory_sections.ssl_tls_analysis.status == "partial"
-    assert ctx.mandatory_sections.security_headers_analysis.status == "partial"
-    assert ctx.mandatory_sections.leaked_emails.status == "partial"
+    assert ctx.mandatory_sections.tech_stack_structured.status == "parser_error"
+    assert ctx.mandatory_sections.ssl_tls_analysis.status == "parser_error"
+    assert ctx.mandatory_sections.security_headers_analysis.status == "parser_error"
+    assert ctx.mandatory_sections.leaked_emails.status == "no_observed_items_after_parsing"
+    assert "no technology rows were parsed" in ctx.mandatory_sections.tech_stack_structured.reason
     assert ctx.mandatory_sections.outdated_components.status == "not_executed"
     tools = {row["tool"]: row for row in ctx.coverage.tool_errors_summary}
     assert tools["whatweb"]["status"] == "failed"
+    assert "raw_meta_error:exec_os_error" in tools["whatweb"]["note"]
+    assert "stderr:sandbox: binary not found" in tools["whatweb"]["note"]
     assert tools["nikto"]["status"] == "no_output"
     assert tools["testssl"]["status"] == "no_output"
     assert tools["sslscan"]["status"] == "no_output"
     assert tools["theharvester"]["status"] == "no_output"
+
+
+def test_security_headers_section_reconstructed_from_finding_evidence() -> None:
+    ctx = build_valhalla_report_context(
+        tenant_id="t",
+        scan_id="s",
+        recon_results=None,
+        tech_profile=None,
+        anomalies_structured=None,
+        raw_artifact_keys=[],
+        phase_outputs=[("vuln_analysis", {"findings": []})],
+        phase_inputs=[],
+        findings=[
+            {
+                "id": "hdr-1",
+                "title": "Security HTTP response headers missing or incomplete",
+                "severity": "low",
+                "affected_url": "https://example.test/",
+                "evidence": "Missing: X-Frame-Options, Content-Security-Policy, X-Content-Type-Options",
+            }
+        ],
+        report_technologies=None,
+        fetch_raw_bodies=False,
+    )
+
+    assert ctx.mandatory_sections.security_headers_analysis.status == "parsed_from_fallback"
+    assert "reconstructed from findings evidence" in ctx.mandatory_sections.security_headers_analysis.reason
+    rows = {row["header"]: row for row in ctx.security_headers_analysis.rows}
+    assert rows["X-Frame-Options"]["present"] is False
+    assert rows["Content-Security-Policy"]["present"] is False
+    assert rows["X-Content-Type-Options"]["present"] is False
 
 
 def test_build_valhalla_minimal_context_patch_keys() -> None:

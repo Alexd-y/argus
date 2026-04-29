@@ -1,75 +1,36 @@
-{% set vc = valhalla_context %}
-<section class="valhalla-appendices panel" id="appendices">
-    <h2>Appendices</h2>
-
-    <h3>Appendix A. Tools and Versions Used</h3>
-    {% if vc.appendix_tools %}
-        <ul>
-            {% for e in vc.appendix_tools %}
-            <li>{{ e.name | e }}{% if e.version %} — {{ e.version | e }}{% endif %}</li>
-            {% endfor %}
-        </ul>
-    {% elif tool_runs %}
-        <ul>
-            {% for tr in tool_runs %}
-            <li><code>{{ tr.tool_name | e }}</code> (status: {{ tr.status | e }})</li>
-            {% endfor %}
-        </ul>
+{# VH-001 / VH-004 — customer Valhalla: Evidence Inventory (no appendices A-G, no MinIO URLs). #}
+{% set vc = valhalla_context if valhalla_context is defined else none %}
+<section class="valhalla-evidence-inventory panel" id="evidence-inventory">
+    <h2>Evidence Inventory</h2>
+    <p class="meta">This table lists evidence references used for findings and key technical sections. Storage paths, API keys, and raw JSON dumps are not included in the customer deliverable.</p>
+    {% if vc and vc.evidence_inventory %}
+        <table class="valhalla-evidence-inventory-table">
+            <thead>
+                <tr>
+                    <th>Evidence ID</th>
+                    <th>Finding / section</th>
+                    <th>Source tool</th>
+                    <th>Evidence type</th>
+                    <th>Summary</th>
+                    <th>Timestamp</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in vc.evidence_inventory %}
+                <tr>
+                    <td><code>{{ row.evidence_id | e }}</code></td>
+                    <td>{{ row.finding_or_section | e }}</td>
+                    <td>{{ row.source_tool | e }}</td>
+                    <td>{{ row.evidence_type | e }}</td>
+                    <td class="desc">{{ row.summary | e }}</td>
+                    <td class="meta">{{ row.timestamp | e }}</td>
+                    <td>{{ row.status | e }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">No evidence inventory rows were generated for this export.</p>
     {% endif %}
-
-    <h3>Appendix B. Phase Configuration and Input Excerpts</h3>
-    {% if valhalla_appendix_phase_inputs_excerpt %}
-        <pre class="ai-slot-body">{{ valhalla_appendix_phase_inputs_excerpt | e }}</pre>
-    {% else %}
-        <p class="empty">No data</p>
-    {% endif %}
-
-    <h3>Appendix C. ARGUS Event Log / Timeline Excerpts</h3>
-    {% if valhalla_appendix_timeline_rows %}
-        <ul class="timeline">
-            {% for row in valhalla_appendix_timeline_rows %}
-            <li><strong>{{ row.phase | e }}</strong> (#{{ row.order_index }}){% if row.snippet %}: {{ row.snippet | e }}{% endif %}</li>
-            {% endfor %}
-        </ul>
-    {% else %}
-        <p class="empty">No data</p>
-    {% endif %}
-
-    <h3>Appendix D. Nmap / Network Scan Excerpt</h3>
-    {% if valhalla_appendix_nmap_excerpt %}
-        <pre class="ai-slot-body">{{ valhalla_appendix_nmap_excerpt | e }}</pre>
-    {% elif vc.exploitation_post_excerpt %}
-        <pre class="ai-slot-body">{{ vc.exploitation_post_excerpt | e }}</pre>
-    {% else %}
-        <p class="empty">Not found</p>
-    {% endif %}
-
-    <h3>Appendix E. APT Indicators (if detected)</h3>
-    <p>APT analysis and MITRE ATT&CK tactic mapping were not conducted during this assessment. If Advanced Persistent Threat indicators or indicators of compromise (IoC) are required, a dedicated threat hunting engagement should be arranged separately.</p>
-
-    <h3>Appendix F. Password Leak Verification Results (hashed, HIBP)</h3>
-    {% if hibp_pwned_password_summary is defined and hibp_pwned_password_summary %}
-        {% set hp = hibp_pwned_password_summary %}
-        <ul class="hibp-summary">
-            <li>Sample values checked (k-anonymity API): <strong>{{ hp.checks_run | default(0) | int }}</strong></li>
-            <li>Matches in Pwned Passwords corpus: <strong>{{ hp.pwned_count | default(0) | int }}</strong></li>
-            <li>Password breach exposure signal: <strong>{{ hp.data_breach_password_exposure | default("—") | e }}</strong></li>
-        </ul>
-        {% if hp.breach_signal_note %}
-            <p class="ai-slot-body">{{ hp.breach_signal_note | e }}</p>
-        {% endif %}
-        {% if hp.note %}
-            <p class="muted"><small>{{ hp.note | e }}</small></p>
-        {% endif %}
-    {% else %}
-        <p class="empty">No aggregated HIBP data (opt-in policy disabled, exploitation phase without sampling, or verification was not performed).</p>
-    {% endif %}
-
-    <h3>Appendix G. Raw Phase Artifacts (presigned / API)</h3>
-    <p class="meta"><small>Same data as the "Phase Artifacts" block in the main report: <code>scan_artifacts</code> from <code>ScanReportData</code> / MinIO listing.</small></p>
-    <div class="valhalla-appendix-scan-artifacts" id="valhalla-appendix-scan-artifacts">
-        {% include "partials/scan_artifacts_inner.html.j2" %}
-    </div>
 </section>

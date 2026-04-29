@@ -1,8 +1,7 @@
 {# ARG-036 — Valhalla tier PDF layout (executive / CISO / Board, gold brand).
-   Self-contained template; not extending base.html.j2. Renders the
-   valhalla_executive_report assembly built by valhalla_tier_renderer:
-   risk-quant per asset, OWASP rollup matrix, top findings by business
-   impact, P0..P3 remediation roadmap. #}
+   Self-contained template; not extending base.html.j2. Section sequence
+   matches :data:`VALHALLA_EXECUTIVE_SECTION_ORDER` in valhalla_tier_renderer
+   (KEV after top business-impact, before roadmap). #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -56,7 +55,9 @@
       <li><a href="#sec-exec">Executive Summary</a></li>
       <li><a href="#sec-risk">Risk Quantification per Asset</a></li>
       <li><a href="#sec-owasp">OWASP Top-10 Rollup Matrix</a></li>
+      <li><a href="#sec-active-injection">Active Injection Coverage</a></li>
       <li><a href="#sec-top">Top Findings by Business Impact</a></li>
+      <li><a href="#sec-kev">KEV-Listed Findings</a></li>
       <li><a href="#sec-roadmap">Remediation Roadmap (P0–P3)</a></li>
       <li><a href="#sec-evidence">Evidence References</a></li>
       <li><a href="#sec-timeline">Pipeline Timeline</a></li>
@@ -148,8 +149,9 @@
         </thead>
         <tbody>
           {% for row in owasp_rows %}
+            {% set cat_disp = "A05:2021" if (valhalla_owasp_2021_labels | default(false)) and (row.category_id or "") == "A02" else (row.category_id | e) %}
             <tr>
-              <td class="col-owasp-id">{{ row.category_id | e }}</td>
+              <td class="col-owasp-id">{{ cat_disp }}</td>
               <td>{{ row.title | e }}</td>
               <td class="col-num">{{ row.critical | default(0) }}</td>
               <td class="col-num">{{ row.high | default(0) }}</td>
@@ -166,6 +168,48 @@
     {% endif %}
   </section>
 
+  {# ------------------- ACTIVE INJECTION COVERAGE (P2-008) ------------------ #}
+  <section id="sec-active-injection" class="injection-coverage">
+    <h2 class="section-heading">Active Injection Coverage</h2>
+    {% set vc_inj = valhalla_context or {} %}
+    {% set inj_pack = vc_inj.active_injection_coverage | default({}, true) %}
+    {% set inj_rows = inj_pack.table_rows | default([]) %}
+    {% if inj_rows %}
+      <table class="business-table injection-coverage-table">
+        <thead>
+          <tr>
+            <th>Family</th>
+            <th>Assessed</th>
+            <th>Tool</th>
+            <th>Status</th>
+            <th class="col-num">Surfaces</th>
+            <th>Evidence IDs</th>
+            <th>Not assessed reason</th>
+            <th class="col-num">Findings</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in inj_rows %}
+            <tr>
+              <td>{{ (row.family or '—') | e }}</td>
+              <td>{{ (row.assessed or '—') | e }}</td>
+              <td>{{ (row.tool or '—') | e }}</td>
+              <td>{{ (row.status or '—') | e }}</td>
+              <td class="col-num">{{ row.surfaces_tested | default(0) }}</td>
+              <td>{{ (row.evidence_ids | join(', ')) if row.evidence_ids else '—' }}</td>
+              <td>{{ (row.not_assessed_reason or '—') | e }}</td>
+              <td class="col-num">{{ row.findings_count | default(0) }}</td>
+              <td>{{ (row.confidence or '—') | e }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No active injection coverage rows were recorded for this engagement.</p>
+    {% endif %}
+  </section>
+
   {# ------------------- TOP BUSINESS-IMPACT ------------------ #}
   <section id="sec-top" class="top-business">
     <h2 class="section-heading">Top Findings by Business Impact</h2>
@@ -177,6 +221,9 @@
             <th class="col-rank">#</th>
             <th>Finding</th>
             <th class="col-sev">Severity</th>
+            <th class="col-tiny">SSVC</th>
+            <th class="col-tiny">KEV</th>
+            <th class="col-epss">EPSS%</th>
             <th class="col-owasp">OWASP</th>
             <th>Asset</th>
             <th class="col-num">CVSS</th>
@@ -185,6 +232,7 @@
         </thead>
         <tbody>
           {% for row in top_rows %}
+            {% set owap = "A05:2021" if (valhalla_owasp_2021_labels | default(false)) and (row.owasp_category or "") == "A02" else (row.owasp_category | e) %}
             <tr>
               <td class="col-rank">{{ row.rank }}</td>
               <td>
@@ -194,7 +242,10 @@
                 {% endif %}
               </td>
               <td class="col-sev"><span class="sev-tag sev-{{ (row.severity or 'info') | lower }}">{{ (row.severity or 'info') | upper }}</span></td>
-              <td class="col-owasp">{{ row.owasp_category | e }}</td>
+              <td class="col-tiny ssvc-cell">{{ (row.ssvc_decision or '—') | e }}</td>
+              <td class="col-tiny">{% if row.kev_listed %}KEV{% else %}—{% endif %}</td>
+              <td class="col-epss">{% if row.epss_percentile is not none %}{{ '%.1f' | format(row.epss_percentile * 100) }}%{% else %}—{% endif %}</td>
+              <td class="col-owasp">{{ owap }}</td>
               <td>{{ row.asset | e or '—' }}</td>
               <td class="col-num">{{ '%.1f' | format(row.cvss) if row.cvss is not none else '—' }}</td>
               <td class="col-num composite-score">{{ '%.2f' | format(row.composite_score) }}</td>
@@ -204,6 +255,49 @@
       </table>
     {% else %}
       <p class="prose empty-state">No business-impact ranking available.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- KEV (CISA) — same data as valhalla_executive_report / HTML partial #}
+  <section id="sec-kev" class="kev-brief">
+    <h2 class="section-heading">KEV-Listed Findings (Actively Exploited)</h2>
+    {% set kev_list = (valhalla_executive_report.kev_listed_findings if valhalla_executive_report else []) or [] %}
+    {% if kev_list %}
+      <table class="kev-table business-table">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th>Title</th>
+            <th class="col-sev">Severity</th>
+            <th class="col-tiny">SSVC</th>
+            <th class="col-owasp">OWASP</th>
+            <th class="col-cwe">CWE</th>
+            <th class="col-num">CVSS</th>
+            <th class="col-epss">EPSS%</th>
+            <th>Asset</th>
+            <th>KEV date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for k in kev_list %}
+            {% set kow = "A05:2021" if (valhalla_owasp_2021_labels | default(false)) and (k.owasp_category or "") == "A02" else (k.owasp_category | e) %}
+            <tr>
+              <td class="col-rank">{{ k.rank }}</td>
+              <td>{{ k.title | e or '—' }}</td>
+              <td class="col-sev"><span class="sev-tag sev-{{ (k.severity or 'info') | lower }}">{{ (k.severity or 'info') | upper }}</span></td>
+              <td class="col-tiny ssvc-cell">{{ (k.ssvc_decision or '—') | e }}</td>
+              <td class="col-owasp">{{ kow }}</td>
+              <td class="col-cwe">{{ (k.cwe or '—') | e }}</td>
+              <td class="col-num">{{ '%.1f' | format(k.cvss) if k.cvss is not none else '—' }}</td>
+              <td class="col-epss">{% if k.epss_percentile is not none %}{{ '%.1f' | format(k.epss_percentile * 100) }}%{% else %}—{% endif %}</td>
+              <td>{{ k.asset | e or '—' }}</td>
+              <td class="kev-date">{{ (k.kev_added_date or '—') | e }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">No KEV-listed vulnerabilities detected.</p>
     {% endif %}
   </section>
 
@@ -217,7 +311,11 @@
           <div class="roadmap-card phase-{{ phase.phase_id | lower }}">
             <div class="phase-header">
               <span class="phase-id">{{ phase.phase_id | e }}</span>
-              <span class="phase-sla">SLA ≤ {{ phase.sla_days }}d</span>
+              {% if (phase.sla_days | default(0)) > 0 %}
+                <span class="phase-sla">SLA ≤ {{ phase.sla_days }}d</span>
+              {% else %}
+                <span class="phase-sla">Backlog</span>
+              {% endif %}
             </div>
             <div class="phase-body">
               <div class="phase-bucket">{{ (phase.severity_bucket or 'info') | upper }}</div>

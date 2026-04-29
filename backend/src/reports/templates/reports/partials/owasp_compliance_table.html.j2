@@ -1,24 +1,41 @@
-{# OWASP Top 10:2025 — embedded in Asgard/Valhalla (RPT-008). Requires owasp_compliance_rows. #}
+{# OWASP compliance table; Valhalla uses 2021 A05 label for Security Misconfiguration (display_category_code on A02 row). #}
 <section class="owasp-compliance" id="owasp-top10-compliance">
-    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 Compliance</h3>
+    {% if valhalla_owasp_2021_labels %}
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2021 compliance mapping</h3>
+    <p class="meta"><small>Unexecuted categories are marked Not assessed. HTTP security response header findings map to <strong>A05:2021 Security Misconfiguration</strong>.</small></p>
+    {% else %}
+    <h3 class="owasp-compliance-heading">OWASP Top 10:2025 compliance mapping</h3>
+    <p class="meta"><small>Security misconfiguration and HTTP header gaps map to <strong>A02:2025</strong> — Security Misconfiguration.</small></p>
+    {% endif %}
     <table class="owasp-compliance-table">
         <thead>
             <tr>
                 <th scope="col">Category</th>
                 <th scope="col">Description</th>
-                <th scope="col" class="owasp-compliance-count-col">Findings Present</th>
+                <th scope="col">Assessed</th>
+                <th scope="col">Result</th>
+                <th scope="col" class="owasp-compliance-count-col">Findings</th>
+                {% if valhalla_owasp_2021_labels %}<th scope="col">Evidence IDs</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for cr in owasp_compliance_rows %}
             <tr class="{{ cr.row_class }}">
                 <td class="owasp-compliance-category"{% if cr.description_hover %} title="{{ cr.description_hover|e }}"{% endif %}>
-                    <span class="owasp-compliance-code"><code>{{ cr.category_id }}</code></span>
+                    <span class="owasp-compliance-code"><code>{{ cr.display_category_code or cr.category_id }}</code></span>
                     <span class="owasp-compliance-sep"> — </span>
                     <span class="owasp-compliance-title">{{ cr.title }}</span>
+                    {% if cr.title_ru and not valhalla_owasp_2021_labels %}
+                    <span class="owasp-compliance-title-ru">{{ cr.title_ru }}</span>
+                    {% endif %}
                 </td>
                 <td class="owasp-compliance-desc">{{ cr.description }}</td>
+                <td class="owasp-compliance-assessed">{{ cr.assessed }}</td>
+                <td class="owasp-compliance-result">{{ cr.assessment_result }}</td>
                 <td class="owasp-compliance-presence">{{ cr.findings_present }}</td>
+                {% if valhalla_owasp_2021_labels %}
+                <td>{% if cr.evidence_ids %}{{ cr.evidence_ids | join(", ") | e }}{% else %}—{% endif %}</td>
+                {% endif %}
             </tr>
             {% endfor %}
         </tbody>

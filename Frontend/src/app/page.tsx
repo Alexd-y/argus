@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useScanProgress } from "@/hooks/useScanProgress";
 
-type ScanType = "quick" | "light" | "deep";
+type ScanType = "quick" | "light" | "deep" | "lab";
 type ReportFormat = "pdf" | "html" | "json" | "xml";
 type RateLimit = "slow" | "normal" | "fast" | "aggressive";
 type UserAgentOption = "chrome" | "firefox" | "mobile" | "bot";
@@ -41,6 +41,10 @@ interface ScanOptions {
     ssrf: boolean;
     lfi: boolean;
     rce: boolean;
+    idor: boolean;
+    ssti: boolean;
+    xxe: boolean;
+    headers: boolean;
   };
   authentication: {
     enabled: boolean;
@@ -60,21 +64,31 @@ interface ScanOptions {
     proxy: string;
     customHeaders: string;
   };
+  active_injection_mode?: "quick" | "standard" | "deep" | "maximum" | "lab";
+  intentional_vulnerable_lab?: boolean;
+  lab_profile?: string;
+  lab_allowed_targets?: string[];
+  argus_lab_allowed_targets?: string;
+  scan_approval_flags?: Record<string, boolean>;
 }
 
 const DEFAULT_OPTIONS: ScanOptions = {
-  scanType: "quick",
+  scanType: "lab",
   reportFormat: "pdf",
-  rateLimit: "normal",
+  rateLimit: "aggressive",
   ports: "80,443,8080,8443",
   followRedirects: true,
   vulnerabilities: {
     xss: true,
     sqli: true,
     csrf: true,
-    ssrf: false,
-    lfi: false,
-    rce: false,
+    ssrf: true,
+    lfi: true,
+    rce: true,
+    idor: true,
+    ssti: true,
+    xxe: true,
+    headers: true,
   },
   authentication: {
     enabled: false,
@@ -84,15 +98,28 @@ const DEFAULT_OPTIONS: ScanOptions = {
     token: "",
   },
   scope: {
-    maxDepth: 3,
+    maxDepth: 10,
     includeSubs: false,
     excludePatterns: "",
   },
   advanced: {
-    timeout: 30,
+    timeout: 120,
     userAgent: "chrome",
     proxy: "",
     customHeaders: "",
+  },
+  active_injection_mode: "lab",
+  intentional_vulnerable_lab: true,
+  lab_profile: "intentional_vulnerable_lab",
+  scan_approval_flags: {
+    sqlmap: true,
+    commix: true,
+    dalfox: true,
+    xsstrike: true,
+    ffuf: true,
+    nuclei: true,
+    testssl: true,
+    sslscan: true,
   },
 };
 
@@ -171,6 +198,26 @@ function normalizeTarget(value: string, selectedProtocol: string = "https"): str
     return value;
   }
   return selectedProtocol + "://" + value;
+}
+
+function buildLabAllowedTargets(normalizedTarget: string): string[] {
+  const allowed: string[] = [];
+  const add = (value: string) => {
+    const clean = value.trim().replace(/\/+$/, "");
+    if (clean && !allowed.includes(clean)) {
+      allowed.push(clean);
+    }
+  };
+
+  try {
+    const parsed = new URL(normalizedTarget);
+    add(parsed.origin);
+  } catch {
+    add(normalizedTarget);
+  }
+  add("localhost");
+  add("127.0.0.1");
+  return allowed;
 }
 
 function Tooltip({ children }: { children: React.ReactNode }) {
@@ -319,21 +366,22 @@ function CompleteRedirect({
 }) {
   const router = useRouter();
   const [redirectCountdown, setRedirectCountdown] = useState(15);
+  const didRedirectRef = useRef(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev <= 1) {
-          const normalizedTarget = normalizeTarget(target, protocol);
-          // Must match Scan.target_url / Report.target in API (full URL), not host-only.
-          router.push(`/report?target=${encodeURIComponent(normalizedTarget)}`);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRedirectCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [target, protocol, router]);
+  }, [target, protocol]);
+
+  // Never call router.push inside setState updater — it updates Router during render phase.
+  useEffect(() => {
+    if (redirectCountdown !== 0 || didRedirectRef.current) return;
+    didRedirectRef.current = true;
+    const normalizedTarget = normalizeTarget(target, protocol);
+    router.push(`/report?target=${encodeURIComponent(normalizedTarget)}`);
+  }, [redirectCountdown, target, protocol, router]);
 
   return (
     <div className="text-center py-8">
@@ -398,10 +446,19 @@ export default function Home() {
     e.preventDefault();
     if (email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       const normalizedTarget = normalizeTarget(target, protocol);
+      const labAllowedTargets = buildLabAllowedTargets(normalizedTarget);
+      const submitOptions: ScanOptions = options.scanType === "lab"
+        ? {
+            ...options,
+            lab_allowed_targets: labAllowedTargets,
+            argus_lab_allowed_targets: labAllowedTargets.join(","),
+          }
+        : options;
       startScan({
         target: normalizedTarget,
         email: email.trim(),
-        options,
+        scan_mode: submitOptions.scanType === "light" ? "standard" : submitOptions.scanType,
+        options: submitOptions,
       });
       setStatus("scanning");
     }
@@ -421,6 +478,7 @@ export default function Home() {
     quick: { description: "Basic OWASP Top 10 checks. Minimal footprint.", time: "~2-5 min" },
     light: { description: "Extended vulnerability scan with fuzzing.", time: "~10-20 min" },
     deep: { description: "Full security audit. All modules enabled.", time: "~1-2 hours" },
+    lab: { description: "Owned-lab maximum profile with explicit active injection approvals.", time: "hours" },
   };
 
   return (
@@ -692,6 +750,7 @@ export default function Home() {
 
               {isComplete && (
                 <CompleteRedirect
+                  key={`${protocol}:${target}`}
                   target={target}
                   protocol={protocol}
                   onViewNow={() => {
@@ -814,11 +873,12 @@ export default function Home() {
                             <TooltipItem label="Quick" desc="Fast surface-level scan" />
                             <TooltipItem label="Light" desc="Moderate depth with fuzzing" />
                             <TooltipItem label="Deep" desc="Comprehensive security audit" />
+                            <TooltipItem label="Lab" desc="Maximum owned-lab active testing" />
                           </div>
                         </Tooltip>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
-                      {(["quick", "light", "deep"] as ScanType[]).map((type) => (
+                      {(["quick", "light", "deep", "lab"] as ScanType[]).map((type) => (
                         <button
                           key={type}
                           type="button"
@@ -1038,6 +1098,34 @@ export default function Home() {
                       description="Remote Code Execution"
                       severity="critical"
                     />
+                    <VulnCheckbox
+                      checked={options.vulnerabilities.idor}
+                      onChange={(v) => setOptions({ ...options, vulnerabilities: { ...options.vulnerabilities, idor: v } })}
+                      label="IDOR"
+                      description="Object-level access control"
+                      severity="high"
+                    />
+                    <VulnCheckbox
+                      checked={options.vulnerabilities.ssti}
+                      onChange={(v) => setOptions({ ...options, vulnerabilities: { ...options.vulnerabilities, ssti: v } })}
+                      label="SSTI"
+                      description="Template injection"
+                      severity="critical"
+                    />
+                    <VulnCheckbox
+                      checked={options.vulnerabilities.xxe}
+                      onChange={(v) => setOptions({ ...options, vulnerabilities: { ...options.vulnerabilities, xxe: v } })}
+                      label="XXE"
+                      description="XML external entity"
+                      severity="high"
+                    />
+                    <VulnCheckbox
+                      checked={options.vulnerabilities.headers}
+                      onChange={(v) => setOptions({ ...options, vulnerabilities: { ...options.vulnerabilities, headers: v } })}
+                      label="Headers"
+                      description="HTTP browser policy"
+                      severity="medium"
+                    />
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-neutral-800 flex gap-2">
@@ -1045,7 +1133,10 @@ export default function Home() {
                       type="button"
                       onClick={() => setOptions({
                         ...options,
-                        vulnerabilities: { xss: true, sqli: true, csrf: true, ssrf: true, lfi: true, rce: true }
+                        vulnerabilities: {
+                          xss: true, sqli: true, csrf: true, ssrf: true, lfi: true, rce: true,
+                          idor: true, ssti: true, xxe: true, headers: true,
+                        }
                       })}
                       className="cursor-pointer text-xs text-[#A655F7] hover:text-[#b875f8]"
                     >
@@ -1056,7 +1147,10 @@ export default function Home() {
                       type="button"
                       onClick={() => setOptions({
                         ...options,
-                        vulnerabilities: { xss: false, sqli: false, csrf: false, ssrf: false, lfi: false, rce: false }
+                        vulnerabilities: {
+                          xss: false, sqli: false, csrf: false, ssrf: false, lfi: false, rce: false,
+                          idor: false, ssti: false, xxe: false, headers: false,
+                        }
                       })}
                       className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-300"
                     >

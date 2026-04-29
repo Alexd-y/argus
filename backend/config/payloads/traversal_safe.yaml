@@ -1,0 +1,23 @@
+family_id: traversal_safe
+description: >-
+  Path-safety curriculum markers (no directory traversal sequences).
+cwe_ids: [22]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: safe_segment
+    template: "argus-traversal-safe-segment-a"
+    confidence: suspected
+    notes: Single path segment; no dot-dot.
+  - id: safe_segment_b
+    template: "argus-traversal-safe-segment-b"
+    confidence: suspected
+    notes: Companion segment for comparisons.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

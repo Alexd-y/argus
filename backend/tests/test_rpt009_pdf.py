@@ -2,6 +2,7 @@
 
 import json
 import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,7 +52,12 @@ def test_generate_pdf_weasyprint_mocked() -> None:
     fake_pdf = b"%PDF-1.4 mocked pdf bytes"
     mock_html_cls = MagicMock()
     doc = MagicMock()
-    doc.write_pdf.return_value = fake_pdf
+
+    def _write_pdf_mock(*, target: str, metadata: dict) -> None:
+        assert metadata["title"] == "ARGUS Security Report"
+        Path(target).write_bytes(fake_pdf)
+
+    doc.write_pdf.side_effect = _write_pdf_mock
     mock_html_cls.return_value = doc
 
     fake_weasy = MagicMock()
@@ -64,9 +70,12 @@ def test_generate_pdf_weasyprint_mocked() -> None:
     mock_html_cls.assert_called_once()
     call_kw = mock_html_cls.call_args[1]
     assert "string" in call_kw
-    assert "ARGUS Security Report" in call_kw["string"]
+    assert "ARGUS Midgard Report" in call_kw["string"]
     assert "base_url" in call_kw
-    doc.write_pdf.assert_called_once_with()
+    doc.write_pdf.assert_called_once()
+    write_pdf_kw = doc.write_pdf.call_args[1]
+    assert "target" in write_pdf_kw
+    assert "metadata" in write_pdf_kw
 
 
 def test_generate_json_top_level_key_order() -> None:
@@ -139,6 +148,10 @@ def test_generate_json_top_level_key_order() -> None:
         "description",
         "cwe",
         "cvss",
+        "confidence",
+        "validation_status",
+        "evidence_quality",
+        "evidence_refs",
     ]
     assert list(parsed["metadata"].keys()) == [
         "report_id",
@@ -336,9 +349,15 @@ def test_vhl005_valhalla_sections_csv_roundtrip() -> None:
             "remediation_stages_text",
             "zero_day_text",
             "conclusion_text",
-            "appendices",
-        ]
-    )
+                "hibp_pwned_password_summary",
+                "appendices",
+                "ssl_tls_table_rows",
+                "security_headers_table_rows",
+                "evidence_inventory",
+                "tool_health_summary",
+                "full_valhalla",
+            ]
+        )
 
 
 @pytest.mark.weasyprint_pdf

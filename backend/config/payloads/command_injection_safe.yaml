@@ -1,0 +1,23 @@
+family_id: command_injection_safe
+description: >-
+  Alphanumeric sentinels for command-injection curriculum (no shell metacharacters).
+cwe_ids: [78]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: canary_a
+    template: "ARGUS_CMDI_SAFE_CANARY_A"
+    confidence: suspected
+    notes: No shell metacharacters; safe for allowlist checks.
+  - id: canary_b
+    template: "ARGUS_CMDI_SAFE_CANARY_B"
+    confidence: suspected
+    notes: Companion sentinel.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

@@ -321,8 +321,13 @@ async def call_llm_for_task(
     attempts = _merge_route_with_global_chain(_build_attempts(route))
 
     last_error: Exception | None = None
+    skipped_no_key: list[str] = []
+    seen_skip: set[str] = set()
     for env_key, base_url, model in attempts:
         if not _get_key(env_key):
+            if env_key not in seen_skip:
+                seen_skip.add(env_key)
+                skipped_no_key.append(env_key)
             continue
         try:
             if base_url == _GEMINI_ROUTE_SENTINEL:
@@ -352,7 +357,10 @@ async def call_llm_for_task(
                 },
             )
 
-    raise LLMAllProvidersFailedError(
+    msg = (
         f"All providers failed for task {task.value}: "
         f"{type(last_error).__name__ if last_error else 'no providers configured'}"
     )
+    if skipped_no_key:
+        msg += ". Skipped (no or empty API key): " + ", ".join(skipped_no_key)
+    raise LLMAllProvidersFailedError(msg)

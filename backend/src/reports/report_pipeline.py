@@ -30,6 +30,7 @@ from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
 
+
 class ReportGenerationError(Exception):
     """Raised when the report generation pipeline encounters a recoverable failure."""
 
@@ -44,7 +45,6 @@ CONTENT_TYPES: dict[str, str] = {
     "csv": "text/csv; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
-
 
 
 def safe_report_task_error_message(exc: BaseException, max_len: int = 480) -> str:
@@ -63,7 +63,9 @@ def normalize_generation_formats(
 ) -> list[str]:
     """Resolve format list from task args or Report.requested_formats JSONB."""
     if explicit is not None and len(explicit) > 0:
-        out = [str(x).lower().strip() for x in explicit if str(x).lower().strip() in REPORT_FORMAT_SET]
+        out = [
+            str(x).lower().strip() for x in explicit if str(x).lower().strip() in REPORT_FORMAT_SET
+        ]
         return out if out else list(DEFAULT_REPORT_FORMATS)
 
     if requested_formats is None:
@@ -86,17 +88,30 @@ def normalize_generation_formats(
 
 async def resolve_scan_id_for_report(
     session: AsyncSession,
+    tenant_id: str,
     report_id: str,
     report: Report,
     scan_id_hint: str | None,
 ) -> str | None:
-    """Effective scan_id for MinIO paths and ReportObject (FK)."""
+    """Effective scan_id for MinIO paths and ReportObject (FK).
+
+    ``tenant_id`` must match ``report.tenant_id``; findings lookup is
+    tenant-scoped to avoid cross-tenant ``scan_id`` inference.
+    """
+    if str(report.tenant_id) != str(tenant_id):
+        return None
     if report.scan_id:
         return str(report.scan_id)
     if scan_id_hint:
         return str(scan_id_hint).strip() or None
     r = await session.execute(
-        select(Finding.scan_id).where(cast(Finding.report_id, String) == report_id).limit(1)
+        select(Finding.scan_id)
+        .join(Report, Report.id == Finding.report_id)
+        .where(
+            cast(Report.id, String) == report_id,
+            cast(Report.tenant_id, String) == str(tenant_id),
+        )
+        .limit(1)
     )
     row = r.first()
     if row and row[0] is not None:
@@ -149,7 +164,9 @@ async def run_generate_report_pipeline(
     formats: list[str] | None,
     include_minio: bool = True,
     redis_client: Any | None = None,
-    upload_fn: Callable[..., str | None] | None = None,  # (tenant_id, scan_id, tier, report_id, fmt, data, *, content_type)
+    upload_fn: (
+        Callable[..., str | None] | None
+    ) = None,  # (tenant_id, scan_id, tier, report_id, fmt, data, *, content_type)
     ensure_bucket_fn: Callable[[], bool] | None = None,
     generator_cls: type[ReportGenerator] = ReportGenerator,
 ) -> dict[str, Any]:
@@ -193,12 +210,14 @@ async def run_generate_report_pipeline(
     if str(report.tenant_id) != str(tenant_id):
         return {"status": "failed", "report_id": report_id, "error": "Tenant mismatch"}
 
-    scan_id = await resolve_scan_id_for_report(session, report_id, report, scan_id_hint)
+    scan_id = await resolve_scan_id_for_report(session, tenant_id, report_id, report, scan_id_hint)
     if not scan_id:
         await session.execute(
             update(Report)
             .where(cast(Report.id, String) == report_id)
-            .values(generation_status="failed", last_error_message="Missing scan_id for report storage")
+            .values(
+                generation_status="failed", last_error_message="Missing scan_id for report storage"
+            )
         )
         await session.commit()
         return {"status": "failed", "report_id": report_id, "error": "No scan_id for report"}
@@ -263,9 +282,7 @@ async def run_generate_report_pipeline(
         # only consumer (HTML/JSON/CSV ignore the flag) but we lift the lookup
         # out of the per-format branch to keep a single async query at the
         # top of the loop.
-        tenant_pdf_format = await resolve_tenant_pdf_archival_format(
-            session, tenant_id
-        )
+        tenant_pdf_format = await resolve_tenant_pdf_archival_format(session, tenant_id)
         for fmt in fmt_list:
             if fmt == "html":
                 content = generate_html(
@@ -348,12 +365,41 @@ async def run_generate_report_pipeline(
         )
         await session.commit()
 
-        return {
+        completed: dict[str, Any] = {
             "status": "completed",
             "report_id": report_id,
             "formats": list(generated.keys()),
             "object_keys": generated,
         }
+        if tier_str == "valhalla":
+            vctx = built.template_context.get("valhalla_context")
+            if isinstance(vctx, dict):
+                completed["full_valhalla"] = bool(vctx.get("full_valhalla"))
+            if "pdf" in generated:
+                completed["pdf_object_key"] = generated.get("pdf")
+
+        log_extra: dict[str, Any] = {
+            "event": "report_generation_completed",
+            "report_id": report_id,
+            "tenant_id": tenant_id,
+            "scan_id": scan_id,
+            "tier": tier_str,
+            "formats_n": len(generated),
+        }
+        rq = built.template_context.get("report_quality")
+        if isinstance(rq, dict):
+            log_extra["coverage_label"] = rq.get("coverage_label")
+            log_extra["tool_health"] = rq.get("tool_health")
+            wn = rq.get("warnings")
+            if isinstance(wn, list):
+                log_extra["warnings_n"] = len(wn)
+        if tier_str == "valhalla":
+            vctx_log = built.template_context.get("valhalla_context")
+            if isinstance(vctx_log, dict):
+                log_extra["full_valhalla"] = bool(vctx_log.get("full_valhalla"))
+        logger.info("report_generation_completed", extra=log_extra)
+
+        return completed
     except jinja2.TemplateError as exc:
         logger.error("Report template rendering failed", exc_info=exc)
         err_msg = safe_report_task_error_message(exc)

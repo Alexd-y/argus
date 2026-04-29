@@ -69,6 +69,10 @@ def _finding(
     poc: dict[str, Any] | None = None,
     repro_steps: str | None = None,
     description: str | None = None,
+    kev_listed: bool = False,
+    kev_added_date: str | None = None,
+    epss_percentile: float | None = None,
+    ssvc_decision: str | None = None,
 ) -> Finding:
     return Finding(
         severity=severity,
@@ -82,6 +86,10 @@ def _finding(
         evidence_type="tool_output",
         reproducible_steps=repro_steps,
         applicability_notes=None,
+        kev_listed=kev_listed,
+        kev_added_date=kev_added_date,
+        epss_percentile=epss_percentile,
+        ssvc_decision=ssvc_decision,
     )
 
 
@@ -137,6 +145,7 @@ def test_section_order_constant_is_complete_and_immutable() -> None:
         "risk_quantification_per_asset",
         "owasp_rollup_matrix",
         "top_findings_by_business_impact",
+        "kev_listed_findings",
         "remediation_roadmap",
         "evidence_refs",
         "timeline_entries",
@@ -269,7 +278,7 @@ def test_asset_risk_caps_to_max_assets() -> None:
     assert len(out.risk_quantification_per_asset) == VALHALLA_TOP_ASSETS_CAP
 
 
-def test_top_findings_sorted_by_composite_then_severity() -> None:
+def test_top_findings_ranked_by_intel_aware_prioritizer() -> None:
     bctx = BusinessContext(
         asset_business_values=(("acme.example.com", 5.0),),
         default_business_value=1.0,
@@ -285,9 +294,8 @@ def test_top_findings_sorted_by_composite_then_severity() -> None:
     )
     titles = [r.title for r in out.top_findings_by_business_impact]
     assert titles[0] == "B_crit"
-    # Tie broken by title (ascending lower-case)
-    assert titles.index("A_high") < titles.index("C_high")
-    assert titles[-1] == "A_low"
+    # Intel-aware :class:`FindingPrioritizer` orders within bucket; not title-only.
+    assert titles == ["B_crit", "C_high", "A_high", "A_low"]
 
 
 def test_top_findings_capped_at_max_findings() -> None:
@@ -671,8 +679,56 @@ def test_jinja_projector_includes_executive_report_slot() -> None:
     assert ctx["tier"] == "valhalla"
     assert "valhalla_executive_report" in ctx
     assert isinstance(ctx["valhalla_executive_report"], dict)
+    assert ctx.get("valhalla_executive_section_order") == list(VALHALLA_EXECUTIVE_SECTION_ORDER)
     for k in VALHALLA_EXECUTIVE_SECTION_ORDER:
         assert k in ctx["valhalla_executive_report"]
+
+
+def test_jinja_executive_report_serialises_kev_section_for_html_pdf() -> None:
+    """RPT-002 — KEV rows must appear in the same blob HTML/PDF consume."""
+    f = _finding(
+        severity="critical",
+        title="KEV-tracked vuln",
+        cwe="CWE-918",
+        cvss=9.0,
+        owasp=None,
+        poc={"url": "https://api.acme.example.com/"},
+        kev_listed=True,
+        kev_added_date="2024-01-15",
+        epss_percentile=0.99,
+        ssvc_decision="Act",
+    )
+    out = assemble_valhalla_sections(_make_data(findings=[f]))
+    assert len(out.kev_listed_findings) == 1
+    kev_row = out.kev_listed_findings[0]
+    assert kev_row.rank == 1
+    assert kev_row.title == "KEV-tracked vuln"
+    assert kev_row.kev_added_date == "2024-01-15"
+    assert kev_row.owasp_category == "A10"
+    assert out.top_findings_by_business_impact[0].kev_listed is True
+
+    ctx = valhalla_assembly_to_jinja_context(out)
+    slot = ctx["valhalla_executive_report"]["kev_listed_findings"]
+    assert isinstance(slot, list) and len(slot) == 1
+    assert slot[0]["rank"] == 1
+    assert slot[0]["asset"] == "api.acme.example.com"
+    assert slot[0]["kev_added_date"] == "2024-01-15"
+    assert slot[0]["owasp_category"] == "A10"
+    assert slot[0]["epss_percentile"] == 0.99
+    assert slot[0]["ssvc_decision"] == "Act"
+
+
+def test_jinja_executive_report_owasp_matrix_matches_assembly_for_pdf() -> None:
+    """RPT-002 — OWASP rollup in context must mirror assembly (PDF uses same dict)."""
+    out = assemble_valhalla_sections(
+        _make_data(findings=[_finding(cwe="CWE-79", owasp=None, severity="high")])
+    )
+    ctx = valhalla_assembly_to_jinja_context(out)
+    matrix = ctx["valhalla_executive_report"]["owasp_rollup_matrix"]
+    assert isinstance(matrix, list)
+    assert len(matrix) == len(out.owasp_rollup_matrix)
+    a05 = next(r for r in matrix if r["category_id"] == "A05")
+    assert a05["high"] == 1
 
 
 def test_jinja_projector_layers_on_top_of_base_context() -> None:

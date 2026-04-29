@@ -172,6 +172,9 @@ def finalize_hibp_pwned_password_summary(summary: dict[str, Any]) -> dict[str, A
         exposure = "no"
     elif attempted > 0 and (all_failed or incomplete):
         exposure = "unknown"
+    elif checks == 0:
+        # No k-anonymity checks completed — do not report as "no breach" / "no exposure".
+        exposure = "unknown"
     else:
         exposure = "no"
 
@@ -196,7 +199,11 @@ def finalize_hibp_pwned_password_summary(summary: dict[str, Any]) -> dict[str, A
             "No sampled credential strings matched Pwned Passwords corpus (or no candidates checked)."
         )
     else:
-        note = "No password-like fields sampled from exploitation output for HIBP check."
+        note = (
+            "No password samples were checked against the HIBP Pwned Passwords API in this run (checks_run=0). "
+            "This is not evidence that real user credentials are or are not present in public breach corpora; "
+            "it only means no k-anonymity checks were completed from sampled material."
+        )
     out["breach_signal_note"] = note
     return out
 

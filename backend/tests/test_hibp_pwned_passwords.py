@@ -37,7 +37,7 @@ async def test_summarize_opt_in_no_passwords():
         assert out is not None
         assert out.get("checks_run") == 0
         assert out.get("pwned_count") == 0
-        assert out.get("data_breach_password_exposure") == "no"
+        assert out.get("data_breach_password_exposure") == "unknown"
         assert "breach_signal_note" in out
 
 

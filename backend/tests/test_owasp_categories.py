@@ -38,6 +38,11 @@ def test_resolve_owasp_a06_insecure_design_cwe1068() -> None:
     assert resolve_owasp_category(cwe="CWE-1068") == "A06"
 
 
+def test_resolve_owasp_cwe693_header_protection_maps_a02_misconfiguration() -> None:
+    """VH-005: missing security header class (CWE-693) maps to A02 / A05:2021 display, not A06."""
+    assert resolve_owasp_category(cwe="CWE-693") == "A02"
+
+
 def test_resolve_owasp_a07_auth_failures_cwe287() -> None:
     assert resolve_owasp_category(cwe="CWE-287") == "A07"
 
@@ -82,19 +87,23 @@ def test_asgard_findings_table_includes_owasp_compliance_section() -> None:
             ),
         ],
     )
-    rows = findings_rows_for_jinja(data)
+    rows_asgard = findings_rows_for_jinja(data, report_tier="asgard")
+    rows_valhalla = findings_rows_for_jinja(data, report_tier="valhalla")
     owasp_ru_path = Path(__file__).resolve().parent.parent / "data" / "owasp_top_10_2025_ru.json"
     owasp_ru = json.loads(owasp_ru_path.read_text(encoding="utf-8"))
     a05_title_ru = (owasp_ru.get("A05") or {}).get("title_ru") or ""
     assert a05_title_ru, "fixture owasp_top_10_2025_ru.json must define A05.title_ru"
 
-    html_asgard = render_findings_table_html("asgard", rows)
-    html_valhalla = render_findings_table_html("valhalla", rows)
-    for label, html in (("asgard", html_asgard), ("valhalla", html_valhalla)):
-        assert "OWASP Top 10:2025 Compliance" in html, label
-        assert "owasp-compliance-table" in html, label
-        assert "A05" in html, label
-        assert a05_title_ru in html, f"{label}: compliance table must include RU title from JSON"
+    html_asgard = render_findings_table_html("asgard", rows_asgard)
+    html_valhalla = render_findings_table_html("valhalla", rows_valhalla)
+    assert "OWASP Top 10:2025 compliance mapping" in html_asgard
+    assert "owasp-compliance-table" in html_asgard
+    assert "A05" in html_asgard
+    assert a05_title_ru in html_asgard
+    assert "owasp-compliance-table" in html_valhalla
+    assert "A05" in html_valhalla
+    assert a05_title_ru in html_valhalla
+    assert "A05:2021" in html_valhalla
 
 
 def test_build_owasp_compliance_rows_empty_findings_title_ru_nonempty() -> None:

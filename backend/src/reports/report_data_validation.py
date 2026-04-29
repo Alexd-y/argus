@@ -10,6 +10,10 @@ from typing import Any
 
 from src.reports.data_collector import executive_severity_totals_from_severity_strings
 from src.reports.generators import ReportData
+from src.reports.report_quality_gate import (
+    cvss_conflict_reason,
+    severity_cvss_band_mismatch_reason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,9 @@ _VALHALLA_VC_REQUIRED_KEYS: frozenset[str] = frozenset(
         "robots_txt_analysis",
         "sitemap_analysis",
         "ssl_tls_analysis",
+        "ssl_tls_table_rows",
         "security_headers_analysis",
+        "security_headers_table_rows",
         "tech_stack_table",
         "tech_stack_structured",
         "dependency_analysis",
@@ -33,6 +39,9 @@ _VALHALLA_VC_REQUIRED_KEYS: frozenset[str] = frozenset(
         "leaked_emails",
         "mandatory_sections",
         "coverage",
+        "full_valhalla",
+        "evidence_inventory",
+        "tool_health_summary",
     }
 )
 
@@ -99,6 +108,27 @@ def validate_report_data(
         if not title and not desc and unknown_sev:
             reasons.append("finding_unknown_empty")
             break
+        conflict = cvss_conflict_reason(f)
+        if conflict:
+            reasons.append("finding_cvss_conflict")
+        band = severity_cvss_band_mismatch_reason(f)
+        if band:
+            reasons.append("finding_severity_cvss_band_mismatch")
+        has_poc = isinstance(getattr(f, "proof_of_concept", None), dict) and bool(
+            getattr(f, "proof_of_concept", None)
+        )
+        has_refs = bool(getattr(f, "evidence_refs", None) or [])
+        if sev_raw in {"high", "critical"} and not has_poc and not has_refs:
+            reasons.append("finding_high_critical_without_evidence")
+        confidence = str(getattr(f, "confidence", "") or "").lower()
+        if confidence == "confirmed":
+            validation_status = str(getattr(f, "validation_status", "") or "").lower()
+            evidence_quality = str(getattr(f, "evidence_quality", "") or "").lower()
+            if validation_status not in {"validated", "partially_validated"} or evidence_quality in {
+                "none",
+                "weak",
+            }:
+                reasons.append("finding_confirmed_without_strong_evidence")
 
     hibp = report_data.hibp_pwned_password_summary
     if isinstance(hibp, dict) and hibp:

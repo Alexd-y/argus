@@ -294,6 +294,10 @@ services:
       retries: 3
       start_period: 10s
 
+  # Gateway: maps host HTTP(S) ports to nginx; `/api/*` → backend:8000 unchanged.
+  # Frontend uses base `/api/v1` (NEXT_PUBLIC_API_URL). Reports (RPT-003/004):
+  #   /api/v1/reports, /api/v1/reports/{id}/download, POST /api/v1/reports/generate,
+  #   /api/v1/scans/{scan_id}/reports/generate(+all). Secrets: ARGUS_GATEWAY_API_KEY / CORS via .env only.
   nginx:
     image: nginx:1.27-alpine
     container_name: argus-nginx
@@ -311,7 +315,9 @@ services:
       ARGUS_GATEWAY_API_KEY: ${ARGUS_GATEWAY_API_KEY:-${ARGUS_API_KEYS:-}}
     ports:
       - "${ARGUS_HTTP_PORT:-8080}:80"
-      - "${ARGUS_HTTPS_PORT:-8443}:443"
+      # Default 19443: 8443/8449 often fail on Windows (Hyper-V excluded ranges).
+      # TLS termination inside nginx is optional (see nginx/ssl + api-tls); port mapping preserved for HTTPS when enabled.
+      - "${ARGUS_HTTPS_PORT:-19443}:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro

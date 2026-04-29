@@ -577,7 +577,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("POC_GENERATION_ENABLED", "poc_generation_enabled"),
     )
 
-    #: Scan mode: quick | standard | deep (Strix-style). Controls category scope and reasoning effort.
+    #: Scan mode: quick | standard | deep | lab. Controls category scope and reasoning effort.
     scan_mode: str = Field(
         default="standard",
         validation_alias=AliasChoices("SCAN_MODE", "scan_mode"),
@@ -640,6 +640,243 @@ class Settings(BaseSettings):
 
     # WEB-006 — destructive tools requiring explicit per-scan approval
     destructive_tool_names: str = "sqlmap,commix"
+    # Lab / staging: server-side hint only. Does **not** bypass per-tool scan flags; see ``argus_lab_mode``.
+    va_lab_profile_allow_destructive_tools: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "VA_LAB_PROFILE_ALLOW_DESTRUCTIVE_TOOLS",
+            "va_lab_profile_allow_destructive_tools",
+        ),
+    )
+    #: Opt-in: allow destructive VA tools only when True AND per-scan ``scan_approval_flags`` grants
+    #: the tool. Safe default False (never treat production as a lab). Env: ``ARGUS_LAB_MODE``.
+    argus_lab_mode: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ARGUS_LAB_MODE", "argus_lab_mode"),
+    )
+    #: When True (default), destructive runs expect explicit signed/recorded approval workflow in
+    #: addition to per-scan flags (flags remain mandatory; ``None`` never enables destructive).
+    #: Env: ``ARGUS_REQUIRE_SIGNED_SCAN_APPROVAL``.
+    argus_scan_approval_required: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_REQUIRE_SIGNED_SCAN_APPROVAL",
+            "argus_require_signed_scan_approval",
+        ),
+    )
+
+    # --- P2-002 — Active injection env modes (FE contracts unchanged; lab fail-closed) ---
+    #
+    # quick: minimal tool set / shallow probes (planner uses mode when implemented).
+    # standard: default balanced coverage.
+    # deep / maximum: extended families + higher caps (still non-destructive unless lab chain passes).
+    # lab: requires full lab_destructive_execution_allowed chain for destructive tooling.
+    #
+    # Lab / destructive: ARGUS_LAB_MODE + ARGUS_DESTRUCTIVE_LAB_MODE + sandbox + signed ids +
+    # allowed targets. ARGUS_KILL_SWITCH_REQUIRED=true means runtime kill-switch must clear
+    # before execution; the settings-only lab_destructive_execution_allowed() returns False
+    # when kill-switch is required (cannot verify Redis here).
+    argus_active_injection_mode: str = Field(
+        default="standard",
+        validation_alias=AliasChoices(
+            "ARGUS_ACTIVE_INJECTION_MODE",
+            "argus_active_injection_mode",
+        ),
+    )
+    #: Separate from ARGUS_LAB_MODE: explicit opt-in for destructive lab execution preflight.
+    argus_destructive_lab_mode: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_DESTRUCTIVE_LAB_MODE",
+            "argus_destructive_lab_mode",
+        ),
+    )
+    #: Comma-separated allowlist (env is not JSON; use CSV, not a JSON array).
+    argus_lab_allowed_targets: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ARGUS_LAB_ALLOWED_TARGETS",
+            "argus_lab_allowed_targets",
+        ),
+    )
+    argus_lab_operator_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ARGUS_LAB_OPERATOR_ID",
+            "argus_lab_operator_id",
+        ),
+    )
+    argus_lab_signed_approval_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ARGUS_LAB_SIGNED_APPROVAL_ID",
+            "argus_lab_signed_approval_id",
+        ),
+    )
+    #: Non-empty enables downstream AI candidate ingestion path (path or marker; planner TBD).
+    argus_ai_payload_candidates: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "ARGUS_AI_PAYLOAD_CANDIDATES",
+            "argus_ai_payload_candidates",
+        ),
+    )
+    argus_ai_generated_lab_payloads: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_AI_GENERATED_LAB_PAYLOADS",
+            "argus_ai_generated_lab_payloads",
+        ),
+    )
+    argus_oast_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ARGUS_OAST_ENABLED", "argus_oast_enabled"),
+    )
+    argus_kill_switch_required: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_KILL_SWITCH_REQUIRED",
+            "argus_kill_switch_required",
+        ),
+    )
+    argus_active_injection_rate_limit_per_sec: float = Field(
+        default=10.0,
+        ge=0.0,
+        validation_alias=AliasChoices(
+            "ARGUS_ACTIVE_INJECTION_RATE_LIMIT_PER_SEC",
+            "argus_active_injection_rate_limit_per_sec",
+        ),
+    )
+    argus_active_injection_timeout_sec: float = Field(
+        default=120.0,
+        ge=1.0,
+        validation_alias=AliasChoices(
+            "ARGUS_ACTIVE_INJECTION_TIMEOUT_SEC",
+            "argus_active_injection_timeout_sec",
+        ),
+    )
+    argus_active_injection_max_concurrency: int = Field(
+        default=3,
+        ge=1,
+        validation_alias=AliasChoices(
+            "ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY",
+            "argus_active_injection_max_concurrency",
+        ),
+    )
+
+    @field_validator("argus_active_injection_mode", mode="before")
+    @classmethod
+    def normalize_argus_active_injection_mode(cls, v: object) -> str:
+        allowed = frozenset({"quick", "standard", "deep", "maximum", "lab"})
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return "standard"
+        s = str(v).strip().lower()
+        return s if s in allowed else "standard"
+
+    @field_validator("argus_lab_allowed_targets", mode="after")
+    @classmethod
+    def strip_argus_lab_allowed_targets(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @field_validator("argus_destructive_lab_mode", mode="before")
+    @classmethod
+    def coerce_argus_destructive_lab_mode(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator(
+        "argus_ai_generated_lab_payloads",
+        "argus_oast_enabled",
+        mode="before",
+    )
+    @classmethod
+    def coerce_active_injection_lab_flags(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"false", "0", "no", "off"}:
+                return False
+            return s in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("argus_kill_switch_required", mode="before")
+    @classmethod
+    def coerce_argus_kill_switch_required(cls, v: object) -> bool:
+        """Default true; explicit false/0/off disables the preflight gate."""
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"false", "0", "no", "off"}:
+                return False
+            return s in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("argus_active_injection_rate_limit_per_sec", mode="before")
+    @classmethod
+    def coerce_rate_limit_per_sec(cls, v: object) -> float:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return 10.0
+        return float(v)
+
+    @field_validator("argus_active_injection_timeout_sec", mode="before")
+    @classmethod
+    def coerce_active_injection_timeout(cls, v: object) -> float:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return 120.0
+        return float(v)
+
+    @field_validator("argus_active_injection_max_concurrency", mode="before")
+    @classmethod
+    def coerce_active_injection_max_concurrency(cls, v: object) -> int:
+        if v is None or (isinstance(v, str) and not str(v).strip()):
+            return 3
+        return int(v)
+
+    @field_validator("argus_lab_operator_id", "argus_lab_signed_approval_id", mode="after")
+    @classmethod
+    def strip_lab_ids(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @field_validator("argus_ai_payload_candidates", mode="after")
+    @classmethod
+    def strip_ai_payload_candidates(cls, v: str) -> str:
+        return (v or "").strip()
+
+    @field_validator("argus_lab_mode", mode="before")
+    @classmethod
+    def coerce_argus_lab_mode(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("argus_scan_approval_required", mode="before")
+    @classmethod
+    def coerce_argus_scan_approval_required(cls, v: object) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in {"false", "0", "no", "off"}:
+                return False
+            return s in {"true", "1", "yes", "on"}
+        return bool(v)
 
     # KAL-002 — MCP password-audit tools (hydra/medusa): server-side gate in addition to request opt-in.
     # Env: KAL_ALLOW_PASSWORD_AUDIT=true
@@ -894,6 +1131,11 @@ class Settings(BaseSettings):
             if t.strip()
         )
 
+    @property
+    def destructive_lab_mode(self) -> bool:
+        """Opt-in lab flag for high-risk active tools (sqlmap, commix, …). Alias of :attr:`argus_lab_mode` (``ARGUS_LAB_MODE``)."""
+        return bool(self.argus_lab_mode)
+
     def get_cors_origins_list(self) -> list[str]:
         """Merge VERCEL_FRONTEND_URL, CORS_ORIGINS, and localhost dev origins (deduped)."""
         dev_defaults = [
@@ -934,6 +1176,35 @@ class Settings(BaseSettings):
             for d in dev_defaults:
                 add(d)
         return out
+
+
+def lab_destructive_execution_allowed(settings: Settings) -> bool:
+    """Return True only when destructive lab execution is fully pre-authorized (conservative).
+
+    Requires lab mode, explicit destructive lab flag, non-empty operator + signed approval ids,
+    sandbox, and at least one allowed target. When :attr:`Settings.argus_kill_switch_required`
+    is True, this settings-only check cannot verify Redis kill-switch clearance and returns
+    False — the runner must consult :mod:`src.policy.kill_switch` and gate there.
+    """
+    if not settings.argus_lab_mode:
+        return False
+    if not settings.argus_destructive_lab_mode:
+        return False
+    if not settings.sandbox_enabled:
+        return False
+    if not (settings.argus_lab_operator_id or "").strip():
+        return False
+    if not (settings.argus_lab_signed_approval_id or "").strip():
+        return False
+    if not [
+        p.strip()
+        for p in (settings.argus_lab_allowed_targets or "").split(",")
+        if p.strip()
+    ]:
+        return False
+    if settings.argus_kill_switch_required:
+        return False
+    return True
 
 
 settings = Settings()

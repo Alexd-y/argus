@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import logging
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -13,13 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from sqlalchemy import String, cast, select
 
 from src.api.schemas import (
+    ErrorResponse,
     Finding,
     ReportDetailResponse,
     ReportListResponse,
     ReportSummary,
 )
 from src.core.tenant import get_current_tenant_id
-from src.db.models import Evidence as EvidenceModel
 from src.db.models import Finding as FindingModel
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.finding_metadata import (
@@ -27,18 +28,10 @@ from src.reports.finding_metadata import (
     normalize_evidence_refs,
     normalize_evidence_type,
 )
-from src.db.models import PhaseOutput, Report, ReportObject, ScanTimeline
-from src.db.models import Screenshot as ScreenshotModel
+from src.db.models import Report, ReportObject
 from src.db.session import async_session_factory, set_session_tenant
-from src.reports.jinja_minimal_context import minimal_jinja_context_from_report_data
 from src.reports.generators import (
-    EvidenceEntry,
-    PhaseOutputEntry,
-    ReportData,
-    ScreenshotEntry,
-    TimelineEntry,
     VALHALLA_SECTIONS_CSV_FORMAT,
-    build_report_data_from_db,
     generate_csv,
     generate_html,
     generate_json,
@@ -46,7 +39,11 @@ from src.reports.generators import (
     generate_valhalla_sections_csv,
 )
 from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
-from src.reports.report_pipeline import _upsert_report_object
+from src.reports.report_findings_scope import (
+    load_findings_for_report,
+    scan_id_hint_for_report_findings,
+)
+from src.reports.report_pipeline import _upsert_report_object, resolve_scan_id_for_report
 from src.reports.report_service import (
     ReportGenerationError,
     ReportNotFoundError,
@@ -54,11 +51,22 @@ from src.reports.report_service import (
 )
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.storage import download as storage_download
+from src.services.reporting import build_report_export_payload
 from src.reports.storage import exists as storage_exists
 from src.reports.storage import get_presigned_url
 from src.storage.s3 import download_by_key, get_presigned_url_by_key, upload_report_artifact
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+# OpenAPI: ошибки для путей под contract_http_exception_handler — JSON { error, code?, details? }
+_REPORT_HTTP_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"model": ErrorResponse, "description": "Bad request"},
+    404: {"model": ErrorResponse, "description": "Not found"},
+    422: {"model": ErrorResponse, "description": "Validation failed"},
+    503: {"model": ErrorResponse, "description": "Service unavailable"},
+}
 
 
 def _hostname_from_target_string(value: str) -> str | None:
@@ -156,7 +164,13 @@ def _findings_to_schema(findings: list[FindingModel]) -> list[Finding]:
     ]
 
 
-@router.get("", response_model=list[ReportListResponse])
+@router.get(
+    "",
+    response_model=list[ReportListResponse],
+    responses={
+        **_REPORT_HTTP_ERROR_RESPONSES,
+    },
+)
 async def list_reports(
     target: str | None = Query(None, description="Filter by target URL"),
     tenant_id: str = Depends(get_current_tenant_id),
@@ -191,10 +205,18 @@ async def list_reports(
 
         out = []
         for report in reports:
-            findings_result = await session.execute(
-                select(FindingModel).where(cast(FindingModel.report_id, String) == report.id)
+            scan_for = await scan_id_hint_for_report_findings(
+                session,
+                tenant_id=tenant_id,
+                report_id=report.id,
+                report_scan_id=report.scan_id,
             )
-            findings = list(findings_result.scalars().all())
+            findings = await load_findings_for_report(
+                session,
+                tenant_id=tenant_id,
+                report_id=report.id,
+                scan_id=scan_for,
+            )
             summary = _report_to_summary(report)
             out.append(
                 ReportListResponse(
@@ -211,7 +233,14 @@ async def list_reports(
         return out
 
 
-@router.get("/{report_id}", response_model=ReportDetailResponse)
+@router.get(
+    "/{report_id}",
+    response_model=ReportDetailResponse,
+    responses={
+        404: _REPORT_HTTP_ERROR_RESPONSES[404],
+        422: _REPORT_HTTP_ERROR_RESPONSES[422],
+    },
+)
 async def get_report(
     report_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
@@ -226,10 +255,18 @@ async def get_report(
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
 
-        findings_result = await session.execute(
-            select(FindingModel).where(cast(FindingModel.report_id, String) == report_id)
+        scan_for = await scan_id_hint_for_report_findings(
+            session,
+            tenant_id=tenant_id,
+            report_id=report_id,
+            report_scan_id=report.scan_id,
         )
-        findings = list(findings_result.scalars().all())
+        findings = await load_findings_for_report(
+            session,
+            tenant_id=tenant_id,
+            report_id=report_id,
+            scan_id=scan_for,
+        )
 
         return ReportDetailResponse(
             report_id=report.id,
@@ -245,80 +282,15 @@ async def get_report(
         )
 
 
-async def _load_report_data(session, report: Report, findings: list[FindingModel]) -> ReportData:
-    """Load full report data: timeline, phase outputs, evidence, screenshots."""
-    scan_id = report.scan_id or report.id
-    t_id = report.tenant_id or "default"
-
-    timeline: list[TimelineEntry] = []
-    phase_outputs: list[PhaseOutputEntry] = []
-    evidence: list[EvidenceEntry] = []
-    screenshots: list[ScreenshotEntry] = []
-
-    if scan_id:
-        tl_result = await session.execute(
-            select(ScanTimeline)
-            .where(cast(ScanTimeline.scan_id, String) == scan_id, cast(ScanTimeline.tenant_id, String) == t_id)
-            .order_by(ScanTimeline.order_index, ScanTimeline.created_at)
-        )
-        for tl in tl_result.scalars().all():
-            timeline.append(
-                TimelineEntry(
-                    phase=tl.phase or "",
-                    order_index=tl.order_index or 0,
-                    entry=tl.entry,
-                    created_at=tl.created_at.isoformat() if tl.created_at else None,
-                )
-            )
-
-        po_result = await session.execute(
-            select(PhaseOutput)
-            .where(cast(PhaseOutput.scan_id, String) == scan_id, cast(PhaseOutput.tenant_id, String) == t_id)
-            .order_by(PhaseOutput.created_at)
-        )
-        for po in po_result.scalars().all():
-            phase_outputs.append(
-                PhaseOutputEntry(phase=po.phase or "", output_data=po.output_data)
-            )
-
-        ev_result = await session.execute(
-            select(EvidenceModel).where(
-                cast(EvidenceModel.scan_id, String) == scan_id, cast(EvidenceModel.tenant_id, String) == t_id
-            )
-        )
-        for ev in ev_result.scalars().all():
-            evidence.append(
-                EvidenceEntry(
-                    finding_id=ev.finding_id or "",
-                    object_key=ev.object_key or "",
-                    description=ev.description,
-                )
-            )
-
-        ss_result = await session.execute(
-            select(ScreenshotModel).where(
-                cast(ScreenshotModel.scan_id, String) == scan_id, cast(ScreenshotModel.tenant_id, String) == t_id
-            )
-        )
-        for ss in ss_result.scalars().all():
-            screenshots.append(
-                ScreenshotEntry(
-                    object_key=ss.object_key or "",
-                    url_or_email=ss.url_or_email,
-                )
-            )
-
-    return build_report_data_from_db(
-        report,
-        findings,
-        timeline=timeline,
-        phase_outputs=phase_outputs,
-        evidence=evidence,
-        screenshots=screenshots,
-    )
-
-
-@router.get("/{report_id}/download", response_model=None)
+@router.get(
+    "/{report_id}/download",
+    response_model=None,
+    responses={
+        400: _REPORT_HTTP_ERROR_RESPONSES[400],
+        404: _REPORT_HTTP_ERROR_RESPONSES[404],
+        503: _REPORT_HTTP_ERROR_RESPONSES[503],
+    },
+)
 async def download_report(
     report_id: str,
     format: str = Query(
@@ -343,13 +315,10 @@ async def download_report(
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
 
-        findings_result = await session.execute(
-            select(FindingModel).where(cast(FindingModel.report_id, String) == report_id)
-        )
-        findings = list(findings_result.scalars().all())
-
         t_id = str(report.tenant_id or "default")
-        scan_id = str(report.scan_id or report_id)
+        effective_scan_id = await resolve_scan_id_for_report(
+            session, tenant_id, report_id, report, scan_id_hint=None
+        )
         filename = f"report.{fmt}"
 
         use_cache = not regenerate
@@ -376,13 +345,17 @@ async def download_report(
                         headers={"Content-Disposition": _attachment_content_disposition(fname)},
                     )
 
-            cached = storage_exists(t_id, scan_id, "reports", filename)
+            cached = (
+                storage_exists(t_id, effective_scan_id, "reports", filename)
+                if effective_scan_id
+                else False
+            )
             if cached:
                 if redirect:
-                    presigned_url = get_presigned_url(t_id, scan_id, "reports", filename)
+                    presigned_url = get_presigned_url(t_id, effective_scan_id, "reports", filename)
                     if presigned_url:
                         return RedirectResponse(url=presigned_url, status_code=302)
-                data = storage_download(t_id, scan_id, "reports", filename)
+                data = storage_download(t_id, effective_scan_id, "reports", filename)
                 if data:
                     fname = f"report-{report_id}.{fmt}"
                     return StreamingResponse(
@@ -391,62 +364,88 @@ async def download_report(
                         headers={"Content-Disposition": _attachment_content_disposition(fname)},
                     )
 
-        report_data = await _load_report_data(session, report, findings)
-        tier_str = str(report.tier or "midgard")
-        jctx = minimal_jinja_context_from_report_data(report_data, tier_str)
-        if fmt == VALHALLA_SECTIONS_CSV_FORMAT:
-            if tier_str != "valhalla":
-                raise HTTPException(
-                    status_code=400,
-                    detail="valhalla_sections.csv is only available for valhalla tier reports",
-                )
-            content = generate_valhalla_sections_csv(report_data, jinja_context=jctx)
-        elif fmt == "pdf":
-            tenant_pdf_format = await resolve_tenant_pdf_archival_format(
-                session, t_id
+        if not effective_scan_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Report export is unavailable: no scan linked to this report.",
             )
-            content = generate_pdf(
-                report_data,
-                jinja_context=jctx,
-                tier=tier_str,
-                pdf_archival_format=tenant_pdf_format,
-            )
-        elif fmt == "html":
-            content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
-        elif fmt == "json":
-            content = generate_json(report_data, jinja_context=jctx)
-        else:
-            content = generate_csv(report_data, jinja_context=jctx)
 
+        tier_str = str(report.tier or "midgard")
         stored_key: str | None = None
         try:
-            tier_str = str(report.tier or "midgard")
-            stored_key = upload_report_artifact(
-                t_id,
-                scan_id,
-                tier_str,
-                str(report.id),
-                fmt,
-                content,
-                content_type=CONTENT_TYPES[fmt],
+            report_data, jctx = await build_report_export_payload(
+                session,
+                tenant_id=tenant_id,
+                report_id=report_id,
+                scan_id=effective_scan_id,
+                tier=report.tier,
+                include_minio=True,
+                sync_ai=True,
             )
-            if stored_key:
-                await _upsert_report_object(
-                    session,
-                    tenant_id=t_id,
-                    scan_id=scan_id,
-                    report_id=str(report.id),
-                    fmt=fmt,
-                    object_key=stored_key,
-                    size_bytes=len(content),
+            if fmt == VALHALLA_SECTIONS_CSV_FORMAT:
+                if tier_str != "valhalla":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="valhalla_sections.csv is only available for valhalla tier reports",
+                    )
+                content = generate_valhalla_sections_csv(report_data, jinja_context=jctx)
+            elif fmt == "pdf":
+                tenant_pdf_format = await resolve_tenant_pdf_archival_format(
+                    session, t_id
                 )
-                try:
-                    await session.commit()
-                except Exception:
-                    with contextlib.suppress(Exception):
-                        await session.rollback()
+                content = generate_pdf(
+                    report_data,
+                    jinja_context=jctx,
+                    tier=tier_str,
+                    pdf_archival_format=tenant_pdf_format,
+                )
+            elif fmt == "html":
+                content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
+            elif fmt == "json":
+                content = generate_json(report_data, jinja_context=jctx)
+            else:
+                content = generate_csv(report_data, jinja_context=jctx)
+
+            try:
+                stored_key = upload_report_artifact(
+                    t_id,
+                    effective_scan_id,
+                    tier_str,
+                    str(report.id),
+                    fmt,
+                    content,
+                    content_type=CONTENT_TYPES[fmt],
+                )
+                if stored_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=t_id,
+                        scan_id=effective_scan_id,
+                        report_id=str(report.id),
+                        fmt=fmt,
+                        object_key=stored_key,
+                        size_bytes=len(content),
+                    )
+                    try:
+                        await session.commit()
+                    except Exception:
+                        with contextlib.suppress(Exception):
+                            await session.rollback()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid report path") from None
+        except HTTPException:
+            raise
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid report path") from None
+        except Exception:
+            logger.exception(
+                "report_download_export_failed",
+                extra={"report_id": report_id, "tenant_id": tenant_id},
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Report export is temporarily unavailable.",
+            ) from None
 
         if redirect and stored_key:
             presigned_url = get_presigned_url_by_key(stored_key)
@@ -514,9 +513,10 @@ def _bundle_response(bundle: ReportBundle) -> StreamingResponse:
     summary="Generate a tier × format report bundle (ARG-024 ReportService)",
     responses={
         200: {"description": "Report bundle (binary)"},
-        400: {"description": "Invalid tier / format / missing identifiers"},
-        404: {"description": "Scan or report not visible to the tenant"},
-        503: {"description": "Generator unavailable (e.g. WeasyPrint missing for PDF)"},
+        400: _REPORT_HTTP_ERROR_RESPONSES[400],
+        404: _REPORT_HTTP_ERROR_RESPONSES[404],
+        422: _REPORT_HTTP_ERROR_RESPONSES[422],
+        503: _REPORT_HTTP_ERROR_RESPONSES[503],
     },
 )
 async def generate_report_bundle(
@@ -545,14 +545,29 @@ async def generate_report_bundle(
             tier=req.tier,
             fmt=req.format,
         )
-    except ReportNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from None
-    except ReportGenerationError:
+    except ReportNotFoundError:  # _load_report_data when no Report row for this tenant/ids
+        raise HTTPException(status_code=404, detail="Report not found") from None
+    except ReportGenerationError as exc:
+        logger.warning(
+            "report_bundle_generation_failed",
+            extra={
+                "event": "report_bundle_generation_failed",
+                "format": req.format.value,
+                "tier": req.tier.value,
+            },
+            exc_info=exc,
+        )
         raise HTTPException(
             status_code=503,
             detail=f"Report generation unavailable for {req.format.value}",
         ) from None
     except ValueError as exc:
+        # Client-facing validation only — no tracebacks (exception handlers strip internals).
+        logger.warning(
+            "report_bundle_bad_request",
+            extra={"event": "report_bundle_bad_request"},
+            exc_info=exc,
+        )
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
     return _bundle_response(bundle)

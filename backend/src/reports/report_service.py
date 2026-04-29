@@ -51,13 +51,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from typing import Any, Final
-from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.observability import get_tracer, safe_set_span_attribute, tenant_hash
-from src.db.models import Finding as FindingModel
 from src.db.models import Report
 from src.reports.asgard_tier_renderer import (
     AsgardSectionAssembly,
@@ -73,6 +71,10 @@ from src.reports.generators import (
     generate_pdf,
 )
 from src.reports.junit_generator import generate_junit
+from src.reports.report_findings_scope import (
+    load_findings_for_report,
+    scan_id_hint_for_report_findings,
+)
 from src.reports.replay_command_sanitizer import SanitizeContext
 from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.sarif_generator import generate_sarif
@@ -324,21 +326,20 @@ class ReportService:
             report_id=report_id,
         )
         if report is None:
-            target = self._derive_target_or_empty(scan_id=scan_id, report_id=report_id)
-            return self._empty_report_data(
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                report_id=report_id,
-                target=target,
-            )
+            raise ReportNotFoundError
 
-        findings_result = await session.execute(
-            select(FindingModel).where(
-                FindingModel.report_id == report.id,
-                FindingModel.tenant_id == tenant_id,
-            )
+        scan_for = await scan_id_hint_for_report_findings(
+            session,
+            tenant_id=tenant_id,
+            report_id=report.id,
+            report_scan_id=report.scan_id,
         )
-        findings = list(findings_result.scalars().all())
+        findings = await load_findings_for_report(
+            session,
+            tenant_id=tenant_id,
+            report_id=report.id,
+            scan_id=scan_for,
+        )
         return build_report_data_from_db(report, findings)
 
     async def _load_report(
@@ -368,58 +369,6 @@ class ReportService:
             )
             return result.scalars().first()
         return None
-
-    @staticmethod
-    def _derive_target_or_empty(
-        *,
-        scan_id: str | None,
-        report_id: str | None,
-    ) -> str:
-        """Best-effort target derivation when no Report row exists.
-
-        We never invent a hostname; the caller may pass a scan_id derived
-        from a URL elsewhere. For an empty result we just return ``""``,
-        which the generators handle gracefully.
-        """
-        for candidate in (scan_id, report_id):
-            if candidate and "://" in candidate:
-                parsed = urlparse(candidate)
-                if parsed.hostname:
-                    return parsed.hostname
-        return ""
-
-    @staticmethod
-    def _empty_report_data(
-        *,
-        tenant_id: str,
-        scan_id: str | None,
-        report_id: str | None,
-        target: str,
-    ) -> ReportData:
-        from src.api.schemas import ReportSummary
-
-        rid = report_id or scan_id or "unknown"
-        empty_summary = ReportSummary(
-            critical=0,
-            high=0,
-            medium=0,
-            low=0,
-            info=0,
-            technologies=[],
-            sslIssues=0,
-            headerIssues=0,
-            leaksFound=False,
-        )
-        return ReportData(
-            report_id=rid,
-            target=target,
-            summary=empty_summary,
-            findings=[],
-            technologies=[],
-            created_at=None,
-            scan_id=scan_id,
-            tenant_id=tenant_id,
-        )
 
     # ------------------------------------------------------------------
     # Format dispatch
@@ -508,17 +457,17 @@ class ReportService:
         """
         if tier is ReportTier.ASGARD and asgard_assembly is not None:
             from src.reports.jinja_minimal_context import (
-                minimal_jinja_context_from_report_data,
+                offline_minimal_jinja_context_from_report_data,
             )
 
-            base = minimal_jinja_context_from_report_data(data, tier.value)
+            base = offline_minimal_jinja_context_from_report_data(data, tier.value)
             return asgard_assembly_to_jinja_context(asgard_assembly, base_context=base)
         if tier is ReportTier.VALHALLA and valhalla_assembly is not None:
             from src.reports.jinja_minimal_context import (
-                minimal_jinja_context_from_report_data,
+                offline_minimal_jinja_context_from_report_data,
             )
 
-            base = minimal_jinja_context_from_report_data(data, tier.value)
+            base = offline_minimal_jinja_context_from_report_data(data, tier.value)
             return valhalla_assembly_to_jinja_context(
                 valhalla_assembly, base_context=base
             )

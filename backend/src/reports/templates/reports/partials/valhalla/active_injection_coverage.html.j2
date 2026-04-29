@@ -1,0 +1,39 @@
+{# P2-008 — Active injection coverage (additive; uses valhalla_context.active_injection_coverage). #}
+{% set aic = (valhalla_context.active_injection_coverage if valhalla_context is defined and valhalla_context else {}) %}
+{% set inj_rows = aic.get('table_rows') if aic is mapping else [] %}
+{% if inj_rows %}
+<section class="valhalla-active-injection panel" id="active-injection-coverage">
+    <h3>Active Injection Coverage</h3>
+    <p class="meta"><small>Scheduler / tool execution summary; “assessed” reflects planned surfaces, observed tool health, and injection-class findings.</small></p>
+    <table class="valhalla-active-injection-table">
+        <thead>
+            <tr>
+                <th>Family</th>
+                <th>Assessed</th>
+                <th>Tool(s)</th>
+                <th>Status</th>
+                <th class="col-num">Surfaces</th>
+                <th>Evidence IDs</th>
+                <th class="col-num">Findings</th>
+                <th>Confidence</th>
+                <th>Not assessed reason</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in inj_rows %}
+            <tr>
+                <td><code>{{ row.family | e }}</code></td>
+                <td>{{ row.assessed | e }}</td>
+                <td class="desc">{{ row.tool | e or '—' }}</td>
+                <td>{{ row.status | e }}</td>
+                <td class="col-num">{{ row.surfaces_tested | default(0) }}</td>
+                <td class="desc">{% if row.evidence_ids %}{{ row.evidence_ids | join(', ') | e }}{% else %}—{% endif %}</td>
+                <td class="col-num">{{ row.findings_count | default(0) }}</td>
+                <td>{{ row.confidence | e }}</td>
+                <td class="desc">{{ row.not_assessed_reason | e or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}

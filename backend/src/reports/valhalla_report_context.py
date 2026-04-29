@@ -10,7 +10,9 @@ import dataclasses
 import json
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,9 +23,24 @@ from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
     parse_whatweb_text_fallback,
     parse_whatweb_to_tech_stack,
 )
+from src.reports.report_quality_gate import (
+    build_active_injection_coverage,
+    is_header_only_advisory_finding,
+)
 from src.storage.s3 import download_by_key
 
-ValhallaSectionCoverageStatus = Literal["completed", "partial", "not_executed", "no_data"]
+ValhallaSectionCoverageStatus = Literal[
+    "completed",
+    "completed_with_fallback",
+    "partial",
+    "parsed_from_fallback",
+    "no_observed_items_after_parsing",
+    "not_executed",
+    "no_data",
+    "not_assessed",
+    "parser_error",
+    "artifact_missing_body",  # tool/phase metadata or object keys exist, but no fetchable stdout/body
+]
 
 _MANDATORY_SECTION_IDS: tuple[str, ...] = (
     "tech_stack_structured",
@@ -32,6 +49,7 @@ _MANDATORY_SECTION_IDS: tuple[str, ...] = (
     "security_headers_analysis",
     "robots_sitemap_analysis",
     "leaked_emails",
+    "port_exposure",
 )
 
 logger = logging.getLogger(__name__)
@@ -46,10 +64,24 @@ _DEP_ARTIFACT_HINTS = frozenset(
         "safety",
         "pip_audit",
         "npm_audit",
+        "yarn_lock",
+        "pnpm_lock",
         "manifest",
         "package_lock",
+        "package_json",
+        "package.json",
         "requirements",
+        "poetry",
+        "composer",
+        "go.mod",
+        "go_sum",
     }
+)
+_HTTP_HEADER_ARTIFACT_HINTS = frozenset(
+    {"headers", "http_audit", "httpx", "nikto", "response", "raw_http", "curl"}
+)
+_EMAIL_FALLBACK_ARTIFACT_HINTS = frozenset(
+    {"theharvester", "email", "contact", "html", "javascript", "js", "sitemap", "robots"}
 )
 _CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
 _CVSS_V3_INLINE_RE = re.compile(
@@ -99,6 +131,9 @@ class TechStackTableRow(BaseModel):
     name: str
     detail: str = ""
     source: str = ""
+    version: str = ""
+    confidence: str = ""
+    security_note: str = ""
 
 
 class TechStackEntryModel(BaseModel):
@@ -134,6 +169,7 @@ class OutdatedComponentRow(BaseModel):
     latest_stable: str | None = None
     support_status: str | None = None
     cves: list[str] = Field(default_factory=list)
+    source: str = ""
     recommendation: str = ""
     exploit_available: bool = False
 
@@ -147,6 +183,26 @@ class SslTlsAnalysisModel(BaseModel):
     weak_protocols: list[str] = Field(default_factory=list)
     weak_ciphers: list[str] = Field(default_factory=list)
     hsts: str | None = None
+
+
+class SslTlsTableRowModel(BaseModel):
+    """VH-008 — one row for SSL/TLS results table (domain-level when recon ssl_certs exists)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    domain: str = ""
+    cert_subject: str = ""
+    issuer: str = ""
+    dates: str = ""
+    days_remaining: str = ""
+    tls_1_0: str = ""
+    tls_1_1: str = ""
+    tls_1_2: str = ""
+    tls_1_3: str = ""
+    weak_ciphers: str = ""
+    hsts: str = ""
+    chain_issues: str = ""
+    evidence_id: str = ""
 
 
 class SecurityHeadersAnalysisModel(BaseModel):
@@ -217,6 +273,8 @@ class CriticalVulnRefModel(BaseModel):
     cvss: float | None = None
     cvss_vector: str | None = None
     exploit_available: bool = False
+    """Alias for legacy templates; use exploit_demonstrated for truth (VAL-003)."""
+    exploit_demonstrated: bool = False
     severity: str = ""
 
 
@@ -453,6 +511,63 @@ class ValhallaSectionEnvelopeModel(BaseModel):
     reason: str = ""
 
 
+class PortExposureSummaryModel(BaseModel):
+    """VH-003 — ports / services from nmap, naabu, recon list, and structured stack hints."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    has_open_ports: bool = False
+    open_port_hints: list[str] = Field(default_factory=list)
+    services_summary: str = ""
+    summary_text: str = ""
+    data_sources: list[str] = Field(default_factory=list)
+    has_naabu_hits: bool = False
+    has_nmap_hits: bool = False
+    has_recon_port_list: bool = False
+
+
+class PortExposureTableRowModel(BaseModel):
+    """Customer-facing port/service exposure row."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = ""
+    port: str = ""
+    protocol: str = "tcp"
+    state: str = "open"
+    service: str = ""
+    version: str = ""
+    source: str = ""
+    confidence: str = ""
+    exposure_note: str = ""
+
+
+class LeakedEmailRowModel(BaseModel):
+    """Customer-facing email/OSINT evidence row with masked addresses only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = ""
+    source: str = ""
+    context: str = ""
+    risk: str = ""
+    evidence_id: str = ""
+
+
+class EvidenceInventoryRowModel(BaseModel):
+    """VH-001 — customer-safe evidence list (no MinIO URLs, no raw JSON)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    evidence_id: str
+    finding_or_section: str = ""
+    source_tool: str = ""
+    evidence_type: str = ""
+    summary: str = ""
+    timestamp: str = ""
+    status: str = ""
+
+
 class ValhallaMandatorySectionsModel(BaseModel):
     """T6 — every mandatory section always has status + machine-readable reason when not completed."""
 
@@ -472,6 +587,7 @@ class ValhallaMandatorySectionsModel(BaseModel):
         default_factory=ValhallaSectionEnvelopeModel
     )
     leaked_emails: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+    port_exposure: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
 
 
 class ValhallaCoverageModel(BaseModel):
@@ -556,10 +672,13 @@ class ValhallaReportContext(BaseModel):
     leaked_emails_fallback_message: str | None = None
     outdated_components: list[OutdatedComponentRow] = Field(default_factory=list)
     leaked_emails: list[str] = Field(default_factory=list)
+    leaked_email_rows: list[LeakedEmailRowModel] = Field(default_factory=list)
     ssl_tls_analysis: SslTlsAnalysisModel = Field(default_factory=SslTlsAnalysisModel)
+    ssl_tls_table_rows: list[SslTlsTableRowModel] = Field(default_factory=list)
     security_headers_analysis: SecurityHeadersAnalysisModel = Field(
         default_factory=SecurityHeadersAnalysisModel
     )
+    security_headers_table_rows: list[dict[str, Any]] = Field(default_factory=list)
     dependency_analysis: list[DependencyAnalysisRow] = Field(default_factory=list)
     threat_model: ThreatModelRefModel = Field(default_factory=ThreatModelRefModel)
     threat_model_excerpt: str = ""
@@ -580,6 +699,21 @@ class ValhallaReportContext(BaseModel):
     scan_metadata: ScanMetadataModel = Field(default_factory=ScanMetadataModel)
     wstg_coverage: dict[str, Any] | None = None
     test_limitations: list[dict[str, str]] | None = None
+    valhalla_engagement_title: str = "Valhalla Automated Security Assessment"
+    full_valhalla: bool = False
+    port_exposure: PortExposureSummaryModel = Field(default_factory=PortExposureSummaryModel)
+    port_exposure_table_rows: list[PortExposureTableRowModel] = Field(default_factory=list)
+    evidence_inventory: list[EvidenceInventoryRowModel] = Field(default_factory=list)
+    tool_health_summary: list[dict[str, Any]] = Field(default_factory=list)
+    wstg_execution_degraded: bool = False
+    wstg_coverage_zero_executed: bool = False
+    #: SCA / Trivy transparency (VHL — URL-only vs filesystem vs image)
+    sca_mode: str = "none"
+    trivy_run_status: str = "not_applicable"
+    sca_manifest_count: int = 0
+    sca_artifact_count: int = 0
+    #: Placeholder for active injection coverage (Phase 2: scheduler + parsers). Safe default.
+    active_injection_coverage: dict[str, Any] = Field(default_factory=dict)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -764,8 +898,8 @@ def _raw_tool_issues_from_artifacts(
         else:
             status = "no_output"
             note = "stderr_nonempty_with_empty_stdout"
-            if stderr_note:
-                note = f"{note}:{stderr_note}"
+        if stderr_note:
+            note = f"{note}; stderr:{stderr_note}"
         out.append({"tool": tool, "status": status, "note": _truncate(note, 240)})
         if len(out) >= max_items:
             break
@@ -924,6 +1058,37 @@ def _sensitive_hints_from_paths(paths: list[str]) -> list[str]:
     return out
 
 
+# Filename / artifact_type fragments treated like stdout-equivalent bodies (JSON/XML/tool logs).
+_RAW_ARTIFACT_JSONISH_KEY_FRAGMENTS: tuple[str, ...] = (
+    ".json",
+    ".xml",
+    "whatweb",
+    "testssl",
+    "sslscan",
+    "sslyze",
+    "tlsx",
+    "nikto",
+    "nmap",
+    "naabu",
+    "masscan",
+    "trivy",
+    "httpx",
+    "http_audit",
+    "wfuzz",
+    "ffuf",
+    "nuclei",
+    "gobuster",
+    "feroxbuster",
+    "wpscan",
+    "osv",
+    "sarif",
+    "semgrep",
+    "pip_audit",
+    "npm_audit",
+    "safety",
+)
+
+
 def _artifact_name_matches(key: str, hints: frozenset[str]) -> bool:
     base = key.rsplit("/", 1)[-1].lower()
     name_no_ext = base.rsplit(".", 1)[0] if "." in base else base
@@ -952,6 +1117,50 @@ def _safe_download_raw(key: str) -> bytes | None:
     if raw is None or len(raw) > _MAX_RAW_FETCH:
         return None
     return raw
+
+
+def _artifact_non_empty_body_for_needles(
+    raw_artifact_keys: list[tuple[str, str]],
+    fetch_bodies: bool,
+    needles: tuple[str, ...],
+    *,
+    require_stdoutish: bool = True,
+) -> bool:
+    """True when at least one raw object for ``needles`` downloads to non-empty text (stdout/result, not metadata-only)."""
+    if not fetch_bodies or not raw_artifact_keys or not needles:
+        return False
+    for key, _ph in raw_artifact_keys:
+        low = key.lower()
+        if any(n in low for n in needles):
+            if "stderr" in low and "_stdout" not in low:
+                continue
+            if low.endswith("_meta.txt") or low.rsplit("/", 1)[-1].endswith("_meta.txt"):
+                continue
+            if require_stdoutish and "stdout" not in low and "output" not in low:
+                if not any(x in low for x in _RAW_ARTIFACT_JSONISH_KEY_FRAGMENTS):
+                    continue
+            blob = _safe_download_raw(key)
+            if not blob:
+                continue
+            if (_text_from_raw_bytes(blob) or "").strip():
+                return True
+    return False
+
+
+def raw_artifact_has_non_empty_body_for_needles(
+    raw_artifact_keys: list[tuple[str, str]],
+    fetch_bodies: bool,
+    needles: tuple[str, ...],
+    *,
+    require_stdoutish: bool = True,
+) -> bool:
+    """Public helper for tests / callers: true when a matching raw object has a non-empty text body."""
+    return _artifact_non_empty_body_for_needles(
+        raw_artifact_keys,
+        fetch_bodies,
+        needles,
+        require_stdoutish=require_stdoutish,
+    )
 
 
 def _text_from_raw_bytes(raw: bytes) -> str | None:
@@ -1023,6 +1232,324 @@ _NMAP_OPEN_LINE_RE = re.compile(
     r"^\d+/(?:tcp|udp)\s+open(?:\s+|\s*$)", re.IGNORECASE | re.MULTILINE
 )
 _MAX_TECH_MERGE = 2000
+_NAABU_LINE_RE = re.compile(r"^([^\s:\[\]]+):(\d+)", re.IGNORECASE)
+
+
+def _raw_has_port_scan_artifact_keys(raw_artifact_keys: list[tuple[str, str]]) -> bool:
+    for k, _ in raw_artifact_keys:
+        kl = k.lower()
+        if any(x in kl for x in ("nmap", "naabu", "masscan")):
+            return True
+    return False
+
+
+def _naabu_text_from_raw_keys(
+    raw_artifact_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> str:
+    if not fetch_bodies:
+        return ""
+    chunks: list[str] = []
+    for key, _ in raw_artifact_keys:
+        kl = key.lower()
+        if "naabu" not in kl:
+            continue
+        if "stdout" not in kl and "output" not in kl and "result" not in kl:
+            continue
+        blob = _safe_download_raw(key)
+        if not blob:
+            continue
+        t = _text_from_raw_bytes(blob) or ""
+        if t.strip():
+            chunks.append(t[: _MAX_TECH_MERGE])
+    merged = "\n".join(chunks)
+    if len(merged) > _MAX_TECH_MERGE:
+        return merged[: _MAX_TECH_MERGE - 1] + "…"
+    return merged
+
+
+def _port_hints_from_naabu(text: str) -> list[str]:
+    out: list[str] = []
+    for line in (text or "").splitlines():
+        m = _NAABU_LINE_RE.match(line.strip())
+        if m:
+            out.append(f"{m.group(2)}/tcp (naabu)")
+    return out[:64]
+
+
+def _build_port_exposure_summary(
+    *,
+    nmap_blob: str,
+    ports: list[int] | None,
+    structured: TechStackStructuredModel,
+    raw_artifact_keys: list[tuple[str, str]],
+    fetch_bodies: bool,
+    target_hint: str = "",
+    tls_observed: bool = False,
+    http_observed: bool = False,
+) -> PortExposureSummaryModel:
+    sources: list[str] = []
+    hints: list[str] = []
+    nmap_hits = bool(_NMAP_OPEN_LINE_RE.search(nmap_blob or ""))
+    if nmap_hits:
+        sources.append("nmap")
+    for line in (nmap_blob or "").splitlines():
+        if _NMAP_OPEN_LINE_RE.search(line):
+            hints.append(line.strip()[:256])
+    naabu_t = _naabu_text_from_raw_keys(raw_artifact_keys, fetch_bodies=fetch_bodies)
+    naabu_ports = _port_hints_from_naabu(naabu_t)
+    if naabu_ports:
+        sources.append("naabu")
+        hints.extend(naabu_ports)
+    has_recon = False
+    if ports:
+        has_recon = True
+        sources.append("recon phase output")
+        hints.extend(f"{int(p)}/tcp" for p in sorted({int(x) for x in ports if isinstance(x, (int, float))})[:48])
+    ps = (structured.ports_summary or "").strip()
+    ss = (structured.services_summary or "").strip()
+    if ps or ss:
+        sources.append("fingerprinting / recon merge")
+    parsed_target = urlparse(target_hint if "://" in target_hint else f"//{target_hint}")
+    scheme = (parsed_target.scheme or "").lower()
+    host_from_target = parsed_target.hostname or (target_hint.split("/", 1)[0] if target_hint else "")
+    raw_key_names = " ".join(k.lower() for k, _p in raw_artifact_keys)
+    http_artifact_observed = any(
+        token in raw_key_names
+        for token in (
+            "http",
+            "headers",
+            "security_headers",
+            "whatweb",
+            "nikto",
+            "robots",
+            "sitemap",
+            "url_history",
+            "head_spider",
+        )
+    )
+    tls_artifact_observed = any(token in raw_key_names for token in ("testssl", "sslscan", "tls", "openssl"))
+    https_confirmed = tls_observed or http_observed or http_artifact_observed or tls_artifact_observed
+    http_confirmed = http_observed or http_artifact_observed
+    if not hints and host_from_target:
+        if scheme == "https" and https_confirmed:
+            sources.append("HTTPS artifact fallback")
+            hints.append("443/tcp open (confirmed by collected HTTPS/HTTP artifact)")
+        elif scheme == "http" and http_confirmed:
+            sources.append("HTTP artifact fallback")
+            hints.append("80/tcp open (confirmed by HTTP response artifact)")
+    elif host_from_target and scheme == "https" and https_confirmed and not any("443/" in h for h in hints):
+        sources.append("HTTPS artifact fallback")
+        hints.append("443/tcp open (confirmed by collected HTTPS/HTTP artifact)")
+    elif host_from_target and scheme == "http" and http_confirmed and not any("80/" in h for h in hints):
+        sources.append("HTTP artifact fallback")
+        hints.append("80/tcp open (confirmed by HTTP response artifact)")
+    summary_bits = [x for x in (ps, ss, _services_summary_from_nmap_text(nmap_blob)) if (x or "").strip()]
+    summary_text = "; ".join(summary_bits)[:2000] if summary_bits else ""
+    if not summary_text and hints:
+        summary_text = "Open port signals: " + ", ".join(hints[:16])
+    has_open = bool(hints) or nmap_hits or has_recon or bool(ps) or bool(ss)
+    return PortExposureSummaryModel(
+        has_open_ports=has_open,
+        open_port_hints=sorted({h for h in hints if h}, key=str)[:48],
+        services_summary=_services_summary_from_nmap_text(nmap_blob)[:_MAX_TECH_MERGE],
+        summary_text=summary_text,
+        data_sources=sorted(set(sources)),
+        has_naabu_hits=bool(naabu_ports),
+        has_nmap_hits=nmap_hits,
+        has_recon_port_list=has_recon,
+    )
+
+
+def _guess_tool_from_finding(f: dict[str, Any]) -> str:
+    blob = f"{f.get('title', '')} {f.get('description', '')}".lower()
+    for needle, label in (
+        ("nuclei", "Nuclei"),
+        ("zap", "OWASP ZAP"),
+        ("burp", "Burp"),
+        ("nikto", "Nikto"),
+        ("sqlmap", "sqlmap"),
+        ("nmap", "nmap"),
+        ("ffuf", "ffuf"),
+    ):
+        if needle in blob:
+            return label
+    et = f.get("evidence_type")
+    if isinstance(et, str) and et.strip():
+        return et.strip()[:120]
+    return "pipeline / scanner"
+
+
+def build_evidence_inventory_rows(
+    findings: list[dict[str, Any]],
+    *,
+    ssl_tls: SslTlsAnalysisModel,
+    security_headers: SecurityHeadersAnalysisModel,
+    tech_stack: list[TechStackTableRow] | None = None,
+    port_exposure: PortExposureSummaryModel | None = None,
+    port_rows: list[PortExposureTableRowModel] | None = None,
+    outdated_components: list[OutdatedComponentRow] | None = None,
+    leaked_email_rows: list[LeakedEmailRowModel] | None = None,
+) -> list[EvidenceInventoryRowModel]:
+    from src.reports.report_quality_gate import score_evidence_quality
+
+    rows: list[EvidenceInventoryRowModel] = []
+    n = 0
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        n += 1
+        evq = score_evidence_quality(f)
+        status = {
+            "strong": "verified",
+            "moderate": "collected",
+            "weak": "limited",
+            "none": "insufficient",
+        }.get(evq, "unknown")
+        refs = f.get("evidence_refs")
+        refs_list = [str(x) for x in refs[:3] if str(x).strip()] if isinstance(refs, list) else []
+        poc = f.get("proof_of_concept")
+        poc_bits: list[str] = []
+        if isinstance(poc, dict):
+            for key in ("request_method", "request_url", "response_status", "validation_status"):
+                val = poc.get(key)
+                if val:
+                    poc_bits.append(f"{key}={str(val)[:120]}")
+        summary_bits = []
+        if refs_list:
+            summary_bits.append("Refs: " + "; ".join(refs_list))
+        if poc_bits:
+            summary_bits.append("PoC: " + "; ".join(poc_bits))
+        if not summary_bits:
+            summary_bits.append("Finding evidence metadata parsed; raw storage paths omitted.")
+        created = f.get("created_at")
+        ts = str(created)[:40] if created is not None else "—"
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section=str(f.get("title") or f.get("id") or "Finding")[:500],
+                source_tool=_guess_tool_from_finding(f),
+                evidence_type=str(f.get("evidence_type") or "scanner / VA output")[:200],
+                summary=_truncate(" ".join(summary_bits), 500),
+                timestamp=ts,
+                status=status,
+            )
+        )
+    if tech_stack:
+        n += 1
+        sample = "; ".join(
+            f"{r.category}: {r.name}{' ' + r.version if r.version else ''}"
+            for r in tech_stack[:6]
+            if r.name
+        )
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="Technology stack",
+                source_tool="WhatWeb / HTTP artifacts / recon",
+                evidence_type="Technology fingerprint",
+                summary=_truncate(sample or "Technology rows parsed from collected artifacts.", 500),
+                timestamp="—",
+                status="collected",
+            )
+        )
+    if not _ssl_surface_empty(ssl_tls):
+        n += 1
+        sm_parts = []
+        if ssl_tls.issuer:
+            sm_parts.append(f"Certificate issuer: {ssl_tls.issuer}")
+        if ssl_tls.validity:
+            sm_parts.append(f"Validity: {ssl_tls.validity}")
+        if ssl_tls.protocols:
+            sm_parts.append("TLS protocols observed: " + ", ".join(ssl_tls.protocols[:4]))
+        if ssl_tls.hsts:
+            sm_parts.append(f"HSTS: {ssl_tls.hsts}")
+        sm = "; ".join(sm_parts)
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="SSL/TLS",
+                source_tool="testssl.sh / sslscan / recon",
+                evidence_type="TLS configuration",
+                summary=_truncate((sm or "TLS section populated")[:500], 500),
+                timestamp="—",
+                status="collected",
+            )
+        )
+    if security_headers.rows:
+        n += 1
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="HTTP security headers",
+                source_tool="recon / httpx / nikto",
+                evidence_type="Response headers",
+                summary=_truncate(
+                    f"HTTP response headers parsed; rows={len(security_headers.rows)}; "
+                    f"missing={', '.join(security_headers.missing_recommended[:8]) or 'none observed'}",
+                    500,
+                ),
+                timestamp="—",
+                status="collected",
+            )
+        )
+    if port_rows or (port_exposure and port_exposure.has_open_ports):
+        n += 1
+        port_summary = "; ".join(
+            f"{r.port}/{r.protocol} {r.state} {r.service}".strip()
+            for r in (port_rows or [])[:8]
+        )
+        if not port_summary and port_exposure:
+            port_summary = port_exposure.summary_text or "; ".join(port_exposure.open_port_hints[:8])
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="Port exposure",
+                source_tool="Nmap / Naabu / recon fallback",
+                evidence_type="Port/service observation",
+                summary=_truncate(port_summary or "Open-port signals parsed.", 500),
+                timestamp="—",
+                status="collected",
+            )
+        )
+    if outdated_components:
+        n += 1
+        comp_summary = "; ".join(
+            f"{r.component}{' ' + r.installed_version if r.installed_version else ''}"
+            for r in outdated_components[:8]
+        )
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="Component inventory / SCA",
+                source_tool="Trivy / manifests / fingerprints",
+                evidence_type="Component/version inventory",
+                summary=_truncate(comp_summary or "Component inventory parsed.", 500),
+                timestamp="—",
+                status="collected",
+            )
+        )
+    if leaked_email_rows is not None:
+        n += 1
+        if leaked_email_rows:
+            email_summary = f"Masked emails parsed: {len(leaked_email_rows)}; sample={leaked_email_rows[0].email}"
+            status = "collected"
+        else:
+            email_summary = "Email-capable sources parsed; no email-like values observed."
+            status = "no_observed_items"
+        rows.append(
+            EvidenceInventoryRowModel(
+                evidence_id=f"EV-{n:04d}",
+                finding_or_section="Email / OSINT",
+                source_tool="theHarvester / fallback artifacts",
+                evidence_type="Masked email observation",
+                summary=_truncate(email_summary, 500),
+                timestamp="—",
+                status=status,
+            )
+        )
+    return rows
 
 
 def _walk_collect_whatweb_candidates(obj: Any, acc: list[dict[str, Any]]) -> None:
@@ -1271,15 +1798,43 @@ def _apply_recon_fallbacks_to_structured(
     return m
 
 
+def _split_component_version(value: str) -> tuple[str, str]:
+    raw = (value or "").strip()
+    if not raw:
+        return "", ""
+    m = re.search(r"(?P<name>[A-Za-z][A-Za-z0-9 ._+-]{1,80}?)[/\s]+(?P<ver>\d+(?:\.\d+){1,4}[A-Za-z0-9._+-]*)", raw)
+    if not m:
+        return raw, ""
+    name = m.group("name").strip(" -/")
+    ver = m.group("ver").strip()
+    return name or raw, ver
+
+
+def _tech_stack_note_for_category(category: str, source: str) -> str:
+    cat = (category or "").lower()
+    src = (source or "").lower()
+    if cat in {"cdn_waf", "hosting_provider", "reverse_proxy"}:
+        return "Edge or hosting marker only; origin application stack is not confirmed."
+    if "header" in src or "robots" in src or "sitemap" in src or "html" in src:
+        return "Fingerprint from passive artifact; verify before stack-specific remediation."
+    if cat in {"ports", "services"}:
+        return "Exposure signal only; do not infer closed ports without a full scan."
+    return "Parsed technology signal; verify version before treating it as authoritative."
+
+
 def _tech_rows_from_structured(model: TechStackStructuredModel) -> list[TechStackTableRow]:
     rows: list[TechStackTableRow] = []
     if model.web_server.strip():
+        name, version = _split_component_version(model.web_server[:512])
         rows.append(
             TechStackTableRow(
                 category="web_server",
-                name=model.web_server[:512],
+                name=name[:512],
                 detail="",
                 source="tech_stack.structured",
+                version=version,
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("web_server", "tech_stack.structured"),
             )
         )
     if model.os.strip():
@@ -1289,33 +1844,47 @@ def _tech_rows_from_structured(model: TechStackStructuredModel) -> list[TechStac
                 name=model.os[:512],
                 detail="",
                 source="tech_stack.structured",
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("os", "tech_stack.structured"),
             )
         )
     if model.cms.strip():
+        name, version = _split_component_version(model.cms[:512])
         rows.append(
             TechStackTableRow(
                 category="cms",
-                name=model.cms[:512],
+                name=name[:512],
                 detail="",
                 source="tech_stack.structured",
+                version=version,
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("cms", "tech_stack.structured"),
             )
         )
     for f in model.frameworks:
+        name, version = _split_component_version(f[:512])
         rows.append(
             TechStackTableRow(
                 category="framework",
-                name=f[:512],
+                name=name[:512],
                 detail="",
                 source="tech_stack.structured",
+                version=version,
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("framework", "tech_stack.structured"),
             )
         )
     for j in model.js_libraries:
+        name, version = _split_component_version(j[:512])
         rows.append(
             TechStackTableRow(
                 category="javascript",
-                name=j[:512],
+                name=name[:512],
                 detail="",
                 source="tech_stack.structured",
+                version=version,
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("javascript", "tech_stack.structured"),
             )
         )
     if model.ports_summary.strip():
@@ -1325,6 +1894,8 @@ def _tech_rows_from_structured(model: TechStackStructuredModel) -> list[TechStac
                 name=model.ports_summary[:512],
                 detail="",
                 source="tech_stack.structured",
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("ports", "tech_stack.structured"),
             )
         )
     if model.services_summary.strip():
@@ -1334,6 +1905,8 @@ def _tech_rows_from_structured(model: TechStackStructuredModel) -> list[TechStac
                 name="nmap (open ports / services)",
                 detail=_truncate(model.services_summary, 1024),
                 source="nmap.summary",
+                confidence="medium",
+                security_note=_tech_stack_note_for_category("services", "nmap.summary"),
             )
         )
     return rows
@@ -1378,17 +1951,27 @@ def _tech_rows_from_recon(
     rows: list[TechStackTableRow] = []
     seen: set[tuple[str, str, str]] = set()
 
-    def add_row(category: str, name: str, detail: str = "", source: str = "") -> None:
+    def add_row(
+        category: str,
+        name: str,
+        detail: str = "",
+        source: str = "",
+        confidence: str = "medium",
+    ) -> None:
         key = (category, name[:256], detail[:256])
         if key in seen:
             return
         seen.add(key)
+        clean_name, version = _split_component_version(name[:512])
         rows.append(
             TechStackTableRow(
                 category=category[:128],
-                name=name[:512] or "—",
+                name=clean_name[:512] or "—",
                 detail=detail[:1024],
                 source=source[:256],
+                version=version,
+                confidence=confidence,
+                security_note=_tech_stack_note_for_category(category, source),
             )
         )
 
@@ -1439,6 +2022,310 @@ def _tech_rows_from_recon(
             add_row("ports", ", ".join(str(x) for x in uniq), "", "recon_output.ports")
 
     return rows[:200]
+
+
+def _add_unique_tech_row(
+    rows: list[TechStackTableRow],
+    seen: set[tuple[str, str]],
+    *,
+    category: str,
+    name: str,
+    detail: str,
+    source: str,
+    confidence: str,
+    version: str = "",
+) -> None:
+    val = (name or "").strip()
+    if not val:
+        return
+    clean_name, detected_version = _split_component_version(val)
+    key = (category.lower().strip(), clean_name.lower().strip()[:200])
+    if key in seen:
+        return
+    seen.add(key)
+    rows.append(
+        TechStackTableRow(
+            category=category[:128],
+            name=clean_name[:512],
+            detail=detail[:1024],
+            source=source[:256],
+            version=(version or detected_version)[:128],
+            confidence=confidence,
+            security_note=_tech_stack_note_for_category(category, source),
+        )
+    )
+
+
+def _cookie_names_from_header(raw: str) -> list[str]:
+    names: list[str] = []
+    for part in re.split(r",\s*(?=[^;,=]+=\S)", raw or ""):
+        first = part.split(";", 1)[0].strip()
+        if "=" not in first:
+            continue
+        name = first.split("=", 1)[0].strip()
+        if name and name not in names:
+            names.append(name[:120])
+    return names[:16]
+
+
+def _tech_rows_from_http_and_urls(
+    http_headers: dict[str, dict[str, str]],
+    robots: RobotsTxtAnalysisModel,
+    sitemap: SitemapAnalysisModel,
+    raw_artifact_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> list[TechStackTableRow]:
+    rows: list[TechStackTableRow] = []
+    seen: set[tuple[str, str]] = set()
+
+    for host, hdrs in list(http_headers.items())[:32]:
+        hdetail = str(host)[:256]
+        server = str(hdrs.get("server") or "").strip()
+        if server:
+            low = server.lower()
+            category = "web_server"
+            if "cloudflare" in low:
+                category = "cdn_waf"
+            elif "vercel" in low or "netlify" in low:
+                category = "hosting_provider"
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category=category,
+                name=server,
+                detail=hdetail,
+                source="HTTP response header: Server",
+                confidence="medium" if category == "web_server" else "high",
+            )
+        powered = str(hdrs.get("x-powered-by") or "").strip()
+        if powered:
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="backend_framework",
+                name=powered,
+                detail=hdetail,
+                source="HTTP response header: X-Powered-By",
+                confidence="medium",
+            )
+        via = str(hdrs.get("via") or "").strip()
+        if via:
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="reverse_proxy",
+                name=via,
+                detail=hdetail,
+                source="HTTP response header: Via",
+                confidence="medium",
+            )
+        served = str(hdrs.get("x-served-by") or "").strip()
+        if served:
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="hosting_provider",
+                name=served,
+                detail=hdetail,
+                source="HTTP response header: X-Served-By",
+                confidence="low",
+            )
+        if any(k.startswith("cf-") or k == "cf-ray" for k in hdrs):
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="cdn_waf",
+                name="Cloudflare",
+                detail=hdetail,
+                source="HTTP response headers: CF-* marker",
+                confidence="high",
+            )
+        if any("vercel" in k or "vercel" in str(v).lower() for k, v in hdrs.items()):
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="hosting_provider",
+                name="Vercel",
+                detail=hdetail,
+                source="HTTP response headers: Vercel marker",
+                confidence="medium",
+            )
+        if any("netlify" in k or "netlify" in str(v).lower() for k, v in hdrs.items()):
+            _add_unique_tech_row(
+                rows,
+                seen,
+                category="hosting_provider",
+                name="Netlify",
+                detail=hdetail,
+                source="HTTP response headers: Netlify marker",
+                confidence="medium",
+            )
+        cookies = _cookie_names_from_header(str(hdrs.get("set-cookie") or ""))
+        for cname in cookies:
+            lowc = cname.lower()
+            if lowc.startswith("__next") or "next-auth" in lowc:
+                _add_unique_tech_row(
+                    rows,
+                    seen,
+                    category="frontend_framework",
+                    name="Next.js / NextAuth cookie marker",
+                    detail=cname,
+                    source="Set-Cookie name",
+                    confidence="low",
+                )
+            elif lowc == "phpsessid":
+                _add_unique_tech_row(
+                    rows,
+                    seen,
+                    category="backend_framework",
+                    name="PHP session",
+                    detail=cname,
+                    source="Set-Cookie name",
+                    confidence="low",
+                )
+            elif "laravel" in lowc:
+                _add_unique_tech_row(
+                    rows,
+                    seen,
+                    category="backend_framework",
+                    name="Laravel session",
+                    detail=cname,
+                    source="Set-Cookie name",
+                    confidence="low",
+                )
+
+    url_chunks: list[str] = []
+    url_chunks.extend(robots.disallowed_paths_sample or [])
+    url_chunks.extend(robots.allow_paths_sample or [])
+    url_chunks.extend(robots.sitemap_hints or [])
+    url_chunks.extend(sitemap.sample_urls or [])
+
+    raw_text_chunks: list[str] = []
+    if fetch_bodies:
+        for key, _phase in raw_artifact_keys[:200]:
+            lowk = key.lower()
+            if not any(tok in lowk for tok in ("html", "body", "response", ".js", "javascript")):
+                continue
+            blob = _safe_download_raw(key)
+            if not blob:
+                continue
+            text = _text_from_raw_bytes(blob)
+            if not text:
+                continue
+            raw_text_chunks.append(text[:12000])
+            if len(raw_text_chunks) >= 8:
+                break
+    joined = "\n".join(url_chunks + raw_text_chunks)
+    low_joined = joined.lower()
+    if "/_next/" in low_joined or "__next_data__" in low_joined:
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="frontend_framework",
+            name="Next.js",
+            detail="/_next/ or __NEXT_DATA__ marker",
+            source="robots/sitemap/HTML/JS artifact",
+            confidence="medium",
+        )
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="frontend_framework",
+            name="React",
+            detail="Inferred from Next.js marker",
+            source="framework marker",
+            confidence="low",
+        )
+    if "/_nuxt/" in low_joined or "__nuxt" in low_joined:
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="frontend_framework",
+            name="Nuxt.js",
+            detail="/_nuxt/ marker",
+            source="robots/sitemap/HTML/JS artifact",
+            confidence="medium",
+        )
+    if "wp-content" in low_joined or "wp-includes" in low_joined:
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="cms",
+            name="WordPress",
+            detail="wp-content/wp-includes marker",
+            source="robots/sitemap/HTML/JS artifact",
+            confidence="medium",
+        )
+    gen_match = re.search(
+        r"<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']([^\"']+)[\"']",
+        joined,
+        re.IGNORECASE,
+    )
+    if gen_match:
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="cms",
+            name=gen_match.group(1).strip(),
+            detail="HTML meta generator",
+            source="HTML body artifact",
+            confidence="medium",
+        )
+    jquery = re.search(r"jquery[-.]((?:\d+\.){1,3}\d+)[^/\"']*\.js", joined, re.IGNORECASE)
+    if jquery:
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="javascript_library",
+            name="jQuery",
+            version=jquery.group(1),
+            detail="script path marker",
+            source="HTML/JS artifact",
+            confidence="medium",
+        )
+    if re.search(r"/assets/(?:index|app)[-.][A-Za-z0-9_-]+\.js", joined):
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="javascript_bundle",
+            name="Bundled frontend JavaScript",
+            detail="/assets/index*.js or /assets/app*.js marker",
+            source="robots/sitemap/HTML artifact",
+            confidence="low",
+        )
+    return rows[:200]
+
+
+def _apply_tech_marker_rows_to_structured(
+    model: TechStackStructuredModel,
+    marker_rows: list[TechStackTableRow],
+) -> TechStackStructuredModel:
+    if not marker_rows:
+        return model
+    m = model.model_copy(deep=True)
+
+    def add_unique(seq: list[str], value: str) -> None:
+        v = value.strip()
+        if v and v not in seq:
+            seq.append(v[:512])
+
+    for row in marker_rows:
+        cat = row.category.lower()
+        name = row.name.strip()
+        if not name:
+            continue
+        if cat == "web_server" and not m.web_server:
+            m.web_server = name[:1024]
+        elif cat == "cms" and not m.cms:
+            m.cms = name[:1024]
+        elif cat in {"frontend_framework", "backend_framework", "framework", "hosting_provider", "cdn_waf"}:
+            add_unique(m.frameworks, name)
+        elif cat in {"javascript_library", "javascript_bundle", "javascript"}:
+            add_unique(m.js_libraries, name)
+    m.frameworks = m.frameworks[:64]
+    m.js_libraries = m.js_libraries[:64]
+    return m
 
 
 def _ssl_from_recon_certs(recon: dict[str, Any] | None) -> SslTlsAnalysisModel:
@@ -1553,7 +2440,7 @@ def _json_dict_from_tls_artifact_text(text: str) -> dict[str, Any] | None:
 
 
 _TESTSSL_PROTOCOL_RE = re.compile(
-    r"(SSLv[23]|TLS\s*1\.[0-3])\s+(offered|not offered)",
+    r"(SSLv[23]|TLSv?\s*1\.[0-3]|TLS\s*1\.[0-3])\s+(offered|not offered|enabled|disabled|accepted|rejected)",
     re.IGNORECASE,
 )
 _TESTSSL_WEAK_PROTOS = frozenset({"sslv2", "sslv3", "tls 1.0", "tls 1.1", "tls1.0", "tls1.1"})
@@ -1569,7 +2456,7 @@ _TESTSSL_WEAK_CIPHER_TOKENS = ("rc4", "des", "null", "export")
 
 
 def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
-    """Parse testssl text stdout when JSON output is unavailable."""
+    """Parse testssl/sslscan/openssl/nmap TLS text when JSON/XML output is unavailable."""
     protocols: list[str] = []
     weak_protocols: list[str] = []
     weak_ciphers: list[str] = []
@@ -1577,29 +2464,76 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
     validity: str | None = None
     hsts: str | None = None
 
+    xml_issuer = re.search(r"<issuer>\s*([^<]+)\s*</issuer>", stdout, re.IGNORECASE)
+    if xml_issuer:
+        issuer = xml_issuer.group(1).strip()[:512]
+    xml_not_before = re.search(r"<not-valid-before>\s*([^<]+)\s*</not-valid-before>", stdout, re.IGNORECASE)
+    xml_not_after = re.search(r"<not-valid-after>\s*([^<]+)\s*</not-valid-after>", stdout, re.IGNORECASE)
+    if xml_not_before and xml_not_after:
+        validity = f"{xml_not_before.group(1).strip()[:120]} - {xml_not_after.group(1).strip()[:120]}"
+    elif xml_not_after:
+        validity = xml_not_after.group(1).strip()[:256]
+    for xml_proto, label in (
+        ("ssl2", "SSLv2"),
+        ("ssl3", "SSLv3"),
+        ("tls10", "TLS 1.0"),
+        ("tls11", "TLS 1.1"),
+        ("tls12", "TLS 1.2"),
+        ("tls13", "TLS 1.3"),
+    ):
+        if re.search(rf"<[^>]*(?:protocol|type)=[\"']{xml_proto}[\"'][^>]*(?:enabled|status)=[\"'](?:1|true|accepted)[\"']", stdout, re.IGNORECASE):
+            protocols.append(label)
+            if label.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or label.lower() in _TESTSSL_WEAK_PROTOS:
+                weak_protocols.append(label)
+    for m in re.finditer(r"sslversion=[\"'](SSLv[23]|TLSv1\.[0-3]|TLS\s*1\.[0-3])[\"']", stdout, re.IGNORECASE):
+        proto = m.group(1).replace("TLSv", "TLS ")
+        if proto not in protocols:
+            protocols.append(proto)
+        if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or proto.lower() in _TESTSSL_WEAK_PROTOS:
+            weak_protocols.append(proto)
+
     for m in _TESTSSL_PROTOCOL_RE.finditer(stdout):
-        proto = m.group(1).strip()
+        proto = m.group(1).strip().replace("TLSv", "TLS ")
         status = m.group(2).strip().lower()
-        if status == "offered":
+        if status in {"offered", "enabled", "accepted"}:
             protocols.append(proto)
             if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or proto.lower() in _TESTSSL_WEAK_PROTOS:
                 weak_protocols.append(proto)
+
+    for proto in ("TLSv1.0", "TLSv1.1", "TLSv1.2", "TLSv1.3", "TLS 1.0", "TLS 1.1", "TLS 1.2", "TLS 1.3"):
+        for pm in re.finditer(rf"\b{re.escape(proto)}\b", stdout, re.IGNORECASE):
+            snip = stdout[pm.start() : min(len(stdout), pm.end() + 80)].lower()
+            if any(word in snip for word in ("disabled", "not offered", "rejected", "no ")):
+                continue
+            normalized = proto.replace("TLSv", "TLS ")
+            if normalized not in protocols:
+                protocols.append(normalized)
+            if normalized.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS and normalized not in weak_protocols:
+                weak_protocols.append(normalized)
+            break
 
     cn_match = re.search(r"CN\s*=\s*([^\s,]+)", stdout)
     if cn_match:
         issuer = cn_match.group(1).strip()[:512]
 
-    issuer_match = re.search(r"Issuer\s*:?\s*(.+)", stdout)
+    issuer_match = re.search(r"(?:Issuer|issuer=|i:)\s*:?\s*(.+)", stdout)
     if issuer_match:
         issuer = issuer_match.group(1).strip()[:512]
 
-    not_after = re.search(r"Not After\s*:\s*(.+)", stdout)
-    if not_after:
+    not_before = re.search(r"(?:Not Before|notBefore=|Not valid before)\s*:?\s*(.+)", stdout, re.IGNORECASE)
+    not_after = re.search(r"(?:Not After|notAfter=|Not valid after)\s*:?\s*(.+)", stdout, re.IGNORECASE)
+    if not_before and not_after:
+        validity = f"{not_before.group(1).strip()[:120]} - {not_after.group(1).strip()[:120]}"
+    elif not_after:
         validity = not_after.group(1).strip()[:256]
 
     hsts_match = re.search(r"Strict.Transport.Security[:\s]+(.+)", stdout, re.IGNORECASE)
     if hsts_match:
         hsts = _truncate(hsts_match.group(1).strip(), 500)
+    else:
+        hsts_header_match = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
+        if hsts_header_match:
+            hsts = _truncate(hsts_header_match.group(1).strip(), 500)
 
     vuln_ciphers_seen: set[str] = set()
     for vuln in _TESTSSL_VULN_MARKERS:
@@ -1612,6 +2546,12 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
     for cm in _TESTSSL_CIPHER_RE.finditer(stdout):
         cipher = cm.group(1)
         cipher_set.add(cipher)
+        if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
+            weak_ciphers.append(cipher)
+
+    cipher_match = re.search(r"(?:Cipher|Selected cipher)\s*:?\s*([A-Z0-9_-]+)", stdout, re.IGNORECASE)
+    if cipher_match:
+        cipher = cipher_match.group(1).strip()
         if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
             weak_ciphers.append(cipher)
 
@@ -1763,22 +2703,25 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
     rows: list[dict[str, Any]] = []
     if not http_headers:
         return SecurityHeadersAnalysisModel()
-    # VDF-003 — canonical security header rows (CSP, XFO, XCTO, HSTS, Referrer-Policy, X-XSS-Protection)
+    # VDF-003 — canonical security header rows used by customer-facing Valhalla tables.
     canonical = (
         ("content-security-policy", "Content-Security-Policy"),
-        ("x-frame-options", "X-Frame-Options"),
-        ("x-content-type-options", "X-Content-Type-Options"),
         ("strict-transport-security", "Strict-Transport-Security"),
+        ("x-content-type-options", "X-Content-Type-Options"),
+        ("x-frame-options", "X-Frame-Options"),
         ("referrer-policy", "Referrer-Policy"),
-        ("x-xss-protection", "X-XSS-Protection"),
+        ("permissions-policy", "Permissions-Policy"),
+        ("cross-origin-opener-policy", "Cross-Origin-Opener-Policy"),
+        ("cross-origin-resource-policy", "Cross-Origin-Resource-Policy"),
+        ("cross-origin-embedder-policy", "Cross-Origin-Embedder-Policy"),
     )
-    extra_recommended = ("permissions-policy",)
     missing: set[str] = set()
     for host, hdrs in list(http_headers.items())[:32]:
         lower_map = dict(hdrs)
         hstr = str(host)[:256]
         for low_name, display in canonical:
-            if low_name not in lower_map:
+            sample = str(lower_map.get(low_name) or "").strip()
+            if not sample:
                 missing.add(low_name)
                 rows.append(
                     {
@@ -1789,7 +2732,6 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
                     }
                 )
             else:
-                sample = lower_map[low_name]
                 if len(sample) > 200:
                     sample = sample[:197] + "…"
                 rows.append(
@@ -1800,9 +2742,6 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
                         "value_sample": sample,
                     }
                 )
-        for low_name in extra_recommended:
-            if low_name not in lower_map:
-                missing.add(low_name)
     miss_sorted = sorted(missing)
     summary = None
     if miss_sorted:
@@ -1816,13 +2755,135 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
 
 _SEC_HDR_NAMES_CANONICAL = (
     "content-security-policy",
-    "x-frame-options",
-    "x-content-type-options",
     "strict-transport-security",
+    "x-content-type-options",
+    "x-frame-options",
     "referrer-policy",
-    "x-xss-protection",
     "permissions-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-resource-policy",
+    "cross-origin-embedder-policy",
 )
+
+_SEC_HDR_DISPLAY_BY_LOW = {
+    "content-security-policy": "Content-Security-Policy",
+    "strict-transport-security": "Strict-Transport-Security",
+    "x-content-type-options": "X-Content-Type-Options",
+    "x-frame-options": "X-Frame-Options",
+    "referrer-policy": "Referrer-Policy",
+    "permissions-policy": "Permissions-Policy",
+    "cross-origin-opener-policy": "Cross-Origin-Opener-Policy",
+    "cross-origin-resource-policy": "Cross-Origin-Resource-Policy",
+    "cross-origin-embedder-policy": "Cross-Origin-Embedder-Policy",
+}
+
+
+def _canonical_security_header_name(raw: str) -> str | None:
+    s = re.sub(r"[^a-z0-9-]+", "-", (raw or "").strip().lower()).strip("-")
+    if not s:
+        return None
+    aliases = {
+        "csp": "content-security-policy",
+        "content-security-policy-report-only": "content-security-policy",
+        "xfo": "x-frame-options",
+        "xcto": "x-content-type-options",
+        "hsts": "strict-transport-security",
+        "coop": "cross-origin-opener-policy",
+        "corp": "cross-origin-resource-policy",
+        "coep": "cross-origin-embedder-policy",
+    }
+    if s in aliases:
+        return aliases[s]
+    return s if s in _SEC_HDR_NAMES_CANONICAL else None
+
+
+def _extract_missing_security_headers_from_text(text: str) -> list[str]:
+    blob = text or ""
+    low = blob.lower()
+    found: list[str] = []
+
+    def add(name: str | None) -> None:
+        if name and name not in found:
+            found.append(name)
+
+    for m in re.finditer(r"\bmissing\s*:\s*([^\n.;]+)", blob, re.IGNORECASE):
+        for part in re.split(r"[,/|]+|\band\b", m.group(1), flags=re.IGNORECASE):
+            add(_canonical_security_header_name(part))
+
+    if "missing" in low or "absent" in low or "not set" in low:
+        for low_name, display in _SEC_HDR_DISPLAY_BY_LOW.items():
+            if low_name in low or display.lower() in low:
+                add(low_name)
+    return found
+
+
+def _security_headers_from_findings(findings: list[dict[str, Any]]) -> SecurityHeadersAnalysisModel:
+    rows: list[dict[str, Any]] = []
+    missing: list[str] = []
+    seen_rows: set[tuple[str, str]] = set()
+    for f in findings[:500]:
+        if not isinstance(f, dict):
+            continue
+        parts: list[str] = []
+        for key in ("title", "name", "description", "evidence", "proof", "applicability_notes"):
+            v = f.get(key)
+            if isinstance(v, str) and v.strip():
+                parts.append(v)
+        poc = f.get("proof_of_concept")
+        if isinstance(poc, dict):
+            with contextlib.suppress(TypeError, ValueError):
+                parts.append(json.dumps(poc, ensure_ascii=False)[:4000])
+        blob = "\n".join(parts)
+        blob_low = blob.lower()
+        if "security" not in blob_low and "header" not in blob_low:
+            continue
+        missing_names = _extract_missing_security_headers_from_text(blob)
+        if (
+            not missing_names
+            and "header" in blob_low
+            and any(word in blob_low for word in ("missing", "incomplete", "absent", "not set"))
+        ):
+            missing_names = [
+                "content-security-policy",
+                "strict-transport-security",
+                "x-content-type-options",
+                "x-frame-options",
+                "referrer-policy",
+                "permissions-policy",
+            ]
+        if not missing_names:
+            continue
+        host = str(
+            f.get("affected_url")
+            or f.get("affected_asset")
+            or f.get("url")
+            or f.get("target")
+            or "finding_evidence"
+        )[:256]
+        for low_name in missing_names:
+            display = _SEC_HDR_DISPLAY_BY_LOW.get(low_name, low_name)
+            row_key = (host, low_name)
+            if row_key in seen_rows:
+                continue
+            seen_rows.add(row_key)
+            if low_name not in missing:
+                missing.append(low_name)
+            rows.append(
+                {
+                    "host": host,
+                    "header": display,
+                    "present": False,
+                    "value_sample": "missing (finding evidence)",
+                }
+            )
+    if not rows:
+        return SecurityHeadersAnalysisModel()
+    miss_sorted = sorted(missing)
+    return SecurityHeadersAnalysisModel(
+        rows=rows[:500],
+        missing_recommended=miss_sorted[:24],
+        summary="Missing recommended headers: " + ", ".join(miss_sorted[:12]) + " (from finding evidence)",
+    )
 
 _NIKTO_MISSING_HDR_RE = re.compile(
     r"(?:Missing|absent|not set)[^:]*:\s*([\w-]+)",
@@ -1830,8 +2891,9 @@ _NIKTO_MISSING_HDR_RE = re.compile(
 )
 _NIKTO_HDR_PRESENT_RE = re.compile(
     r"(X-Frame-Options|X-Content-Type-Options|Content-Security-Policy"
-    r"|Strict-Transport-Security|Referrer-Policy|X-XSS-Protection"
-    r"|Permissions-Policy)\s*(?:header\s+(?:is\s+)?(?:set|present|found))",
+    r"|Strict-Transport-Security|Referrer-Policy|Permissions-Policy"
+    r"|Cross-Origin-Opener-Policy|Cross-Origin-Resource-Policy"
+    r"|Cross-Origin-Embedder-Policy)\s*(?:header\s+(?:is\s+)?(?:set|present|found))",
     re.IGNORECASE,
 )
 
@@ -1897,8 +2959,8 @@ def _security_headers_from_nikto_stdout(
             continue
         hdrs: dict[str, str] = {}
         for m in _NIKTO_MISSING_HDR_RE.finditer(text):
-            hname = m.group(1).strip().lower()
-            if any(c in hname for c in _SEC_HDR_NAMES_CANONICAL):
+            hname = _canonical_security_header_name(m.group(1))
+            if hname:
                 hdrs[hname] = ""
         for m in _NIKTO_HDR_PRESENT_RE.finditer(text):
             hname = m.group(1).strip().lower()
@@ -1955,7 +3017,19 @@ def _security_headers_from_raw_http_responses(
     http_header_re = re.compile(r"^([\w-]+):\s*(.+)$", re.MULTILINE)
     for key, _p in raw_keys:
         lowk = key.lower()
-        if not any(tok in lowk for tok in ("response", "headers", "http_resp")):
+        if not any(
+            tok in lowk
+            for tok in (
+                "response",
+                "headers",
+                "http_resp",
+                "http_audit",
+                "curl",
+                "httpx",
+                "nikto",
+                "whatweb",
+            )
+        ):
             continue
         blob = _safe_download_raw(key)
         if not blob:
@@ -1964,10 +3038,12 @@ def _security_headers_from_raw_http_responses(
         if not text:
             continue
         hdrs: dict[str, str] = {}
+        if not re.search(r"^HTTP/\d(?:\.\d)?\s+\d{3}", text[:8192], re.MULTILINE | re.IGNORECASE):
+            continue
         for m in http_header_re.finditer(text[:8192]):
             hname = m.group(1).strip().lower()
             hval = m.group(2).strip()
-            if hname in _SEC_HDR_NAMES_CANONICAL:
+            if hname and hval:
                 hdrs[hname] = hval[:500]
         if hdrs:
             logger.info(
@@ -1984,10 +3060,24 @@ def _dependency_rows_from_artifact_json(val: Any, source_key: str) -> list[Depen
         for item in val[:200]:
             if not isinstance(item, dict):
                 continue
+            nested_vulns = item.get("Vulnerabilities") or item.get("vulnerabilities")
+            if isinstance(nested_vulns, list):
+                out.extend(_dependency_rows_from_artifact_json(nested_vulns, source_key))
+                continue
             pkg = str(item.get("package") or item.get("PkgName") or item.get("name") or "").strip()
-            ver = item.get("version") or item.get("InstalledVersion") or item.get("installed_version")
+            ver = (
+                item.get("version")
+                or item.get("InstalledVersion")
+                or item.get("installed_version")
+                or item.get("installedVersion")
+            )
             sev = item.get("severity") or item.get("Severity")
-            detail = item.get("detail") or item.get("Title") or item.get("description")
+            detail = (
+                item.get("detail")
+                or item.get("Title")
+                or item.get("VulnerabilityID")
+                or item.get("description")
+            )
             if pkg:
                 out.append(
                     DependencyAnalysisRow(
@@ -1999,15 +3089,40 @@ def _dependency_rows_from_artifact_json(val: Any, source_key: str) -> list[Depen
                     )
                 )
     elif isinstance(val, dict):
+        package_name = val.get("name")
+        if isinstance(package_name, str) and package_name.strip():
+            version = val.get("version")
+            out.append(
+                DependencyAnalysisRow(
+                    package=package_name[:256],
+                    version=str(version)[:64] if version is not None else None,
+                    severity=None,
+                    source=source_key[-120:],
+                    detail="package manifest",
+                )
+            )
+        for block_name in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+            deps = val.get(block_name)
+            if isinstance(deps, dict):
+                for pkg, ver in list(deps.items())[:300]:
+                    out.append(
+                        DependencyAnalysisRow(
+                            package=str(pkg)[:256],
+                            version=str(ver)[:64] if ver is not None else None,
+                            severity=None,
+                            source=source_key[-120:],
+                            detail=block_name,
+                        )
+                    )
         findings = val.get("findings")
         if isinstance(findings, list):
-            return _dependency_rows_from_artifact_json(findings, source_key)
+            out.extend(_dependency_rows_from_artifact_json(findings, source_key))
         results = val.get("Results") or val.get("results")
         if isinstance(results, list):
-            return _dependency_rows_from_artifact_json(results, source_key)
+            out.extend(_dependency_rows_from_artifact_json(results, source_key))
         vulns = val.get("vulnerabilities") or val.get("Vulnerabilities")
         if isinstance(vulns, list):
-            return _dependency_rows_from_artifact_json(vulns, source_key)
+            out.extend(_dependency_rows_from_artifact_json(vulns, source_key))
     return out
 
 
@@ -2026,10 +3141,11 @@ def _collect_dependency_rows(
         if not blob:
             continue
         text = _text_from_raw_bytes(blob)
-        if not text or not text.strip().startswith("{"):
+        stripped = (text or "").strip()
+        if not stripped or not stripped.startswith(("{", "[")):
             continue
         try:
-            val = json.loads(text)
+            val = json.loads(stripped)
         except json.JSONDecodeError:
             continue
         rows.extend(_dependency_rows_from_artifact_json(val, key))
@@ -2058,6 +3174,8 @@ _IMPACT_FROM_SEVERITY_03: dict[str, int] = {
 
 def derive_exploit_available_flag(f: dict[str, Any]) -> bool:
     """Derive exploit exposure from intel, PoC payload, or wording (VHQ-004)."""
+    if f.get("exploit_demonstrated") is True:
+        return True
     intel = f.get("intel")
     if isinstance(intel, dict) and intel.get("exploit_available") is True:
         return True
@@ -2194,19 +3312,52 @@ def _cve_known_exploit_heuristic(f: dict[str, Any]) -> bool:
     )
 
 
+def _validation_is_validated(f: dict[str, Any]) -> bool:
+    st = str(f.get("validation_status") or "").strip().lower()
+    if st == "validated":
+        return True
+    poc = f.get("proof_of_concept")
+    if isinstance(poc, dict):
+        pst = str(poc.get("validation_status") or "").strip().lower()
+        if pst == "validated":
+            return True
+    return False
+
+
+def _evidence_is_strong(f: dict[str, Any]) -> bool:
+    q = str(f.get("evidence_quality") or "").strip().lower()
+    if q == "strong":
+        return True
+    poc = f.get("proof_of_concept")
+    if isinstance(poc, dict):
+        return str(poc.get("evidence_quality") or "").strip().lower() == "strong"
+    return False
+
+
 def _critical_vuln_include(f: dict[str, Any]) -> bool:
-    cvss_raw = f.get("cvss")
-    if not isinstance(cvss_raw, (int, float)) or float(cvss_raw) < 7.0:
+    """VAL-003: Critical tier only for true criticals with validated + strong + demonstrated exploit; never header-only."""
+    if is_header_only_advisory_finding(f):
         return False
-    if _finding_verified_or_confirmed(f):
-        return True
-    if derive_exploit_available_flag(f):
-        return True
-    return bool(_cve_known_exploit_heuristic(f))
+    if f.get("exploit_demonstrated") is not True:
+        poc0 = f.get("proof_of_concept")
+        if not (isinstance(poc0, dict) and poc0.get("exploit_demonstrated") is True):
+            return False
+    if not _validation_is_validated(f):
+        return False
+    if not _evidence_is_strong(f):
+        return False
+    sev = _normalize_severity_label(f.get("severity"))
+    _cr = f.get("cvss_score") if f.get("cvss_score") is not None else f.get("cvss")
+    cvss = float(_cr) if isinstance(_cr, (int, float)) else None
+    is_critical_sev = sev == "critical"
+    is_cvss_9_plus = cvss is not None and cvss >= 9.0
+    if not (is_critical_sev or is_cvss_9_plus):
+        return False
+    return True
 
 
 def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[CriticalVulnRefModel]:
-    """VHQ-004 — CVSS ≥ 7.0 and (verified/confirmed OR exploit signal OR CVE+exploit heuristic)."""
+    """VAL-003 — Critical severity or CVSS ≥ 9, validated, strong evidence, exploit demonstrated; excludes header-only."""
     out: list[CriticalVulnRefModel] = []
     for i, f in enumerate(findings):
         if not isinstance(f, dict):
@@ -2215,11 +3366,17 @@ def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[Critic
             continue
         fid = _finding_id_for_risk(f, i)
         title = str(f.get("title") or "").strip() or "—"
-        cvss = float(f["cvss"]) if isinstance(f.get("cvss"), (int, float)) else None
+        _cr = f.get("cvss_score") if f.get("cvss_score") is not None else f.get("cvss")
+        cvss = float(_cr) if isinstance(_cr, (int, float)) else None
         desc = str(f.get("description") or "").strip()
         short = _truncate(desc, 280) if desc else ""
         sev = _normalize_severity_label(f.get("severity"))
         cvss_vec = _cvss_vector_string(f)
+        ed = f.get("exploit_demonstrated")
+        poc2 = f.get("proof_of_concept")
+        if ed is not True and isinstance(poc2, dict) and poc2.get("exploit_demonstrated") is True:
+            ed = True
+        ed_bool = ed is True
         out.append(
             CriticalVulnRefModel(
                 vuln_id=fid,
@@ -2227,7 +3384,8 @@ def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[Critic
                 description=short,
                 cvss=cvss,
                 cvss_vector=cvss_vec,
-                exploit_available=derive_exploit_available_flag(f),
+                exploit_available=ed_bool,
+                exploit_demonstrated=ed_bool,
                 severity=sev,
             )
         )
@@ -2254,6 +3412,7 @@ def _outdated_from_findings(findings: list[dict[str, Any]]) -> list[OutdatedComp
                 latest_stable="—",
                 support_status=support,
                 cves=cves,
+                source=support or "finding",
                 recommendation="Track patches; remediate vulnerable versions per advisory",
             )
         )
@@ -2283,6 +3442,7 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
                 latest_stable="—",
                 support_status="whatweb",
                 cves=[],
+                source="whatweb",
                 recommendation="Verify version against upstream and install a supported release",
             )
         )
@@ -2313,6 +3473,7 @@ def _outdated_from_nmap_sv(nmap_text: str) -> list[OutdatedComponentRow]:
                 latest_stable="—",
                 support_status="nmap -sV",
                 cves=[],
+                source="nmap -sV",
                 recommendation="Update service to a patched version (vendor/CVE)",
             )
         )
@@ -2359,6 +3520,7 @@ def _outdated_from_searchsploit_phase(phase_outputs: list[tuple[str, dict[str, A
                 latest_stable="—",
                 support_status="searchsploit",
                 cves=cves,
+                source="searchsploit",
                 recommendation="Verify public exploit and apply patch / compensating controls",
                 exploit_available=True,
             )
@@ -2390,11 +3552,46 @@ def _outdated_from_trivy_dependency_rows(
                 latest_stable="—",
                 support_status="trivy",
                 cves=cves,
+                source=d.source or "trivy",
                 recommendation=rec,
                 exploit_available=bool(cves) and sev in ("critical", "high"),
             )
         )
     return rows[:80]
+
+
+def _outdated_from_dependency_inventory(deps: list[DependencyAnalysisRow]) -> list[OutdatedComponentRow]:
+    rows: list[OutdatedComponentRow] = []
+    seen: set[str] = set()
+    for d in deps[:300]:
+        package = (d.package or "").strip()
+        if not package:
+            continue
+        key = f"{package.lower()}|{(d.version or '').lower()}"
+        if key in seen:
+            continue
+        seen.add(key)
+        blob = f"{d.package} {d.detail or ''} {d.version or ''}"
+        cves = sorted({m.group(0).upper() for m in _CVE_RE.finditer(blob)})[:16]
+        rows.append(
+            OutdatedComponentRow(
+                component=package[:256],
+                installed_version=d.version,
+                latest_stable="—",
+                support_status=d.severity or "inventory parsed",
+                cves=cves,
+                source=d.source,
+                recommendation=(
+                    "No vulnerability advisory was parsed for this component; validate with SCA before treating it as current."
+                    if not cves
+                    else "Remediate according to the referenced advisory or fixed version."
+                ),
+                exploit_available=False,
+            )
+        )
+        if len(rows) >= 80:
+            break
+    return rows
 
 
 def _merge_outdated_rows(groups: list[list[OutdatedComponentRow]]) -> list[OutdatedComponentRow]:
@@ -2410,12 +3607,13 @@ def _merge_outdated_rows(groups: list[list[OutdatedComponentRow]]) -> list[Outda
                 merged[key] = OutdatedComponentRow(
                     component=cur.component,
                     installed_version=cur.installed_version or r.installed_version,
-                    latest_stable=cur.latest_stable if (cur.latest_stable or "") != "—" else r.latest_stable,
-                    support_status=cur.support_status or r.support_status,
-                    cves=cves,
-                    recommendation=(cur.recommendation or r.recommendation)[:800],
-                    exploit_available=bool(cur.exploit_available or r.exploit_available),
-                )
+                latest_stable=cur.latest_stable if (cur.latest_stable or "") != "—" else r.latest_stable,
+                support_status=cur.support_status or r.support_status,
+                cves=cves,
+                source=cur.source or r.source,
+                recommendation=(cur.recommendation or r.recommendation)[:800],
+                exploit_available=bool(cur.exploit_available or r.exploit_available),
+            )
     return list(merged.values())[:120]
 
 
@@ -2436,6 +3634,7 @@ def _assemble_outdated_components(
             _outdated_from_nmap_sv(nmap_blob),
             _outdated_from_searchsploit_phase(phase_outputs),
             _outdated_from_trivy_dependency_rows(dependency_rows, trivy_enabled=trivy_enabled),
+            _outdated_from_dependency_inventory(dependency_rows),
         ]
     )
 
@@ -2663,6 +3862,278 @@ def _ssl_surface_empty(s: SslTlsAnalysisModel) -> bool:
     )
 
 
+def _parse_cert_not_after(not_after: str) -> datetime | None:
+    raw = (not_after or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _days_remaining_label(not_after: str) -> str:
+    dt = _parse_cert_not_after(not_after)
+    if dt is None:
+        return "—"
+    d = dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+    days = (d - datetime.now(UTC)).days
+    if days < 0:
+        return "expired"
+    return str(max(days, 0))
+
+
+def _join_weak(lines: list[str] | None, cap: int = 8) -> str:
+    if not lines:
+        return "—"
+    return _truncate("; ".join(lines[:cap]), 1200)
+
+
+def _tls_version_cell(proto_blobs: list[str], version: str) -> str:
+    b = " ".join(proto_blobs or []).lower()
+    if not b.strip() and not proto_blobs:
+        return "n/a"
+    needles = {
+        "1.0": ("tls1.0", "tls 1.0", "tls1_0", "ssl3", "1.0"),
+        "1.1": ("tls1.1", "tls 1.1", "tls1_1", "1.1"),
+        "1.2": ("tls1.2", "tls 1.2", "tls1_2", "1.2"),
+        "1.3": ("tls1.3", "tls 1.3", "tls1_3", "1.3"),
+    }
+    for needle in needles.get(version, ()):
+        if needle in b:
+            snip = b[max(0, b.find(needle) - 24) : b.find(needle) + 40]
+            if "not" in snip and "offer" in snip:
+                return "no"
+            return "yes (see scan)"
+    return "unknown"
+
+
+def _header_row_risk_rec(header_display: str, present: bool) -> tuple[str, str]:
+    h = (header_display or "").lower()
+    if present:
+        return "low", "Maintain header values during releases; re-test after framework upgrades."
+    if "content-security-policy" in h or h.strip() == "csp":
+        return "medium", "Add a strict Content-Security-Policy using nonces or hashes; avoid unsafe-inline for scripts when feasible."
+    if "frame" in h:
+        return "medium", "Set X-Frame-Options DENY/SAMEORIGIN or CSP frame-ancestors to mitigate clickjacking."
+    if "content-type" in h:
+        return "low", "Set X-Content-Type-Options: nosniff."
+    if "strict-transport" in h or "hsts" in h:
+        return "medium", "Enable HSTS for HTTPS; use includeSubDomains when all subdomains are HTTPS-ready; preload only with operational commitment."
+    if "referrer" in h:
+        return "low", "Set Referrer-Policy to match privacy requirements."
+    if "xss-protection" in h:
+        return "low", "Do not rely on X-XSS-Protection; prefer CSP. Remove or leave disabled per browser policy."
+    if "permissions" in h:
+        return "low", "Set Permissions-Policy to disable unused powerful browser features."
+    return "low", "Configure this response header in line with application architecture."
+
+
+def build_ssl_tls_table_rows(
+    recon: dict[str, Any] | None,
+    ssl_out: SslTlsAnalysisModel,
+    *,
+    target_hint: str = "",
+) -> list[SslTlsTableRowModel]:
+    """VH-008 — rows from ``ssl_certs`` + aggregate testssl fields."""
+    proto_lines = list(ssl_out.protocols or []) + list(ssl_out.weak_protocols or [])
+    weak_joined = _join_weak(list(ssl_out.weak_ciphers or []), 8)
+    rows_out: list[SslTlsTableRowModel] = []
+    n = 0
+    if isinstance(recon, dict):
+        certs = recon.get("ssl_certs")
+        if isinstance(certs, dict) and certs:
+            for host, lst in list(certs.items())[:48]:
+                if not isinstance(lst, list):
+                    continue
+                for c in lst[:2]:
+                    if not isinstance(c, dict):
+                        continue
+                    n += 1
+                    cn = str(c.get("common_name") or "").strip()
+                    sans = c.get("subject_alternative_names")
+                    subj = cn
+                    if isinstance(sans, list) and sans:
+                        subj = f"{cn} / SAN: {', '.join(str(x) for x in sans[:6])}" if cn else ", ".join(
+                            str(x) for x in sans[:8]
+                        )
+                    nb = str(c.get("validity_not_before") or "").strip()
+                    na = str(c.get("validity_not_after") or "").strip()
+                    dates = f"{nb} — {na}" if nb and na else (na or nb or "—")
+                    iss = str(c.get("issuer") or "").strip() or "—"
+                    hsts_v = (ssl_out.hsts or "—")[:500]
+                    rows_out.append(
+                        SslTlsTableRowModel(
+                            domain=_truncate(str(host), 512),
+                            cert_subject=_truncate(subj or "—", 500),
+                            issuer=_truncate(iss, 500),
+                            dates=_truncate(dates, 500),
+                            days_remaining=_days_remaining_label(na),
+                            tls_1_0=_tls_version_cell(proto_lines, "1.0"),
+                            tls_1_1=_tls_version_cell(proto_lines, "1.1"),
+                            tls_1_2=_tls_version_cell(proto_lines, "1.2"),
+                            tls_1_3=_tls_version_cell(proto_lines, "1.3"),
+                            weak_ciphers=weak_joined,
+                            hsts=hsts_v,
+                            chain_issues="not evaluated by parser",
+                            evidence_id=f"EV-SSL-{n:04d}",
+                        )
+                    )
+    if not rows_out and not _ssl_surface_empty(ssl_out):
+        n = 1
+        dom = (target_hint or "aggregated").strip()[:512] or "aggregated"
+        rows_out.append(
+            SslTlsTableRowModel(
+                domain=dom,
+                cert_subject="—",
+                issuer=(ssl_out.issuer or "—")[:500],
+                dates=(ssl_out.validity or "—")[:500],
+                days_remaining="—",
+                tls_1_0=_tls_version_cell(proto_lines, "1.0"),
+                tls_1_1=_tls_version_cell(proto_lines, "1.1"),
+                tls_1_2=_tls_version_cell(proto_lines, "1.2"),
+                tls_1_3=_tls_version_cell(proto_lines, "1.3"),
+                weak_ciphers=weak_joined,
+                hsts=(ssl_out.hsts or "—")[:500],
+                chain_issues="not evaluated by parser",
+                evidence_id=f"EV-SSL-{n:04d}",
+            )
+        )
+    return rows_out
+
+
+def build_security_headers_table_rows(sec: SecurityHeadersAnalysisModel) -> list[dict[str, Any]]:
+    """VH-008 — customer columns for headers matrix."""
+    out: list[dict[str, Any]] = []
+    for i, r in enumerate(sec.rows or [], start=1):
+        if not isinstance(r, dict):
+            continue
+        host = str(r.get("host") or "—")[:500]
+        hdr = str(r.get("header") or "—")
+        present = bool(r.get("present"))
+        obs = str(r.get("value_sample") or "")
+        if not obs:
+            obs = "—" if not present else "header present (value may be long)"
+        risk, rec = _header_row_risk_rec(hdr, present)
+        out.append(
+            {
+                "url": host,
+                "header": hdr,
+                "status": "present" if present else "missing",
+                "observed": _truncate(obs, 500),
+                "risk": risk,
+                "recommendation": rec,
+                "evidence_id": f"EV-HDR-{i:04d}",
+            }
+        )
+    return out
+
+
+_PORT_DETAILED_RE = re.compile(
+    r"^(?P<port>\d+)/(?:tcp|udp)\s+(?P<state>open|filtered|closed)\s*(?P<service>\S+)?\s*(?P<version>.*)$",
+    re.IGNORECASE,
+)
+_PORT_HINT_RE = re.compile(r"(?P<port>\d+)/(?:tcp|udp)", re.IGNORECASE)
+
+
+def _host_from_target_hint(target_hint: str) -> str:
+    raw = (target_hint or "").strip()
+    if not raw:
+        return "target"
+    parsed = urlparse(raw if "://" in raw else f"//{raw}")
+    return (parsed.hostname or raw.split("/", 1)[0] or "target")[:512]
+
+
+def build_port_exposure_table_rows(
+    port_data: PortExposureSummaryModel,
+    *,
+    target_hint: str = "",
+) -> list[PortExposureTableRowModel]:
+    rows: list[PortExposureTableRowModel] = []
+    host = _host_from_target_hint(target_hint)
+    seen: set[tuple[str, str, str]] = set()
+
+    def add(
+        *,
+        port: str,
+        protocol: str = "tcp",
+        state: str = "open",
+        service: str = "",
+        version: str = "",
+        source: str = "",
+        confidence: str = "medium",
+        note: str = "",
+    ) -> None:
+        p = str(port).strip()
+        if not p:
+            return
+        key = (host, p, protocol)
+        if key in seen:
+            return
+        seen.add(key)
+        rows.append(
+            PortExposureTableRowModel(
+                host=host,
+                port=p[:16],
+                protocol=protocol[:16],
+                state=state[:32],
+                service=service[:128],
+                version=version[:256],
+                source=source[:256],
+                confidence=confidence,
+                exposure_note=note[:500]
+                or "Observed open-service signal; do not infer other ports are closed unless a full scan completed.",
+            )
+        )
+
+    for hint in port_data.open_port_hints or []:
+        text = str(hint).strip()
+        m = _PORT_DETAILED_RE.match(text)
+        if m:
+            add(
+                port=m.group("port"),
+                state=m.group("state").lower(),
+                service=(m.group("service") or ""),
+                version=(m.group("version") or ""),
+                source="nmap" if "nmap" in (port_data.data_sources or []) else "port scan artifact",
+                confidence="high" if port_data.has_nmap_hits else "medium",
+            )
+            continue
+        mh = _PORT_HINT_RE.search(text)
+        if mh:
+            src = "naabu" if "naabu" in text.lower() else "recon/fallback"
+            service = "https" if mh.group("port") == "443" else "http" if mh.group("port") == "80" else ""
+            add(
+                port=mh.group("port"),
+                service=service,
+                source=src,
+                confidence="medium" if src != "recon/fallback" else "low",
+                note=text,
+            )
+
+    if not rows and port_data.summary_text:
+        for p in sorted(set(_PORT_HINT_RE.findall(port_data.summary_text)))[:32]:
+            add(port=str(p), source="summary text", confidence="low")
+    return rows[:128]
+
+
+def build_leaked_email_rows(emails: list[str]) -> list[LeakedEmailRowModel]:
+    rows: list[LeakedEmailRowModel] = []
+    for idx, email in enumerate(emails[:64], start=1):
+        rows.append(
+            LeakedEmailRowModel(
+                email=email,
+                source="OSINT / HTML / recon artifacts",
+                context="Masked email-like value parsed from collected ARGUS artifacts.",
+                risk="May support targeted phishing or reconnaissance; no mailbox compromise was demonstrated.",
+                evidence_id=f"EV-EMAIL-{idx:04d}",
+            )
+        )
+    return rows
+
+
 def _phase_output_excerpt(data: dict[str, Any] | None, max_len: int = 1200) -> str:
     if not isinstance(data, dict) or not data:
         return ""
@@ -2671,6 +4142,41 @@ def _phase_output_excerpt(data: dict[str, Any] | None, max_len: int = 1200) -> s
     except (TypeError, ValueError):
         text = str(data)
     return _truncate(text, max_len)
+
+
+def _format_threat_model_for_report(data: dict[str, Any], max_len: int = 2000) -> str:
+    """VAL-008 — Human-readable lines; no raw JSON blob in the report body."""
+    lines: list[str] = [
+        "The following items are model hypotheses or scanner context labels — not independently validated in this run.",
+    ]
+    for k, v in list(data.items())[:40]:
+        label = str(k).replace("_", " ")
+        if isinstance(v, dict) and v:
+            parts = [f"{ik}={_truncate(str(iv), 100)}" for ik, iv in list(v.items())[:12]]
+            lines.append(f"• {label}: {', '.join(parts)}")
+        elif isinstance(v, list):
+            snip = ", ".join(_truncate(str(x), 80) for x in v[:10])
+            lines.append(f"• {label}: {snip}")
+        else:
+            lines.append(f"• {label}: {_truncate(str(v), 500)}")
+    return _truncate("\n".join(lines), max_len)
+
+
+def _phased_output_narrative(od: dict[str, Any], max_len: int) -> str:
+    """Shallow key/value narrative for non-threat phase blobs (avoids raw JSON dumps in PDF/HTML)."""
+    if not od:
+        return ""
+    parts: list[str] = []
+    for k, v in list(od.items())[:24]:
+        if k == "threat_model" and isinstance(v, dict):
+            continue
+        label = str(k).replace("_", " ")
+        if isinstance(v, (dict, list)):
+            raw = json.dumps(v, ensure_ascii=False)
+            parts.append(f"• {label}: {_truncate(raw, 400)}")
+        else:
+            parts.append(f"• {label}: {_truncate(str(v), 500)}")
+    return _truncate("\n".join(parts), max_len)
 
 
 def _collect_leaked_emails(
@@ -2709,6 +4215,12 @@ def _raw_keys_hint_flags(raw_artifact_keys: list[tuple[str, str]]) -> dict[str, 
         "has_sitemap": any(_artifact_name_matches(k, _SITEMAP_KEY_HINTS) for k, _ in raw_artifact_keys),
         "has_tls": any(_artifact_name_matches(k, _TLS_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
         "has_harvester": "theharvester" in keys_low,
+        "has_headers": any(_artifact_name_matches(k, _HTTP_HEADER_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
+        "has_dependency": any(_artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
+        "has_email_fallback": any(
+            _artifact_name_matches(k, _EMAIL_FALLBACK_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+        ),
+        "has_ports": _raw_has_port_scan_artifact_keys(raw_artifact_keys),
     }
 
 
@@ -2721,6 +4233,7 @@ def _tool_errors_summary_from_runs(
     bad_status = frozenset({"failed", "error", "timeout", "cancelled", "canceled", "aborted"})
     out: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    row_by_key: dict[tuple[str, str], dict[str, str]] = {}
     if tool_run_summaries:
         for name, status in tool_run_summaries:
             n = (name or "").strip()[:200]
@@ -2733,7 +4246,9 @@ def _tool_errors_summary_from_runs(
             if key in seen:
                 continue
             seen.add(key)
-            out.append({"tool": n, "status": st, "note": "tool_run_finished_non_success"})
+            row = {"tool": n, "status": st, "note": "tool_run_finished_non_success"}
+            row_by_key[key] = row
+            out.append(row)
             if len(out) >= max_items:
                 return out
     if raw_tool_issues:
@@ -2745,9 +4260,18 @@ def _tool_errors_summary_from_runs(
                 continue
             key = (n.lower(), st)
             if key in seen:
+                existing = row_by_key.get(key)
+                if existing and note and note not in existing.get("note", ""):
+                    old_note = existing.get("note") or ""
+                    if old_note == "tool_run_finished_non_success":
+                        existing["note"] = note
+                    else:
+                        existing["note"] = _truncate(f"{old_note}; {note}", 240)
                 continue
             seen.add(key)
-            out.append({"tool": n, "status": st, "note": note or "raw_artifact_issue"})
+            out_row = {"tool": n, "status": st, "note": note or "raw_artifact_issue"}
+            row_by_key[key] = out_row
+            out.append(out_row)
             if len(out) >= max_items:
                 break
     return out
@@ -2763,6 +4287,31 @@ def _tool_issue_present(
     for row in raw_tool_issues:
         tool = str(row.get("tool") or "").lower()
         if any(n in tool for n in lowered):
+            return True
+    return False
+
+
+def _no_conclusion_tool_reason(tool_label: str) -> str:
+    return (
+        f"No conclusion can be drawn because {tool_label} execution failed. "
+        "The related assessment domain is not assessed."
+    )
+
+
+_REPORT_SECTION_DATA_STATUSES = frozenset(
+    {"completed", "completed_with_fallback", "partial", "parsed_from_fallback", "no_observed_items_after_parsing"}
+)
+
+
+def _tool_completed_present(
+    tool_run_summaries: list[tuple[str, str]] | None,
+    *needles: str,
+) -> bool:
+    ok_statuses = {"success", "succeeded", "completed", "complete", "ok", "finished", "done"}
+    for name, status in tool_run_summaries or []:
+        n = (name or "").lower()
+        st = (status or "").lower().strip()
+        if any(needle in n for needle in needles) and st in ok_statuses:
             return True
     return False
 
@@ -2785,6 +4334,7 @@ def _compute_mandatory_sections_and_coverage(
     outdated: list[OutdatedComponentRow],
     ssl_out: SslTlsAnalysisModel,
     sec_hdr: SecurityHeadersAnalysisModel,
+    security_headers_from_findings: bool,
     robots: RobotsTxtAnalysisModel,
     sitemap: SitemapAnalysisModel,
     robots_sitemap_merged: RobotsSitemapMergedSummaryModel,
@@ -2800,6 +4350,7 @@ def _compute_mandatory_sections_and_coverage(
     tool_run_summaries: list[tuple[str, str]] | None,
     feature_flags: dict[str, bool],
     fallback_messages: dict[str, str | None],
+    port_data: PortExposureSummaryModel,
 ) -> tuple[ValhallaMandatorySectionsModel, ValhallaCoverageModel]:
     phases = _phases_executed_from_outputs(phase_outputs)
     raw_tool_issues = _raw_tool_issues_from_artifacts(
@@ -2811,26 +4362,86 @@ def _compute_mandatory_sections_and_coverage(
         raw_tool_issues=raw_tool_issues,
     )
     has_dep_artifacts = any(_artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys)
+    whatweb_failed = _tool_issue_present(tool_errs, "whatweb")
+    tls_failed = _tool_issue_present(tool_errs, "testssl", "sslscan", "sslyze", "tlsx")
+    trivy_failed = _tool_issue_present(tool_errs, "trivy")
+    header_tool_failed = _tool_issue_present(tool_errs, "nikto", "whatweb", "httpx")
+    harvester_failed = _tool_issue_present(tool_errs, "harvester")
+    port_scan_failed = _tool_issue_present(tool_errs, "nmap", "naabu", "masscan")
+    whatweb_completed = _tool_completed_present(tool_run_summaries, "whatweb")
+    tls_completed = _tool_completed_present(tool_run_summaries, "testssl", "sslscan", "sslyze", "tlsx")
+    trivy_completed = _tool_completed_present(tool_run_summaries, "trivy", "safety", "pip", "npm")
+    header_tool_completed = _tool_completed_present(tool_run_summaries, "nikto", "httpx", "whatweb")
+    harvester_completed = _tool_completed_present(tool_run_summaries, "harvester")
+    port_scan_completed = _tool_completed_present(tool_run_summaries, "nmap", "naabu", "masscan")
+
+    whatweb_raw_body = _artifact_non_empty_body_for_needles(
+        raw_artifact_keys, fetch_raw_bodies, ("whatweb", "http_audit", "httpx", "http_headers", "head_spider")
+    )
+    tls_raw_body = _artifact_non_empty_body_for_needles(
+        raw_artifact_keys, fetch_raw_bodies, ("testssl", "sslscan", "sslyze", "tlsx", "openssl", "x509", "ssl_enum")
+    )
+    header_raw_body = _artifact_non_empty_body_for_needles(
+        raw_artifact_keys,
+        fetch_raw_bodies,
+        ("nikto", "httpx", "http_audit", "headers", "curl", "raw_http", "response", "security_header"),
+    )
+    port_raw_body = _artifact_non_empty_body_for_needles(
+        raw_artifact_keys, fetch_raw_bodies, ("nmap", "naabu", "masscan", "recon_open_ports", "deep_port", "port_scan")
+    )
+    trivy_raw_body = _artifact_non_empty_body_for_needles(
+        raw_artifact_keys, fetch_raw_bodies, ("trivy", "safety", "npm_audit", "pip_audit", "osv")
+    )
 
     # --- tech_stack_structured
     tech_empty = _structured_stack_effectively_empty(structured) and not tech_table
-    if not tech_empty:
-        tech_env = _envelope_completed()
-    elif raw_hints.get("has_whatweb") and _tool_issue_present(raw_tool_issues, "whatweb"):
+    if whatweb_failed and not tech_empty:
         tech_env = _envelope(
-            "partial",
-            "WhatWeb artifacts exist, but the tool produced no parseable stdout or reported stderr/meta issues; "
-            "see tool_errors_summary.",
+            "parsed_from_fallback",
+            "WhatWeb execution failed, but fallback technology signals were reconstructed from other collected evidence. "
+            "Treat the technology stack as incomplete.",
         )
-    elif raw_hints.get("has_whatweb"):
-        tech_env = _envelope(
-            "partial",
-            "WhatWeb artifacts exist, but no parseable technology entries were reconstructed from them.",
-        )
+    elif whatweb_failed:
+        if not (raw_hints.get("has_whatweb") or whatweb_completed):
+            tech_env = _envelope("not_assessed", _no_conclusion_tool_reason("WhatWeb"))
+        elif fetch_raw_bodies and not whatweb_raw_body:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb reports failure; stdout/body artifacts were empty or not stored for parsing.",
+            )
+        else:
+            tech_env = _envelope(
+                "parser_error",
+                "WhatWeb stdout/body was available, but no technology rows were produced by the parser.",
+            )
+    elif not tech_empty:
+        if raw_hints.get("has_whatweb") or whatweb_completed:
+            tech_env = _envelope_completed()
+        else:
+            tech_env = _envelope(
+                "parsed_from_fallback",
+                "Technology stack parsed from HTTP headers, HTML/JS markers, robots/sitemap, or recon fallback data.",
+            )
+    elif raw_hints.get("has_whatweb") or whatweb_completed:
+        if not fetch_raw_bodies:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb execution metadata or object keys exist, but stdout/body artifacts were not fetched (INCLUDE_MINIO/stage download disabled or missing).",
+            )
+        elif not whatweb_raw_body:
+            tech_env = _envelope(
+                "artifact_missing_body",
+                "WhatWeb execution metadata exists, but stdout/body artifact was not stored or is empty in object storage.",
+            )
+        else:
+            tech_env = _envelope(
+                "no_observed_items_after_parsing",
+                "WhatWeb artifact body was stored, but no technology rows were reconstructed (parser produced zero rows).",
+            )
     elif not fetch_raw_bodies and (raw_hints.get("has_whatweb") or phase_outputs):
         tech_env = _envelope(
             "partial",
-            "Not scanned: INCLUDE_MINIO=false — WhatWeb raw artifact bodies were not fetched; "
+            "INCLUDE_MINIO=false: WhatWeb raw artifact bodies were not fetched; "
             "stack reconstruction from phase_outputs / recon_results only.",
         )
     elif not phase_outputs and not fetch_raw_bodies:
@@ -2845,27 +4456,64 @@ def _compute_mandatory_sections_and_coverage(
         )
 
     # --- outdated_components
+    outdated_has_advisory = any(r.cves or "cve" in (r.recommendation or "").lower() for r in outdated)
+    outdated_has_sca_source = any("trivy" in (r.source or r.support_status or "").lower() for r in outdated)
     if outdated:
-        outd_env = _envelope_completed()
+        if outdated_has_advisory or outdated_has_sca_source:
+            outd_env = _envelope_completed()
+        else:
+            outd_env = _envelope(
+                "partial",
+                "Component/version inventory was parsed, but no fixed-version advisory result was available in the artifacts.",
+            )
+    elif trivy_failed:
+        if not (has_dep_artifacts or trivy_completed):
+            outd_env = _envelope("not_assessed", _no_conclusion_tool_reason("Trivy/dependency scanner"))
+        elif fetch_raw_bodies and not trivy_raw_body:
+            outd_env = _envelope(
+                "artifact_missing_body",
+                "Trivy/SCA tool reported failure; dependency stdout/body artifacts were empty or not stored.",
+            )
+        else:
+            outd_env = _envelope(
+                "parser_error",
+                "Trivy/SCA artifact bodies were present, but no component inventory rows were parsed.",
+            )
+    elif deps:
+        outd_env = _envelope(
+            "partial",
+            "Dependency artifacts were parsed into component inventory, but no vulnerability advisory rows were produced.",
+        )
     elif trivy_enabled and not any("trivy" in (d.source or "").lower() for d in deps):
         if has_dep_artifacts:
             outd_env = _envelope(
-                "partial",
+                "no_observed_items_after_parsing",
                 "TRIVY_ENABLED=true and dependency/SCA artifacts exist, but no Trivy rows were parsed.",
             )
         else:
             outd_env = _envelope(
                 "not_executed",
-                "TRIVY_ENABLED=true, but no Trivy/dependency artifacts were collected for this scan.",
+                "TRIVY_ENABLED=true, but no Trivy/SCA artifact, SBOM, lockfile, or dependency manifest was present for this run.",
             )
     elif not fetch_raw_bodies and has_dep_artifacts:
         outd_env = _envelope(
             "partial",
-            "Not scanned: INCLUDE_MINIO=false — dependency JSON from raw artifacts was not fetched.",
+            "INCLUDE_MINIO=false: dependency artifacts are indexed, but raw bodies were not fetched.",
         )
+    elif trivy_completed:
+        if fetch_raw_bodies and not trivy_raw_body:
+            outd_env = _envelope(
+                "artifact_missing_body",
+                "Trivy/SCA completed per tool metadata, but no non-empty Trivy/lockfile/SBOM body was stored for parsing.",
+            )
+        else:
+            outd_env = _envelope(
+                "no_observed_items_after_parsing",
+                "SCA artifacts were present, but no dependency or CVE rows were produced after parsing (zero rows).",
+            )
     else:
         outd_env = _envelope(
-            "no_data",
+            "not_executed",
             (
                 fallback_messages.get("outdated")
                 or "No outdated component signals (CVE/Trivy/searchsploit/versions)."
@@ -2879,27 +4527,61 @@ def _compute_mandatory_sections_and_coverage(
         and not ssl_out.weak_ciphers
         and not ssl_out.hsts
     )
-    if not _ssl_surface_empty(ssl_out):
-        ssl_env = _envelope_completed() if not ssl_from_recon_only else _envelope(
-            "partial",
-            "Certificate data available from recon; full TLS scan (testssl/sslscan) missing or not parsed.",
-        )
-    elif raw_hints.get("has_tls") and _tool_issue_present(raw_tool_issues, "testssl", "sslscan", "sslyze", "tlsx"):
+    if tls_failed and not _ssl_surface_empty(ssl_out):
         ssl_env = _envelope(
-            "partial",
-            "TLS tool artifacts exist, but testssl/sslscan produced no parseable output or reported stderr/meta issues; "
-            "see tool_errors_summary.",
+            "completed_with_fallback",
+            "testssl/sslscan execution failed, but fallback TLS or certificate signals were reconstructed. "
+            "Full TLS configuration remains inconclusive.",
+        )
+    elif tls_failed:
+        if not (raw_hints.get("has_tls") or tls_completed):
+            ssl_env = _envelope("not_assessed", _no_conclusion_tool_reason("testssl/sslscan"))
+        elif fetch_raw_bodies and not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS scanner failure; testssl/sslscan stdout/body was not stored or was empty.",
+            )
+        else:
+            ssl_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TLS tool produced output bodies, but no SSL/TLS table values were parsed from them.",
+            )
+    elif not _ssl_surface_empty(ssl_out):
+        ssl_env = (
+            _envelope_completed()
+            if not ssl_from_recon_only
+            else _envelope(
+                "parsed_from_fallback",
+                "Certificate data available from recon; cipher inventory was not available in parsed TLS artifacts.",
+            )
         )
     elif raw_hints.get("has_tls") and fetch_raw_bodies:
-        ssl_env = _envelope(
-            "partial",
-            "TLS artifacts exist, but no parseable testssl/sslscan JSON or text summary was reconstructed.",
-        )
+        if not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS-related object keys or execution metadata exist, but no non-empty testssl/sslscan/SSL stdout body is stored.",
+            )
+        else:
+            ssl_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TLS raw bodies were stored, but the pipeline did not reconstruct a parseable testssl/sslscan table.",
+            )
     elif not fetch_raw_bodies and raw_hints.get("has_tls"):
         ssl_env = _envelope(
-            "not_executed",
-            "Not scanned: INCLUDE_MINIO=false — TLS artifacts exist in index, bodies were not fetched.",
+            "partial",
+            "INCLUDE_MINIO=false: TLS artifacts exist in index, but bodies were not fetched.",
         )
+    elif tls_completed:
+        if fetch_raw_bodies and not tls_raw_body:
+            ssl_env = _envelope(
+                "artifact_missing_body",
+                "TLS tool completed per metadata, but no TLS stdout/body artifact is available in storage to parse.",
+            )
+        else:
+            ssl_env = _envelope(
+                "no_observed_items_after_parsing",
+                "TLS stdout/body exists, but SSL/TLS table values were not produced (zero rows after parsing).",
+            )
     else:
         ssl_env = _envelope(
             "no_data",
@@ -2907,18 +4589,54 @@ def _compute_mandatory_sections_and_coverage(
         )
 
     if sec_hdr.rows:
-        sec_env = _envelope_completed()
+        if security_headers_from_findings and not merged_http_headers:
+            sec_env = _envelope(
+                "parsed_from_fallback",
+                "Missing security headers were reconstructed from findings evidence; full response header map "
+                "was not collected.",
+            )
+        else:
+            sec_env = _envelope_completed()
     elif merged_http_headers:
         sec_env = _envelope(
-            "partial",
+            "parser_error",
             "Partial headers present in data, but canonical security headers table was not built.",
         )
-    elif _tool_issue_present(raw_tool_issues, "nikto", "whatweb", "httpx"):
-        sec_env = _envelope(
-            "partial",
-            "Header-capable tool artifacts exist, but they produced no parseable stdout or reported stderr/meta issues; "
-            "see tool_errors_summary.",
-        )
+    elif header_tool_failed:
+        if not (raw_hints.get("has_headers") or raw_hints.get("has_whatweb") or header_tool_completed):
+            sec_env = _envelope("not_assessed", _no_conclusion_tool_reason("Nikto/httpx/WhatWeb header-capable tool"))
+        elif fetch_raw_bodies and not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-related tools failed; nikto/httpx/response stdout or body artifacts were not stored or were empty.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Header tool output exists, but no security header table rows were produced from parsing.",
+            )
+    elif raw_hints.get("has_headers") and fetch_raw_bodies:
+        if not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-capable execution metadata or keys exist, but no non-empty raw HTTP/header stdout/body was stored.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "HTTP header bodies were stored, but the canonical security headers table was not populated (zero rows).",
+            )
+    elif header_tool_completed:
+        if fetch_raw_bodies and not header_raw_body:
+            sec_env = _envelope(
+                "artifact_missing_body",
+                "Header-capable tools completed per metadata, but no nikto/httpx/response body was stored to build the table.",
+            )
+        else:
+            sec_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Header tool output was present, but no security header table rows were produced.",
+            )
     else:
         sec_env = _envelope(
             "no_data",
@@ -2943,8 +4661,8 @@ def _compute_mandatory_sections_and_coverage(
         rs_env = _envelope_completed()
     elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
         rs_env = _envelope(
-            "not_executed",
-            "Not scanned: INCLUDE_MINIO=false — robots/sitemap keys exist, bodies were not fetched.",
+            "partial",
+            "INCLUDE_MINIO=false: robots/sitemap keys exist, but bodies were not fetched.",
         )
     else:
         rs_env = _envelope(
@@ -2952,23 +4670,104 @@ def _compute_mandatory_sections_and_coverage(
             (fallback_messages.get("robots_sitemap") or "robots.txt and sitemap were not retrieved."),
         )
 
+    email_sources_exist = bool(
+        raw_hints.get("has_harvester")
+        or raw_hints.get("has_email_fallback")
+        or phase_outputs
+        or harvester_completed
+    )
     if final_emails:
-        em_env = _envelope_completed()
-    elif harvester_enabled and raw_hints.get("has_harvester") and _tool_issue_present(raw_tool_issues, "harvester"):
+        em_env = (
+            _envelope(
+                "completed_with_fallback",
+                "Email indicators were parsed from fallback artifacts after theHarvester execution issues.",
+            )
+            if harvester_failed
+            else _envelope_completed()
+        )
+    elif harvester_enabled and harvester_failed:
+        em_env = (
+            _envelope(
+                "no_observed_items_after_parsing",
+                "theHarvester execution failed, but fallback ARGUS sources were parsed and no email-like values were observed.",
+            )
+            if email_sources_exist
+            else _envelope("not_assessed", _no_conclusion_tool_reason("theHarvester"))
+        )
+    elif email_sources_exist:
         em_env = _envelope(
-            "partial",
-            "theHarvester artifacts exist, but the tool produced no parseable email output or reported stderr/meta issues; "
-            "see tool_errors_summary.",
+            "no_observed_items_after_parsing",
+            "Email-capable OSINT or fallback sources were parsed; no email-like values were observed.",
         )
     elif harvester_enabled:
         em_env = _envelope(
-            "no_data",
+            "not_executed",
             (fallback_messages.get("leaked_emails") or "theHarvester enabled, but no masked emails found in data."),
         )
     else:
         em_env = _envelope(
             "not_executed",
             "Not scanned: HARVESTER_ENABLED=false — targeted email collection via theHarvester was not performed.",
+        )
+
+    if port_scan_failed and port_data.has_open_ports:
+        port_env = _envelope(
+            "completed_with_fallback",
+            "nmap/naabu/masscan execution failed, but fallback port or service signals were reconstructed. "
+            "Full port exposure remains inconclusive.",
+        )
+    elif port_scan_failed:
+        if not (raw_hints.get("has_ports") or port_scan_completed):
+            port_env = _envelope("not_assessed", _no_conclusion_tool_reason("nmap/naabu/masscan"))
+        elif fetch_raw_bodies and not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scanners failed; nmap/naabu/masscan stdout or structured output was not stored or is empty.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scan output bodies were present, but no open-port rows were parsed (zero rows).",
+            )
+    elif port_data.has_open_ports:
+        if any("fallback" in s.lower() for s in port_data.data_sources or []):
+            port_env = _envelope(
+                "parsed_from_fallback",
+                "Port exposure was reconstructed from successful HTTP/HTTPS artifacts; no full closed-port conclusion is implied.",
+            )
+        else:
+            port_env = _envelope_completed()
+    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and fetch_raw_bodies:
+        if not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scan object keys or execution metadata exist, but nmap/naabu/masscan stdout/body is empty in storage.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scan raw bodies are present, but no open ports or services were parsed in this pipeline.",
+            )
+    elif _raw_has_port_scan_artifact_keys(raw_artifact_keys) and not fetch_raw_bodies:
+        port_env = _envelope(
+            "partial",
+            "Port scan object keys are listed, but raw bodies were not fetched; cannot parse open ports for this view.",
+        )
+    elif port_scan_completed:
+        if fetch_raw_bodies and not port_raw_body:
+            port_env = _envelope(
+                "artifact_missing_body",
+                "Port scan completed per tool metadata, but no port-scan stdout/structured body was stored to parse.",
+            )
+        else:
+            port_env = _envelope(
+                "no_observed_items_after_parsing",
+                "Port scanner output was stored, but no port exposure rows were produced (zero rows).",
+            )
+    else:
+        port_env = _envelope(
+            "no_data",
+            "No nmap/naabu/masscan open port signals in collected scan data.",
         )
 
     mandatory = ValhallaMandatorySectionsModel(
@@ -2978,6 +4777,7 @@ def _compute_mandatory_sections_and_coverage(
         security_headers_analysis=sec_env,
         robots_sitemap_analysis=rs_env,
         leaked_emails=em_env,
+        port_exposure=port_env,
     )
     sections_map: dict[str, dict[str, str]] = {}
     for sid in _MANDATORY_SECTION_IDS:
@@ -3024,12 +4824,14 @@ def build_valhalla_minimal_context_patch(
         "robots_sitemap": None,
         "leaked_emails": None,
     }
+    port_empty = PortExposureSummaryModel()
     mandatory, coverage = _compute_mandatory_sections_and_coverage(
         structured=structured,
         tech_table=tech_table,
         outdated=outdated,
         ssl_out=ssl_out,
         sec_hdr=sec_hdr,
+        security_headers_from_findings=False,
         robots=robots,
         sitemap=sitemap,
         robots_sitemap_merged=merged_rs,
@@ -3049,6 +4851,7 @@ def build_valhalla_minimal_context_patch(
             "INCLUDE_MINIO": fetch_raw_bodies,
         },
         fallback_messages=fb,
+        port_data=port_empty,
     )
     rs_bundle = ValhallaRobotsSitemapAnalysisBundleModel(
         robots_txt=robots,
@@ -3067,6 +4870,51 @@ def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return dataclasses.asdict(obj)
     return dict(obj) if isinstance(obj, dict) else {}
+
+
+def _finding_is_rate_limit_signal(f: dict[str, Any]) -> bool:
+    blob = f"{f.get('title', '')} {f.get('description', '')} {f.get('evidence', '')}".lower()
+    return bool(("rate" in blob and "limit" in blob) or "http 429" in blob or "too many requests" in blob)
+
+
+def _tools_for_wstg_from_parsed_sections(
+    *,
+    base_tools: list[str],
+    robots: RobotsTxtAnalysisModel,
+    sitemap: SitemapAnalysisModel,
+    tech_table: list[TechStackTableRow],
+    ssl_out: SslTlsAnalysisModel,
+    security_headers: SecurityHeadersAnalysisModel,
+    port_data: PortExposureSummaryModel,
+    emails: list[str],
+    outdated: list[OutdatedComponentRow],
+    deps: list[DependencyAnalysisRow],
+    findings: list[dict[str, Any]],
+) -> list[str]:
+    tools: list[str] = list(base_tools)
+
+    def add(name: str) -> None:
+        if name and name.lower() not in {t.lower() for t in tools}:
+            tools.append(name)
+
+    if robots.found or sitemap.found:
+        add("curl")
+    if tech_table:
+        add("whatweb")
+    if not _ssl_surface_empty(ssl_out):
+        add("testssl")
+    if security_headers.rows:
+        add("httpx")
+        add("nikto")
+    if port_data.has_open_ports:
+        add("nmap")
+    if emails:
+        add("theharvester")
+    if outdated or deps:
+        add("trivy")
+    if any(_finding_is_rate_limit_signal(f) for f in findings):
+        add("rate_limit_signal")
+    return tools
 
 
 def build_valhalla_report_context(
@@ -3088,6 +4936,7 @@ def build_valhalla_report_context(
     harvester_enabled: bool = False,
     tool_run_summaries: list[tuple[str, str]] | None = None,
     extra_feature_flags: dict[str, bool] | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ValhallaReportContext:
     """Assemble ValhallaReportContext from already-collected scan report inputs."""
     tid = (tenant_id or "").strip()
@@ -3200,7 +5049,23 @@ def build_valhalla_report_context(
             )
 
     merged_http_headers = _http_headers_merged_from_recon_and_phases(recon_results, phase_outputs)
+    marker_rows = _tech_rows_from_http_and_urls(
+        merged_http_headers,
+        robots,
+        sitemap,
+        raw_artifact_keys,
+        fetch_bodies=fetch_raw_bodies,
+    )
+    if marker_rows:
+        structured = _apply_tech_marker_rows_to_structured(structured, marker_rows)
+        structured_rows = _tech_rows_from_structured(structured)
+        tech_table = _merge_tech_stack_tables(
+            structured_rows + marker_rows,
+            legacy_rows,
+            structured=structured,
+        )
     sec_hdr = _security_headers_from_host_map(merged_http_headers)
+    security_headers_from_findings = False
 
     if not sec_hdr.rows:
         fallback_header_sources: list[dict[str, dict[str, str]]] = [
@@ -3217,6 +5082,27 @@ def build_valhalla_report_context(
                 sec_hdr = _security_headers_from_host_map(merged_http_headers)
                 if sec_hdr.rows:
                     break
+    if merged_http_headers:
+        header_marker_rows = _tech_rows_from_http_and_urls(
+            merged_http_headers,
+            robots,
+            sitemap,
+            raw_artifact_keys,
+            fetch_bodies=False,
+        )
+        if header_marker_rows:
+            structured = _apply_tech_marker_rows_to_structured(structured, header_marker_rows)
+            structured_rows = _tech_rows_from_structured(structured)
+            tech_table = _merge_tech_stack_tables(
+                structured_rows + marker_rows + header_marker_rows,
+                legacy_rows,
+                structured=structured,
+            )
+    if not sec_hdr.rows:
+        finding_headers = _security_headers_from_findings(findings)
+        if finding_headers.rows:
+            sec_hdr = finding_headers
+            security_headers_from_findings = True
 
     deps = _collect_dependency_rows(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
     outdated = _assemble_outdated_components(
@@ -3236,9 +5122,9 @@ def build_valhalla_report_context(
         if (ph or "").lower() == threat_phase and od:
             tm = od.get("threat_model")
             if isinstance(tm, dict) and tm:
-                threat_excerpt = _phase_output_excerpt(tm, 1500)
+                threat_excerpt = _format_threat_model_for_report(tm, 2000)
             else:
-                threat_excerpt = _phase_output_excerpt(od, 1500)
+                threat_excerpt = _phased_output_narrative(od, 1500)
             break
 
     api_hint = ""
@@ -3322,23 +5208,22 @@ def build_valhalla_report_context(
     tech_stack_fallback_message: str | None = None
     if _structured_stack_effectively_empty(structured) and not tech_table:
         tech_stack_fallback_message = (
-            "Technology stack not identified automatically: no valid WhatWeb output "
-            "or insufficient recon signals to populate the table."
+            "Technology stack table was not populated because no parseable WhatWeb, HTTP header, HTML/JS, "
+            "robots/sitemap, or recon fingerprint signals were available."
         )
 
     ssl_tls_fallback_message: str | None = None
     if _ssl_surface_empty(ssl_out):
         ssl_tls_fallback_message = (
-            "SSL/TLS data missing or not retrieved: for HTTPS targets testssl.sh (JSON) "
-            "or sslscan output is expected in raw artifacts; for HTTP targets TLS check was not performed. "
-            "If needed, verify VA policy and testssl.sh availability in the sandbox."
+            "SSL/TLS table was not populated because no parseable testssl.sh, sslscan, nmap ssl-enum-ciphers, "
+            "openssl, or certificate metadata was available for this report context."
         )
 
     security_headers_fallback_message: str | None = None
     if not sec_hdr.rows and not merged_http_headers:
         security_headers_fallback_message = (
-            "Security headers analysis unavailable: no http_headers map in recon_results.json "
-            "and no embedded headers found in recon/vuln_analysis phase outputs."
+            "HTTP security header table was not populated because no parseable response header map or raw "
+            "HTTP response artifact was available."
         )
 
     outdated_components_fallback_message: str | None = None
@@ -3346,20 +5231,21 @@ def build_valhalla_report_context(
         has_trivy_rows = any("trivy" in (d.source or "").lower() for d in deps)
         if trivy_enabled and not has_trivy_rows:
             outdated_components_fallback_message = (
-                "Trivy enabled, but dependency manifests were not collected or Trivy report is empty; "
-                "outdated components SCA block is not populated (check artifact collection and TRIVY_ENABLED)."
+                "SCA via Trivy was not applicable because no filesystem target, container image, SBOM, or "
+                "dependency manifest bodies were available in this scan. For external URL-only tests, "
+                "ARGUS may use JS/bundle heuristics instead of full Trivy filesystem scanning."
             )
         else:
             outdated_components_fallback_message = (
-                "No explicit outdated component signals (CVE, Trivy, searchsploit, versions from WhatWeb/nmap) "
-                "found in scan data."
+                "No explicit component advisory signals (CVE, Trivy, searchsploit, or versioned WhatWeb/nmap "
+                "fingerprints) were parsed from scan data."
             )
 
     robots_sitemap_fallback_message: str | None = None
     if not robots_sitemap_merged.robots_found and not robots_sitemap_merged.sitemap_found:
         robots_sitemap_fallback_message = (
-            "robots.txt and sitemap were not retrieved or are unavailable via HTTP; "
-            "extended surface analysis based on them is absent."
+            "robots.txt and sitemap.xml were not present in the parsed report context; related surface "
+            "analysis is limited."
         )
 
     leaked_emails_fallback_message: str | None = None
@@ -3377,6 +5263,29 @@ def build_valhalla_report_context(
     if extra_feature_flags:
         ff.update({str(k): bool(v) for k, v in extra_feature_flags.items()})
 
+    target_guess = ""
+    if isinstance(recon_results, dict):
+        target_guess = str(
+            recon_results.get("target_url")
+            or recon_results.get("target_domain")
+            or recon_results.get("target")
+            or ""
+        )
+    if not target_guess and findings:
+        t0 = findings[0] if isinstance(findings[0], dict) else {}
+        target_guess = str(t0.get("affected_url") or t0.get("url") or t0.get("target") or "")
+
+    port_data = _build_port_exposure_summary(
+        nmap_blob=nmap_blob,
+        ports=ports,
+        structured=structured,
+        raw_artifact_keys=raw_artifact_keys,
+        fetch_bodies=fetch_raw_bodies,
+        target_hint=target_guess,
+        tls_observed=not _ssl_surface_empty(ssl_out),
+        http_observed=bool(merged_http_headers or sec_hdr.rows),
+    )
+
     raw_hints = _raw_keys_hint_flags(raw_artifact_keys)
     mandatory, coverage = _compute_mandatory_sections_and_coverage(
         structured=structured,
@@ -3384,6 +5293,7 @@ def build_valhalla_report_context(
         outdated=outdated,
         ssl_out=ssl_out,
         sec_hdr=sec_hdr,
+        security_headers_from_findings=security_headers_from_findings,
         robots=robots,
         sitemap=sitemap,
         robots_sitemap_merged=robots_sitemap_merged,
@@ -3406,6 +5316,7 @@ def build_valhalla_report_context(
             "robots_sitemap": robots_sitemap_fallback_message,
             "leaked_emails": leaked_emails_fallback_message,
         },
+        port_data=port_data,
     )
     rs_analysis_bundle = ValhallaRobotsSitemapAnalysisBundleModel(
         robots_txt=robots,
@@ -3420,9 +5331,72 @@ def build_valhalla_report_context(
         build_wstg_coverage as _build_wstg_coverage,
     )
 
-    tools_executed_names = [at.name for at in appendix_tools if at.name]
     finding_dicts = [f if isinstance(f, dict) else {} for f in findings]
+    tools_executed_names = _tools_for_wstg_from_parsed_sections(
+        base_tools=[at.name for at in appendix_tools if at.name],
+        robots=robots,
+        sitemap=sitemap,
+        tech_table=tech_table,
+        ssl_out=ssl_out,
+        security_headers=sec_hdr,
+        port_data=port_data,
+        emails=final_emails,
+        outdated=outdated,
+        deps=deps,
+        findings=finding_dicts,
+    )
     wstg_result = _build_wstg_coverage(tools_executed_names, finding_dicts)
+    try:
+        wstg_pct = float(wstg_result.coverage_percentage)
+    except (TypeError, ValueError):
+        wstg_pct = 0.0
+    wstg_cov_n = int(getattr(wstg_result, "covered", 0) or 0)
+    wstg_partial_n = int(getattr(wstg_result, "partial", 0) or 0)
+    wstg_total = int(getattr(wstg_result, "total_tests", 0) or 0)
+    wstg_exec_degraded = wstg_pct < 70.0
+    wstg_zero = wstg_total > 0 and wstg_cov_n == 0 and wstg_partial_n == 0
+    from src.reports.report_quality_gate import evaluate_valhalla_engagement_title_and_full
+    from src.reports.valhalla_tool_health import build_tool_health_summary_rows, tool_health_rows_to_jinja
+
+    mstat: dict[str, str] = {}
+    md_mand = mandatory.model_dump(mode="python")
+    for sid in _MANDATORY_SECTION_IDS:
+        ent = md_mand.get(sid) if isinstance(md_mand, dict) else None
+        if isinstance(ent, dict):
+            mstat[sid] = str(ent.get("status") or "")
+    engagement_title, full_v = evaluate_valhalla_engagement_title_and_full(
+        wstg_coverage_pct=wstg_pct,
+        mandatory_section_status=mstat,
+        findings=finding_dicts,
+        tool_error_rows=coverage.tool_errors_summary,
+    )
+
+    ssl_tls_table_rows = build_ssl_tls_table_rows(
+        recon_results if isinstance(recon_results, dict) else None,
+        ssl_out,
+        target_hint=target_guess,
+    )
+    security_headers_table_rows = build_security_headers_table_rows(sec_hdr)
+    port_exposure_table_rows = build_port_exposure_table_rows(port_data, target_hint=target_guess)
+    leaked_email_rows = build_leaked_email_rows(final_emails)
+    evidence_inv = build_evidence_inventory_rows(
+        finding_dicts,
+        ssl_tls=ssl_out,
+        security_headers=sec_hdr,
+        tech_stack=tech_table,
+        port_exposure=port_data,
+        port_rows=port_exposure_table_rows,
+        outdated_components=outdated,
+        leaked_email_rows=leaked_email_rows,
+    )
+    th_jinja = tool_health_rows_to_jinja(
+        build_tool_health_summary_rows(
+            tool_run_summaries=tool_run_summaries,
+            appendix_tool_names=[a.name for a in appendix_tools if a.name],
+            raw_error_rows=coverage.tool_errors_summary,
+            mandatory_section_status=mstat,
+        )
+    )
 
     scan_config_for_lim: dict[str, Any] = {}
     for _ph, inp in phase_inputs:
@@ -3442,6 +5416,73 @@ def build_valhalla_report_context(
 
     test_lim = _build_test_limitations(scan_config_for_lim, scan_results_for_lim)
 
+    sca_mode = "none"
+    trivy_run_status = "not_applicable"
+    if trivy_enabled:
+        manifestish = 0
+        trivyish = 0
+        for key, _ in raw_artifact_keys:
+            lk = key.lower()
+            if any(
+                m in lk
+                for m in (
+                    "package.json",
+                    "package-lock",
+                    "yarn.lock",
+                    "pnpm-lock",
+                    "requirements",
+                    "poetry.lock",
+                    "pipfile",
+                    "pom.xml",
+                    "build.gradle",
+                    "go.mod",
+                    "composer.lock",
+                    "cargo.lock",
+                    "dockerfile",
+                    "container",
+                )
+            ):
+                manifestish += 1
+            if "trivy" in lk or "sbom" in lk or "cyclonedx" in lk or "spdx" in lk:
+                trivyish += 1
+        sca_manifest_count = manifestish
+        sca_artifact_count = trivyish
+        if manifestish == 0 and trivyish == 0:
+            sca_mode = "url_js_fingerprint"
+        elif trivyish and manifestish:
+            sca_mode = "filesystem"
+        elif trivyish:
+            sca_mode = "container_image" if "docker" in str(phase_outputs).lower() else "sbom"
+        else:
+            sca_mode = "filesystem"
+        trivy_run_status = "not_executed"
+        _bad_tr = frozenset({"failed", "error", "timeout", "cancelled", "canceled"})
+        saw_trivy = False
+        for n, s in tool_run_summaries or []:
+            if "trivy" not in (n or "").lower():
+                continue
+            saw_trivy = True
+            if (s or "").lower() in _bad_tr:
+                trivy_run_status = "failed"
+                break
+            trivy_run_status = "executed_with_findings" if outdated else "executed_no_findings"
+        if trivyish and not saw_trivy and trivy_run_status == "not_executed":
+            trivy_run_status = "executed_with_findings" if outdated else "executed_no_findings"
+    else:
+        sca_manifest_count = 0
+        sca_artifact_count = 0
+        trivy_run_status = "not_applicable"
+        sca_mode = "none"
+
+    active_injection_scan_options = dict(scan_options) if isinstance(scan_options, dict) else {}
+    for ph, od in phase_outputs:
+        if (ph or "").lower() != "vuln_analysis" or not isinstance(od, dict):
+            continue
+        phase_aic = od.get("active_injection_coverage")
+        if isinstance(phase_aic, dict) and phase_aic:
+            active_injection_scan_options["active_injection_coverage"] = phase_aic
+            break
+
     return ValhallaReportContext(
         robots_txt_analysis=robots,
         sitemap_analysis=sitemap,
@@ -3456,8 +5497,11 @@ def build_valhalla_report_context(
         leaked_emails_fallback_message=leaked_emails_fallback_message,
         outdated_components=outdated,
         leaked_emails=final_emails,
+        leaked_email_rows=leaked_email_rows,
         ssl_tls_analysis=ssl_out,
+        ssl_tls_table_rows=ssl_tls_table_rows,
         security_headers_analysis=sec_hdr,
+        security_headers_table_rows=security_headers_table_rows,
         dependency_analysis=deps,
         threat_model=threat_ref,
         threat_model_excerpt=threat_ref.excerpt,
@@ -3473,4 +5517,17 @@ def build_valhalla_report_context(
         xss_structured=build_xss_structured_rows_from_findings(findings),
         wstg_coverage=_dataclass_to_dict(wstg_result),
         test_limitations=test_lim,
+        valhalla_engagement_title=engagement_title,
+        full_valhalla=bool(full_v),
+        port_exposure=port_data,
+        port_exposure_table_rows=port_exposure_table_rows,
+        evidence_inventory=evidence_inv,
+        tool_health_summary=th_jinja,
+        wstg_execution_degraded=wstg_exec_degraded,
+        wstg_coverage_zero_executed=wstg_zero,
+        sca_mode=sca_mode,
+        trivy_run_status=trivy_run_status,
+        sca_manifest_count=sca_manifest_count,
+        sca_artifact_count=sca_artifact_count,
+        active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
     )

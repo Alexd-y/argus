@@ -81,6 +81,7 @@
   --sev-medium: #c39200;
   --sev-low: #2f6fd6;
   --sev-info: #6b7280;
+  --section-accent: #b45309;
 }
 
 html, body {
@@ -90,6 +91,9 @@ html, body {
   color: var(--argus-text);
   margin: 0;
   padding: 0;
+  /* WeasyPrint: keep chart / badge colours (gold cover, severity pills) */
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 h1, h2, h3, h4 {
@@ -231,13 +235,15 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .section-heading {
   font-size: 16pt;
   border-bottom: 1pt solid var(--argus-rule);
-  padding-bottom: 0.15cm;
+  border-left: 4pt solid var(--section-accent);
+  padding: 0.12cm 0 0.12cm 0.35cm;
   margin: 0.6cm 0 0.4cm 0;
   color: var(--argus-charcoal);
+  background: rgba(180, 83, 9, 0.08);
 }
 
 .exec-summary { page-break-inside: avoid; margin-bottom: 0.6cm; }
-.risk-quant, .owasp-rollup, .top-business, .roadmap, .evidence, .timeline {
+.risk-quant, .owasp-rollup, .top-business, .kev-brief, .roadmap, .evidence, .timeline {
   page-break-before: always;
   margin-bottom: 0.6cm;
 }
@@ -272,7 +278,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .empty-state { color: var(--argus-text-muted); font-style: italic; }
 
 /* --------------------------- Tables ----------------------------- */
-.risk-table, .owasp-matrix, .business-table, .evidence-table, .timeline-table {
+.risk-table, .owasp-matrix, .business-table, .kev-table, .evidence-table, .timeline-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 9pt;
@@ -281,6 +287,7 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .risk-table th, .risk-table td,
 .owasp-matrix th, .owasp-matrix td,
 .business-table th, .business-table td,
+.kev-table th, .kev-table td,
 .evidence-table th, .evidence-table td,
 .timeline-table th, .timeline-table td {
   border: 0.5pt solid var(--argus-rule);
@@ -290,17 +297,26 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 }
 
 .risk-table thead, .owasp-matrix thead,
-.business-table thead, .evidence-table thead, .timeline-table thead {
+.business-table thead, .kev-table thead, .evidence-table thead, .timeline-table thead {
   background: var(--argus-surface-alt);
 }
 
 .risk-table thead th, .owasp-matrix thead th,
-.business-table thead th, .evidence-table thead th, .timeline-table thead th {
+.business-table thead th, .kev-table thead th, .evidence-table thead th, .timeline-table thead th {
   color: var(--argus-charcoal);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 8pt;
+}
+
+.risk-table tbody tr:nth-child(even) td,
+.owasp-matrix tbody tr:nth-child(even) td,
+.business-table tbody tr:nth-child(even) td,
+.kev-table tbody tr:nth-child(even) td,
+.evidence-table tbody tr:nth-child(even) td,
+.timeline-table tbody tr:nth-child(even) td {
+  background: rgba(243, 233, 197, 0.55);
 }
 
 .col-num         { text-align: right; width: 1.6cm; }
@@ -309,6 +325,10 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .col-cwe         { width: 1.6cm; }
 .col-owasp       { width: 1.5cm; }
 .col-owasp-id    { width: 1.4cm; }
+.col-tiny        { width: 1.15cm; font-size: 8pt; }
+.col-epss        { width: 1.0cm; text-align: right; }
+.ssvc-cell       { font-size: 8pt; line-height: 1.2; }
+.kev-date        { width: 1.6cm; font-size: 8pt; }
 .col-tl-order    { width: 1.0cm; text-align: right; }
 .col-tl-phase    { width: 4.0cm; }
 .col-tl-time     { width: 4.0cm; }

@@ -181,26 +181,75 @@ def evaluate_va_active_scan_tool_policy(*, tool_name: str) -> McpPolicyDecision:
     )
 
 
-# WEB-006 — per-tool approval policy for destructive active-scan tools
+# WEB-006 / destructive active-scan — per-tool approval (fail-closed)
+#
+# - Destructive VA tools (see ``Settings.destructive_tool_names``) run only when
+#   ``Settings.argus_lab_mode`` (``ARGUS_LAB_MODE``) **and**
+#   ``Settings.argus_destructive_lab_mode`` (``ARGUS_DESTRUCTIVE_LAB_MODE``) are true,
+#   plus a non-``None`` ``scan_approval_flags`` dict grants the canonical tool id
+#   (``True`` for that key). ``Settings.argus_active_injection_mode`` ``quick`` blocks
+#   destructive tools at this policy layer (planner should not schedule them).
+# - ``scan_approval_flags is None`` is never a silent allow: the tool is blocked. With lab on
+#   and missing/empty/False flag entry, the decision is ``requires_approval``.
+# - With lab / destructive-lab off, destructive tools are blocked with ``requires_lab_mode`` first.
+# - ``va_lab_profile_allow_destructive_tools`` does not bypass the above; scheduler uses only
+#   this policy. Rate limits and executor timeouts are unchanged here (DoS policy).
+# - No free-form destructive payload strings from AI: tools use catalog/executor-defined argv only.
 TOOL_APPROVAL_POLICY_ID = "tool_approval_policy_v1"
+
+
+def is_destructive_va_tool(tool_name: str) -> bool:
+    """True when the tool is in settings.destructive_tools (e.g. sqlmap, commix)."""
+    from src.core.config import settings
+
+    canonical = resolve_va_active_scan_tool_canonical(tool_name)
+    if not canonical:
+        return False
+    return canonical in settings.destructive_tools
+
+
+def is_safe_active_va_tool(tool_name: str) -> bool:
+    """True when tool is on the VA active-scan allowlist and not destructive (default safe lab path)."""
+    canonical = resolve_va_active_scan_tool_canonical(tool_name)
+    if not canonical:
+        return False
+    return not is_destructive_va_tool(tool_name)
 
 
 def evaluate_tool_approval_policy(
     tool_name: str,
     *,
     scan_approval_flags: dict[str, bool] | None = None,
+    policy_settings: Any | None = None,
 ) -> McpPolicyDecision:
-    """Per-tool approval: base allowlist + explicit approval for destructive tools.
+    """Per-tool approval: base allowlist + **destructive lab** + per-scan flags for destructive tools.
 
-    Backward compatible: when *scan_approval_flags* is ``None``, destructive
-    tools are allowed if they pass the base VA active-scan allowlist (existing
-    behaviour preserved).
+    **Fail closed:** destructive tools require :attr:`Settings.argus_lab_mode`
+    (``ARGUS_LAB_MODE``), :attr:`Settings.argus_destructive_lab_mode`
+    (``ARGUS_DESTRUCTIVE_LAB_MODE``), a **non-**``None`` ``scan_approval_flags`` map, and
+    ``scan_approval_flags[canonical] is True``. ``argus_active_injection_mode=quick``
+    always denies destructive tools (``active_injection_quick_blocks_destructive``).
+
+    - ``scan_approval_flags is None`` → blocked (in lab, ``reason=requires_approval``; off lab,
+      ``reason=requires_lab_mode``). Never treated as an implicit allow.
+    - ``argus_scan_approval_required`` (signed workflow) is reserved; per-scan boolean flags
+      remain mandatory in all cases.
+
+    When ``ARGUS_KILL_SWITCH_REQUIRED`` is true, this function cannot verify Redis clearance;
+    destructive tools that would otherwise be allowed are denied with ``requires_kill_switch_clearance``.
+    Runners must consult :mod:`src.policy.kill_switch` before execution (P2-009).
+
+    Pass ``policy_settings`` to inject policy inputs in tests; default is :data:`src.core.config.settings`.
     """
-    from src.core.config import settings
+    from src.core.config import Settings, lab_destructive_execution_allowed, settings as app_settings
+
+    cfg: Settings = app_settings if policy_settings is None else policy_settings  # type: ignore[assignment]
 
     base_decision = evaluate_va_active_scan_tool_policy(tool_name=tool_name)
     canonical = resolve_va_active_scan_tool_canonical(tool_name)
-    is_destructive = (canonical in settings.destructive_tools) if canonical else False
+    is_destructive = (canonical in cfg.destructive_tools) if canonical else False
+    key = (canonical or str(tool_name or "").strip().lower() or tool_name) or ""
+    key = str(key).lower()
 
     if not base_decision.allowed:
         decision = McpPolicyDecision(
@@ -208,30 +257,96 @@ def evaluate_tool_approval_policy(
             reason=base_decision.reason,
             policy_id=TOOL_APPROVAL_POLICY_ID,
         )
-    elif (
-        is_destructive
-        and scan_approval_flags is not None
-        and not scan_approval_flags.get(canonical or tool_name, False)
-    ):
-        decision = McpPolicyDecision(
-            allowed=False,
-            reason="requires_approval",
-            policy_id=TOOL_APPROVAL_POLICY_ID,
-        )
-    else:
+    elif not is_destructive:
         decision = McpPolicyDecision(
             allowed=True,
             reason="allowed",
             policy_id=TOOL_APPROVAL_POLICY_ID,
         )
+    else:
+        inj_mode = str(cfg.argus_active_injection_mode or "").strip().lower()
+        if inj_mode == "quick":
+            decision = McpPolicyDecision(
+                allowed=False,
+                reason="active_injection_quick_blocks_destructive",
+                policy_id=TOOL_APPROVAL_POLICY_ID,
+            )
+        else:
+            flags_ok = scan_approval_flags is not None and bool(
+                scan_approval_flags.get(key, False)
+            )
+            lab_ok = bool(cfg.argus_lab_mode and cfg.argus_destructive_lab_mode)
+            if not lab_ok:
+                decision = McpPolicyDecision(
+                    allowed=False,
+                    reason="requires_lab_mode",
+                    policy_id=TOOL_APPROVAL_POLICY_ID,
+                )
+            elif not flags_ok:
+                decision = McpPolicyDecision(
+                    allowed=False,
+                    reason="requires_approval",
+                    policy_id=TOOL_APPROVAL_POLICY_ID,
+                )
+            elif cfg.argus_kill_switch_required:
+                # Policy-only layer cannot read Redis; align with lab_destructive_execution_allowed gate.
+                ks_preflight_ok = lab_destructive_execution_allowed(cfg)
+                if not ks_preflight_ok:
+                    decision = McpPolicyDecision(
+                        allowed=False,
+                        reason="requires_kill_switch_clearance",
+                        policy_id=TOOL_APPROVAL_POLICY_ID,
+                    )
+                else:
+                    decision = McpPolicyDecision(
+                        allowed=True,
+                        reason="allowed",
+                        policy_id=TOOL_APPROVAL_POLICY_ID,
+                    )
+            else:
+                decision = McpPolicyDecision(
+                    allowed=True,
+                    reason="allowed",
+                    policy_id=TOOL_APPROVAL_POLICY_ID,
+                )
 
+    needs_approval = is_destructive and not decision.allowed
+    if is_destructive and not decision.allowed:
+        logger.info(
+            "destructive_tool_policy_gate",
+            extra={
+                "event": "destructive_requires_approval",
+                "tool": canonical or key or "unknown",
+                "allowed": False,
+                "policy_id": TOOL_APPROVAL_POLICY_ID,
+                "reason": decision.reason,
+                "requires_approval": True,
+                "argus_lab_mode": bool(cfg.argus_lab_mode),
+                "argus_destructive_lab_mode": bool(cfg.argus_destructive_lab_mode),
+                "destructive_lab_mode": bool(cfg.destructive_lab_mode),
+                "argus_active_injection_mode": str(cfg.argus_active_injection_mode or ""),
+                "argus_oast_enabled": bool(cfg.argus_oast_enabled),
+                "lab_destructive_execution_allowed": lab_destructive_execution_allowed(cfg),
+                "scan_approval_flags_absent": scan_approval_flags is None,
+                "positive_key_present": bool(
+                    scan_approval_flags is not None
+                    and bool(scan_approval_flags.get(key, False))
+                ),
+            },
+        )
     logger.info(
         "policy_decision",
         extra={
             "tool": tool_name,
             "allowed": decision.allowed,
             "reason": decision.reason,
+            "requires_approval": bool(needs_approval),
             "approval_required": is_destructive,
+            "argus_active_injection_mode": getattr(
+                cfg, "argus_active_injection_mode", "standard"
+            ),
+            "argus_kill_switch_required": bool(cfg.argus_kill_switch_required),
+            "argus_oast_enabled": bool(getattr(cfg, "argus_oast_enabled", False)),
         },
     )
     return decision

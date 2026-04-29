@@ -160,7 +160,8 @@ async def test_collect_async_full_no_minio() -> None:
         title="Test Finding",
         description="Description that passes quality filter validation",
         cwe="79",
-        cvss=5.0,
+        cvss=7.5,
+        evidence_refs=["scanner:evidence-row-1"],
         created_at=now,
     )
 
@@ -246,7 +247,7 @@ async def test_resolve_scan_id_from_finding() -> None:
     res = MagicMock()
     res.first = MagicMock(return_value=("sc-from-finding",))
     session.execute = AsyncMock(return_value=res)
-    sid = await resolve_scan_id_for_report(session, "r1", report, None)
+    sid = await resolve_scan_id_for_report(session, "t1", "r1", report, None)
     assert sid == "sc-from-finding"
 
 
@@ -480,7 +481,7 @@ async def test_resolve_scan_id_whitespace_hint() -> None:
     report = SimpleNamespace(scan_id=None, tenant_id="t1")
     session = MagicMock()
     session.execute = AsyncMock(return_value=MagicMock(first=lambda: None))
-    sid = await resolve_scan_id_for_report(session, "r1", report, "   ")
+    sid = await resolve_scan_id_for_report(session, "t1", "r1", report, "   ")
     assert sid is None
 
 

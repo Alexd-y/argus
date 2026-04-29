@@ -3,20 +3,63 @@
 {% if cov %}
 <section class="valhalla-coverage panel" id="data-coverage">
     <h3>Data Completeness and Coverage</h3>
+    {% if report_quality is defined and report_quality %}
+        <div class="coverage-quality-gate">
+            <p><strong>Report mode:</strong> {{ report_quality.report_mode_label | e }}</p>
+            <ul class="coverage-flags">
+                <li><strong>Scan type:</strong> {{ report_quality.scan_type | e }}</li>
+                <li><strong>Authenticated:</strong> {% if report_quality.authenticated %}yes{% else %}no{% endif %}</li>
+                <li><strong>Coverage:</strong> {{ report_quality.coverage_label | e }}</li>
+                <li><strong>Tool health:</strong> {{ report_quality.tool_health | e }}</li>
+                <li><strong>Evidence confidence:</strong> {{ report_quality.evidence_confidence | e }}</li>
+            </ul>
+            {% if report_quality.warnings %}
+                <div class="report-warning">
+                    <strong>Report limitations:</strong>
+                    <ul>
+                        {% for warning in report_quality.warnings %}
+                        <li>{{ warning | e }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
     {% if cov.phases_executed %}
         <p><strong>Phases with output data:</strong> {{ cov.phases_executed | join(", ") | e }}</p>
     {% else %}
         <p class="meta">Phases with output data: no phase_outputs records in report context.</p>
     {% endif %}
     {% if cov.feature_flags %}
-        <p><strong>Feature flags (as in environment):</strong></p>
+        <p><strong>Scan options (high level):</strong></p>
         <ul class="coverage-flags">
             {% for fk, fv in cov.feature_flags.items() %}
-            <li><code>{{ fk | e }}</code> = {% if fv %}true{% else %}false{% endif %}</li>
+            <li>
+                {% if fk == "INCLUDE_MINIO" %}
+                    Raw artifact bodies fetched: {% if fv %}yes{% else %}no{% endif %}
+                {% elif fk == "HARVESTER_ENABLED" %}
+                    Email OSINT (theHarvester): {% if fv %}enabled{% else %}off{% endif %}
+                {% elif fk == "TRIVY_ENABLED" %}
+                    SCA (Trivy): {% if fv %}enabled{% else %}off{% endif %}
+                {% else %}
+                    <code>{{ fk | e }}</code>: {% if fv %}on{% else %}off{% endif %}
+                {% endif %}
+            </li>
             {% endfor %}
         </ul>
     {% endif %}
     {% if cov.sections %}
+        {% set status_labels = {
+            "completed": "completed",
+            "completed_with_fallback": "completed with fallback",
+            "partial": "partial",
+            "parsed_from_fallback": "parsed from fallback",
+            "no_observed_items_after_parsing": "no observed items after parsing",
+            "parser_error": "parser error",
+            "not_assessed": "not assessed",
+            "not_executed": "not executed",
+            "no_data": "no data"
+        } %}
         <table class="valhalla-coverage-sections">
             <thead>
                 <tr><th>Section</th><th>Status</th><th>Reason / Comment</th></tr>
@@ -25,22 +68,37 @@
                 {% for sk, sv in cov.sections.items() %}
                 <tr>
                     <td><code>{{ sk | e }}</code></td>
-                    <td>{{ sv.status | e }}</td>
+                    <td>{{ status_labels.get(sv.status, sv.status) | e }}</td>
                     <td class="desc">{{ sv.reason | default("") | e }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% endif %}
-    {% if cov.tool_errors_summary %}
-        <h4>Failed Tool Run Summary</h4>
-        <ul>
-            {% for row in cov.tool_errors_summary %}
-            <li><code>{{ row.tool | e }}</code> — {{ row.status | e }}{% if row.note %} <span class="meta">({{ row.note | e }})</span>{% endif %}</li>
-            {% endfor %}
-        </ul>
+    {% if valhalla_context is defined and valhalla_context.tool_health_summary %}
+        <h4>Tool health summary (capabilities)</h4>
+        <table class="valhalla-tool-health-table">
+            <thead>
+                <tr>
+                    <th>Capability</th>
+                    <th>Tools (representative)</th>
+                    <th>State</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in valhalla_context.tool_health_summary %}
+                <tr>
+                    <td>{{ row.capability | e }}</td>
+                    <td class="desc">{{ row.tools | e }}</td>
+                    <td>{{ row.state_label | e }}</td>
+                    <td class="desc">{{ row.summary | e }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     {% else %}
-        <p class="meta"><small>No records of tools completing with errors in tool_errors_summary.</small></p>
+        <p class="meta"><small>Tool health summary was not generated for this export.</small></p>
     {% endif %}
 </section>
 {% endif %}

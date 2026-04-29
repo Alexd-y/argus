@@ -1,0 +1,23 @@
+family_id: xxe_oast_safe
+description: >-
+  Non-fetching XML fragment markers for XXE curriculum (no external entity resolution).
+cwe_ids: [611]
+owasp_top10:
+  - 'A05:2021'
+risk_level: low
+requires_approval: false
+oast_required: true
+payloads:
+  - id: inert_element
+    template: "<argus-xxe-safe data-curriculum=\"1\"/>"
+    confidence: suspected
+    notes: Inert element; parser policy must reject external expansion.
+  - id: text_marker
+    template: "ARGUS_XXE_OAST_SAFE_TEXT"
+    confidence: suspected
+    notes: Literal text only.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

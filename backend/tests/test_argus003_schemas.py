@@ -55,6 +55,28 @@ class TestScanCreateRequest:
         assert r.options.scanType == "deep"
         assert r.options.reportFormat == "html"
 
+    def test_lab_scan_mode_valid(self) -> None:
+        """Owned-lab scan mode is accepted by the API contract."""
+        r = ScanCreateRequest(
+            target="https://x.com",
+            email="u@x.com",
+            scan_mode="lab",
+            options=ScanOptions(
+                scanType="lab",
+                active_injection_mode="lab",
+                intentional_vulnerable_lab=True,
+                lab_profile="intentional_vulnerable_lab",
+                lab_allowed_targets=["https://x.com", "localhost", "127.0.0.1"],
+                argus_lab_allowed_targets="https://x.com,localhost,127.0.0.1",
+                scan_approval_flags={"sqlmap": True, "commix": True},
+            ),
+        )
+        assert r.scan_mode == "lab"
+        assert r.options.active_injection_mode == "lab"
+        assert r.options.lab_allowed_targets == ["https://x.com", "localhost", "127.0.0.1"]
+        assert r.options.argus_lab_allowed_targets == "https://x.com,localhost,127.0.0.1"
+        assert r.options.scan_approval_flags["sqlmap"] is True
+
     def test_missing_target_raises(self) -> None:
         """Missing target raises ValidationError."""
         with pytest.raises(ValidationError):

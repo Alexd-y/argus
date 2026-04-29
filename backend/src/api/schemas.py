@@ -49,6 +49,10 @@ class ScanOptionsVulnerabilities(BaseModel):
     ssrf: bool = False
     lfi: bool = False
     rce: bool = False
+    idor: bool = False
+    ssti: bool = False
+    xxe: bool = False
+    headers: bool = False
 
 
 class ScanOptionsKal(BaseModel):
@@ -78,6 +82,12 @@ class ScanOptions(BaseModel):
     scope: ScanOptionsScope = Field(default_factory=ScanOptionsScope)
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
     kal: ScanOptionsKal = Field(default_factory=ScanOptionsKal)
+    active_injection_mode: str | None = None
+    intentional_vulnerable_lab: bool = False
+    lab_profile: str | None = None
+    lab_allowed_targets: list[str] = Field(default_factory=list)
+    argus_lab_allowed_targets: str | None = None
+    scan_approval_flags: dict[str, bool] = Field(default_factory=dict)
 
 
 class ScanCreateRequest(BaseModel):
@@ -93,9 +103,9 @@ class ScanCreateRequest(BaseModel):
     )
     email: str
     options: ScanOptions = Field(default_factory=ScanOptions)
-    scan_mode: Literal["quick", "standard", "deep"] = Field(
+    scan_mode: Literal["quick", "standard", "deep", "lab"] = Field(
         default="standard",
-        description="Scan depth: quick (high-impact only), standard (OWASP Top 10), deep (exhaustive)",
+        description="Scan depth: quick, standard, deep, or lab (owned lab maximum profile)",
     )
     report_language: str = Field(
         default="en",
@@ -797,6 +807,8 @@ class ReportSummary(BaseModel):
 
 
 FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"]
+FindingValidationStatusLiteral = Literal["missing", "unverified", "partially_validated", "validated"]
+FindingEvidenceQualityLiteral = Literal["none", "weak", "moderate", "strong"]
 FindingEvidenceTypeLiteral = Literal[
     "observed",
     "tool_output",
@@ -814,9 +826,15 @@ class Finding(BaseModel):
     description: str
     cwe: str | None = None
     cvss: float | None = None
+    cvss_score: float | None = Field(default=None, ge=0.0, le=10.0)
+    cvss_vector: str | None = Field(default=None, max_length=256)
+    exploit_demonstrated: bool = False
+    exploit_summary: str | None = Field(default=None, max_length=8000)
     owasp_category: OwaspTop102025CategoryId | None = None
     proof_of_concept: dict[str, Any] | None = None
     confidence: FindingConfidenceLiteral = "likely"
+    validation_status: FindingValidationStatusLiteral = "unverified"
+    evidence_quality: FindingEvidenceQualityLiteral = "none"
     evidence_type: FindingEvidenceTypeLiteral | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
@@ -842,9 +860,15 @@ class FindingDetailResponse(BaseModel):
     description: str
     cwe: str | None = None
     cvss: float | None = None
+    cvss_score: float | None = Field(default=None, ge=0.0, le=10.0)
+    cvss_vector: str | None = Field(default=None, max_length=256)
+    exploit_demonstrated: bool = False
+    exploit_summary: str | None = Field(default=None, max_length=8000)
     owasp_category: OwaspTop102025CategoryId | None = None
     proof_of_concept: dict[str, Any] | None = None
     confidence: FindingConfidenceLiteral = "likely"
+    validation_status: FindingValidationStatusLiteral = "unverified"
+    evidence_quality: FindingEvidenceQualityLiteral = "none"
     evidence_type: FindingEvidenceTypeLiteral | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
@@ -1185,7 +1209,7 @@ class ErrorResponse(BaseModel):
 
     error: str
     code: str | None = None
-    details: dict[str, Any] | None = None
+    details: Any | None = None
 
 
 # --- Auth ---

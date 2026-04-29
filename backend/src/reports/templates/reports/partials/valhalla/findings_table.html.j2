@@ -34,27 +34,28 @@
                     <td class="desc">{{ (row.description or "") | e }}</td>
                     <td>{{ (row.cwe or "—") | e }}</td>
                     <td class="owasp-finding-cell">
-                        {% if row.owasp_category %}
-                            <span class="owasp-finding-id"><code>{{ row.owasp_category | e }}</code></span>
+                        {% set ow_disp = row.owasp_top10_2021 or row.owasp_display_code or row.owasp_category %}
+                        {% if ow_disp %}
+                            <span class="owasp-finding-id"><code>{{ ow_disp | e }}</code></span>
                             {% if row.owasp_title %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ row.owasp_title | e }}</span>
-                            {% elif labels.get(row.owasp_category) %}
+                            {% elif row.owasp_category and labels.get(row.owasp_category) %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
                             {% endif %}
                         {% else %}
-                            Not found
+                            Not mapped
                         {% endif %}
                     </td>
-                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}Not found{% endif %}</td>
+                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</td>
                     <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) %}
+                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
                     {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
@@ -98,9 +99,19 @@
                                     <p><strong>Response (excerpt)</strong></p>
                                     <pre class="finding-poc-block"><code>{{ poc.response | e }}</code></pre>
                                 {% endif %}
+                                {% if row.verification_commands is defined and row.verification_commands %}
+                                    <p><strong>Verification (evidence collection)</strong></p>
+                                    {% for vcmd in row.verification_commands %}
+                                    <pre class="finding-poc-block"><code>{{ (vcmd.tool ~ ": " ~ vcmd.command) | e }}</code></pre>
+                                    {% endfor %}
+                                {% endif %}
+                                {% if row.remediation_text is defined and row.remediation_text %}
+                                    <p><strong>Remediation (summary)</strong></p>
+                                    <p class="desc">{{ row.remediation_text | e }}</p>
+                                {% endif %}
                             </section>
                             {% else %}
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                             {% endif %}
                         </td>
                     </tr>
@@ -117,7 +128,7 @@
             {% endfor %}
             {% if not primary.any %}
                 <tr>
-                    <td colspan="{{ col_count }}" class="empty">No data</td>
+                    <td colspan="{{ col_count }}" class="empty">No primary findings are listed in this report context.</td>
                 </tr>
             {% endif %}
         </tbody>
@@ -155,27 +166,28 @@
                     <td class="desc">{{ (row.description or "") | e }}</td>
                     <td>{{ (row.cwe or "—") | e }}</td>
                     <td class="owasp-finding-cell">
-                        {% if row.owasp_category %}
-                            <span class="owasp-finding-id"><code>{{ row.owasp_category | e }}</code></span>
+                        {% set ow_disp = row.owasp_top10_2021 or row.owasp_display_code or row.owasp_category %}
+                        {% if ow_disp %}
+                            <span class="owasp-finding-id"><code>{{ ow_disp | e }}</code></span>
                             {% if row.owasp_title %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ row.owasp_title | e }}</span>
-                            {% elif labels.get(row.owasp_category) %}
+                            {% elif row.owasp_category and labels.get(row.owasp_category) %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
                             {% endif %}
                         {% else %}
-                            Not found
+                            Not mapped
                         {% endif %}
                     </td>
-                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}Not found{% endif %}</td>
+                    <td>{% if row.cve %}{{ row.cve | e }}{% else %}No CVE identifier provided{% endif %}</td>
                     <td>{% if row.cvss is not none %}{{ row.cvss | e }}{% else %}—{% endif %}</td>
                 </tr>
-                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) %}
+                {% if row.proof_of_concept or (row.http_evidence is defined and row.http_evidence) or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set poc = row.proof_of_concept or {} %}
                     {% set has_xss_detail = row.xss_poc_detail is defined and row.xss_poc_detail %}
                     {% set has_http_evidence = row.http_evidence is defined and row.http_evidence %}
-                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence %}
+                    {% set has_detail = poc.curl_command or poc.javascript_code or poc.request or poc.response or poc.payload or poc.response_snippet or row.poc_screenshot_url or has_xss_detail or has_http_evidence or (row.verification_commands is defined and row.verification_commands) or (row.remediation_text is defined and row.remediation_text) %}
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     <tr class="poc-row">
                         <td colspan="{{ col_count }}">
@@ -193,9 +205,19 @@
                                 {% if poc.curl_command and not (row.http_evidence is defined and row.http_evidence) %}
                                     <pre class="finding-poc-block"><code>{{ poc.curl_command | e }}</code></pre>
                                 {% endif %}
+                                {% if row.verification_commands is defined and row.verification_commands %}
+                                    <p><strong>Verification (evidence collection)</strong></p>
+                                    {% for vcmd in row.verification_commands %}
+                                    <pre class="finding-poc-block"><code>{{ (vcmd.tool ~ ": " ~ vcmd.command) | e }}</code></pre>
+                                    {% endfor %}
+                                {% endif %}
+                                {% if row.remediation_text is defined and row.remediation_text %}
+                                    <p><strong>Remediation (summary)</strong></p>
+                                    <p class="desc">{{ row.remediation_text | e }}</p>
+                                {% endif %}
                             </section>
                             {% else %}
-                            <p class="finding-poc-empty">No data</p>
+                            <p class="finding-poc-empty">No proof-of-concept details were attached for this finding.</p>
                             {% endif %}
                         </td>
                     </tr>

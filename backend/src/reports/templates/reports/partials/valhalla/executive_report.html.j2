@@ -241,7 +241,7 @@
     <p class="empty">No assets ranked.</p>
     {% endif %}
 
-    <h3>OWASP Top-10 (2025) Rollup Matrix</h3>
+    <h3>OWASP Top-10 Rollup Matrix</h3>
     {% set rollup = _ver.owasp_rollup_matrix or [] %}
     {% if rollup %}
     <table>
@@ -259,8 +259,9 @@
         </thead>
         <tbody>
         {% for row in rollup %}
+            {% set row_category_display = "A05:2021" if valhalla_owasp_2021_labels is defined and valhalla_owasp_2021_labels and row.category_id == "A02" else row.category_id %}
             <tr>
-                <td>{{ row.category_id }}</td>
+                <td>{{ row_category_display }}</td>
                 <td>{{ row.title }}</td>
                 <td class="center">{{ row.critical }}</td>
                 <td class="center">{{ row.high }}</td>
@@ -324,7 +325,8 @@
                         <span class="empty">—</span>
                     {% endif %}
                 </td>
-                <td>{{ f.owasp_category }}</td>
+                {% set f_owasp_display = "A05:2021" if valhalla_owasp_2021_labels is defined and valhalla_owasp_2021_labels and f.owasp_category == "A02" else f.owasp_category %}
+                <td>{{ f_owasp_display }}</td>
                 <td>{{ f.cwe or "—" }}</td>
                 <td class="num">{% if f.cvss is not none %}{{ "%.1f"|format(f.cvss) }}{% else %}—{% endif %}</td>
                 <td class="num"><strong>{{ "%.2f"|format(f.composite_score) }}</strong></td>
@@ -377,7 +379,8 @@
                         <span class="empty">—</span>
                     {% endif %}
                 </td>
-                <td>{{ k.owasp_category }}</td>
+                {% set k_owasp_display = "A05:2021" if valhalla_owasp_2021_labels is defined and valhalla_owasp_2021_labels and k.owasp_category == "A02" else k.owasp_category %}
+                <td>{{ k_owasp_display }}</td>
                 <td>{{ k.cwe or "—" }}</td>
                 <td class="num">{% if k.cvss is not none %}{{ "%.1f"|format(k.cvss) }}{% else %}—{% endif %}</td>
                 <td class="num epss-pct">

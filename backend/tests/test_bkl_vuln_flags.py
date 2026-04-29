@@ -148,3 +148,8 @@ class TestPlanToolsByScanModeVulnOverrides:
         assert len(steps) > 0
         for s in steps:
             assert s.url == "http://example.com/?q=1"
+
+    def test_lab_mode_uses_deep_tool_set(self) -> None:
+        lab_steps = plan_tools_by_scan_mode("lab", target_url="http://example.com/?q=1")
+        deep_steps = plan_tools_by_scan_mode("deep", target_url="http://example.com/?q=1")
+        assert {s.tool_id for s in lab_steps} == {s.tool_id for s in deep_steps}

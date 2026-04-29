@@ -29,13 +29,15 @@ _VALHALLA_TIMELINE_LIMIT = 32
 _VALHALLA_SNIPPET_CHARS = 800
 
 
-def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[str, Any]:
+def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[str, Any]:
     """
-    Aligns with ``ReportGenerator.prepare_template_context`` shape for HTML-only export paths
-    (e.g. API regenerate) without a second DB collect pass.
+    **Tests / offline / assembly base only** — approximates ``prepare_template_context`` shape
+    without ``ReportDataCollector`` or MinIO listing (see RPT-001). Do not use for production
+    on-demand PDF/HTML export; use ``build_report_export_payload`` + pipeline context instead.
     """
     from src.reports import generators as gen
     from src.reports.valhalla_report_context import (
+        PortExposureSummaryModel,
         ValhallaReportContext,
         build_valhalla_minimal_context_patch,
     )
@@ -109,6 +111,11 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         )
         for f in data.findings
     ]
+    if tier_norm == "valhalla":
+        for row in finding_dicts:
+            if row.get("owasp_category") == "A02":
+                row["owasp_display_code"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
+                row["owasp_top10_2021"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
 
     valhalla_ctx: dict[str, Any] | None = None
     if tier_norm == "valhalla":
@@ -135,6 +142,15 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
                 tool_run_summaries=None,
             )
         )
+        valhalla_ctx.setdefault("evidence_inventory", [])
+        valhalla_ctx.setdefault("tool_health_summary", [])
+        valhalla_ctx.setdefault("full_valhalla", False)
+        valhalla_ctx.setdefault("ssl_tls_table_rows", [])
+        valhalla_ctx.setdefault("security_headers_table_rows", [])
+        valhalla_ctx.setdefault("port_exposure_table_rows", [])
+        valhalla_ctx.setdefault("leaked_email_rows", [])
+        if not valhalla_ctx.get("port_exposure"):
+            valhalla_ctx["port_exposure"] = PortExposureSummaryModel().model_dump(mode="json")
 
     out: dict[str, Any] = {
         "embed_poc_screenshot_inline": settings.report_poc_embed_screenshot_inline,
@@ -152,7 +168,11 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         "phase_inputs_count": 0,
         "phase_outputs_count": len(data.phase_outputs),
         "findings": finding_dicts,
-        "owasp_compliance_rows": gen.build_owasp_compliance_rows(finding_dicts),
+        "owasp_compliance_rows": gen.build_owasp_compliance_rows(
+            finding_dicts,
+            use_valhalla_owasp_2021_misconfig_labels=tier_norm == "valhalla",
+        ),
+        "valhalla_owasp_2021_labels": tier_norm == "valhalla",
         "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
         "recon_summary": recon_summary,
         "exploitation": exploitation,
@@ -184,6 +204,10 @@ def minimal_jinja_context_from_report_data(data: ReportData, tier: str) -> dict[
         out["valhalla_appendix_timeline_rows"] = tl_rows
         out["hibp_pwned_password_summary"] = data.hibp_pwned_password_summary
     return out
+
+
+# Backward-compatible alias for unit tests and legacy call sites.
+minimal_jinja_context_from_report_data = offline_minimal_jinja_context_from_report_data
 
 
 _PHASE_LABELS: dict[str, str] = {

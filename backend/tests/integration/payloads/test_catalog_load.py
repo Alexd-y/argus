@@ -52,6 +52,23 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "idor",
         "mass_assignment",
         "race_condition",
+        # Phase 2 — signed safe curriculum families (P2-005)
+        "xss_contextual",
+        "sqli_safe",
+        "nosqli_safe",
+        "ldapi_safe",
+        "xpathi_safe",
+        "ssti_safe",
+        "ssrf_oast_safe",
+        "xxe_oast_safe",
+        "command_injection_safe",
+        "crlf_safe",
+        "traversal_safe",
+        "prototype_pollution_safe",
+        "graphql_safe",
+        "jwt_safe",
+        "mass_assignment_safe",
+        "open_redirect_safe",
     }
 )
 

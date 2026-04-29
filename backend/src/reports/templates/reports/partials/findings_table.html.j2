@@ -1,5 +1,6 @@
 {% set tier_low = (tier or "midgard") | lower %}
 {% set show_owasp_block = tier_low in ["asgard", "valhalla"] %}
+{% set findings_colspan = 9 if show_owasp_block else 8 %}
 {% set labels = owasp_top10_labels if owasp_top10_labels is defined else {} %}
 <section class="findings" id="findings">
     <h2>Findings</h2>
@@ -17,6 +18,9 @@
                 <th>OWASP Category</th>
                 {% endif %}
                 <th>CVSS</th>
+                <th>Evidence Quality</th>
+                <th>Validation Status</th>
+                <th>Confidence</th>
             </tr>
         </thead>
         <tbody>
@@ -28,8 +32,8 @@
                     <td>{{ row.cwe or "—" }}</td>
                     {% if show_owasp_block %}
                     <td class="owasp-finding-cell">
-                        {% if row.owasp_category %}
-                            <span class="owasp-finding-id"><code>{{ row.owasp_category }}</code></span>
+                        {% if row.owasp_display_code or row.owasp_category %}
+                            <span class="owasp-finding-id"><code>{{ row.owasp_display_code or row.owasp_category }}</code></span>
                             {% if row.owasp_title %}
                             <span class="owasp-finding-sep"> — </span>
                             <span class="owasp-finding-label">{{ row.owasp_title }}</span>
@@ -43,6 +47,9 @@
                     </td>
                     {% endif %}
                     <td>{% if row.cvss is not none %}{{ row.cvss }}{% else %}—{% endif %}</td>
+                    <td>{{ row.evidence_quality or "none" }}</td>
+                    <td>{{ row.validation_status or "unverified" }}</td>
+                    <td>{{ row.confidence or "likely" }}</td>
                 </tr>
                 {% if row.proof_of_concept %}
                     {% set poc = row.proof_of_concept %}
@@ -50,7 +57,7 @@
                     {% set param_label = row.parameter or row.param or poc.parameter %}
                     {% if tier_low in ["asgard", "valhalla"] %}
                         <tr class="poc-row">
-                            <td colspan="{{ 6 if show_owasp_block else 5 }}">
+                            <td colspan="{{ findings_colspan }}">
                                 {% if has_detail %}
                                 <section class="finding-poc">
                                     <h3 class="finding-poc-title">Proof of concept</h3>
@@ -97,7 +104,7 @@
                         </tr>
                     {% elif tier_low == "midgard" %}
                         <tr class="poc-row poc-tier-midgard">
-                            <td colspan="{{ 6 if show_owasp_block else 5 }}">
+                            <td colspan="{{ findings_colspan }}">
                                 <p class="poc-tier-note">PoC details are available in Asgard / Valhalla reports.</p>
                             </td>
                         </tr>
@@ -105,7 +112,7 @@
                 {% endif %}
             {% else %}
                 <tr>
-                    <td colspan="{{ 6 if show_owasp_block else 5 }}" class="empty">No findings in this report.</td>
+                    <td colspan="{{ findings_colspan }}" class="empty">No findings in this report.</td>
                 </tr>
             {% endfor %}
         </tbody>

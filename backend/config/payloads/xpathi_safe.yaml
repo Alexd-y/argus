@@ -1,0 +1,23 @@
+family_id: xpathi_safe
+description: >-
+  XPath-safe training tokens (no axes/functions; documentation probes).
+cwe_ids: [643]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: token_a
+    template: "ARGUS_XPATH_SAFE_TOKEN_A"
+    confidence: suspected
+    notes: Plain literal token.
+  - id: token_b
+    template: "ARGUS_XPATH_SAFE_TOKEN_B"
+    confidence: suspected
+    notes: Companion token for pairing checks.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

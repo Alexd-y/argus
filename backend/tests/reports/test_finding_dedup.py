@@ -202,6 +202,24 @@ def test_deduplicate_mixed_dict_and_object_hard_duplicate_keeps_richer() -> None
     assert out[0] is obj_finding
 
 
+def test_val002_merge_header_gap_titles_same_url() -> None:
+    a = {
+        "title": "Missing Security HTTP Response Headers",
+        "cwe": "CWE-693",
+        "affected_url": "https://app.example.com/",
+        "description": "CSP missing.",
+    }
+    b = {
+        "title": "Security HTTP response headers missing or incomplete",
+        "cwe": "CWE-693",
+        "affected_url": "https://app.example.com",
+        "description": "HSTS not enforced.",
+    }
+    out = deduplicate_findings([a, b])
+    assert len(out) == 1
+    assert "Missing or incomplete HTTP security response headers" in (out[0].get("title") or "")
+
+
 def test_multiple_duplicates_chain_collapses_to_single_finding() -> None:
     base = {
         "title": "t",

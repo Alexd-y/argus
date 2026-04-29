@@ -7,8 +7,6 @@ import io
 import json
 from unittest.mock import patch
 
-import pytest
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.data_collector import (
     FindingRow,
@@ -226,23 +224,16 @@ def test_valhalla_html_production_jinja_major_sections(_mock_llm: object) -> Non
         ('id="findings"', "Findings"),
         ('id="exploitation"', "Exploit Chain"),
         ('id="remediation-priority"', "Recommendations and Prioritization"),
-        ('id="zero-day-potential"', "Zero-Day Potential"),
+        ('id="zero-day-potential"', "Novel Vulnerability Indication"),
         ('id="conclusion"', "Conclusion"),
-        ('id="appendices"', "Appendices"),
+        ('id="evidence-inventory"', "Evidence Inventory"),
     ]
     for marker, heading in section_checks:
         assert marker in html, f"missing marker {marker}"
         assert heading in html, f"missing heading {heading}"
 
-    for appendix_heading in (
-        "Appendix A. Tools and Versions Used",
-        "Appendix B. Phase Configuration and Input Excerpts",
-        "Appendix C. ARGUS Event Log / Timeline Excerpts",
-        "Appendix D. Nmap / Network Scan Excerpt",
-        "Appendix E. APT Indicators (if detected)",
-        "Appendix F. Password Leak Verification Results (hashed, HIBP)",
-    ):
-        assert appendix_heading in html
+    # VH-001 / VH-009 — customer appendices: evidence inventory (§16); no raw phase JSON in body.
+    assert "Evidence Inventory" in html
 
     assert 'class="valhalla-tech-structured"' in html
     assert "Technology Stack and Components" in html
@@ -315,6 +306,11 @@ def test_valhalla_json_and_payload_valhalla_report_key() -> None:
     assert parsed["valhalla_report"]["exploit_chains_text"] == direct["exploit_chains_text"]
     assert direct.get("hibp_pwned_password_summary") is None
     assert parsed["valhalla_report"].get("hibp_pwned_password_summary") is None
+    assert "full_valhalla" in direct and isinstance(direct["full_valhalla"], bool)
+    assert "ssl_tls_table_rows" in direct and "security_headers_table_rows" in direct
+    assert "evidence_inventory" in direct and "tool_health_summary" in direct
+    tm = direct["threat_modeling_ref"].get("threat_model")
+    assert isinstance(tm, dict) and "tenant_id" not in tm and "scan_id" not in tm
 
 
 def test_valhalla_sections_csv_non_empty_rows() -> None:

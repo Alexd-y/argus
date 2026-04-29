@@ -1,5 +1,6 @@
 {# Objectives, scope, and methodology #}
 {% set opts = scan.options if scan and scan.options is mapping else {} %}
+{% set vcm = valhalla_context if valhalla_context is defined else none %}
 {% set target = recon_summary.target_url or (report.target if report else "") or (scan.target_url if scan else "") or "" %}
 {% set obj = opts.get("object_text") or opts.get("scope_object") %}
 {% set goal = opts.get("goal_text") or opts.get("pentest_goal") %}
@@ -8,8 +9,8 @@
 
 <section class="valhalla-objectives panel" id="objectives">
     <h2>Subject, Goals and Objectives</h2>
-    <p><strong>Subject:</strong> {% if obj %}{{ obj }}{% else %}Public web resource {{ target or "No data" }} and related components (if applicable).{% endif %}</p>
-    <p><strong>Goal:</strong> {% if goal %}{{ goal }}{% else %}Assess the security level of the web resource {{ target or "No data" }} against an external attacker (model based on scan parameters).{% endif %}</p>
+    <p><strong>Subject:</strong> {% if obj %}{{ obj }}{% else %}Public web resource {{ target or "target not specified" }} and related components (if applicable).{% endif %}</p>
+    <p><strong>Goal:</strong> {% if goal %}{{ goal }}{% else %}Assess evidence-backed security signals for the web resource {{ target or "target not specified" }} from an external perspective.{% endif %}</p>
     <p><strong>Objectives:</strong></p>
     <ul>
         {% if opts.get("tasks") and opts.get("tasks") is iterable and opts.get("tasks") is not string %}
@@ -18,7 +19,7 @@
             {% endfor %}
         {% else %}
             <li>Identify vulnerabilities in the web application and adjacent infrastructure.</li>
-            <li>Assess the possibility of unauthorized access to data and user accounts.</li>
+            <li>Assess authentication, authorization, and exposure signals within the tested scope.</li>
             <li>Provide recommendations for improving the security posture.</li>
         {% endif %}
     </ul>
@@ -31,7 +32,7 @@
         <div class="ai-slot-body">{{ scope_in }}</div>
     {% else %}
         <ul>
-            <li>Domains, subdomains, and IPs agreed upon for scanning: {{ target or "No data" }}.</li>
+            <li>Domains, subdomains, and IPs agreed upon for scanning: {{ target or "target not specified" }}.</li>
             <li>External perimeter and agreed entry points (URLs, forms, APIs if applicable).</li>
             <li>Non-destructive testing without DoS and without actions outside the agreed scope.</li>
         </ul>
@@ -74,7 +75,7 @@
         <li>Reconnaissance (OSINT, information gathering)</li>
         <li>Automated scanning</li>
         <li>Manual verification (PoC)</li>
-        <li>Password leak analysis (hashed), if policy enabled</li>
+        <li>Credential exposure analysis (hashed), if policy enabled</li>
         <li>Impact assessment and recommendations</li>
     </ul>
 
@@ -85,10 +86,16 @@
         {% elif tool_runs %}
             Per tool_runs log: {% for tr in tool_runs %}<code>{{ tr.tool_name | e }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
         {% else %}
-            No data
+            Tool execution metadata was not included in this export.
         {% endif %}
     </p>
 
     {% include "partials/valhalla/wstg_coverage_table.html.j2" %}
+    {% if vcm and vcm.wstg_execution_degraded %}
+    <p class="report-warning"><strong>Methodology limitation:</strong> WSTG-aligned automated coverage is below 70% or is otherwise incomplete. This engagement is labeled <em>{{ vcm.valhalla_engagement_title | e }}</em> and is <strong>not</strong> equivalent to a full manual OWASP WSTG review.</p>
+    {% endif %}
+    {% if vcm and vcm.wstg_coverage_zero_executed %}
+    <p class="report-warning">WSTG coverage is 0% against the mapped 96 test cases in this run; unexecuted areas must be read as <strong>not assessed</strong>.</p>
+    {% endif %}
     {% include "partials/valhalla/nist_limitations.html.j2" %}
 </section>

@@ -2,23 +2,24 @@
 {% set vc = valhalla_context %}
 <section class="valhalla-threat panel" id="threat-modeling">
     <h2>Threat Modeling and Attack Scenarios</h2>
-    <p>Based on identified vulnerabilities, probable attacker scenarios have been modeled.</p>
+    <p>Scenario text is limited to validated findings and documented coverage constraints.</p>
     <h3>Scenarios (AI)</h3>
     <div class="ai-slot-body">
         {% set atk = ai_sections.get("attack_scenarios") if ai_sections is defined else "" %}
         {% if atk and atk.strip() %}
             {{ atk | md | safe }}
         {% else %}
-            <p class="empty">No data</p>
+            <p>No validated attack scenario was demonstrated beyond the findings table.</p>
         {% endif %}
     </div>
-    <h3>Threat Model Excerpt (scan context)</h3>
+    <h3>Threat model excerpt (scan context, non-authoritative)</h3>
+    <p class="meta"><small>Structured phase output summarized as labeled bullets — not a raw API/JSON dump. Hypothetical assets and model paths are <strong>not</strong> field-validated unless tied to a finding id in the table.</small></p>
     {% if vc.threat_model_excerpt %}
-        <pre class="ai-slot-body">{{ vc.threat_model_excerpt | e }}</pre>
+        <div class="ai-slot-body threat-model-text" style="white-space:pre-wrap;">{{ vc.threat_model_excerpt | e }}</div>
     {% elif vc.threat_model and vc.threat_model.excerpt %}
-        <pre class="ai-slot-body">{{ vc.threat_model.excerpt | e }}</pre>
+        <div class="ai-slot-body threat-model-text" style="white-space:pre-wrap;">{{ vc.threat_model.excerpt | e }}</div>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No threat-model excerpt was generated for this report context.</p>
     {% endif %}
 </section>
 

@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from src.findings.cvss import parse_cvss_vector
+
 FindingConfidence = Literal["confirmed", "likely", "possible", "advisory"]
 FindingEvidenceType = Literal[
     "observed",
@@ -115,7 +117,25 @@ def estimate_cvss_vector(
 
     vector_string, base_score, severity = entry
     if ctx:
-        vector_string = _apply_context_adjustments(vector_string, ctx)
+        adjusted = _apply_context_adjustments(vector_string, ctx)
+        if adjusted != vector_string:
+            try:
+                parsed = parse_cvss_vector(adjusted)
+            except ValueError as exc:
+                logger.warning(
+                    "cvss_context_adjustment_parse_failed",
+                    extra={
+                        "cwe_id": f"CWE-{normalized}",
+                        "vector": adjusted,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                vector_string = adjusted
+                base_score = parsed.base
+                severity = parsed.severity.lower()
+        else:
+            vector_string = adjusted
 
     cwe_label = f"CWE-{normalized}"
 
@@ -284,6 +304,5 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
             cv = estimate_cvss_vector(cwe, context=ctx)
             if cv:
                 f["cvss_vector"] = cv.vector_string
-                f["cvss_base_score"] = cv.base_score
                 if f.get("cvss_score") is None:
                     f["cvss_score"] = cv.base_score

@@ -343,7 +343,7 @@ async def run_recon_url_history_bundle(
                 continue
             if isinstance(block, dict):
                 st = block.get("stdout")
-                if isinstance(st, str) and st.strip():
+                if isinstance(st, str) and len(st) > 0:
                     try:
                         await asyncio.to_thread(raw_sink.upload_text, f"url_history_{tool_key}_stdout", st)
                     except Exception:

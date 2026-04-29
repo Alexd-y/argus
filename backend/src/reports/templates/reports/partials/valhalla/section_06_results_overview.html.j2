@@ -11,6 +11,7 @@
     <h2>Results Overview and Risk Matrix</h2>
 
     {% include "partials/valhalla/section_data_coverage.html.j2" %}
+    {% include "partials/valhalla/active_injection_coverage.html.j2" %}
 
     <h3>robots.txt and sitemap.xml Analysis</h3>
     {{ section_envelope(vc, "robots_sitemap_analysis") }}
@@ -20,11 +21,11 @@
     {% if vc.robots_sitemap_merged and (vc.robots_sitemap_merged.notes or vc.robots_sitemap_merged.notes_ru) %}
         <p class="meta"><small>{{ (vc.robots_sitemap_merged.notes or vc.robots_sitemap_merged.notes_ru) | e }}</small></p>
     {% endif %}
-    <p><strong>robots.txt:</strong> {% if robots.found %}Found{% else %}Not found{% endif %}</p>
+    <p><strong>robots.txt:</strong> {% if robots.found %}Found{% else %}Not retrieved in parsed context{% endif %}</p>
     {% if robots.disallowed_paths_sample %}
         <p>Contains paths (sample): {{ robots.disallowed_paths_sample | join(", ") | e }}</p>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No robots.txt allow/disallow entries were parsed.</p>
     {% endif %}
     {% if robots.sitemap_hints %}
         <p>Sitemap references: {{ robots.sitemap_hints | join(", ") | e }}</p>
@@ -36,12 +37,12 @@
         <p class="meta"><small>Summary (robots_sitemap_analysis.merged): robots={{ rsa.merged.robots_found | default(false) }}, sitemap={{ rsa.merged.sitemap_found | default(false) }}, security.txt={{ rsa.merged.security_txt_reachable | default(false) }}, URLs in sitemap: {{ rsa.merged.sitemap_url_count | default(0) }}</small></p>
     {% endif %}
 
-    <p><strong>sitemap.xml:</strong> {% if sm.found %}Found{% else %}Not found{% endif %}{% if sm.index_found %} (including index){% endif %}</p>
+    <p><strong>sitemap.xml:</strong> {% if sm.found %}Found{% else %}Not retrieved in parsed context{% endif %}{% if sm.index_found %} (including index){% endif %}</p>
     <p><strong>URL count:</strong> {{ sm.url_count if sm.url_count is not none else 0 }}</p>
     {% if sm.sample_urls %}
         <p><strong>Examples:</strong> {{ sm.sample_urls | join(", ") | e }}</p>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No sitemap URL examples were parsed.</p>
     {% endif %}
 
     <h3>Sample Vulnerability Summary (first finding, if available)</h3>
@@ -50,16 +51,17 @@
         <table>
             <tbody>
                 <tr><th scope="row">Identifier / Title</th><td>{{ f0.id | e }} — {{ f0.title | e }}</td></tr>
-                <tr><th scope="row">Description</th><td class="desc">{{ f0.description or "No data" }}</td></tr>
+                <tr><th scope="row">Description</th><td class="desc">{{ f0.description or "Description was not provided." }}</td></tr>
                 <tr><th scope="row">Severity</th><td>{{ f0.severity | e }}</td></tr>
-                <tr><th scope="row">CWE</th><td>{{ f0.cwe or "Not found" }}</td></tr>
-                <tr><th scope="row">OWASP</th><td>{% if f0.owasp_category %}{{ f0.owasp_category | e }}{% else %}Not found{% endif %}</td></tr>
+                <tr><th scope="row">CWE</th><td>{{ f0.cwe or "Not mapped" }}</td></tr>
+                {% set f0_owasp = f0.owasp_top10_2021 or f0.owasp_display_code or f0.owasp_category %}
+                <tr><th scope="row">OWASP</th><td>{% if f0_owasp %}{{ f0_owasp | e }}{% else %}Not mapped{% endif %}</td></tr>
                 <tr><th scope="row">CVSS</th><td>{% if f0.cvss is not none %}{{ f0.cvss }}{% else %}—{% endif %}</td></tr>
-                <tr><th scope="row">CVE</th><td>{{ f0.cve or "Not found" }}</td></tr>
+                <tr><th scope="row">CVE</th><td>{{ f0.cve or "No CVE identifier provided" }}</td></tr>
             </tbody>
         </table>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No reportable findings are listed in this report context.</p>
     {% endif %}
 
     <h3>Technology Stack and Components</h3>
@@ -115,10 +117,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>Category</th>
                     <th>Component</th>
-                    <th>Details</th>
+                    <th>Detected value</th>
+                    <th>Version</th>
                     <th>Source</th>
+                    <th>Confidence</th>
+                    <th>Security note</th>
                 </tr>
             </thead>
             <tbody>
@@ -126,14 +130,16 @@
                 <tr>
                     <td>{{ row.category | e }}</td>
                     <td>{{ row.name | e }}</td>
-                    <td>{{ row.detail | e }}</td>
+                    <td>{{ row.version or "—" }}</td>
                     <td>{{ row.source | e }}</td>
+                    <td>{{ row.confidence or "—" }}</td>
+                    <td class="desc">{{ row.security_note or row.detail or "Parsed technology signal; verify before stack-specific remediation." }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">No customer-facing technology rows were parsed for this run.</p>
     {% endif %}
 
     <h3>Outdated Components</h3>
@@ -146,11 +152,11 @@
             <thead>
                 <tr>
                     <th>Component</th>
-                    <th>Installed Version</th>
-                    <th>Latest Stable</th>
-                    <th>Status / Source</th>
-                    <th>CVE</th>
-                    <th>Public Exploit (heuristic)</th>
+                    <th>Detected version</th>
+                    <th>Latest / fixed version</th>
+                    <th>CVE / advisory</th>
+                    <th>Severity</th>
+                    <th>Source</th>
                     <th>Recommendation</th>
                 </tr>
             </thead>
@@ -160,16 +166,16 @@
                     <td>{{ row.component | e }}</td>
                     <td>{{ row.installed_version or "—" }}</td>
                     <td>{{ row.latest_stable or "—" }}</td>
-                    <td>{{ row.support_status or "—" }}</td>
                     <td>{% if row.cves %}{{ row.cves | join(", ") | e }}{% else %}—{% endif %}</td>
-                    <td>{% if row.exploit_available %}Yes{% else %}No / N/A{% endif %}</td>
+                    <td>{{ row.support_status or "—" }}</td>
+                    <td>{{ row.source or "—" }}</td>
                     <td class="desc">{{ row.recommendation | e }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">No component/version rows were parsed for this section.</p>
     {% endif %}
 
     <h3>Discovered Email Addresses (masked)</h3>
@@ -177,14 +183,88 @@
     {% if vc.leaked_emails_fallback_message and not vc.leaked_emails %}
         <p class="meta">{{ vc.leaked_emails_fallback_message | e }}</p>
     {% endif %}
-    {% if vc.leaked_emails %}
-        <ul>
-            {% for e in vc.leaked_emails %}
-            <li>{{ e | e }}</li>
-            {% endfor %}
-        </ul>
+    {% if vc.leaked_email_rows %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Email / masked email</th>
+                    <th>Source</th>
+                    <th>Context</th>
+                    <th>Risk</th>
+                    <th>Evidence ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in vc.leaked_email_rows %}
+                <tr>
+                    <td>{{ row.email | e }}</td>
+                    <td>{{ row.source | e }}</td>
+                    <td class="desc">{{ row.context | e }}</td>
+                    <td class="desc">{{ row.risk | e }}</td>
+                    <td><code>{{ row.evidence_id | e }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">Email-capable sources were parsed only when indicated by the section status; no email-like values are listed here.</p>
+    {% endif %}
+
+    <h3>Credential Exposure Check — HIBP Pwned Passwords (aggregate)</h3>
+    {% if hibp_pwned_password_summary is defined and hibp_pwned_password_summary %}
+        {% set hp = hibp_pwned_password_summary %}
+        <table>
+            <tbody>
+                <tr><th scope="row">Sample values checked (k-anonymity API)</th><td>{{ hp.checks_run | default(0) | int }}</td></tr>
+                <tr><th scope="row">Matches in Pwned Passwords corpus</th><td>{{ hp.pwned_count | default(0) | int }}</td></tr>
+            <tr><th scope="row">Password exposure signal</th><td>{{ hp.data_breach_password_exposure | default("—") | e }}</td></tr>
+            </tbody>
+        </table>
+        {% if hp.breach_signal_note %}
+            <p class="ai-slot-body">{{ hp.breach_signal_note | e }}</p>
+        {% endif %}
+        {% if hp.note %}
+            <p class="muted"><small>{{ hp.note | e }}</small></p>
+        {% endif %}
+    {% else %}
+        <p class="empty">No aggregated HIBP data was available for this assessment.</p>
+    {% endif %}
+
+    <h3>Port Exposure</h3>
+    {{ section_envelope(vc, "port_exposure") }}
+    {% if vc.port_exposure_table_rows %}
+        <table class="valhalla-port-exposure-table">
+            <thead>
+                <tr>
+                    <th>Host</th>
+                    <th>Port</th>
+                    <th>Protocol</th>
+                    <th>State</th>
+                    <th>Service</th>
+                    <th>Version</th>
+                    <th>Source</th>
+                    <th>Confidence</th>
+                    <th>Exposure note</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in vc.port_exposure_table_rows %}
+                <tr>
+                    <td>{{ row.host | e }}</td>
+                    <td>{{ row.port | e }}</td>
+                    <td>{{ row.protocol | e }}</td>
+                    <td>{{ row.state | e }}</td>
+                    <td>{{ row.service or "—" }}</td>
+                    <td>{{ row.version or "—" }}</td>
+                    <td>{{ row.source | e }}</td>
+                    <td>{{ row.confidence | e }}</td>
+                    <td class="desc">{{ row.exposure_note | e }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No customer-facing port rows were parsed for this run.</p>
     {% endif %}
 
     <h3>SSL/TLS Analysis Results</h3>
@@ -192,16 +272,49 @@
     {% if vc.ssl_tls_fallback_message %}
         <p class="meta">{{ vc.ssl_tls_fallback_message | e }}</p>
     {% endif %}
-    <table>
+    {% if vc.ssl_tls_table_rows is defined and vc.ssl_tls_table_rows %}
+    <table class="valhalla-ssl-tls-table">
+        <thead>
+            <tr>
+                <th>Domain</th>
+                <th>Certificate subject</th>
+                <th>Issuer</th>
+                <th>Validity (dates)</th>
+                <th>Days remaining</th>
+                <th>TLS 1.0</th>
+                <th>TLS 1.1</th>
+                <th>TLS 1.2</th>
+                <th>TLS 1.3</th>
+                <th>Weak ciphers</th>
+                <th>HSTS</th>
+                <th>Chain issues</th>
+                <th>Evidence ID</th>
+            </tr>
+        </thead>
         <tbody>
-            <tr><th scope="row">Certificate Issuer</th><td>{{ ssl.issuer or "Not found" }}</td></tr>
-            <tr><th scope="row">Validity Period</th><td>{{ ssl.validity or "Not found" }}</td></tr>
-            <tr><th scope="row">Supported Protocols</th><td>{% if ssl.protocols %}{{ ssl.protocols | join(", ") | e }}{% else %}No data{% endif %}</td></tr>
-            <tr><th scope="row">Weak / Deprecated Protocols</th><td>{% if ssl.weak_protocols %}{{ ssl.weak_protocols | join(", ") | e }}{% else %}Not found / no data{% endif %}</td></tr>
-            <tr><th scope="row">Weak Ciphers</th><td>{% if ssl.weak_ciphers %}{{ ssl.weak_ciphers | join(", ") | e }}{% else %}Not found / no data{% endif %}</td></tr>
-            <tr><th scope="row">HSTS</th><td>{{ ssl.hsts or "No data" }}</td></tr>
+            {% for tr in vc.ssl_tls_table_rows %}
+            <tr>
+                <td>{{ tr.domain | e }}</td>
+                <td class="desc">{{ tr.cert_subject | e }}</td>
+                <td class="desc">{{ tr.issuer | e }}</td>
+                <td class="desc">{{ tr.dates | e }}</td>
+                <td>{{ tr.days_remaining | e }}</td>
+                <td>{{ tr.tls_1_0 | e }}</td>
+                <td>{{ tr.tls_1_1 | e }}</td>
+                <td>{{ tr.tls_1_2 | e }}</td>
+                <td>{{ tr.tls_1_3 | e }}</td>
+                <td class="desc">{{ tr.weak_ciphers | e }}</td>
+                <td class="desc">{{ tr.hsts | e }}</td>
+                <td>{{ tr.chain_issues | e }}</td>
+                <td><code>{{ tr.evidence_id | e }}</code></td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
+    <p class="meta"><small>When certificate rows come from multiple hosts, HSTS and TLS protocol cells may reflect the aggregate testssl / recon summary.</small></p>
+    {% else %}
+    <p class="empty">No customer-facing TLS rows were parsed for this run.</p>
+    {% endif %}
 
     <h3>HTTP Security Headers Analysis</h3>
     {{ section_envelope(vc, "security_headers_analysis") }}
@@ -211,7 +324,34 @@
     {% if hdrs.summary %}
         <p>{{ hdrs.summary | e }}</p>
     {% endif %}
-    {% if hdrs.rows %}
+    {% if vc.security_headers_table_rows is defined and vc.security_headers_table_rows %}
+        <table class="valhalla-sec-headers-table">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Header</th>
+                    <th>Status</th>
+                    <th>Observed</th>
+                    <th>Risk</th>
+                    <th>Recommendation</th>
+                    <th>Evidence ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in vc.security_headers_table_rows %}
+                <tr>
+                    <td class="desc">{{ r.url | e }}</td>
+                    <td>{{ r.header | e }}</td>
+                    <td>{{ r.status | e }}</td>
+                    <td class="desc">{{ r.observed | e }}</td>
+                    <td>{{ r.risk | e }}</td>
+                    <td class="desc">{{ r.recommendation | e }}</td>
+                    <td><code>{{ r.evidence_id | e }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif hdrs.rows %}
         <table>
             <thead>
                 <tr>
@@ -227,13 +367,13 @@
                     <td>{{ r.host | default("—") | e }}</td>
                     <td>{{ r.header | e }}</td>
                     <td>{{ r.value_sample | default("—") | e }}</td>
-                    <td>{% if r.present %}✅{% else %}❌{% endif %}</td>
+                    <td>{% if r.present %}present{% else %}missing{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No customer-facing security header rows were parsed for this run.</p>
     {% endif %}
 
     <h3>Component and Dependency Analysis</h3>
@@ -261,7 +401,7 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">No dependency inventory rows were parsed for this run.</p>
     {% endif %}
 
     <h3>Risk Matrix (Impact × Likelihood)</h3>
@@ -290,11 +430,11 @@
             </tbody>
         </table>
     {% else %}
-        <p class="empty">No data</p>
+        <p class="empty">No risk matrix rows were produced because there were no reportable findings.</p>
     {% endif %}
 
     <h3>Critical Vulnerabilities (immediate remediation required)</h3>
-    <p class="meta"><small>CVSS ≥ 7.0 and confirmed / exploitation evidence (PoC, CVE+exploit, verified).</small></p>
+    <p class="meta"><small>Only findings with <strong>Critical</strong> severity or <strong>CVSS ≥ 9.0</strong>, <strong>validated</strong> status, <strong>strong</strong> evidence, and <strong>exploit demonstrated</strong> (passive header gaps are excluded). Exploit is shown as “yes” only with demonstrated exploit evidence.</small></p>
     {% if vc.critical_vulns %}
         <table>
             <thead>
@@ -303,7 +443,7 @@
                     <th>Title</th>
                     <th>Summary</th>
                     <th>CVSS</th>
-                    <th>Exploit</th>
+                    <th>Exploit demonstrated</th>
                 </tr>
             </thead>
             <tbody>
@@ -313,12 +453,12 @@
                     <td>{{ v.title | e }}{% if v.severity %} <span class="meta">({{ v.severity | e }})</span>{% endif %}</td>
                     <td class="desc">{{ v.description | e }}</td>
                     <td>{% if v.cvss is not none %}{{ v.cvss }}{% else %}—{% endif %}</td>
-                    <td>{% if v.exploit_available %}yes{% else %}no{% endif %}</td>
+                    <td>{% if v.exploit_demonstrated is defined and v.exploit_demonstrated %}yes{% else %}no{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p class="empty">Not found</p>
+        <p class="empty">No validated critical vulnerabilities met the evidence threshold for this section.</p>
     {% endif %}
 </section>

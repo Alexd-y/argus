@@ -6,6 +6,7 @@ import asyncio
 import ipaddress
 import json
 import logging
+import re
 import shlex
 import socket
 from html.parser import HTMLParser
@@ -51,6 +52,10 @@ from src.recon.pipeline import run_recon_planned_tool_gather
 from src.recon.recon_runtime import build_recon_runtime_config
 from src.recon.step_registry import ReconStepId, plan_recon_steps
 from src.recon.summary_builder import build_recon_summary_document
+from src.recon.vulnerability_analysis.active_scan.spa_api_surface import (
+    extract_script_urls_from_html,
+    extract_spa_api_surfaces,
+)
 from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
     run_va_active_scan_phase,
 )
@@ -121,13 +126,21 @@ def _truncate_query_values_for_log(url: str, max_value_len: int = 80) -> str:
     return rebuilt[:500]
 
 
-def _log_va_url_surface_extracted(target: str, params: list[dict[str, Any]], forms: list[dict[str, Any]]) -> None:
+def _log_va_url_surface_extracted(
+    target: str,
+    params: list[dict[str, Any]],
+    forms: list[dict[str, Any]],
+    endpoints: list[dict[str, Any]] | None = None,
+    routes: list[dict[str, Any]] | None = None,
+) -> None:
     logger.info(
         "va_url_surface_extracted",
         extra={
             "event": "va_url_surface_extracted",
             "extracted_url_params_count": len(params),
             "extracted_forms_count": len(forms),
+            "extracted_endpoint_count": len(endpoints or []),
+            "extracted_route_count": len(routes or []),
             "target": _truncate_query_values_for_log(target, 80),
         },
     )
@@ -222,22 +235,272 @@ def _parse_forms_from_html(html: str, page_url: str) -> list[dict[str, Any]]:
     return forms_inventory
 
 
-async def _extract_url_params_and_forms(
-    target: str,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Extract URL query params (static) and HTML forms (via HTTP GET) for active scan targeting.
+def _auth_profile_from_scan_options(scan_options: dict[str, Any] | None) -> dict[str, Any]:
+    """Sanitize optional authenticated scan profile/test credentials for surface planning.
 
-    Returns (params_inventory, forms_inventory). Both are safe to pass as empty lists on error.
+    Secret values are intentionally not returned; only presence and field names are kept.
     """
+    if not isinstance(scan_options, dict):
+        return {"enabled": False}
+    raw = (
+        scan_options.get("authenticated_scan_profile")
+        or scan_options.get("auth_profile")
+        or scan_options.get("auth")
+        or scan_options.get("test_credentials")
+    )
+    if raw is True:
+        return {"enabled": True}
+    if not isinstance(raw, dict):
+        if scan_options.get("authenticated") is True:
+            return {"enabled": True}
+        return {"enabled": False}
+    username_field = str(
+        raw.get("username_field")
+        or raw.get("user_field")
+        or raw.get("login_field")
+        or "username"
+    ).strip()[:80]
+    password_field = str(raw.get("password_field") or "password").strip()[:80]
+    headers = raw.get("headers")
+    cookies = raw.get("cookies")
+    return {
+        "enabled": bool(raw.get("enabled", True)),
+        "login_url": str(raw.get("login_url") or raw.get("url") or "").strip()[:2048],
+        "username_field": username_field or "username",
+        "password_field": password_field or "password",
+        "username_present": bool(raw.get("username") or raw.get("email")),
+        "password_present": bool(raw.get("password")),
+        "headers_present": sorted(str(k)[:80] for k in headers) if isinstance(headers, dict) else [],
+        "cookies_present": sorted(str(k)[:80] for k in cookies) if isinstance(cookies, dict) else [],
+    }
+
+
+def _add_auth_profile_login_endpoint(
+    endpoint_inventory: list[dict[str, Any]],
+    *,
+    target: str,
+    auth_profile: dict[str, Any],
+) -> None:
+    if not auth_profile.get("enabled"):
+        return
+    login_url = str(auth_profile.get("login_url") or "").strip()
+    if login_url:
+        absolute = urljoin(target, login_url)
+    else:
+        return
+    parsed = urlparse(absolute)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return
+    fields = [
+        str(auth_profile.get("username_field") or "username").strip() or "username",
+        str(auth_profile.get("password_field") or "password").strip() or "password",
+    ]
+    row = {
+        "url": urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", "", parsed.query, "")),
+        "method": "POST",
+        "content_type": "application/json",
+        "json_fields": list(dict.fromkeys(fields)),
+        "query_params": [],
+        "path_params": [],
+        "source": "authenticated_scan_profile",
+        "evidence_ref": "scan_options:authenticated_scan_profile",
+        "confidence": "medium",
+        "confirmed": bool(auth_profile.get("username_present") and auth_profile.get("password_present")),
+        "auth_context": "anonymous",
+    }
+    key = (row["url"], row["method"], tuple(row["json_fields"]))
+    existing = {
+        (str(r.get("url") or ""), str(r.get("method") or ""), tuple(r.get("json_fields") or []))
+        for r in endpoint_inventory
+        if isinstance(r, dict)
+    }
+    if key not in existing:
+        endpoint_inventory.append(row)
+
+
+def _dedupe_dict_rows(rows: list[dict[str, Any]], keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, ...]] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = tuple(str(row.get(k) or "") for k in keys)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
+_RECON_HTTP_URL_RE = re.compile(r"https?://[^\s\"'<>\\)]+", re.IGNORECASE)
+_RECON_API_PATH_RE = re.compile(
+    r"(?P<path>/(?:api|trpc|graphql|rpc|auth|login|signin|admin|user|users|account|"
+    r"orders?|products?|search|profile|session|cart|checkout|upload|webhook)"
+    r"[A-Za-z0-9_./{}:?=&%+\-]*)",
+    re.IGNORECASE,
+)
+_RECON_JS_KEY_HINTS = (
+    "js",
+    "javascript",
+    "bundle",
+    "linkfinder",
+    "script",
+    "next",
+)
+_RECON_URL_KEY_HINTS = (
+    "url",
+    "urls",
+    "stdout",
+    "endpoint",
+    "route",
+    "path",
+    "katana",
+    "gau",
+    "wayback",
+    "history",
+    "crawl",
+    "js_analysis",
+)
+
+
+def _normalize_scan_mode_for_va(scan_options: dict[str, Any] | None) -> str:
+    """Single depth selector for VA; top-level scan_mode wins over legacy scanType."""
+    opts = scan_options or {}
+    raw = opts.get("scan_mode") or opts.get("scanType") or "standard"
+    mode = str(raw or "standard").strip().lower()
+    aliases = {
+        "light": "standard",
+        "normal": "standard",
+        "aggressive": "deep",
+        "maximum": "deep",
+        "lab": "deep",
+    }
+    mode = aliases.get(mode, mode)
+    return mode if mode in {"quick", "standard", "deep"} else "standard"
+
+
+def _same_origin_or_path(target: str, candidate: str) -> bool:
+    parsed_target = urlparse(target)
+    cand = str(candidate or "").strip()
+    if not cand:
+        return False
+    if cand.startswith("/"):
+        return True
+    parsed = urlparse(cand)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    return parsed.hostname.lower() == (parsed_target.hostname or "").lower()
+
+
+def _collect_recon_surface_artifacts(
+    recon_context: Any,
+    *,
+    target: str,
+    max_urls: int = 1000,
+    max_scripts: int = 40,
+) -> tuple[list[str], dict[str, str]]:
+    """Extract URL/API/script hints from recon tool results for active scan targeting."""
+    discovered_urls: list[str] = []
+    script_bodies: dict[str, str] = {}
+    seen_urls: set[str] = set()
+
+    def add_url(raw: str) -> None:
+        if len(discovered_urls) >= max_urls:
+            return
+        value = str(raw or "").strip().strip(".,;)")
+        if not value or not _same_origin_or_path(target, value):
+            return
+        if value in seen_urls:
+            return
+        seen_urls.add(value)
+        discovered_urls.append(value)
+
+    def add_text(label: str, text: str) -> None:
+        if not text:
+            return
+        key_low = label.lower()
+        if not any(h in key_low for h in _RECON_URL_KEY_HINTS + _RECON_JS_KEY_HINTS):
+            return
+        clipped = text[:1_500_000]
+        for m in _RECON_HTTP_URL_RE.finditer(clipped):
+            add_url(m.group(0))
+        for m in _RECON_API_PATH_RE.finditer(clipped):
+            add_url(m.group("path"))
+        if (
+            len(script_bodies) < max_scripts
+            and any(h in key_low for h in _RECON_JS_KEY_HINTS)
+            and any(token in clipped for token in ("fetch(", "axios.", "XMLHttpRequest", "/api/", "__NEXT_DATA__"))
+        ):
+            script_bodies[f"recon:{label[:120]}:{len(script_bodies)}"] = clipped
+
+    def walk(obj: Any, path: str = "recon") -> None:
+        if len(discovered_urls) >= max_urls and len(script_bodies) >= max_scripts:
+            return
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                walk(value, f"{path}.{key}")
+            return
+        if isinstance(obj, (list, tuple, set)):
+            for idx, value in enumerate(list(obj)[:2000]):
+                walk(value, f"{path}[{idx}]")
+            return
+        if isinstance(obj, str):
+            add_text(path, obj)
+
+    walk(recon_context)
+    return discovered_urls, script_bodies
+
+
+async def _extract_url_params_forms_and_spa_surfaces(
+    target: str,
+    scan_options: dict[str, Any] | None = None,
+    *,
+    discovered_urls: list[str] | None = None,
+    recon_script_bodies: dict[str, str] | None = None,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Extract URL, form, SPA/API and endpoint inventories for active scan targeting.
+
+    Returns params, forms, endpoint_inventory, route_inventory, api_surface, js_findings.
+    """
+    legacy_extractor = globals().get("_extract_url_params_and_forms")
+    baseline_legacy = globals().get("_LEGACY_URL_PARAMS_FORMS_EXTRACTOR")
+    if (
+        baseline_legacy is not None
+        and legacy_extractor is not None
+        and legacy_extractor is not baseline_legacy
+    ):
+        params, forms = await legacy_extractor(target)  # type: ignore[misc]
+        return params, forms, [], [], [], []
+
     params_inventory = _extract_url_query_params(target)
 
     forms_inventory: list[dict[str, Any]] = []
+    endpoint_inventory: list[dict[str, Any]] = []
+    route_inventory: list[dict[str, Any]] = []
+    api_surface: list[dict[str, Any]] = []
+    js_findings: list[dict[str, Any]] = []
+    script_bodies: dict[str, str] = dict(recon_script_bodies or {})
+    seed_discovered_urls = [str(u) for u in (discovered_urls or []) if str(u).strip()][:1000]
+    auth_profile = _auth_profile_from_scan_options(scan_options)
 
     parsed = urlparse(target)
     if not parsed.scheme or parsed.scheme not in ("http", "https"):
         logger.info("http_crawl_skipped", extra={"reason": "non_http_scheme"})
-        _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
-        return params_inventory, forms_inventory
+        _log_va_url_surface_extracted(
+            target,
+            params_inventory,
+            forms_inventory,
+            endpoint_inventory,
+            route_inventory,
+        )
+        return params_inventory, forms_inventory, endpoint_inventory, route_inventory, api_surface, js_findings
 
     try:
         async with httpx.AsyncClient(
@@ -253,11 +516,70 @@ async def _extract_url_params_and_forms(
         content_type = response.headers.get("content-type", "")
         if "html" not in content_type.lower():
             logger.info("http_crawl_no_html", extra={"content_type": content_type})
-            _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
-            return params_inventory, forms_inventory
+            surfaces = extract_spa_api_surfaces(
+                str(response.url),
+                html_text="",
+                script_bodies=script_bodies,
+                discovered_urls=seed_discovered_urls,
+                auth_profile=auth_profile,
+            )
+            endpoint_inventory = list(surfaces.endpoint_inventory)
+            _add_auth_profile_login_endpoint(
+                endpoint_inventory,
+                target=str(response.url),
+                auth_profile=auth_profile,
+            )
+            route_inventory = list(surfaces.route_inventory)
+            api_surface = list(surfaces.api_surface)
+            js_findings = list(surfaces.js_findings)
+            _log_va_url_surface_extracted(
+                target,
+                params_inventory,
+                forms_inventory,
+                endpoint_inventory,
+                route_inventory,
+            )
+            return params_inventory, forms_inventory, endpoint_inventory, route_inventory, api_surface, js_findings
 
         body = response.text[:500_000]
         forms_inventory = _parse_forms_from_html(body, str(response.url))
+
+        script_urls = extract_script_urls_from_html(str(response.url), body, max_scripts=12)
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(_HTTP_CRAWL_TIMEOUT),
+            max_redirects=_HTTP_CRAWL_MAX_REDIRECTS,
+            follow_redirects=True,
+            verify=False,
+        ) as script_client:
+            for script_url in script_urls[:12]:
+                try:
+                    sr = await script_client.get(
+                        script_url,
+                        headers={"User-Agent": _HTTP_CRAWL_USER_AGENT},
+                    )
+                except httpx.HTTPError:
+                    continue
+                ctype = sr.headers.get("content-type", "").lower()
+                if sr.status_code >= 400 or ("javascript" not in ctype and not script_url.lower().endswith(".js")):
+                    continue
+                script_bodies[script_url] = sr.text[:1_000_000]
+
+        surfaces = extract_spa_api_surfaces(
+            str(response.url),
+            html_text=body,
+            script_bodies=script_bodies,
+            discovered_urls=seed_discovered_urls,
+            auth_profile=auth_profile,
+        )
+        endpoint_inventory = list(surfaces.endpoint_inventory)
+        _add_auth_profile_login_endpoint(
+            endpoint_inventory,
+            target=str(response.url),
+            auth_profile=auth_profile,
+        )
+        route_inventory = list(surfaces.route_inventory)
+        api_surface = list(surfaces.api_surface)
+        js_findings = list(surfaces.js_findings)
 
         page_params = _extract_url_query_params(str(response.url))
         existing_keys = {(p["url"], p["param"]) for p in params_inventory}
@@ -290,15 +612,60 @@ async def _extract_url_params_and_forms(
             exc_info=True,
         )
 
+    if not endpoint_inventory and (script_bodies or seed_discovered_urls):
+        surfaces = extract_spa_api_surfaces(
+            target,
+            html_text="",
+            script_bodies=script_bodies,
+            discovered_urls=seed_discovered_urls,
+            auth_profile=auth_profile,
+        )
+        endpoint_inventory = list(surfaces.endpoint_inventory)
+        _add_auth_profile_login_endpoint(
+            endpoint_inventory,
+            target=target,
+            auth_profile=auth_profile,
+        )
+        route_inventory = list(surfaces.route_inventory)
+        api_surface = list(surfaces.api_surface)
+        js_findings = list(surfaces.js_findings)
+
     logger.info(
         "http_crawl_complete",
         extra={
             "params_count": len(params_inventory),
             "forms_count": len(forms_inventory),
+            "endpoint_count": len(endpoint_inventory),
+            "route_count": len(route_inventory),
+            "js_bundle_count": len(script_bodies),
         },
     )
-    _log_va_url_surface_extracted(target, params_inventory, forms_inventory)
-    return params_inventory, forms_inventory
+    _log_va_url_surface_extracted(
+        target,
+        params_inventory,
+        forms_inventory,
+        endpoint_inventory,
+        route_inventory,
+    )
+    return (
+        params_inventory,
+        forms_inventory,
+        _dedupe_dict_rows(endpoint_inventory, ("url", "method", "source")),
+        _dedupe_dict_rows(route_inventory, ("url", "source")),
+        _dedupe_dict_rows(api_surface, ("endpoint", "method", "source")),
+        _dedupe_dict_rows(js_findings, ("url", "method", "source")),
+    )
+
+
+async def _extract_url_params_and_forms(
+    target: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Backward-compatible helper kept for older tests and callers."""
+    params, forms, _endpoints, _routes, _api, _js = await _extract_url_params_forms_and_spa_surfaces(target)
+    return params, forms
+
+
+_LEGACY_URL_PARAMS_FORMS_EXTRACTOR = _extract_url_params_and_forms
 
 
 async def _try_fetch_and_upload_dependency_manifests(target: str, sink: RawPhaseSink) -> None:
@@ -370,9 +737,10 @@ async def _upload_recon_tool_streams(sink: RawPhaseSink, tool_results: dict[str,
             continue
         stdout = result.get("stdout")
         stderr = result.get("stderr")
-        if isinstance(stdout, str) and stdout.strip():
+        # Persist any captured bytes (including whitespace-only) when the subprocess wrote a stream.
+        if isinstance(stdout, str) and len(stdout) > 0:
             await asyncio.to_thread(sink.upload_text, f"tool_{name}_stdout", stdout)
-        if isinstance(stderr, str) and stderr.strip():
+        if isinstance(stderr, str) and len(stderr) > 0:
             await asyncio.to_thread(sink.upload_text, f"tool_{name}_stderr", stderr)
 
 
@@ -590,7 +958,16 @@ async def run_recon(
             await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
 
     inp = ReconInput(target=target, options=options)
-    return await ai_recon(inp, tool_results=tool_results_str, raw_sink=raw_sink)
+    recon_out = await ai_recon(
+        inp,
+        tool_results=tool_results_str,
+        raw_sink=raw_sink,
+        scan_id=scan_id,
+    )
+    recon_out.tool_results = tool_results
+    recon_out.crawl_params = crawl_params
+    recon_out.crawl_forms = crawl_forms
+    return recon_out
 
 
 async def _query_nvd_for_technologies(assets: list[str]) -> str:
@@ -648,6 +1025,7 @@ async def run_threat_modeling(
     ports: list[int] | None = None,
     target: str = "",
     recon_summary: dict[str, Any] | None = None,
+    scan_id: str | None = None,
 ) -> ThreatModelOutput:
     """Production threat modeling: enriched recon context + NVD CVE lookup + LLM STRIDE analysis."""
     from src.orchestration.threat_model_enrichment import (
@@ -681,7 +1059,10 @@ async def run_threat_modeling(
 
     inp = ThreatModelInput(assets=assets)
     raw_output = await ai_threat_modeling(
-        inp, nvd_data=nvd_data, recon_context=recon_context_str
+        inp,
+        nvd_data=nvd_data,
+        recon_context=recon_context_str,
+        scan_id=scan_id,
     )
 
     parsed = parse_threat_model_result(raw_output.threat_model)
@@ -945,6 +1326,7 @@ async def run_vuln_analysis(
     tenant_id: str | None = None,
     scan_id: str | None = None,
     scan_options: dict[str, Any] | None = None,
+    recon_context: dict[str, Any] | None = None,
 ) -> VulnAnalysisOutput:
     """Production vuln analysis: optional active scan + LLM analysis.
 
@@ -953,10 +1335,16 @@ async def run_vuln_analysis(
     prompt as additional context and merged into the final output.
     Falls back to LLM-only when sandbox is disabled or active scan fails.
     """
+    scan_options = scan_options if isinstance(scan_options, dict) else {}
     active_scan_findings: list[dict[str, Any]] = []
     active_scan_context = ""
+    active_injection_coverage: dict[str, Any] = {}
     params_inv: list[dict[str, Any]] = []
     forms_inv: list[dict[str, Any]] = []
+    endpoint_inv: list[dict[str, Any]] = []
+    route_inv: list[dict[str, Any]] = []
+    api_surface_inv: list[dict[str, Any]] = []
+    js_findings_inv: list[dict[str, Any]] = []
 
     target_present = bool((target or "").strip())
     if not target_present:
@@ -985,7 +1373,23 @@ async def run_vuln_analysis(
             from src.recon.scan_options_kal import scan_kal_flags
 
             kal_flags = scan_kal_flags(scan_options)
-            params_inv, forms_inv = await _extract_url_params_and_forms(target)
+            recon_urls, recon_scripts = _collect_recon_surface_artifacts(
+                recon_context or {},
+                target=target,
+            )
+            (
+                params_inv,
+                forms_inv,
+                endpoint_inv,
+                route_inv,
+                api_surface_inv,
+                js_findings_inv,
+            ) = await _extract_url_params_forms_and_spa_surfaces(
+                target,
+                scan_options,
+                discovered_urls=recon_urls,
+                recon_script_bodies=recon_scripts,
+            )
             bundle = VulnerabilityAnalysisInputBundle(
                 engagement_id=scan_id or "unknown",
                 target_id=target[:36],
@@ -993,6 +1397,10 @@ async def run_vuln_analysis(
                 threat_scenarios=[],
                 params_inventory=params_inv,
                 forms_inventory=forms_inv,
+                endpoint_inventory=endpoint_inv,
+                route_inventory=route_inv,
+                api_surface=api_surface_inv,
+                js_findings=js_findings_inv,
                 intel_findings=[],
                 live_hosts=[_live_host_row_for_target(target)],
                 tech_profile=[],
@@ -1007,11 +1415,7 @@ async def run_vuln_analysis(
                     "stage": "pre_va_active_scan_phase",
                 },
             )
-            _effective_scan_mode = (
-                (scan_options or {}).get("scanType")
-                or (scan_options or {}).get("scan_mode")
-                or "standard"
-            )
+            _effective_scan_mode = _normalize_scan_mode_for_va(scan_options)
             result_bundle = await run_va_active_scan_phase(
                 bundle,
                 tenant_id_raw=tenant_id,
@@ -1022,9 +1426,21 @@ async def run_vuln_analysis(
                 ),
                 password_audit_opt_in=bool(kal_flags["password_audit_opt_in"]),
                 va_network_capture_opt_in=bool(kal_flags["va_network_capture_opt_in"]),
+                scan_approval_flags=(
+                    {
+                        str(k).strip().lower(): bool(v)
+                        for k, v in scan_options.get("scan_approval_flags", {}).items()
+                    }
+                    if isinstance(scan_options.get("scan_approval_flags"), dict)
+                    else None
+                ),
                 scan_mode=_effective_scan_mode,
                 scan_options=scan_options,
             )
+            if isinstance(scan_options, dict) and isinstance(
+                scan_options.get("active_injection_coverage"), dict
+            ):
+                active_injection_coverage = dict(scan_options["active_injection_coverage"])
             raw_intel = list(result_bundle.intel_findings or [])
             raw_intel = normalize_active_scan_intel_findings(raw_intel)
             if settings.va_custom_xss_poc_enabled:
@@ -1157,7 +1573,9 @@ async def run_vuln_analysis(
             )
 
     inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
-    llm_output = await ai_vuln_analysis(inp, active_scan_context=active_scan_context)
+    llm_output = await ai_vuln_analysis(
+        inp, active_scan_context=active_scan_context, scan_id=scan_id
+    )
 
     if active_scan_findings:
         seen_titles = {f.get("title", "").lower() for f in llm_output.findings}
@@ -1174,13 +1592,16 @@ async def run_vuln_analysis(
         extra_context_blob=(active_scan_context or "")[:8000],
     )
     assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
+    llm_output.active_injection_coverage = active_injection_coverage
     return llm_output
 
 
-async def run_exploit_attempt(findings: list[dict]) -> ExploitationOutput:
+async def run_exploit_attempt(
+    findings: list[dict], *, scan_id: str | None = None
+) -> ExploitationOutput:
     """Exploitation: LLM plans theoretical exploit paths based on real findings."""
     inp = ExploitationInput(findings=findings)
-    return await ai_exploitation(inp)
+    return await ai_exploitation(inp, scan_id=scan_id)
 
 
 async def run_exploit_verify(candidates_output: ExploitationOutput) -> ExploitationOutput:
@@ -1209,12 +1630,14 @@ async def run_exploit_verify(candidates_output: ExploitationOutput) -> Exploitat
     )
 
 
-async def run_exploitation(findings: list[dict]) -> ExploitationOutput:
+async def run_exploitation(
+    findings: list[dict], *, scan_id: str | None = None
+) -> ExploitationOutput:
     """
     Exploitation: input(findings) -> output(exploits, evidence).
     Runs EXPLOIT_ATTEMPT then EXPLOIT_VERIFY; only verified exploits are returned.
     """
-    attempt_out = await run_exploit_attempt(findings)
+    attempt_out = await run_exploit_attempt(findings, scan_id=scan_id)
     return await run_exploit_verify(attempt_out)
 
 
@@ -1229,7 +1652,9 @@ async def run_post_exploitation(
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "post_exploitation")
     inp = PostExploitationInput(exploits=exploits)
-    return await ai_post_exploitation(inp, raw_sink=raw_sink)
+    return await ai_post_exploitation(
+        inp, raw_sink=raw_sink, scan_id=scan_id
+    )
 
 
 async def run_reporting(
@@ -1239,6 +1664,8 @@ async def run_reporting(
     vuln_analysis: VulnAnalysisOutput | None,
     exploitation: ExploitationOutput | None,
     post_exploitation: PostExploitationOutput | None,
+    *,
+    scan_id: str | None = None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
     report_context: dict[str, Any] = {}
@@ -1259,4 +1686,4 @@ async def run_reporting(
         post_exploitation=post_exploitation,
         report_context=report_context,
     )
-    return await ai_reporting(inp)
+    return await ai_reporting(inp, scan_id=scan_id)

@@ -239,7 +239,7 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     REPORTING: (
         SYSTEM_PROMPT_BASE,
         "Generate all text in English. Keep technical terms (CVE, CVSS, CWE, OWASP) in English.\n\n"
-        "Generate a comprehensive penetration test report from the following real data.\n\n"
+        "Generate an evidence-bound security assessment report from the following real data.\n\n"
         "=== FULL PENTEST SUMMARY ===\n{summary}\n=== END SUMMARY ===\n\n"
         "The report must include:\n"
         '- "summary": object with counts by severity (critical, high, medium, low, info) and overall risk rating\n'
@@ -517,19 +517,19 @@ REPORT_AI_SECTION_KEYS: frozenset[str] = frozenset(
 
 # Bump segment when template semantics change (invalidates Redis cache for that section).
 REPORT_AI_PROMPT_VERSIONS: dict[str, str] = {
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq012-20260405",
-    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq012-20260405",
-    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq012-20260405",
-    REPORT_AI_SECTION_BUSINESS_RISK: "vhq012-20260405",
-    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq012-20260405",
-    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq012-20260405",
-    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq012-20260405",
-    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq012-20260405",
-    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq012-20260405",
-    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq012-20260405",
-    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq012-20260405",
-    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq012-20260405",
-    REPORT_AI_SECTION_COST_SUMMARY: "vhq012-20260405",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY: "vhq015-20260425",
+    REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION: "vhq015-20260425",
+    REPORT_AI_SECTION_REMEDIATION_STEP: "vhq015-20260425",
+    REPORT_AI_SECTION_BUSINESS_RISK: "vhq015-20260425",
+    REPORT_AI_SECTION_COMPLIANCE_CHECK: "vhq015-20260425",
+    REPORT_AI_SECTION_PRIORITIZATION_ROADMAP: "vhq015-20260425",
+    REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS: "vhq015-20260425",
+    REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA: "vhq015-20260425",
+    REPORT_AI_SECTION_ATTACK_SCENARIOS: "vhq015-20260425",
+    REPORT_AI_SECTION_EXPLOIT_CHAINS: "vhq015-20260425",
+    REPORT_AI_SECTION_REMEDIATION_STAGES: "vhq015-20260425",
+    REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: "vhq015-20260425",
+    REPORT_AI_SECTION_COST_SUMMARY: "vhq015-20260425",
 }
 
 REPORT_AI_SYSTEM = (
@@ -550,6 +550,13 @@ REPORT_AI_SYSTEM = (
     "use them as the primary structured facts for stack/TLS/headers/deps/robots sections; if a key is "
     "absent or its fields are empty, state explicitly that the data was not collected or is unavailable—"
     "do not invent tool output. "
+    "Use report_quality_gate plus valhalla_context.mandatory_sections and "
+    "valhalla_context.coverage.tool_errors_summary as quality gates: if WSTG coverage is below 70%, "
+    "if a critical scanner failed, or if a section status is partial, not_executed, no_data, or "
+    "not_assessed, describe the limitation and tool failure/collection reason. Never convert an empty "
+    "table into proof that the risk is absent; for example, "
+    "an empty outdated_components_table with not_executed or partial status means SCA data is missing, not "
+    "that all components are current. "
     "When findings entries include finding_id, title, parameter, affected_url (or affected_asset), "
     "reference those concrete fields in technical sections—do not substitute generic placeholders. "
     "When ``valhalla_context.xss_structured`` is non-empty, each row is authoritative XSS evidence: "
@@ -570,25 +577,39 @@ REPORT_AI_SYSTEM = (
     "Always use the EXACT severity distribution from the data.\n"
     "2. Each AI section MUST contain UNIQUE content. No sentence or paragraph may appear in more than "
     "one section. Cross-reference other sections instead of repeating.\n"
-    "3. When tech_stack_structured has data, ALL code examples MUST be tailored to the detected "
-    "technology stack (e.g., Next.js \u2192 middleware code, Nginx \u2192 config directives).\n"
+    "3. When tech_stack_structured has data, remediation may be tailored to that detected stack. "
+    "When the stack is empty, no_data, partial, or not_assessed, use stack-neutral controls only.\n"
     "4. Include CVSS:3.1 vector string (e.g., CVSS:3.1/AV:N/AC:L/...) alongside severity score for "
     "EVERY referenced finding when cvss_vector is available in the context.\n"
     "5. For each finding reference, include: finding name (title), CWE ID, CVSS score, and affected URL.\n"
-    "6. Remediation MUST include CONCRETE code examples specific to the detected stack, not generic advice.\n"
+    "6. Remediation MUST NOT assume Express, Nginx, Node, Django, or any framework unless the context "
+    "confirms that stack. Prefer application middleware, reverse proxy/WAF, identity provider controls, "
+    "per-account and per-IP throttling, exponential backoff, lockout/CAPTCHA, monitoring, and verification.\n"
     "7. NEVER use phrases like 'the assessment revealed' or 'it was found that' without specifying "
     "WHICH finding (by title and finding_id) and WHERE (affected_url).\n"
     "8. Use the ACTUAL severity distribution from severity_counts and executive_severity_totals in the "
     "context JSON \u2014 reference these exact integers.\n"
     "9. Each section has a section_id provided in the SECTION CONTEXT preamble. Content for this "
-    "section_id MUST NOT duplicate content from sections listed in ALREADY WRITTEN SECTIONS."
+    "section_id MUST NOT duplicate content from sections listed in ALREADY WRITTEN SECTIONS.\n"
+    "10. Forbidden unsupported phrases: relatively stable; positive observation; absence of critical "
+    "vulnerabilities; no critical vulnerabilities; no findings means secure; confirmed these findings without false positives; "
+    "unauthorized transactions; regulatory fines; financial fraud; data breach; zero-day potential; "
+    "significant vulnerability; critical HTTP headers; could be exploited by attackers; compromise the application; "
+    "absence of effective rate limiting; does not implement rate limiting; allowing attackers to perform rapid login attempts; "
+    "comprehensive penetration test. Use not assessed / inconclusive limitation language instead.\n"
+    "11. Findings with evidence_quality none/weak or validation_status missing/unverified must not be "
+    "called confirmed, validated, critical to business impact, or part of an exploit chain.\n"
+    "12. HTTP response header findings are passive configuration observations. Do not call them significant "
+    "or critical vulnerabilities, do not claim application compromise, and do not describe exploitability "
+    "beyond browser-side defense-in-depth unless separate validated impact evidence exists. For customer-facing "
+    "Valhalla text, map this class to OWASP Top 10:2021 A05:2021 Security Misconfiguration, not A02."
 )
 
 REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY: (
         "ROLE: You are a Chief Information Security Officer (CISO) summarizing assessment results for business stakeholders.\n"
         "LANGUAGE: Write in English.\n\n"
-        "Write a concise executive summary (2\u20134 short paragraphs) for business stakeholders.\n\n"
+        "Write a concise, evidence-bound executive summary (1\u20132 short paragraphs) for business stakeholders.\n\n"
         "REQUIREMENTS:\n"
         "1. SEVERITY DISTRIBUTION: Start with the EXACT severity breakdown from severity_counts and "
         "executive_severity_totals \u2014 state the precise number of critical, high, medium, low, and info "
@@ -598,9 +619,11 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "3. QUANTIFIED RISK METRICS: Include concrete quantification where possible (e.g., '3 of 5 tested "
         "endpoints are vulnerable to XSS', '2 critical findings affect the authentication flow', "
         "'60%% of findings are in OWASP A03 category').\n"
-        "4. Cover scope (target_url, finding_count), overall risk posture, and top risk themes grounded "
-        "in the actual data.\n"
-        "5. When owasp_compliance_table exists, reference top categories by finding count.\n"
+        "4. Cover scope (target_url, finding_count), validation status, evidence quality, failed tools, "
+        "and coverage limitations. Do not state an overall security posture when coverage is partial or "
+        "inconclusive.\n"
+        "5. When owasp_compliance_table exists, distinguish Finding Present, Assessed, Not Assessed, "
+        "and No Finding After Assessment. Do not report Not Assessed as clean.\n"
         "6. When hibp_pwned_password_summary exists and pwned_count > 0, add one sentence on "
         "credential exposure using exact pwned_count and checks_run integers.\n\n"
         "Context JSON:\n{context_json}"
@@ -633,10 +656,9 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "- EFFORT ESTIMATE: tag each fix as [Quick Fix] (< 1 hour, config change or one-liner), "
         "[Moderate] (1\u20138 hours, code changes in limited scope), or [Complex Refactor] (> 8 hours, "
         "architectural or multi-component change)\n"
-        "- CODE EXAMPLE: provide a concrete code snippet tailored to the technology stack detected in "
-        "tech_stack_structured. If Next.js detected \u2192 middleware/API route code. If Nginx detected \u2192 "
-        "config directives. If Express \u2192 middleware setup. If Django \u2192 view/middleware code. "
-        "When tech_stack_structured is empty, provide framework-agnostic examples with adaptation notes.\n"
+        "- IMPLEMENTATION CONTROL: tailor examples only to technology stack detected in tech_stack_structured. "
+        "When tech_stack_structured is empty, partial, no_data, or not_assessed, use stack-neutral controls "
+        "and avoid Express/Nginx/Node/Django-specific snippets.\n"
         "- VERIFICATION COMMAND: include a curl or similar command to verify the fix is applied "
         "(e.g., ``curl -sS -D- https://target/path | grep 'X-Content-Type-Options'``). "
         "Use the actual affected_url from the finding when available.\n\n"
@@ -651,14 +673,17 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "When ``tools_executed`` is present, mention which tool originally detected the issue.\n\n"
         "CONSTRAINTS:\n"
         "Avoid one-line boilerplate such as 'validate input' without tying controls to the named parameter "
-        "and context from the JSON. Every remediation item MUST have a code example or concrete config change. "
+        "and context from the JSON. Every remediation item MUST have a concrete control and verification "
+        "method; code/config examples are allowed only when stack evidence supports them. "
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_BUSINESS_RISK: (
         "ROLE: You are a risk management consultant translating technical findings to business impact.\n"
         "LANGUAGE: Write in English.\n\n"
-        "Explain business impact: operational, financial, and reputational angles grounded in the context. "
-        "Avoid alarmism without evidence. "
+        "Explain only conditional and proportional business impact grounded in validated evidence. "
+        "Avoid alarmism without evidence. For weak/unverified authentication rate-limit evidence, the allowed "
+        "impact wording is limited to susceptibility to brute-force or credential stuffing attempts if valid "
+        "credentials are known or reused. "
         "When ``valhalla_context`` is present, tie material risks to its summary, ``risk_matrix``, "
         "``critical_vulns``, surface/TLS/headers, dependencies, and threat/exploit excerpts where supported. "
         "Reference concrete ``finding_id`` and titles when tying risk to specific validated issues. "
@@ -720,32 +745,39 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "ROLE: You are a senior penetration tester writing an executive summary for a leadership-technical brief.\n"
         "LANGUAGE: Write in English.\n\n"
         "FOCUS:\n"
-        "1. Overall security posture assessment \u2014 one clear verdict sentence.\n"
+        "1. Coverage-limited assessment summary. If report_quality_gate.coverage_label is partial or "
+        "inconclusive, state that no overall security posture verdict can be drawn. If "
+        "``valhalla_context.engagement_title`` or ``report_quality.report_mode_label`` includes "
+        "``degraded execution``, name that limitation and do not imply a full manual pentest.\n"
         "2. SEVERITY DISTRIBUTION: state the EXACT breakdown from executive_severity_totals (critical, "
         "high, medium, low, info counts) in the opening paragraph.\n"
-        "3. The 2\u20133 most significant findings by title and their BUSINESS IMPACT (revenue, reputation, "
-        "compliance risk) \u2014 do NOT list all findings.\n"
+        "3. The 1\u20133 most significant evidence-backed findings by title and validation status. Business "
+        "impact must be conditional and proportional to evidence_quality.\n"
         "4. QUANTIFIED RISK METRICS: include concrete ratios where the data supports them (e.g., "
         "'N of M endpoints vulnerable to XSS', 'X%% of findings map to OWASP A03').\n"
-        "5. What was NOT found or was within acceptable limits (scope confirmation, positive observations).\n"
+        "5. What was not assessed, inconclusive, or limited by failed tools/coverage gaps.\n"
         "6. Immediate priority actions (max 3 bullet points).\n\n"
         "NUMBERS: use EXACT integers from `executive_severity_totals` and `finding_count` \u2014 copy verbatim, never estimate.\n"
         "When `owasp_compliance_table` exists, cite at most the top 2 categories by count.\n"
         "When `hibp_pwned_password_summary` exists and pwned_count > 0, add one sentence on credential exposure.\n\n"
         "CONSTRAINTS:\n"
-        "- Write 3\u20134 paragraphs of plain prose. No Markdown formatting. No bullet lists except for priority actions.\n"
+        "- Write 1\u20132 paragraphs of plain prose. No Markdown formatting. No bullet lists unless data supports immediate actions.\n"
         "- SYNTHESIZE, do not enumerate \u2014 this is NOT a findings table. The reader already has the detailed findings.\n"
         "- Do NOT repeat finding IDs, technical parameters, or affected URLs \u2014 keep it executive-level.\n"
         "- Do NOT fabricate CVEs, systems, or test results not in the context.\n"
-        "- Ground every claim in `valhalla_context.summary`, `risk_matrix`, `critical_vulns`, or `executive_severity_totals`.\n\n"
+        "- Ground every claim in `findings`, `report_quality_gate`, `valhalla_context.coverage`, or `executive_severity_totals`.\n\n"
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_ATTACK_SCENARIOS: (
         "ROLE: You are a threat modeling expert constructing realistic attack scenarios.\n"
         "LANGUAGE: Write in English.\n\n"
-        "FOCUS: Describe 2–3 realistic attack CHAINS — not individual vulnerabilities.\n"
+        "HEADER-ONLY / PASSIVE FINDINGS: Do not describe rate limiting, credential stuffing, or login POST "
+        "workflows unless those signals exist in structured findings. Missing HTTP security headers are "
+        "misconfiguration observations, not RCE/SQLi; do not fabricate multi-step exploit chains for them.\n\n"
+        "FOCUS: Describe validated attack chains only. If there are fewer than two validated findings, or "
+        "the evidence is weak/unverified, state that no validated chain was demonstrated.\n"
         "Each scenario MUST:\n"
-        "- Combine 2+ findings or weaknesses into a multi-step attack path\n"
+        "- Combine 2+ validated findings into a multi-step attack path\n"
         "- Name a realistic attacker persona: opportunistic scanner / targeted attacker / insider threat\n"
         "- Estimate likelihood (Low / Medium / High) with one-sentence reasoning\n"
         "- Describe the concrete damage if the chain succeeds (data exfiltration, lateral movement, service disruption)\n"
@@ -758,17 +790,22 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "- Do NOT summarize individual findings — the reader already has the findings table.\n"
         "- Do NOT describe live exploitation steps or weaponized payloads.\n"
         "- Do NOT repeat content from the Executive Summary — focus on attack CHAINS, not posture.\n"
-        "- If only 1–2 findings exist, describe one chain and honestly state limited chaining opportunity.\n\n"
+        "- If only weak/unverified rate-limit evidence exists, write: No validated exploit chain was demonstrated.\n\n"
         "Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_EXPLOIT_CHAINS: (
-        "ROLE: You are a red team operator constructing multi-step exploit chains from validated findings.\n"
+        "ROLE: You are a red team operator describing scope-appropriate exploit narratives from validated findings.\n"
         "LANGUAGE: Write in English.\n\n"
-        "Outline multi-step exploit chains (recon → initial access → impact) grounded strictly in "
-        "findings, threat-model excerpts, and ``valhalla_context`` technical signals (stack, headers, TLS, "
-        "dependencies, ``risk_matrix``, ``critical_vulns``). "
-        "Each chain: name, stages, required preconditions, and mapped finding_id + title + severity "
-        "(and parameter/affected_url when available). "
+        "HEADER-ONLY: For passive HTTP response header gaps, provide at most a short, honest chain sketch: "
+        "attacker can influence browser security boundaries / clickjacking / protocol confusion only as far as "
+        "the evidence shows — explicitly state that header absence is not code execution, SQL injection, or "
+        "auth bypass, unless separate findings prove that. Do not mention rate limits, login POST, or credential "
+        "stuffing for header-only data.\n\n"
+        "Outline multi-step exploit chains only when multiple validated findings with exploit_demonstrated / "
+        "strong evidence support the chain. "
+        "If no chain is validated, state that no validated exploit chain was demonstrated. "
+        "Ground any chain in finding rows, ``critical_vulns`` (if present), ``risk_matrix``, and "
+        "``valhalla_context`` — not generic industry boilerplate. "
         "Theoretical only; no instructions for abuse. Context JSON:\n{context_json}"
     ),
     REPORT_AI_SECTION_REMEDIATION_STAGES: (
@@ -777,18 +814,18 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
         "FOCUS: Structure remediation in exactly 3 tiers:\n\n"
         "TIER 1 \u2014 Fix immediately (within 48 hours):\n"
         "- Findings with confirmed exploit evidence OR CVSS >= 7.0 OR severity critical/high\n"
-        "- For each: WHAT to change, WHERE (file/config/service), HOW to verify the fix, "
-        "and a CODE EXAMPLE tailored to tech_stack_structured\n"
+        "- For each: WHAT to change, WHERE (application middleware / reverse proxy / WAF / identity provider "
+        "unless stack evidence is known), and HOW to verify the fix\n"
         "- Tag each fix: [Quick Fix] / [Moderate] / [Complex Refactor]\n"
         "- Include a verification command (curl or tool command) for each fix\n\n"
         "TIER 2 \u2014 Fix within 2 weeks:\n"
         "- Medium-priority findings, dependency updates, configuration hardening\n"
-        "- For each: specific action, code example for the detected stack, and verification method\n"
+        "- For each: specific action, stack-neutral control if the stack is unknown, and verification method\n"
         "- Tag each fix: [Quick Fix] / [Moderate] / [Complex Refactor]\n\n"
         "TIER 3 \u2014 Architectural / SDLC improvements:\n"
         "- Structural issues: missing CSP, no WAF, weak SDLC practices\n"
         "- Process improvements: security testing in CI/CD, dependency scanning, code review policies\n"
-        "- Include concrete configuration examples for the detected stack where applicable\n\n"
+        "- Include concrete configuration examples only for detected stack evidence; otherwise stay stack-neutral\n\n"
         "GROUNDING:\n"
         "- Reference `finding_id` + title + parameter/affected_url for each remediation item\n"
         "- Use `valhalla_context.critical_vulns`, `risk_matrix`, `owasp_compliance_table` for prioritization\n"
@@ -805,18 +842,23 @@ REPORT_AI_USER_TEMPLATES: dict[str, str] = {
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL: (
         "ROLE: You are a vulnerability researcher assessing zero-day and novel exploitation potential.\n"
         "LANGUAGE: Write in English.\n\n"
-        "FOCUS — answer these specific questions:\n"
+        "FOCUS — assess novel vulnerability indication strictly; do not speculate beyond evidence:\n"
         "1. Do any findings suggest non-standard attack surfaces that automated scanners typically miss?\n"
         "2. Are there chaining opportunities that could ELEVATE low/medium-severity findings to critical impact?\n"
         "3. Do outdated components (from `valhalla_context.tech_stack_structured` or `outdated_components_table`) have known n-day exposure windows?\n"
         "4. What additional MANUAL testing would be highest-value given this attack surface?\n"
-        "5. Final zero-day potential rating: None / Low / Medium / High — with a one-sentence justification.\n\n"
+        "5. Final novel vulnerability indication rating: Not indicated / Low / Medium / High — with a one-sentence justification.\n\n"
         "GROUNDING:\n"
         "- Use `valhalla_context.critical_vulns`, `risk_matrix`, tech stack, TLS/header analysis, and findings\n"
         "- Tie discussion to concrete `finding_id` and titles where applicable\n"
         "- Clearly separate known CVE-backed risk from speculative unknown-vulnerability risk\n\n"
         "CONSTRAINTS:\n"
-        "- Do NOT claim active zero-days exist without evidence.\n"
+        "- Do NOT claim active zero-days, zero-day potential, or novel exploitability without evidence.\n"
+        "- If `valhalla_context.mandatory_sections.outdated_components.status` is partial, not_executed, "
+        "or no_data, state that dependency/version evidence is unavailable; do NOT say the application is "
+        "not at risk from known third-party vulnerabilities merely because `outdated_components_table` is empty.\n"
+        "- If stack, TLS, headers, or email sections are partial/not_executed/no_data, tie manual testing "
+        "recommendations to those explicit collection gaps and `coverage.tool_errors_summary`.\n"
         "- Do NOT repeat the findings list or executive summary — focus ONLY on research/novel potential.\n"
         "- Be honest if findings are standard scanner output and zero-day potential is genuinely low.\n"
         "- Do NOT invent CVEs, component versions, or attack techniques not supported by the context.\n"

@@ -10,7 +10,9 @@ import logging
 import re
 from typing import Any
 
-from src.llm import call_llm, is_llm_available
+from src.llm import is_llm_available
+from src.llm.facade import call_llm_unified
+from src.llm.task_router import LLMTask
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
@@ -42,6 +44,15 @@ logger = logging.getLogger(__name__)
 
 MAX_JSON_RETRIES = 1
 
+_PHASE_TO_TASK: dict[str, LLMTask] = {
+    RECON: LLMTask.ORCHESTRATION,
+    THREAT_MODELING: LLMTask.THREAT_MODELING,
+    VULN_ANALYSIS: LLMTask.ZERO_DAY_ANALYSIS,
+    EXPLOITATION: LLMTask.EXPLOIT_GENERATION,
+    POST_EXPLOITATION: LLMTask.REMEDIATION_PLAN,
+    REPORTING: LLMTask.REPORT_SECTION,
+}
+
 
 def _parse_llm_json(text: str) -> dict[str, Any] | None:
     """Extract and parse JSON from LLM response. Handles ```json blocks."""
@@ -64,12 +75,20 @@ async def _call_llm_with_json_retry(
     *,
     raw_sink: RawPhaseSink | None = None,
     raw_label_prefix: str = "llm",
+    scan_id: str | None = None,
 ) -> dict[str, Any] | None:
     """
     Call LLM, parse JSON. On parse failure, retry once with fixer prompt.
     Returns parsed dict or None.
     """
-    response = await call_llm(user_prompt, system_prompt=system_prompt)
+    task = _PHASE_TO_TASK.get(phase, LLMTask.ORCHESTRATION)
+    response = await call_llm_unified(
+        system_prompt,
+        user_prompt,
+        task=task,
+        scan_id=scan_id,
+        phase=phase,
+    )
     if raw_sink is not None and response:
         await asyncio.to_thread(
             raw_sink.upload_text,
@@ -82,7 +101,13 @@ async def _call_llm_with_json_retry(
 
     for attempt in range(MAX_JSON_RETRIES):
         fixer_system, fixer_user = get_fixer_prompt(response, get_schema(phase))
-        response = await call_llm(fixer_user, system_prompt=fixer_system)
+        response = await call_llm_unified(
+            fixer_system,
+            fixer_user,
+            task=task,
+            scan_id=scan_id,
+            phase=phase,
+        )
         if raw_sink is not None and response:
             await asyncio.to_thread(
                 raw_sink.upload_text,
@@ -122,6 +147,7 @@ async def ai_recon(
     tool_results: str = "",
     *,
     raw_sink: RawPhaseSink | None = None,
+    scan_id: str | None = None,
 ) -> ReconOutput:
     """Analyze real tool output via LLM to produce structured recon. Raises on failure."""
     _require_llm()
@@ -135,6 +161,7 @@ async def ai_recon(
             system,
             raw_sink=raw_sink,
             raw_label_prefix="recon_llm",
+            scan_id=scan_id,
         ),
         RECON,
     )
@@ -152,6 +179,7 @@ async def ai_threat_modeling(
     nvd_data: str = "",
     *,
     recon_context: str = "",
+    scan_id: str | None = None,
 ) -> ThreatModelOutput:
     """Build threat model from real assets, NVD CVEs, and enriched recon context via LLM."""
     _require_llm()
@@ -162,7 +190,9 @@ async def ai_threat_modeling(
         recon_context=recon_context,
     )
     data = _require_json(
-        await _call_llm_with_json_retry(THREAT_MODELING, user, system),
+        await _call_llm_with_json_retry(
+            THREAT_MODELING, user, system, scan_id=scan_id
+        ),
         THREAT_MODELING,
     )
     if not isinstance(data.get("threat_model"), dict):
@@ -174,6 +204,7 @@ async def ai_vuln_analysis(
     inp: VulnAnalysisInput,
     *,
     active_scan_context: str = "",
+    scan_id: str | None = None,
 ) -> VulnAnalysisOutput:
     """Call LLM to analyze vulns from threat model. Raises on failure."""
     _require_llm()
@@ -184,7 +215,9 @@ async def ai_vuln_analysis(
         active_scan_context=active_scan_context,
     )
     data = _require_json(
-        await _call_llm_with_json_retry(VULN_ANALYSIS, user, system),
+        await _call_llm_with_json_retry(
+            VULN_ANALYSIS, user, system, scan_id=scan_id
+        ),
         VULN_ANALYSIS,
     )
     if not isinstance(data.get("findings"), list):
@@ -192,12 +225,16 @@ async def ai_vuln_analysis(
     return VulnAnalysisOutput(findings=data["findings"])
 
 
-async def ai_exploitation(inp: ExploitationInput) -> ExploitationOutput:
+async def ai_exploitation(
+    inp: ExploitationInput, *, scan_id: str | None = None
+) -> ExploitationOutput:
     """Call LLM to plan exploitation. Raises on failure."""
     _require_llm()
     system, user = get_prompt(EXPLOITATION, findings=inp.findings)
     data = _require_json(
-        await _call_llm_with_json_retry(EXPLOITATION, user, system),
+        await _call_llm_with_json_retry(
+            EXPLOITATION, user, system, scan_id=scan_id
+        ),
         EXPLOITATION,
     )
     if not isinstance(data.get("exploits"), list):
@@ -212,6 +249,7 @@ async def ai_post_exploitation(
     inp: PostExploitationInput,
     *,
     raw_sink: RawPhaseSink | None = None,
+    scan_id: str | None = None,
 ) -> PostExploitationOutput:
     """Call LLM for lateral movement / persistence. Raises on failure."""
     _require_llm()
@@ -223,6 +261,7 @@ async def ai_post_exploitation(
             system,
             raw_sink=raw_sink,
             raw_label_prefix="post_exploitation_llm",
+            scan_id=scan_id,
         ),
         POST_EXPLOITATION,
     )
@@ -232,7 +271,9 @@ async def ai_post_exploitation(
     )
 
 
-async def ai_reporting(inp: ReportingInput) -> ReportingOutput:
+async def ai_reporting(
+    inp: ReportingInput, *, scan_id: str | None = None
+) -> ReportingOutput:
     """Call LLM to generate report. Raises on failure."""
     _require_llm()
     summary = {
@@ -248,7 +289,10 @@ async def ai_reporting(inp: ReportingInput) -> ReportingOutput:
         summary["report_context"] = rc
     system, user = get_prompt(REPORTING, summary=summary)
     data = _require_json(
-        await _call_llm_with_json_retry(REPORTING, user, system), REPORTING
+        await _call_llm_with_json_retry(
+            REPORTING, user, system, scan_id=scan_id
+        ),
+        REPORTING,
     )
     if not isinstance(data.get("report"), dict):
         raise RuntimeError(f"LLM returned invalid response for {REPORTING}")

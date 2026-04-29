@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -84,6 +85,9 @@ def _effective_tenant_for_scan_create(body_tenant_id: str | None, tenant_id_head
     return effective_tenant
 
 
+ScanCreateMode = Literal["quick", "standard", "deep", "lab"]
+
+
 def _map_max_phases_to_scan_mode(max_phases: int) -> Literal["quick", "standard", "deep"]:
     if max_phases <= 2:
         return "quick"
@@ -92,11 +96,82 @@ def _map_max_phases_to_scan_mode(max_phases: int) -> Literal["quick", "standard"
     return "deep"
 
 
+def _sync_scan_depth_options(
+    options_dict: dict[str, Any],
+    scan_mode: ScanCreateMode,
+    *,
+    target: str | None = None,
+) -> dict[str, Any]:
+    """Keep legacy options.scanType and canonical scan_mode aligned for workers."""
+    options_dict = dict(options_dict)
+    options_dict["scan_mode"] = scan_mode
+    options_dict["scanType"] = scan_mode
+    if scan_mode == "lab":
+        options_dict.setdefault("active_injection_mode", "lab")
+        options_dict.setdefault("intentional_vulnerable_lab", True)
+        options_dict.setdefault("lab_profile", "intentional_vulnerable_lab")
+        flags = options_dict.get("scan_approval_flags")
+        if not isinstance(flags, dict):
+            flags = {}
+        for tool in ("sqlmap", "commix", "dalfox", "xsstrike", "ffuf", "nuclei", "testssl", "sslscan"):
+            flags.setdefault(tool, True)
+        options_dict["scan_approval_flags"] = flags
+        allowlist = _merge_lab_allowed_targets(
+            options_dict.get("lab_allowed_targets"),
+            options_dict.get("argus_lab_allowed_targets"),
+            target,
+        )
+        options_dict["lab_allowed_targets"] = allowlist
+        options_dict["argus_lab_allowed_targets"] = ",".join(allowlist)
+    return options_dict
+
+
+def _merge_lab_allowed_targets(*values: Any) -> list[str]:
+    """Build a conservative per-scan lab allowlist from UI/env-shaped values."""
+    out: list[str] = []
+
+    def add(raw: Any) -> None:
+        if raw is None:
+            return
+        if isinstance(raw, (list, tuple, set)):
+            for item in raw:
+                add(item)
+            return
+        text = str(raw).strip()
+        if not text or text.lower() in {"true", "false", "none", "null"}:
+            return
+        if "," in text:
+            for part in text.split(","):
+                add(part)
+            return
+        candidate = _normalize_lab_allowed_target(text)
+        if candidate and candidate not in out:
+            out.append(candidate)
+
+    for value in values:
+        add(value)
+    add("localhost")
+    add("127.0.0.1")
+    return out
+
+
+def _normalize_lab_allowed_target(value: str) -> str:
+    raw = value.strip().rstrip("/")
+    if not raw:
+        return ""
+    parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+    if not parsed.netloc:
+        return raw
+    if raw.startswith(("http://", "https://")):
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+    return parsed.netloc
+
+
 async def _persist_scan_start(
     tenant_id: str,
     target: str,
     options_dict: dict[str, Any],
-    scan_mode: Literal["quick", "standard", "deep"],
+    scan_mode: ScanCreateMode,
 ) -> str:
     """Insert tenant/target/scan and return scan_id."""
     scan_id = str(uuid.uuid4())
@@ -190,6 +265,7 @@ async def create_smart_scan(
     tenant_id = _effective_tenant_for_scan_create(req.tenant_id, tenant_id_header)
     scan_mode = _map_max_phases_to_scan_mode(req.max_phases)
     options_dict = ScanOptions().model_dump()
+    options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
     options_dict["smart_objective"] = req.objective
     options_dict["max_phases"] = req.max_phases
 
@@ -218,6 +294,7 @@ async def create_skill_scan(
     options_dict = ScanOptions().model_dump()
     options_dict["skill_focus"] = req.skill
     scan_mode: Literal["quick", "standard", "deep"] = "deep"
+    options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
 
     scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
     record_scan_started()
@@ -242,6 +319,7 @@ async def create_scan(
     """Create scan — persist to DB, run state machine in background."""
     scan_id = str(uuid.uuid4())
     options_dict = req.options.model_dump() if req.options else {}
+    options_dict = _sync_scan_depth_options(options_dict, req.scan_mode, target=req.target)
 
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)

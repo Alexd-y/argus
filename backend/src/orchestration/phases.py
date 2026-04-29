@@ -71,6 +71,9 @@ class ReconOutput(BaseModel):
     assets: list[str] = Field(default_factory=list)
     subdomains: list[str] = Field(default_factory=list)
     ports: list[int] = Field(default_factory=list)
+    tool_results: dict[str, Any] = Field(default_factory=dict, exclude=True)
+    crawl_params: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
+    crawl_forms: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
 
 
 # --- Threat Modeling ---
@@ -98,6 +101,7 @@ class VulnAnalysisOutput(BaseModel):
     """Output of vuln_analysis phase."""
 
     findings: list[dict[str, Any]] = Field(default_factory=list)
+    active_injection_coverage: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Exploitation ---

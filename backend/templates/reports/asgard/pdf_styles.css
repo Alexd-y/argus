@@ -80,6 +80,7 @@
   --sev-medium: #c39200;
   --sev-low: #2f6fd6;
   --sev-info: #6b7280;
+  --section-accent: #0f766e;
 }
 
 html, body {
@@ -227,9 +228,11 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
 .section-heading {
   font-size: 16pt;
   border-bottom: 1pt solid var(--argus-rule);
-  padding-bottom: 0.15cm;
+  border-left: 4pt solid var(--section-accent);
+  padding: 0.12cm 0 0.12cm 0.35cm;
   margin: 0.6cm 0 0.4cm 0;
   color: var(--argus-primary-dark);
+  background: rgba(15, 118, 110, 0.07);
 }
 
 .exec-summary { page-break-inside: avoid; margin-bottom: 0.6cm; }
@@ -293,6 +296,10 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 8pt;
+}
+
+.findings-table tbody tr:nth-child(even) td {
+  background: rgba(246, 230, 205, 0.55);
 }
 
 .col-sev   { width: 1.9cm; }
@@ -417,6 +424,11 @@ code { font-family: "DejaVu Sans Mono", "Consolas", monospace; font-size: 9pt; }
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 8pt;
+}
+
+.evidence-table tbody tr:nth-child(even) td,
+.timeline-table tbody tr:nth-child(even) td {
+  background: rgba(246, 230, 205, 0.45);
 }
 
 .col-tl-order   { width: 1.0cm; text-align: right; }

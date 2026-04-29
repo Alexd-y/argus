@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getReportByTarget } from "./reports";
+import {
+  getReportByTarget,
+  getReportDownloadUrl,
+  getPublicReportUiMessage,
+  reportErrorKind,
+} from "./reports";
 import type { Report } from "./types";
 
 const mockReport: Report = {
@@ -30,6 +35,61 @@ describe("reports", () => {
         json: () => Promise.resolve([mockReport]),
       })
     );
+  });
+
+  describe("getReportDownloadUrl", () => {
+    it("builds /reports/:id/download with format only by default", () => {
+      const u = getReportDownloadUrl("rpt-abc", "pdf");
+      expect(u).toMatch(/\/reports\/rpt-abc\/download\?/);
+      expect(u).toContain("format=pdf");
+      expect(u).not.toContain("regenerate");
+    });
+
+    it("appends regenerate=true when options.regenerate is set", () => {
+      const u = getReportDownloadUrl("rpt-abc", "html", { regenerate: true });
+      expect(u).toContain("format=html");
+      expect(u).toContain("regenerate=true");
+    });
+
+    it("supports valhalla_sections.csv format (Valhalla tier export)", () => {
+      const u = getReportDownloadUrl("rpt-abc", "valhalla_sections.csv");
+      expect(u).toContain("format=valhalla_sections.csv");
+    });
+
+    it("appends redirect=true when options.redirect is set", () => {
+      const u = getReportDownloadUrl("rpt-abc", "pdf", { redirect: true });
+      expect(u).toContain("format=pdf");
+      expect(u).toContain("redirect=true");
+    });
+  });
+
+  describe("getPublicReportUiMessage", () => {
+    it("returns safe generic text for unknown server messages", () => {
+      expect(getPublicReportUiMessage("psycopg.OperationalError: connection refused")).toBe(
+        "We could not load the report. Try again or return to the scanner.",
+      );
+    });
+
+    it("maps not-found style errors", () => {
+      expect(getPublicReportUiMessage("Report not found")).toBe(
+        "This report is missing or the link is no longer valid.",
+      );
+    });
+
+    it("maps missing query hint from useReport", () => {
+      const msg = getPublicReportUiMessage("No target or report ID provided");
+      expect(msg).toContain("scanner");
+    });
+  });
+
+  describe("reportErrorKind", () => {
+    it("classifies missing query as missing", () => {
+      expect(reportErrorKind("x", false)).toBe("missing");
+    });
+
+    it("classifies not found when target param exists", () => {
+      expect(reportErrorKind("Report not found", true)).toBe("not_found");
+    });
   });
 
   describe("getReportByTarget", () => {

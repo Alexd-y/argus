@@ -1,0 +1,23 @@
+family_id: crlf_safe
+description: >-
+  Visible CR/LF curriculum tokens replaced by words (no protocol injection).
+cwe_ids: [93]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: cr_word
+    template: "ARGUS_CRLF_SAFE_CARRIAGE_RETURN_WORD"
+    confidence: suspected
+    notes: Verbalized token — no raw CR/LF bytes in template.
+  - id: lf_word
+    template: "ARGUS_CRLF_SAFE_LINE_FEED_WORD"
+    confidence: suspected
+    notes: Verbalized token — no raw CR/LF bytes in template.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

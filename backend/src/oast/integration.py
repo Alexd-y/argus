@@ -32,7 +32,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
@@ -50,11 +50,8 @@ from src.oast.provisioner import (
     OASTToken,
     OASTUnavailableError,
 )
-from src.payloads.builder import PayloadBuildRequest
-from src.payloads.registry import PayloadFamily
-
-
 if TYPE_CHECKING:
+    from src.payloads.registry import PayloadFamily
     from src.policy.policy_engine import PolicyContext
 
 
@@ -117,7 +114,7 @@ class EvidencePreparation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
     strategy: EvidenceStrategy
-    payload_request: PayloadBuildRequest
+    payload_request: Any
     oast_token: OASTToken | None = None
     canary: Canary | None = None
     canary_token_for_finding: StrictStr = Field(
@@ -329,6 +326,8 @@ class OASTPlane:
         parameters["oast_host"] = token.subdomain
         parameters["canary"] = token.path_token.lower()
 
+        from src.payloads.builder import PayloadBuildRequest
+
         request = PayloadBuildRequest(
             family_id=family.family_id,
             correlation_key=correlation_key,
@@ -387,7 +386,9 @@ class OASTPlane:
         # caller paired a canary with an OAST template.
         parameters["canary"] = canary.secret_value
 
-        request = PayloadBuildRequest(
+        from src.payloads.builder import PayloadBuildRequest as _PayloadBuildRequest
+
+        request = _PayloadBuildRequest(
             family_id=family.family_id,
             correlation_key=correlation_key,
             encoding_pipeline=encoding_pipeline,

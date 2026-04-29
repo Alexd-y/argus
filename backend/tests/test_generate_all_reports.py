@@ -24,7 +24,9 @@ DEFAULT_GENERATE_ALL_API = ("pdf", "html", "json", "csv")
 
 
 def test_build_report_object_key_five_segments() -> None:
-    k = build_report_object_key("t1", "s1", "asgard", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "json")
+    k = build_report_object_key(
+        "t1", "s1", "asgard", "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "json"
+    )
     assert k == "t1/s1/reports/asgard/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.json"
     assert len(k.split("/")) == 5
 
@@ -74,7 +76,9 @@ def test_normalize_generation_formats_empty_explicit_defaults() -> None:
 
 
 def test_report_generate_all_request_resolved_formats_omitted_or_null() -> None:
-    assert ReportGenerateAllRequest.model_validate({}).resolved_formats() == list(DEFAULT_GENERATE_ALL_API)
+    assert ReportGenerateAllRequest.model_validate({}).resolved_formats() == list(
+        DEFAULT_GENERATE_ALL_API
+    )
     assert ReportGenerateAllRequest.model_validate({"formats": None}).resolved_formats() == list(
         DEFAULT_GENERATE_ALL_API
     )
@@ -220,8 +224,7 @@ def test_post_generate_all_empty_formats_array_rejected(app) -> None:
     details = body.get("details") or []
     assert isinstance(details, list) and details
     assert any(
-        "formats" in (err.get("loc") or ())
-        and "at least one" in (err.get("msg") or "").lower()
+        "formats" in (err.get("loc") or ()) and "at least one" in (err.get("msg") or "").lower()
         for err in details
     )
 
@@ -349,7 +352,9 @@ def test_download_report_uses_report_object_key_not_legacy_path(client: TestClie
         object_key=tier_key,
         size_bytes=4,
     )
-    factory = _session_factory_download_with_report_object(report=report, findings=[], report_object=ro)
+    factory = _session_factory_download_with_report_object(
+        report=report, findings=[], report_object=ro
+    )
 
     with (
         patch("src.api.routers.reports.async_session_factory", factory),
@@ -421,6 +426,7 @@ async def test_pipeline_upload_fn_receives_distinct_keys(monkeypatch: pytest.Mon
         exec_results = [
             _ExecScalar(report),
             MagicMock(),
+            _ExecScalar(None),
             _ExecScalar(None),
             MagicMock(),
         ]
@@ -543,7 +549,9 @@ async def test_enqueue_generate_all_bundle_post_scan_skips_if_already_flagged() 
     assert len(added) == 0
 
 
-def test_schedule_generate_all_reports_task_safe_invokes_celery(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_schedule_generate_all_reports_task_safe_invokes_celery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     mock_task = MagicMock()
     mock_task.delay.return_value = MagicMock(id="celery-1")
     monkeypatch.setattr("src.tasks.generate_all_reports_task", mock_task)

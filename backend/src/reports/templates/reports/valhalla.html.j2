@@ -1,40 +1,14 @@
-{% extends "base.html.j2" %}
-{# VHL-004 — section order per Report Valhalla.md #}
-{% block recon %}
+{% extends "valhalla_secreport_base.html.j2" %}
+{# VHL-004 — main narrative order; executive lens (ARG-031) key order: ``valhalla_executive_section_order`` in Jinja. #}
+{% block report_body %}
 {% if tier == 'valhalla' %}
     {% include "partials/valhalla/sections_01_02_title_executive.html.j2" %}
     {% include "partials/valhalla/sections_03_05_objectives_methodology.html.j2" %}
     {% include "partials/valhalla/section_06_results_overview.html.j2" %}
-{% endif %}
-{% endblock %}
-{% block findings %}
-{% if tier == 'valhalla' %}
     {% include "partials/valhalla/sections_07_08_threat_findings.html.j2" %}
-{% endif %}
-{% endblock %}
-{% block active_web_scan %}
     {% include "partials/active_web_scan.html.j2" %}
-{% endblock %}
-{% block artifacts %}
-{# RPT-008: anchor #scan-artifacts for navigation; full tables in Appendix G #}
-{% if tier == 'valhalla' %}
-    <h2 id="scan-artifacts">Phase Artifacts</h2>
-    <p class="meta">List of phase raw objects (presigned / API) is provided in <a href="#valhalla-appendix-scan-artifacts">Appendix G</a>.</p>
-{% endif %}
-{% endblock %}
-{% block exploitation %}
-{% if tier == 'valhalla' %}
     {% include "partials/valhalla/section_09_exploit_chains.html.j2" %}
-{% endif %}
-{% endblock %}
-{% block ai %}
-{% if tier == 'valhalla' %}
     {% include "partials/valhalla/sections_10_12_remediation_conclusion.html.j2" %}
-    {% include "partials/valhalla/section_cost_summary.html.j2" %}
-{% endif %}
-{% endblock %}
-{% block extra %}
-{% if tier == 'valhalla' %}
     {# ARG-031 — executive business-impact lens (renders only when ``valhalla_executive_report`` is wired). #}
     {% include "partials/valhalla/executive_report.html.j2" %}
     {% include "partials/valhalla/appendices.html.j2" %}

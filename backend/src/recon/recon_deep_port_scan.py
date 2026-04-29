@@ -299,7 +299,7 @@ async def run_recon_deep_port_scan_bundle(
                         extra={"event": "recon_deep_naabu_upload_failed"},
                     )
                 err = str(nb_r.get("stderr") or "")
-                if err.strip():
+                if len(err) > 0:
                     try:
                         await asyncio.to_thread(
                             raw_sink.upload_text,
@@ -377,7 +377,7 @@ async def run_recon_deep_port_scan_bundle(
                     extra={"event": "recon_deep_nmap_upload_failed"},
                 )
             err = str(nm_r.get("stderr") or "")
-            if err.strip():
+            if len(err) > 0:
                 try:
                     await asyncio.to_thread(
                         raw_sink.upload_text,

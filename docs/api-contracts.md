@@ -51,11 +51,39 @@ Base URL: `/api/v1` (или `NEXT_PUBLIC_API_URL`)
 
 ### 1.2 Отчёты
 
+**Список:** Frontend (`getReportByTarget`) запрашивает `GET /reports?target=…` и ожидает **JSON-массив** записей отчётов (берётся первый элемент).
+
 | Endpoint | Method | Request Schema | Response Schema | Error Schema |
 |----------|--------|----------------|-----------------|--------------|
-| `GET /reports` | GET | Query: `?target=string` | `{ report_id: string, target: string, summary: ReportSummary, findings: Finding[], technologies: string[], ... }` | `{ error: string, code?: string }` |
-| `GET /reports/:id` | GET | — | Full report object | `{ error: string, code?: string }` |
-| `GET /reports/:id/download` | GET | Query: `?format=pdf\|html\|json\|csv` | Binary/stream | `{ error: string, code?: string }` |
+| `GET /reports` | GET | Query: `?target=string` (опционально; фильтр по цели скана) | **`Report[]`** — массив объектов ниже | `{ error: string, code?: string, details?: object }` |
+| `GET /reports/:id` | GET | — | **`Report`** + доп. поля детали (ниже) | `{ error: string, code?: string, details?: object }` |
+| `GET /reports/:id/download` | GET | Query: см. ниже | Binary/stream (`Content-Disposition: attachment`) | `{ error: string, code?: string, details?: object }` |
+| `POST /reports/generate` | POST | ARG-024: `{ scan_id?: string, report_id?: string, tier: "midgard"\|"asgard"\|"valhalla", format: "html"\|"pdf"\|"json"\|"csv"\|"sarif"\|"junit" }` (хотя бы один из `scan_id` / `report_id`) | Файл отчёта + заголовки `X-Argus-Report-*` | 400 / 404 / 503 с телом ошибки как выше |
+
+**`GET /reports/:id/download` — query:**
+
+- `format`: `pdf` \| `html` \| `json` \| `csv` \| `valhalla_sections.csv` (последний только для отчётов tier `valhalla`).
+- `regenerate` (optional): `true` — пересобрать экспорт, минуя кэш `ReportObject`/MinIO.
+- `redirect` (optional): `true` — редирект `302` на presigned URL вместо потоковой выдачи.
+
+**Report (элемент списка и база для детали):**
+
+```ts
+{
+  report_id: string;
+  target: string;
+  summary: ReportSummary;
+  findings: Finding[];
+  technologies: string[];
+  generation_status?: string;  // pending | processing | ready | failed
+  tier?: string;               // midgard | asgard | valhalla
+  requested_formats?: string[] | null;
+}
+```
+
+**Дополнительно в `GET /reports/:id`:** `created_at?: string`, `scan_id?: string | null`.
+
+**Finding** — контракт задаёт минимум; сервер может добавлять опциональные поля (`owasp_category`, `confidence`, PoC и т.д.). Клиенты с индексной сигнатурой (`[key: string]: unknown`) остаются совместимыми.
 
 **ReportSummary** (из report/page.tsx):
 

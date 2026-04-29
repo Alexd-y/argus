@@ -58,6 +58,22 @@ def test_parse_whatweb_text_fallback_bracket_plugins() -> None:
     assert ts.get("web_server") or ts.get("cms")
 
 
+def test_parse_whatweb_text_fallback_detects_next_vercel_markers() -> None:
+    line = (
+        "https://glomsoposten.vercel.app [200 OK] Next.js, Script, "
+        "x-vercel-id: cdg1::abc, server: Vercel, /_next/static/chunks/app.js"
+    )
+    root = parse_whatweb_text_fallback(line)
+    assert root is not None
+    plugs = root["plugins"]
+    assert "Next.js" in plugs
+    assert "Vercel" in plugs
+    merged = merge_whatweb_json_roots([root])
+    ts = parse_whatweb_to_tech_stack(merged)
+    assert "next" in " ".join(ts.get("frameworks") or []).lower()
+    assert "vercel" in (ts.get("web_server") or "").lower()
+
+
 def test_parse_whatweb_to_tech_stack_from_merged() -> None:
     merged = merge_whatweb_json_roots(
         [

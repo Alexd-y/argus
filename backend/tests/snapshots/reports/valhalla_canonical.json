@@ -35,6 +35,12 @@
       "description": "UNION-based SQLi via id parameter on the payments API.",
       "cwe": "CWE-89",
       "cvss": 9.8,
+      "confidence": "confirmed",
+      "validation_status": "partially_validated",
+      "evidence_quality": "moderate",
+      "evidence_refs": [
+        "s3://argus-evidence/sqli-dump"
+      ],
       "owasp_category": "A05",
       "proof_of_concept": {
         "url": "https://payments.acme.example.com/api/v1/users",
@@ -52,6 +58,10 @@
       "description": "ghp_* token observed in /static/app.js.",
       "cwe": "CWE-200",
       "cvss": 7.5,
+      "confidence": "confirmed",
+      "validation_status": "unverified",
+      "evidence_quality": "none",
+      "evidence_refs": [],
       "owasp_category": "A01",
       "proof_of_concept": {
         "url": "https://www.acme.example.com/static/app.js",
@@ -64,6 +74,10 @@
       "description": "File upload allows RCE; PoC included.",
       "cwe": "CWE-78",
       "cvss": 8.6,
+      "confidence": "confirmed",
+      "validation_status": "unverified",
+      "evidence_quality": "none",
+      "evidence_refs": [],
       "owasp_category": "A05",
       "proof_of_concept": {
         "url": "https://app.acme.example.com/upload",
@@ -80,6 +94,10 @@
       "description": "No CSP / HSTS / X-Frame-Options.",
       "cwe": "CWE-693",
       "cvss": 4.3,
+      "confidence": "likely",
+      "validation_status": "unverified",
+      "evidence_quality": "none",
+      "evidence_refs": [],
       "owasp_category": "A02"
     },
     {
@@ -88,6 +106,10 @@
       "description": "Hardcoded password in deploy script.",
       "cwe": "CWE-798",
       "cvss": 2.9,
+      "confidence": "possible",
+      "validation_status": "unverified",
+      "evidence_quality": "none",
+      "evidence_refs": [],
       "owasp_category": "A07",
       "proof_of_concept": {
         "url": "https://ci.acme.example.com/deploy",
@@ -161,19 +183,19 @@
     "Rotate all PATs."
   ],
   "ai_sections": {
-    "attack_scenarios": "AI generation skipped: could not generate content",
-    "business_risk": "AI generation skipped: could not generate content",
-    "compliance_check": "AI generation skipped: could not generate content",
-    "cost_summary": "AI generation skipped: could not generate content",
+    "attack_scenarios": "AI generation skipped: no LLM provider available",
+    "business_risk": "AI generation skipped: no LLM provider available",
+    "compliance_check": "AI generation skipped: no LLM provider available",
+    "cost_summary": "AI generation skipped: no LLM provider available",
     "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
     "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
-    "exploit_chains": "AI generation skipped: could not generate content",
-    "hardening_recommendations": "AI generation skipped: could not generate content",
-    "prioritization_roadmap": "AI generation skipped: could not generate content",
-    "remediation_stages": "AI generation skipped: could not generate content",
+    "exploit_chains": "AI generation skipped: no LLM provider available",
+    "hardening_recommendations": "AI generation skipped: no LLM provider available",
+    "prioritization_roadmap": "AI generation skipped: no LLM provider available",
+    "remediation_stages": "AI generation skipped: no LLM provider available",
     "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
     "vulnerability_description": "LLM exec summary",
-    "zero_day_potential": "AI generation skipped: could not generate content"
+    "zero_day_potential": "AI generation skipped: no LLM provider available"
   },
   "scan_artifacts": {
     "phase_blocks": [
@@ -247,104 +269,135 @@
     },
     "owasp_compliance": [
       {
+        "assessed": "Assessed",
+        "assessment_result": "Finding present",
         "category_id": "A01",
         "count": 1,
         "description": "Пользователь меняет идентификатор в URL или API и получает чужой заказ, отчёт или админ‑функцию без проверки роли на сервере.",
         "description_hover": "Принудительная авторизация на сервере для каждого запроса, политики по ролям и владельцу ресурса, запрет на опору только на «скрытые» URL и параметры.",
-        "findings_present": "Yes",
+        "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
-        "title": "Broken Access Control"
+        "title": "Broken Access Control",
+        "title_ru": "Нарушение контроля доступа"
       },
       {
+        "assessed": "Assessed",
+        "assessment_result": "Finding present",
         "category_id": "A02",
         "count": 1,
         "description": "Открыты отладочные страницы, дефолтные учётки, лишние HTTP‑методы или заголовки; утечка версий и внутренних путей через ошибки.",
         "description_hover": "Минимальная поверхность: отключить лишнее, сильные TLS‑наборы, единый безопасный baseline, автоматизированные проверки конфигурации в CI/CD.",
-        "findings_present": "Yes",
+        "display_category_code": "A05:2021",
+        "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
-        "title": "Security Misconfiguration"
+        "title": "Security Misconfiguration",
+        "title_ru": "Небезопасная конфигурация"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A03",
         "count": 0,
         "description": "Компрометация зависимости или сборочного конвейера: подмена пакета, вредоносный артефакт в registry, скомпрометированный секрет CI.",
         "description_hover": "Закрепление версий, verified publishers, подписи и проверка checksum, изолированные сборки, минимальные права для CI, мониторинг уязвимостей в зависимостях.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Software Supply Chain Failures"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Software Supply Chain Failures",
+        "title_ru": "Сбои цепочки поставки ПО"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A04",
         "count": 0,
         "description": "Передача секретов и токенов по HTTP, слабые или устаревшие алгоритмы, хранение паролей без надёжного хэширования, предсказуемые IV/ключи.",
         "description_hover": "TLS везде для чувствительных данных, современные AEAD‑шифры, KMS/Vault для ключей, bcrypt/Argon2 для паролей, отказ от самописной криптографии.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Cryptographic Failures"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Cryptographic Failures",
+        "title_ru": "Криптографические сбои"
       },
       {
+        "assessed": "Assessed",
+        "assessment_result": "Finding present",
         "category_id": "A05",
         "count": 2,
         "description": "SQLi через форму поиска, XSS в отражённом выводе, командная инъекция в вызове shell, LDAP/XML‑инъекции в интеграциях.",
         "description_hover": "Параметризованные запросы, контекстное экранирование, CSP где уместно, запрет небезопасных API (eval, сырой shell), валидация по белым спискам.",
-        "findings_present": "Yes",
+        "findings_present": "2",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
-        "title": "Injection"
+        "title": "Injection",
+        "title_ru": "Инъекции"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A06",
         "count": 0,
         "description": "Функции спроектированы без модели угроз: доверие к клиенту, отсутствие rate limit, «временные» обходы аутентификации в проде.",
         "description_hover": "Secure SDLC, явные контроли на этапе дизайна, разделение зон доверия, лимиты и квоты, проектирование под принцип наименьших привилегий.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Insecure Design"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Insecure Design",
+        "title_ru": "Небезопасное проектирование"
       },
       {
+        "assessed": "Assessed",
+        "assessment_result": "Finding present",
         "category_id": "A07",
         "count": 1,
         "description": "Перебор паролей без блокировки, слабое восстановление доступа, фиксация сессии, кража токенов из localStorage, отсутствие MFA для чувствительных операций.",
         "description_hover": "MFA где нужно, безопасное хранение сессий (HttpOnly, Secure, SameSite), rate limiting, мониторинг аномальных логинов, современные потоки OAuth/OIDC.",
-        "findings_present": "Yes",
+        "findings_present": "1",
         "has_findings": true,
         "row_class": "owasp-compliance-warn",
-        "title": "Authentication Failures"
+        "title": "Authentication Failures",
+        "title_ru": "Сбои аутентификации"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A08",
         "count": 0,
         "description": "Небезопасная десериализация, подмена плагина или конфига, отсутствие проверки подписи обновлений, CI без защиты от подделки артефакта.",
         "description_hover": "Подписи и проверка целостности, безопасные форматы сериализации, запрет недоверенной десериализации, контроль целостности в pipeline и на узлах.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Software or Data Integrity Failures"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Software or Data Integrity Failures",
+        "title_ru": "Сбои целостности ПО и данных"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A09",
         "count": 0,
         "description": "Атакующий удаляет следы или действия не фиксируются; администратор не узнаёт о компрометации из‑за шума или отсутствия корреляции.",
         "description_hover": "Структурированные логи без секретов, централизованный сбор, неизменяемое хранилище, runbooks и алерты по ключевым индикаторам компрометации.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Security Logging & Alerting Failures"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Security Logging & Alerting Failures",
+        "title_ru": "Сбои журналирования и оповещения"
       },
       {
+        "assessed": "Not assessed",
+        "assessment_result": "Not assessed",
         "category_id": "A10",
         "count": 0,
         "description": "Падение сервиса из‑за неперехваченного исключения, утечка внутренних деталей в ответе об ошибке, отказ в обслуживании через краевые случаи ввода.",
         "description_hover": "Единый безопасный формат ошибок для клиента, детальные логи только на сервере, лимиты ресурсов, circuit breaker, корректные коды и таймауты для зависимостей.",
-        "findings_present": "No",
+        "findings_present": "Not assessed",
         "has_findings": false,
-        "row_class": "owasp-compliance-0",
-        "title": "Mishandling of Exceptional Conditions"
+        "row_class": "owasp-compliance-not-assessed",
+        "title": "Mishandling of Exceptional Conditions",
+        "title_ru": "Неверная обработка исключительных ситуаций"
       }
     ],
     "robots_sitemap": {
@@ -376,11 +429,13 @@
       "weak_ciphers": [],
       "weak_protocols": []
     },
+    "ssl_tls_table_rows": [],
     "headers": {
       "missing_recommended": [],
       "rows": [],
       "summary": null
     },
+    "security_headers_table_rows": [],
     "dependencies": [],
     "risk_matrix": {
       "cells": [],
@@ -388,23 +443,29 @@
       "variant": "matrix"
     },
     "critical_vulns": [],
+    "full_valhalla": false,
+    "evidence_inventory": [],
+    "tool_health_summary": [],
     "threat_modeling_ref": {
       "exploitation_post_excerpt": "",
       "threat_model": {
         "api_hint": "",
         "excerpt": "",
-        "phase": "threat_modeling",
-        "scan_id": "",
-        "tenant_id": ""
+        "phase": "threat_modeling"
       },
       "threat_model_excerpt": "",
       "threat_model_phase_link": ""
     },
     "findings": [
       {
+        "confidence": "confirmed",
         "cvss": 9.8,
         "cwe": "CWE-89",
         "description": "UNION-based SQLi via id parameter on the payments API.",
+        "evidence_quality": "moderate",
+        "evidence_refs": [
+          "s3://argus-evidence/sqli-dump"
+        ],
         "owasp_category": "A05",
         "proof_of_concept": {
           "replay_command": [
@@ -416,12 +477,16 @@
           "url": "https://payments.acme.example.com/api/v1/users"
         },
         "severity": "critical",
-        "title": "SQLi at /api/v1/users"
+        "title": "SQLi at /api/v1/users",
+        "validation_status": "partially_validated"
       },
       {
+        "confidence": "confirmed",
         "cvss": 8.6,
         "cwe": "CWE-78",
         "description": "File upload allows RCE; PoC included.",
+        "evidence_quality": "none",
+        "evidence_refs": [],
         "owasp_category": "A05",
         "proof_of_concept": {
           "replay_command": [
@@ -432,32 +497,46 @@
           "url": "https://app.acme.example.com/upload"
         },
         "severity": "high",
-        "title": "Reverse shell PoC in /upload"
+        "title": "Reverse shell PoC in /upload",
+        "validation_status": "unverified"
       },
       {
+        "confidence": "confirmed",
         "cvss": 7.5,
         "cwe": "CWE-200",
         "description": "ghp_* token observed in /static/app.js.",
+        "evidence_quality": "none",
+        "evidence_refs": [],
         "owasp_category": "A01",
         "proof_of_concept": {
           "reproducer": "curl -H 'Authorization: token [REDACTED-GH-TOKEN]' https://api.github.com/user",
           "url": "https://www.acme.example.com/static/app.js"
         },
         "severity": "high",
-        "title": "GitHub PAT leaked in JS bundle"
+        "title": "GitHub PAT leaked in JS bundle",
+        "validation_status": "unverified"
       },
       {
+        "confidence": "likely",
         "cvss": 4.3,
         "cwe": "CWE-693",
         "description": "No CSP / HSTS / X-Frame-Options.",
+        "evidence_quality": "none",
+        "evidence_refs": [],
         "owasp_category": "A02",
+        "owasp_display_code": "A05:2021",
+        "owasp_top10_2021": "A05:2021",
         "severity": "medium",
-        "title": "Missing security headers"
+        "title": "Missing security headers",
+        "validation_status": "unverified"
       },
       {
+        "confidence": "possible",
         "cvss": 2.9,
         "cwe": "CWE-798",
         "description": "Hardcoded password in deploy script.",
+        "evidence_quality": "none",
+        "evidence_refs": [],
         "owasp_category": "A07",
         "proof_of_concept": {
           "replay_command": [
@@ -473,22 +552,23 @@
           "url": "https://ci.acme.example.com/deploy"
         },
         "severity": "low",
-        "title": "MySQL root password observed in CI script"
+        "title": "MySQL root password observed in CI script",
+        "validation_status": "unverified"
       }
     ],
-    "exploit_chains_text": "AI generation skipped: could not generate content",
-    "remediation_stages_text": "AI generation skipped: could not generate content",
-    "zero_day_text": "AI generation skipped: could not generate content",
-    "conclusion_text": "AI generation skipped: could not generate content\n\nAI generation skipped: could not generate content",
+    "exploit_chains_text": "AI generation skipped: no LLM provider available",
+    "remediation_stages_text": "AI generation skipped: no LLM provider available",
+    "zero_day_text": "AI generation skipped: no LLM provider available",
+    "conclusion_text": "AI generation skipped: no LLM provider available\n\nAI generation skipped: no LLM provider available",
     "hibp_pwned_password_summary": {
       "pwned_count": 12
     },
     "appendices": {
       "ai_sections_supplemental": {
-        "attack_scenarios": "AI generation skipped: could not generate content",
-        "business_risk": "AI generation skipped: could not generate content",
-        "compliance_check": "AI generation skipped: could not generate content",
-        "cost_summary": "AI generation skipped: could not generate content",
+        "attack_scenarios": "AI generation skipped: no LLM provider available",
+        "business_risk": "AI generation skipped: no LLM provider available",
+        "compliance_check": "AI generation skipped: no LLM provider available",
+        "cost_summary": "AI generation skipped: no LLM provider available",
         "executive_summary": "Critical SQLi and RCE; rotate exposed credentials immediately.",
         "executive_summary_valhalla": "Critical SQLi and RCE; rotate exposed credentials immediately.",
         "remediation_step": "Patch ORM.\n\nDisable unrestricted upload.\n\nRotate all PATs.",
@@ -497,7 +577,8 @@
       "exploitation": [],
       "raw_artifacts": [
         {
-          "raw": "recon dump"
+          "artifact_count": 1,
+          "note": "Raw artifact bodies are omitted from the Valhalla export bundle; use scan artifact listings or storage-backed downloads where enabled."
         }
       ],
       "recon_summary": {
@@ -590,6 +671,7 @@
       "low": 1,
       "medium": 1
     },
+    "kev_listed_findings": [],
     "owasp_rollup_matrix": [
       {
         "category_id": "A01",
@@ -818,7 +900,10 @@
         "cvss": 9.8,
         "cwe": "CWE-89",
         "description": "UNION-based SQLi via id parameter on the payments API.",
+        "epss_percentile": null,
+        "epss_score": null,
         "exploitability_factor": 1.0,
+        "kev_listed": false,
         "owasp_category": "A05",
         "rank": 1,
         "sanitized_command": [
@@ -828,6 +913,7 @@
           "{ENDPOINT}?id=1' UNION SELECT 1,2,3--"
         ],
         "severity": "critical",
+        "ssvc_decision": null,
         "title": "SQLi at /api/v1/users"
       },
       {
@@ -837,7 +923,10 @@
         "cvss": 8.6,
         "cwe": "CWE-78",
         "description": "File upload allows RCE; PoC included.",
+        "epss_percentile": null,
+        "epss_score": null,
         "exploitability_factor": 1.0,
+        "kev_listed": false,
         "owasp_category": "A05",
         "rank": 2,
         "sanitized_command": [
@@ -846,6 +935,7 @@
           "[REDACTED-REVERSE-SHELL] [REDACTED-REVERSE-SHELL] 0>&1"
         ],
         "severity": "high",
+        "ssvc_decision": null,
         "title": "Reverse shell PoC in /upload"
       },
       {
@@ -855,7 +945,10 @@
         "cvss": 7.5,
         "cwe": "CWE-200",
         "description": "ghp_* token observed in /static/app.js.",
+        "epss_percentile": null,
+        "epss_score": null,
         "exploitability_factor": 1.0,
+        "kev_listed": false,
         "owasp_category": "A01",
         "rank": 3,
         "sanitized_command": [
@@ -867,6 +960,7 @@
           "https://api.github.com/user"
         ],
         "severity": "high",
+        "ssvc_decision": null,
         "title": "GitHub PAT leaked in JS bundle"
       },
       {
@@ -876,7 +970,10 @@
         "cvss": 4.3,
         "cwe": "CWE-693",
         "description": "No CSP / HSTS / X-Frame-Options.",
+        "epss_percentile": null,
+        "epss_score": null,
         "exploitability_factor": 0.75,
+        "kev_listed": false,
         "owasp_category": "A02",
         "rank": 4,
         "sanitized_command": [
@@ -885,6 +982,7 @@
           "https://www.acme.example.com/"
         ],
         "severity": "medium",
+        "ssvc_decision": null,
         "title": "Missing security headers"
       },
       {
@@ -894,7 +992,10 @@
         "cvss": 2.9,
         "cwe": "CWE-798",
         "description": "Hardcoded password in deploy script.",
+        "epss_percentile": null,
+        "epss_score": null,
         "exploitability_factor": 0.5,
+        "kev_listed": false,
         "owasp_category": "A07",
         "rank": 5,
         "sanitized_command": [
@@ -908,6 +1009,7 @@
           "SHOW DATABASES;"
         ],
         "severity": "low",
+        "ssvc_decision": null,
         "title": "MySQL root password observed in CI script"
       }
     ]

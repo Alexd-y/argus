@@ -1,0 +1,23 @@
+family_id: ssrf_oast_safe
+description: >-
+  Inert URL-shaped tokens for OAST/SSRF curriculum (synthetic host; no live callback).
+cwe_ids: [918]
+owasp_top10:
+  - 'A10:2021'
+risk_level: low
+requires_approval: false
+oast_required: true
+payloads:
+  - id: synthetic_url
+    template: "https://argus-oast-safe.invalid/ssrf-curriculum"
+    confidence: suspected
+    notes: Use with lab OAST only; string is non-routable (invalid TLD).
+  - id: marker
+    template: "ARGUS_SSRF_OAST_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without URL semantics.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

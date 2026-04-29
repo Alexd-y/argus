@@ -4,7 +4,11 @@ import React, { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useReport } from "@/hooks/useReport";
-import { getReportDownloadUrl } from "@/lib/reports";
+import {
+  getPublicReportUiMessage,
+  getReportDownloadUrl,
+  reportErrorKind,
+} from "@/lib/reports";
 
 type PlanType = "free" | "standard" | "premium";
 
@@ -106,6 +110,14 @@ function ReportPageContent() {
   const idParam = searchParams.get("id");
   const { report, loading, error, refetch } = useReport(targetParam, idParam);
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
+  const hasQuery = Boolean(targetParam || idParam);
+  const errKind = reportErrorKind(error, hasQuery);
+  const errorTitle =
+    errKind === "missing"
+      ? "Link incomplete"
+      : errKind === "not_found"
+        ? "Report not found"
+        : "Unable to load report";
 
   const site = report?.target ?? targetParam ?? "Unknown Target";
   const scanSummary = report?.summary ?? DEFAULT_SUMMARY;
@@ -139,8 +151,10 @@ function ReportPageContent() {
         </header>
         <main className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-md">
-            <div className="mb-4 text-red-400">Report not found</div>
-            <p className="text-neutral-400 text-sm mb-6">{error}</p>
+            <div className="mb-4 text-red-400">{errorTitle}</div>
+            <p className="text-neutral-400 text-sm mb-6">
+              {getPublicReportUiMessage(error)}
+            </p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={refetch}
@@ -320,14 +334,26 @@ function ReportPageContent() {
                   </div>
 
                   {plan.id === "free" && report ? (
-                    <a
-                      href={getReportDownloadUrl(report.report_id, "pdf")}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-3 rounded text-sm font-medium transition-all cursor-pointer block text-center bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700"
-                    >
-                      {plan.buttonText}
-                    </a>
+                    <div className="space-y-2">
+                      <a
+                        href={getReportDownloadUrl(report.report_id, "pdf")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-3 rounded text-sm font-medium transition-all cursor-pointer block text-center bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700"
+                      >
+                        {plan.buttonText}
+                      </a>
+                      <a
+                        href={getReportDownloadUrl(report.report_id, "pdf", {
+                          regenerate: true,
+                        })}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-center text-[11px] text-neutral-500 hover:text-emerald-400 underline-offset-2 hover:underline"
+                      >
+                        Regenerate &amp; download (fresh export)
+                      </a>
+                    </div>
                   ) : (
                     <button
                       onClick={() => setSelectedPlan(plan.id)}

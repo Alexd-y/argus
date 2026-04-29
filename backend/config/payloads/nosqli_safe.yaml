@@ -1,0 +1,23 @@
+family_id: nosqli_safe
+description: >-
+  Inert tokens for NoSQL operator detection drills (no server-side evaluation).
+cwe_ids: [943]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: marker_a
+    template: "ARGUS_NOSQL_SAFE_MARKER_A"
+    confidence: suspected
+    notes: Plain ASCII marker.
+  - id: marker_b
+    template: "ARGUS_NOSQL_SAFE_MARKER_B"
+    confidence: suspected
+    notes: Companion marker for correlation.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

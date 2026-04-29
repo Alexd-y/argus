@@ -61,10 +61,17 @@ def severity_from_cvss(cvss: float) -> str | None:
 
 
 def _get_cvss(finding) -> float | None:
-    """Extract CVSS score as float, handling both field names."""
+    """Extract CVSS score as float, handling both field names and PoC mirrors."""
     raw = _get_attr(finding, "cvss_score")
     if raw is None:
         raw = _get_attr(finding, "cvss")
+    if raw is None:
+        poc = _get_attr(finding, "proof_of_concept")
+        if isinstance(poc, dict):
+            for k in ("cvss_score", "cvss_base_score", "cvss", "base_score"):
+                if k in poc and poc.get(k) is not None:
+                    raw = poc.get(k)
+                    break
     if raw is None:
         return None
     try:

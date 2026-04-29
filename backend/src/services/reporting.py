@@ -66,9 +66,20 @@ from src.reports.finding_metadata import (
     normalize_evidence_type,
 )
 from src.reports.generators import (
+    VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE,
     ReportData,
     build_owasp_compliance_rows,
     build_report_data_from_scan_report,
+)
+from src.reports.report_quality_gate import (
+    build_report_quality_gate,
+    is_http_header_gap_topic,
+    sanitize_ai_sections_for_quality,
+)
+from src.reports.valhalla_finding_normalization import (
+    header_gap_verification_commands,
+    owasp_top10_2021_label,
+    valhalla_header_finding_remediation_text,
 )
 from src.reports.valhalla_report_context import (
     ValhallaReportContext,
@@ -464,13 +475,19 @@ def _build_xss_poc_detail_for_jinja(poc: dict[str, Any], row: dict[str, Any]) ->
     return out or None
 
 
-def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
+def findings_rows_for_jinja(
+    data: ScanReportData, *, report_tier: str | None = None
+) -> list[dict[str, Any]]:
     """Serializable finding rows for report templates (autoescaped at render)."""
+    tier_norm = normalize_report_tier(report_tier) if report_tier else None
     rows: list[dict[str, Any]] = []
     for f in data.findings:
         parsed_owasp = (
             parse_owasp_category(f.owasp_category) if isinstance(f.owasp_category, str) else None
         )
+        header_gap = is_http_header_gap_topic(f)
+        if tier_norm == "valhalla" and header_gap:
+            parsed_owasp = "A02"
         row: dict[str, Any] = {
             "id": f.id or "",
             "severity": f.severity or "",
@@ -479,9 +496,18 @@ def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
             "cwe": f.cwe,
             "cvss": f.cvss,
             "owasp_category": parsed_owasp,
+            "validation_status": f.validation_status or "unverified",
+            "evidence_quality": f.evidence_quality or "none",
         }
         if parsed_owasp:
             row["owasp_title"] = OWASP_TOP10_2025_CATEGORY_TITLES.get(parsed_owasp, parsed_owasp)
+        if tier_norm == "valhalla" and parsed_owasp == "A02":
+            row["owasp_display_code"] = VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
+            row["owasp_top10_2021"] = "A05:2021"
+        elif tier_norm == "valhalla" and parsed_owasp:
+            lbl21 = owasp_top10_2021_label(parsed_owasp)
+            if lbl21:
+                row["owasp_top10_2021"] = lbl21
         poc: dict[str, Any] = {}
         if isinstance(f.proof_of_concept, dict):
             poc = dict(f.proof_of_concept)
@@ -507,6 +533,17 @@ def findings_rows_for_jinja(data: ScanReportData) -> list[dict[str, Any]]:
         refs = normalize_evidence_refs(f.evidence_refs)
         row["evidence_type"] = et
         row["evidence_refs"] = refs
+        if tier_norm == "valhalla" and header_gap:
+            url_guess = ""
+            if poc:
+                url_guess = str(poc.get("request_url") or poc.get("url") or "").strip()
+            if not url_guess:
+                au = getattr(f, "affected_url", None)
+                if isinstance(au, str) and au.strip():
+                    url_guess = au.strip()
+            row["verification_commands"] = header_gap_verification_commands(url_guess)
+            row["remediation_text"] = valhalla_header_finding_remediation_text()
+            row["evidence_ids"] = list(refs) if refs else []
         row["evidence_summary"] = format_evidence_cell(et, refs)
         row["applicability_notes"] = (f.applicability_notes or "").strip()
         row["reproducible_steps"] = (f.reproducible_steps or "").strip()
@@ -533,11 +570,17 @@ def render_findings_table_html(
     tier_norm = normalize_report_tier(tier)
     env = get_report_jinja_environment()
     summary_arg = owasp_summary if owasp_summary else None
+    v2021 = tier_norm == "valhalla"
     return env.get_template("partials/findings_table.html.j2").render(
         tier=tier_norm,
         findings=findings_rows,
         embed_poc_screenshot_inline=bool(embed),
-        owasp_compliance_rows=build_owasp_compliance_rows(findings_rows, owasp_summary=summary_arg),
+        valhalla_owasp_2021_labels=v2021,
+        owasp_compliance_rows=build_owasp_compliance_rows(
+            findings_rows,
+            owasp_summary=summary_arg,
+            use_valhalla_owasp_2021_misconfig_labels=v2021,
+        ),
         owasp_top10_labels=OWASP_TOP10_2025_CATEGORY_TITLES,
     )
 
@@ -664,6 +707,9 @@ def _compact_owasp_fields(info: dict[str, Any]) -> dict[str, str]:
     title = info.get("title") or info.get("title_ru")
     if isinstance(title, str) and title.strip():
         out["title"] = _truncate_report_text(title, _OWASP_AI_REFERENCE_FIELD_MAX_LEN)
+    title_ru = info.get("title_ru")
+    if isinstance(title_ru, str) and title_ru.strip():
+        out["title_ru"] = _truncate_report_text(title_ru, _OWASP_AI_REFERENCE_FIELD_MAX_LEN)
     for key in ("example_attack", "how_to_find", "how_to_fix"):
         raw = info.get(key)
         if isinstance(raw, str) and raw.strip():
@@ -832,6 +878,10 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
     hdr = vc.security_headers_analysis
     ssl = vc.ssl_tls_analysis
     return {
+        "engagement_title": (vc.valhalla_engagement_title or "")[:256],
+        "full_valhalla": bool(vc.full_valhalla),
+        "wstg_execution_degraded": bool(vc.wstg_execution_degraded),
+        "wstg_coverage_zero_executed": bool(vc.wstg_coverage_zero_executed),
         "summary": _valhalla_one_line_summary(vc),
         "robots_txt": {
             "found": rob.found,
@@ -954,7 +1004,8 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
                 "title": _truncate_report_text(v.title or "", 500),
                 "cvss": float(v.cvss) if isinstance(v.cvss, (int, float)) else None,
                 "description": _truncate_report_text(v.description or "", _VALHALLA_AI_FINDING_DESC_MAX),
-                "exploit_available": bool(v.exploit_available),
+                "exploit_available": bool(v.exploit_demonstrated),
+                "exploit_demonstrated": bool(v.exploit_demonstrated),
             }
             for v in (vc.critical_vulns or [])[:_VALHALLA_AI_CRITICAL_VULNS_MAX]
         ],
@@ -994,24 +1045,32 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
     }
 
 
-def _owasp_compliance_table_for_ai(data: ScanReportData) -> list[dict[str, Any]]:
-    """OWASP Top 10:2025 rows aligned with HTML compliance table (compact)."""
+def _owasp_compliance_table_for_ai(data: ScanReportData, *, report_tier: str) -> list[dict[str, Any]]:
+    """OWASP Top 10 rows aligned with HTML compliance table (compact)."""
+    t = normalize_report_tier(report_tier)
+    v2021 = t == "valhalla"
     rows = build_owasp_compliance_rows(
-        findings_rows_for_jinja(data),
+        findings_rows_for_jinja(data, report_tier=t),
         owasp_summary=data.owasp_summary if data.owasp_summary else None,
+        wstg_coverage=data.valhalla_context.wstg_coverage,
+        use_valhalla_owasp_2021_misconfig_labels=v2021,
     )
     out: list[dict[str, Any]] = []
     for r in rows:
-        out.append(
-            {
-                "category_id": r.get("category_id"),
-                "title": _truncate_report_text(str(r.get("title") or ""), 200),
-                "has_findings": bool(r.get("has_findings")),
-                "findings_present": r.get("findings_present"),
-                "count": int(r.get("count") or 0),
-                "row_class": r.get("row_class"),
-            }
-        )
+        item: dict[str, Any] = {
+            "category_id": r.get("category_id"),
+            "title": _truncate_report_text(str(r.get("title") or ""), 200),
+            "has_findings": bool(r.get("has_findings")),
+            "assessed": r.get("assessed"),
+            "assessment_result": r.get("assessment_result"),
+            "findings_present": r.get("findings_present"),
+            "count": int(r.get("count") or 0),
+            "row_class": r.get("row_class"),
+        }
+        dc = r.get("display_category_code")
+        if isinstance(dc, str) and dc.strip():
+            item["display_category_code"] = dc.strip()
+        out.append(item)
     return out
 
 
@@ -1156,6 +1215,10 @@ class ReportGenerator:
                 "severity": f.severity,
                 "title": (f.title or "")[:240],
                 "cwe": f.cwe,
+                "confidence": f.confidence,
+                "validation_status": f.validation_status,
+                "evidence_quality": f.evidence_quality,
+                "evidence_refs": normalize_evidence_refs(f.evidence_refs)[:12],
             }
             ow_raw = f.owasp_category
             ow_parsed = (
@@ -1186,8 +1249,11 @@ class ReportGenerator:
                 item["exploit_available"] = derive_exploit_available_flag(
                     _finding_row_as_dict_for_exploit(f)
                 )
-                cv = f.cvss
+                cv = getattr(f, "cvss_score", None)
+                if cv is None:
+                    cv = f.cvss
                 item["cvss"] = float(cv) if isinstance(cv, (int, float)) else None
+                item["cvss_score"] = item["cvss"]
                 cvss_vec = poc_d.get("cvss_vector")
                 if not cvss_vec and f.cwe:
                     estimated = estimate_cvss_vector(f.cwe)
@@ -1260,7 +1326,12 @@ class ReportGenerator:
         owasp_ref = _owasp_category_reference_for_ai(owasp_summary)
         if owasp_ref is not None:
             payload["owasp_category_reference"] = owasp_ref
-        payload["owasp_compliance_table"] = _owasp_compliance_table_for_ai(data)
+            payload["owasp_category_reference_ru"] = owasp_ref
+        payload["owasp_compliance_table"] = _owasp_compliance_table_for_ai(
+            data, report_tier=tier_norm
+        )
+        quality_gate = build_report_quality_gate(data).as_dict()
+        payload["report_quality_gate"] = quality_gate
         if tier_norm == "valhalla":
             compact_vc = _compact_valhalla_context_for_ai(data.valhalla_context)
             payload["valhalla_context"] = compact_vc
@@ -1270,7 +1341,7 @@ class ReportGenerator:
             payload["security_headers_analysis"] = compact_vc.get("security_headers")
             payload["outdated_components_table"] = compact_vc.get("outdated_components")
             payload["robots_sitemap_analysis"] = compact_vc.get("robots_sitemap_analysis")
-            payload["valhalla_fallback_messages"] = {
+            fallback_messages = {
                 "tech_stack": vc.tech_stack_fallback_message,
                 "ssl_tls": vc.ssl_tls_fallback_message,
                 "security_headers": vc.security_headers_fallback_message,
@@ -1278,6 +1349,9 @@ class ReportGenerator:
                 "robots_sitemap": vc.robots_sitemap_fallback_message,
                 "leaked_emails": vc.leaked_emails_fallback_message,
             }
+            payload["valhalla_fallback_messages"] = fallback_messages
+            # Backward-compatible key consumed by older Valhalla prompts/tests.
+            payload["valhalla_fallback_messages_ru"] = fallback_messages
             hibp = data.hibp_pwned_password_summary
             if isinstance(hibp, dict) and hibp:
                 payload["hibp_pwned_password_summary"] = hibp
@@ -1468,6 +1542,16 @@ class ReportGenerator:
                 if not has_any_llm_key()
                 else REPORT_AI_SKIPPED_GENERATION_FAILED
             )
+        quality_gate = build_report_quality_gate(data)
+        texts, ai_quality_warnings = sanitize_ai_sections_for_quality(
+            texts,
+            data,
+            quality_gate,
+            enforce_quality_gate=tier_norm == "valhalla",
+        )
+        for warning in ai_quality_warnings:
+            if warning not in quality_gate.warnings:
+                quality_gate.warnings.append(warning)
         extra_merged: dict[str, Any] = dict(extra) if extra else {}
         embed_key = "embed_poc_screenshot_inline"
         embed_override = extra_merged.pop(embed_key, None)
@@ -1486,8 +1570,9 @@ class ReportGenerator:
                 "active": name == tier_norm,
                 "slots": {k: texts.get(k, "") for k in keys},
             }
-        finding_rows = findings_rows_for_jinja(data)
+        finding_rows = findings_rows_for_jinja(data, report_tier=tier_norm)
         severity_counts_ctx = executive_severity_totals_from_finding_rows(data.findings)
+        v2021_owasp = tier_norm == "valhalla"
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
             "tier": tier_norm,
@@ -1506,7 +1591,10 @@ class ReportGenerator:
             "owasp_compliance_rows": build_owasp_compliance_rows(
                 finding_rows,
                 owasp_summary=data.owasp_summary if data.owasp_summary else None,
+                wstg_coverage=data.valhalla_context.wstg_coverage,
+                use_valhalla_owasp_2021_misconfig_labels=v2021_owasp,
             ),
+            "valhalla_owasp_2021_labels": v2021_owasp,
             "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
             "recon_summary": recon_summary_for_jinja(data),
             "exploitation": exploitation_outputs_for_jinja(data),
@@ -1521,6 +1609,8 @@ class ReportGenerator:
             ),
             "valhalla_appendix_timeline_rows": valhalla_timeline_appendix_rows(data.timeline),
             "hibp_pwned_password_summary": data.hibp_pwned_password_summary,
+            "report_quality": quality_gate.as_dict(),
+            "ai_quality_warnings": ai_quality_warnings,
             "ai_sections": dict(texts),
             "jinja": jinja_tiers,
         }
@@ -1618,6 +1708,13 @@ class ReportGenerator:
         report_id: str | None = None,
     ) -> ReportData:
         """Delegate to ``build_report_data_from_scan_report`` for HTML/JSON/PDF/CSV generators."""
+        quality_gate = build_report_quality_gate(data)
+        ai_section_texts, _warnings = sanitize_ai_sections_for_quality(
+            dict(ai_section_texts),
+            data,
+            quality_gate,
+            enforce_quality_gate=bool(data.report and data.report.tier == "valhalla"),
+        )
         exec_key = (
             REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA
             if ai_section_texts.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA)
@@ -1638,3 +1735,45 @@ class ReportGenerator:
             remediation=remediation,
             ai_insights=insights,
         )
+
+
+async def build_report_export_payload(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    report_id: str,
+    scan_id: str,
+    tier: str | None,
+    include_minio: bool = True,
+    sync_ai: bool = True,
+    redis_client: Any | None = None,
+    generator: ReportGenerator | None = None,
+) -> tuple[ReportData, dict[str, Any]]:
+    """
+    Canonical on-demand export: same chain as ``run_generate_report_pipeline`` —
+    ``ReportGenerator.build_context`` → ``to_generator_report_data`` plus full ``template_context``.
+
+    Callers must pass a tenant-scoped ``scan_id`` (e.g. from ``resolve_scan_id_for_report``).
+    """
+    from src.core.redis_client import get_redis
+
+    gen = generator or ReportGenerator()
+    # Hot paths should pass ``redis_client`` to avoid sync get_redis() in async code.
+    redis = redis_client if redis_client is not None else get_redis()
+    built = await gen.build_context(
+        session,
+        tenant_id,
+        scan_id,
+        tier,
+        report_id=report_id,
+        include_minio=include_minio,
+        sync_ai=sync_ai,
+        redis_client=redis,
+    )
+    texts = gen.ai_results_to_text_map(built.ai_section_results)
+    report_data = gen.to_generator_report_data(
+        built.scan_report_data,
+        texts,
+        report_id=report_id,
+    )
+    return report_data, built.template_context

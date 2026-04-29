@@ -1,0 +1,23 @@
+family_id: ssti_safe
+description: >-
+  Non-eval SSTI curriculum markers (no template engine directives).
+cwe_ids: [1336]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: plain_a
+    template: "ARGUS_SSTI_SAFE_PLAIN_A"
+    confidence: suspected
+    notes: Static text marker without delimiters.
+  - id: plain_b
+    template: "ARGUS_SSTI_SAFE_PLAIN_B"
+    confidence: suspected
+    notes: Companion static marker.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

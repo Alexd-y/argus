@@ -1,0 +1,23 @@
+family_id: xss_contextual
+description: >-
+  Non-executable XSS context markers for parser training (no script execution).
+cwe_ids: [79]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: inert_tag
+    template: "<xss data-argus-safe=\"ctx1\"/>"
+    confidence: suspected
+    notes: Inert custom element; safe for encoding pipeline tests.
+  - id: encoded_angle
+    template: "&lt;argus-xss-safe&gt;"
+    confidence: suspected
+    notes: Entity-encoded brackets only.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Raw UTF-8 context probe.

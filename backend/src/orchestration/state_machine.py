@@ -612,6 +612,7 @@ async def run_scan_state_machine(
                         subdomains=recon_out.subdomains if recon_out else None,
                         ports=recon_out.ports if recon_out else None,
                         target=target,
+                        scan_id=scan_id,
                     )
                     output_data = threat_out.model_dump()
                 elif phase == ScanPhase.VULN_ANALYSIS:
@@ -628,6 +629,7 @@ async def run_scan_state_machine(
                         tenant_id=tenant_id,
                         scan_id=scan_id,
                         scan_options=options,
+                        recon_context=recon_out.tool_results if recon_out else None,
                     )
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:
@@ -651,7 +653,9 @@ async def run_scan_state_machine(
                     )
                     record_tool_run(ExploitationSubPhase.EXPLOIT_ATTEMPT.value)
                     await session.commit()
-                    attempt_out = await run_exploit_attempt(findings)
+                    attempt_out = await run_exploit_attempt(
+                        findings, scan_id=scan_id
+                    )
                     await _record_event(
                         session,
                         tenant_id,
@@ -695,7 +699,13 @@ async def run_scan_state_machine(
                 elif phase == ScanPhase.REPORTING:
                     record_tool_run("reporting")
                     report_out = await run_reporting(
-                        target, recon_out, threat_out, vuln_out, exploit_out, post_out
+                        target,
+                        recon_out,
+                        threat_out,
+                        vuln_out,
+                        exploit_out,
+                        post_out,
+                        scan_id=scan_id,
                     )
                     output_data = report_out.model_dump()
                 else:

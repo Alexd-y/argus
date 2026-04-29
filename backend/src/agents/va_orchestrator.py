@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.cache.scan_knowledge_base import get_knowledge_base
-from src.llm.task_router import LLMTask, LLMTaskResponse, call_llm_for_task
+from src.llm.facade import call_llm_unified
+from src.llm.task_router import LLMTask
 from src.skills import build_skills_prompt_block
 
 logger = logging.getLogger(__name__)
@@ -445,12 +446,14 @@ class VAMultiAgentOrchestrator:
             )
 
             try:
-                response: LLMTaskResponse = await call_llm_for_task(
+                text = await call_llm_unified(
+                    system_prompt,
+                    user_prompt,
                     task=LLMTask.VALIDATION_ONESHOT,
-                    prompt=user_prompt,
-                    system_prompt=system_prompt,
+                    scan_id=_scan_id or None,
+                    phase="va_discovery",
                 )
-                findings = self._parse_findings(response.text, category, target_url)
+                findings = self._parse_findings(text, category, target_url)
                 return DiscoveryResult(
                     category=category,
                     findings=findings,

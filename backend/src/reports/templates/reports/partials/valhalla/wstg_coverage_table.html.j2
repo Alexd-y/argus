@@ -3,11 +3,17 @@
     <h3>OWASP WSTG v4.2 Test Coverage</h3>
     <div class="coverage-summary">
         <span class="coverage-score">{{ wstg_coverage.coverage_percentage|round(1) }}%</span>
-        <span>Covered: {{ wstg_coverage.covered }} / {{ wstg_coverage.total_tests }}</span>
+        <span>Full coverage: {{ wstg_coverage.covered }} / {{ wstg_coverage.total_tests }}</span>
         {% if wstg_coverage.partial > 0 %}
             <span class="meta">(Partial: {{ wstg_coverage.partial }})</span>
         {% endif %}
     </div>
+    {% if wstg_coverage.coverage_percentage < 70 %}
+        <p class="report-warning"><strong>Warning:</strong> WSTG coverage is {{ wstg_coverage.coverage_percentage|round(1) }}% — this is <strong>not</strong> comprehensive application penetration testing. The report title should be read as <em>Valhalla Automated Security Assessment — degraded execution</em> for this run.</p>
+    {% endif %}
+    {% if wstg_coverage.covered is defined and wstg_coverage.covered == 0 and wstg_coverage.total_tests is defined and wstg_coverage.total_tests > 0 %}
+        <p class="report-warning"><strong>0 / {{ wstg_coverage.total_tests }} WSTG-mapped cases</strong> with executed coverage in this run — this is not a full-scope application security assessment.</p>
+    {% endif %}
     <table class="wstg-table">
         <thead>
             <tr>
@@ -16,6 +22,7 @@
                 <th>Partial</th>
                 <th>Not Covered</th>
                 <th>Coverage</th>
+                <th>Evidence IDs</th>
             </tr>
         </thead>
         <tbody>
@@ -35,6 +42,7 @@
                     </div>
                     {{ cat_data.percentage|round(1) }}%
                 </td>
+                <td>{% if cat_data.evidence_ids %}{{ cat_data.evidence_ids | join(", ") | e }}{% else %}—{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -1,0 +1,23 @@
+family_id: jwt_safe
+description: >-
+  Non-secret JWT curriculum fragments (not valid signed tokens; structure drills).
+cwe_ids: [345]
+owasp_top10:
+  - 'A07:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: not_a_jwt
+    template: "ARGUS_JWT_SAFE_NOT_A_TOKEN"
+    confidence: suspected
+    notes: Not base64url JWT structure; marker only.
+  - id: header_label
+    template: "ARGUS_JWT_SAFE_HEADER_LABEL"
+    confidence: suspected
+    notes: Text label for curriculum.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

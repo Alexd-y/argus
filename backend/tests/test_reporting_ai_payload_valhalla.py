@@ -96,7 +96,7 @@ def test_build_ai_payload_valhalla_includes_risk_matrix_and_critical_vulns_compa
 
     assert "critical_vulns" in vctx
     assert vctx["critical_vulns"][0]["vuln_id"] == "fid-1"
-    assert vctx["critical_vulns"][0]["exploit_available"] is True
+    assert vctx["critical_vulns"][0]["exploit_available"] is False
 
     f0 = p["findings"][0]
     assert f0["finding_id"] == "fid-1"

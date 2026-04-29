@@ -11,8 +11,10 @@ services:
 
   minio:
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # Host ports → container 9000/9001. On Windows, 9000-9001 are often in
+      # Hyper-V excluded ranges (e.g. 8985-9084); set MINIO_PORT and MINIO_CONSOLE_PORT in .env.
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
 
   redis:
     ports:

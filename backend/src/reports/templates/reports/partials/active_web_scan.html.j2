@@ -2,7 +2,11 @@
 {% if active_web_scan.visible %}
 <section class="panel active-web-scan" id="active-web-scan">
     <h2>Active Web Scanning</h2>
+    {% if tier == "valhalla" %}
+    <p class="meta">Dynamic testing evidence is summarized in the Findings and Evidence Inventory sections. Raw storage paths and internal API endpoints are omitted from the customer report.</p>
+    {% else %}
     <p class="meta">Dynamic testing (phases <code>vuln_analysis</code>, <code>exploitation</code>): tool outputs in raw artifacts and condensed AI context for report sections.</p>
+    {% endif %}
 
     {% if active_web_scan.tools_run %}
         <h3>Tools Executed (by artifact names)</h3>
@@ -15,10 +19,12 @@
         <p class="empty">No active scanning tools were identified from raw artifact names (or artifacts were not uploaded).</p>
     {% endif %}
 
-    <h3>Artifacts and API</h3>
-    <p>Raw logs are available in the <a href="#{{ active_web_scan.artifacts_section_id | e }}">Phase Artifacts</a> section.
-        Additionally: <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=vuln_analysis&amp;raw=true</code>,
-        <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=exploitation&amp;raw=true</code>.</p>
+    {% if tier != "valhalla" %}
+        <h3>Artifacts and API</h3>
+        <p>Raw logs are available in the <a href="#{{ active_web_scan.artifacts_section_id | e }}">Phase Artifacts</a> section.
+            Additionally: <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=vuln_analysis&amp;raw=true</code>,
+            <code>GET /api/v1/scans/{{ scan_id }}/artifacts?phase=exploitation&amp;raw=true</code>.</p>
+    {% endif %}
 
     {% if active_web_scan.ai_summary_rows %}
         <h3>AI Context Summary (report sections)</h3>
@@ -30,8 +36,10 @@
         <p class="empty">AI texts for related sections are empty or have not been generated yet.</p>
     {% endif %}
 
-    <h3>Reflected Input Verification Example (curl)</h3>
-    <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
-    <pre class="ai-slot-body"><code>{{ active_web_scan.curl_xss_example | e }}</code></pre>
+    {% if tier != "valhalla" %}
+        <h3>Reflected Input Verification Example (curl)</h3>
+        <p>Use only on authorized test environments. Substitute a safe test string for the placeholder; do not embed executable HTML/JS in the report.</p>
+        <pre class="ai-slot-body"><code>{{ active_web_scan.curl_xss_example | e }}</code></pre>
+    {% endif %}
 </section>
 {% endif %}
