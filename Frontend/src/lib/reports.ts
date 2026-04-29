@@ -50,13 +50,57 @@ export function reportErrorKind(
   return "other";
 }
 
-export async function getReportByTarget(target: string): Promise<Report> {
+export async function getReportsByTarget(target: string): Promise<Report[]> {
   const params = new URLSearchParams({ target });
   const reports = await apiFetch<Report[]>(`/reports?${params.toString()}`);
   if (!Array.isArray(reports) || reports.length === 0) {
     throw new Error("Report not found");
   }
+  return reports;
+}
+
+export async function getReportByTarget(target: string): Promise<Report> {
+  const reports = await getReportsByTarget(target);
   return reports[0];
+}
+
+/** True when backend marks report artifacts as ready for download (HTML/PDF, etc.). */
+export function isReportGenerationReady(
+  generationStatus?: string | null,
+): boolean {
+  return (generationStatus ?? "ready").toLowerCase() === "ready";
+}
+
+/**
+ * Prefer scan-scoped URL so HTML is always Valhalla tier even when the UI row is another tier.
+ * Fallback: Valhalla report row + HTML export.
+ */
+export function resolveValhallaHtmlReportDownloadUrl(input: {
+  scanId?: string | null;
+  valhallaReportId?: string | null;
+}): string | null {
+  const scanId = input.scanId?.trim();
+  if (scanId) {
+    const params = new URLSearchParams({
+      format: "html",
+      tier: "valhalla",
+    });
+    return apiUrl(
+      `/scans/${encodeURIComponent(scanId)}/report?${params.toString()}`,
+    );
+  }
+  const rid = input.valhallaReportId?.trim();
+  if (rid) {
+    return getReportDownloadUrl(rid, "html");
+  }
+  return null;
+}
+
+/** Pick Valhalla-tier row from GET /reports list (same target / tenant). */
+export function findValhallaReportRow(reports: Report[]): Report | undefined {
+  return reports.find(
+    (r) => String(r.tier ?? "").toLowerCase() === "valhalla",
+  );
 }
 
 export async function getReportById(reportId: string): Promise<Report> {

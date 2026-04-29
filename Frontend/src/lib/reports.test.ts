@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getReportByTarget,
+  getReportsByTarget,
   getReportDownloadUrl,
   getPublicReportUiMessage,
   reportErrorKind,
+  isReportGenerationReady,
+  resolveValhallaHtmlReportDownloadUrl,
+  findValhallaReportRow,
 } from "./reports";
 import type { Report } from "./types";
 
@@ -23,6 +27,8 @@ const mockReport: Report = {
   },
   findings: [],
   technologies: ["nginx", "React"],
+  tier: "midgard",
+  generation_status: "ready",
 };
 
 describe("reports", () => {
@@ -35,6 +41,53 @@ describe("reports", () => {
         json: () => Promise.resolve([mockReport]),
       })
     );
+  });
+
+  describe("isReportGenerationReady", () => {
+    it("treats missing status as ready (backend default)", () => {
+      expect(isReportGenerationReady(undefined)).toBe(true);
+      expect(isReportGenerationReady(null)).toBe(true);
+    });
+
+    it("returns false for non-ready statuses", () => {
+      expect(isReportGenerationReady("pending")).toBe(false);
+      expect(isReportGenerationReady("processing")).toBe(false);
+      expect(isReportGenerationReady("failed")).toBe(false);
+    });
+  });
+
+  describe("resolveValhallaHtmlReportDownloadUrl", () => {
+    it("prefers scan-scoped URL when scanId is set", () => {
+      const u = resolveValhallaHtmlReportDownloadUrl({
+        scanId: "scan-1",
+        valhallaReportId: "rpt-v",
+      });
+      expect(u).toMatch(/\/scans\/scan-1\/report\?/);
+      expect(u).toContain("format=html");
+      expect(u).toContain("tier=valhalla");
+    });
+
+    it("falls back to reports download when only valhallaReportId is set", () => {
+      const u = resolveValhallaHtmlReportDownloadUrl({
+        scanId: null,
+        valhallaReportId: "rpt-v",
+      });
+      expect(u).toMatch(/\/reports\/rpt-v\/download\?/);
+      expect(u).toContain("format=html");
+    });
+
+    it("returns null when neither scan nor report id is usable", () => {
+      expect(
+        resolveValhallaHtmlReportDownloadUrl({ scanId: "", valhallaReportId: "" }),
+      ).toBeNull();
+    });
+  });
+
+  describe("findValhallaReportRow", () => {
+    it("finds Valhalla tier row case-insensitively", () => {
+      const v = { ...mockReport, report_id: "v1", tier: "Valhalla" };
+      expect(findValhallaReportRow([mockReport, v])).toEqual(v);
+    });
   });
 
   describe("getReportDownloadUrl", () => {
@@ -173,6 +226,22 @@ describe("reports", () => {
       await expect(getReportByTarget("https://example.com")).rejects.toThrow(
         "Request failed (500)"
       );
+    });
+  });
+
+  describe("getReportsByTarget", () => {
+    it("returns full array from GET /reports?target=", async () => {
+      const fetchMock = vi.mocked(fetch);
+      const second = { ...mockReport, report_id: "rpt-789", tier: "valhalla" };
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve([mockReport, second]),
+      } as Response);
+
+      const rows = await getReportsByTarget("https://example.com");
+      expect(rows).toHaveLength(2);
+      expect(rows[1].report_id).toBe("rpt-789");
     });
   });
 });

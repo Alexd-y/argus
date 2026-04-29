@@ -1,14 +1,10 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useReport } from "@/hooks/useReport";
-import {
-  getPublicReportUiMessage,
-  getReportDownloadUrl,
-  reportErrorKind,
-} from "@/lib/reports";
+import { getPublicReportUiMessage, reportErrorKind } from "@/lib/reports";
 
 type PlanType = "free" | "standard" | "premium";
 
@@ -108,8 +104,7 @@ function ReportPageContent() {
   const searchParams = useSearchParams();
   const targetParam = searchParams.get("target");
   const idParam = searchParams.get("id");
-  const { report, loading, error, refetch } = useReport(targetParam, idParam);
-  const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
+  const { report, loading, error, refetch, valhallaHtmlDownloadUrl } = useReport(targetParam, idParam);
   const hasQuery = Boolean(targetParam || idParam);
   const errKind = reportErrorKind(error, hasQuery);
   const errorTitle =
@@ -283,123 +278,132 @@ function ReportPageContent() {
             </div>
           </div>
 
-          <div className="mb-6 sm:mb-8 text-center">
-            <h1 className="text-xl sm:text-2xl text-white mb-2">Choose Your Report</h1>
-            <p className="text-neutral-500 text-sm sm:text-base px-2">Get detailed analysis and remediation recommendations for discovered vulnerabilities</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
-            {plans.map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative border rounded-lg overflow-hidden transition-all ${
-                  plan.popular
-                    ? "border-[#A655F7] bg-[#A655F7]/5"
-                    : "border-neutral-800 bg-neutral-900 hover:border-neutral-700"
-                } ${selectedPlan === plan.id ? "ring-2 ring-[#A655F7]" : ""}`}
-              >
-                {plan.popular && (
-                  <div className="absolute top-0 left-0 right-0 bg-[#A655F7] text-white text-xs text-center py-1 font-medium uppercase tracking-wider">
-                    Most Popular
-                  </div>
-                )}
-
-                <div className={`p-6 ${plan.popular ? "pt-10" : ""}`}>
-                  <div className="mb-4">
-                    <h3 className="text-white font-medium mb-1">{plan.name}</h3>
-                    <p className="text-xs text-neutral-500">{plan.nameRu}</p>
-                  </div>
-
-                  <div className="mb-4">
-                    <span className={`text-3xl font-bold ${plan.price === null ? "text-emerald-400" : "text-white"}`}>
-                      {plan.priceLabel}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                    {plan.description}
+          {!valhallaHtmlDownloadUrl ? (
+            <div className="mb-8 sm:mb-12 border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <h2 className="text-white font-medium mb-1">Report not ready yet</h2>
+                  <p className="text-neutral-400 text-sm leading-relaxed">
+                    The full Valhalla HTML report is still being generated. Download options will appear here when it is ready.
                   </p>
-
-                  <div className="space-y-3 mb-6">
-                    {plan.features.map((feature, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className={`text-xs mt-0.5 ${feature.included ? "text-emerald-400" : "text-neutral-600"}`}>
-                          {feature.included ? "✓" : "×"}
-                        </span>
-                        <span className={`text-xs ${feature.included ? "text-neutral-300" : "text-neutral-600 line-through"}`}>
-                          {feature.text}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {plan.id === "free" && report ? (
-                    <div className="space-y-2">
-                      <a
-                        href={getReportDownloadUrl(report.report_id, "pdf")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-3 rounded text-sm font-medium transition-all cursor-pointer block text-center bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700"
-                      >
-                        {plan.buttonText}
-                      </a>
-                      <a
-                        href={getReportDownloadUrl(report.report_id, "pdf", {
-                          regenerate: true,
-                        })}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-center text-[11px] text-neutral-500 hover:text-emerald-400 underline-offset-2 hover:underline"
-                      >
-                        Regenerate &amp; download (fresh export)
-                      </a>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setSelectedPlan(plan.id)}
-                      className={`w-full py-3 rounded text-sm font-medium transition-all cursor-pointer ${
-                        plan.popular
-                          ? "bg-[#A655F7] text-white hover:bg-[#b875f8] glitch-hover"
-                          : "bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700 hover:border-[#A655F7]/50"
-                      }`}
-                    >
-                      {plan.buttonText}
-                    </button>
-                  )}
                 </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mb-8 sm:mb-12 border border-neutral-800 bg-neutral-900 rounded p-4 sm:p-6">
-            <h3 className="text-white font-medium mb-4">What You Get in Each Report</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-xs">
-              <div>
-                <div className="text-neutral-300 uppercase tracking-wider mb-1">Midgard</div>
-                <div className="text-neutral-400 text-[10px] mb-2">Surface-level overview</div>
-                <p className="text-neutral-400 leading-relaxed">
-                  Facts only about discovered issues. No recommendations — you&apos;ll know WHAT was found,
-                  but not HOW to fix it.
-                </p>
-              </div>
-              <div>
-                <div className="text-[#A655F7] uppercase tracking-wider mb-1">Asgard</div>
-                <div className="text-[#c9a0fa] text-[10px] mb-2">Deep insights & guidance</div>
-                <p className="text-neutral-400 leading-relaxed">
-                  General recommendations: &quot;upgrade to version X&quot;, &quot;enable HTTPS&quot;.
-                  Links to documentation. No case-specific instructions.
-                </p>
-              </div>
-              <div>
-                <div className="text-amber-400 uppercase tracking-wider mb-1">Valhalla</div>
-                <div className="text-amber-300 text-[10px] mb-2">Elite full protection</div>
-                <p className="text-neutral-400 leading-relaxed">
-                  Detailed instructions with prioritization. What to fix first,
-                  step-by-step actions for each issue.
-                </p>
+                <button
+                  type="button"
+                  onClick={refetch}
+                  className="shrink-0 cursor-pointer px-4 py-2 text-sm bg-neutral-800 text-white hover:bg-neutral-700 rounded border border-neutral-700"
+                >
+                  Check again
+                </button>
               </div>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="mb-6 sm:mb-8 text-center">
+                <h1 className="text-xl sm:text-2xl text-white mb-2">Choose Your Report</h1>
+                <p className="text-neutral-500 text-sm sm:text-base px-2">
+                  Get detailed analysis and remediation recommendations for discovered vulnerabilities
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12">
+                {plans.map((plan) => (
+                  <div
+                    key={plan.id}
+                    className={`relative border rounded-lg overflow-hidden transition-all ${
+                      plan.popular
+                        ? "border-[#A655F7] bg-[#A655F7]/5"
+                        : "border-neutral-800 bg-neutral-900 hover:border-neutral-700"
+                    }`}
+                  >
+                    {plan.popular && (
+                      <div className="absolute top-0 left-0 right-0 bg-[#A655F7] text-white text-xs text-center py-1 font-medium uppercase tracking-wider">
+                        Most Popular
+                      </div>
+                    )}
+
+                    <div className={`p-6 ${plan.popular ? "pt-10" : ""}`}>
+                      <div className="mb-4">
+                        <h3 className="text-white font-medium mb-1">{plan.name}</h3>
+                        <p className="text-xs text-neutral-500">{plan.nameRu}</p>
+                      </div>
+
+                      <div className="mb-4">
+                        <span
+                          className={`text-3xl font-bold ${plan.price === null ? "text-emerald-400" : "text-white"}`}
+                        >
+                          {plan.priceLabel}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-neutral-400 mb-6 leading-relaxed">{plan.description}</p>
+
+                      <div className="space-y-3 mb-6">
+                        {plan.features.map((feature, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span
+                              className={`text-xs mt-0.5 ${feature.included ? "text-emerald-400" : "text-neutral-600"}`}
+                            >
+                              {feature.included ? "✓" : "×"}
+                            </span>
+                            <span
+                              className={`text-xs ${feature.included ? "text-neutral-300" : "text-neutral-600 line-through"}`}
+                            >
+                              {feature.text}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {valhallaHtmlDownloadUrl ? (
+                        <a
+                          href={valhallaHtmlDownloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`w-full py-3 rounded text-sm font-medium transition-all cursor-pointer block text-center ${
+                            plan.popular
+                              ? "bg-[#A655F7] text-white hover:bg-[#b875f8] glitch-hover"
+                              : "bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700 hover:border-[#A655F7]/50"
+                          }`}
+                        >
+                          {plan.buttonText}
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mb-8 sm:mb-12 border border-neutral-800 bg-neutral-900 rounded p-4 sm:p-6">
+                <h3 className="text-white font-medium mb-4">What You Get in Each Report</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 text-xs">
+                  <div>
+                    <div className="text-neutral-300 uppercase tracking-wider mb-1">Midgard</div>
+                    <div className="text-neutral-400 text-[10px] mb-2">Surface-level overview</div>
+                    <p className="text-neutral-400 leading-relaxed">
+                      Facts only about discovered issues. No recommendations — you&apos;ll know WHAT was found,
+                      but not HOW to fix it.
+                    </p>
+                  </div>
+                  <div>
+                    <div className="text-[#A655F7] uppercase tracking-wider mb-1">Asgard</div>
+                    <div className="text-[#c9a0fa] text-[10px] mb-2">Deep insights & guidance</div>
+                    <p className="text-neutral-400 leading-relaxed">
+                      General recommendations: &quot;upgrade to version X&quot;, &quot;enable HTTPS&quot;.
+                      Links to documentation. No case-specific instructions.
+                    </p>
+                  </div>
+                  <div>
+                    <div className="text-amber-400 uppercase tracking-wider mb-1">Valhalla</div>
+                    <div className="text-amber-300 text-[10px] mb-2">Elite full protection</div>
+                    <p className="text-neutral-400 leading-relaxed">
+                      Detailed instructions with prioritization. What to fix first,
+                      step-by-step actions for each issue.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="mb-8 sm:mb-12">
             <div className="border border-neutral-800 bg-neutral-900 rounded-lg overflow-hidden">
