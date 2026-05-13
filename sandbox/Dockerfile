@@ -137,7 +137,9 @@ RUN pip3 install --no-cache-dir --break-system-packages dirsearch || true
 # at build time (as root), `playwright install-deps chromium` pulls apt deps Playwright expects.
 # VA XSS-005 browser verification runs in backend/Celery Python (same codebase as worker), not in
 # this sandbox container — this install is for any tool/script executed inside argus-sandbox only.
-RUN pip install playwright && playwright install chromium
+# Kali rolling: PEP 668 — same as XSStrike/dirsearch layers (pip3 --break-system-packages).
+RUN pip3 install --no-cache-dir --break-system-packages playwright \
+    && playwright install chromium
 
 RUN if [ "${INSTALL_MSF}" = "true" ]; then \
       export DEBIAN_FRONTEND=noninteractive; \
