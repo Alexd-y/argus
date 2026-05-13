@@ -278,15 +278,23 @@ def call_llm_sync(
     synchronous code path.  When already inside a running event loop the
     coroutine is executed in a dedicated thread to avoid "cannot run nested
     event loop" errors.
+
+    Every path is bounded by ``_SYNC_TIMEOUT_SECONDS`` (``asyncio.wait_for``)
+    so a hung WRB cannot block a Celery worker indefinitely.
     """
-    coro = call_llm_unified(
-        system_prompt,
-        user_prompt,
-        task=task,
-        model=model,
-        scan_id=scan_id,
-        phase=phase,
-    )
+
+    def _make_coro():
+        return call_llm_unified(
+            system_prompt,
+            user_prompt,
+            task=task,
+            model=model,
+            scan_id=scan_id,
+            phase=phase,
+        )
+
+    def _run_bounded() -> str:
+        return asyncio.run(asyncio.wait_for(_make_coro(), timeout=_SYNC_TIMEOUT_SECONDS))
 
     try:
         loop = asyncio.get_running_loop()
@@ -295,7 +303,7 @@ def call_llm_sync(
 
     if loop is not None and loop.is_running():
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, coro)
-            return future.result(timeout=_SYNC_TIMEOUT_SECONDS)
+            future = pool.submit(_run_bounded)
+            return future.result(timeout=_SYNC_TIMEOUT_SECONDS + 30.0)
 
-    return asyncio.run(coro)
+    return _run_bounded()

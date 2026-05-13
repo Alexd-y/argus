@@ -19,6 +19,8 @@ def _provider_from_model(model: str) -> str:
     if not model:
         return "_other"
     m = model.lower()
+    if "whiterabbit" in m or "white-rabbit-neo" in m or "taico-ai" in m:
+        return "whiterabbitneo"
     if m.startswith("anthropic/") or "claude" in m:
         return "anthropic"
     if m.startswith("openai/") or m.startswith("gpt") or m.startswith("o1") or m.startswith("o3"):

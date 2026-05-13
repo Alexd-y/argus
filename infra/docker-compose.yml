@@ -3,6 +3,8 @@
 #
 # Usage:
 #   Production: docker compose -f infra/docker-compose.yml up
+#   Worker image: build backend first (worker Dockerfile FROM argus-backend — not on Hub):
+#     docker compose -f docker-compose.yml build backend && docker compose -f docker-compose.yml up -d --build
 #   Dev: docker compose up (from infra/ — docker-compose.override.yml auto-loaded)
 #
 # Env: copy infra/.env.example to infra/.env (see .env.example for path)
@@ -332,7 +334,8 @@ services:
     image: nginx:1.27-alpine
     container_name: argus-nginx
     env_file: .env
-    entrypoint: ["/docker-entrypoint.sh"]
+    # Bind-mounted script may lose +x (Windows clone, git filemode); exec via sh avoids "permission denied".
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
     environment:
       # Accept either ARGUS_CORS_ALLOWED_ORIGINS (canonical) or CORS_ORIGINS
       # (used by backend FastAPI app) so the same .env value drives both layers.

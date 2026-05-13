@@ -231,7 +231,17 @@ _FINDING_SEVERITIES: Final[frozenset[str]] = frozenset(
 )
 _FINDING_KEV_FLAGS: Final[frozenset[str]] = frozenset({"true", "false"})
 _LLM_PROVIDERS: Final[frozenset[str]] = frozenset(
-    {"anthropic", "openai", "deepseek", "openrouter", "google", "kimi", "perplexity"},
+    {
+        "anthropic",
+        "openai",
+        "deepseek",
+        "openrouter",
+        "google",
+        "kimi",
+        "perplexity",
+        "whiterabbitneo",
+        "_other",
+    },
 )
 _LLM_DIRECTIONS: Final[frozenset[str]] = frozenset({"in", "out"})
 _MCP_STATUSES: Final[frozenset[str]] = frozenset(

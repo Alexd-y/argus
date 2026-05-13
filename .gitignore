@@ -7,6 +7,8 @@
 
 # Dependencies
 node_modules/
+# Next/Turbopack must not see a stray lockfile here — it treats repo root as workspace and breaks Frontend (tailwindcss in ARGUS/).
+/package-lock.json
 
 # Build outputs
 .next/
