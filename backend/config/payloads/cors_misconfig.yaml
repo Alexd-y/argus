@@ -1,0 +1,37 @@
+family_id: cors_misconfig
+description: >-
+  CORS misconfiguration probes (CWE-942). Origin: null, Origin: attacker.com,
+  Origin: sub.target.com, and Access-Control-Allow-Credentials bypass vectors.
+cwe_ids: [942]
+owasp_top10:
+  - 'A01:2021'
+  - 'A05:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: origin_null
+    template: "null"
+    confidence: suspected
+    notes: Origin: null header probe; sandboxed iframes and data: URIs send null origin.
+  - id: origin_attacker
+    template: "https://{oast_host}"
+    confidence: suspected
+    notes: Attacker-controlled Origin header; tests wildcard or reflexive ACAO responses.
+  - id: origin_sub_target
+    template: "https://{canary}.{target_domain}"
+    confidence: suspected
+    notes: Subdomain Origin probe; tests prefix-matching CORS allowlist bypass.
+  - id: creds_bypass_origin
+    template: "https://{target_domain}.{oast_host}"
+    confidence: suspected
+    notes: Suffix-matching Origin; bypasses ACAO-Credentials restrictions via suffix injection.
+mutations:
+  - name: mixed_scheme
+    description: Swap Origin between http:// and https:// to test scheme-level allowlists.
+  - name: trailing_slash
+    description: Append trailing dot to Origin domain to test RFC-allowlist matching flaws.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw Origin header value.

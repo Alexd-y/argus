@@ -124,4 +124,45 @@ export const adminApi = {
         "/health/dashboard"
       ),
   },
+  llm: {
+    aliases: {
+      list: (params?: { tenant_id?: string }) => {
+        const q = new URLSearchParams();
+        if (params?.tenant_id) q.set("tenant_id", params.tenant_id);
+        return fetchAdmin<Array<{ id: string; alias: string; provider_key: string; model: string; role: string; cloud_allowed: boolean; enabled: boolean }>>(
+          `/gateway/providers?${q}`
+        );
+      },
+    },
+    usage: {
+      summary: (params?: { tenant_id?: string; scan_id?: string }) => {
+        const q = new URLSearchParams();
+        if (params?.tenant_id) q.set("tenant_id", params.tenant_id);
+        if (params?.scan_id) q.set("scan_id", params.scan_id);
+        return fetchAdmin<{ total_calls: number; total_tokens: number; total_cost_usd: number; by_provider: Record<string, number>; by_model: Record<string, number> }>(
+          `/gateway/usage?${q}`
+        );
+      },
+      invocations: (params?: { tenant_id?: string; scan_id?: string; limit?: number }) => {
+        const q = new URLSearchParams();
+        if (params?.tenant_id) q.set("tenant_id", params.tenant_id);
+        if (params?.scan_id) q.set("scan_id", params.scan_id);
+        if (params?.limit) q.set("limit", String(params.limit ?? 50));
+        return fetchAdmin<Array<{ id: string; alias: string; provider: string; model: string; prompt_tokens: number; completion_tokens: number; estimated_cost_usd: number; latency_ms: number; status: string; created_at: string }>>(
+          `/gateway/invocations?${q}`
+        );
+      },
+      perTenant: (tenant_id: string) => {
+        return fetchAdmin<{ tenant_id: string; total_calls: number; total_tokens: number; total_cost_usd: number; providers: Record<string, { calls: number; tokens: number; cost_usd: number }> }>(
+          `/gateway/usage?tenant_id=${tenant_id}`
+        );
+      },
+    },
+    health: {
+      wrb: () =>
+        fetch("/api/v1/llm/whiterabbitneo/health").then(r => r.json()),
+      all: () =>
+        fetch("/api/v1/llm/health/all").then(r => r.json()),
+    },
+  },
 };

@@ -26,6 +26,11 @@ from src.reports.report_data_validation import (
     validate_report_data,
 )
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
+from src.reports.valhalla_report import (
+    generate_valhalla_report,
+    generate_valhalla_sections,
+    render_valhalla_report,
+)
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -421,3 +426,192 @@ async def run_generate_report_pipeline(
         with contextlib.suppress(Exception):
             await session.rollback()
     return {"status": "failed", "report_id": report_id, "error": "generation_failed"}
+
+
+async def generate_valhalla_report_pipeline(
+    session: AsyncSession,
+    *,
+    report_id: str,
+    tenant_id: str,
+    scan_id_hint: str | None,
+    include_minio: bool = True,
+    redis_client: Any | None = None,
+    llm_callable: Callable[[str, dict], str] | None = None,
+) -> dict[str, Any]:
+    """VHL-010 — Full Valhalla pipeline: context → AI sections → render → upload.
+
+    Invoked when tier == "valhalla". Uses :func:`~src.reports.valhalla_report.generate_valhalla_report`
+    to build context, call LLM for all 13 Valhalla sections, and render to HTML.
+    Then uploads rendered artifacts to MinIO and upserts ReportObject rows.
+    """
+    from src.core.redis_client import get_redis
+    from src.reports.storage import ensure_bucket
+    from src.storage.s3 import upload_report_artifact as default_upload_report
+
+    def _default_upload(
+        tenant_id: str,
+        scan_id: str,
+        tier: str,
+        report_id: str,
+        fmt: str,
+        data: bytes,
+        *,
+        content_type: str,
+    ) -> str | None:
+        return default_upload_report(
+            tenant_id, scan_id, tier, report_id, fmt, data, content_type=content_type,
+        )
+
+    ensure_bucket()
+
+    result = await session.execute(select(Report).where(cast(Report.id, String) == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        return {"status": "failed", "report_id": report_id, "error": "Report not found"}
+
+    if str(report.tenant_id) != str(tenant_id):
+        return {"status": "failed", "report_id": report_id, "error": "Tenant mismatch"}
+
+    scan_id = await resolve_scan_id_for_report(session, tenant_id, report_id, report, scan_id_hint)
+    if not scan_id:
+        await session.execute(
+            update(Report)
+            .where(cast(Report.id, String) == report_id)
+            .values(
+                generation_status="failed",
+                last_error_message="Missing scan_id for Valhalla report storage",
+            )
+        )
+        await session.commit()
+        return {"status": "failed", "report_id": report_id, "error": "No scan_id for report"}
+
+    await session.execute(
+        update(Report)
+        .where(cast(Report.id, String) == report_id)
+        .values(generation_status="processing", last_error_message=None)
+    )
+    await session.commit()
+
+    try:
+        redis = redis_client if redis_client is not None else get_redis()
+        pipeline_result = await generate_valhalla_report(
+            session=session,
+            scan_id=scan_id,
+            tenant_id=tenant_id,
+            report_id=report_id,
+            llm_callable=llm_callable,
+        )
+
+        if pipeline_result["status"] == "partial_no_llm":
+            logger.warning(
+                "valhalla_report_generated_without_llm",
+                extra={
+                    "event": "valhalla_report_generated_without_llm",
+                    "scan_id": scan_id,
+                    "tenant_id": tenant_id,
+                },
+            )
+
+        html_data = pipeline_result["html_bytes"]
+        tier_str = "valhalla"
+
+        # Upload HTML
+        html_key = _default_upload(
+            tenant_id,
+            scan_id,
+            tier_str,
+            report_id,
+            "valhalla_full",
+            html_data,
+            content_type="text/html; charset=utf-8",
+        )
+        if not html_key:
+            raise RuntimeError("Upload failed for Valhalla full HTML")
+
+        await _upsert_report_object(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            report_id=report_id,
+            fmt="valhalla_full",
+            object_key=html_key,
+            size_bytes=len(html_data),
+        )
+
+        # Also render markdown and upload as archival artifact
+        context_obj = pipeline_result.get("context")
+        from src.reports.valhalla_report import ValhallaReportContext as VRC
+        md_ctx = VRC.model_validate(context_obj) if isinstance(context_obj, dict) else None
+        if md_ctx is not None:
+            md_data = render_valhalla_report(md_ctx, format="md")
+            md_key = _default_upload(
+                tenant_id,
+                scan_id,
+                tier_str,
+                report_id,
+                "valhalla_md",
+                md_data,
+                content_type="text/markdown; charset=utf-8",
+            )
+            if md_key:
+                await _upsert_report_object(
+                    session,
+                    tenant_id=tenant_id,
+                    scan_id=scan_id,
+                    report_id=report_id,
+                    fmt="valhalla_md",
+                    object_key=md_key,
+                    size_bytes=len(md_data),
+                )
+
+        await session.execute(
+            update(Report)
+            .where(cast(Report.id, String) == report_id)
+            .values(generation_status="ready", last_error_message=None)
+        )
+        await session.commit()
+
+        completed: dict[str, Any] = {
+            "status": "completed",
+            "report_id": report_id,
+            "valhalla_full": True,
+            "html_object_key": html_key,
+            "html_size": len(html_data),
+            "ai_sections_count": len(pipeline_result.get("ai_sections", {})),
+        }
+
+        logger.info(
+            "valhalla_report_pipeline_completed",
+            extra={
+                "event": "valhalla_report_pipeline_completed",
+                "report_id": report_id,
+                "tenant_id": tenant_id,
+                "scan_id": scan_id,
+                "ai_sections_n": completed["ai_sections_count"],
+                "html_size": completed["html_size"],
+            },
+        )
+
+        return completed
+
+    except jinja2.TemplateError as exc:
+        logger.error("Valhalla report template rendering failed", exc_info=exc)
+        err_msg = safe_report_task_error_message(exc)
+    except OSError as exc:
+        logger.error("Valhalla report file I/O failed", exc_info=exc)
+        err_msg = safe_report_task_error_message(exc)
+    except Exception as exc:
+        logger.error("Valhalla report generation failed", exc_info=exc)
+        err_msg = safe_report_task_error_message(exc)
+
+    try:
+        await session.execute(
+            update(Report)
+            .where(cast(Report.id, String) == report_id)
+            .values(generation_status="failed", last_error_message=err_msg)
+        )
+        await session.commit()
+    except Exception:
+        with contextlib.suppress(Exception):
+            await session.rollback()
+    return {"status": "failed", "report_id": report_id, "error": "valhalla_generation_failed"}

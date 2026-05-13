@@ -25,3 +25,10 @@ data:
   OTEL_TRACES_SAMPLER_ARG: {{ .Values.otelInstrumentation.sampleRatio | quote }}
   OTEL_SERVICE_NAME: argus
   {{- end }}
+  {{- if .Values.llmGateway.enabled }}
+  LLM_GATEWAY_URL: "http://{{ include "argus.fullname" . }}-llm-gateway:{{ .Values.llmGateway.service.port }}"
+  {{- end }}
+  {{- if .Values.whiteRabbitNeo.enabled }}
+  WHITERABBITNEO_URL: "http://{{ include "argus.fullname" . }}-whiterabbitneo:8000/v1"
+  LLM_REQUIRE_WHITERABBITNEO: "true"
+  {{- end }}

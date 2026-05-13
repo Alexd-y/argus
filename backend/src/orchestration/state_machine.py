@@ -654,7 +654,7 @@ async def run_scan_state_machine(
                     record_tool_run(ExploitationSubPhase.EXPLOIT_ATTEMPT.value)
                     await session.commit()
                     attempt_out = await run_exploit_attempt(
-                        findings, scan_id=scan_id
+                        findings, scan_id=scan_id, target=target, tenant_id=tenant_id
                     )
                     await _record_event(
                         session,

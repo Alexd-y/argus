@@ -1,0 +1,40 @@
+tool_id: curl
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+cpu_limit: "200m"
+memory_limit: "128Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-web:latest"
+command_template:
+  - "curl"
+  - "-sS"
+  - "--fail-with-body"
+  - "--max-time"
+  - "30"
+  - "-i"
+  - "-L"
+  - "-o"
+  - "{out_dir}/curl_body.txt"
+  - "-D"
+  - "{out_dir}/curl_headers.txt"
+  - "{url}"
+parse_strategy: http_raw
+evidence_artifacts:
+  - "/out/curl_body.txt"
+  - "/out/curl_headers.txt"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-02"
+  - "WSTG-INFO-08"
+description: "curl HTTP/S probe capturing response headers and body with redirect following for initial service fingerprinting. Backlog/dev1_md §4.4."

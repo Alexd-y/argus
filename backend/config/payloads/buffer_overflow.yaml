@@ -1,0 +1,37 @@
+family_id: buffer_overflow
+description: >-
+  Memory corruption curriculum probes (CWE-120). Format string %n writes,
+  long input overflow probes, and stack canary test markers. Non-exploitative
+  curriculum only — no shellcode or return-oriented chains.
+cwe_ids: [120]
+owasp_top10:
+  - 'A06:2021'
+risk_level: critical
+requires_approval: true
+oast_required: false
+payloads:
+  - id: fmt_overflow_probe
+    template: "%5000d%17$n"
+    confidence: suspected
+    notes: Format specifier probe; %n write to memory location tests insecure printf.
+  - id: long_input_overflow
+    template: "{repeated_a_8192}"
+    confidence: suspected
+    notes: 8192-byte oversized input; tests stack buffer boundaries in native handlers.
+  - id: canary_read_probe
+    template: "%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p.%p"
+    confidence: suspected
+    notes: Stack leak via format string; exposes canary values and return addresses.
+  - id: off_by_one_null
+    template: "B{repeated_A_255}\x00"
+    confidence: suspected
+    notes: Off-by-one null byte probe; tests null-termination boundary conditions.
+mutations:
+  - name: fmt_positional
+    description: Swap positional argument index to target different stack offsets.
+  - name: length_escalation
+    description: Progressively increase input length 1K, 4K, 8K, 16K, 128K boundary steps.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw binary-compatible payload pass-through.

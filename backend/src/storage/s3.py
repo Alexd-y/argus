@@ -30,6 +30,15 @@ logger = logging.getLogger(__name__)
 # Lazy import to avoid boto3 requirement when storage disabled
 _client = None
 
+
+def _invalidate_s3_client_after_empty_put(body_len: int) -> None:
+    """Сбросить клиент после PUT с пустым телом: MinIO + urllib3 дают битое соединение в пуле
+    (HeaderParsingError / MissingHeaderBodySeparatorDefect на следующем ответе). См. minio#6540, boto3#3757."""
+    global _client
+    if body_len == 0:
+        _client = None
+
+
 # Path traversal: reject slashes, backslashes, parent dir refs (for path components)
 _FORBIDDEN_PATTERN = re.compile(r"[/\\]|\.\.|^\s*$")
 
@@ -93,12 +102,36 @@ def _get_client():
                 scheme = "https" if settings.minio_secure else "http"
                 endpoint = f"{scheme}://{endpoint}"
 
+            # MinIO + recent urllib3: default flexible checksum / response headers from
+            # S3-compatible servers can trigger urllib3.exceptions.HeaderParsingError
+            # (MissingHeaderBodySeparatorDefect) on some responses. Prefer legacy-style
+            # checksum behavior; path-style addressing avoids virtual-host quirks on
+            # custom endpoints. Real AWS S3 keeps virtual-hosted style.
+            ep_lower = endpoint.lower()
+            custom_s3 = "amazonaws.com" not in ep_lower
+            s3_opts: dict[str, str] | None = (
+                {"addressing_style": "path"} if custom_s3 else None
+            )
+            base_cfg = dict(
+                signature_version="s3v4",
+                retries={"max_attempts": 3, "mode": "standard"},
+                s3=s3_opts,
+            )
+            try:
+                client_cfg = Config(
+                    **base_cfg,
+                    request_checksum_calculation="when_required",
+                    response_checksum_validation="when_required",
+                )
+            except TypeError:
+                # botocore < ~1.35: checksum options unavailable
+                client_cfg = Config(**base_cfg)
             _client = boto3.client(
                 "s3",
                 endpoint_url=endpoint,
                 aws_access_key_id=settings.minio_access_key,
                 aws_secret_access_key=settings.minio_secret_key,
-                config=Config(signature_version="s3v4", retries={"max_attempts": 2}),
+                config=client_cfg,
                 region_name="us-east-1",
             )
         except ImportError as e:
@@ -233,6 +266,7 @@ def upload_recon_summary_json(tenant_id: str, scan_id: str, obj: Any) -> str | N
             Body=body,
             ContentType="application/json",
         )
+        _invalidate_s3_client_after_empty_put(len(body))
         logger.info(
             "recon_summary_uploaded",
             extra={"event": "recon_summary_uploaded", "size_bytes": len(body)},
@@ -285,6 +319,7 @@ def upload_raw_artifact(
             Body=body,
             ContentType=ct,
         )
+        _invalidate_s3_client_after_empty_put(body_len)
         logger.info(
             "Raw artifact uploaded",
             extra={
@@ -428,6 +463,7 @@ def upload_finding_poc_json(
             Body=body,
             ContentType="application/json; charset=utf-8",
         )
+        _invalidate_s3_client_after_empty_put(len(body))
         logger.info(
             "Finding PoC JSON uploaded",
             extra={"event": "finding_poc_uploaded", "size_bytes": len(body)},
@@ -469,6 +505,7 @@ def upload_finding_poc_screenshot_png(
             Body=body,
             ContentType="image/png",
         )
+        _invalidate_s3_client_after_empty_put(body_len)
         logger.info(
             "Finding PoC screenshot uploaded",
             extra={"event": "finding_poc_screenshot_uploaded", "size_bytes": body_len},
@@ -506,12 +543,14 @@ def upload_report_artifact(
     bucket = _bucket_for_object_key(key)
     try:
         body = data if isinstance(data, (bytes, bytearray)) else data.read()
+        body_len = len(body)
         client.put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
             ContentType=content_type,
         )
+        _invalidate_s3_client_after_empty_put(body_len)
         return key
     except Exception:
         logger.warning("Report artifact upload failed", extra={"key": key})
@@ -579,12 +618,14 @@ def upload(
     bucket = _bucket_for_object_type(object_type)
     try:
         body = data if isinstance(data, (bytes, bytearray)) else data.read()
+        body_len = len(body)
         client.put_object(
             Bucket=bucket,
             Key=key,
             Body=body,
             ContentType=content_type,
         )
+        _invalidate_s3_client_after_empty_put(body_len)
         return key
     except Exception:
         logger.warning("Upload failed", extra={"key": key})

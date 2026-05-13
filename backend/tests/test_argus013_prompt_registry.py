@@ -169,12 +169,16 @@ class TestAiPromptsRetryWithFixer:
     @pytest.mark.asyncio
     async def test_fixer_still_invalid_json_raises(self) -> None:
         """When initial and all fixer retries return invalid JSON, ai_recon raises."""
+        from src.orchestration.ai_prompts import MAX_JSON_RETRIES
+
         invalid_responses = [
             "not valid json at all",
             '{"assets": ["broken", ',
             "still not json",
             "{bad}",
         ]
+
+        expected_calls = 1 + MAX_JSON_RETRIES  # initial + each fixer retry
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
             with patch("src.orchestration.ai_prompts.call_llm_unified", new_callable=AsyncMock) as mock_call:
@@ -185,4 +189,4 @@ class TestAiPromptsRetryWithFixer:
                 with pytest.raises(RuntimeError, match="LLM returned invalid response"):
                     await ai_recon(ReconInput(target="x.com", options={}))
 
-                assert mock_call.call_count == 4
+                assert mock_call.call_count == expected_calls

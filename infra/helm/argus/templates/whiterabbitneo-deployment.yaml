@@ -1,0 +1,138 @@
+{{- if .Values.whiteRabbitNeo.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-whiterabbitneo
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whiterabbitneo
+spec:
+  replicas: {{ .Values.whiteRabbitNeo.replicaCount }}
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: whiterabbitneo
+  template:
+    metadata:
+      labels:
+        {{- include "argus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: whiterabbitneo
+    spec:
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      {{- if .Values.whiteRabbitNeo.gpu.enabled }}
+      nodeSelector:
+        accelerator: nvidia-tesla-t4
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: vllm
+          image: {{ .Values.whiteRabbitNeo.image.repository }}:{{ .Values.whiteRabbitNeo.image.tag }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "1"
+            - name: WHITERABBITNEO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-wrb" (include "argus.fullname" .) }}
+                  key: api_key
+                  optional: true
+          {{- if .Values.whiteRabbitNeo.gpu.enabled }}
+          args:
+            - "--model"
+            - "WhiteRabbitNeo/WhiteRabbitNeo-7B-AWQ"
+            - "--quantization"
+            - "awq"
+            - "--max-model-len"
+            - "8192"
+            - "--gpu-memory-utilization"
+            - "0.90"
+            - "--dtype"
+            - "auto"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          resources:
+            limits:
+              nvidia.com/gpu: {{ .Values.whiteRabbitNeo.gpu.count }}
+            requests:
+              nvidia.com/gpu: {{ .Values.whiteRabbitNeo.gpu.count }}
+          {{- else }}
+          args:
+            - "--model"
+            - "/models/WhiteRabbitNeo-7B-{{ .Values.whiteRabbitNeo.cpuMode.quantization }}.gguf"
+            - "--n_ctx"
+            - "4096"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          resources:
+            {{- toYaml .Values.whiteRabbitNeo.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              {{- if .Values.whiteRabbitNeo.gpu.enabled }}
+              readOnly: true
+              {{- end }}
+            - name: cache
+              mountPath: /root/.cache/huggingface
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 180
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 180
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 5
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: {{ include "argus.fullname" . }}-wrb-models
+        - name: cache
+          emptyDir:
+            sizeLimit: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "argus.fullname" . }}-wrb-models
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.whiteRabbitNeo.gpu.modelVolume.size }}
+{{- end }}

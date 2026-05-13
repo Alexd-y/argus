@@ -1318,6 +1318,53 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
     return findings
 
 
+async def _run_sast_scan(
+    repo_path: str,
+    *,
+    scan_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Run SAST + secrets scan on a repository path."""
+    findings: list[dict[str, Any]] = []
+
+    try:
+        result = execute_command(
+            f"semgrep --config=auto --json {repo_path}",
+            use_sandbox=False,
+        )
+        data = json.loads(result["stdout"]) if result["stdout"] else {}
+        for r in data.get("results", []):
+            findings.append({
+                "type": "sast", "tool": "semgrep",
+                "rule": r.get("check_id", ""),
+                "file": r.get("path", ""),
+                "severity": r.get("extra", {}).get("severity", "medium"),
+                "description": r.get("extra", {}).get("message", ""),
+            })
+    except Exception:
+        pass
+
+    try:
+        result = execute_command(
+            f"gitleaks detect --source {repo_path} --no-git -v --format=json",
+            use_sandbox=False,
+        )
+        if result["stdout"]:
+            raw = result["stdout"]
+            leaks = json.loads(raw) if isinstance(raw, str) else raw
+            for leak in leaks if isinstance(leaks, list) else []:
+                findings.append({
+                    "type": "secret", "tool": "gitleaks",
+                    "rule": leak.get("RuleID", ""),
+                    "file": leak.get("File", ""),
+                    "severity": "high",
+                    "description": f"Secret found: {leak.get('Description', '')}",
+                })
+    except Exception:
+        pass
+
+    return findings
+
+
 async def run_vuln_analysis(
     threat_model: dict,
     assets: list[str],
@@ -1572,6 +1619,18 @@ async def run_vuln_analysis(
                 exc_info=True,
             )
 
+    if recon_context and recon_context.get("repo_path"):
+        try:
+            sast_findings = await _run_sast_scan(
+                str(recon_context["repo_path"]),
+                scan_id=scan_id,
+            )
+            active_scan_findings.extend(sast_findings)
+            if sast_findings:
+                active_scan_context = _build_active_scan_context(active_scan_findings)
+        except Exception as exc:
+            logger.warning("sast_scan_failed", extra={"scan_id": scan_id, "error": str(exc)})
+
     inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
     llm_output = await ai_vuln_analysis(
         inp, active_scan_context=active_scan_context, scan_id=scan_id
@@ -1597,9 +1656,33 @@ async def run_vuln_analysis(
 
 
 async def run_exploit_attempt(
-    findings: list[dict], *, scan_id: str | None = None
+    findings: list[dict],
+    *,
+    scan_id: str | None = None,
+    target: str = "",
+    tenant_id: str = "",
 ) -> ExploitationOutput:
-    """Exploitation: LLM plans theoretical exploit paths based on real findings."""
+    """Exploitation: generates payloads via PayloadBuilder, executes tools in sandbox,
+    verifies exploitability via WRB analysis. Falls back to LLM-only if sandbox unavailable."""
+    from src.orchestration.exploitation_executor import execute_exploitation
+
+    if not findings:
+        return ExploitationOutput(exploits=[], evidence=[])
+
+    try:
+        exploits, evidence = await execute_exploitation(
+            findings,
+            target=target, tenant_id=tenant_id, scan_id=scan_id,
+        )
+        if exploits:
+            return ExploitationOutput(exploits=exploits, evidence=evidence)
+    except Exception as exc:
+        logger.warning(
+            "exploitation_executor_failed",
+            extra={"scan_id": scan_id, "error": str(exc)},
+        )
+
+    # Fallback: LLM theoretical exploitation
     inp = ExploitationInput(findings=findings)
     return await ai_exploitation(inp, scan_id=scan_id)
 
@@ -1647,14 +1730,90 @@ async def run_post_exploitation(
     tenant_id: str | None = None,
     scan_id: str | None = None,
 ) -> PostExploitationOutput:
-    """Post exploitation: LLM analyzes lateral movement and persistence."""
+    """Post exploitation: LLM analyzes lateral movement and persistence.
+    
+    When there are verified exploits, also attempts basic post-exploitation checks:
+    - Internal network reachability
+    - Service discovery on compromised host
+    - Persistence mechanism feasibility assessment
+    """
     raw_sink: RawPhaseSink | None = None
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "post_exploitation")
+    
+    verified = [e for e in exploits if e.get("status") == "verified"]
+    target = verified[0].get("target") or verified[0].get("url") if verified else ""
+    
+    # Basic post-exploitation checks if we have verified exploits
+    post_lateral: list[dict[str, Any]] = []
+    post_persistence: list[dict[str, Any]] = []
+    
+    if verified and target:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(target)
+            host = parsed.hostname
+            
+            # Check internal network — try common internal services
+            internal_checks = [
+                ("metadata_service", f"http://169.254.169.254/latest/meta-data/"),
+                ("internal_dns", f"http://{host}:53/"),
+                ("internal_api", f"http://{host}:8080/"),
+                ("internal_admin", f"http://{host}:3000/"),
+            ]
+            
+            import httpx
+            async with httpx.AsyncClient(timeout=3.0, follow_redirects=False) as client:
+                for service_name, service_url in internal_checks:
+                    try:
+                        resp = await client.get(service_url)
+                        if 200 <= resp.status_code < 500:
+                            post_lateral.append({
+                                "technique": f"Internal {service_name} reachable",
+                                "description": f"Discovered {service_name} at {service_url} (HTTP {resp.status_code})",
+                                "from_exploit": verified[0].get("finding_id", ""),
+                            })
+                    except Exception:
+                        pass
+            
+            # Check common persistence paths
+            if post_lateral:
+                post_persistence.append({
+                    "type": "internal_service_access",
+                    "description": f"Access to internal services enables potential lateral movement. Review network segmentation.",
+                    "risk_level": "medium",
+                })
+
+            # AD/SMB enumeration if targets appear to be Windows/AD
+            if any(svc.get("technique", "").startswith("Internal") for svc in post_lateral):
+                try:
+                    ad_target = host if host else target
+
+                    enum_result = execute_command(
+                        f"enum4linux-ng -A {ad_target}",
+                        use_sandbox=True,
+                    )
+                    if enum_result["success"] and enum_result["stdout"]:
+                        post_lateral.append({
+                            "technique": "SMB Enumeration via enum4linux",
+                            "description": enum_result["stdout"][:500],
+                            "from_exploit": verified[0].get("finding_id", ""),
+                            "tool": "enum4linux_ng",
+                        })
+                except Exception as e:
+                    logger.debug("ad_enum_skipped", extra={"error": str(e)})
+        except Exception as exc:
+            logger.warning("post_exploitation_checks_failed", extra={"error": str(exc)})
+    
+    # Combine with LLM analysis
     inp = PostExploitationInput(exploits=exploits)
-    return await ai_post_exploitation(
-        inp, raw_sink=raw_sink, scan_id=scan_id
-    )
+    ai_result = await ai_post_exploitation(inp, raw_sink=raw_sink, scan_id=scan_id)
+    
+    # Merge real checks with AI results
+    ai_result.lateral = post_lateral + ai_result.lateral
+    ai_result.persistence = post_persistence + ai_result.persistence
+    
+    return ai_result
 
 
 async def run_reporting(

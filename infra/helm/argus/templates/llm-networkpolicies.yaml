@@ -1,0 +1,97 @@
+{{- if .Values.networkPolicies.enabled }}
+{{- if .Values.llmGateway.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-llm-gateway-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: llm-gateway
+  policyTypes:
+    - Egress
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: backend
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: celery-worker
+      ports:
+        - port: {{ .Values.llmGateway.service.port }}
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: whiterabbitneo
+      ports:
+        - port: 8000
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 443
+          protocol: TCP
+{{- end }}
+{{- if .Values.whiteRabbitNeo.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "argus.fullname" . }}-whiterabbitneo-egress
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whiterabbitneo
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: whiterabbitneo
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: backend
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: celery-worker
+        - podSelector:
+            matchLabels:
+              {{- include "argus.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: llm-gateway
+      ports:
+        - port: 8000
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+{{- end }}
+{{- end }}

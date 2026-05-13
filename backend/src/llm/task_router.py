@@ -29,6 +29,22 @@ class LLMTask(Enum):
     COST_SUMMARY = "cost_summary"
 
 
+_TASK_TO_ROLE: dict[LLMTask, str] = {
+    LLMTask.ORCHESTRATION: "planner",
+    LLMTask.THREAT_MODELING: "planner",
+    LLMTask.VALIDATION_ONESHOT: "planner",
+    LLMTask.DEDUP_ANALYSIS: "planner",
+    LLMTask.ZERO_DAY_ANALYSIS: "planner",
+    LLMTask.POC_GENERATION: "code",
+    LLMTask.EXPLOIT_GENERATION: "code",
+    LLMTask.PERPLEXITY_OSINT: "osint",
+    LLMTask.REPORT_SECTION: "report",
+    LLMTask.EXECUTIVE_SUMMARY: "report",
+    LLMTask.REMEDIATION_PLAN: "report",
+    LLMTask.COST_SUMMARY: "report",
+}
+
+
 @dataclass(frozen=True)
 class LLMRoute:
     provider_env_key: str

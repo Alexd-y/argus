@@ -1,0 +1,32 @@
+tool_id: host
+version: "1.0.0"
+category: recon
+phase: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+cpu_limit: "200m"
+memory_limit: "128Mi"
+seccomp_profile: runtime/default
+network_policy:
+  name: recon-passive
+  egress_allowlist:
+    - "0.0.0.0/0"
+  dns_resolvers:
+    - "1.1.1.1"
+    - "9.9.9.9"
+image: "argus-kali-recon:latest"
+command_template:
+  - "host"
+  - "-a"
+  - "{domain}"
+  - ">"
+  - "{out_dir}/host.txt"
+parse_strategy: dns_zone_text
+evidence_artifacts:
+  - "/out/host.txt"
+cwe_hints: []
+owasp_wstg:
+  - "WSTG-INFO-01"
+  - "WSTG-INFO-02"
+description: "host -a (all records) DNS lookup, equivalent to nslookup-style zone enumeration over public resolvers. Backlog/dev1_md §4.1."

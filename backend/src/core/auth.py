@@ -57,12 +57,13 @@ async def get_optional_auth(
                 return AuthContext(user_id=sub, tenant_id=tenant_id, is_api_key=False)
 
     if api_key:
-        # API key validation — checks ARGUS_API_KEYS env or admin key
-        allowed = [
-            k.strip()
-            for k in (os.environ.get("ARGUS_API_KEYS") or "").split(",")
-            if k.strip()
-        ]
+        allowed = list(settings.api_keys)
+        if not allowed:
+            allowed = [
+                k.strip()
+                for k in (os.environ.get("ARGUS_API_KEYS") or "").split(",")
+                if k.strip()
+            ]
         if api_key in allowed:
             return AuthContext(
                 user_id="api-key",

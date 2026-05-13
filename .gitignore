@@ -1,4 +1,6 @@
 # Environment files — never commit secrets
+Новое видение
+
 .env
 .env.*
 .env.example

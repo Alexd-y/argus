@@ -1,0 +1,27 @@
+family_id: csrf_safe
+description: >-
+  Non-destructive CSRF curriculum markers (anti-CSRF token submission only, no credential changes).
+cwe_ids: [352]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: missing_token
+    template: ""
+    confidence: suspected
+    notes: Request without anti-CSRF token header.
+  - id: wrong_token
+    template: "argus-csrf-curriculum-invalid-token"
+    confidence: suspected
+    notes: Request with intentionally invalid CSRF token.
+  - id: blank_token
+    template: ""
+    confidence: suspected
+    notes: Request with empty CSRF token value.
+mutations: []
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

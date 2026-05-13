@@ -1,0 +1,39 @@
+family_id: format_string
+description: >-
+  Format string attack curriculum probes (CWE-134). %x %n %s read/write
+  probes and positional argument tests. Safe curriculum markers only.
+cwe_ids: [134]
+owasp_top10:
+  - 'A06:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: fmt_read_stack
+    template: "%x.%x.%x.%x.%x.%x.%x.%x"
+    confidence: suspected
+    notes: Stack read probe; hex dump exposes stack values to caller.
+  - id: fmt_n_write
+    template: "%100d%7$n"
+    confidence: suspected
+    notes: %n write probe; overwrites memory at stack offset 7 with byte count 100.
+  - id: fmt_string_read
+    template: "%s%s%s%s%s%s%s%s"
+    confidence: suspected
+    notes: %s read probe; dereferences stack pointers to read referenced strings.
+  - id: fmt_positional_read
+    template: "%1$p %2$p %3$p %4$p %5$p %6$p"
+    confidence: suspected
+    notes: Positional argument pointer leak; exposes specific stack frame values.
+mutations:
+  - name: width_increment
+    description: Scale %d width up to 65000+ to trigger short-write wraparound.
+  - name: offset_scan
+    description: Sweep $n positional index 1-50 to locate writable stack targets.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw format string in parameter context.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for format strings in query parameters.

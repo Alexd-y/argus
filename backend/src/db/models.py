@@ -862,3 +862,277 @@ class AdminSession(Base):
         Index("ix_admin_sessions_subject_revoked", "subject", "revoked_at"),
         Index("ix_admin_sessions_expires_at", "expires_at"),
     )
+
+
+# ===== Phase 1: Ingestion & Knowledge Graph =====
+
+class Repo(Base):
+    __tablename__ = "repos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    default_branch: Mapped[str] = mapped_column(String(255), default="main", server_default="main")
+    clone_url: Mapped[str | None] = mapped_column(String(1024))
+    web_url: Mapped[str | None] = mapped_column(String(1024))
+    language: Mapped[str | None] = mapped_column(String(64))
+    description: Mapped[str | None] = mapped_column(Text)
+    private: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    webhook_secret: Mapped[str | None] = mapped_column(String(255))
+    size_kb: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RepoArtifact(Base):
+    __tablename__ = "repo_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(32), default="source_code", server_default="source_code")
+    content_hash: Mapped[str] = mapped_column(String(64))
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
+    source: Mapped[str] = mapped_column(String(32), default="webhook", server_default="webhook")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    parsed_info: Mapped[dict | None] = mapped_column(JSONB)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgeNode(Base):
+    __tablename__ = "knowledge_nodes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"))
+    node_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(512))
+    file_path: Mapped[str | None] = mapped_column(String(1024))
+    line_start: Mapped[int | None] = mapped_column(Integer)
+    line_end: Mapped[int | None] = mapped_column(Integer)
+    language: Mapped[str | None] = mapped_column(String(32))
+    # Имя атрибута не «metadata»: зарезервировано Declarative API (Table.metadata).
+    node_meta: Mapped[dict | None] = mapped_column(JSONB, name="metadata")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class KnowledgeEdge(Base):
+    __tablename__ = "knowledge_edges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"))
+    source_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    edge_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    edge_meta: Mapped[dict | None] = mapped_column(JSONB, name="metadata")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ThreatModel(Base):
+    __tablename__ = "threat_models"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"))
+    version: Mapped[str] = mapped_column(String(16), default="1.0", server_default="1.0")
+    commit_sha: Mapped[str | None] = mapped_column(String(64))
+    model_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===== Phase 2: Sandbox & Patches & Risk =====
+
+class SandboxRun(Base):
+    __tablename__ = "sandbox_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scan_id: Mapped[str | None] = mapped_column(String(36))
+    finding_id: Mapped[str | None] = mapped_column(String(36))
+    profile: Mapped[str] = mapped_column(String(32), default="web_app", server_default="web_app")
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    exploitable: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    exit_code: Mapped[int] = mapped_column(Integer, default=-1, server_default=text("-1"))
+    stdout_preview: Mapped[str | None] = mapped_column(Text)
+    stderr_preview: Mapped[str | None] = mapped_column(Text)
+    results_json: Mapped[dict | None] = mapped_column(JSONB)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    error: Mapped[str | None] = mapped_column(Text)
+    policy_breaches: Mapped[list | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PatchProposal(Base):
+    __tablename__ = "patch_proposals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    repo_id: Mapped[str | None] = mapped_column(String(36))
+    finding_id: Mapped[str | None] = mapped_column(String(36))
+    patch_type: Mapped[str] = mapped_column(String(16), default="minimal", server_default="minimal")
+    file_path: Mapped[str | None] = mapped_column(String(1024))
+    line_start: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    original_code: Mapped[str | None] = mapped_column(Text)
+    patched_code: Mapped[str | None] = mapped_column(Text)
+    diff: Mapped[str | None] = mapped_column(Text)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    secure_alternative: Mapped[str | None] = mapped_column(Text)
+    blast_radius: Mapped[str | None] = mapped_column(Text)
+    backward_compat_risk: Mapped[str] = mapped_column(String(16), default="low", server_default="low")
+    regression_test: Mapped[str | None] = mapped_column(Text)
+    validation_output: Mapped[str | None] = mapped_column(Text)
+    lint_passed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    tests_passed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    pr_url: Mapped[str | None] = mapped_column(String(512))
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class RiskScore(Base):
+    __tablename__ = "risk_scores"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    finding_id: Mapped[str | None] = mapped_column(String(36))
+    cvss_base: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    cvss_temporal: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    cvss_environmental: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    exploitability_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    impact_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    business_impact: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    overall_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    priority: Mapped[str] = mapped_column(String(20), default="p4_low", server_default="p4_low")
+    vector_string: Mapped[str | None] = mapped_column(String(128))
+    reasoning: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===== Phase 3: Binary & Incidents & Safety =====
+
+class BinaryAnalysis(Base):
+    __tablename__ = "binary_analyses"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    sample_id: Mapped[str | None] = mapped_column(String(36))
+    file_path: Mapped[str | None] = mapped_column(String(1024))
+    file_size: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    format: Mapped[str | None] = mapped_column(String(16))
+    architecture: Mapped[str | None] = mapped_column(String(32))
+    verdict: Mapped[str | None] = mapped_column(String(32))
+    risk_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    obfuscation_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    packer_hints: Mapped[list | None] = mapped_column(JSONB)
+    capabilities: Mapped[list | None] = mapped_column(JSONB)
+    mitre_attck: Mapped[list | None] = mapped_column(JSONB)
+    wb_analysis: Mapped[dict | None] = mapped_column(JSONB)
+    indicators: Mapped[list | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IncidentEnrichment(Base):
+    __tablename__ = "incident_enrichments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    incident_id: Mapped[str | None] = mapped_column(String(36))
+    alert_id: Mapped[str | None] = mapped_column(String(36))
+    code_root_cause: Mapped[str | None] = mapped_column(Text)
+    file_path: Mapped[str | None] = mapped_column(String(1024))
+    owner_team: Mapped[str | None] = mapped_column(String(128))
+    repo: Mapped[str | None] = mapped_column(String(256))
+    cloud_asset: Mapped[str | None] = mapped_column(String(256))
+    mitre_enrichment: Mapped[list | None] = mapped_column(JSONB)
+    cwe_mapping: Mapped[list | None] = mapped_column(JSONB)
+    remediation_tasks: Mapped[list | None] = mapped_column(JSONB)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SafetyAlert(Base):
+    __tablename__ = "safety_alerts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str | None] = mapped_column(String(36))
+    alert_type: Mapped[str] = mapped_column(String(64))
+    severity: Mapped[str] = mapped_column(String(16))
+    description: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(String(64))
+    task: Mapped[str | None] = mapped_column(String(32))
+    prompt_hash: Mapped[str | None] = mapped_column(String(64))
+    evidence: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===== Phase 4: Gateway & Governance =====
+
+class GatewayProvider(Base):
+    __tablename__ = "gateway_providers"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    alias: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128))
+    base_url: Mapped[str | None] = mapped_column(String(512))
+    role: Mapped[str | None] = mapped_column(String(32))
+    cloud_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    config_json: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class GatewayInvocation(Base):
+    __tablename__ = "gateway_invocations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scan_id: Mapped[str | None] = mapped_column(String(36))
+    phase: Mapped[str | None] = mapped_column(String(32))
+    task: Mapped[str | None] = mapped_column(String(32))
+    alias: Mapped[str | None] = mapped_column(String(64))
+    provider: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(128))
+    prompt_hash: Mapped[str | None] = mapped_column(String(64))
+    response_hash: Mapped[str | None] = mapped_column(String(64))
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    status: Mapped[str] = mapped_column(String(20), default="completed", server_default="completed")
+    error_code: Mapped[str | None] = mapped_column(String(32))
+    policy_decision: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BenchmarkRun(Base):
+    __tablename__ = "benchmark_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    name: Mapped[str | None] = mapped_column(String(128))
+    model: Mapped[str | None] = mapped_column(String(128))
+    profile: Mapped[str | None] = mapped_column(String(32))
+    datasets: Mapped[list | None] = mapped_column(JSONB)
+    metrics_json: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_s: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

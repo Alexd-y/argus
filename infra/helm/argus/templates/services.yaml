@@ -71,9 +71,44 @@ spec:
       protocol: TCP
       name: http
     - port: {{ .Values.service.mcp.metricsPort }}
-      targetPort: metrics
+    app.kubernetes.io/component: mcp-server
+---
+{{- if .Values.llmGateway.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-llm-gateway
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: llm-gateway
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.llmGateway.service.port }}
+      targetPort: http
       protocol: TCP
-      name: metrics
+      name: http
   selector:
     {{- include "argus.selectorLabels" . | nindent 4 }}
-    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/component: llm-gateway
+---
+{{- end }}
+{{- if .Values.whiteRabbitNeo.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-whiterabbitneo
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: whiterabbitneo
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: whiterabbitneo
+{{- end }}

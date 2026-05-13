@@ -108,25 +108,30 @@ def run_kal_mcp_tool(
     cat_slug = slug_for_artifact_type_component(category)
     bin_slug = slug_for_artifact_type_component(bin_name or "tool")
     if tid and sid:
-        k_out = sink_raw_text(
-            tenant_id=tid,
-            scan_id=sid,
-            phase=KAL_MCP_RAW_PHASE,
-            artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stdout",
-            text=stdout,
-            ext="txt",
-        )
-        k_err = sink_raw_text(
-            tenant_id=tid,
-            scan_id=sid,
-            phase=KAL_MCP_RAW_PHASE,
-            artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stderr",
-            text=stderr,
-            ext="txt",
-        )
-        for k in (k_out, k_err):
-            if k:
-                minio_keys.append(k)
+        # Skip empty streams (matches RawPhaseSink / recon handlers): avoids useless
+        # 0-byte PUTs and reduces MinIO+urllib3 edge cases on empty-object responses.
+        if isinstance(stdout, str) and len(stdout) > 0:
+            k_out = sink_raw_text(
+                tenant_id=tid,
+                scan_id=sid,
+                phase=KAL_MCP_RAW_PHASE,
+                artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stdout",
+                text=stdout,
+                ext="txt",
+            )
+            if k_out:
+                minio_keys.append(k_out)
+        if isinstance(stderr, str) and len(stderr) > 0:
+            k_err = sink_raw_text(
+                tenant_id=tid,
+                scan_id=sid,
+                phase=KAL_MCP_RAW_PHASE,
+                artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stderr",
+                text=stderr,
+                ext="txt",
+            )
+            if k_err:
+                minio_keys.append(k_err)
 
     logger.info(
         "kal_mcp_run",

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     vercel_frontend_url: str = ""
     debug: bool = False
+    dev_login_bypass_enabled: bool = False
+    api_keys: list[str] = Field(default_factory=list)
     log_level: str = "INFO"
     version: str = "0.1.0"
     default_tenant_id: str = "00000000-0000-0000-0000-000000000001"
@@ -52,6 +54,30 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MAX_COST_PER_SCAN_USD", "max_cost_per_scan_usd"),
     )
 
+    # WhiteRabbitNeo — primary pentest AI (локально, $0)
+    whiterabbitneo_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("WHITERABBITNEO_URL", "whiterabbitneo_url"),
+    )
+    whiterabbitneo_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("WHITERABBITNEO_API_KEY", "whiterabbitneo_api_key"),
+    )
+    whiterabbitneo_timeout_seconds: float = Field(
+        default=600.0,
+        ge=10.0,
+        le=7200.0,
+        validation_alias=AliasChoices(
+            "WHITERABBITNEO_TIMEOUT_SEC",
+            "whiterabbitneo_timeout_seconds",
+        ),
+    )
+    # External LLM Gateway URL (optional — uses in-process routing when unset)
+    llm_gateway_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("LLM_GATEWAY_URL", "llm_gateway_url"),
+    )
+
     # Data Sources (Phase 6) — optional
     censys_api_key: str | None = None
     securitytrails_api_key: str | None = None
@@ -69,6 +95,36 @@ class Settings(BaseSettings):
     # External URL for presigned links in reports (replaces internal Docker hostname).
     # When unset, presigned URLs are returned as-is (dev mode).
     minio_public_url: str | None = None
+
+    # P2 — Optional message queue (NATS / RabbitMQ)
+    message_queue_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("MESSAGE_QUEUE_ENABLED", "message_queue_enabled"),
+    )
+    message_queue_backend: Literal["nats", "rabbitmq", "none"] = Field(
+        default="none",
+        validation_alias=AliasChoices("MESSAGE_QUEUE_BACKEND", "message_queue_backend"),
+    )
+    nats_url: str = Field(
+        default="nats://localhost:4222",
+        validation_alias=AliasChoices("NATS_URL", "nats_url"),
+    )
+    rabbitmq_url: str = Field(
+        default="amqp://guest:guest@localhost:5672/",
+        validation_alias=AliasChoices("RABBITMQ_URL", "rabbitmq_url"),
+    )
+    message_queue_scan_events_topic: str = Field(
+        default="scan.events",
+        validation_alias=AliasChoices("MESSAGE_QUEUE_SCAN_EVENTS_TOPIC", "message_queue_scan_events_topic"),
+    )
+    message_queue_finding_alerts_topic: str = Field(
+        default="finding.alerts",
+        validation_alias=AliasChoices("MESSAGE_QUEUE_FINDING_ALERTS_TOPIC", "message_queue_finding_alerts_topic"),
+    )
+    message_queue_report_topic: str = Field(
+        default="report.generated",
+        validation_alias=AliasChoices("MESSAGE_QUEUE_REPORT_TOPIC", "message_queue_report_topic"),
+    )
 
     # ARG-041 — Observability (OpenTelemetry + Prometheus + cardinality discipline)
     # Tenant hash salt MUST be set in production; default empty triggers warning.

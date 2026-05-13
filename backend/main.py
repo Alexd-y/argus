@@ -40,7 +40,19 @@ from src.api.admin import mfa as admin_mfa_router  # admin MFA endpoints (C7-T03
 from src.api.routers import admin_webhook_dlq  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
 from src.auth.admin_dependencies import log_mfa_enforcement_state
 
+from src.api.routers.llm_health import router as llm_health_router
 from src.api.routers.recon import recon_router
+from src.api.routers.sandbox_validation import router as sandbox_validation_router
+from src.api.routers.patches import router as patches_router
+from src.api.routers.analysis import router as analysis_router
+from src.api.routers.binary_triage import router as binary_router
+from src.api.routers.incidents import router as incidents_router
+from src.api.routers.integrations import router as integrations_router
+from src.api.routers.compliance import router as compliance_router
+from src.api.routers.admin_gateway import router as admin_gateway_router
+from src.api.routers.benchmarks import router as benchmarks_router
+from src.api.routers.release import router as release_router
+from src.api.routers.research import router as research_router
 from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.config import settings
@@ -152,6 +164,18 @@ app.include_router(intelligence.router, prefix="/api/v1")
 app.include_router(skills_public.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")
 app.include_router(mcp_slack_callbacks.router, prefix="/api/v1")
+app.include_router(llm_health_router, prefix="/api/v1")
+app.include_router(sandbox_validation_router, prefix="/api/v1")
+app.include_router(patches_router, prefix="/api/v1")
+app.include_router(analysis_router, prefix="/api/v1")
+app.include_router(binary_router, prefix="/api/v1")
+app.include_router(incidents_router, prefix="/api/v1")
+app.include_router(integrations_router, prefix="/api/v1")
+app.include_router(compliance_router, prefix="/api/v1")
+app.include_router(admin_gateway_router, prefix="/api/v1")
+app.include_router(benchmarks_router, prefix="/api/v1")
+app.include_router(release_router, prefix="/api/v1")
+app.include_router(research_router, prefix="/api/v1")
 
 
 @app.get("/")

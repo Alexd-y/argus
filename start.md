@@ -44,6 +44,8 @@ docker compose up -d --build
 
 **Важно:** первый билд тянет **backend, worker, sandbox (Kali)** — может занять **очень долго** и много места на диске. Это ожидаемо.
 
+Сервис **whiterabbitneo** (локальная LLM) может долго качать модель; он **не блокирует** подъём `backend` и **nginx**, чтобы фронт на хосте мог ходить в API (`NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8080` — прямой проброс FastAPI из `docker-compose.override.yml`).
+
 Проверка статуса:
 
 ```powershell
@@ -51,13 +53,13 @@ docker compose ps
 docker compose logs -f backend
 ```
 
-Точки входа по умолчанию:
+Точки входа по умолчанию (из каталога `infra/` с подключённым `docker-compose.override.yml`):
 
-- **API через nginx:** `http://127.0.0.1:8080` (переменная `ARGUS_HTTP_PORT`, по умолчанию **8080**).
-- **Прямой бэкенд с хоста** в dev-override **не проброшен** — ходите в API через **8080**.
+- **API для Next.js rewrites:** `http://127.0.0.1:8080` — **прямо FastAPI** (проброс `backend:8000` на хост).
+- **Через nginx (шлюз, CORS/ключи):** `http://127.0.0.1:18888` (переменная `ARGUS_HTTP_PORT`, дефолт в compose **18888**; не ставьте `ARGUS_HTTP_PORT=8080`, если нужен проброс бэкенда на 8080 — будет конфликт портов).
 - **MinIO console** (если порты открыты override’ом): `http://127.0.0.1:9001`.
 
-Health (через прокси, если маршрут настроен как в типичном nginx-шаблоне):
+Health:
 
 ```powershell
 Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/v1/health" -UseBasicParsing
@@ -118,6 +120,6 @@ docker compose down
 2. `cd infra` → `docker compose up -d --build`.  
 3. `docker compose exec backend alembic upgrade head`.  
 4. `Frontend`: `npm install` → `.env.local` с `NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8080` → `npm run dev`.  
-5. Браузер: UI **:5000**, API **:8080**.
+5. Браузер: UI **:5000**, API **:8080** (прямой FastAPI с хоста; nginx-шлюз по умолчанию **:18888**).
 
 Если нужно, могу отдельно расписать **только API без UI** или вариант **без sandbox/worker** (если в вашей ветке compose это вынесено в profile — в текущем `docker-compose.yml` у `worker`/`sandbox` профиля нет, они поднимаются вместе со стеком).

@@ -21,6 +21,7 @@ into the broader payload space at request time inside
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from collections.abc import Iterator
@@ -442,10 +443,46 @@ class PayloadRegistry:
                 approvals += 1
             if record.family.oast_required:
                 oast += 1
-        return PayloadRegistrySummary(
+        summary = PayloadRegistrySummary(
             total=len(self._registered),
             family_ids=tuple(sorted(self._registered)),
             by_risk=dict(risks),
             requires_approval_count=approvals,
             oast_required_count=oast,
         )
+        self._validate_catalog_index(summary)
+        return summary
+
+    def _validate_catalog_index(self, summary: PayloadRegistrySummary) -> None:
+        """Validate payload_catalog_index.json against loaded YAML families.
+
+        Fail-closed: raises RegistryLoadError on catalog entries missing YAML.
+        """
+        catalog_path = self._payloads_dir / "payload_catalog_index.json"
+        if not catalog_path.exists():
+            _logger.warning("payload_catalog_index_missing", extra={"path": str(catalog_path)})
+            return
+
+        try:
+            raw = catalog_path.read_text(encoding="utf-8")
+            manifest = json.loads(raw)
+        except (OSError, json.JSONDecodeError) as exc:
+            _logger.warning("payload_catalog_index_unreadable", extra={"path": str(catalog_path), "error": str(exc)})
+            return
+
+        catalog_families: set[str] = set(manifest.get("families", []))
+        loaded_families: set[str] = set(summary.family_ids)
+
+        missing_yamls = catalog_families - loaded_families
+        if missing_yamls:
+            raise RegistryLoadError(
+                f"Catalog entries with no YAML file: {sorted(missing_yamls)}. "
+                f"Create the YAML files or remove them from {catalog_path.name}."
+            )
+
+        unlisted = loaded_families - catalog_families
+        if unlisted:
+            _logger.info(
+                "payload_catalog_unlisted",
+                extra={"count": len(unlisted), "families": sorted(unlisted), "hint": "Add to payload_catalog_index.json"},
+            )

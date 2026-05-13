@@ -560,3 +560,44 @@ probes:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
+
+# ── LLM Gateway (Phase 4 multi-model orchestration) ─────────────────────────
+llmGateway:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: argus-backend
+    tag: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  service:
+    port: 8000
+
+# ── WhiteRabbitNeo — primary pentest AI (local, GPU recommended) ────────────
+whiteRabbitNeo:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: argus-whiterabbitneo
+    tag: latest
+  resources:
+    requests:
+      cpu: "4"
+      memory: 16Gi
+    limits:
+      cpu: "8"
+      memory: 24Gi
+  gpu:
+    enabled: false
+    count: 1
+    modelVolume:
+      size: 30Gi
+      storageClass: fast-ssd
+  cpuMode:
+    enabled: true
+    quantization: "Q4_K_M"

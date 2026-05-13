@@ -27,6 +27,9 @@ services:
       - ../backend:/app
 
   backend:
+    # Next.js на хосте (Frontend/.env.local) проксирует на 127.0.0.1:8080 — без публикации порта nginx может быть недоступен.
+    ports:
+      - "127.0.0.1:8080:8000"
     command:
       - uvicorn
       - main:app
@@ -47,10 +50,26 @@ services:
       - "__pycache__/*"
       - --reload-exclude
       - ".pytest_cache/*"
+      - --reload-exclude
+      - ".pytest-tmp"
+      - --reload-exclude
+      - ".pytest-tmp/*"
+      - --reload-exclude
+      - ".pytest-run"
+      - --reload-exclude
+      - ".pytest-run/*"
+      - --reload-exclude
+      - ".pytest-run-codex-aggregate"
+      - --reload-exclude
+      - ".pytest-run-codex-aggregate/*"
       - --reload-delay
       - "2.0"
     volumes:
       - ../backend:/app
+      # Скрыть каталоги pytest с хоста (права root → иначе watchfiles падает и рвёт uvicorn --reload).
+      - /app/.pytest-tmp
+      - /app/.pytest-run
+      - /app/.pytest-run-codex-aggregate
     environment:
       LOG_LEVEL: DEBUG
       SANDBOX_ENABLED: "true"

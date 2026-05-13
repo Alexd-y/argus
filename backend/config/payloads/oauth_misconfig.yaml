@@ -1,0 +1,40 @@
+family_id: oauth_misconfig
+description: >-
+  OAuth 2.0 flow bypass probes (CWE-290). redirect_uri bypass, state
+  parameter omission, PKCE downgrade, and scope upgrade attempts.
+cwe_ids: [290]
+owasp_top10:
+  - 'A01:2021'
+  - 'A07:2021'
+risk_level: high
+requires_approval: false
+oast_required: true
+payloads:
+  - id: redirect_uri_bypass
+    template: "https://{oast_host}/callback"
+    confidence: suspected
+    notes: Attacker redirect_uri; tests strict vs lax redirect validation in OAuth flow.
+  - id: state_omission
+    template: ""
+    confidence: suspected
+    notes: Empty state parameter; tests CSRF protections that fall back to state absence.
+  - id: pkce_downgrade
+    template: "code_challenge=plain&code_challenge_method=plain"
+    confidence: suspected
+    notes: PKCE downgrade to plain method; bypasses S256 challenge verification.
+  - id: scope_upgrade
+    template: "read+write+admin+offline_access"
+    confidence: suspected
+    notes: Scope upgrade probe; tests whether the AS ignores incremental scope requests.
+mutations:
+  - name: openid_redirect
+    description: Add openid redirect_path to test OpenID Connect redirect validation gaps.
+  - name: fragment_injection
+    description: Append #fragment to redirect_uri to test URI parser mismatch.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw parameter values in OAuth authorization request.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for redirect_uri and scope query parameters.

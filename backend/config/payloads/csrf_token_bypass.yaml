@@ -1,0 +1,40 @@
+family_id: csrf_token_bypass
+description: >-
+  CSRF token bypass curriculum vectors (CWE-352). Token in custom header,
+  null byte CSRF token, Referer header validation bypass, and same-site
+  cookie bypass probes.
+cwe_ids: [352]
+owasp_top10:
+  - 'A01:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: token_null_byte
+    template: "valid_token\x00"
+    confidence: suspected
+    notes: Null byte appended to CSRF token; tests length-check or C-string truncation bypass.
+  - id: token_custom_header
+    template: ""
+    confidence: suspected
+    notes: CSRF token in custom header X-CSRF-Token; tests whether server checks body vs header.
+  - id: referer_bypass
+    template: "https://{oast_host}/{canary}"
+    confidence: suspected
+    notes: Spoofed Referer header probe; tests whether server trusts Referer for anti-CSRF.
+  - id: samesite_cookie_bypass
+    template: "{canary}"
+    confidence: suspected
+    notes: SameSite=Lax cookie probe via top-level GET navigation; tests CSRF under lax policy.
+mutations:
+  - name: token_reuse
+    description: Replay previously captured CSRF tokens to test session-scoped token reuse.
+  - name: header_rotation
+    description: Swap custom CSRF header names X-CSRF-Token, X-CSRFToken, X-XSRF-Token.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw CSRF bypass probe payload.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for CSRF tokens in query-string bypass contexts.

@@ -1,0 +1,39 @@
+family_id: type_juggling
+description: >-
+  PHP type confusion probes (CWE-697). 0e-hash collision, strcmp bypass,
+  in_array loose comparison, and json_decode overflow for JWT bypass.
+cwe_ids: [697]
+owasp_top10:
+  - 'A06:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: zero_e_hash_collision
+    template: "240610708"
+    confidence: suspected
+    notes: Magic hash '0e...' string collides with 0 when loose-compared; bypasses hash checks.
+  - id: strcmp_bypass
+    template: "[]"
+    confidence: suspected
+    notes: Array parameter input; strcmp returns NULL which == 0 in loose comparison.
+  - id: in_array_loose
+    template: "1"
+    confidence: suspected
+    notes: in_array without strict flag; 1 == true bypasses allowlist checks on boolean values.
+  - id: json_decode_overflow
+    template: "9223372036854775808"
+    confidence: suspected
+    notes: 64-bit overflow integer via json_decode; bypasses JWT iat/exp numeric checks.
+mutations:
+  - name: magic_hash_rotator
+    description: Cycle through known 0e-numeric strings (0e462097, 0e830400, etc.).
+  - name: type_array_flip
+    description: Convert query string to array notation param[] to test type-juggle arrays.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw parameter value for PHP type-juggle contexts.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string type-juggle parameters.

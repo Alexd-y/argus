@@ -1,0 +1,39 @@
+family_id: integer_overflow
+description: >-
+  Arithmetic overflow curriculum probes (CWE-190). INT_MAX+1, INT_MIN-1
+  boundary tests, and allocation size underflow via negative integers.
+cwe_ids: [190]
+owasp_top10:
+  - 'A06:2021'
+risk_level: high
+requires_approval: false
+oast_required: false
+payloads:
+  - id: int_overflow_32
+    template: "4294967296"
+    confidence: suspected
+    notes: UINT32_MAX+1 (0x100000000); tests 32-bit unsigned integer wraparound.
+  - id: int_underflow_32
+    template: "-1"
+    confidence: suspected
+    notes: Integer -1 to unsigned context; triggers massive allocation in size_t sinks.
+  - id: int_max_boundary
+    template: "2147483647"
+    confidence: suspected
+    notes: INT32_MAX boundary; tests edge condition at signed 32-bit max.
+  - id: int_min_boundary
+    template: "-2147483648"
+    confidence: suspected
+    notes: INT32_MIN boundary; tests abs() overflow and negation edge conditions.
+mutations:
+  - name: width_escalation
+    description: Escalate to INT64_MAX+1 (9223372036854775808) for 64-bit boundary tests.
+  - name: type_context_swap
+    description: Wrap integer in JSON, XML, or multipart to test context-dependent parsing.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw integer string in request context.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string parameter contexts.

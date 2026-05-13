@@ -57,6 +57,8 @@ dependencies = [
     # because the wire format contract (provisioning URI / secret length /
     # window semantics) is what the operator runbook will reference.
     "pyotp==2.9.0",
+    # Token counting for LLM cost tracking (facade.py fallback path).
+    "tiktoken>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -108,6 +110,10 @@ dev = [
     # Runtime stays on asyncpg; psycopg2-binary is dev-only (binary wheel — no
     # native build chain required).
     "psycopg2-binary>=2.9",
+]
+messaging = [
+    "nats-py>=0.9.0",
+    "aio-pika>=9.4.0",
 ]
 
 [build-system]

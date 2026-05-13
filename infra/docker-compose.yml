@@ -121,6 +121,30 @@ services:
       minio:
         condition: service_healthy
 
+  whiterabbitneo:
+    build:
+      context: ./whiterabbitneo
+      dockerfile: Dockerfile
+      args:
+        GPU_MODE: ${WRB_GPU_MODE:-cpu}
+    image: argus-whiterabbitneo
+    container_name: argus-whiterabbitneo
+    env_file: .env
+    environment:
+      VLLM_API_KEY: ${WRB_API_KEY:-argus-wrb-key}
+    volumes:
+      - wrb_models:/models
+      - wrb_cache:/root/.cache/huggingface
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/v1/models || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Первый запуск CPU: скачивание GGUF с Hugging Face (~4 GiB).
+      start_period: 900s
+
   backend:
     build:
       context: ../backend
@@ -169,6 +193,8 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       VERCEL_FRONTEND_URL: ${VERCEL_FRONTEND_URL:-}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       # SECURITY: docker.sock is required for VA active-scan sandbox exec.
       # In production, prefer a dedicated sandbox REST API (see docs/security.md).
@@ -177,6 +203,8 @@ services:
     networks:
       - backend
       - data
+    # whiterabbitneo не в depends_on: иначе при долгой/сломанной загрузке GGUF не поднимаются
+    # backend и nginx → на хосте нет API для Next.js (override: FastAPI на 127.0.0.1:8080).
     depends_on:
       postgres:
         condition: service_healthy
@@ -238,6 +266,8 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       # SECURITY: docker.sock is required for VA active-scan sandbox exec.
       # In production, prefer a dedicated sandbox REST API (see docs/security.md).
@@ -314,7 +344,9 @@ services:
       # limited scope/rate-limits; do not expose backend auth keys in frontend JS.
       ARGUS_GATEWAY_API_KEY: ${ARGUS_GATEWAY_API_KEY:-${ARGUS_API_KEYS:-}}
     ports:
-      - "${ARGUS_HTTP_PORT:-8080}:80"
+      # По умолчанию не 8080: в docker-compose.override.yml dev-бэкенд публикуется на 8080 для Next.js.
+      # Задайте ARGUS_HTTP_PORT=8080 только если не используете dev-override с пробросом backend.
+      - "${ARGUS_HTTP_PORT:-18888}:80"
       # Default 19443: 8443/8449 often fail on Windows (Hyper-V excluded ranges).
       # TLS termination inside nginx is optional (see nginx/ssl + api-tls); port mapping preserved for HTTPS when enabled.
       - "${ARGUS_HTTPS_PORT:-19443}:443"
@@ -362,11 +394,46 @@ services:
     profiles:
       - tunnel
 
+  # P2: Optional message queue — uncomment to enable
+  # nats:
+  #   image: nats:2.10-alpine
+  #   container_name: argus-nats
+  #   command: ["-js"]
+  #   ports:
+  #     - "4222:4222"
+  #     - "8222:8222"
+  #   networks:
+  #     - backend
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "nats server check connection || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 10s
+
+  # P2: Optional message queue — uncomment to enable
+  # rabbitmq:
+  #   image: rabbitmq:3.13-management-alpine
+  #   container_name: argus-rabbitmq
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   networks:
+  #     - backend
+  #   healthcheck:
+  #     test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 15s
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
   sandbox_tmp:
+  wrb_models:
+  wrb_cache:
 
 networks:
   frontend:
