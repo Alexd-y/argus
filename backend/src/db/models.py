@@ -188,6 +188,7 @@ class Scan(Base):
     phase: Mapped[str] = mapped_column(String(50), default="init")
     options: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     #: quick | standard | deep (Strix-style scan mode).
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     scan_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="standard", server_default=text("'standard'")
     )

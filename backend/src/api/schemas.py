@@ -101,7 +101,12 @@ class ScanCreateRequest(BaseModel):
         pattern=TARGET_PATTERN,
         description="URL or domain to scan",
     )
-    email: str
+    email: str = Field(
+        default="unknown@argus.local",
+        min_length=1,
+        max_length=320,
+        description="Operator contact email for report delivery",
+    )
     options: ScanOptions = Field(default_factory=ScanOptions)
     scan_mode: Literal["quick", "standard", "deep", "lab"] = Field(
         default="standard",
@@ -132,6 +137,7 @@ class ScanDetailResponse(BaseModel):
     progress: int
     phase: str
     target: str
+    email: str | None = None
     created_at: str
 
 
@@ -143,6 +149,7 @@ class ScanListItemResponse(BaseModel):
     progress: int
     phase: str
     target: str
+    email: str | None = None
     created_at: str
     scan_mode: str = "standard"
 

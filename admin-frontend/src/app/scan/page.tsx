@@ -152,6 +152,7 @@ function useScanSSE(scanId: string | null) {
 export default function ScanPage() {
   const [scanId, setScanId] = useState("");
   const [inputValue, setInputValue] = useState("https://");
+  const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const { events, phase, progress, status, error } = useScanSSE(scanId || null);
@@ -164,7 +165,7 @@ export default function ScanPage() {
       const res = await fetch(`${baseUrl}/api/v1/scans`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_url: inputValue, options: {} }),
+        body: JSON.stringify({ target: inputValue, email: email || "unknown@argus.local", options: {} }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -187,7 +188,7 @@ export default function ScanPage() {
       {!scanId ? (
         <>
           <h1 className="mb-4 text-xl font-semibold">New Pentest Scan</h1>
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-col gap-2 mb-4">
             <input
               type="text"
               value={inputValue}
@@ -196,6 +197,16 @@ export default function ScanPage() {
               className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
               disabled={submitting}
             />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com (optional)"
+              className="flex-1 rounded border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
+              disabled={submitting}
+            />
+          </div>
+          <div className="flex gap-2 mb-4">
             <button
               onClick={startScan}
               disabled={submitting || !inputValue.startsWith("http")}

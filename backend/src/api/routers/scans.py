@@ -250,6 +250,7 @@ async def list_scans(
                 progress=s.progress,
                 phase=s.phase,
                 target=s.target_url,
+                email=getattr(s, "email", None),
                 created_at=format_created_at_iso_z(s.created_at),
                 scan_mode=str(getattr(s, "scan_mode", None) or "standard"),
             )
@@ -351,6 +352,7 @@ async def create_scan(
             phase="init",
             options=options_dict,
             scan_mode=req.scan_mode,
+            email=req.email,
         )
         session.add(scan)
         await session.commit()
@@ -399,6 +401,7 @@ async def get_scan(
             progress=scan.progress,
             phase=scan.phase,
             target=scan.target_url,
+            email=scan.email,
             created_at=format_created_at_iso_z(scan.created_at),
         )
 
