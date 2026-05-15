@@ -125,6 +125,7 @@ class ValhallaReportContext(BaseModel):
     target_url: str = ""
     scan_id: str = ""
     tenant_id: str = ""
+    email: str = ""
     report_tier: str = "valhalla"
     generated_at: str = ""
 
@@ -463,8 +464,26 @@ async def build_valhalla_report_context(
     now_iso = datetime.utcnow().isoformat() + "Z"
 
     resolved_findings: list[dict[str, Any]] = list(findings or [])
+    operator_email = ""
     # Load from DB when session is available
     if session is not None and isinstance(session, AsyncSession):
+        try:
+            from src.db.models import Scan as ScanModel
+            scan_result = await session.execute(
+                select(ScanModel).where(
+                    cast(ScanModel.id, String) == str(scan_id),
+                    cast(ScanModel.tenant_id, String) == str(tenant_id),
+                )
+            )
+            scan_row = scan_result.scalar_one_or_none()
+            if scan_row is not None:
+                operator_email = getattr(scan_row, "email", "") or ""
+        except Exception:
+            logger.debug(
+                "valhalla_ctx_scan_load_failed",
+                extra={"scan_id": scan_id, "tenant_id": tenant_id},
+                exc_info=True,
+            )
         try:
             from src.db.models import Finding as FindingModel
             result = await session.execute(
@@ -648,6 +667,7 @@ async def build_valhalla_report_context(
 
     return ValhallaReportContext(
         engagement_title=engagement_title,
+        email=operator_email,
         target_url=str(target)[:2048],
         scan_id=str(scan_id),
         tenant_id=str(tenant_id),
