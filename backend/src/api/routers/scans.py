@@ -54,6 +54,7 @@ from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_s
 from src.tasks import generate_all_reports_task, generate_report_task, scan_phase_task
 
 SSE_POLL_INTERVAL_SEC = 1.5
+SSE_KEEPALIVE_INTERVAL_SEC = 15  # Emit keepalive comments to prevent proxy timeout
 # Max wall time for GET /scans/{id}/events SSE before emitting "Event stream timeout" (30 minutes).
 SSE_MAX_WAIT_SEC = 30 * 60
 
@@ -1228,13 +1229,22 @@ async def get_scan_events(
     tenant_id: str = Depends(get_current_tenant_id),
 ):
     """SSE stream for scan events from DB. Content-Type: text/event-stream.
-    Emits: phase_start, progress, complete, error. Polls scan_events until complete/failed."""
+    Emits: phase_start, progress, complete, error, keepalive (every 15s).
+    Polls scan_events until complete/failed. Keepalive comments prevent nginx/proxy timeouts."""
     async def event_generator():
         try:
             seen_event_ids: set[str] = set()
             started_at = time.monotonic()
+            last_keepalive = started_at
 
             while True:
+                now = time.monotonic()
+
+                # Emit SSE keepalive comment every SSE_KEEPALIVE_INTERVAL_SEC
+                if now - last_keepalive >= SSE_KEEPALIVE_INTERVAL_SEC:
+                    yield {"event": "keepalive", "data": "", "comment": f"ping - {now}"}
+                    last_keepalive = now
+
                 async with async_session_factory() as session:
                     await set_session_tenant(session, tenant_id)
                     # DB has VARCHAR(36) for id/tenant_id; ORM uses UUID — cast for comparison
@@ -1315,5 +1325,7 @@ async def get_scan_events(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Content-Type-Options": "nosniff",
         },
+        # ping_interval is sse_starlette >=2.0 only; skip for backward compat
     )

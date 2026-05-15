@@ -28,6 +28,26 @@ export function getApiBaseUrl(): string {
 }
 
 /**
+ * Base URL for **browser** SSE (`GET /scans/:id/events`).
+ *
+ * Next.js dev rewrites the same `/api/v1` path for `fetch()`, but Turbopack can drop or
+ * reset long-lived EventSource streams — the UI then loses `complete` events and polling
+ * may lag. Point SSE at the API the browser reaches directly (usually public nginx), e.g.:
+ * `NEXT_PUBLIC_SSE_API_BASE=http://YOUR_HOST:18888/api/v1`
+ *
+ * CORS / nginx: backend must allow this page's `Origin` (see `CORS_ORIGINS` / nginx CORS map).
+ */
+export function getSseApiBaseUrl(): string {
+  const raw =
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SSE_API_BASE) || "";
+  const trimmed = raw.trim().replace(/\/$/, "");
+  if (trimmed) {
+    return trimmed;
+  }
+  return getApiBaseUrl();
+}
+
+/**
  * Build full URL for an API path (relative or absolute depending on base).
  */
 export function apiUrl(path: string): string {

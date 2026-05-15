@@ -487,6 +487,10 @@ async def run_scan_state_machine(
 
     report_out: ReportingOutput | None = None
 
+    from src.recon.sandbox_tool_runner import clear_tool_availability_cache
+
+    clear_tool_availability_cache()
+
     for order_index, phase in enumerate(PHASE_ORDER):
         progress = _phase_to_progress(phase)
         phase_str = phase.value

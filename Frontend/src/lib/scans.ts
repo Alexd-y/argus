@@ -2,7 +2,7 @@
  * ARGUS Scans API - POST /scans, GET /scans/:id, GET /scans/:id/events (SSE).
  */
 
-import { apiFetch, getApiBaseUrl } from "./api";
+import { apiFetch, getSseApiBaseUrl } from "./api";
 import type {
   CreateScanRequest,
   CreateScanResponse,
@@ -34,7 +34,7 @@ export function subscribeScanEvents(
   onEvent: ScanEventCallback,
   onError?: (err: unknown) => void
 ): () => void {
-  const base = getApiBaseUrl();
+  const base = getSseApiBaseUrl();
   const url = `${base}/scans/${encodeURIComponent(scanId)}/events`;
 
   if (typeof EventSource === "undefined") {

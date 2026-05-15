@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     api_keys: list[str] = Field(default_factory=list)
     log_level: str = "INFO"
     version: str = "0.1.0"
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT", "environment"),
+    )
     default_tenant_id: str = "00000000-0000-0000-0000-000000000001"
 
     # LLM Providers (Phase 6) — at least one required for AI orchestration
@@ -1130,7 +1134,7 @@ class Settings(BaseSettings):
         request ever lands. Both failure paths are silent in dev / staging
         / tests because they only fire when ``ENVIRONMENT=production``.
         """
-        env = os.getenv("ENVIRONMENT", "").strip().lower()
+        env = self.environment.strip().lower()
         if env != "production":
             return self
 
@@ -1273,6 +1277,11 @@ def _sync_llm_api_keys_to_environ() -> None:
     ``os.environ``. Code in ``src.llm.adapters`` and ``src.core.llm_config`` only
     reads ``os.environ``. Values already set in the real environment win.
     """
+    # ENVIRONMENT and ADMIN_* are also read by os.getenv() in validators and middleware.
+    if (os.environ.get("ENVIRONMENT") or "").strip() == "":
+        env_val = os.getenv("ENVIRONMENT", settings.model_config.get("env_file", ""))  # noqa
+        os.environ.setdefault("ENVIRONMENT", "development")
+
     pairs: list[tuple[str, str | None]] = [
         ("OPENAI_API_KEY", settings.openai_api_key),
         ("DEEPSEEK_API_KEY", settings.deepseek_api_key),
@@ -1280,6 +1289,7 @@ def _sync_llm_api_keys_to_environ() -> None:
         ("GOOGLE_API_KEY", settings.google_api_key),
         ("KIMI_API_KEY", settings.kimi_api_key),
         ("PERPLEXITY_API_KEY", settings.perplexity_api_key),
+        ("ADMIN_AUTH_MODE", settings.admin_auth_mode),
     ]
     for env_key, val in pairs:
         if not val or not str(val).strip():
