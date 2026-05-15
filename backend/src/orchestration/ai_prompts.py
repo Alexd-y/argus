@@ -153,29 +153,29 @@ async def ai_recon(
     raw_sink: RawPhaseSink | None = None,
     scan_id: str | None = None,
 ) -> ReconOutput:
-    """Analyze real tool output via LLM to produce structured recon. Raises on failure."""
+    """Analyze real tool output via LLM to produce structured recon."""
     _require_llm()
-    system, user = get_prompt(
-        RECON, target=inp.target, options=inp.options, tool_results=tool_results
-    )
-    data = _require_json(
-        await _call_llm_with_json_retry(
+    try:
+        system, user = get_prompt(
+            RECON, target=inp.target, options=inp.options, tool_results=tool_results
+        )
+        data = _require_json(
+            await _call_llm_with_json_retry(
+                RECON, user, system, raw_sink=raw_sink,
+                raw_label_prefix="recon_llm", scan_id=scan_id,
+            ),
             RECON,
-            user,
-            system,
-            raw_sink=raw_sink,
-            raw_label_prefix="recon_llm",
-            scan_id=scan_id,
-        ),
-        RECON,
-    )
-    if not isinstance(data.get("assets"), list):
-        raise RuntimeError(f"LLM returned invalid response for {RECON}")
-    return ReconOutput(
-        assets=data.get("assets", []),
-        subdomains=data.get("subdomains", []),
-        ports=[int(p) for p in data.get("ports", []) if isinstance(p, (int, float))],
-    )
+        )
+        if not isinstance(data.get("assets"), list):
+            raise RuntimeError(f"LLM returned invalid response for {RECON}")
+        return ReconOutput(
+            assets=data.get("assets", []),
+            subdomains=data.get("subdomains", []),
+            ports=[int(p) for p in data.get("ports", []) if isinstance(p, (int, float))],
+        )
+    except Exception:
+        logger.exception("recon_llm_failed")
+        return ReconOutput(assets=[], subdomains=[], ports=[])
 
 
 async def ai_threat_modeling(
@@ -187,21 +187,20 @@ async def ai_threat_modeling(
 ) -> ThreatModelOutput:
     """Build threat model from real assets, NVD CVEs, and enriched recon context via LLM."""
     _require_llm()
-    system, user = get_prompt(
-        THREAT_MODELING,
-        assets=inp.assets,
-        nvd_data=nvd_data,
-        recon_context=recon_context,
-    )
-    data = _require_json(
-        await _call_llm_with_json_retry(
-            THREAT_MODELING, user, system, scan_id=scan_id
-        ),
-        THREAT_MODELING,
-    )
-    if not isinstance(data.get("threat_model"), dict):
-        raise RuntimeError(f"LLM returned invalid response for {THREAT_MODELING}")
-    return ThreatModelOutput(threat_model=data["threat_model"])
+    try:
+        system, user = get_prompt(
+            THREAT_MODELING, assets=inp.assets, nvd_data=nvd_data, recon_context=recon_context,
+        )
+        data = _require_json(
+            await _call_llm_with_json_retry(THREAT_MODELING, user, system, scan_id=scan_id),
+            THREAT_MODELING,
+        )
+        if not isinstance(data.get("threat_model"), dict):
+            raise RuntimeError(f"LLM returned invalid response for {THREAT_MODELING}")
+        return ThreatModelOutput(threat_model=data["threat_model"])
+    except Exception:
+        logger.exception("threat_model_llm_failed")
+        return ThreatModelOutput(threat_model={})
 
 
 async def ai_vuln_analysis(
@@ -210,43 +209,45 @@ async def ai_vuln_analysis(
     active_scan_context: str = "",
     scan_id: str | None = None,
 ) -> VulnAnalysisOutput:
-    """Call LLM to analyze vulns from threat model. Raises on failure."""
+    """Call LLM to analyze vulns from threat model. Returns empty findings on failure."""
     _require_llm()
-    system, user = get_prompt(
-        VULN_ANALYSIS,
-        threat_model=inp.threat_model,
-        assets=inp.assets,
-        active_scan_context=active_scan_context,
-    )
-    data = _require_json(
-        await _call_llm_with_json_retry(
-            VULN_ANALYSIS, user, system, scan_id=scan_id
-        ),
-        VULN_ANALYSIS,
-    )
-    if not isinstance(data.get("findings"), list):
-        raise RuntimeError(f"LLM returned invalid response for {VULN_ANALYSIS}")
-    return VulnAnalysisOutput(findings=data["findings"])
+    try:
+        system, user = get_prompt(
+            VULN_ANALYSIS, threat_model=inp.threat_model,
+            assets=inp.assets, active_scan_context=active_scan_context,
+        )
+        data = _require_json(
+            await _call_llm_with_json_retry(VULN_ANALYSIS, user, system, scan_id=scan_id),
+            VULN_ANALYSIS,
+        )
+        if not isinstance(data.get("findings"), list):
+            raise RuntimeError(f"LLM returned invalid response for {VULN_ANALYSIS}")
+        return VulnAnalysisOutput(findings=data["findings"])
+    except Exception:
+        logger.exception("vuln_analysis_llm_failed")
+        return VulnAnalysisOutput(findings=[])
 
 
 async def ai_exploitation(
     inp: ExploitationInput, *, scan_id: str | None = None
 ) -> ExploitationOutput:
-    """Call LLM to plan exploitation. Raises on failure."""
+    """Call LLM to plan exploitation. Returns empty on failure."""
     _require_llm()
-    system, user = get_prompt(EXPLOITATION, findings=inp.findings)
-    data = _require_json(
-        await _call_llm_with_json_retry(
-            EXPLOITATION, user, system, scan_id=scan_id
-        ),
-        EXPLOITATION,
-    )
-    if not isinstance(data.get("exploits"), list):
-        raise RuntimeError(f"LLM returned invalid response for {EXPLOITATION}")
-    return ExploitationOutput(
-        exploits=data.get("exploits", []),
-        evidence=data.get("evidence", []),
-    )
+    try:
+        system, user = get_prompt(EXPLOITATION, findings=inp.findings)
+        data = _require_json(
+            await _call_llm_with_json_retry(EXPLOITATION, user, system, scan_id=scan_id),
+            EXPLOITATION,
+        )
+        if not isinstance(data.get("exploits"), list):
+            raise RuntimeError(f"LLM returned invalid response for {EXPLOITATION}")
+        return ExploitationOutput(
+            exploits=data.get("exploits", []),
+            evidence=data.get("evidence", []),
+        )
+    except Exception:
+        logger.exception("exploitation_llm_failed")
+        return ExploitationOutput(exploits=[], evidence=[])
 
 
 async def ai_post_exploitation(
@@ -255,24 +256,25 @@ async def ai_post_exploitation(
     raw_sink: RawPhaseSink | None = None,
     scan_id: str | None = None,
 ) -> PostExploitationOutput:
-    """Call LLM for lateral movement / persistence. Raises on failure."""
+    """Call LLM for lateral movement / persistence. Returns empty on failure."""
     _require_llm()
-    system, user = get_prompt(POST_EXPLOITATION, exploits=inp.exploits)
-    data = _require_json(
-        await _call_llm_with_json_retry(
+    try:
+        system, user = get_prompt(POST_EXPLOITATION, exploits=inp.exploits)
+        data = _require_json(
+            await _call_llm_with_json_retry(
+                POST_EXPLOITATION, user, system,
+                raw_sink=raw_sink, raw_label_prefix="post_exploitation_llm",
+                scan_id=scan_id,
+            ),
             POST_EXPLOITATION,
-            user,
-            system,
-            raw_sink=raw_sink,
-            raw_label_prefix="post_exploitation_llm",
-            scan_id=scan_id,
-        ),
-        POST_EXPLOITATION,
-    )
-    return PostExploitationOutput(
-        lateral=data.get("lateral", []) if isinstance(data.get("lateral"), list) else [],
-        persistence=data.get("persistence", []) if isinstance(data.get("persistence"), list) else [],
-    )
+        )
+        return PostExploitationOutput(
+            lateral=data.get("lateral", []) if isinstance(data.get("lateral"), list) else [],
+            persistence=data.get("persistence", []) if isinstance(data.get("persistence"), list) else [],
+        )
+    except Exception:
+        logger.exception("post_exploitation_llm_failed")
+        return PostExploitationOutput(lateral=[], persistence=[])
 
 
 async def _call_wrb_report_section(
@@ -281,28 +283,39 @@ async def _call_wrb_report_section(
     *,
     scan_id: str | None = None,
 ) -> str:
-    """Call WRB to generate a report section for ONE phase with FULL raw data."""
-    system, user = get_report_section_prompt(phase, phase_data)
-    response = await call_llm_unified(
-        system,
-        user,
-        task=LLMTask.REPORT_SECTION,
-        scan_id=scan_id,
-        phase=f"{phase}_report_section",
-    )
-    if response:
-        data = _parse_llm_json(response)
-        if data is not None and isinstance(data.get("section"), dict):
-            section = data["section"]
-            summary_keys = [
-                "recon_summary", "threat_model_summary", "vuln_analysis_summary",
-                "exploitation_summary", "post_exploitation_summary",
-            ]
-            for key in summary_keys:
-                val = section.get(key)
-                if isinstance(val, str) and val:
-                    return val
-            return json.dumps(section, ensure_ascii=False, default=str)
+    """Call WRB to generate a report section for ONE phase. Truncates data if exceeding 24k chars."""
+    import json as _json
+
+    max_data = 24000
+    if len(phase_data) > max_data:
+        phase_data = phase_data[:max_data]
+        try:
+            truncated = _json.loads(phase_data.rsplit('"', 1)[0] + '"}')
+            phase_data = _json.dumps(truncated, ensure_ascii=False, default=str, indent=2)
+        except Exception:
+            pass
+
+    try:
+        system, user = get_report_section_prompt(phase, phase_data)
+        response = await call_llm_unified(
+            system, user, task=LLMTask.REPORT_SECTION,
+            scan_id=scan_id, phase=f"{phase}_report_section",
+        )
+        if response:
+            data = _parse_llm_json(response)
+            if data is not None and isinstance(data.get("section"), dict):
+                section = data["section"]
+                summary_keys = [
+                    "recon_summary", "threat_model_summary", "vuln_analysis_summary",
+                    "exploitation_summary", "post_exploitation_summary",
+                ]
+                for key in summary_keys:
+                    val = section.get(key)
+                    if isinstance(val, str) and val:
+                        return val
+                return _json.dumps(section, ensure_ascii=False, default=str)
+    except Exception:
+        logger.exception("report_section_wrb_call_failed", extra={"phase": phase})
     return ""
 
 
