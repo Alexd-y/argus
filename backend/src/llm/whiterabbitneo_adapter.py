@@ -1,5 +1,4 @@
 """WhiteRabbitNeo adapter — primary pentest AI, OpenAI-compatible via vLLM.
-
 WhiteRabbitNeo V3 7B is the single source of truth for all pentest analysis.
 Cloud providers (DeepSeek, OpenAI, Perplexity) serve only as report supplements.
 """
@@ -17,11 +16,11 @@ WRB_DEFAULT_MODEL = "taico-ai/WhiteRabbitNeo-v3-7B"
 WRB_DEFAULT_MAX_TOKENS = 4096
 WRB_DEFAULT_TEMPERATURE = 0.3
 WRB_DEFAULT_TIMEOUT = 600.0
+WRB_MAX_PROMPT_BYTES = 8192
 
 
 class WhiteRabbitNeoAdapter(LLMAdapter):
     """Primary pentest AI — all scan phases run through this adapter first.
-
     Falls back to cloud providers only when explicitly configured for
     report-supplement tasks (REPORT_SECTION, EXECUTIVE_SUMMARY).
     """
@@ -87,6 +86,19 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
 
         async with httpx.AsyncClient(timeout=self._httpx_timeout()) as client:
             resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                body = (resp.text or "")[:2000]
+                prompt_bytes = len(payload.get("messages", [{}])[-1].get("content", ""))
+                logger.error(
+                    "whiterabbitneo_http_error",
+                    extra={
+                        "event": "whiterabbitneo_http_error",
+                        "status": resp.status_code,
+                        "body": body,
+                        "prompt_bytes": prompt_bytes,
+                        "prompt_bytes_total": len(json.dumps(payload)),
+                    },
+                )
             resp.raise_for_status()
             data = resp.json()
 
@@ -129,6 +141,19 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
 
         async with httpx.AsyncClient(timeout=self._httpx_timeout()) as client:
             resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                body = (resp.text or "")[:2000]
+                prompt_bytes = len(payload.get("messages", [{}])[-1].get("content", ""))
+                logger.error(
+                    "whiterabbitneo_http_error",
+                    extra={
+                        "event": "whiterabbitneo_http_error",
+                        "status": resp.status_code,
+                        "body": body,
+                        "prompt_bytes": prompt_bytes,
+                        "prompt_bytes_total": len(json.dumps(payload)),
+                    },
+                )
             resp.raise_for_status()
             data = resp.json()
 

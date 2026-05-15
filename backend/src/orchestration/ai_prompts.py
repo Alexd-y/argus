@@ -271,29 +271,121 @@ async def ai_post_exploitation(
     )
 
 
-async def ai_reporting(
-    inp: ReportingInput, *, scan_id: str | None = None
-) -> ReportingOutput:
-    """Call LLM to generate report. Raises on failure."""
-    _require_llm()
+WRB_SAFE_PROMPT_LIMIT = 12000
+
+def _trim_phase_data(data: dict[str, Any] | None, max_items: int = 20) -> dict[str, Any] | None:
+    """Keep only essential fields to fit WRB 7B context window."""
+    if data is None:
+        return None
+    trimmed: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, list) and len(value) > max_items:
+            trimmed[key] = value[:max_items]
+        elif isinstance(value, dict):
+            trimmed[key] = _trim_phase_data(value, max_items)
+        elif isinstance(value, str) and len(value) > 12000:
+            trimmed[key] = value[:12000] + "...[truncated]"
+        else:
+            trimmed[key] = value
+    return trimmed
+
+
+def _build_reporting_prompt(inp: ReportingInput) -> tuple[str, str]:
+    """Build reporting prompt, auto-truncating to fit WRB context."""
+    import json as _json
+
     summary = {
         "target": inp.target,
-        "recon": inp.recon.model_dump() if inp.recon else None,
-        "threat_model": inp.threat_model.model_dump() if inp.threat_model else None,
-        "vuln_analysis": inp.vuln_analysis.model_dump() if inp.vuln_analysis else None,
-        "exploitation": inp.exploitation.model_dump() if inp.exploitation else None,
-        "post_exploitation": inp.post_exploitation.model_dump() if inp.post_exploitation else None,
     }
+    if inp.recon:
+        rd = _trim_phase_data(inp.recon.model_dump())
+        summary["recon"] = rd
+    if inp.threat_model:
+        td = _trim_phase_data(inp.threat_model.model_dump())
+        summary["threat_model"] = td
+    if inp.vuln_analysis:
+        vd = _trim_phase_data(inp.vuln_analysis.model_dump())
+        summary["vuln_analysis"] = vd
+    if inp.exploitation:
+        ed = _trim_phase_data(inp.exploitation.model_dump())
+        summary["exploitation"] = ed
+    if inp.post_exploitation:
+        pd = _trim_phase_data(inp.post_exploitation.model_dump())
+        summary["post_exploitation"] = pd
     rc = inp.report_context if isinstance(inp.report_context, dict) else {}
     if rc:
         summary["report_context"] = rc
+
     system, user = get_prompt(REPORTING, summary=summary)
-    data = _require_json(
-        await _call_llm_with_json_retry(
-            REPORTING, user, system, scan_id=scan_id
+
+    if len(user) + len(system) > WRB_SAFE_PROMPT_LIMIT:
+        raw = _json.dumps(summary, ensure_ascii=False, default=str)
+        max_raw = WRB_SAFE_PROMPT_LIMIT // 4
+        if len(raw) > max_raw:
+            raw = raw[:max_raw]
+            try:
+                summary = _json.loads(raw + '"}')
+            except Exception:
+                summary = {"target": inp.target, "error": "data truncated for LLM context"}
+            system, user = get_prompt(REPORTING, summary=summary)
+
+    return system, user
+
+
+def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
+    """Non-LLM report when WRB + cloud all fail."""
+    findings: list[dict[str, Any]] = []
+    if inp.vuln_analysis:
+        va = inp.vuln_analysis.model_dump()
+        raw_findings = va.get("findings") or va.get("vulnerabilities") or []
+        for f in raw_findings[:50]:
+            if isinstance(f, dict):
+                findings.append({
+                    "severity": str(f.get("severity", "info")).lower(),
+                    "description": str(f.get("description") or f.get("name", "Unknown finding")),
+                    "impact": str(f.get("impact", "Not assessed")),
+                    "remediation": str(f.get("remediation", "Manual review required")),
+                })
+    sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    for f in findings:
+        s = f.get("severity", "info")
+        if s in sev_counts:
+            sev_counts[s] += 1
+
+    report = {
+        "summary": {**sev_counts, "risk_rating": "medium"},
+        "executive_summary": (
+            f"Security assessment completed for {inp.target}. "
+            f"Identified {len(findings)} findings "
+            f"({sev_counts['critical']} critical, {sev_counts['high']} high, "
+            f"{sev_counts['medium']} medium, {sev_counts['low']} low). "
+            f"Review findings manually for full impact analysis."
         ),
-        REPORTING,
-    )
-    if not isinstance(data.get("report"), dict):
-        raise RuntimeError(f"LLM returned invalid response for {REPORTING}")
-    return ReportingOutput(report=data["report"])
+        "sections": ["Scope", "Methodology", "Findings", "Recommendations"],
+        "findings_detail": findings,
+        "ai_insights": [],
+    }
+    return ReportingOutput(report=report)
+
+
+async def ai_reporting(
+    inp: ReportingInput, *, scan_id: str | None = None
+) -> ReportingOutput:
+    """Call LLM to generate report. Falls back to structured non-LLM report on failure."""
+    _require_llm()
+    system, user = _build_reporting_prompt(inp)
+
+    try:
+        data = _require_json(
+            await _call_llm_with_json_retry(
+                REPORTING, user, system, scan_id=scan_id
+            ),
+            REPORTING,
+        )
+        if isinstance(data.get("report"), dict):
+            return ReportingOutput(report=data["report"])
+    except Exception:
+        logger.exception("reporting_llm_failed_falling_back_to_structured")
+
+    logger.info("reporting_using_fallback", extra={"target": inp.target})
+    return _build_fallback_report(inp)
