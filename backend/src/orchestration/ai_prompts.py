@@ -286,7 +286,7 @@ async def _call_wrb_report_section(
     """Call WRB to generate a report section for ONE phase. Truncates data if exceeding 24k chars."""
     import json as _json
 
-    max_data = 24000
+    max_data = 48000
     if len(phase_data) > max_data:
         phase_data = phase_data[:max_data]
         try:

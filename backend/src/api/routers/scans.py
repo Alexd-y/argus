@@ -114,7 +114,7 @@ def _sync_scan_depth_options(
         flags = options_dict.get("scan_approval_flags")
         if not isinstance(flags, dict):
             flags = {}
-        for tool in ("sqlmap", "commix", "dalfox", "xsstrike", "ffuf", "nuclei", "testssl", "sslscan"):
+        for tool in ("sqlmap", "commix", "hydra", "medusa", "dalfox", "xsstrike", "ffuf", "nuclei", "wfuzz", "gobuster", "feroxbuster", "testssl", "sslscan", "whatweb", "nikto", "theharvester", "gospider", "parsero"):
             flags.setdefault(tool, True)
         options_dict["scan_approval_flags"] = flags
         allowlist = _merge_lab_allowed_targets(

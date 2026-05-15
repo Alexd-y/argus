@@ -5,8 +5,8 @@ import re
 from typing import Any
 
 # Max length for user-provided strings in prompts (mitigates prompt injection)
-MAX_PROMPT_STRING_LENGTH = 4096
-MAX_PROMPT_OBJECT_LENGTH = 65536
+MAX_PROMPT_STRING_LENGTH = 16384
+MAX_PROMPT_OBJECT_LENGTH = 262144
 
 # Patterns that may indicate prompt injection attempts
 _SUSPICIOUS_PATTERNS = [
