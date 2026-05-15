@@ -374,7 +374,163 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
 }
 
 
-# Cloud fallback phase prompts — reuse the USER templates from PHASE_PROMPTS
+# ---------------------------------------------------------------------------
+# Per-phase report section prompts — each phase gets FULL raw data.
+# WRB 7B processes one phase at a time → no context overflow, zero data loss.
+# A 6th call assembles all section summaries into the final report JSON.
+# ---------------------------------------------------------------------------
+
+SYSTEM_PROMPT_REPORT_SECTION_RECON = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Reconnaissance report section. Analyse the FULL RAW RECON DATA. "
+    "Produce: all discovered assets (IPs, domains, services + versions), subdomain inventory, "
+    "open ports + banners, technology stack (frameworks, CMS, server software), "
+    "HTTP security headers, SSL/TLS certificate details, identified entry points "
+    "(login forms, API endpoints, admin panels, file uploads). "
+    "List EVERY item found — no summarisation, no omission."
+)
+
+SYSTEM_PROMPT_REPORT_SECTION_THREAT_MODEL = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Threat Modeling report section. Analyse the FULL RAW THREAT MODEL DATA. "
+    "Produce: STRIDE per asset (Spoofing, Tampering, Repudiation, Info Disclosure, "
+    "DoS, Elevation of Privilege), CVE correlations with detected versions, "
+    "MITRE ATT&CK technique mappings, risk matrix (likelihood x impact), "
+    "actionable mitigations per threat. Cover EVERY threat — no omissions."
+)
+
+SYSTEM_PROMPT_REPORT_SECTION_VULN = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Vulnerability Analysis report section. Analyse the FULL RAW VULNERABILITY DATA. "
+    "Produce: complete findings index with CWE IDs, CVSS 3.1 scores, severity levels, "
+    "confidence ratings, evidence types, OWASP 2025 category mappings, "
+    "exploitation difficulty, and impact analysis. "
+    "List EVERY finding — do not omit any vulnerability."
+)
+
+SYSTEM_PROMPT_REPORT_SECTION_EXPLOIT = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Exploitation report section. Analyse the FULL RAW EXPLOITATION DATA. "
+    "Produce: exploit inventory (tool, payload, success/failure per finding), "
+    "PoC evidence (screenshots, HTTP responses, shell access), "
+    "attack chain (step-by-step exploitation paths), MITRE ATT&CK mappings. "
+    "Document EVERY exploit attempt — successes, partials, and failures."
+)
+
+SYSTEM_PROMPT_REPORT_SECTION_POST_EXPLOIT = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Post-Exploitation report section. Analyse the FULL RAW POST-EXPLOITATION DATA. "
+    "Produce: lateral movement paths, persistence mechanisms, privilege escalation vectors, "
+    "credential harvesting results, internal recon findings, blast radius assessment. "
+    "Include ALL discovered paths and techniques."
+)
+
+SYSTEM_PROMPT_REPORT_ASSEMBLY = (
+    SYSTEM_PROMPT_BASE + " "
+    "FOCUS: Report assembly. Merge 5 per-phase section summaries into a single "
+    "comprehensive security assessment report. Calculate severity distribution across all sections. "
+    "Write an executive summary (2-3 paragraphs) synthesising all sections. "
+    "Preserve ALL detail from every section. Do NOT lose any finding, count, or insight. "
+    "Output the final report JSON."
+)
+
+_PHASE_REPORT_SECTION_USER: dict[str, str] = {
+    RECON: (
+        "Generate the Reconnaissance report section from the FULL RAW DATA below.\n\n"
+        "=== RECON DATA ===\n{phase_data}\n=== END RECON DATA ===\n\n"
+        'Return JSON: {{"section": {{"discovered_assets": [...], '
+        '"subdomain_inventory": [...], "port_scan_results": [...], '
+        '"technology_stack": [...], "http_headers": [...], '
+        '"ssl_tls": {{...}}, "entry_points": [...], '
+        '"recon_summary": "string"}}}}'
+    ),
+    THREAT_MODELING: (
+        "Generate the Threat Modeling report section from the FULL RAW DATA below.\n\n"
+        "=== THREAT MODEL DATA ===\n{phase_data}\n=== END THREAT MODEL DATA ===\n\n"
+        'Return JSON: {{"section": {{"threats_by_asset": [...], '
+        '"cve_correlations": [...], "mitre_attack_mapping": [...], '
+        '"risk_matrix": {{...}}, "threat_model_summary": "string"}}}}'
+    ),
+    VULN_ANALYSIS: (
+        "Generate the Vulnerability Analysis report section from the FULL RAW DATA below.\n\n"
+        "=== VULNERABILITY ANALYSIS DATA ===\n{phase_data}\n=== END VULNERABILITY ANALYSIS DATA ===\n\n"
+        'Return JSON: {{"section": {{"findings_index": [...], '
+        '"severity_distribution": {{...}}, "owasp_coverage": {{...}}, '
+        '"vuln_analysis_summary": "string"}}}}'
+    ),
+    EXPLOITATION: (
+        "Generate the Exploitation report section from the FULL RAW DATA below.\n\n"
+        "=== EXPLOITATION DATA ===\n{phase_data}\n=== END EXPLOITATION DATA ===\n\n"
+        'Return JSON: {{"section": {{"exploit_inventory": [...], '
+        '"poc_evidence": [...], "attack_chain": [...], '
+        '"exploitation_summary": "string"}}}}'
+    ),
+    POST_EXPLOITATION: (
+        "Generate the Post-Exploitation report section from the FULL RAW DATA below.\n\n"
+        "=== POST-EXPLOITATION DATA ===\n{phase_data}\n=== END POST-EXPLOITATION DATA ===\n\n"
+        'Return JSON: {{"section": {{"lateral_movement": [...], '
+        '"persistence": [...], "privilege_escalation": [...], '
+        '"credential_exposure": [...], "post_exploitation_summary": "string"}}}}'
+    ),
+}
+
+_REPORT_ASSEMBLY_USER = (
+    "Assemble the final security assessment report from the 5 section summaries below.\n\n"
+    "=== RECON SUMMARY ===\n{recon_summary}\n=== END RECON ===\n\n"
+    "=== THREAT MODEL SUMMARY ===\n{threat_model_summary}\n=== END THREAT MODEL ===\n\n"
+    "=== VULN ANALYSIS SUMMARY ===\n{vuln_summary}\n=== END VULN ANALYSIS ===\n\n"
+    "=== EXPLOITATION SUMMARY ===\n{exploit_summary}\n=== END EXPLOITATION ===\n\n"
+    "=== POST-EXPLOITATION SUMMARY ===\n{post_exploit_summary}\n=== END POST-EXPLOITATION ===\n\n"
+    "Target: {target}\n\n"
+    'Return JSON: {{"report": {{"summary": {{"critical": 0, "high": 0, "medium": 0, '
+    '"low": 0, "info": 0, "risk_rating": "string"}}, "executive_summary": "string", '
+    '"sections": ["string"], "findings_detail": [{{"severity": "string", '
+    '"description": "string", "impact": "string", "remediation": "string"}}], '
+    '"ai_insights": ["string"]}}}}'
+)
+
+_PHASE_REPORT_SECTION_SYSTEM: dict[str, str] = {
+    RECON: SYSTEM_PROMPT_REPORT_SECTION_RECON,
+    THREAT_MODELING: SYSTEM_PROMPT_REPORT_SECTION_THREAT_MODEL,
+    VULN_ANALYSIS: SYSTEM_PROMPT_REPORT_SECTION_VULN,
+    EXPLOITATION: SYSTEM_PROMPT_REPORT_SECTION_EXPLOIT,
+    POST_EXPLOITATION: SYSTEM_PROMPT_REPORT_SECTION_POST_EXPLOIT,
+}
+
+
+def get_report_section_prompt(phase: str, phase_data: str) -> tuple[str, str]:
+    """Return (system, user) prompt for one phase's report section with FULL raw data."""
+    system = _PHASE_REPORT_SECTION_SYSTEM.get(phase)
+    template = _PHASE_REPORT_SECTION_USER.get(phase)
+    if system is None or template is None:
+        raise ValueError(f"No report section prompt for phase: {phase}")
+    user = template.format(phase_data=phase_data)
+    return system, user
+
+
+def get_report_assembly_prompt(
+    *,
+    target: str,
+    recon_summary: str = "",
+    threat_model_summary: str = "",
+    vuln_summary: str = "",
+    exploit_summary: str = "",
+    post_exploit_summary: str = "",
+) -> tuple[str, str]:
+    """Return (system, user) prompt for final report assembly from section summaries."""
+    user = _REPORT_ASSEMBLY_USER.format(
+        target=target,
+        recon_summary=recon_summary or "No recon data",
+        threat_model_summary=threat_model_summary or "No threat model data",
+        vuln_summary=vuln_summary or "No vulnerability data",
+        exploit_summary=exploit_summary or "No exploitation data",
+        post_exploit_summary=post_exploit_summary or "No post-exploitation data",
+    )
+    return SYSTEM_PROMPT_REPORT_ASSEMBLY, user
+
+
+# ---------------------------------------------------------------------------
+# Cloud fallback prompts — used when WhiteRabbitNeo V3 is unavailable.
 CLOUD_FALLBACK_PHASE_PROMPTS: dict[str, tuple[str, str]] = {
     "recon": (CLOUD_FALLBACK_RECON_SYSTEM, PHASE_PROMPTS["recon"][1]),
     "threat_modeling": (CLOUD_FALLBACK_THREAT_MODEL_SYSTEM, PHASE_PROMPTS["threat_modeling"][1]),

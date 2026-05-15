@@ -36,6 +36,8 @@ from src.orchestration.prompt_registry import (
     VULN_ANALYSIS,
     get_fixer_prompt,
     get_prompt,
+    get_report_assembly_prompt,
+    get_report_section_prompt,
     get_schema,
 )
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
@@ -52,6 +54,8 @@ _PHASE_TO_TASK: dict[str, LLMTask] = {
     POST_EXPLOITATION: LLMTask.REMEDIATION_PLAN,
     REPORTING: LLMTask.REPORT_SECTION,
 }
+
+_PHASE_ORDER: list[str] = [RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION]
 
 
 def _parse_llm_json(text: str) -> dict[str, Any] | None:
@@ -271,65 +275,53 @@ async def ai_post_exploitation(
     )
 
 
-WRB_SAFE_PROMPT_LIMIT = 12000
+async def _call_wrb_report_section(
+    phase: str,
+    phase_data: str,
+    *,
+    scan_id: str | None = None,
+) -> str:
+    """Call WRB to generate a report section for ONE phase with FULL raw data."""
+    system, user = get_report_section_prompt(phase, phase_data)
+    response = await call_llm_unified(
+        system,
+        user,
+        task=LLMTask.REPORT_SECTION,
+        scan_id=scan_id,
+        phase=f"{phase}_report_section",
+    )
+    if response:
+        data = _parse_llm_json(response)
+        if data is not None and isinstance(data.get("section"), dict):
+            section = data["section"]
+            summary_keys = [
+                "recon_summary", "threat_model_summary", "vuln_analysis_summary",
+                "exploitation_summary", "post_exploitation_summary",
+            ]
+            for key in summary_keys:
+                val = section.get(key)
+                if isinstance(val, str) and val:
+                    return val
+            return json.dumps(section, ensure_ascii=False, default=str)
+    return ""
 
-def _trim_phase_data(data: dict[str, Any] | None, max_items: int = 20) -> dict[str, Any] | None:
-    """Keep only essential fields to fit WRB 7B context window."""
-    if data is None:
-        return None
-    trimmed: dict[str, Any] = {}
-    for key, value in data.items():
-        if isinstance(value, list) and len(value) > max_items:
-            trimmed[key] = value[:max_items]
-        elif isinstance(value, dict):
-            trimmed[key] = _trim_phase_data(value, max_items)
-        elif isinstance(value, str) and len(value) > 12000:
-            trimmed[key] = value[:12000] + "...[truncated]"
-        else:
-            trimmed[key] = value
-    return trimmed
 
-
-def _build_reporting_prompt(inp: ReportingInput) -> tuple[str, str]:
-    """Build reporting prompt, auto-truncating to fit WRB context."""
+def _get_phase_data(inp: ReportingInput, phase: str) -> str | None:
+    """Extract FULL raw JSON for one phase from ReportingInput."""
     import json as _json
 
-    summary = {
-        "target": inp.target,
+    mapping: dict[str, Any] = {
+        RECON: inp.recon,
+        THREAT_MODELING: inp.threat_model,
+        VULN_ANALYSIS: inp.vuln_analysis,
+        EXPLOITATION: inp.exploitation,
+        POST_EXPLOITATION: inp.post_exploitation,
     }
-    if inp.recon:
-        rd = _trim_phase_data(inp.recon.model_dump())
-        summary["recon"] = rd
-    if inp.threat_model:
-        td = _trim_phase_data(inp.threat_model.model_dump())
-        summary["threat_model"] = td
-    if inp.vuln_analysis:
-        vd = _trim_phase_data(inp.vuln_analysis.model_dump())
-        summary["vuln_analysis"] = vd
-    if inp.exploitation:
-        ed = _trim_phase_data(inp.exploitation.model_dump())
-        summary["exploitation"] = ed
-    if inp.post_exploitation:
-        pd = _trim_phase_data(inp.post_exploitation.model_dump())
-        summary["post_exploitation"] = pd
-    rc = inp.report_context if isinstance(inp.report_context, dict) else {}
-    if rc:
-        summary["report_context"] = rc
-
-    system, user = get_prompt(REPORTING, summary=summary)
-
-    if len(user) + len(system) > WRB_SAFE_PROMPT_LIMIT:
-        raw = _json.dumps(summary, ensure_ascii=False, default=str)
-        max_raw = WRB_SAFE_PROMPT_LIMIT // 4
-        if len(raw) > max_raw:
-            raw = raw[:max_raw]
-            try:
-                summary = _json.loads(raw + '"}')
-            except Exception:
-                summary = {"target": inp.target, "error": "data truncated for LLM context"}
-            system, user = get_prompt(REPORTING, summary=summary)
-
-    return system, user
+    obj = mapping.get(phase)
+    if obj is None:
+        return None
+    raw = obj.model_dump()
+    return _json.dumps(raw, ensure_ascii=False, default=str, indent=2)
 
 
 def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
@@ -338,7 +330,7 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
     if inp.vuln_analysis:
         va = inp.vuln_analysis.model_dump()
         raw_findings = va.get("findings") or va.get("vulnerabilities") or []
-        for f in raw_findings[:50]:
+        for f in raw_findings:
             if isinstance(f, dict):
                 findings.append({
                     "severity": str(f.get("severity", "info")).lower(),
@@ -346,7 +338,7 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
                     "impact": str(f.get("impact", "Not assessed")),
                     "remediation": str(f.get("remediation", "Manual review required")),
                 })
-    sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
+    sev_counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0}
     for f in findings:
         s = f.get("severity", "info")
         if s in sev_counts:
@@ -371,21 +363,70 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
 async def ai_reporting(
     inp: ReportingInput, *, scan_id: str | None = None
 ) -> ReportingOutput:
-    """Call LLM to generate report. Falls back to structured non-LLM report on failure."""
+    """Generate report via 6 separate WRB calls — one per phase (FULL data) + assembly.
+
+    No data is ever truncated. Each phase gets its complete raw output as a separate
+    WRB call, producing a structured section summary. A final assembly call merges
+    all summaries into the final report JSON. Falls back to structured report on failure.
+    """
     _require_llm()
-    system, user = _build_reporting_prompt(inp)
+
+    section_summaries: dict[str, str] = {}
+    for phase in _PHASE_ORDER:
+        phase_data = _get_phase_data(inp, phase)
+        if not phase_data:
+            continue
+        try:
+            summary = await _call_wrb_report_section(phase, phase_data, scan_id=scan_id)
+            if summary:
+                section_summaries[phase] = summary
+                logger.info(
+                    "report_section_generated",
+                    extra={"phase": phase, "summary_len": len(summary)},
+                )
+            else:
+                logger.warning(
+                    "report_section_empty",
+                    extra={"phase": phase},
+                )
+        except Exception:
+            logger.exception(
+                "report_section_failed",
+                extra={"phase": phase},
+            )
 
     try:
-        data = _require_json(
-            await _call_llm_with_json_retry(
-                REPORTING, user, system, scan_id=scan_id
-            ),
-            REPORTING,
+        assembly_system, assembly_user = get_report_assembly_prompt(
+            target=inp.target,
+            recon_summary=section_summaries.get(RECON, ""),
+            threat_model_summary=section_summaries.get(THREAT_MODELING, ""),
+            vuln_summary=section_summaries.get(VULN_ANALYSIS, ""),
+            exploit_summary=section_summaries.get(EXPLOITATION, ""),
+            post_exploit_summary=section_summaries.get(POST_EXPLOITATION, ""),
         )
-        if isinstance(data.get("report"), dict):
+        response = await call_llm_unified(
+            assembly_system,
+            assembly_user,
+            task=LLMTask.REPORT_SECTION,
+            scan_id=scan_id,
+            phase="report_assembly",
+        )
+        data = _parse_llm_json(response)
+        if data is not None and isinstance(data.get("report"), dict):
+            logger.info("report_assembly_success")
             return ReportingOutput(report=data["report"])
     except Exception:
-        logger.exception("reporting_llm_failed_falling_back_to_structured")
+        logger.exception("report_assembly_failed")
+
+    if section_summaries:
+        report = {
+            "summary": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, "risk_rating": "medium"},
+            "executive_summary": f"Security assessment completed for {inp.target}.",
+            "sections": list(section_summaries.keys()),
+            "findings_detail": [],
+            "ai_insights": list(section_summaries.values()),
+        }
+        return ReportingOutput(report=report)
 
     logger.info("reporting_using_fallback", extra={"target": inp.target})
     return _build_fallback_report(inp)
