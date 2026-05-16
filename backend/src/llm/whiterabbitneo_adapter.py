@@ -3,6 +3,7 @@ WhiteRabbitNeo V3 7B is the single source of truth for all pentest analysis.
 Cloud providers (DeepSeek, OpenAI, Perplexity) serve only as report supplements.
 """
 
+import json
 import logging
 from typing import Any
 
@@ -121,6 +122,10 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         """Call and return (text, usage_dict) with token counts."""
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
+
+        # Truncate prompts to fit WRB context window (7B model ~8k tokens)
+        system_prompt = (system_prompt or "")[:WRB_MAX_PROMPT_BYTES]
+        prompt = prompt[:WRB_MAX_PROMPT_BYTES]
 
         messages: list[dict[str, str]] = []
         if system_prompt:

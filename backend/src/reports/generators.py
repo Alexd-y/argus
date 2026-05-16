@@ -259,6 +259,16 @@ def _effective_validation_status(finding: Any, quality: str) -> str:
     return status
 
 
+def _strip_legacy_cvss_from_poc(poc: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Remove legacy CVSS keys from PoC dict to prevent cvss_conflict validation failures."""
+    if poc is None:
+        return None
+    out = dict(poc)
+    for k in ("cvss_base_score", "base_score", "cvss"):
+        out.pop(k, None)
+    return out
+
+
 def _finding_row_to_schema(row: FindingRow) -> Finding:
     quality = _effective_evidence_quality(row)
     cv = row.cvss_score if row.cvss_score is not None else row.cvss
@@ -273,7 +283,7 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
         exploit_demonstrated=bool(getattr(row, "exploit_demonstrated", False)),
         exploit_summary=getattr(row, "exploit_summary", None),
         owasp_category=parse_owasp_category(row.owasp_category),
-        proof_of_concept=row.proof_of_concept,
+        proof_of_concept=_strip_legacy_cvss_from_poc(row.proof_of_concept),
         confidence=normalize_confidence(row.confidence, default="likely"),
         validation_status=_effective_validation_status(row, quality),
         evidence_quality=quality,
