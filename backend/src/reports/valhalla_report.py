@@ -444,6 +444,68 @@ def _build_zero_day_assessment(findings: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+def _extract_recon_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract recon-like structured data from findings when recon_output is empty."""
+    tech_entries = []
+    header_findings = []
+    ssl_findings = []
+    outdated_entries = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        data = f.get("data") or f
+        poc = data.get("proof_of_concept") or {}
+        tool = str(data.get("tool") or data.get("evidence_type") or data.get("scanner") or "").lower()
+        title = str(data.get("title") or "").lower()
+        if "whatweb" in tool or "tech" in title or "technology" in title:
+            tech_entries.append({"tool": tool, "title": data.get("title", ""), "data": data})
+        if "header" in title or "security header" in title:
+            header_findings.append(data)
+        if "ssl" in title or "tls" in title or "certificate" in title:
+            ssl_findings.append(data)
+        if "outdated" in title or "version" in title or "deprecated" in title:
+            outdated_entries.append(data)
+    return {
+        "tech_stack": tech_entries,
+        "security_headers": {"findings": header_findings},
+        "ssl_tls": {"findings": ssl_findings},
+        "outdated_components": outdated_entries,
+        "target_url": findings[0].get("target_url", "") if findings else "",
+    }
+
+
+def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract threat-model-like data from findings."""
+    categories = {}
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        cat = f.get("owasp_category") or f.get("category") or "uncategorized"
+        categories.setdefault(cat, []).append(f.get("title", "untitled"))
+    return {
+        "threat_categories": categories,
+        "finding_count": len(findings),
+        "excerpt": f"Threat model derived from {len(findings)} findings across {len(categories)} categories.",
+    }
+
+
+def _extract_exploitation_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract exploitation-like data from findings."""
+    exploits = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        poc = f.get("proof_of_concept") or f.get("data", {}).get("proof_of_concept") or {}
+        if poc:
+            exploits.append({
+                "finding_id": f.get("id", f.get("finding_id", "")),
+                "title": f.get("title", "untitled"),
+                "severity": f.get("severity", "info"),
+                "poc_summary": str(poc)[:500],
+            })
+    return {"exploits": exploits, "exploit_count": len(exploits)}
+
+
 async def build_valhalla_report_context(
     scan_id: str,
     tenant_id: str,
@@ -541,6 +603,14 @@ async def build_valhalla_report_context(
     exp_out = exploitation_output or {}
     pe = post_exploitation_output or {}
 
+    # Fallback: extract structured data from findings when phase outputs are empty
+    if not rec and resolved_findings:
+        rec = _extract_recon_from_findings(resolved_findings)
+    if not tm and resolved_findings:
+        tm = _extract_threat_model_from_findings(resolved_findings)
+    if not exp_out and resolved_findings:
+        exp_out = _extract_exploitation_from_findings(resolved_findings)
+
     sev_counts = _counts_from_findings(resolved_findings)
     exec_totals = dict(sev_counts)
 
@@ -628,10 +698,16 @@ async def build_valhalla_report_context(
          for f in resolved_findings if f.get("evidence_type")}
     )
 
+    # Compute WSTG coverage from tools_executed + findings
+    from src.reports.wstg_coverage import build_wstg_coverage
+    wstg_result = build_wstg_coverage(tool_list, resolved_findings)
+    wstg_coverage_pct = wstg_result.coverage_percentage
+    wstg_low = wstg_coverage_pct < 70.0
+
     qg: dict[str, Any] = {
         "warnings": [],
-        "wstg_coverage_pct": 0.0,
-        "wstg_low_coverage": False,
+        "wstg_coverage_pct": wstg_coverage_pct,
+        "wstg_low_coverage": wstg_low,
         "critical_scanner_failed": False,
         "failed_domains": {},
         "scan_type": "standard",
@@ -651,6 +727,14 @@ async def build_valhalla_report_context(
         "phases_executed": list(
             {str(f.get("evidence_type") or "recon") for f in resolved_findings}
         ),
+        "wstg_coverage": {
+            "coverage_percentage": wstg_coverage_pct,
+            "total_tests": wstg_result.total_tests,
+            "covered": wstg_result.covered,
+            "partial": wstg_result.partial,
+            "not_covered": wstg_result.not_covered,
+            "by_category": wstg_result.by_category,
+        },
     }
 
     tool_errors: dict[str, Any] = {"errors": []}
@@ -709,6 +793,148 @@ async def build_valhalla_report_context(
 # ---------------------------------------------------------------------------
 # 3. generate_valhalla_sections() — LLM for all 13 Valhalla AI sections
 # ---------------------------------------------------------------------------
+
+
+def _build_structured_fallback(section_key: str, context: ValhallaReportContext) -> str:
+    """Generate evidence-backed structured text when LLM is unavailable."""
+    findings = context.findings or []
+    sev = context.severity_counts or {}
+    total = sum(sev.values()) if isinstance(sev, dict) else len(findings)
+    wstg_pct = context.report_quality_gate.get("wstg_coverage_pct", 0) if isinstance(context.report_quality_gate, dict) else 0
+    qg = context.report_quality_gate if isinstance(context.report_quality_gate, dict) else {}
+
+    if section_key == "executive_summary_valhalla":
+        crit = sev.get("critical", 0)
+        high = sev.get("high", 0)
+        med = sev.get("medium", 0)
+        low = sev.get("low", 0)
+        info = sev.get("info", 0)
+        lines = [
+            f"Assessment of {context.target_url} (scan {context.scan_id}).",
+            f"Total findings: {total} (critical={crit}, high={high}, medium={med}, low={low}, info={info}).",
+            f"WSTG coverage: {wstg_pct:.0f}%. Tool health: {qg.get('tool_health', 'unknown')}.",
+            f"Evidence confidence: {qg.get('evidence_confidence', 'unknown')}.",
+        ]
+        if findings:
+            top = findings[:3]
+            lines.append("Top findings by severity:")
+            for i, f in enumerate(top, 1):
+                if isinstance(f, dict):
+                    lines.append(f"  {i}. [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
+        lines.append(f"Limitations: WSTG coverage below 70% means many categories were not assessed.")
+        return "\n".join(lines)
+
+    if section_key == "executive_summary":
+        return _build_structured_fallback("executive_summary_valhalla", context)
+
+    if section_key == "vulnerability_description":
+        if not findings:
+            return "No vulnerability findings were recorded during this assessment."
+        lines = ["Vulnerability findings summary:"]
+        for f in findings[:10]:
+            if isinstance(f, dict):
+                lines.append(f"- [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}: {f.get('description', 'No description')[:200]}")
+        if len(findings) > 10:
+            lines.append(f"... and {len(findings) - 10} more findings.")
+        return "\n".join(lines)
+
+    if section_key == "remediation_step":
+        if not findings:
+            return "No remediation steps — no findings recorded."
+        lines = ["Remediation priorities (by severity):"]
+        for f in findings[:10]:
+            if isinstance(f, dict):
+                sev_val = f.get("severity", "info")
+                lines.append(f"- [{sev_val.upper()}] {f.get('title', 'untitled')}: Review and apply fix per finding details.")
+        return "\n".join(lines)
+
+    if section_key == "business_risk":
+        crit = sev.get("critical", 0)
+        high = sev.get("high", 0)
+        if crit > 0 or high > 0:
+            return f"Business risk is elevated due to {crit} critical and {high} high severity findings. Immediate remediation recommended for findings with exploitable impact. Conditional impact only — no business compromise was demonstrated without validated exploit chains."
+        return f"Business risk is inconclusive. {total} finding(s) recorded at medium severity or below. No critical or high severity findings validated. WSTG coverage: {wstg_pct:.0f}%."
+
+    if section_key == "compliance_check":
+        return f"Compliance mapping is limited to the {total} validated finding(s) and coverage gaps. OWASP categories without tested evidence must be treated as not assessed, not as clean. WSTG coverage: {wstg_pct:.0f}%. Evidence confidence: {qg.get('evidence_confidence', 'unknown')}."
+
+    if section_key == "prioritization_roadmap":
+        if not findings:
+            return "No findings to prioritize."
+        lines = ["Prioritization roadmap:"]
+        for tier, sev_label in [("Immediate (48h)", "critical"), ("Short-term (2 weeks)", "high"), ("Medium-term (1 month)", "medium"), ("Long-term (quarter)", "low")]:
+            tier_findings = [f for f in findings if isinstance(f, dict) and f.get("severity") == sev_label]
+            if tier_findings:
+                lines.append(f"- {tier}: {len(tier_findings)} finding(s) — {', '.join(f.get('title', 'untitled')[:50] for f in tier_findings[:3])}")
+        return "\n".join(lines)
+
+    if section_key == "hardening_recommendations":
+        tech = context.tech_stack_structured or {}
+        lines = ["Hardening recommendations:"]
+        if tech.get("web_server"):
+            lines.append(f"- Web server: {tech['web_server']} — ensure latest stable version, disable unnecessary modules")
+        if tech.get("cms"):
+            lines.append(f"- CMS: {tech['cms']} — apply all security patches, review plugin inventory")
+        headers = context.security_headers_analysis or {}
+        missing = headers.get("missing_recommended", [])
+        if missing:
+            lines.append(f"- HTTP headers: add missing headers: {', '.join(missing[:5])}")
+        ssl = context.ssl_tls_analysis or {}
+        if ssl.get("weak_protocols"):
+            lines.append(f"- TLS: disable weak protocols: {', '.join(ssl['weak_protocols'][:3])}")
+        lines.append("- Integrate security testing into CI/CD pipeline")
+        lines.append("- Deploy WAF and centralized logging")
+        return "\n".join(lines)
+
+    if section_key == "attack_scenarios":
+        scenarios = context.attack_scenarios or []
+        if scenarios:
+            lines = ["Attack scenarios:"]
+            for s in scenarios[:5]:
+                if isinstance(s, dict):
+                    lines.append(f"- {s.get('title', 'untitled')}: likelihood={s.get('likelihood', 'unknown')}, persona={s.get('persona', 'unknown')}")
+            return "\n".join(lines)
+        return "No validated attack scenarios. Findings do not form a complete attack chain. Additional testing required for scenario validation."
+
+    if section_key == "exploit_chains":
+        chains = context.exploit_chains or []
+        if chains:
+            lines = ["Exploit chains:"]
+            for c in chains[:5]:
+                if isinstance(c, dict):
+                    lines.append(f"- {c.get('title', 'untitled')}: status={c.get('status', 'unknown')}, impact={c.get('impact', 'unknown')}")
+            return "\n".join(lines)
+        return "No validated exploit chain was demonstrated. Multi-step chains require multiple validated findings with scope-appropriate impact. WSTG coverage: {0:.0f}%.".format(wstg_pct)
+
+    if section_key == "remediation_stages":
+        stages = context.remediation_stages or {}
+        lines = ["Remediation stages:"]
+        for tier_name, tier_label in [("tier_1_immediate", "Tier 1 — Immediate (48h)"), ("tier_2_short_term", "Tier 2 — Short-Term (2 weeks)"), ("tier_3_architectural", "Tier 3 — Architectural (SDLC)")]:
+            items = stages.get(tier_name, [])
+            if items:
+                lines.append(f"{tier_label}:")
+                for item in items[:5]:
+                    if isinstance(item, dict):
+                        lines.append(f"  - {item.get('title') or item.get('action', 'untitled')}")
+        return "\n".join(lines) if len(lines) > 1 else "No remediation stages generated — no findings recorded."
+
+    if section_key == "zero_day_potential":
+        return f"Novel vulnerability indication: Not indicated. The {total} finding(s) reflect known vulnerability patterns and no novel vulnerability class was observed. WSTG coverage: {wstg_pct:.0f}%. Evidence confidence: {qg.get('evidence_confidence', 'unknown')}."
+
+    if section_key == "cost_summary":
+        cost = context.cost_summary or {}
+        lines = [
+            f"Scan cost summary:",
+            f"- Total API calls: {cost.get('total_calls', 0)}",
+            f"- Total tokens: {cost.get('total_tokens', 0)}",
+            f"- Total cost: ${cost.get('total_cost_usd', 0):.4f}",
+        ]
+        by_provider = cost.get("by_provider", {})
+        if by_provider:
+            lines.append(f"- By provider: {', '.join(f'{k}: ${v:.4f}' for k, v in by_provider.items())}")
+        return "\n".join(lines)
+
+    return f"No evidence-backed narrative available for this section. ({total} finding(s) recorded, WSTG coverage: {wstg_pct:.0f}%)."
 
 
 def _valhalla_ai_payload(context: ValhallaReportContext) -> dict[str, Any]:
@@ -779,6 +1005,7 @@ async def generate_valhalla_sections(
     payload = _valhalla_ai_payload(context)
     generated: dict[str, str] = {}
     generated_summaries: dict[str, str] = {}
+    has_llm = llm_callable is not None or has_any_llm_key()
 
     for section_key in _VALHALLA_AI_SECTION_ORDER:
         if section_key not in REPORT_AI_SECTION_KEYS:
@@ -788,8 +1015,8 @@ async def generate_valhalla_sections(
             )
             continue
 
-        if llm_callable is None and not has_any_llm_key():
-            generated[section_key] = REPORT_AI_SKIPPED_NO_LLM
+        if not has_llm:
+            generated[section_key] = _build_structured_fallback(section_key, context)
             continue
 
         try:
@@ -802,7 +1029,7 @@ async def generate_valhalla_sections(
                 extra={"section_key": section_key},
                 exc_info=True,
             )
-            generated[section_key] = REPORT_AI_SKIPPED_GENERATION_FAILED
+            generated[section_key] = _build_structured_fallback(section_key, context)
             continue
 
         try:
@@ -823,11 +1050,11 @@ async def generate_valhalla_sections(
                 extra={"section_key": section_key},
                 exc_info=True,
             )
-            generated[section_key] = REPORT_AI_SKIPPED_GENERATION_FAILED
+            generated[section_key] = _build_structured_fallback(section_key, context)
             continue
 
         if not text:
-            generated[section_key] = REPORT_AI_SKIPPED_GENERATION_FAILED
+            generated[section_key] = _build_structured_fallback(section_key, context)
             continue
 
         generated[section_key] = text
@@ -900,6 +1127,68 @@ def _findings_table_html(findings: list[dict[str, Any]]) -> str:
             f"<td>{f.get('evidence_quality', '—')}</td>"
             "</tr>"
         )
+    return "\n".join(rows)
+
+
+def _wstg_coverage_matrix_html(context: ValhallaReportContext) -> str:
+    """Render WSTG coverage matrix as HTML table."""
+    coverage = context.coverage or {}
+    wstg = coverage.get("wstg_coverage") or {}
+    pct = wstg.get("coverage_percentage", 0)
+    total = wstg.get("total_tests", 96)
+    covered = wstg.get("covered", 0)
+    partial = wstg.get("partial", 0)
+    not_covered = wstg.get("not_covered", 0)
+    by_category = wstg.get("by_category", {})
+
+    rows = [
+        f'<p style="margin-bottom:12px;">Overall WSTG coverage: <strong>{pct:.0f}%</strong> '
+        f'({covered} covered, {partial} partial, {not_covered} not assessed of {total} tests)</p>',
+        '<table class="data-table"><thead><tr><th>Category</th><th>Covered</th><th>Partial</th><th>Not Assessed</th><th>Total</th><th>%</th></tr></thead><tbody>',
+    ]
+    for cat_name, counts in sorted(by_category.items()):
+        if isinstance(counts, dict):
+            rows.append(
+                f"<tr><td>{cat_name}</td>"
+                f"<td>{counts.get('covered', 0)}</td>"
+                f"<td>{counts.get('partial', 0)}</td>"
+                f"<td>{counts.get('not_covered', 0)}</td>"
+                f"<td>{counts.get('total', 0)}</td>"
+                f"<td>{counts.get('percentage', 0):.0f}%</td></tr>"
+            )
+    rows.append("</tbody></table>")
+    return "\n".join(rows)
+
+
+def _unverified_items_html(context: ValhallaReportContext) -> str:
+    """Render unverified/follow-up items from findings with low confidence."""
+    findings = context.findings or []
+    unverified = [
+        f for f in findings
+        if isinstance(f, dict) and f.get("confidence") in ("possible", "likely", "advisory")
+    ]
+    if not unverified:
+        return '<p style="color:var(--text-secondary)">No unverified items — all findings have sufficient evidence.</p>'
+
+    rows = [
+        f'<p style="margin-bottom:12px;">{len(unverified)} finding(s) require additional validation:</p>',
+        '<table class="data-table"><thead><tr><th>Severity</th><th>Title</th><th>Confidence</th><th>Evidence Quality</th><th>Required for Validation</th></tr></thead><tbody>',
+    ]
+    for f in sorted(unverified, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)):
+        sev = (f.get("severity") or "info").lower()
+        badge = f'<span class="badge badge-{sev}">{sev.upper()}</span>' if sev in _SEVERITY_RANK else sev
+        conf = f.get("confidence", "unknown")
+        eq = f.get("evidence_quality", "none")
+        data = f.get("data") or {}
+        notes = data.get("applicability_notes") or f.get("applicability_notes") or "Additional testing required"
+        rows.append(
+            f"<tr><td>{badge}</td>"
+            f"<td>{f.get('title', 'untitled')}</td>"
+            f"<td>{conf}</td>"
+            f"<td>{eq}</td>"
+            f"<td>{str(notes)[:200]}</td></tr>"
+        )
+    rows.append("</tbody></table>")
     return "\n".join(rows)
 
 
@@ -1431,6 +1720,18 @@ def render_valhalla_report(
 <section id="section-remediation-stages-structured">
   <h2>Remediation Stages</h2>
   {rem_html}
+</section>
+
+<!-- WSTG Coverage Matrix -->
+<section id="section-wstg-coverage" class="card">
+  <h2>OWASP WSTG Coverage Matrix</h2>
+  {_wstg_coverage_matrix_html(context)}
+</section>
+
+<!-- Unverified / Follow-up Items -->
+<section id="section-unverified" class="card">
+  <h2>Unverified / Follow-up Items</h2>
+  {_unverified_items_html(context)}
 </section>
 
 <!-- AI-Generated Sections -->

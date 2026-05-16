@@ -156,6 +156,31 @@ def validate_report_data(
             missing = sorted(k for k in _VALHALLA_VC_REQUIRED_KEYS if k not in vc)
             if missing:
                 reasons.append("valhalla_context_incomplete")
+            # Consistency: injection coverage vs findings
+            inj_coverage = vc.get("active_injection_coverage") or {}
+            families = inj_coverage.get("families") or {}
+            for f in report_data.findings:
+                f_type = (getattr(f, "type", "") or "").lower()
+                f_title = (getattr(f, "title", "") or "").lower()
+                f_desc = (getattr(f, "description", "") or "").lower()
+                combined = f"{f_type} {f_title} {f_desc}"
+                if "sql" in combined:
+                    fam = families.get("sqli") or {}
+                    if isinstance(fam, dict) and fam.get("status") == "not_assessed":
+                        reasons.append("sqli_finding_but_injection_not_assessed")
+                if "xss" in combined or "cross-site" in combined:
+                    fam = families.get("xss") or {}
+                    if isinstance(fam, dict) and fam.get("status") == "not_assessed":
+                        reasons.append("xss_finding_but_injection_not_assessed")
+            # Consistency: auth testing vs authz findings
+            authenticated = vc.get("report_quality_gate", {}).get("authenticated", False) if isinstance(vc.get("report_quality_gate"), dict) else False
+            if not authenticated:
+                for f in report_data.findings:
+                    f_title = (getattr(f, "title", "") or "").lower()
+                    f_type = (getattr(f, "type", "") or "").lower()
+                    combined = f"{f_type} {f_title}"
+                    if any(kw in combined for kw in ("idor", "auth bypass", "role bypass", "authorization")):
+                        reasons.append("authz_finding_without_authenticated_testing")
         scan_art = ctx.get("scan_artifacts")
         if not isinstance(scan_art, dict) or "status" not in scan_art:
             reasons.append("valhalla_scan_artifacts_meta_missing")

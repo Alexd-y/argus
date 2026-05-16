@@ -274,6 +274,55 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
     "trivy": [
         "WSTG-INFO-09", "WSTG-CONF-02",
     ],
+    "xsstrike": [
+        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-CLNT-01",
+    ],
+    "commix": [
+        "WSTG-INPV-11", "WSTG-INPV-12", "WSTG-INPV-10",
+    ],
+    "tplmap": [
+        "WSTG-INPV-18",
+    ],
+    "argus_recon": [
+        "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04",
+        "WSTG-INFO-05", "WSTG-INFO-06", "WSTG-INFO-08",
+        "WSTG-INFO-09", "WSTG-INFO-10",
+        "WSTG-CONF-07", "WSTG-CONF-10",
+        "WSTG-CRYP-03",
+    ],
+    "argus_active_scan": [
+        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
+        "WSTG-INPV-06", "WSTG-INPV-10", "WSTG-INPV-11",
+        "WSTG-INPV-12", "WSTG-INPV-18", "WSTG-INPV-19",
+        "WSTG-CLNT-01",
+    ],
+    "playwright": [
+        "WSTG-CLNT-01", "WSTG-CLNT-02", "WSTG-CLNT-07",
+    ],
+    "katana": [
+        "WSTG-INFO-04", "WSTG-CONF-03", "WSTG-CONF-05",
+    ],
+    "waybackurls": [
+        "WSTG-INFO-04", "WSTG-CONF-03",
+    ],
+    "gau": [
+        "WSTG-INFO-04", "WSTG-CONF-03",
+    ],
+    "httpx_tool": [
+        "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-CONF-07",
+    ],
+    "masscan": [
+        "WSTG-INFO-04", "WSTG-CONF-01",
+    ],
+    "naabu": [
+        "WSTG-INFO-04", "WSTG-CONF-01",
+    ],
+    "nuclei": [
+        "WSTG-INFO-08", "WSTG-CONF-02", "WSTG-CONF-07",
+        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
+        "WSTG-INPV-18", "WSTG-INPV-19", "WSTG-CRYP-01",
+        "WSTG-ERRH-01", "WSTG-ERRH-02",
+    ],
 }
 
 _TOOL_ALIASES: dict[str, str] = {
