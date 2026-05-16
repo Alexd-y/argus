@@ -283,10 +283,10 @@ async def _call_wrb_report_section(
     *,
     scan_id: str | None = None,
 ) -> str:
-    """Call WRB to generate a report section for ONE phase. Truncates data if exceeding 24k chars."""
+    """Call WRB to generate a report section for ONE phase. Hard limit 16k chars to stay within 32k context."""
     import json as _json
 
-    max_data = 48000
+    max_data = 16000
     if len(phase_data) > max_data:
         phase_data = phase_data[:max_data]
         try:
@@ -294,9 +294,14 @@ async def _call_wrb_report_section(
             phase_data = _json.dumps(truncated, ensure_ascii=False, default=str, indent=2)
         except Exception:
             pass
+        if len(phase_data) > max_data:
+            phase_data = phase_data[:max_data]
 
     try:
         system, user = get_report_section_prompt(phase, phase_data)
+        total_bytes = len(system) + len(user)
+        if total_bytes > 20000:
+            user = user[:12000]
         response = await call_llm_unified(
             system, user, task=LLMTask.REPORT_SECTION,
             scan_id=scan_id, phase=f"{phase}_report_section",

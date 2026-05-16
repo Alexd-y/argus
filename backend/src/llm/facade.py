@@ -36,6 +36,16 @@ _SYNC_TIMEOUT_SECONDS = 120
 
 _tiktoken_enc = None
 
+# WRB request queue — max 1 concurrent request to avoid context overflow
+# and llama.cpp memory pressure. Other requests wait in order.
+_wrb_semaphore: asyncio.Semaphore | None = None
+
+def _get_wrb_semaphore() -> asyncio.Semaphore:
+    global _wrb_semaphore
+    if _wrb_semaphore is None:
+        _wrb_semaphore = asyncio.Semaphore(1)
+    return _wrb_semaphore
+
 # Tasks where cloud fallback is ALLOWED (report supplements / OSINT).
 # Pentest analysis tasks use WhiteRabbitNeo ONLY — no cloud fallback.
 _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset({
@@ -206,48 +216,50 @@ async def call_llm_unified(
 
     # WhiteRabbitNeo configured: use it first for ALL non-OSINT tasks
     if wrb.is_configured:
-        try:
-            return await _call_via_whiterabbitneo(
-                system_prompt, user_prompt,
-                task=task, scan_id=scan_id, phase=phase,
-            )
-        except Exception as exc:
-            logger.warning(
-                "whiterabbitneo_call_failed",
-                extra={
-                    "event": "whiterabbitneo_call_failed",
-                    "task": task.value,
-                    "phase": phase,
-                    "error": str(exc),
-                },
-            )
-            # Cloud fallback only for report-supplement tasks
-            if task in _CLOUD_FALLBACK_TASKS:
-                logger.info(
-                    "whiterabbitneo_fallback_to_cloud",
+        semaphore = _get_wrb_semaphore()
+        async with semaphore:
+            try:
+                return await _call_via_whiterabbitneo(
+                    system_prompt, user_prompt,
+                    task=task, scan_id=scan_id, phase=phase,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "whiterabbitneo_call_failed",
                     extra={
-                        "event": "whiterabbitneo_fallback_to_cloud",
+                        "event": "whiterabbitneo_call_failed",
                         "task": task.value,
+                        "phase": phase,
+                        "error": str(exc),
                     },
                 )
-                return await _call_via_task_router(
-                    system_prompt, user_prompt, task,
-                    scan_id=scan_id, phase=phase,
-                )
-            net_hint = ""
-            if isinstance(exc, httpx.TimeoutException):
-                net_hint = (
-                    "Таймаут HTTP к WRB (часто llama.cpp на CPU с длинным промптом). "
-                    "Увеличьте WHITERABBITNEO_TIMEOUT_SEC в infra/.env (например 900–1800). "
-                )
-            elif isinstance(exc, httpx.ConnectError):
-                net_hint = "Нет TCP-соединения с WRB (контейнер не запущен или неверный WHITERABBITNEO_URL). "
-            raise RuntimeError(
-                f"WhiteRabbitNeo unavailable for pentest task {task.value}. "
-                f"{net_hint}"
-                "Cloud fallback is not permitted for analysis tasks. "
-                "Ensure WRB container is running and responsive."
-            ) from exc
+                # Cloud fallback only for report-supplement tasks
+                if task in _CLOUD_FALLBACK_TASKS:
+                    logger.info(
+                        "whiterabbitneo_fallback_to_cloud",
+                        extra={
+                            "event": "whiterabbitneo_fallback_to_cloud",
+                            "task": task.value,
+                        },
+                    )
+                    return await _call_via_task_router(
+                        system_prompt, user_prompt, task,
+                        scan_id=scan_id, phase=phase,
+                    )
+                net_hint = ""
+                if isinstance(exc, httpx.TimeoutException):
+                    net_hint = (
+                        "Таймаут HTTP к WRB (часто llama.cpp на CPU с длинным промптом). "
+                        "Увеличьте WHITERABBITNEO_TIMEOUT_SEC в infra/.env (например 900–1800). "
+                    )
+                elif isinstance(exc, httpx.ConnectError):
+                    net_hint = "Нет TCP-соединения с WRB (контейнер не запущен или неверный WHITERABBITNEO_URL). "
+                raise RuntimeError(
+                    f"WhiteRabbitNeo unavailable for pentest task {task.value}. "
+                    f"{net_hint}"
+                    "Cloud fallback is not permitted for analysis tasks. "
+                    "Ensure WRB container is running and responsive."
+                ) from exc
 
     # WRB not configured: legacy behaviour — use cloud task_router
     logger.info(
