@@ -93,31 +93,26 @@ VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     "dalfox",
     "xsstrike",
     "ffuf",
-    # sqlmap: runner MUST enforce non-interactive --batch, target URL only from
-    # validate_target_for_tool / engagement scope (guardrails), and MUST NOT pass
-    # dangerous defaults (--os-pwn, --os-shell, --file-read, unrestricted --risk/--level)
-    # unless explicitly enabled by a separate policy flag (executor fail-closed).
     "sqlmap",
     "nuclei",
     "gobuster",
-    # OWASP2-001: wfuzz (fuzzing), commix (command injection) — same executor scope rules as sqlmap/ffuf.
     "wfuzz",
     "commix",
-    # KAL-004 — recon / fingerprint hooks (sandbox + MinIO artifacts)
     "whatweb",
     "nikto",
     "testssl",
     "sslscan",
-    # KAL-005 — feroxbuster (content discovery); password-audit + capture tools (gated in runner)
     "feroxbuster",
     "hydra",
     "medusa",
     "mitmdump",
     "tcpdump",
-    # VDF-005 / VDF-008 — optional OSINT / shallow crawl (gated by settings + runner)
     "theharvester",
     "gospider",
     "parsero",
+    "wpscan",
+    "joomscan",
+    "droopescan",
 })
 
 # VA-006 — MCP / internal enqueue operation ids (Celery task names mirror these with argus.va.*)

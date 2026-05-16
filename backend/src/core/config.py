@@ -534,7 +534,7 @@ class Settings(BaseSettings):
     report_poc_embed_screenshot_inline: bool = False
     # RPT / Valhalla — отображаемое имя исполнителя на титульном листе отчёта.
     # Env: REPORT_EXECUTOR_DISPLAY_NAME
-    report_executor_display_name: str = "Svalbard Security Inc."
+    report_executor_display_name: str = "Rognarek Security"
     # VA-007 — after vuln findings, exploitation phase may enqueue Celery sqlmap (policy + approval)
     va_exploit_aggressive_enabled: bool = False
     # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)

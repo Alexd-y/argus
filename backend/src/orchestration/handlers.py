@@ -971,7 +971,7 @@ async def run_recon(
 
 
 async def _query_nvd_for_technologies(assets: list[str]) -> str:
-    """Query NVD for CVEs related to technologies found in assets."""
+    """Query NVD for CVEs related to technologies found in assets + detected component versions."""
     client = NVDClient()
     all_cves: list[dict[str, Any]] = []
     keywords_seen: set[str] = set()
@@ -985,13 +985,29 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
                 continue
             keywords_seen.add(keyword)
 
-    for keyword in list(keywords_seen)[:5]:
+    tech_keywords = {
+        "nginx", "apache", "cloudflare", "wordpress", "joomla", "drupal",
+        "bootstrap", "jquery", "react", "vue", "angular", "laravel",
+        "django", "flask", "express", "spring", "tomcat", "iis",
+        "php", "python", "ruby", "node", "mysql", "postgresql", "mariadb",
+        "redis", "mongodb", "elasticsearch", "memcached",
+    }
+    keyword_priority = sorted(
+        tech_keywords & keywords_seen,
+        key=lambda k: (1 if k == "wordpress" else 2, k),
+    )
+    for kw in keyword_priority[:5]:
+        if kw not in keywords_seen:
+            keywords_seen.add(kw)
+            break
+
+    for keyword in list(keywords_seen)[:8]:
         try:
             data = await client.query(
-                params={"keywordSearch": keyword, "resultsPerPage": 5}
+                params={"keywordSearch": keyword, "resultsPerPage": 10}
             )
             vulns = data.get("vulnerabilities", [])
-            for v in vulns[:5]:
+            for v in vulns[:8]:
                 cve_item = v.get("cve", {})
                 cve_id = cve_item.get("id", "")
                 descriptions = cve_item.get("descriptions", [])
@@ -1015,7 +1031,7 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
         except Exception:
             logger.warning("NVD query for '%s' failed", keyword)
 
-    return _safe_json(all_cves, 20000) if all_cves else "No CVE data available"
+    return _safe_json(all_cves, 40000) if all_cves else "No CVE data available"
 
 
 async def run_threat_modeling(

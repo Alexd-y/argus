@@ -993,7 +993,7 @@ def _build_executive_summary(
         phase_part = "No remediation actions required."
     return (
         f"During scan {scan_id} for tenant {tenant} as of {when}, "
-        f"ARGUS identified {total} finding(s) ({severity_part}). "
+        f"ROGNAREK identified {total} finding(s) ({severity_part}). "
         f"{top_asset_part} {phase_part}"
     )
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ARGUS Report — {{ recon_summary.target_url or scan_id or "scan" }}</title>
+    <title>ROGNAREK Report — {{ recon_summary.target_url or scan_id or "scan" }}</title>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
         h1 { color: #1a1a2e; }
@@ -56,7 +56,7 @@
     </style>
 </head>
 <body>
-    <h1>ARGUS Security Report</h1>
+    <h1>ROGNAREK Security Report</h1>
     <p class="meta">
         <span class="tier-badge">{{ tier }}</span>
         {% set tier_hint = tier_stubs.get(tier) %}
