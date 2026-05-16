@@ -2715,37 +2715,49 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
         ("cross-origin-resource-policy", "Cross-Origin-Resource-Policy"),
         ("cross-origin-embedder-policy", "Cross-Origin-Embedder-Policy"),
     )
-    missing: set[str] = set()
+    # Track per-header: which hosts have it present
+    header_hosts_present: dict[str, list[str]] = {low: [] for low, _ in canonical}
+    header_hosts_total: dict[str, int] = {low: 0 for low, _ in canonical}
+
     for host, hdrs in list(http_headers.items())[:32]:
         lower_map = dict(hdrs)
         hstr = str(host)[:256]
         for low_name, display in canonical:
+            header_hosts_total[low_name] += 1
             sample = str(lower_map.get(low_name) or "").strip()
-            if not sample:
-                missing.add(low_name)
-                rows.append(
-                    {
-                        "host": hstr,
-                        "header": display,
-                        "present": False,
-                        "value_sample": "",
-                    }
-                )
-            else:
-                if len(sample) > 200:
-                    sample = sample[:197] + "…"
-                rows.append(
-                    {
-                        "host": hstr,
-                        "header": display,
-                        "present": True,
-                        "value_sample": sample,
-                    }
-                )
-    miss_sorted = sorted(missing)
-    summary = None
-    if miss_sorted:
-        summary = "Missing recommended headers: " + ", ".join(miss_sorted[:12])
+            if sample:
+                header_hosts_present[low_name].append(hstr)
+            if len(sample) > 200:
+                sample = sample[:197] + "…"
+            rows.append(
+                {
+                    "host": hstr,
+                    "header": display,
+                    "present": bool(sample),
+                    "value_sample": sample,
+                }
+            )
+
+    # Only report as "missing" if absent on ALL hosts
+    # Report as "inconsistent" if present on some but not all
+    missing: list[str] = []
+    inconsistent: list[str] = []
+    for low_name, display in canonical:
+        total = header_hosts_total.get(low_name, 0)
+        present_count = len(header_hosts_present.get(low_name, []))
+        if total > 0 and present_count == 0:
+            missing.append(low_name)
+        elif total > 0 and present_count < total:
+            inconsistent.append(low_name)
+
+    miss_sorted = sorted(missing + inconsistent)
+    summary_parts = []
+    if missing:
+        summary_parts.append(f"Missing on all hosts: {', '.join(sorted(missing)[:8])}")
+    if inconsistent:
+        summary_parts.append(f"Inconsistent across hosts: {', '.join(sorted(inconsistent)[:8])}")
+    summary = "; ".join(summary_parts) if summary_parts else None
+
     return SecurityHeadersAnalysisModel(
         rows=rows[:500],
         missing_recommended=miss_sorted[:24],

@@ -382,9 +382,44 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
                  if isinstance((f.get("cvss") or f.get("cvss_score")), (int, float))
                  and float(f.get("cvss") or f.get("cvss_score") or 0) >= 7.0]
     medium = [f for f in findings if (f.get("severity") or "").lower() == "medium"]
+    low = [f for f in findings if (f.get("severity") or "").lower() == "low"]
+
+    _REMEDIATION_MAP = {
+        "SQLI_CANDIDATE": {
+            "action": "Use parameterized queries/prepared statements for all database interactions. Input validation alone is insufficient.",
+            "verification": "Re-run sqlmap with same parameters — should report 'not injectable'.",
+            "owner": "Backend development team",
+        },
+        "XSS": {
+            "action": "Apply context-aware output encoding (HTML, JS, URL, CSS). Implement Content-Security-Policy as defense-in-depth.",
+            "verification": "Inject <script>alert(1)</script> — should be encoded, not executed. Verify CSP blocks inline scripts.",
+            "owner": "Frontend development team",
+        },
+        "COMMAND_INJECTION_CANDIDATE": {
+            "action": "Eliminate OS command execution from user input. Use language-native APIs instead of shell commands. If unavoidable, use strict allowlist validation.",
+            "verification": "Re-run commix — should report no injection points.",
+            "owner": "Backend development team",
+        },
+        "RATE_LIMIT": {
+            "action": "Implement per-IP and per-account rate limiting with exponential backoff. Add CAPTCHA after threshold. Monitor and alert on repeated failures.",
+            "verification": "Send 20+ rapid login requests — should receive HTTP 429 after threshold.",
+            "owner": "Infrastructure / API team",
+        },
+        "SECURITY_HEADER": {
+            "action": "Add missing HTTP security headers at reverse proxy or application level. Verify with curl -sS -I <url>.",
+            "verification": "curl -sS -I https://<target> | grep -iE 'content-security-policy|x-content-type-options|referrer-policy|permissions-policy'",
+            "owner": "Infrastructure / DevOps team",
+        },
+    }
 
     tier1: list[dict[str, Any]] = []
     for f in (critical + [h for h in high_cvss if h not in critical])[:8]:
+        f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
+        remediation = None
+        for key, rem in _REMEDIATION_MAP.items():
+            if key in f_type:
+                remediation = rem
+                break
         tier1.append(
             {
                 "finding_id": str(f.get("id") or ""),
@@ -392,11 +427,20 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
                 "severity": f.get("severity"),
                 "effort": "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate",
                 "deadline": "48 hours",
+                "action": remediation["action"] if remediation else "Review and apply fix per finding details",
+                "verification": remediation["verification"] if remediation else "Re-test after fix",
+                "owner": remediation["owner"] if remediation else "Development team",
             }
         )
 
     tier2: list[dict[str, Any]] = []
     for f in medium[:6]:
+        f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
+        remediation = None
+        for key, rem in _REMEDIATION_MAP.items():
+            if key in f_type:
+                remediation = rem
+                break
         tier2.append(
             {
                 "finding_id": str(f.get("id") or ""),
@@ -404,13 +448,36 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
                 "severity": f.get("severity"),
                 "effort": "Quick Fix",
                 "deadline": "2 weeks",
+                "action": remediation["action"] if remediation else "Review and apply fix",
+                "verification": remediation["verification"] if remediation else "Re-test after fix",
+                "owner": remediation["owner"] if remediation else "Development team",
+            }
+        )
+
+    for f in low[:4]:
+        f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
+        remediation = None
+        for key, rem in _REMEDIATION_MAP.items():
+            if key in f_type:
+                remediation = rem
+                break
+        tier2.append(
+            {
+                "finding_id": str(f.get("id") or ""),
+                "title": str(f.get("title") or ""),
+                "severity": f.get("severity"),
+                "effort": "Quick Fix",
+                "deadline": "1 month",
+                "action": remediation["action"] if remediation else "Review and apply fix",
+                "verification": remediation["verification"] if remediation else "Re-test after fix",
+                "owner": remediation["owner"] if remediation else "Development team",
             }
         )
 
     tier3: list[dict[str, Any]] = [
-        {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor"},
-        {"category": "Monitoring", "action": "Deploy WAF and centralized logging", "effort": "Moderate"},
-        {"category": "Dependencies", "action": "Implement automated dependency scanning and SBOM generation", "effort": "Moderate"},
+        {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team"},
+        {"category": "Monitoring", "action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team"},
+        {"category": "Dependencies", "action": "Implement automated dependency scanning and SBOM generation", "effort": "Moderate", "owner": "Development team"},
     ]
 
     return {
@@ -1210,7 +1277,26 @@ def _render_ai_section(key: str, context: ValhallaReportContext) -> str:
         REPORT_AI_SECTION_COST_SUMMARY: "Cost Summary",
     }
     label = label_map.get(key, key.replace("_", " ").title())
-    text = context.ai_sections.get(key, "") or "(No AI-generated content for this section.)"
+    text = context.ai_sections.get(key, "") or ""
+
+    # Replace sentinel patterns with structured fallback
+    sentinel_patterns = [
+        "AI generation skipped",
+        "AI generation skipped: no LLM provider available",
+        "AI generation skipped: could not generate content",
+        "See \"Vulnerability Description\"",
+        "See Vulnerability Description",
+        "To be determined based on organizational priorities",
+        "To be determined",
+    ]
+    for pattern in sentinel_patterns:
+        if pattern.lower() in text.lower():
+            text = _build_structured_fallback(key, context)
+            break
+
+    if not text:
+        text = _build_structured_fallback(key, context)
+
     text_safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     text_html = text_safe.replace("\n\n", "</p><p>").replace("\n", "<br>")
     return (
@@ -1303,16 +1389,25 @@ def render_valhalla_report(
         items = context.remediation_stages.get(tier_name, [])
         if not items and tier_name == "tier_3_architectural":
             items = [
-                {"action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor"},
-                {"action": "Deploy WAF and centralized logging", "effort": "Moderate"},
-                {"action": "Implement automated dependency scanning", "effort": "Moderate"},
+                {"action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team"},
+                {"action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team"},
+                {"action": "Implement automated dependency scanning", "effort": "Moderate", "owner": "Development team"},
             ]
-        rem_html += f"<h3>{tier_label}</h3><table class=\"data-table\"><thead><tr><th>Finding ID</th><th>Title</th><th>Effort</th></tr></thead><tbody>"
+        rem_html += f"<h3>{tier_label}</h3><table class=\"data-table\"><thead><tr><th>Finding</th><th>Remediation Action</th><th>Verification</th><th>Owner</th><th>Effort</th></tr></thead><tbody>"
         for item in (items if isinstance(items, list) else []):
             if isinstance(item, dict):
-                rem_html += (f"<tr><td>{item.get('finding_id', '—')}</td>"
-                             f"<td>{item.get('title') or item.get('action', '—')}</td>"
-                             f"<td>{item.get('effort', '—')}</td></tr>")
+                title = item.get("title") or item.get("action", "—")
+                action = item.get("action", "Review and apply fix per finding details")
+                verification = item.get("verification", "Re-test after fix")
+                owner = item.get("owner", "Development team")
+                effort = item.get("effort", "—")
+                rem_html += (
+                    f"<tr><td>{title}</td>"
+                    f"<td>{action}</td>"
+                    f"<td>{verification}</td>"
+                    f"<td>{owner}</td>"
+                    f"<td>{effort}</td></tr>"
+                )
         rem_html += "</tbody></table>"
 
     # Risk matrix table

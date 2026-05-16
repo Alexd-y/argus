@@ -92,6 +92,9 @@ _RATE_LIMIT_RE = re.compile(
     r"\b(rate[-\s]?limit|http\s*429|too many requests|lockout|captcha)\b", re.I
 )
 _LOGIN_RE = re.compile(r"\b(login|signin|sign-in|auth|authentication)\b", re.I)
+_RATE_LIMIT_WORKING_RE = re.compile(
+    r"\b(429|too many requests|retry-after|rate.limit.*enforced|rate.limit.*active|rate.limit.*work|throttl.*work|block.*after|limit.*trigger)\b", re.I
+)
 
 
 @dataclass
@@ -180,6 +183,12 @@ def _text_blob(finding: Any) -> str:
 def _is_rate_limit_finding(finding: Any) -> bool:
     blob = _text_blob(finding)
     return bool(_RATE_LIMIT_RE.search(blob) and _LOGIN_RE.search(blob))
+
+
+def _is_rate_limit_working(finding: Any) -> bool:
+    """Check if the finding indicates rate limiting is actually working (429 responses)."""
+    blob = _text_blob(finding)
+    return bool(_RATE_LIMIT_WORKING_RE.search(blob))
 
 
 def _poc_dict(finding: Any) -> dict[str, Any]:
@@ -1091,53 +1100,104 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
             if item and item not in merged_signals:
                 merged_signals.append(item)
         poc["merged_signals"] = merged_signals[:10]
-        groups[key] = _copy_with(
-            primary,
-            {
-                "title": "Missing or insufficient rate limiting on login endpoint",
-                "description": (
-                    "Possible missing or insufficient rate limiting on the login endpoint. "
-                    "Evidence combines rapid login-path requests without HTTP 429 and related "
-                    "authentication-control signals, but account lockout, CAPTCHA, and full login "
-                    "POST behavior were not validated."
-                ),
-                "cwe": _get_attr(primary, "cwe") or _get_attr(secondary, "cwe") or "CWE-307",
-                "owasp_category": _get_attr(primary, "owasp_category")
-                or _get_attr(secondary, "owasp_category")
-                or "A07",
-                "severity": "low",
-                "cvss": 3.7,
-                "cvss_score": 3.7,
-                "confidence": "possible",
-                "validation_status": "unverified",
-                "evidence_quality": "weak",
-                "evidence_refs": refs,
-                "proof_of_concept": poc,
-            },
-        )
-    merged = list(groups.values())
-    for i, f in enumerate(merged):
-        if _normalized_title(f) != "Missing or insufficient rate limiting on login endpoint":
-            poc = _poc_dict(f)
-            merged[i] = _copy_with(
-                f,
+
+        # Check if rate limiting is actually working (429 responses observed)
+        rate_limit_working = _is_rate_limit_working(primary) or _is_rate_limit_working(secondary)
+
+        if rate_limit_working:
+            # Rate limiting IS working — record as positive observation, not a finding
+            groups[key] = _copy_with(
+                primary,
+                {
+                    "title": "Rate limiting observed on login endpoint",
+                    "description": (
+                        "HTTP 429 Too Many Requests responses were observed during login-path testing, "
+                        "indicating that rate limiting controls are active. This is a positive observation. "
+                        "Account lockout, CAPTCHA, and full login POST behavior were not fully validated."
+                    ),
+                    "cwe": None,
+                    "owasp_category": "A07",
+                    "severity": "info",
+                    "cvss": 0.0,
+                    "cvss_score": 0.0,
+                    "confidence": "likely",
+                    "validation_status": "partially_validated",
+                    "evidence_quality": "moderate",
+                    "evidence_refs": refs,
+                    "proof_of_concept": poc,
+                },
+            )
+        else:
+            groups[key] = _copy_with(
+                primary,
                 {
                     "title": "Missing or insufficient rate limiting on login endpoint",
                     "description": (
                         "Possible missing or insufficient rate limiting on the login endpoint. "
-                        "Evidence quality is weak unless full authentication flow behavior is validated."
+                        "Evidence combines rapid login-path requests without HTTP 429 and related "
+                        "authentication-control signals, but account lockout, CAPTCHA, and full login "
+                        "POST behavior were not validated."
                     ),
-                    "cwe": _get_attr(f, "cwe") or "CWE-307",
-                    "owasp_category": _get_attr(f, "owasp_category") or "A07",
+                    "cwe": _get_attr(primary, "cwe") or _get_attr(secondary, "cwe") or "CWE-307",
+                    "owasp_category": _get_attr(primary, "owasp_category")
+                    or _get_attr(secondary, "owasp_category")
+                    or "A07",
                     "severity": "low",
                     "cvss": 3.7,
                     "cvss_score": 3.7,
                     "confidence": "possible",
                     "validation_status": "unverified",
                     "evidence_quality": "weak",
-                    "proof_of_concept": poc or None,
+                    "evidence_refs": refs,
+                    "proof_of_concept": poc,
                 },
             )
+    merged = list(groups.values())
+    for i, f in enumerate(merged):
+        title = _normalized_title(f)
+        if title not in ("Missing or insufficient rate limiting on login endpoint", "Rate limiting observed on login endpoint"):
+            poc = _poc_dict(f)
+            rate_limit_working = _is_rate_limit_working(f)
+            if rate_limit_working:
+                merged[i] = _copy_with(
+                    f,
+                    {
+                        "title": "Rate limiting observed on login endpoint",
+                        "description": (
+                            "HTTP 429 Too Many Requests responses were observed during login-path testing, "
+                            "indicating that rate limiting controls are active. This is a positive observation."
+                        ),
+                        "cwe": None,
+                        "owasp_category": "A07",
+                        "severity": "info",
+                        "cvss": 0.0,
+                        "cvss_score": 0.0,
+                        "confidence": "likely",
+                        "validation_status": "partially_validated",
+                        "evidence_quality": "moderate",
+                        "proof_of_concept": poc or None,
+                    },
+                )
+            else:
+                merged[i] = _copy_with(
+                    f,
+                    {
+                        "title": "Missing or insufficient rate limiting on login endpoint",
+                        "description": (
+                            "Possible missing or insufficient rate limiting on the login endpoint. "
+                            "Evidence quality is weak unless full authentication flow behavior is validated."
+                        ),
+                        "cwe": _get_attr(f, "cwe") or "CWE-307",
+                        "owasp_category": _get_attr(f, "owasp_category") or "A07",
+                        "severity": "low",
+                        "cvss": 3.7,
+                        "cvss_score": 3.7,
+                        "confidence": "possible",
+                        "validation_status": "unverified",
+                        "evidence_quality": "weak",
+                        "proof_of_concept": poc or None,
+                    },
+                )
     return others + merged
 
 
