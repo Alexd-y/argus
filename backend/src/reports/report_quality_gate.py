@@ -67,6 +67,10 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "account compromise",
     "brute force is possible as proven",
     "comprehensive penetration test",
+    "no proof-of-concept",
+    "no proof of concept",
+    "not assessed",
+    "not_proven",
 )
 
 LOW_WSTG_LIMITATION = (
@@ -961,6 +965,17 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         confidence = "likely" if quality == "weak" else "possible"
     if quality == "weak" and status != "validated":
         confidence = "possible" if _is_rate_limit_finding(finding) else confidence
+
+    # INJECTION EVIDENCE GATE: never allow 'confirmed' for injection findings without strong evidence
+    inj_family = map_injection_family(finding)
+    if inj_family and confidence == "confirmed" and quality != "strong":
+        confidence = "likely" if quality == "moderate" else "possible"
+        if not notes:
+            notes = (
+                f"{inj_family.upper()} finding downgraded from confirmed: "
+                f"evidence quality is {quality}, not strong. "
+                f"No concrete payload, parameter, or request/response artifact was captured."
+            )
 
     if _is_rate_limit_finding(finding):
         cvss = 3.7 if cvss is None or cvss > 3.7 else cvss
