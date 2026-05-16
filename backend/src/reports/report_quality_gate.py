@@ -1411,16 +1411,10 @@ def safe_section_text(section_key: str, data: Any, gate: ReportQualityGate) -> s
     rate = _rate_limit_finding(findings)
     header_only = any(is_header_only_advisory_finding(f) for f in findings)
     weak_rate = rate is not None and str(_get_attr(rate, "evidence_quality", "") or "") == "weak"
-    finding_phrase = (
-        "one low-severity, unverified authentication control weakness related to possible missing rate limiting on the login endpoint"
-        if total == 1 and rate is not None
-        else (
-            "one passive HTTP response security-header configuration observation"
-            if total == 1 and header_only
-            else f"{total} finding(s) with severity distribution critical={counts['critical']}, high={counts['high']}, medium={counts['medium']}, low={counts['low']}, info={counts['info']}"
-        )
-    )
     failed = _failed_area_sentence(gate)
+    cov_pct = gate.wstg_coverage_pct
+    tool_h = gate.tool_health
+    evidence_c = gate.evidence_confidence
 
     if section_key in {"executive_summary", "executive_summary_valhalla"}:
         if rate is not None:
@@ -1431,63 +1425,89 @@ def safe_section_text(section_key: str, data: Any, gate: ReportQualityGate) -> s
                 else "Evidence is limited to the artifacts referenced in the finding table."
             )
             return (
-                f"The assessment identified {finding_phrase}. {quality}"
-                f"{failed} Therefore, the report should not be interpreted as a comprehensive security assessment."
+                f"The assessment identified {total} finding(s) "
+                f"(critical={counts['critical']}, high={counts['high']}, medium={counts['medium']}, "
+                f"low={counts['low']}, info={counts['info']}), including a possible rate-limit signal "
+                f"on the login endpoint. {quality}"
+                f"{failed} WSTG coverage: {cov_pct:.0f}%. Tool health: {tool_h}. "
+                f"Evidence confidence: {evidence_c}."
             )
         if header_only:
             return (
-                f"The assessment recorded {finding_phrase}. This is a passive configuration observation: "
-                "no application compromise, authenticated impact, or exploit chain was demonstrated."
-                f"{failed} Findings and limitations should be interpreted only within the tested scope."
+                f"The assessment recorded {total} finding(s) "
+                f"(critical={counts['critical']}, high={counts['high']}, medium={counts['medium']}, "
+                f"low={counts['low']}, info={counts['info']}), including passive HTTP response "
+                f"security-header configuration observations. No application compromise, authenticated "
+                f"impact, or exploit chain was demonstrated."
+                f"{failed} WSTG coverage: {cov_pct:.0f}%. Tool health: {tool_h}. "
+                f"Evidence confidence: {evidence_c}."
             )
         return (
-            f"The assessment recorded {finding_phrase}."
-            f"{failed} Findings and limitations should be interpreted only within the tested scope."
+            f"The assessment recorded {total} finding(s) "
+            f"(critical={counts['critical']}, high={counts['high']}, medium={counts['medium']}, "
+            f"low={counts['low']}, info={counts['info']})."
+            f"{failed} WSTG coverage: {cov_pct:.0f}%. Tool health: {tool_h}. "
+            f"Evidence confidence: {evidence_c}. "
+            f"Findings and limitations should be interpreted only within the tested scope."
         )
 
     if section_key == "business_risk":
         if rate is not None:
             return (
-                "The observed authentication-control signal could increase susceptibility to brute-force "
-                "or credential stuffing attempts if valid credentials are known or reused. Impact remains "
-                "conditional because no account compromise, credential stuffing success, or authenticated "
-                "business action was demonstrated."
+                f"The observed authentication-control signal ({total} finding(s) recorded) "
+                f"could increase susceptibility to brute-force or credential stuffing attempts "
+                f"if valid credentials are known or reused. Impact remains conditional because "
+                f"no account compromise, credential stuffing success, or authenticated business "
+                f"action was demonstrated. WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
         if header_only:
             return (
-                "Missing or incomplete HTTP response security headers could reduce browser-side defense-in-depth "
-                "for affected responses. Business impact remains conditional because no application compromise, "
-                "credential theft, account takeover, or authenticated business action was demonstrated."
+                f"Missing or incomplete HTTP response security headers ({total} finding(s)) "
+                f"could reduce browser-side defense-in-depth for affected responses. Business "
+                f"impact remains conditional because no application compromise, credential theft, "
+                f"account takeover, or authenticated business action was demonstrated. "
+                f"WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
-        return "Business impact is inconclusive beyond the validated findings and documented coverage limitations."
+        return (
+            f"Business impact is inconclusive beyond the {total} validated finding(s) "
+            f"and documented coverage limitations. WSTG coverage: {cov_pct:.0f}%. "
+            f"Tool health: {tool_h}. Evidence confidence: {evidence_c}."
+        )
 
     if section_key in {"exploit_chains", "attack_scenarios"}:
         if rate is not None:
             return (
-                "No validated exploit chain was demonstrated. The identified rate-limiting signal may "
-                "contribute to credential attacks, but no account compromise, credential stuffing success, "
-                "or authenticated impact was proven."
+                f"No validated exploit chain was demonstrated across {total} finding(s). "
+                f"The identified rate-limiting signal may contribute to credential attacks, "
+                f"but no account compromise, credential stuffing success, or authenticated "
+                f"impact was proven. WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
         if header_only:
             return (
-                "No validated exploit chain was demonstrated. Observations about HTTP response headers are "
-                "passive configuration checks: they are not remote code execution, authentication bypass, "
-                "or a demonstrated multi-step exploit without additional validated impact evidence."
+                f"No validated exploit chain was demonstrated across {total} finding(s). "
+                f"Observations about HTTP response headers are passive configuration checks: "
+                f"they are not remote code execution, authentication bypass, or a demonstrated "
+                f"multi-step exploit without additional validated impact evidence. "
+                f"WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
         return (
-            "No validated exploit chain was demonstrated in the collected evidence. Multi-step chains require "
-            "multiple validated findings with scope-appropriate impact where applicable."
+            f"No validated exploit chain was demonstrated in the collected evidence "
+            f"({total} finding(s)). Multi-step chains require multiple validated findings "
+            f"with scope-appropriate impact where applicable. WSTG coverage: {cov_pct:.0f}%. "
+            f"Evidence confidence: {evidence_c}."
         )
 
     if section_key == "zero_day_potential":
         if header_only:
             return (
-                "Novel vulnerability indication: Not indicated. The finding is a common HTTP response header "
-                "configuration weakness and no novel vulnerability class was observed."
+                f"Novel vulnerability indication: Not indicated. The {total} finding(s) include "
+                f"common HTTP response header configuration weaknesses and no novel vulnerability "
+                f"class was observed. WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
         return (
-            "Novel vulnerability indication: Not indicated. The finding is a common authentication "
-            "control weakness and no novel vulnerability class was observed."
+            f"Novel vulnerability indication: Not indicated. The {total} finding(s) reflect "
+            f"known vulnerability patterns and no novel vulnerability class was observed. "
+            f"WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
         )
 
     if section_key in {
@@ -1498,57 +1518,88 @@ def safe_section_text(section_key: str, data: Any, gate: ReportQualityGate) -> s
     }:
         if rate is not None:
             return (
-                "Use stack-neutral authentication throttling controls until the technology stack is verified: "
-                "application middleware, reverse proxy or WAF rules, and identity provider controls. Apply "
-                "per-account and per-IP throttling, exponential backoff, lockout or CAPTCHA after a defined "
-                "threshold, and monitoring with alerting for repeated failed attempts. Validate the fix with "
-                "real login POST attempts, timestamps, and raw request/response evidence."
+                f"Use stack-neutral authentication throttling controls until the technology stack "
+                f"is verified: application middleware, reverse proxy or WAF rules, and identity "
+                f"provider controls. Apply per-account and per-IP throttling, exponential backoff, "
+                f"lockout or CAPTCHA after a defined threshold, and monitoring with alerting for "
+                f"repeated failed attempts. Validate the fix with real login POST attempts, "
+                f"timestamps, and raw request/response evidence. "
+                f"({total} finding(s) recorded, WSTG coverage: {cov_pct:.0f}%)."
             )
         if header_only:
             return (
-                "Harden transport and browser policy using modern header sets (avoid deprecated browser "
-                "XSS filter headers). Set a strict Content-Security-Policy, X-Content-Type-Options: nosniff, "
-                "frame control via Content-Security-Policy frame-ancestors (or X-Frame-Options as a stopgap), "
-                "Referrer-Policy, a deliberate Permissions-Policy, Strict-Transport-Security on HTTPS, and "
-                "(where appropriate) Cross-Origin-Opener-Policy / Cross-Origin-Resource-Policy. Verify with "
-                "``curl -sS -D- -o /dev/null <url>`` (or equivalent) and review both redirect and final responses. "
-                "Prefer controls at the reverse proxy, CDN, or application framework that matches your stack when known."
+                f"Harden transport and browser policy using modern header sets (avoid deprecated "
+                f"browser XSS filter headers). Set a strict Content-Security-Policy, "
+                f"X-Content-Type-Options: nosniff, frame control via Content-Security-Policy "
+                f"frame-ancestors (or X-Frame-Options as a stopgap), Referrer-Policy, a deliberate "
+                f"Permissions-Policy, Strict-Transport-Security on HTTPS, and (where appropriate) "
+                f"Cross-Origin-Opener-Policy / Cross-Origin-Resource-Policy. Verify with "
+                f"``curl -sS -D- -o /dev/null <url>`` (or equivalent) and review both redirect "
+                f"and final responses. Prefer controls at the reverse proxy, CDN, or application "
+                f"framework that matches your stack when known. "
+                f"({total} finding(s) recorded, WSTG coverage: {cov_pct:.0f}%)."
             )
+        sev_priority = []
+        if counts["critical"]:
+            sev_priority.append("critical")
+        if counts["high"]:
+            sev_priority.append("high")
+        if counts["medium"]:
+            sev_priority.append("medium")
+        if counts["low"]:
+            sev_priority.append("low")
+        priority_text = ", ".join(sev_priority) if sev_priority else "informational"
         return (
-            "Prioritize fixes using validated severity and business impact. When the technology stack is unknown, "
-            "describe controls in a stack-neutral way: application middleware, reverse proxy or WAF, and identity "
-            "provider settings where applicable. Verify each change with repeatable commands or test cases — without "
-            "assuming a specific framework."
+            f"Prioritize fixes using validated severity and business impact. "
+            f"Address {priority_text} findings first ({total} total). "
+            f"When the technology stack is unknown, describe controls in a stack-neutral way: "
+            f"application middleware, reverse proxy or WAF, and identity provider settings where "
+            f"applicable. Verify each change with repeatable commands or test cases. "
+            f"WSTG coverage: {cov_pct:.0f}%. Tool health: {tool_h}."
         )
 
     if section_key == "vulnerability_description":
         if rate is not None:
             return (
-                "The finding describes possible missing or insufficient rate limiting on the login endpoint. "
-                "Current evidence is weak: rapid login-path requests did not receive HTTP 429, but the test "
-                "did not prove full authentication-flow behavior, per-account lockout, CAPTCHA, or throttling."
+                f"The finding describes possible missing or insufficient rate limiting on the "
+                f"login endpoint. Current evidence is weak: rapid login-path requests did not "
+                f"receive HTTP 429, but the test did not prove full authentication-flow behavior, "
+                f"per-account lockout, CAPTCHA, or throttling. "
+                f"({total} finding(s) recorded, evidence confidence: {evidence_c})."
             )
         if header_only:
             return (
-                "The finding describes missing or incomplete HTTP response security headers. This is a passive "
-                "configuration observation, not proof of application compromise. Impact depends on affected "
-                "responses, browser behavior, TLS deployment, and confirmed final-response headers."
+                f"The finding describes missing or incomplete HTTP response security headers. "
+                f"This is a passive configuration observation, not proof of application compromise. "
+                f"Impact depends on affected responses, browser behavior, TLS deployment, and "
+                f"confirmed final-response headers. "
+                f"({total} finding(s) recorded, evidence confidence: {evidence_c})."
             )
-        return "No additional vulnerability narrative is available beyond the evidence-backed findings table."
+        return (
+            f"No additional vulnerability narrative is available beyond the {total} "
+            f"evidence-backed finding(s). Evidence confidence: {evidence_c}. "
+            f"WSTG coverage: {cov_pct:.0f}%."
+        )
 
     if section_key == "compliance_check":
         if header_only:
             return (
-                "Customer-facing OWASP mapping for HTTP security-header configuration findings is A05:2021 "
-                "Security Misconfiguration. Categories that were not tested must be treated as not assessed, "
-                "not as clean or validated."
+                f"Customer-facing OWASP mapping for HTTP security-header configuration findings "
+                f"is A05:2021 Security Misconfiguration ({total} finding(s)). Categories that "
+                f"were not tested must be treated as not assessed, not as clean or validated. "
+                f"WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
             )
         return (
-            "Compliance mapping is limited to the validated finding and coverage gaps. OWASP categories "
-            "without tested evidence must be treated as not assessed, not as clean."
+            f"Compliance mapping is limited to the {total} validated finding(s) and coverage gaps. "
+            f"OWASP categories without tested evidence must be treated as not assessed, not as clean. "
+            f"WSTG coverage: {cov_pct:.0f}%. Evidence confidence: {evidence_c}."
         )
 
-    return "No evidence-backed narrative is available for this section."
+    return (
+        f"No evidence-backed narrative is available for this section. "
+        f"({total} finding(s) recorded, WSTG coverage: {cov_pct:.0f}%, "
+        f"evidence confidence: {evidence_c})."
+    )
 
 
 def _contains_forbidden_certainty(text: str) -> str | None:
@@ -1589,9 +1640,8 @@ def sanitize_ai_sections_for_quality(
     out = dict(texts)
     warnings: list[str] = []
     high_risk_gate = enforce_quality_gate and (
-        gate.wstg_low_coverage
-        or gate.critical_scanner_failed
-        or gate.evidence_confidence in {"none", "weak"}
+        gate.evidence_confidence == "none"
+        or (gate.critical_scanner_failed and gate.evidence_confidence in {"none", "weak"})
     )
     header_only_findings = any(
         is_header_only_advisory_finding(f) for f in list(_get_attr(data, "findings", []) or [])

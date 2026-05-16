@@ -373,6 +373,23 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
     return ReportingOutput(report=report)
 
 
+async def _compress_summary_for_assembly(summary: str, *, max_chars: int = 8000) -> str:
+    """Ask WRB to compress a summary to key facts only."""
+    try:
+        prompt = (
+            f"Compress this security assessment summary to its key facts only. "
+            f"Keep: findings, severity counts, tool results, CVE IDs, evidence. "
+            f"Remove: filler, repetition, generic advice. Max {max_chars} chars.\n\n{summary}"
+        )
+        resp = await call_llm_unified(
+            "Compress text to key facts. Return only the compressed text.",
+            prompt, task=LLMTask.REPORT_SECTION, phase="summary_compression",
+        )
+        return resp[:max_chars] if resp else summary[:max_chars]
+    except Exception:
+        return summary[:max_chars]
+
+
 async def ai_reporting(
     inp: ReportingInput, *, scan_id: str | None = None
 ) -> ReportingOutput:
@@ -428,7 +445,50 @@ async def ai_reporting(
         if data is not None and isinstance(data.get("report"), dict):
             logger.info("report_assembly_success")
             return ReportingOutput(report=data["report"])
-    except Exception:
+    except Exception as exc:
+        exc_name = type(exc).__name__
+        is_http_400 = "400" in str(exc) or "HTTPStatusError" in exc_name
+        if is_http_400 and section_summaries:
+            for retry in range(2):
+                try:
+                    compressed: dict[str, str] = {}
+                    for phase_name, summary in section_summaries.items():
+                        if len(summary) > 8000:
+                            compressed[phase_name] = await _compress_summary_for_assembly(
+                                summary, max_chars=8000,
+                            )
+                        else:
+                            compressed[phase_name] = summary
+                    total = sum(len(v) for v in compressed.values())
+                    if total > 24000:
+                        factor = 24000 / total
+                        compressed = {
+                            k: v[: int(len(v) * factor)] for k, v in compressed.items()
+                        }
+                    sys2, usr2 = get_report_assembly_prompt(
+                        target=inp.target,
+                        recon_summary=compressed.get(RECON, ""),
+                        threat_model_summary=compressed.get(THREAT_MODELING, ""),
+                        vuln_summary=compressed.get(VULN_ANALYSIS, ""),
+                        exploit_summary=compressed.get(EXPLOITATION, ""),
+                        post_exploit_summary=compressed.get(POST_EXPLOITATION, ""),
+                    )
+                    resp2 = await call_llm_unified(
+                        sys2, usr2, task=LLMTask.REPORT_SECTION,
+                        scan_id=scan_id, phase=f"report_assembly_retry_{retry + 1}",
+                    )
+                    data2 = _parse_llm_json(resp2)
+                    if data2 is not None and isinstance(data2.get("report"), dict):
+                        logger.info(
+                            "report_assembly_retry_success",
+                            extra={"retry": retry + 1},
+                        )
+                        return ReportingOutput(report=data2["report"])
+                except Exception:
+                    logger.warning(
+                        "report_assembly_retry_failed",
+                        extra={"retry": retry + 1},
+                    )
         logger.exception("report_assembly_failed")
 
     if section_summaries:
