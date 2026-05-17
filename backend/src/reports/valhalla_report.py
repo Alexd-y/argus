@@ -1709,6 +1709,62 @@ def render_valhalla_report(
   @media (max-width: 768px) {{
     main, header.valhalla-header {{ padding-left: 20px; padding-right: 20px; }}
   }}
+
+  @media print {{
+    body {{
+      background: #fff;
+      color: #111;
+      font-size: 12px;
+    }}
+    header.valhalla-header {{
+      background: #fff;
+      border-bottom: 2px solid #000;
+      padding: 20px 30px 16px;
+    }}
+    .header-content .brand {{ color: #333; }}
+    .header-content h1 {{ color: #111; font-size: 22px; }}
+    .brand-logo {{ max-height: 28px; }}
+    .tier-badge {{
+      background: #333;
+      color: #fff;
+    }}
+    main {{ padding: 16px 30px 32px; }}
+    .card {{
+      background: #fff;
+      border: 1px solid #ccc;
+    }}
+    table.data-table thead th {{
+      background: #f5f5f5;
+      color: #333;
+    }}
+    table.data-table tbody td {{
+      color: #111;
+    }}
+    .chart-bar {{
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }}
+    footer.valhalla-footer {{
+      border-top: 1px solid #999;
+      color: #666;
+    }}
+    @page {{
+      margin: 15mm;
+      @bottom-center {{
+        content: "Svalbard Security Inc. Valhalla Report — Page " counter(page);
+        font-size: 10px;
+        color: #999;
+      }}
+    }}
+    @page :first {{
+      @top-center {{
+        content: "";
+      }}
+    }}
+    .page-break {{
+      page-break-after: always;
+    }}
+  }}
 </style>
 </head>
 <body>

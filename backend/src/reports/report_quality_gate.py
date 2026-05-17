@@ -1665,15 +1665,34 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
 
 
 def normalize_findings_for_report(findings: Iterable[Any]) -> list[Any]:
-    """Normalize evidence status, CVSS surface, confidence, and rate-limit duplicates."""
+    """Normalize evidence status, CVSS surface, confidence, rate-limit duplicates, and enforce severity rules."""
     from src.reports.finding_dedup import merge_http_security_header_gaps, merge_reflected_xss_findings
 
     base = merge_http_security_header_gaps(list(findings))
     normalized: list[Any] = []
+    severity_issues = enforce_severity_rules(base)
+    downgraded_ids: dict[str, str] = {}
+    for si in severity_issues:
+        if "downgrade" in si.get("action", ""):
+            fid = si["finding_id"]
+            if "to_medium" in si["action"]:
+                downgraded_ids[fid] = "medium"
+            elif "to_info" in si["action"]:
+                downgraded_ids[fid] = "info"
     for finding in base:
+        fid = str(_get_attr(finding, "id", _get_attr(finding, "finding_id", "")) or "")
         norm = _normalize_one_finding(finding)
-        if norm is not None:
-            normalized.append(norm)
+        if norm is None:
+            continue
+        if fid in downgraded_ids:
+            if isinstance(norm, dict):
+                norm["severity"] = downgraded_ids[fid]
+            elif hasattr(norm, "severity"):
+                try:
+                    setattr(norm, "severity", downgraded_ids[fid])
+                except Exception:
+                    pass
+        normalized.append(norm)
     return merge_reflected_xss_findings(_merge_rate_limit_findings(normalized))
 
 
@@ -2380,3 +2399,117 @@ def sanitize_ai_patterns(text: str) -> tuple[str, list[str]]:
             text = pattern.sub(replacement, text)
             warnings.append(f"Replaced AI pattern: {pattern.pattern}")
     return text, warnings
+
+
+def enforce_severity_rules(findings: Iterable[Any]) -> list[dict[str, str]]:
+    """VHL-SEV-001 — enforce severity rules for XSS, Command Injection, rate-limit signals.
+    
+    Returns list of {'finding_id': str, 'action': str, 'reason': str} for violations found.
+    """
+    issues: list[dict[str, str]] = []
+    for f in findings:
+        fid = str(_get_attr(f, "id", _get_attr(f, "finding_id", "")) or "")
+        sev = str(_get_attr(f, "severity", "") or "").lower()
+        title = str(_get_attr(f, "title", "") or "").lower()
+        desc = str(_get_attr(f, "description", "") or "").lower()
+        blob = title + " " + desc
+        classification = str(_get_attr(f, "evidence_classification", "") or "").lower()
+        confidence = str(_get_attr(f, "confidence", "") or "").lower()
+        poc = _poc_dict(f)
+        # XSS: High only with browser execution proof
+        is_xss = "xss" in blob or "cross-site" in blob or "cwe-79" in blob
+        if is_xss and sev == "high" and classification != "validated":
+            has_browser_proof = bool(
+                poc.get("browser_proof_url") or
+                poc.get("screenshot_url") or
+                poc.get("browser_executed")
+            )
+            if not has_browser_proof:
+                issues.append({
+                    "finding_id": fid,
+                    "action": "downgrade_severity_to_medium",
+                    "reason": "XSS High requires browser execution proof; downgraded to Medium",
+                })
+        # Command Injection: High/Critical only with server-side command output
+        is_cmd = any(kw in blob for kw in ("command injection", "rce", "cwe-78", "command execution", "shell injection"))
+        if is_cmd and sev in ("critical", "high") and classification != "validated":
+            has_server_output = bool(
+                poc.get("command_output") or
+                poc.get("shell_output") or
+                poc.get("server_response") or
+                (poc.get("raw_response") and len(str(poc.get("raw_response", ""))) > 100)
+            )
+            if not has_server_output:
+                issues.append({
+                    "finding_id": fid,
+                    "action": "downgrade_severity_to_medium",
+                    "reason": "Command Injection High/Critical requires controlled server-side command output; downgraded to Medium",
+                })
+        # HTTP 429 rate-limit: observation, not vulnerability
+        if ("429" in str(poc.get("response_status") or "") or "rate limit" in blob or "too many requests" in blob):
+            if sev in ("high", "critical") and not (getattr(f, "exploit_demonstrated", False)):
+                issues.append({
+                    "finding_id": fid,
+                    "action": "downgrade_severity_to_info",
+                    "reason": "HTTP 429 on login is a positive observation, not a confirmed vulnerability; downgraded to Info",
+                })
+    return issues
+
+
+def build_retest_checklist(findings: Iterable[Any]) -> list[dict[str, str]]:
+    """VHL-RETEST-001 — build retest checklist from validated findings."""
+    items: list[dict[str, str]] = []
+    for f in findings:
+        fid = str(_get_attr(f, "id", _get_attr(f, "finding_id", "")) or "")
+        title = str(_get_attr(f, "title", "") or "")
+        sev = str(_get_attr(f, "severity", "") or "").lower()
+        classification = str(_get_attr(f, "evidence_classification", "") or "").lower()
+        if classification not in ("validated", "observed"):
+            continue
+        poc = _poc_dict(f)
+        endpoint = poc.get("request_url", poc.get("affected_url", "")) or ""
+        parameter = poc.get("parameter", "") or ""
+        method = poc.get("request_method", "GET") or "GET"
+        payload = poc.get("payload", "") or ""
+        verification = str(_get_attr(f, "verification_command", "") or "")
+        acceptance = str(_get_attr(f, "acceptance_criteria", "") or "")
+        items.append({
+            "finding_id": fid,
+            "title": title,
+            "severity": sev,
+            "endpoint": str(endpoint)[:512],
+            "parameter": str(parameter)[:256],
+            "method": str(method)[:16],
+            "payload_to_retest": str(payload)[:500],
+            "verification_command": verification[:500] or f"curl -X {method} '{endpoint}' -d 'safe_value'",
+            "expected_result": "Finding no longer reproducible; response returns expected safe output without vulnerability indicators",
+            "evidence_required": "Raw request/response pair at retest timestamp; response status code; updated finding status",
+        })
+    return items
+
+
+def verify_cross_format_consistency(
+    *,
+    html_sha256: str = "",
+    pdf_sha256: str = "",
+    md_sha256: str = "",
+    csv_sha256: str = "",
+    json_sha256: str = "",
+    html_findings: int = 0,
+    pdf_findings: int = 0,
+    md_findings: int = 0,
+    csv_findings: int = 0,
+    json_findings: int = 0,
+) -> tuple[bool, list[str]]:
+    """Verify all formats generated from same dataset."""
+    issues: list[str] = []
+    counts = [html_findings, pdf_findings, md_findings, csv_findings, json_findings]
+    non_zero = [c for c in counts if c > 0]
+    if non_zero and len(set(non_zero)) > 1:
+        issues.append(f"Finding count mismatch across formats: html={html_findings}, pdf={pdf_findings}, md={md_findings}, csv={csv_findings}, json={json_findings}")
+    # Any format with 0 findings and non-zero hashes indicates potential corruption
+    formats_with_hashes = sum(1 for h in [html_sha256, pdf_sha256, md_sha256, csv_sha256, json_sha256] if h)
+    formats_with_findings = sum(1 for c in counts if c > 0)
+    if formats_with_hashes > 0 and formats_with_findings == 0:
+        issues.append("Content hashes present but no findings recorded; possible empty render")
+    return len(issues) == 0, issues

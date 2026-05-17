@@ -74,8 +74,12 @@ class BrandModel(BaseModel):
         raw = logo_path.read_bytes()
         self.logo_sha256 = hashlib.sha256(raw).hexdigest()
         self.logo_base64_svg = base64.b64encode(raw).decode("ascii")
-        # For PDF rendering, convert SVG to data URI
-        self.logo_base64_png = ""
+        try:
+            import cairosvg
+            png_bytes = cairosvg.svg2png(bytestring=raw, output_width=240, output_height=101)
+            self.logo_base64_png = base64.b64encode(png_bytes).decode("ascii")
+        except Exception:
+            self.logo_base64_png = ""
 
 
 _CACHED_BRAND: BrandModel | None = None

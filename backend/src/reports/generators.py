@@ -1407,7 +1407,11 @@ def _build_branded_pdf_context(
     from src.reports.valhalla_report_context import get_brand
     brand = get_brand()
     ctx["brand_name"] = brand.name
-    ctx["brand_logo_data_uri"] = f"data:image/svg+xml;base64,{brand.logo_base64_svg}"
+    ctx["brand_logo_data_uri"] = (
+        f"data:image/png;base64,{brand.logo_base64_png}"
+        if brand.logo_base64_png
+        else f"data:image/svg+xml;base64,{brand.logo_base64_svg}"
+    )
     ctx["brand_logo_sha256"] = brand.logo_sha256
     ctx["brand_alt_text"] = brand.alt_text
     return ctx
