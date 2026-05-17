@@ -99,6 +99,31 @@
                                     <p><strong>Response (excerpt)</strong></p>
                                     <pre class="finding-poc-block"><code>{{ poc.response | e }}</code></pre>
                                 {% endif %}
+                                {% if row.tool_command %}
+                                    <p><strong>Tool Command</strong></p>
+                                    <pre class="finding-poc-block"><code>{{ row.tool_command | e }}</code></pre>
+                                {% endif %}
+                                {% if row.tool_name %}
+                                    <p><strong>Tool</strong>: {{ row.tool_name | e }}{% if row.tool_version %} ({{ row.tool_version | e }}){% endif %}</p>
+                                {% endif %}
+                                {% if row.timestamp_utc %}
+                                    <p><strong>Timestamp</strong>: {{ row.timestamp_utc | e }}</p>
+                                {% endif %}
+                                {% if row.auth_state %}
+                                    <p><strong>Auth State</strong>: {{ row.auth_state | e }}</p>
+                                {% endif %}
+                                {% if row.response_status %}
+                                    <p><strong>Response Status</strong>: {{ row.response_status | e }}</p>
+                                {% endif %}
+                                {% if row.affected_layer %}
+                                    <p><strong>Affected Layer</strong>: {{ row.affected_layer | e }}</p>
+                                {% endif %}
+                                {% if row.observed_impact %}
+                                    <p><strong>Observed Impact</strong>: {{ row.observed_impact | e }}</p>
+                                {% endif %}
+                                {% if row.evidence_classification %}
+                                    <p><strong>Evidence Classification</strong>: <span class="sev-{{ (row.evidence_classification or "candidate") | lower | e }}">{{ row.evidence_classification | e }}</span></p>
+                                {% endif %}
                                 {% if row.verification_commands is defined and row.verification_commands %}
                                     <p><strong>Verification (evidence collection)</strong></p>
                                     {% for vcmd in row.verification_commands %}

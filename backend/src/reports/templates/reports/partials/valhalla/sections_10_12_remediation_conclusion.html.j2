@@ -23,36 +23,40 @@
                 <th>Priority</th>
                 <th>Deadline</th>
                 <th>Effort</th>
+                <th>Est. Hours</th>
                 <th>Affected Layer</th>
                 <th>Owner Team</th>
                 <th>Component</th>
-                <th>Affected URL</th>
-                <th>Parameter</th>
-                <th>Fix</th>
+                <th>Fix Action</th>
                 <th>Rollback Risk</th>
                 <th>Verification</th>
+                <th>Test Case</th>
                 <th>Acceptance Criteria</th>
+                <th>Dependencies</th>
+                <th>Business Impact</th>
             </tr>
         </thead>
         <tbody>
             {% for entry in rem_matrix %}
             <tr>
-                <td><code>{{ entry.finding_id | e }}</code></td>
+                <td><code>{{ entry.finding_id | default(entry.id or "") | e }}</code></td>
                 <td>{{ entry.title | e }}</td>
                 <td>{{ entry.severity | e }}</td>
-                <td>{{ entry.cvss | e }}</td>
+                <td>{{ entry.cvss_score | default(entry.cvss or "") | e }}</td>
                 <td>{{ entry.priority | e }}</td>
                 <td>{{ entry.deadline | e }}</td>
                 <td>{{ entry.effort | e }}</td>
+                <td>{{ entry.estimated_hours | default("—") | e }}</td>
                 <td>{{ entry.affected_layer | e }}</td>
-                <td>{{ entry.owner_team | e }}</td>
-                <td>{{ entry.config_component | e }}</td>
-                <td><code>{{ entry.affected_url | e }}</code></td>
-                <td>{{ entry.affected_parameter | e }}</td>
-                <td>{{ entry.fix | e }}</td>
+                <td>{{ entry.owner_team | default(entry.owner or "") | e }}</td>
+                <td>{{ entry.config_component | default(entry.component or "") | e }}</td>
+                <td>{{ entry.fix_action | default(entry.fix or "") | e }}</td>
                 <td>{{ entry.rollback_risk | e }}</td>
-                <td>{{ entry.verification_step | e }}</td>
+                <td>{{ entry.verification_step | default(entry.verification or "") | e }}</td>
+                <td>{{ entry.test_case | default("—") | e }}</td>
                 <td>{{ entry.acceptance_criteria | e }}</td>
+                <td>{{ entry.dependencies | default("—") | e }}</td>
+                <td>{{ entry.business_impact | default("—") | e }}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -83,6 +83,10 @@
                     <th>Capability</th>
                     <th>Tools (representative)</th>
                     <th>State</th>
+                    <th>Tool Commands</th>
+                    <th>Versions</th>
+                    <th>Artifact Paths</th>
+                    <th>Failure Reason</th>
                     <th>Summary</th>
                 </tr>
             </thead>
@@ -92,6 +96,10 @@
                     <td>{{ row.capability | e }}</td>
                     <td class="desc">{{ row.tools | e }}</td>
                     <td>{{ row.state_label | e }}</td>
+                    <td class="desc"><code>{{ row.tool_commands | default("—") | e }}</code></td>
+                    <td>{{ row.tool_versions | default("—") | e }}</td>
+                    <td class="desc"><code>{{ row.artifact_paths | default("—") | e }}</code></td>
+                    <td class="desc">{{ row.failure_reason | default("—") | e }}</td>
                     <td class="desc">{{ row.summary | e }}</td>
                 </tr>
                 {% endfor %}

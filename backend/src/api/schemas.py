@@ -816,7 +816,7 @@ class ReportSummary(BaseModel):
 FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"]
 FindingValidationStatusLiteral = Literal["missing", "unverified", "partially_validated", "validated"]
 FindingEvidenceQualityLiteral = Literal["none", "weak", "moderate", "strong"]
-FindingEvidenceClassificationLiteral = Literal["validated", "candidate", "inconclusive"]
+FindingEvidenceClassificationLiteral = Literal["validated", "observed", "candidate", "inconclusive"]
 FindingEvidenceTypeLiteral = Literal[
     "observed",
     "tool_output",
@@ -860,6 +860,22 @@ class Finding(BaseModel):
     manual_validation_result: str | None = None
     owner_team: str | None = None
     verification_command: str | None = None
+    # Full finding card fields (VHL-FINDING-CARD-001)
+    http_method: str | None = None
+    auth_state: str | None = None  # anonymous, authenticated, token, session
+    response_status: int | None = None
+    response_headers: dict[str, str] | None = None
+    timestamp_utc: str | None = None
+    tool_name: str | None = None
+    tool_version: str | None = None
+    tool_command: str | None = None
+    tool_output_excerpt: str | None = None
+    observed_impact: str | None = None
+    affected_layer: str | None = None  # CDN/WAF/reverse-proxy/app/API/auth/CI/IdP
+    config_component: str | None = None
+    rollback_risk: str | None = None
+    acceptance_criteria: str | None = None
+    retest_result: str | None = None
     # ARG-044 — intel-enrichment fields (all optional / backward-compat).
     epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
     epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -905,6 +921,21 @@ class FindingDetailResponse(BaseModel):
     manual_validation_result: str | None = None
     owner_team: str | None = None
     verification_command: str | None = None
+    http_method: str | None = None
+    auth_state: str | None = None
+    response_status: int | None = None
+    response_headers: dict[str, str] | None = None
+    timestamp_utc: str | None = None
+    tool_name: str | None = None
+    tool_version: str | None = None
+    tool_command: str | None = None
+    tool_output_excerpt: str | None = None
+    observed_impact: str | None = None
+    affected_layer: str | None = None
+    config_component: str | None = None
+    rollback_risk: str | None = None
+    acceptance_criteria: str | None = None
+    retest_result: str | None = None
     # ARG-044 — intel-enrichment fields (all optional / backward-compat).
     epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
     epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)

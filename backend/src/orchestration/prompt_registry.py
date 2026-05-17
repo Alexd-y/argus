@@ -146,7 +146,11 @@ SYSTEM_PROMPT_VULN_ANALYSIS = (
     "FOCUS: Vulnerability Analysis phase. Analyse findings from active scanners (nuclei, dalfox, "
     "sqlmap, ffuf) and SAST tools (semgrep, bandit, gitleaks). Confirm, correlate, and augment "
     "findings with threat model context. Assign CWE, CVSS, confidence level, and evidence type. "
-    "Filter out false positives by cross-referencing sandbox output with threat model."
+    "Filter out false positives by cross-referencing sandbox output with threat model. "
+    "For each finding, evaluate evidence quality: identify gaps in proof-of-concept data, "
+    "missing raw request/response pairs, absent tool commands, and unvalidated impact claims. "
+    "Flag findings with insufficient evidence for targeted re-testing. Generate specific payload "
+    "recommendations to validate each gap."
 )
 
 SYSTEM_PROMPT_EXPLOITATION = (
@@ -155,7 +159,10 @@ SYSTEM_PROMPT_EXPLOITATION = (
     "Select appropriate tools from the sandbox allowlist (dalfox, xsstrike, sqlmap, nuclei, ffuf, "
     "commix, hydra, bloodhound-python, crackmapexec, impacket-secretsdump, kerbrute, prowler). "
     "Generate concrete payloads via PayloadBuilder. Execute in sandbox, capture evidence, "
-    "assess exploitability from tool output. Map to MITRE ATT&CK techniques."
+    "assess exploitability from tool output. Map to MITRE ATT&CK techniques. "
+    "For each finding, analyze evidence gaps: identify missing proof-of-concept data, "
+    "unvalidated claims, and insufficient evidence quality. Generate targeted payloads "
+    "to fill these gaps. Prioritize findings with high severity but low evidence quality."
 )
 
 SYSTEM_PROMPT_POST_EXPLOITATION = (
@@ -209,7 +216,10 @@ CLOUD_FALLBACK_THREAT_MODEL_SYSTEM = (
 CLOUD_FALLBACK_VULN_SYSTEM = (
     CLOUD_FALLBACK_PREAMBLE + " "
     "FOCUS: Vulnerability analysis. Map scanner findings to CWE IDs, assign CVSS scores, "
-    "determine confidence levels based on evidence strength. Cross-reference with threat model."
+    "determine confidence levels based on evidence strength. Cross-reference with threat model. "
+    "For each finding, evaluate evidence quality: identify gaps in proof-of-concept data, "
+    "missing raw request/response pairs, absent tool commands, and unvalidated impact claims. "
+    "Flag findings with insufficient evidence for targeted re-testing."
 )
 
 CLOUD_FALLBACK_EXPLOIT_SYSTEM = (
@@ -218,7 +228,9 @@ CLOUD_FALLBACK_EXPLOIT_SYSTEM = (
     "For each finding, recommend appropriate tools from this allowlist: "
     "dalfox, xsstrike, sqlmap, nuclei, ffuf, commix, hydra, medusa, nmap. "
     "Suggest payload types, concrete payloads, and expected outcomes. "
-    "Generate executable exploit steps and weaponised payloads."
+    "Generate executable exploit steps and weaponised payloads. "
+    "Analyze evidence gaps: identify missing PoC data, unvalidated claims, and insufficient evidence. "
+    "Generate targeted payloads to fill these gaps. Prioritize findings with high severity but low evidence quality."
 )
 
 CLOUD_FALLBACK_POST_EXPLOIT_SYSTEM = (
@@ -328,7 +340,9 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
         "Based on the following vulnerability findings, plan and validate exploit paths. "
         "You ARE authorized to generate and execute exploits on in-scope targets in the sandbox. "
         "For each finding, provide concrete, executable exploit steps and expected outcomes. "
-        "Include payload selection, tool recommendations, and verification methods.\n\n"
+        "Include payload selection, tool recommendations, and verification methods. "
+        "Analyze evidence gaps: identify missing PoC data, unvalidated claims, and insufficient evidence. "
+        "Generate targeted payloads to fill these gaps.\n\n"
         "Findings: {findings}\n\n"
         "For each exploitable finding:\n"
         '- "finding_id": reference to the finding\n'
@@ -338,14 +352,25 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
         '- "tool": recommended sandbox tool (dalfox, xsstrike, sqlmap, nuclei, ffuf, commix)\n'
         '- "args": list of CLI arguments for the tool\n'
         '- "payload": the payload to use\n'
+        '- "payload_type": "xss" | "sqli" | "rce" | "lfi" | "ssrf" | "auth_bypass" | "other"\n'
         '- "description": how the exploit works\n'
         '- "impact": potential impact\n'
-        '- "difficulty": easy/medium/hard\n\n'
+        '- "difficulty": easy/medium/hard\n'
+        '- "evidence_gap": description of missing evidence this exploit addresses\n'
+        '- "expected_response": expected HTTP status/response pattern if successful\n\n'
+        'Also include evidence gap analysis:\n'
+        '- "gap_finding_id": finding with insufficient evidence\n'
+        '- "gap_type": "missing_poc" | "missing_raw_req" | "missing_raw_resp" | "unvalidated_impact" | "missing_tool_cmd"\n'
+        '- "recommended_action": specific test/payload to fill the gap\n'
+        '- "priority": "high" | "medium" | "low"\n\n'
         'Return JSON: {{"exploits": [{{"finding_id": "string", "status": "string", '
         '"title": "string", "technique": "string", "tool": "string", "args": ["string"], '
-        '"payload": "string", "description": "string", '
-        '"impact": "string", "difficulty": "string"}}], '
-        '"evidence": [{{"type": "string", "description": "string", "finding_id": "string"}}]}}',
+        '"payload": "string", "payload_type": "string", "description": "string", '
+        '"impact": "string", "difficulty": "string", "evidence_gap": "string", '
+        '"expected_response": "string"}}], '
+        '"evidence": [{{"type": "string", "description": "string", "finding_id": "string"}}], '
+        '"evidence_gaps": [{{"gap_finding_id": "string", "gap_type": "string", '
+        '"recommended_action": "string", "priority": "string"}}]}}',
     ),
     POST_EXPLOITATION: (
         SYSTEM_PROMPT_POST_EXPLOITATION,
@@ -692,7 +717,7 @@ VULN_ANALYSIS_SCHEMA: dict[str, Any] = {
 
 EXPLOITATION_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "required": ["exploits", "evidence"],
+    "required": ["exploits", "evidence", "evidence_gaps"],
     "properties": {
         "exploits": {
             "type": "array",
@@ -702,6 +727,16 @@ EXPLOITATION_SCHEMA: dict[str, Any] = {
                     "finding_id": {"type": "string"},
                     "status": {"type": "string"},
                     "title": {"type": "string"},
+                    "technique": {"type": "string"},
+                    "tool": {"type": "string"},
+                    "args": {"type": "array", "items": {"type": "string"}},
+                    "payload": {"type": "string"},
+                    "payload_type": {"type": "string"},
+                    "description": {"type": "string"},
+                    "impact": {"type": "string"},
+                    "difficulty": {"type": "string"},
+                    "evidence_gap": {"type": "string"},
+                    "expected_response": {"type": "string"},
                 },
             },
         },
@@ -713,6 +748,18 @@ EXPLOITATION_SCHEMA: dict[str, Any] = {
                     "type": {"type": "string"},
                     "path": {"type": "string"},
                     "finding_id": {"type": "string"},
+                },
+            },
+        },
+        "evidence_gaps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "gap_finding_id": {"type": "string"},
+                    "gap_type": {"type": "string"},
+                    "recommended_action": {"type": "string"},
+                    "priority": {"type": "string"},
                 },
             },
         },

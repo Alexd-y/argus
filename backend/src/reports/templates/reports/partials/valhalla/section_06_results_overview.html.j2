@@ -155,6 +155,10 @@
                     <th>Detected version</th>
                     <th>Latest / fixed version</th>
                     <th>CVE / advisory</th>
+                    <th>Max CVSS</th>
+                    <th>EOL Status</th>
+                    <th>Upgrade Effort</th>
+                    <th>Package Manager</th>
                     <th>Severity</th>
                     <th>Source</th>
                     <th>Recommendation</th>
@@ -167,6 +171,10 @@
                     <td>{{ row.installed_version or "—" }}</td>
                     <td>{{ row.latest_stable or "—" }}</td>
                     <td>{% if row.cves %}{{ row.cves | join(", ") | e }}{% else %}—{% endif %}</td>
+                    <td>{{ row.cvss_max_score | default("—") | e }}</td>
+                    <td>{{ row.eol_status | default("unknown") | e }}</td>
+                    <td>{{ row.upgrade_effort | default("medium") | e }}</td>
+                    <td>{{ row.package_manager | default("—") | e }}</td>
                     <td>{{ row.support_status or "—" }}</td>
                     <td>{{ row.source or "—" }}</td>
                     <td class="desc">{{ row.recommendation | e }}</td>
@@ -192,6 +200,10 @@
                     <th>Context</th>
                     <th>Risk</th>
                     <th>Evidence ID</th>
+                    <th>HIBP Breaches</th>
+                    <th>Breach Names</th>
+                    <th>Data Classes</th>
+                    <th>Password Exposed</th>
                 </tr>
             </thead>
             <tbody>
@@ -202,6 +214,10 @@
                     <td class="desc">{{ row.context | e }}</td>
                     <td class="desc">{{ row.risk | e }}</td>
                     <td><code>{{ row.evidence_id | e }}</code></td>
+                    <td>{{ row.hibp_breach_count | default(0) | e }}</td>
+                    <td class="desc">{{ row.hibp_breach_names | join(", ") | default("—") | e }}</td>
+                    <td class="desc">{{ row.hibp_data_classes | join(", ") | default("—") | e }}</td>
+                    <td>{{ "Yes" if row.password_exposed else "No" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -460,5 +476,119 @@
         </table>
     {% else %}
         <p class="empty">No validated critical vulnerabilities met the evidence threshold for this section.</p>
+    {% endif %}
+
+    <h3>Authenticated Testing Context</h3>
+    {% if vc.auth_testing %}
+        {% set at = vc.auth_testing %}
+        <table>
+            <tbody>
+                <tr><th scope="row">Auth Testing Enabled</th><td>{{ "Yes" if at.auth_testing_enabled else "No" }}</td></tr>
+                <tr><th scope="row">Credentials Provided</th><td>{{ "Yes" if at.auth_credentials_provided else "No" }}</td></tr>
+                <tr><th scope="row">Auth Method</th><td>{{ at.auth_method_used | default("—") | e }}</td></tr>
+                <tr><th scope="row">Roles Tested</th><td>{{ at.roles_tested | join(", ") | default("—") | e }}</td></tr>
+                <tr><th scope="row">Auth Findings</th><td>{{ at.auth_findings_count }}</td></tr>
+                <tr><th scope="row">Auth Bypass Attempts</th><td>{{ at.auth_bypass_attempts }}</td></tr>
+                <tr><th scope="row">Session Management Tested</th><td>{{ "Yes" if at.session_management_tested else "No" }}</td></tr>
+                <tr><th scope="row">Token Validation Tested</th><td>{{ "Yes" if at.token_validation_tested else "No" }}</td></tr>
+                <tr><th scope="row">MFA Status</th><td>{{ at.mfa_status | e }}</td></tr>
+            </tbody>
+        </table>
+        {% if at.auth_matrix %}
+            <h4>Authorization Matrix</h4>
+            <table class="valhalla-auth-matrix-table">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Resource</th>
+                        <th>Access Level</th>
+                        <th>Auth Method</th>
+                        <th>Test Command</th>
+                        <th>Observed Response</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in at.auth_matrix %}
+                    <tr>
+                        <td>{{ row.role | e }}</td>
+                        <td class="desc">{{ row.resource | e }}</td>
+                        <td>{{ row.access_level | e }}</td>
+                        <td>{{ row.auth_method | e }}</td>
+                        <td class="desc"><code>{{ row.test_command | default("—") | e }}</code></td>
+                        <td class="desc">{{ row.observed_response | default("—") | e }}</td>
+                        <td>{{ row.timestamp | default("—") | e }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if at.notes %}
+            <p class="meta"><small>{{ at.notes | e }}</small></p>
+        {% endif %}
+    {% else %}
+        <p class="empty">Authenticated testing context was not collected for this assessment.</p>
+    {% endif %}
+
+    <h3>Full Headers Analysis (All Endpoints)</h3>
+    {% if vc.full_headers %}
+        {% set fh = vc.full_headers %}
+        <table>
+            <tbody>
+                <tr><th scope="row">Total Endpoints Scanned</th><td>{{ fh.total_endpoints_scanned }}</td></tr>
+                <tr><th scope="row">Common Missing Headers</th><td>{{ fh.common_missing_headers | join(", ") | default("None") | e }}</td></tr>
+            </tbody>
+        </table>
+        {% if fh.inconsistent_headers %}
+            <h4>Inconsistent Security Headers Across Endpoints</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Values Observed (sample)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in fh.inconsistent_headers %}
+                    <tr>
+                        <td><code>{{ item.header | e }}</code></td>
+                        <td class="desc">{{ item.values_sample | e }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if fh.endpoint_headers %}
+            <h4>Endpoint Header Details (sample)</h4>
+            <table class="valhalla-endpoint-headers-table">
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Method</th>
+                        <th>Status</th>
+                        <th>Response Headers (count)</th>
+                        <th>Tool Source</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eh in fh.endpoint_headers[:12] %}
+                    <tr>
+                        <td class="desc"><code>{{ eh.url | e }}</code></td>
+                        <td>{{ eh.method | e }}</td>
+                        <td>{{ eh.status_code | e }}</td>
+                        <td>{{ eh.response_headers | length if eh.response_headers else 0 }}</td>
+                        <td>{{ eh.tool_source | default("—") | e }}</td>
+                        <td>{{ eh.timestamp | default("—") | e }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if fh.notes %}
+            <p class="meta"><small>{{ fh.notes | e }}</small></p>
+        {% endif %}
+    {% else %}
+        <p class="empty">Full headers analysis was not collected for this assessment.</p>
     {% endif %}
 </section>

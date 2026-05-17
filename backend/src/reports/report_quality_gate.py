@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from src.reports.finding_severity_normalizer import severity_from_cvss
 
 EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
-EvidenceClassification = Literal["validated", "candidate", "inconclusive"]
+EvidenceClassification = Literal["validated", "observed", "candidate", "inconclusive"]
 
 # VAL-001 — header-gap / passive header observation default (CVSS 3.1); severity capped to Medium without chain.
 HEADER_ONLY_DEFAULT_CVSS_VECTOR = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
@@ -126,6 +126,330 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "industry best practices",
     "recommended best practices",
     "follow security best practices",
+    # Expanded AI-isms (VHL-AI-001-v2)
+    "comprehensive security posture",
+    "robust security measures",
+    "multi-layered defense",
+    "defense in depth",
+    "attack surface reduction",
+    "proactive security",
+    "security-first approach",
+    "holistic security",
+    "end-to-end security",
+    "zero trust architecture",
+    "shift-left security",
+    "continuous monitoring",
+    "real-time threat detection",
+    "advanced persistent threat",
+    "sophisticated attack",
+    "highly targeted",
+    "state-of-the-art",
+    "cutting-edge security",
+    "next-generation",
+    "world-class security",
+    "enterprise-grade",
+    "mission-critical",
+    "business-critical",
+    "highly sensitive",
+    "extremely vulnerable",
+    "severely impacted",
+    "critically exposed",
+    "immediate attention required",
+    "urgent remediation",
+    "critical priority",
+    "high priority",
+    "top priority",
+    "paramount importance",
+    "crucial step",
+    "essential measure",
+    "vital component",
+    "key takeaway",
+    "main finding",
+    "primary concern",
+    "significant risk",
+    "notable observation",
+    "remarkable finding",
+    "interesting pattern",
+    "unusual behavior",
+    "anomalous activity",
+    "potential impact",
+    "possible scenario",
+    "likely outcome",
+    "probable cause",
+    "reasonable assumption",
+    "logical conclusion",
+    "clear indication",
+    "strong evidence",
+    "compelling argument",
+    "persuasive finding",
+    "convincing proof",
+    "definitive answer",
+    "absolute certainty",
+    "without a doubt",
+    "undoubtedly",
+    "undeniably",
+    "indisputably",
+    "irrefutably",
+    "conclusively",
+    "definitively",
+    "categorically",
+    "unambiguously",
+    "explicitly",
+    "clearly demonstrated",
+    "clearly shows",
+    "clearly indicates",
+    "evidently",
+    "obviously",
+    "apparently",
+    "presumably",
+    "arguably",
+    "reportedly",
+    "allegedly",
+    "supposedly",
+    "ostensibly",
+    "seemingly",
+    "outwardly",
+    "superficially",
+    "on the surface",
+    "at first glance",
+    "initial assessment",
+    "preliminary findings",
+    "early indicators",
+    "early signs",
+    "first impressions",
+    "initial observations",
+    "baseline assessment",
+    "starting point",
+    "foundation for",
+    "building block",
+    "stepping stone",
+    "path forward",
+    "way forward",
+    "roadmap to",
+    "journey toward",
+    "progress toward",
+    "steps toward",
+    "measures toward",
+    "actions toward",
+    "efforts toward",
+    "initiatives toward",
+    "strategies for",
+    "approaches to",
+    "methods for",
+    "techniques for",
+    "mechanisms for",
+    "processes for",
+    "procedures for",
+    "protocols for",
+    "frameworks for",
+    "models for",
+    "paradigms for",
+    "philosophies of",
+    "principles of",
+    "tenets of",
+    "doctrines of",
+    "theories of",
+    "concepts of",
+    "ideas about",
+    "notions about",
+    "beliefs about",
+    "assumptions about",
+    "presumptions about",
+    "speculations about",
+    "hypotheses about",
+    "conjectures about",
+    "suppositions about",
+    "considerations for",
+    "factors in",
+    "elements of",
+    "components of",
+    "aspects of",
+    "dimensions of",
+    "facets of",
+    "features of",
+    "characteristics of",
+    "attributes of",
+    "properties of",
+    "qualities of",
+    "traits of",
+    "markers of",
+    "indicators of",
+    "signs of",
+    "signals of",
+    "symptoms of",
+    "manifestations of",
+    "expressions of",
+    "representations of",
+    "reflections of",
+    "illustrations of",
+    "examples of",
+    "instances of",
+    "cases of",
+    "situations of",
+    "scenarios of",
+    "contexts of",
+    "environments of",
+    "settings of",
+    "conditions of",
+    "circumstances of",
+    "states of",
+    "statuses of",
+    "positions of",
+    "stances of",
+    "postures of",
+    "orientations of",
+    "alignments of",
+    "configurations of",
+    "arrangements of",
+    "organizations of",
+    "structures of",
+    "architectures of",
+    "designs of",
+    "plans for",
+    "blueprints for",
+    "schematics for",
+    "diagrams of",
+    "charts of",
+    "graphs of",
+    "tables of",
+    "lists of",
+    "catalogs of",
+    "inventories of",
+    "registries of",
+    "directories of",
+    "indexes of",
+    "catalogues of",
+    "databases of",
+    "repositories of",
+    "archives of",
+    "collections of",
+    "sets of",
+    "groups of",
+    "clusters of",
+    "batches of",
+    "bundles of",
+    "packages of",
+    "suites of",
+    "toolkits of",
+    "toolboxes of",
+    "arsenals of",
+    "repertoires of",
+    "portfolios of",
+    "assortments of",
+    "varieties of",
+    "ranges of",
+    "spectrums of",
+    "arrays of",
+    "matrices of",
+    "grids of",
+    "networks of",
+    "webs of",
+    "lattices of",
+    "meshes of",
+    "fabric of",
+    "tapestry of",
+    "mosaic of",
+    "collage of",
+    "composite of",
+    "amalgamation of",
+    "fusion of",
+    "blend of",
+    "mixture of",
+    "combination of",
+    "integration of",
+    "synthesis of",
+    "unification of",
+    "consolidation of",
+    "aggregation of",
+    "accumulation of",
+    "collection of",
+    "gathering of",
+    "assembly of",
+    "compilation of",
+    "anthology of",
+    "compendium of",
+    "encyclopedia of",
+    "handbook of",
+    "manual of",
+    "guide to",
+    "reference for",
+    "resource for",
+    "tool for",
+    "instrument for",
+    "device for",
+    "apparatus for",
+    "mechanism for",
+    "system for",
+    "solution for",
+    "answer to",
+    "response to",
+    "reaction to",
+    "adaptation to",
+    "adjustment to",
+    "modification to",
+    "alteration to",
+    "change to",
+    "transformation of",
+    "evolution of",
+    "development of",
+    "growth of",
+    "expansion of",
+    "extension of",
+    "enhancement of",
+    "improvement of",
+    "optimization of",
+    "refinement of",
+    "perfection of",
+    "mastery of",
+    "expertise in",
+    "proficiency in",
+    "competence in",
+    "capability in",
+    "capacity for",
+    "ability to",
+    "potential for",
+    "opportunity for",
+    "prospect for",
+    "possibility of",
+    "chance of",
+    "likelihood of",
+    "probability of",
+    "risk of",
+    "threat of",
+    "danger of",
+    "hazard of",
+    "peril of",
+    "jeopardy of",
+    "vulnerability to",
+    "exposure to",
+    "susceptibility to",
+    "sensitivity to",
+    "responsiveness to",
+    "reactivity to",
+    "liability to",
+    "proneness to",
+    "tendency toward",
+    "inclination toward",
+    "propensity for",
+    "predisposition to",
+    "predilection for",
+    "preference for",
+    "bias toward",
+    "leaning toward",
+    "drift toward",
+    "trend toward",
+    "movement toward",
+    "shift toward",
+    "transition to",
+    "migration to",
+    "conversion to",
+    "switch to",
+    "changeover to",
+    "transformation into",
+    "metamorphosis into",
+    "transmutation into",
+    "transfiguration into",
+    "transubstantiation into",
 )
 
 LOW_WSTG_LIMITATION = (
@@ -350,12 +674,13 @@ def validation_status_for_quality(evidence_quality: EvidenceQuality) -> Validati
 
 
 def classify_evidence(finding: Any) -> EvidenceClassification:
-    """VHL-EVIDENCE-001 — classify finding as VALIDATED, CANDIDATE, or INCONCLUSIVE.
+    """VHL-EVIDENCE-001 — classify finding as VALIDATED, OBSERVED, CANDIDATE, or INCONCLUSIVE.
 
     VALIDATED: raw request + raw response + timestamp + endpoint + parameter +
-               payload + observed impact + reproduction steps
-    CANDIDATE: scanner hits without demonstrated impact
-    INCONCLUSIVE: failed tools / missing data
+               payload + observed impact + reproduction steps + manual/browser/server-side validation
+    OBSERVED: technical observation (missing header, HTTP 429, banner) — impact limited, no exploit proof
+    CANDIDATE: scanner hit exists but impact not demonstrated; FUZZ_HIT, scanner banner, curl PoC without response proof
+    INCONCLUSIVE: tool failed / parser failed / artifact missing / insufficient data
     """
     poc = _poc_dict(finding)
     refs = _get_attr(finding, "evidence_refs", []) or []
@@ -386,6 +711,17 @@ def classify_evidence(finding: Any) -> EvidenceClassification:
     if (quality == "strong" and validated_criteria_count >= 5 and
             confidence in ("confirmed", "likely") and val_status == "validated"):
         return "validated"
+
+    # OBSERVED: technical observation with limited impact (missing header, HTTP 429, banner)
+    # Header-only findings, rate-limit signals without exploit proof, scanner banners
+    title = str(_get_attr(finding, "title") or "").lower()
+    desc = str(_get_attr(finding, "description") or "").lower()
+    is_header_observation = bool(_HEADER_ADVISORY_RE.search(title + " " + desc))
+    is_rate_limit_signal = "429" in str(poc.get("response_status") or "") or "rate" in title or "throttl" in title
+    is_banner_only = quality == "weak" and validated_criteria_count <= 1 and not has_payload
+
+    if is_header_observation or is_rate_limit_signal or is_banner_only:
+        return "observed"
 
     # CANDIDATE: some evidence but not fully validated
     if quality in ("moderate", "weak") or validated_criteria_count >= 2:
@@ -1109,6 +1445,28 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     # NO high/critical severity downgrade — severity preserved as-is
     # NO CVSS cap — CVSS preserved as-is
 
+    # Extract new finding card fields from PoC
+    http_method = str(poc.get("http_method") or poc.get("method") or "").strip().upper() or None
+    auth_state = str(poc.get("auth_state") or poc.get("authentication") or "").strip().lower() or None
+    response_status = poc.get("response_status") or poc.get("status_code")
+    if isinstance(response_status, str):
+        with contextlib.suppress(ValueError):
+            response_status = int(response_status)
+    response_headers = poc.get("response_headers") or poc.get("headers")
+    if not isinstance(response_headers, dict):
+        response_headers = None
+    timestamp_utc = str(poc.get("timestamp") or poc.get("timestamp_utc") or "").strip() or None
+    tool_name = str(poc.get("tool_name") or poc.get("tool") or "").strip() or None
+    tool_version = str(poc.get("tool_version") or poc.get("version") or "").strip() or None
+    tool_command = str(poc.get("tool_command") or poc.get("command") or "").strip() or None
+    tool_output_excerpt = str(poc.get("tool_output") or poc.get("tool_output_excerpt") or poc.get("stdout") or "").strip()[:4000] or None
+    observed_impact = str(poc.get("observed_impact") or poc.get("impact") or "").strip() or None
+    affected_layer = str(poc.get("affected_layer") or poc.get("layer") or "").strip().lower() or None
+    config_component = str(poc.get("config_component") or poc.get("component") or "").strip() or None
+    rollback_risk = str(poc.get("rollback_risk") or poc.get("rollback") or "").strip() or None
+    acceptance_criteria = str(poc.get("acceptance_criteria") or poc.get("acceptance") or "").strip() or None
+    retest_result = str(poc.get("retest_result") or poc.get("retest") or "").strip() or None
+
     if cvss is not None:
         final_severity = severity_from_cvss(cvss) or "info"
     else:
@@ -1143,6 +1501,22 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         "evidence_quality": quality,
         "validation_status": status,
         "evidence_classification": classify_evidence(finding),
+        # New finding card fields
+        "http_method": http_method,
+        "auth_state": auth_state,
+        "response_status": response_status,
+        "response_headers": response_headers,
+        "timestamp_utc": timestamp_utc,
+        "tool_name": tool_name,
+        "tool_version": tool_version,
+        "tool_command": tool_command,
+        "tool_output_excerpt": tool_output_excerpt,
+        "observed_impact": observed_impact,
+        "affected_layer": affected_layer,
+        "config_component": config_component,
+        "rollback_risk": rollback_risk,
+        "acceptance_criteria": acceptance_criteria,
+        "retest_result": retest_result,
     }
     return _copy_with(finding, updates)
 
@@ -1810,6 +2184,11 @@ def sanitize_ai_sections_for_quality(
         elif phrase:
             out[key] = _replace_forbidden_phrase(value)
             warnings.append(f"{key}: removed unsupported phrase ({phrase})")
+        ai_matches = detect_ai_patterns(value)
+        if ai_matches:
+            sanitized, ai_warnings = sanitize_ai_patterns(value)
+            out[key] = sanitized
+            warnings.extend([f"{key}: {w}" for w in ai_warnings])
     return out, warnings
 
 
@@ -1936,3 +2315,68 @@ def _replace_forbidden_phrase(text: str) -> str:
     for phrase, repl in replacements.items():
         out = re.sub(re.escape(phrase), repl, out, flags=re.I)
     return out
+
+
+_AI_PATTERN_RE = [
+    (re.compile(r"\b(it is|this is|there is)\s+(important|crucial|essential|vital|critical|key)\s+(to|that|for)\b", re.I), "documented finding:"),
+    (re.compile(r"\b(in|at|for)\s+(the|this)\s+(end|conclusion|summary|wrap-up)\b", re.I), "in this assessment:"),
+    (re.compile(r"\b(taken together|all in all|on balance|by and large|for the most part)\b", re.I), "based on evidence:"),
+    (re.compile(r"\b(it goes without saying|needless to say|as expected|as anticipated)\b", re.I), "observed:"),
+    (re.compile(r"\b(last but not least|first and foremost|above all|most importantly)\b", re.I), "notably:"),
+    (re.compile(r"\b(to put it (simply|bluntly|mildly|another way))\b", re.I), "stated:"),
+    (re.compile(r"\b(in (light|view) of (the|these|this))\b", re.I), "given:"),
+    (re.compile(r"\b(with (respect|regard) to)\b", re.I), "regarding:"),
+    (re.compile(r"\b(as (far as|to) (the|this|that))\b", re.I), "regarding:"),
+    (re.compile(r"\b(in (terms|relation) of)\b", re.I), "regarding:"),
+    (re.compile(r"\b(on (the|this|that) (note|front|matter|subject))\b", re.I), "regarding:"),
+    (re.compile(r"\b(by (the|this|that) (same|token|measure|standard))\b", re.I), "similarly:"),
+    (re.compile(r"\b(in (a|this|that) (same|similar|like|related) (way|manner|fashion|vein))\b", re.I), "similarly:"),
+    (re.compile(r"\b(in (contrast|comparison|opposition|juxtaposition|parallel))\b", re.I), "compared to:"),
+    (re.compile(r"\b(on (the|this|that) (other|flip|reverse|contrary) (hand|side))\b", re.I), "alternatively:"),
+    (re.compile(r"\b(having (said|stated|noted|established|determined) (that|this))\b", re.I), "given:"),
+    (re.compile(r"\b(that (said|stated|noted|established|determined))\b", re.I), "given:"),
+    (re.compile(r"\b(all (this|that) (said|stated|noted|established|determined))\b", re.I), "given:"),
+    (re.compile(r"\b(be (that|this|it) as it may)\b", re.I), "regardless:"),
+    (re.compile(r"\b(be (that|this|it) as it (should|would|could|might) (be|may))\b", re.I), "regardless:"),
+    (re.compile(r"\b(whether or (not|no))\b", re.I), "regardless:"),
+    (re.compile(r"\b(no (matter|significance) (what|how|why|when|where|who))\b", re.I), "regardless:"),
+    (re.compile(r"\b(in (any|every|no) (case|event|instance|situation|circumstance))\b", re.I), "regardless:"),
+    (re.compile(r"\b(at (any|every|no) (rate|time|point|moment|stage))\b", re.I), "regardless:"),
+    (re.compile(r"\b(for (all|any|no) (that|this|these|those))\b", re.I), "despite:"),
+    (re.compile(r"\b(in (spite|defiance|disregard) of)\b", re.I), "despite:"),
+    (re.compile(r"\b(notwithstanding (the|this|that|these|those))\b", re.I), "despite:"),
+    (re.compile(r"\b(nevertheless|nonetheless|notwithstanding)\b", re.I), "however:"),
+    (re.compile(r"\b(be (that|this|it) as it may)\b", re.I), "regardless:"),
+    (re.compile(r"\b(all (the|this|that|these|those) (same|while))\b", re.I), "however:"),
+    (re.compile(r"\b(even (so|then|still|though|if))\b", re.I), "however:"),
+    (re.compile(r"\b(despite (the|this|that|these|those))\b", re.I), "despite:"),
+    (re.compile(r"\b(in (contrast|comparison) (to|with))\b", re.I), "compared to:"),
+    (re.compile(r"\b(on (the|this|that) (contrary|other) (hand|side))\b", re.I), "alternatively:"),
+    (re.compile(r"\b(by (contrast|comparison))\b", re.I), "compared to:"),
+    (re.compile(r"\b(in (a|the|this|that) (same|similar|like|related) (way|manner|fashion))\b", re.I), "similarly:"),
+    (re.compile(r"\b(likewise|similarly|correspondingly|equally|comparably)\b", re.I), "similarly:"),
+    (re.compile(r"\b(in (the|this|that|same) (way|manner|fashion|vein|light))\b", re.I), "similarly:"),
+    (re.compile(r"\b(along (the|this|that) (same|similar|like|related) (lines|vein|theme|thread))\b", re.I), "similarly:"),
+    (re.compile(r"\b(in (a|the|this|that) (similar|like|related|comparable) (way|manner|fashion|vein))\b", re.I), "similarly:"),
+    (re.compile(r"\b(by (the|this|that) (same|similar|like|related) (token|measure|standard|yardstick))\b", re.I), "similarly:"),
+    (re.compile(r"\b(in (a|the|this|that) (same|similar|like|related) (manner|fashion|vein|light))\b", re.I), "similarly:"),
+]
+
+
+def detect_ai_patterns(text: str) -> list[tuple[str, str]]:
+    """Detect AI writing patterns using regex. Returns list of (pattern, replacement) tuples."""
+    matches: list[tuple[str, str]] = []
+    for pattern, replacement in _AI_PATTERN_RE:
+        if pattern.search(text):
+            matches.append((pattern.pattern, replacement))
+    return matches
+
+
+def sanitize_ai_patterns(text: str) -> tuple[str, list[str]]:
+    """Remove AI writing patterns from text. Returns (sanitized_text, warnings)."""
+    warnings: list[str] = []
+    for pattern, replacement in _AI_PATTERN_RE:
+        if pattern.search(text):
+            text = pattern.sub(replacement, text)
+            warnings.append(f"Replaced AI pattern: {pattern.pattern}")
+    return text, warnings

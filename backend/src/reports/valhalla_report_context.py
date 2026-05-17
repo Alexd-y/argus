@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 _ROBOTS_KEY_HINTS = frozenset({"robots", "robots_txt", "robotstxt"})
 _SITEMAP_KEY_HINTS = frozenset({"sitemap", "sitemap_xml", "sitemapxml"})
-_TLS_ARTIFACT_HINTS = frozenset({"testssl", "sslscan", "tls", "ssl"})
+_TLS_ARTIFACT_HINTS = frozenset({"testssl", "sslscan", "tls", "ssl", "openssl", "s_client", "nmap_ssl", "nse_ssl"})
 _DEP_ARTIFACT_HINTS = frozenset(
     {
         "trivy",
@@ -162,6 +162,8 @@ class TechStackStructuredModel(BaseModel):
 
 
 class OutdatedComponentRow(BaseModel):
+    """SCA / component version analysis row (Step 8: enhanced with CVSS, EOL, dependency type)."""
+
     model_config = ConfigDict(extra="forbid")
 
     component: str
@@ -172,6 +174,13 @@ class OutdatedComponentRow(BaseModel):
     source: str = ""
     recommendation: str = ""
     exploit_available: bool = False
+    cvss_max_score: float | None = None
+    first_published: str = ""
+    last_updated: str = ""
+    package_manager: str = ""
+    is_direct_dependency: bool = True
+    eol_status: Literal["active", "maintenance", "eol", "unknown"] = "unknown"
+    upgrade_effort: Literal["trivial", "low", "medium", "high", "breaking"] = "medium"
 
 
 class SslTlsAnalysisModel(BaseModel):
@@ -543,7 +552,7 @@ class PortExposureTableRowModel(BaseModel):
 
 
 class LeakedEmailRowModel(BaseModel):
-    """Customer-facing email/OSINT evidence row with masked addresses only."""
+    """Customer-facing email/OSINT evidence row with masked addresses only (Step 7: HIBP enhanced)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -552,6 +561,12 @@ class LeakedEmailRowModel(BaseModel):
     context: str = ""
     risk: str = ""
     evidence_id: str = ""
+    hibp_breach_count: int = 0
+    hibp_breach_names: list[str] = Field(default_factory=list)
+    hibp_data_classes: list[str] = Field(default_factory=list)
+    first_breach_date: str = ""
+    last_breach_date: str = ""
+    password_exposed: bool = False
 
 
 class EvidenceInventoryRowModel(BaseModel):
@@ -588,6 +603,31 @@ class ValhallaMandatorySectionsModel(BaseModel):
     )
     leaked_emails: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
     port_exposure: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+
+
+class RemediationMatrixRow(BaseModel):
+    """16-column remediation matrix row with acceptance criteria (Step 12)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str = ""
+    title: str = ""
+    severity: str = ""
+    cvss_score: float | None = None
+    priority: str = ""
+    deadline: str = ""
+    effort: str = ""
+    estimated_hours: int = 0
+    affected_layer: str = ""
+    owner_team: str = ""
+    config_component: str = ""
+    fix_action: str = ""
+    rollback_risk: str = ""
+    verification_step: str = ""
+    test_case: str = ""
+    acceptance_criteria: str = ""
+    dependencies: str = ""
+    business_impact: str = ""
 
 
 class ValhallaCoverageModel(BaseModel):
@@ -652,6 +692,66 @@ class ScanMetadataModel(BaseModel):
     findings_deduplicated: int = 0
 
 
+class AuthMatrixRow(BaseModel):
+    """Single row in the authorization/access matrix (Step 3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str = ""
+    resource: str = ""
+    access_level: Literal["full", "partial", "denied", "not_tested"] = "not_tested"
+    auth_method: str = ""
+    test_command: str = ""
+    observed_response: str = ""
+    timestamp: str = ""
+
+
+class AuthTestingContext(BaseModel):
+    """Authenticated testing context (Step 3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    auth_testing_enabled: bool = False
+    auth_credentials_provided: bool = False
+    auth_method_used: str = ""
+    roles_tested: list[str] = Field(default_factory=list)
+    auth_matrix: list[AuthMatrixRow] = Field(default_factory=list)
+    auth_findings_count: int = 0
+    auth_bypass_attempts: int = 0
+    session_management_tested: bool = False
+    token_validation_tested: bool = False
+    mfa_status: Literal["not_tested", "absent", "present_bypassed", "present_secure"] = "not_tested"
+    notes: str = ""
+
+
+class EndpointHeaderData(BaseModel):
+    """Full header data from a single endpoint (Step 3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = ""
+    method: str = "GET"
+    status_code: int = 0
+    request_headers: dict[str, str] = Field(default_factory=dict)
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    raw_request: str = ""
+    raw_response: str = ""
+    timestamp: str = ""
+    tool_source: str = ""
+
+
+class FullHeadersContext(BaseModel):
+    """Collection of headers from all scanned endpoints (Step 3)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint_headers: list[EndpointHeaderData] = Field(default_factory=list)
+    common_missing_headers: list[str] = Field(default_factory=list)
+    inconsistent_headers: list[dict[str, str]] = Field(default_factory=list)
+    total_endpoints_scanned: int = 0
+    notes: str = ""
+
+
 class ValhallaReportContext(BaseModel):
     """Nested context for Valhalla HTML/PDF templates (RPT / VHL-001)."""
 
@@ -714,6 +814,11 @@ class ValhallaReportContext(BaseModel):
     sca_artifact_count: int = 0
     #: Placeholder for active injection coverage (Phase 2: scheduler + parsers). Safe default.
     active_injection_coverage: dict[str, Any] = Field(default_factory=dict)
+    #: Step 3 — Authenticated testing context, authorization matrix, and full header data
+    auth_testing: AuthTestingContext = Field(default_factory=AuthTestingContext)
+    full_headers: FullHeadersContext = Field(default_factory=FullHeadersContext)
+    #: Step 12 — 16-column remediation matrix with acceptance criteria
+    remediation_matrix: list[RemediationMatrixRow] = Field(default_factory=list)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -2453,6 +2558,126 @@ _TESTSSL_CIPHER_RE = re.compile(
     re.IGNORECASE,
 )
 _TESTSSL_WEAK_CIPHER_TOKENS = ("rc4", "des", "null", "export")
+_OPENSSL_PROTO_RE = re.compile(
+    r"(?:Protocol\s*:\s*|New,\s*(TLSv1\.[0-3]|SSLv[23]),)",
+    re.IGNORECASE,
+)
+_OPENSSL_CIPHER_RE = re.compile(
+    r"(?:Cipher\s*:\s*|Cipher is\s+)([A-Z0-9_-]+)",
+    re.IGNORECASE,
+)
+_OPENSSL_ISSUER_RE = re.compile(
+    r"(?:issuer\s*=\s*|i:\s*)(.+)",
+    re.IGNORECASE,
+)
+_NMAP_SSL_PROTO_RE = re.compile(
+    r"(\b(?:TLSv1\.[0-3]|SSLv[23])\b)",
+    re.IGNORECASE,
+)
+_NMAP_SSL_CIPHER_RE = re.compile(
+    r"(?:ciphers\s*:|preferred ciphers\s*:)\s*\n((?:[ \t]+[^\n]+\n?)+)",
+    re.IGNORECASE,
+)
+
+
+def _parse_openssl_sclient_output(stdout: str) -> SslTlsAnalysisModel:
+    """Parse openssl s_client -connect output for TLS data (Step 4)."""
+    protocols: list[str] = []
+    weak_protocols: list[str] = []
+    weak_ciphers: list[str] = []
+    issuer: str | None = None
+    validity: str | None = None
+    hsts: str | None = None
+    for m in _OPENSSL_PROTO_RE.finditer(stdout):
+        proto = m.group(1).strip().replace("TLSv", "TLS ")
+        if proto not in protocols:
+            protocols.append(proto)
+        if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS:
+            weak_protocols.append(proto)
+    for m in _OPENSSL_CIPHER_RE.finditer(stdout):
+        cipher = m.group(1).strip()
+        if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
+            weak_ciphers.append(cipher)
+    issuer_m = _OPENSSL_ISSUER_RE.search(stdout)
+    if issuer_m:
+        issuer = issuer_m.group(1).strip()[:512]
+    cert_block = re.search(r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----", stdout, re.DOTALL)
+    if cert_block:
+        import base64
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+            pem_data = "-----BEGIN CERTIFICATE-----" + cert_block.group(1) + "-----END CERTIFICATE-----"
+            cert = x509.load_pem_x509_certificate(pem_data.encode(), default_backend())
+            issuer = issuer or ", ".join(
+                f"{oid._name}={v}"
+                for oid, v in cert.issuer
+                if isinstance(v, str)
+            )[:512]
+            validity = f"{cert.not_valid_before_utc.isoformat()} - {cert.not_valid_after_utc.isoformat()}"
+        except Exception:
+            na = re.search(r"Not After\s*:\s*(.+)", stdout)
+            nb = re.search(r"Not Before\s*:\s*(.+)", stdout)
+            if nb and na:
+                validity = f"{nb.group(1).strip()[:120]} - {na.group(1).strip()[:120]}"
+    hsts_m = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
+    if hsts_m:
+        hsts = _truncate(hsts_m.group(1).strip(), 500)
+    return SslTlsAnalysisModel(
+        issuer=issuer,
+        validity=validity,
+        protocols=protocols[:32],
+        weak_protocols=weak_protocols[:32],
+        weak_ciphers=weak_ciphers[:48],
+        hsts=hsts,
+    )
+
+
+def _parse_nmap_ssl_scripts_output(stdout: str) -> SslTlsAnalysisModel:
+    """Parse nmap NSE ssl-* script output for TLS data (Step 4)."""
+    protocols: list[str] = []
+    weak_protocols: list[str] = []
+    weak_ciphers: list[str] = []
+    issuer: str | None = None
+    validity: str | None = None
+    hsts: str | None = None
+    for m in _NMAP_SSL_PROTO_RE.finditer(stdout):
+        proto = m.group(1).strip()
+        if proto not in protocols:
+            protocols.append(proto)
+        if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS:
+            weak_protocols.append(proto)
+    cipher_block = _NMAP_SSL_CIPHER_RE.search(stdout)
+    if cipher_block:
+        for line in cipher_block.group(1).splitlines():
+            line = line.strip()
+            if line and not line.startswith("|"):
+                cipher = line.split()[0] if line.split() else line
+                if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
+                    weak_ciphers.append(cipher)
+    issuer_m = re.search(r"issuer:\s*(.+)", stdout, re.IGNORECASE)
+    if issuer_m:
+        issuer = issuer_m.group(1).strip()[:512]
+    cn_m = re.search(r"Subject:.*?CN\s*=\s*([^\s,]+)", stdout)
+    if cn_m:
+        issuer = issuer or cn_m.group(1).strip()[:512]
+    not_after = re.search(r"Not After\s*:\s*(.+)", stdout)
+    not_before = re.search(r"Not Before\s*:\s*(.+)", stdout)
+    if not_before and not_after:
+        validity = f"{not_before.group(1).strip()[:120]} - {not_after.group(1).strip()[:120]}"
+    elif not_after:
+        validity = not_after.group(1).strip()[:256]
+    hsts_m = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
+    if hsts_m:
+        hsts = _truncate(hsts_m.group(1).strip(), 500)
+    return SslTlsAnalysisModel(
+        issuer=issuer,
+        validity=validity,
+        protocols=protocols[:32],
+        weak_protocols=weak_protocols[:32],
+        weak_ciphers=weak_ciphers[:48],
+        hsts=hsts,
+    )
 
 
 def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
@@ -2599,7 +2824,7 @@ def _ssl_from_testssl_text_artifacts(
     *,
     fetch_bodies: bool,
 ) -> SslTlsAnalysisModel | None:
-    """B1 fallback: parse testssl plain-text stdout when JSON is unavailable."""
+    """B1 fallback: parse testssl/openssl/nmap plain-text stdout when JSON is unavailable (Step 4)."""
     if not fetch_bodies:
         return None
     for key, _p in raw_keys:
@@ -2613,7 +2838,13 @@ def _ssl_from_testssl_text_artifacts(
             continue
         if _json_dict_from_tls_artifact_text(text) is not None:
             continue
-        result = _parse_testssl_text_output(text)
+        kl = key.lower()
+        if "openssl" in kl or "s_client" in kl:
+            result = _parse_openssl_sclient_output(text)
+        elif "nmap" in kl or "nse" in kl:
+            result = _parse_nmap_ssl_scripts_output(text)
+        else:
+            result = _parse_testssl_text_output(text)
         if not _ssl_surface_empty(result):
             logger.info(
                 "ssl_tls_text_fallback_used",
@@ -4131,16 +4362,217 @@ def build_port_exposure_table_rows(
     return rows[:128]
 
 
-def build_leaked_email_rows(emails: list[str]) -> list[LeakedEmailRowModel]:
+def build_remediation_matrix_rows(
+    findings: list[dict[str, Any]],
+    *,
+    max_rows: int = 48,
+) -> list[RemediationMatrixRow]:
+    """Build 16-column remediation matrix rows from findings (Step 12)."""
+    rows: list[RemediationMatrixRow] = []
+    effort_map = {"critical": 16, "high": 8, "medium": 4, "low": 2, "info": 1}
+    priority_map = {"critical": "P0", "high": "P0", "medium": "P1", "low": "P2", "info": "P3"}
+    deadline_map = {"critical": "48 hours", "high": "48 hours", "medium": "2 weeks", "low": "1 month", "info": "Next quarter"}
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(
+            str(f.get("severity", "info")).lower(), 5
+        ),
+    )
+    for f in sorted_findings[:max_rows]:
+        if not isinstance(f, dict):
+            continue
+        sev = str(f.get("severity", "info")).lower()
+        poc = f.get("proof_of_concept", {}) or {}
+        cvss = f.get("cvss") or f.get("cvss_score")
+        cvss_val = float(cvss) if cvss is not None else None
+        effort_hours = effort_map.get(sev, 4)
+        priority = priority_map.get(sev, "P3")
+        deadline = deadline_map.get(sev, "Next quarter")
+        f_type = str(f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "")).upper()
+        fix_action = "Review finding details and apply appropriate fix"
+        verification = "Re-test after fix applied"
+        test_case = "Verify finding is no longer reproducible"
+        owner = "Development team"
+        layer = "app/unknown"
+        component = "Unknown component"
+        rollback = "Assess before deployment"
+        acceptance = "Finding no longer reproducible under same conditions"
+        dependencies = "None"
+        business_impact = str(f.get("business_impact", f.get("impact", "Potential security compromise")))[:200]
+        if "SQL" in f_type or "SQLI" in f_type:
+            fix_action = "Replace all dynamic SQL queries with parameterized statements or ORM methods"
+            verification = "Run sqlmap against affected endpoint — should report no injection points"
+            test_case = "Inject SQL payload (e.g., ' OR 1=1 --) — should be safely parameterized"
+            owner = "Backend development team"
+            layer = "app/backend/database"
+            component = "Database query layer"
+            rollback = "Low — parameterized queries are backward compatible"
+            acceptance = "All database queries use parameterized statements; sqlmap reports no injection points"
+        elif "XSS" in f_type:
+            fix_action = "Apply context-aware output encoding (HTML, JS, URL, CSS). Implement Content-Security-Policy"
+            verification = "Inject <script>alert(1)</script> — should be encoded, not executed"
+            test_case = "Submit XSS payload in all user input fields — verify encoding"
+            owner = "Frontend development team"
+            layer = "app/frontend"
+            component = "Template engine / output rendering"
+            rollback = "Low — encoding is backward compatible"
+            acceptance = "All user input encoded per context; CSP header present with strict-dynamic or nonce"
+        elif "COMMAND" in f_type or "RCE" in f_type:
+            fix_action = "Eliminate OS command execution from user input. Use language-native APIs"
+            verification = "Re-run commix — should report no injection points"
+            test_case = "Inject shell metacharacters (;, |, &&, $()) — should be rejected"
+            owner = "Backend development team"
+            layer = "app/backend"
+            component = "System command execution layer"
+            rollback = "Medium — may require API changes"
+            acceptance = "No shell metacharacters accepted; commix reports no injection points"
+        elif "AUTH" in f_type or "LOGIN" in f_type or "SESSION" in f_type:
+            fix_action = "Implement proper authentication checks, session validation, and access controls"
+            verification = "Attempt unauthorized access — should receive 401/403"
+            test_case = "Access protected resource without valid session — should be denied"
+            owner = "Backend / Security team"
+            layer = "app/backend/auth"
+            component = "Authentication / session management"
+            rollback = "Medium — may affect existing user sessions"
+            acceptance = "All protected endpoints require valid authentication; session tokens properly validated"
+        elif "HEADER" in f_type:
+            fix_action = "Add missing HTTP security headers at reverse proxy or application level"
+            verification = "curl -sS -I <url> | grep -iE 'content-security-policy|x-content-type-options'"
+            test_case = "Request any endpoint — verify all recommended headers present"
+            owner = "Infrastructure / DevOps team"
+            layer = "infrastructure/reverse-proxy"
+            component = "Nginx/Apache/Cloudflare configuration"
+            rollback = "Low — headers are additive"
+            acceptance = "All recommended headers present; curl verification passes"
+        rows.append(
+            RemediationMatrixRow(
+                finding_id=str(f.get("id", f.get("finding_id", "")))[:64],
+                title=str(f.get("title", ""))[:256],
+                severity=sev.capitalize() if sev else "Info",
+                cvss_score=cvss_val,
+                priority=priority,
+                deadline=deadline,
+                effort=f"{effort_hours}h",
+                estimated_hours=effort_hours,
+                affected_layer=layer,
+                owner_team=owner,
+                config_component=component,
+                fix_action=fix_action,
+                rollback_risk=rollback,
+                verification_step=verification,
+                test_case=test_case,
+                acceptance_criteria=acceptance,
+                dependencies=dependencies,
+                business_impact=business_impact,
+            )
+        )
+    return rows
+
+
+def _parse_hibp_data_from_phases(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    raw_artifact_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> dict[str, dict[str, Any]]:
+    """Parse HIBP-style breach data from phase outputs and raw artifacts (Step 7)."""
+    hibp_data: dict[str, dict[str, Any]] = {}
+    for _ph, od in phase_outputs:
+        if not isinstance(od, dict):
+            continue
+        ph_lower = (_ph or "").lower()
+        if "hibp" in ph_lower or "breach" in ph_lower or "pwned" in ph_lower or "haveibeenpwned" in ph_lower:
+            emails_data = od.get("emails") or od.get("breaches") or od.get("results")
+            if isinstance(emails_data, dict):
+                for email, data in emails_data.items():
+                    if isinstance(data, dict):
+                        hibp_data[email] = data
+            elif isinstance(emails_data, list):
+                for item in emails_data:
+                    if isinstance(item, dict):
+                        email = item.get("email") or item.get("name") or item.get("account")
+                        if email:
+                            hibp_data[email] = item
+    if fetch_bodies:
+        for key, _phase in raw_artifact_keys:
+            kl = key.lower()
+            if "hibp" not in kl and "breach" not in kl and "pwned" not in kl:
+                continue
+            blob = _safe_download_raw(key)
+            if not blob:
+                continue
+            text = _text_from_raw_bytes(blob)
+            if not text:
+                continue
+            try:
+                data = json.loads(text)
+                if isinstance(data, dict):
+                    for email, breach_info in data.items():
+                        if isinstance(breach_info, dict):
+                            hibp_data[email] = breach_info
+                elif isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            email = item.get("email") or item.get("name") or item.get("account")
+                            if email:
+                                hibp_data[email] = item
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return hibp_data
+
+
+def build_leaked_email_rows(
+    emails: list[str],
+    *,
+    hibp_data: dict[str, dict[str, Any]] | None = None,
+) -> list[LeakedEmailRowModel]:
+    """Build leaked email rows with optional HIBP enrichment (Step 7)."""
     rows: list[LeakedEmailRowModel] = []
+    hibp = hibp_data or {}
     for idx, email in enumerate(emails[:64], start=1):
+        email_lower = email.lower()
+        hibp_entry = None
+        for k, v in hibp.items():
+            if k.lower() == email_lower or _mask_email(k).lower() == email_lower:
+                hibp_entry = v
+                break
+        breach_count = 0
+        breach_names: list[str] = []
+        data_classes: list[str] = []
+        first_date = ""
+        last_date = ""
+        password_exposed = False
+        if isinstance(hibp_entry, dict):
+            breach_count = int(hibp_entry.get("breach_count", hibp_entry.get("pwn_count", 0)))
+            raw_names = hibp_entry.get("breach_names", hibp_entry.get("breaches", []))
+            if isinstance(raw_names, list):
+                breach_names = [str(n)[:128] for n in raw_names[:8] if str(n).strip()]
+            raw_classes = hibp_entry.get("data_classes", hibp_entry.get("classes", []))
+            if isinstance(raw_classes, list):
+                data_classes = [str(c)[:128] for c in raw_classes[:8] if str(c).strip()]
+            first_date = str(hibp_entry.get("first_breach_date", hibp_entry.get("first_seen", "")))[:40]
+            last_date = str(hibp_entry.get("last_breach_date", hibp_entry.get("last_seen", "")))[:40]
+            password_exposed = bool(hibp_entry.get("password_exposed", hibp_entry.get("has_password", False)))
+        source = "HIBP / OSINT / HTML / recon artifacts" if hibp_entry else "OSINT / HTML / recon artifacts"
+        risk_parts = []
+        if breach_count > 0:
+            risk_parts.append(f"Found in {breach_count} known data breach(es).")
+        if password_exposed:
+            risk_parts.append("Password hash/value was exposed in at least one breach.")
+        risk_parts.append("May support targeted phishing or reconnaissance; no mailbox compromise was demonstrated.")
         rows.append(
             LeakedEmailRowModel(
                 email=email,
-                source="OSINT / HTML / recon artifacts",
-                context="Masked email-like value parsed from collected ARGUS artifacts.",
-                risk="May support targeted phishing or reconnaissance; no mailbox compromise was demonstrated.",
+                source=source,
+                context="Masked email-like value parsed from collected ARGUS artifacts." + (f" Enriched with HIBP data ({breach_count} breach(es))." if breach_count else ""),
+                risk=" ".join(risk_parts),
                 evidence_id=f"EV-EMAIL-{idx:04d}",
+                hibp_breach_count=breach_count,
+                hibp_breach_names=breach_names,
+                hibp_data_classes=data_classes,
+                first_breach_date=first_date,
+                last_breach_date=last_date,
+                password_exposed=password_exposed,
             )
         )
     return rows
@@ -4889,6 +5321,167 @@ def _finding_is_rate_limit_signal(f: dict[str, Any]) -> bool:
     return bool(("rate" in blob and "limit" in blob) or "http 429" in blob or "too many requests" in blob)
 
 
+def _parse_auth_testing_context(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    findings: list[dict[str, Any]],
+    scan_options: dict[str, Any] | None = None,
+) -> AuthTestingContext:
+    """Parse authenticated testing context from phase outputs and findings (Step 3)."""
+    ctx = AuthTestingContext()
+    scan_opts = scan_options or {}
+    ctx.auth_testing_enabled = bool(scan_opts.get("auth_testing_enabled", False))
+    ctx.auth_credentials_provided = bool(scan_opts.get("auth_credentials_provided", False))
+    ctx.auth_method_used = str(scan_opts.get("auth_method", ""))[:128]
+    roles_tested = scan_opts.get("roles_tested", [])
+    if isinstance(roles_tested, list):
+        ctx.roles_tested = [str(r)[:128] for r in roles_tested if str(r).strip()][:16]
+    for _ph, od in phase_outputs:
+        if not isinstance(od, dict):
+            continue
+        ph_lower = (_ph or "").lower()
+        if "auth" in ph_lower or "login" in ph_lower or "session" in ph_lower:
+            if od.get("mfa_detected"):
+                ctx.mfa_status = "present_bypassed" if od.get("mfa_bypassed") else "present_secure"
+            elif od.get("mfa_absent"):
+                ctx.mfa_status = "absent"
+            if od.get("session_tested"):
+                ctx.session_management_tested = True
+            if od.get("token_validation_tested"):
+                ctx.token_validation_tested = True
+    auth_findings = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        title = str(f.get("title", "")).lower()
+        desc = str(f.get("description", "")).lower()
+        if any(kw in title or kw in desc for kw in ("auth", "login", "session", "token", "jwt", "oauth", "mfa", "2fa", "bypass", "idor", "access control")):
+            auth_findings.append(f)
+    ctx.auth_findings_count = len(auth_findings)
+    for f in auth_findings:
+        if str(f.get("severity", "")).lower() in ("critical", "high"):
+            ctx.auth_bypass_attempts += 1
+    matrix_rows: list[AuthMatrixRow] = []
+    for f in auth_findings:
+        role = str(f.get("auth_state", {}).get("role", "unknown"))[:128] if isinstance(f.get("auth_state"), dict) else "unknown"
+        resource = str(f.get("target_url", f.get("title", "")))[:256]
+        access = "not_tested"
+        sev = str(f.get("severity", "")).lower()
+        if sev in ("critical", "high"):
+            access = "full"
+        elif sev == "medium":
+            access = "partial"
+        elif sev in ("low", "info"):
+            access = "denied"
+        poc = f.get("proof_of_concept", {})
+        test_cmd = str(poc.get("tool_command", ""))[:512] if isinstance(poc, dict) else ""
+        obs_resp = str(poc.get("response_status", ""))[:128] if isinstance(poc, dict) else ""
+        ts = str(f.get("created_at", ""))[:40] if f.get("created_at") else ""
+        matrix_rows.append(
+            AuthMatrixRow(
+                role=role,
+                resource=resource,
+                access_level=access,
+                auth_method=ctx.auth_method_used,
+                test_command=test_cmd,
+                observed_response=obs_resp,
+                timestamp=ts,
+            )
+        )
+    ctx.auth_matrix = matrix_rows[:64]
+    return ctx
+
+
+def _parse_full_headers_context(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+    raw_artifact_keys: list[tuple[str, str]],
+    *,
+    fetch_bodies: bool,
+) -> FullHeadersContext:
+    """Parse full header data from all scanned endpoints (Step 3)."""
+    ctx = FullHeadersContext()
+    endpoint_headers: list[EndpointHeaderData] = []
+    for _ph, od in phase_outputs:
+        if not isinstance(od, dict):
+            continue
+        ph_lower = (_ph or "").lower()
+        if "http" in ph_lower or "headers" in ph_lower or "recon" in ph_lower:
+            http_headers = od.get("http_headers") or od.get("response_headers")
+            if isinstance(http_headers, dict):
+                for url, headers in http_headers.items():
+                    if isinstance(headers, dict):
+                        req_hdrs = headers.get("request_headers", {})
+                        resp_hdrs = headers.get("response_headers", headers)
+                        endpoint_headers.append(
+                            EndpointHeaderData(
+                                url=str(url)[:512],
+                                method=str(headers.get("method", "GET"))[:16],
+                                status_code=int(headers.get("status_code", 0)),
+                                request_headers={str(k): str(v) for k, v in (req_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
+                                response_headers={str(k): str(v) for k, v in (resp_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
+                                raw_request=str(headers.get("raw_request", ""))[:2048],
+                                raw_response=str(headers.get("raw_response", ""))[:2048],
+                                timestamp=str(headers.get("timestamp", ""))[:40],
+                                tool_source=str(headers.get("tool", _ph or ""))[:128],
+                            )
+                        )
+    for key, _phase in raw_artifact_keys:
+        if not fetch_bodies:
+            break
+        kl = key.lower()
+        if "headers" not in kl and "http" not in kl and "curl" not in kl:
+            continue
+        blob = _safe_download_raw(key)
+        if not blob:
+            continue
+        text = _text_from_raw_bytes(blob)
+        if not text:
+            continue
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                url = str(data.get("url", key))[:512]
+                resp_hdrs = data.get("response_headers", data.get("headers", {}))
+                if isinstance(resp_hdrs, dict):
+                    endpoint_headers.append(
+                        EndpointHeaderData(
+                            url=url,
+                            method=str(data.get("method", "GET"))[:16],
+                            status_code=int(data.get("status_code", data.get("status", 0))),
+                            response_headers={str(k): str(v) for k, v in resp_hdrs.items() if isinstance(v, (str, int, float))}[:32],
+                            raw_request=str(data.get("raw_request", ""))[:2048],
+                            raw_response=str(data.get("raw_response", ""))[:2048],
+                            timestamp=str(data.get("timestamp", ""))[:40],
+                            tool_source=_tool_name_from_raw_key(key) or key[:128],
+                        )
+                    )
+        except (json.JSONDecodeError, ValueError):
+            pass
+    ctx.endpoint_headers = endpoint_headers[:128]
+    ctx.total_endpoints_scanned = len(endpoint_headers)
+    sec_headers = frozenset({
+        "strict-transport-security", "content-security-policy", "x-content-type-options",
+        "x-frame-options", "x-xss-protection", "referrer-policy",
+        "permissions-policy", "cache-control", "pragma",
+    })
+    all_resp_keys: set[str] = set()
+    for eh in endpoint_headers:
+        all_resp_keys.update(k.lower() for k in eh.response_headers.keys())
+    ctx.common_missing_headers = sorted(sec_headers - all_resp_keys)
+    header_values: dict[str, set[str]] = {}
+    for eh in endpoint_headers:
+        for k, v in eh.response_headers.items():
+            kl = k.lower()
+            if kl not in header_values:
+                header_values[kl] = set()
+            header_values[kl].add(str(v))
+    inconsistent: list[dict[str, str]] = []
+    for k, vals in header_values.items():
+        if len(vals) > 1 and k in sec_headers:
+            inconsistent.append({"header": k, "values_sample": ", ".join(sorted(vals)[:4])})
+    ctx.inconsistent_headers = inconsistent[:32]
+    return ctx
+
+
 def _tools_for_wstg_from_parsed_sections(
     *,
     base_tools: list[str],
@@ -5390,7 +5983,8 @@ def build_valhalla_report_context(
     )
     security_headers_table_rows = build_security_headers_table_rows(sec_hdr)
     port_exposure_table_rows = build_port_exposure_table_rows(port_data, target_hint=target_guess)
-    leaked_email_rows = build_leaked_email_rows(final_emails)
+    hibp_data = _parse_hibp_data_from_phases(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_bodies)
+    leaked_email_rows = build_leaked_email_rows(final_emails, hibp_data=hibp_data)
     evidence_inv = build_evidence_inventory_rows(
         finding_dicts,
         ssl_tls=ssl_out,
@@ -5542,4 +6136,7 @@ def build_valhalla_report_context(
         sca_manifest_count=sca_manifest_count,
         sca_artifact_count=sca_artifact_count,
         active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
+        auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
+        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_bodies),
+        remediation_matrix=build_remediation_matrix_rows(finding_dicts),
     )

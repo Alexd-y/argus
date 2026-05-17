@@ -192,6 +192,10 @@ class ToolHealthCapabilityRow:
     representative_tools: str
     state: ToolHealthState
     customer_summary: str
+    tool_commands: str = ""
+    tool_versions: str = ""
+    artifact_paths: str = ""
+    failure_reason: str = ""
 
 
 def build_tool_health_summary_rows(
@@ -200,9 +204,15 @@ def build_tool_health_summary_rows(
     appendix_tool_names: list[str] | None,
     raw_error_rows: list[dict[str, str]] | None,
     mandatory_section_status: dict[str, str] | None = None,
+    tool_commands: dict[str, str] | None = None,
+    tool_versions: dict[str, str] | None = None,
+    artifact_paths: dict[str, str] | None = None,
 ) -> list[ToolHealthCapabilityRow]:
-    """Build one row per capability from tool names + run statuses; customer-safe text only."""
+    """Build one row per capability from tool names + run statuses; customer-safe text only (Step 11 enhanced)."""
     by_cap: dict[CapabilityId, dict[str, Any]] = {}
+    cmds = tool_commands or {}
+    vers = tool_versions or {}
+    arts = artifact_paths or {}
 
     def ensure(cid: CapabilityId, label: str) -> dict[str, Any]:
         if cid not in by_cap:
@@ -212,6 +222,10 @@ def build_tool_health_summary_rows(
                 "any_ok": False,
                 "any_fail": False,
                 "any_fallback": False,
+                "commands": [],
+                "versions": [],
+                "artifacts": [],
+                "failure_reasons": [],
             }
         return by_cap[cid]
 
@@ -247,6 +261,9 @@ def build_tool_health_summary_rows(
             bucket = ensure(cid, label)
             bucket["tools"].add(_display_tool_name(t))
             bucket["any_fail"] = True
+            fail_note = sanitize_customer_tool_text(str(row.get("note", ""))[:200])
+            if fail_note:
+                bucket["failure_reasons"].append(fail_note)
 
     for tool in ordered:
         cid, label = _capability_for_tool(tool)
@@ -261,6 +278,13 @@ def build_tool_health_summary_rows(
         note = err_by_tool.get(tool.lower(), "")
         if note and "stderr" in note.lower() and "empty" in note.lower():
             bucket["any_fallback"] = True
+        tool_key = tool.lower()
+        if tool_key in cmds:
+            bucket["commands"].append(sanitize_customer_tool_text(cmds[tool_key], max_len=200))
+        if tool_key in vers:
+            bucket["versions"].append(str(vers[tool_key])[:64])
+        if tool_key in arts:
+            bucket["artifacts"].append(sanitize_customer_tool_text(arts[tool_key], max_len=200))
 
     rows: list[ToolHealthCapabilityRow] = []
     mandatory = {str(k): str(v or "").strip().lower() for k, v in (mandatory_section_status or {}).items()}
@@ -324,6 +348,10 @@ def build_tool_health_summary_rows(
                 representative_tools=tools_str,
                 state=state,
                 customer_summary=sanitize_customer_tool_text(summary, max_len=400),
+                tool_commands="; ".join(data.get("commands", [])[:3])[:500] or "—",
+                tool_versions="; ".join(data.get("versions", [])[:3])[:200] or "—",
+                artifact_paths="; ".join(data.get("artifacts", [])[:3])[:500] or "—",
+                failure_reason="; ".join(data.get("failure_reasons", [])[:2])[:400] or "—",
             )
         )
 
@@ -365,6 +393,10 @@ def tool_health_rows_to_jinja(
                 "state": state,
                 "state_label": display,
                 "summary": r.customer_summary,
+                "tool_commands": r.tool_commands,
+                "tool_versions": r.tool_versions,
+                "artifact_paths": r.artifact_paths,
+                "failure_reason": r.failure_reason,
             }
         )
     return out
