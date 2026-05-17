@@ -463,6 +463,9 @@ def evaluate_exploitation_policy(
 # KAL MCP — unrestricted
 KAL_MCP_POLICY_ID = "kal_mcp_unrestricted_v1"
 
+# KAL-006/007 — bounded Exploit-DB CLI from recon (argv policy via evaluate_kal_mcp_policy)
+KAL_CATEGORY_VULN_INTEL = "vuln_intel"
+
 KAL_OPERATION_CATEGORIES = frozenset({
     "network_scanning",
     "web_fingerprinting",
