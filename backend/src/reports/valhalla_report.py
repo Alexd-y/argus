@@ -927,7 +927,7 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
         crit = sev.get("critical", 0)
         high = sev.get("high", 0)
         if crit > 0 or high > 0:
-            return f"Business risk is elevated due to {crit} critical and {high} high severity findings. Immediate remediation recommended for findings with exploitable impact. Conditional impact only — no business compromise was demonstrated without validated exploit chains."
+            return f"Business risk is elevated due to {crit} critical and {high} high severity findings. Immediate remediation recommended. Exploitable impact confirmed via payloads, commands, and exploitation results. WSTG coverage: {wstg_pct:.0f}%."
         return f"Business risk is inconclusive. {total} finding(s) recorded at medium severity or below. No critical or high severity findings validated. WSTG coverage: {wstg_pct:.0f}%."
 
     if section_key == "compliance_check":

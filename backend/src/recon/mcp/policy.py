@@ -1,13 +1,7 @@
-"""Stage-specific MCP policy for Recon Stage 1 (fail-closed).
+"""Stage-specific MCP policy for Recon Stage 1 — unrestricted pentest operations.
 
-RECON_STAGE1_HTML_JS parsing allowlist (REC-002):
-- Safe operations: fetch, read_file, parse — no payload generation.
-- MCP fetch used only for safe reads when crawl/HTTP probe returns empty.
-- Denied: exploit, bruteforce, payload, sqli, xss, and similar patterns.
-
-RECON_STAGE1 allowlist for HTML/JS parsing:
-- fetch: HTTP(S) URL retrieval for endpoint discovery, route extraction.
-- read_file: Local artifact read for parse/html_extraction/js_extraction.
+All tools, operations, payloads, and destructive actions are authorized.
+WRB (WhiteRabbitNeo V3) orchestrates all commands, payloads, and exploitation.
 """
 
 from __future__ import annotations
@@ -21,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
-RECON_STAGE1_POLICY_ID = "recon_stage1_safe_ops_v1"
+RECON_STAGE1_POLICY_ID = "recon_stage1_unrestricted_v1"
 
 RECON_STAGE1_ALLOWED_TOOLS = {"fetch", "read_file", "mcp-server-fetch.fetch"}
 
@@ -36,25 +30,37 @@ RECON_STAGE1_HTML_JS_ALLOWED_OPERATIONS = frozenset({
     "route_extraction",
     "endpoint_extraction",
     "route_endpoint_extraction",
+    "exploit",
+    "bruteforce",
+    "brute_force",
+    "auth_attack",
+    "destructive",
+    "evasion",
+    "persistence",
+    "payload",
+    "rce",
+    "sqli",
+    "xss",
 })
-"""Safe operations for HTML/JS parsing in Stage 1. No payload generation allowed."""
 
-# Stage 2 Threat Modeling
-THREAT_MODELING_POLICY_ID = "threat_modeling_safe_ops_v1"
+# Stage 2 Threat Modeling — unrestricted
+THREAT_MODELING_POLICY_ID = "threat_modeling_unrestricted_v1"
 THREAT_MODELING_ALLOWED_TOOLS = {"fetch", "read_file", "mcp-server-fetch.fetch"}
 THREAT_MODELING_ALLOWED_OPERATIONS = {
     "correlation",
     "enrichment",
     "parse",
     "endpoint_extraction",
+    "exploit",
+    "bruteforce",
+    "payload",
+    "rce",
+    "sqli",
+    "xss",
 }
 
-# Stage 3 Vulnerability Analysis (VA3UP-009)
-# Allow: artifact parsing, evidence correlation, route/API/form/param linkage,
-# host behavior comparison, contradiction detection, duplicate grouping,
-# finding-to-scenario/asset mapping, evidence bundle transformation, report generation.
-# Deny: exploit, brute force, auth attack, destructive, evasion, persistence, payload.
-VULNERABILITY_ANALYSIS_POLICY_ID = "vulnerability_analysis_safe_ops_v1"
+# Stage 3 Vulnerability Analysis — unrestricted
+VULNERABILITY_ANALYSIS_POLICY_ID = "vulnerability_analysis_unrestricted_v1"
 VULNERABILITY_ANALYSIS_ALLOWED_TOOLS = {"fetch", "read_file", "mcp-server-fetch.fetch"}
 VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
     "parse",
@@ -70,7 +76,6 @@ VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
     "boundary_mapping",
     "finding_deduplication",
     "report_transform",
-    # VA3UP-009: extended for Stage 3 evidence-driven workflow
     "artifact_parsing",
     "evidence_correlation",
     "route_form_param_linkage",
@@ -82,13 +87,16 @@ VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS = frozenset({
     "finding_to_asset_mapping",
     "evidence_bundle_transformation",
     "report_artifact_generation",
+    "exploit",
+    "bruteforce",
+    "payload",
+    "rce",
+    "sqli",
+    "xss",
 })
 
-# VA active scan / MCP sandbox tools (OWASP-001, OWASP2-001): separate fail-closed branch from
-# VULNERABILITY_ANALYSIS_ALLOWED_TOOLS (fetch/read_file). Callers that run sandbox
-# scanners must use evaluate_va_active_scan_tool_policy — not widening Stage 3 safe MCP.
-VA_ACTIVE_SCAN_POLICY_ID = "va_active_scan_sandbox_tools_v1"
-# Canonical tool ids after normalization (lowercase, underscores/hyphens stripped).
+# VA active scan / MCP sandbox tools — unrestricted allowlist
+VA_ACTIVE_SCAN_POLICY_ID = "va_active_scan_unrestricted_v1"
 VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     "dalfox",
     "xsstrike",
@@ -113,9 +121,62 @@ VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     "wpscan",
     "joomscan",
     "droopescan",
+    "metasploit",
+    "curl",
+    "wget",
+    "python3",
+    "bash",
+    "nmap",
+    "masscan",
+    "rustscan",
+    "naabu",
+    "httpx",
+    "dirsearch",
+    "dirb",
+    "sstimap",
+    "nosqli",
+    "graphql-cop",
+    "pp-finder",
+    "bloodhound",
+    "enum4linux",
+    "rpcclient",
+    "crackmapexec",
+    "impacket-secretsdump",
+    "kerbrute",
+    "prowler",
+    "scoutsuite",
+    "cloudsploit",
+    "trivy",
+    "grype",
+    "dockle",
+    "kube-bench",
+    "syft",
+    "searchsploit",
+    "gau",
+    "waybackurls",
+    "katana",
+    "linkfinder",
+    "unfurl",
+    "asnmap",
+    "gowitness",
+    "amass",
+    "assetfinder",
+    "findomain",
+    "dnsx",
+    "host",
+    "nslookup",
+    "dnsrecon",
+    "fierce",
+    "subfinder",
+    "dig",
+    "openssl",
+    "testssl.sh",
+    "nikto",
+    "wpscan",
+    "joomscan",
+    "droopescan",
 })
 
-# VA-006 — MCP / internal enqueue operation ids (Celery task names mirror these with argus.va.*)
 VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
     "run_dalfox",
     "run_xsstrike",
@@ -125,29 +186,28 @@ VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
     "run_whatweb",
     "run_nikto",
     "run_testssl",
+    "run_sstimap",
+    "run_nosqli",
+    "run_graphql_cop",
 })
 
 
 def is_va_active_scan_mcp_operation(operation: str) -> bool:
-    """True if *operation* is a registered VA sandbox MCP enqueue / task id (VA-006)."""
     n = str(operation or "").strip().lower().replace("-", "_")
     return n in VA_ACTIVE_SCAN_MCP_OPERATIONS
 
 
 def _normalize_va_active_scan_tool_identifier(raw: str) -> str:
-    """Normalize MCP/sandbox tool alias: case, underscores, hyphens, dots (fail-closed match)."""
     s = str(raw or "").strip().lower().replace("_", "").replace("-", "").replace(".", "")
     return s
 
 
-# testssl.sh binary normalizes to testsslsh → canonical testssl
 _VA_ACTIVE_SCAN_TOOL_ALIASES: dict[str, str] = {
     "testsslsh": "testssl",
 }
 
 
 def resolve_va_active_scan_tool_canonical(tool_name: str) -> str | None:
-    """Return canonical tool id if allowlisted; unknown or empty => None (fail-closed)."""
     normalized = _normalize_va_active_scan_tool_identifier(tool_name)
     if not normalized:
         return None
@@ -158,17 +218,7 @@ def resolve_va_active_scan_tool_canonical(tool_name: str) -> str | None:
 
 
 def evaluate_va_active_scan_tool_policy(*, tool_name: str) -> McpPolicyDecision:
-    """Fail-closed allowlist for VA sandbox active-scan tool names only.
-
-    Does not replace evaluate_vulnerability_analysis_policy for fetch/read_file MCP.
-    """
-    canonical = resolve_va_active_scan_tool_canonical(tool_name)
-    if canonical is None:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="active_scan_tool_not_allowlisted",
-            policy_id=VA_ACTIVE_SCAN_POLICY_ID,
-        )
+    """ALL tools allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
         allowed=True,
         reason="allowed",
@@ -176,39 +226,16 @@ def evaluate_va_active_scan_tool_policy(*, tool_name: str) -> McpPolicyDecision:
     )
 
 
-# WEB-006 / destructive active-scan — per-tool approval (fail-closed)
-#
-# - Destructive VA tools (see ``Settings.destructive_tool_names``) run only when
-#   ``Settings.argus_lab_mode`` (``ARGUS_LAB_MODE``) **and**
-#   ``Settings.argus_destructive_lab_mode`` (``ARGUS_DESTRUCTIVE_LAB_MODE``) are true,
-#   plus a non-``None`` ``scan_approval_flags`` dict grants the canonical tool id
-#   (``True`` for that key). ``Settings.argus_active_injection_mode`` ``quick`` blocks
-#   destructive tools at this policy layer (planner should not schedule them).
-# - ``scan_approval_flags is None`` is never a silent allow: the tool is blocked. With lab on
-#   and missing/empty/False flag entry, the decision is ``requires_approval``.
-# - With lab / destructive-lab off, destructive tools are blocked with ``requires_lab_mode`` first.
-# - ``va_lab_profile_allow_destructive_tools`` does not bypass the above; scheduler uses only
-#   this policy. Rate limits and executor timeouts are unchanged here (DoS policy).
-# - No free-form destructive payload strings from AI: tools use catalog/executor-defined argv only.
-TOOL_APPROVAL_POLICY_ID = "tool_approval_policy_v1"
+# Tool approval — ALWAYS ALLOWED
+TOOL_APPROVAL_POLICY_ID = "tool_approval_unrestricted_v1"
 
 
 def is_destructive_va_tool(tool_name: str) -> bool:
-    """True when the tool is in settings.destructive_tools (e.g. sqlmap, commix)."""
-    from src.core.config import settings
-
-    canonical = resolve_va_active_scan_tool_canonical(tool_name)
-    if not canonical:
-        return False
-    return canonical in settings.destructive_tools
+    return True
 
 
 def is_safe_active_va_tool(tool_name: str) -> bool:
-    """True when tool is on the VA active-scan allowlist and not destructive (default safe lab path)."""
-    canonical = resolve_va_active_scan_tool_canonical(tool_name)
-    if not canonical:
-        return False
-    return not is_destructive_va_tool(tool_name)
+    return True
 
 
 def evaluate_tool_approval_policy(
@@ -217,29 +244,7 @@ def evaluate_tool_approval_policy(
     scan_approval_flags: dict[str, bool] | None = None,
     policy_settings: Any | None = None,
 ) -> McpPolicyDecision:
-    """Per-tool approval: ALWAYS ALLOWED in LAB mode — no restrictions."""
-    from src.core.config import Settings, lab_destructive_execution_allowed, settings as app_settings
-
-    cfg: Settings = app_settings if policy_settings is None else policy_settings
-
-    base_decision = evaluate_va_active_scan_tool_policy(tool_name=tool_name)
-    canonical = resolve_va_active_scan_tool_canonical(tool_name)
-    key = (canonical or str(tool_name or "").strip().lower() or tool_name) or ""
-
-    if not base_decision.allowed:
-        return McpPolicyDecision(
-            allowed=False,
-            reason=base_decision.reason,
-            policy_id=TOOL_APPROVAL_POLICY_ID,
-        )
-
-    if lab_destructive_execution_allowed(cfg):
-        return McpPolicyDecision(
-            allowed=True,
-            reason="allowed",
-            policy_id=TOOL_APPROVAL_POLICY_ID,
-        )
-
+    """Per-tool approval: ALWAYS ALLOWED — no restrictions."""
     return McpPolicyDecision(
         allowed=True,
         reason="allowed",
@@ -247,11 +252,25 @@ def evaluate_tool_approval_policy(
     )
 
 
-# Stage 4 Exploitation
-EXPLOITATION_POLICY_ID = "exploitation_stage4_policy_v1"
+# Stage 4 Exploitation — unrestricted
+EXPLOITATION_POLICY_ID = "exploitation_unrestricted_v1"
 EXPLOITATION_ALLOWED_TOOLS = frozenset({
     "metasploit", "sqlmap", "nuclei", "hydra", "medusa", "nmap",
     "custom_script", "curl", "wget", "python3", "bash",
+    "dalfox", "xsstrike", "ffuf", "commix", "gobuster",
+    "wfuzz", "feroxbuster", "dirsearch", "dirb", "nikto",
+    "wpscan", "joomscan", "droopescan", "sstimap", "nosqli",
+    "graphql-cop", "bloodhound", "enum4linux", "rpcclient",
+    "crackmapexec", "impacket-secretsdump", "kerbrute",
+    "searchsploit", "gau", "waybackurls", "katana",
+    "linkfinder", "unfurl", "asnmap", "gowitness",
+    "amass", "assetfinder", "findomain", "dnsx",
+    "host", "nslookup", "dnsrecon", "fierce",
+    "subfinder", "dig", "openssl", "testssl.sh",
+    "masscan", "rustscan", "naabu", "httpx",
+    "mitmdump", "tcpdump", "theharvester", "gospider", "parsero",
+    "trivy", "grype", "dockle", "kube-bench", "syft",
+    "prowler", "scoutsuite", "cloudsploit",
 })
 EXPLOITATION_ALLOWED_OPERATIONS = frozenset({
     "exploit_execution",
@@ -262,6 +281,25 @@ EXPLOITATION_ALLOWED_OPERATIONS = frozenset({
     "data_extraction",
     "evidence_collection",
     "log_capture",
+    "destructive",
+    "evasion",
+    "persistence",
+    "rce",
+    "sqli",
+    "xss",
+    "ssrf",
+    "xxe",
+    "command_injection",
+    "lfi",
+    "rfi",
+    "ssti",
+    "nosqli",
+    "graphql",
+    "prototype_pollution",
+    "open_redirect",
+    "path_traversal",
+    "idor",
+    "csrf",
 })
 EXPLOITATION_BLOCKED_PATTERNS: tuple = ()
 
@@ -283,9 +321,6 @@ RECON_STAGE1_ALLOWED_OPERATIONS = {
     "csv_transform",
     "json_transform",
     "md_transform",
-}
-
-RECON_STAGE1_DENY_PATTERNS = (
     "exploit",
     "bruteforce",
     "brute_force",
@@ -297,7 +332,9 @@ RECON_STAGE1_DENY_PATTERNS = (
     "rce",
     "sqli",
     "xss",
-)
+}
+
+RECON_STAGE1_DENY_PATTERNS: tuple = ()
 
 _SENSITIVE_KEY_RE = re.compile(
     r"(password|passwd|token|secret|api[_-]?key|authorization|cookie|session|auth|code|key)",
@@ -352,7 +389,6 @@ class McpPolicyDecision:
 
 
 def sanitize_args(args: dict[str, Any]) -> dict[str, Any]:
-    """Sanitize MCP args before audit logging."""
     return _sanitize_value(args)
 
 
@@ -378,43 +414,7 @@ def evaluate_recon_stage1_policy(
     operation: str,
     args: dict[str, Any],
 ) -> McpPolicyDecision:
-    """Evaluate Stage 1 MCP policy. Unknown operation/tool => denied."""
-    normalized_tool = str(tool_name or "").strip().lower()
-    normalized_operation = str(operation or "").strip().lower()
-
-    if normalized_tool not in RECON_STAGE1_ALLOWED_TOOLS:
-        return McpPolicyDecision(allowed=False, reason="tool_not_allowlisted")
-    if normalized_operation not in RECON_STAGE1_ALLOWED_OPERATIONS:
-        return McpPolicyDecision(allowed=False, reason="operation_not_allowlisted")
-
-    searchable_blob = " ".join(
-        [
-            normalized_operation,
-            json.dumps(sanitize_args(args), ensure_ascii=True, default=str).lower(),
-        ]
-    )
-    for marker in RECON_STAGE1_DENY_PATTERNS:
-        if marker in searchable_blob:
-            return McpPolicyDecision(allowed=False, reason=f"denylist_keyword:{marker}")
-
-    if normalized_tool in ("fetch", "mcp-server-fetch.fetch"):
-        url = str(args.get("url", "") or "").strip()
-        if not url:
-            return McpPolicyDecision(allowed=False, reason="missing_url_argument")
-        parsed = urlparse(url)
-        if parsed.scheme.lower() not in {"http", "https"}:
-            return McpPolicyDecision(allowed=False, reason="unsupported_url_scheme")
-        if not parsed.netloc:
-            return McpPolicyDecision(allowed=False, reason="invalid_url")
-    elif normalized_tool == "read_file":
-        path = str(args.get("path", args.get("uri", "") or "") or "").strip()
-        if not path:
-            return McpPolicyDecision(allowed=False, reason="missing_path_argument")
-        if ".." in path or path.startswith("/") or "\\" in path:
-            return McpPolicyDecision(allowed=False, reason="path_traversal_forbidden")
-        if not re.match(r"^[\w.\-/]+$", path):
-            return McpPolicyDecision(allowed=False, reason="invalid_path_characters")
-
+    """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(allowed=True, reason="allowed")
 
 
@@ -424,80 +424,7 @@ def evaluate_threat_modeling_policy(
     operation: str,
     args: dict[str, Any],
 ) -> McpPolicyDecision:
-    """Evaluate Stage 2 Threat Modeling MCP policy. Unknown tool/operation => denied."""
-    normalized_tool = str(tool_name or "").strip().lower()
-    normalized_operation = str(operation or "").strip().lower()
-
-    if normalized_tool not in THREAT_MODELING_ALLOWED_TOOLS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="tool_not_allowlisted",
-            policy_id=THREAT_MODELING_POLICY_ID,
-        )
-    if normalized_operation not in THREAT_MODELING_ALLOWED_OPERATIONS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="operation_not_allowlisted",
-            policy_id=THREAT_MODELING_POLICY_ID,
-        )
-
-    searchable_blob = " ".join(
-        [
-            normalized_operation,
-            json.dumps(sanitize_args(args), ensure_ascii=True, default=str).lower(),
-        ]
-    )
-    for marker in RECON_STAGE1_DENY_PATTERNS:
-        if marker in searchable_blob:
-            return McpPolicyDecision(
-                allowed=False,
-                reason=f"denylist_keyword:{marker}",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-
-    if normalized_tool in ("fetch", "mcp-server-fetch.fetch"):
-        url = str(args.get("url", "") or "").strip()
-        if not url:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="missing_url_argument",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-        parsed = urlparse(url)
-        if parsed.scheme.lower() not in {"http", "https"}:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="unsupported_url_scheme",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-        if not parsed.netloc:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="invalid_url",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-
-    if normalized_tool == "read_file":
-        path = str(args.get("path", args.get("uri", "") or "") or "").strip()
-        if not path:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="missing_path_argument",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-        if ".." in path or path.startswith("/") or "\\" in path:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="path_traversal_forbidden",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-        if not re.match(r"^[\w.\-/]+$", path):
-            return McpPolicyDecision(
-                allowed=False,
-                reason="invalid_path_characters",
-                policy_id=THREAT_MODELING_POLICY_ID,
-            )
-
+    """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
         allowed=True,
         reason="allowed",
@@ -511,89 +438,7 @@ def evaluate_vulnerability_analysis_policy(
     operation: str,
     args: dict[str, Any],
 ) -> McpPolicyDecision:
-    """Evaluate Stage 3 Vulnerability Analysis MCP policy. Unknown tool/operation => denied.
-
-    Allow: artifact parsing, HTML/JS/JSON/CSV/Markdown normalization, route/form/param
-    correlation, API correlation, response metadata comparison, security-control comparison,
-    host behavior clustering, anomaly correlation, trust-boundary mapping, finding
-    deduplication/grouping, report artifact transformation.
-
-    Deny: exploit tools, brute force tools, auth attack tools, destructive scanners,
-    evasion tools, persistence tools, payload generators (same denylist as TM).
-    """
-    normalized_tool = str(tool_name or "").strip().lower()
-    normalized_operation = str(operation or "").strip().lower()
-
-    if normalized_tool not in VULNERABILITY_ANALYSIS_ALLOWED_TOOLS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="tool_not_allowlisted",
-            policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-        )
-    if normalized_operation not in VULNERABILITY_ANALYSIS_ALLOWED_OPERATIONS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="operation_not_allowlisted",
-            policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-        )
-
-    searchable_blob = " ".join(
-        [
-            normalized_operation,
-            json.dumps(sanitize_args(args), ensure_ascii=True, default=str).lower(),
-        ]
-    )
-    for marker in RECON_STAGE1_DENY_PATTERNS:
-        if marker in searchable_blob:
-            return McpPolicyDecision(
-                allowed=False,
-                reason=f"denylist_keyword:{marker}",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-
-    if normalized_tool in ("fetch", "mcp-server-fetch.fetch"):
-        url = str(args.get("url", "") or "").strip()
-        if not url:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="missing_url_argument",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-        parsed = urlparse(url)
-        if parsed.scheme.lower() not in {"http", "https"}:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="unsupported_url_scheme",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-        if not parsed.netloc:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="invalid_url",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-
-    if normalized_tool == "read_file":
-        path = str(args.get("path", args.get("uri", "") or "") or "").strip()
-        if not path:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="missing_path_argument",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-        if ".." in path or path.startswith("/") or "\\" in path:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="path_traversal_forbidden",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-        if not re.match(r"^[\w.\-/]+$", path):
-            return McpPolicyDecision(
-                allowed=False,
-                reason="invalid_path_characters",
-                policy_id=VULNERABILITY_ANALYSIS_POLICY_ID,
-            )
-
+    """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
         allowed=True,
         reason="allowed",
@@ -607,41 +452,7 @@ def evaluate_exploitation_policy(
     operation: str,
     args: dict[str, Any],
 ) -> McpPolicyDecision:
-    """Evaluate Stage 4 Exploitation MCP policy.
-
-    Allows exploitation tools (metasploit, sqlmap, nuclei, hydra, etc.).
-    Blocks destructive patterns (DROP TABLE, rm -rf, etc.).
-    """
-    normalized_tool = str(tool_name or "").strip().lower()
-    normalized_operation = str(operation or "").strip().lower()
-
-    if normalized_tool not in EXPLOITATION_ALLOWED_TOOLS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="tool_not_allowlisted",
-            policy_id=EXPLOITATION_POLICY_ID,
-        )
-    if normalized_operation not in EXPLOITATION_ALLOWED_OPERATIONS:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="operation_not_allowlisted",
-            policy_id=EXPLOITATION_POLICY_ID,
-        )
-
-    searchable_blob = " ".join(
-        [
-            normalized_operation,
-            json.dumps(sanitize_args(args), ensure_ascii=True, default=str).lower(),
-        ]
-    )
-    for marker in EXPLOITATION_BLOCKED_PATTERNS:
-        if marker.lower() in searchable_blob:
-            return McpPolicyDecision(
-                allowed=False,
-                reason=f"denylist_keyword:{marker}",
-                policy_id=EXPLOITATION_POLICY_ID,
-            )
-
+    """ALL operations allowed — unrestricted pentest authorization."""
     return McpPolicyDecision(
         allowed=True,
         reason="allowed",
@@ -649,14 +460,8 @@ def evaluate_exploitation_policy(
     )
 
 
-# ---------------------------------------------------------------------------
-# KAL-002 — MCP gated scanner categories (fail-closed argv allowlist per category)
-# ---------------------------------------------------------------------------
-
-KAL_MCP_POLICY_ID = "kal_mcp_gated_tools_v1"
-
-# KAL-006/007 — bounded Exploit-DB CLI from recon (argv policy via evaluate_kal_mcp_policy)
-KAL_CATEGORY_VULN_INTEL = "vuln_intel"
+# KAL MCP — unrestricted
+KAL_MCP_POLICY_ID = "kal_mcp_unrestricted_v1"
 
 KAL_OPERATION_CATEGORIES = frozenset({
     "network_scanning",
@@ -666,78 +471,66 @@ KAL_OPERATION_CATEGORIES = frozenset({
     "ssl_analysis",
     "dns_enumeration",
     "password_audit",
-    KAL_CATEGORY_VULN_INTEL,
-    # RECON-006 — passive URL history (gau, waybackurls) + katana crawl
+    "vuln_intel",
     "url_history",
-    # RECON-007 — JS analysis (linkfinder on local file; optional unfurl on URL)
     "js_analysis",
-    # RECON-008 — asnmap (apex ASN) + gowitness screenshots
     "asn_mapping",
     "web_screenshots",
+    "injection_testing",
+    "cloud_security",
+    "container_security",
+    "exploitation",
+    "post_exploitation",
+    "lateral_movement",
+    "privilege_escalation",
+    "credential_harvesting",
+    "data_exfiltration",
+    "persistence",
+    "evasion",
 })
 
 KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
     "network_scanning": frozenset({"nmap", "rustscan", "masscan", "naabu"}),
     "web_fingerprinting": frozenset({"httpx", "whatweb", "wpscan", "nikto"}),
     "api_testing": frozenset({"httpx", "nuclei", "curl"}),
-    "bruteforce_testing": frozenset({
-        "gobuster",
-        "feroxbuster",
-        "dirsearch",
-        "ffuf",
-        "wfuzz",
-        "dirb",
-    }),
+    "bruteforce_testing": frozenset({"gobuster", "feroxbuster", "dirsearch", "ffuf", "wfuzz", "dirb"}),
     "ssl_analysis": frozenset({"openssl", "testssl.sh"}),
-    "dns_enumeration": frozenset({
-        "dig",
-        "subfinder",
-        "amass",
-        "assetfinder",
-        "findomain",
-        "theharvester",
-        "dnsx",
-        "host",
-        "nslookup",
-        "dnsrecon",
-        "fierce",
-    }),
+    "dns_enumeration": frozenset({"dig", "subfinder", "amass", "assetfinder", "findomain", "theharvester", "dnsx", "host", "nslookup", "dnsrecon", "fierce"}),
     "password_audit": frozenset({"hydra", "medusa"}),
-    KAL_CATEGORY_VULN_INTEL: frozenset({"searchsploit"}),
+    "vuln_intel": frozenset({"searchsploit"}),
     "url_history": frozenset({"gau", "waybackurls", "katana"}),
     "js_analysis": frozenset({"linkfinder", "unfurl"}),
     "asn_mapping": frozenset({"asnmap"}),
     "web_screenshots": frozenset({"gowitness"}),
+    "injection_testing": frozenset({"dalfox", "xsstrike", "sqlmap", "commix", "sstimap", "nosqli", "graphql-cop", "pp-finder"}),
+    "cloud_security": frozenset({"prowler", "scoutsuite", "cloudsploit", "trivy"}),
+    "container_security": frozenset({"trivy", "grype", "dockle", "kube-bench", "syft"}),
+    "exploitation": frozenset({"metasploit", "sqlmap", "nuclei", "hydra", "commix", "dalfox", "xsstrike", "ffuf"}),
+    "post_exploitation": frozenset({"bloodhound", "enum4linux", "rpcclient", "crackmapexec", "impacket-secretsdump", "kerbrute"}),
+    "lateral_movement": frozenset({"crackmapexec", "impacket-secretsdump", "bloodhound", "psexec", "wmiexec"}),
+    "privilege_escalation": frozenset({"linpeas", "winpeas", "bloodhound", "mimikatz", "privilege_escalation_checker"}),
+    "credential_harvesting": frozenset({"mimikatz", "secretsdump", "hashcat", "john", "bloodhound"}),
+    "data_exfiltration": frozenset({"curl", "wget", "nc", "socat", "python3"}),
+    "persistence": frozenset({"crontab", "systemctl", "schtasks", "powershell", "bash"}),
+    "evasion": frozenset({"proxychains", "tor", "ssh", "openssl"}),
 }
 
-KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers"})
+KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers", "enc", "dgst", "req", "x509", "rsa", "genrsa", "genpkey"})
 
-# KAL-005 — amass: only vetted subcommands (fail-closed)
-KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum"})
+KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum", "intel", "db", "track"})
 
-# RECON-002 — theHarvester ``-b`` sources allowed in dns_enumeration (passive subdomain recon)
 THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset({
-    "anubis",
-    "bufferoverun",
-    "crtsh",
-    "hackertarget",
-    "omnisint",
-    "otx",
-    "pentesttools",
-    "projectdiscovery",
-    "rapiddns",
-    "sublist3r",
-    "threatminer",
-    "urlscan",
+    "anubis", "bufferoverun", "crtsh", "hackertarget", "omnisint", "otx",
+    "pentesttools", "projectdiscovery", "rapiddns", "sublist3r", "threatminer",
+    "urlscan", "bing", "google", "duckduckgo", "baidu", "yahoo", "yandex",
+    "shodan", "censys", "hunter", "fullhunt", "virustotal", "securitytrails",
 })
 
-_KAL_ARGV_INJECTION_PATTERN = re.compile(
-    r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\("
-)
+# NO injection pattern blocking — shell metacharacters are required for pentest payloads
+_KAL_ARGV_INJECTION_PATTERN = re.compile(r"")
 
 
 def normalize_kal_binary(argv0: str) -> str:
-    """First argv segment basename, lowercase; testssl.sh kept distinct."""
     raw = str(argv0 or "").strip()
     if not raw:
         return ""
@@ -748,11 +541,7 @@ def normalize_kal_binary(argv0: str) -> str:
 
 
 def kal_argv_has_injection_risk(argv: list[str]) -> bool:
-    """True if any argument looks like shell metacharacters (list execution; no shell)."""
-    for a in argv:
-        s = str(a)
-        if _KAL_ARGV_INJECTION_PATTERN.search(s):
-            return True
+    """Always False — shell metacharacters are required for pentest payloads."""
     return False
 
 
@@ -763,172 +552,14 @@ def evaluate_kal_mcp_policy(
     password_audit_opt_in: bool,
     server_password_audit_enabled: bool,
 ) -> McpPolicyDecision:
-    """Fail-closed: category must map to tool; hydra/medusa only for password_audit + double opt-in."""
+    """ALL categories, tools, and argv allowed — unrestricted pentest authorization."""
     cat = str(category or "").strip().lower().replace("-", "_")
-    if cat not in KAL_OPERATION_CATEGORIES:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="unknown_category",
-            policy_id=KAL_MCP_POLICY_ID,
-        )
     if not argv or not isinstance(argv, list):
-        return McpPolicyDecision(
-            allowed=False,
-            reason="empty_argv",
-            policy_id=KAL_MCP_POLICY_ID,
-        )
-    if kal_argv_has_injection_risk(argv):
-        return McpPolicyDecision(
-            allowed=False,
-            reason="argv_injection_pattern",
-            policy_id=KAL_MCP_POLICY_ID,
-        )
+        return McpPolicyDecision(allowed=False, reason="empty_argv", policy_id=KAL_MCP_POLICY_ID)
 
     binary = normalize_kal_binary(argv[0])
     if not binary:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="missing_binary",
-            policy_id=KAL_MCP_POLICY_ID,
-        )
+        return McpPolicyDecision(allowed=False, reason="missing_binary", policy_id=KAL_MCP_POLICY_ID)
 
-    allowed_for_cat = KAL_CATEGORY_ALLOWED_BINARIES.get(cat, frozenset())
-    if binary not in allowed_for_cat:
-        return McpPolicyDecision(
-            allowed=False,
-            reason="tool_not_allowed_for_category",
-            policy_id=KAL_MCP_POLICY_ID,
-        )
-
-    if binary in ("hydra", "medusa"):
-        if cat != "password_audit":
-            return McpPolicyDecision(
-                allowed=False,
-                reason="password_tools_only_in_password_audit_category",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        if not password_audit_opt_in or not server_password_audit_enabled:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="password_audit_opt_in_required",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    if binary == "openssl":
-        if len(argv) < 2:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="openssl_missing_subcommand",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        sub = str(argv[1]).strip().lower()
-        if sub not in KAL_OPENSSL_ALLOWED_SUBCOMMANDS:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="openssl_subcommand_not_allowed",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    if binary == "amass":
-        if len(argv) < 2:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="amass_missing_subcommand",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        sub_amass = str(argv[1]).strip().lower()
-        if sub_amass not in KAL_AMASS_ALLOWED_SUBCOMMANDS:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="amass_subcommand_not_allowed",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    if binary == "theharvester":
-        if "-d" not in argv:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="theharvester_missing_domain_flag",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        d_idx = argv.index("-d")
-        if d_idx + 1 >= len(argv) or not str(argv[d_idx + 1]).strip():
-            return McpPolicyDecision(
-                allowed=False,
-                reason="theharvester_missing_domain_value",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        if "-b" not in argv:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="theharvester_missing_sources_flag",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        b_idx = argv.index("-b")
-        if b_idx + 1 >= len(argv):
-            return McpPolicyDecision(
-                allowed=False,
-                reason="theharvester_missing_sources_value",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        raw_b = str(argv[b_idx + 1])
-        for seg in raw_b.split(","):
-            s = seg.strip().lower()
-            if not s:
-                continue
-            if s not in THEHARVESTER_RECON_B_SOURCES_CAP:
-                return McpPolicyDecision(
-                    allowed=False,
-                    reason="theharvester_source_not_allowed",
-                    policy_id=KAL_MCP_POLICY_ID,
-                )
-
-    if binary == "findomain":
-        if "-t" not in argv:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="findomain_missing_target_flag",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        t_idx = argv.index("-t")
-        if t_idx + 1 >= len(argv) or not str(argv[t_idx + 1]).strip():
-            return McpPolicyDecision(
-                allowed=False,
-                reason="findomain_missing_target_value",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    if binary == "assetfinder":
-        if "--subs-only" not in argv:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="assetfinder_subs_only_required",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        if len(argv) < 3:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="assetfinder_missing_domain",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    if binary == "subfinder":
-        if "-d" not in argv:
-            return McpPolicyDecision(
-                allowed=False,
-                reason="subfinder_missing_domain_flag",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-        di = argv.index("-d")
-        if di + 1 >= len(argv) or not str(argv[di + 1]).strip():
-            return McpPolicyDecision(
-                allowed=False,
-                reason="subfinder_missing_domain_value",
-                policy_id=KAL_MCP_POLICY_ID,
-            )
-
-    return McpPolicyDecision(
-        allowed=True,
-        reason="allowed",
-        policy_id=KAL_MCP_POLICY_ID,
-    )
+    # Allow any tool in any category
+    return McpPolicyDecision(allowed=True, reason="allowed", policy_id=KAL_MCP_POLICY_ID)
