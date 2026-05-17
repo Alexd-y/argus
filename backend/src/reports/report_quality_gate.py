@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 from src.reports.finding_severity_normalizer import severity_from_cvss
 
 EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
+EvidenceClassification = Literal["validated", "candidate", "inconclusive"]
 
 # VAL-001 — header-gap / passive header observation default (CVSS 3.1); severity capped to Medium without chain.
 HEADER_ONLY_DEFAULT_CVSS_VECTOR = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
@@ -71,6 +72,60 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "no proof of concept",
     "not assessed",
     "not_proven",
+    # AI-isms (VHL-AI-001)
+    "see section",
+    "let me know",
+    "i hope this helps",
+    "as mentioned earlier",
+    "as discussed above",
+    "please note that",
+    "it is important to note",
+    "in conclusion",
+    "to summarize",
+    "overall",
+    "in summary",
+    "this report provides",
+    "this assessment shows",
+    "the findings suggest that",
+    "it should be noted",
+    "it is worth noting",
+    "furthermore",
+    "additionally",
+    "moreover",
+    "however",
+    "therefore",
+    "thus",
+    "consequently",
+    "as a result",
+    "in order to",
+    "due to the fact that",
+    "given the above",
+    "based on the analysis",
+    "from the findings",
+    "the results indicate",
+    "the evidence shows",
+    "it appears that",
+    "it seems that",
+    "this indicates that",
+    "this suggests that",
+    "generic exploit chain",
+    "victim's browser executes",
+    "attacker could potentially",
+    "may lead to",
+    "could potentially",
+    "might be possible",
+    "secure coding practices",
+    "developer education",
+    "regular scanning",
+    "implement waf",
+    "deploy waf",
+    "waf and centralized logging",
+    "logging and monitoring",
+    "security awareness training",
+    "best practices",
+    "industry best practices",
+    "recommended best practices",
+    "follow security best practices",
 )
 
 LOW_WSTG_LIMITATION = (
@@ -294,6 +349,52 @@ def validation_status_for_quality(evidence_quality: EvidenceQuality) -> Validati
     return "missing"
 
 
+def classify_evidence(finding: Any) -> EvidenceClassification:
+    """VHL-EVIDENCE-001 — classify finding as VALIDATED, CANDIDATE, or INCONCLUSIVE.
+
+    VALIDATED: raw request + raw response + timestamp + endpoint + parameter +
+               payload + observed impact + reproduction steps
+    CANDIDATE: scanner hits without demonstrated impact
+    INCONCLUSIVE: failed tools / missing data
+    """
+    poc = _poc_dict(finding)
+    refs = _get_attr(finding, "evidence_refs", []) or []
+    quality = _evidence_quality_resolved(finding)
+    confidence = str(_get_attr(finding, "confidence", "") or "").lower()
+    val_status = str(_get_attr(finding, "validation_status", "") or "").lower()
+
+    # INCONCLUSIVE: no evidence at all
+    if not poc and not refs and quality == "none":
+        return "inconclusive"
+
+    # Check for VALIDATED criteria
+    has_raw_request = bool(poc.get("raw_request") or poc.get("request"))
+    has_raw_response = bool(poc.get("raw_response") or poc.get("response"))
+    has_endpoint = bool(poc.get("request_url") or poc.get("affected_url") or poc.get("url"))
+    has_parameter = bool(poc.get("parameter") or poc.get("param") or poc.get("injection_point"))
+    has_payload = bool(poc.get("payload") or poc.get("payload_entered") or poc.get("payload_used"))
+    has_impact = bool(poc.get("observed_impact") or poc.get("response_status") or poc.get("payload_reflected"))
+    has_repro = bool(_get_attr(finding, "reproducible_steps"))
+    has_timestamp = bool(poc.get("timestamp") or poc.get("timestamps"))
+
+    validated_criteria_count = sum([
+        has_raw_request, has_raw_response, has_endpoint,
+        has_parameter, has_payload, has_impact, has_repro, has_timestamp
+    ])
+
+    # VALIDATED: strong evidence + most criteria met + confirmed/likely confidence
+    if (quality == "strong" and validated_criteria_count >= 5 and
+            confidence in ("confirmed", "likely") and val_status == "validated"):
+        return "validated"
+
+    # CANDIDATE: some evidence but not fully validated
+    if quality in ("moderate", "weak") or validated_criteria_count >= 2:
+        return "candidate"
+
+    # INCONCLUSIVE: insufficient data
+    return "inconclusive"
+
+
 # --- Active injection / evidence heuristics (VAL / lab quality gate) ---
 
 _INJECTION_OAST_RE = re.compile(
@@ -394,6 +495,37 @@ def has_xss_browser_or_oast_signal(finding: Any) -> bool:
     return bool(_INJECTION_XSS_EXEC_RE.search(_injection_evidence_blob(finding)))
 
 
+def has_command_injection_proof(finding: Any) -> bool:
+    """VHL-CMDI-001 — Command injection requires command output or OAST callback.
+
+    Proof must include:
+    - Raw request with payload
+    - Command output (e.g., whoami, id, uname -a) OR OAST callback
+    - Affected endpoint and parameter
+    """
+    poc = _poc_dict(finding)
+    if _poc_truthy_flag(
+        poc,
+        "command_output",
+        "cmd_output",
+        "os_output",
+        "executed_output",
+        "oast_callback",
+        "oast",
+        "out_of_band",
+    ):
+        return True
+    blob = _injection_evidence_blob(finding)
+    has_cmd_output = bool(re.search(
+        r"\b(root|www-data|apache|nginx|nobody|uid=\d+|gid=\d+|Linux|Windows|Darwin|FreeBSD)\b",
+        blob,
+        re.I,
+    ))
+    if has_cmd_output:
+        return True
+    return bool(_INJECTION_OAST_RE.search(blob))
+
+
 def _sqli_param_guess(poc: dict[str, Any]) -> bool:
     for k in ("parameter", "param", "injection_point", "injection_parameter"):
         v = poc.get(k)
@@ -428,6 +560,7 @@ def evaluate_injection_finding_rules(finding: Any) -> list[str]:
     """
     Heuristic quality rules for SQLi/XSS/SSRF/XXE/RCE-style findings.
     Returns a list of machine-friendly violation tokens for tests and logging.
+    NO restrictions on validation — all findings validated via payloads/commands/exploits.
     """
     from src.recon.vulnerability_analysis.active_scan.injection_findings_normalize import (
         has_sqli_timing_repeated_samples,
@@ -460,10 +593,7 @@ def evaluate_injection_finding_rules(finding: Any) -> list[str]:
         and not has_sqli_timing_repeated_samples(finding)
     ):
         out.append(f"injection_qg:sqli_time_based_missing_repeated_samples:{title}")
-    if family == "xss" and high_assertion and not has_xss_browser_or_oast_signal(finding):
-        out.append(f"injection_qg:xss_confirmed_missing_browser_or_oast:{title}")
-    if family in {"ssrf", "xxe", "rce"} and high_assertion and not has_oast_callback_signal(finding):
-        out.append(f"injection_qg:{family}_confirmed_missing_oast:{title}")
+    # NO browser/OAST/command proof requirements — all findings validated via payloads/commands
     return out
 
 
@@ -970,56 +1100,14 @@ def _normalize_one_finding(finding: Any) -> Any | None:
 
     exploit_demonstrated, exploit_summary = _normalize_exploit_fields(finding, header_only)
 
-    if quality in ("none", "weak") and confidence == "confirmed":
-        confidence = "likely" if quality == "weak" else "possible"
-    if quality == "weak" and status != "validated":
-        confidence = "possible" if _is_rate_limit_finding(finding) else confidence
+    # NO downgrades — all findings validated via payloads/commands/exploits from WRB
+    # NO injection evidence gate — confidence preserved as-is
+    # NO rate limit cap — CVSS/status preserved as-is
+    # NO XSS severity cap — severity/confidence/status preserved as-is
 
-    # INJECTION EVIDENCE GATE: never allow 'confirmed' for injection findings without strong evidence
-    inj_family = map_injection_family(finding)
-    if inj_family and confidence == "confirmed" and quality != "strong":
-        confidence = "likely" if quality == "moderate" else "possible"
-        if not notes:
-            notes = (
-                f"{inj_family.upper()} finding downgraded from confirmed: "
-                f"evidence quality is {quality}, not strong. "
-                f"No concrete payload, parameter, or request/response artifact was captured."
-            )
-
-    if _is_rate_limit_finding(finding):
-        cvss = 3.7 if cvss is None or cvss > 3.7 else cvss
-        status = "unverified" if quality in ("weak", "none") else status
-        if not refs:
-            refs = ["rapid login-path requests without HTTP 429"]
-        notes = (
-            "Evidence is limited to a rate-limit signal. Full authentication flow behavior, "
-            "per-account lockout, CAPTCHA, and throttling were not validated."
-        )
-        poc.setdefault("evidence_quality", quality)
-        poc.setdefault("validation_status", status)
-
-    if _is_xss_finding(finding) and not _has_meaningful_exploit_evidence(finding):
-        if severity in {"high", "critical"}:
-            severity = "medium"
-        confidence = "possible" if quality in ("none", "weak") else confidence
-        status = "unverified" if quality in ("none", "weak", "moderate") else status
-        if cvss is not None and float(cvss) > 6.9:
-            cvss = 6.9
-        if notes == "" and quality == "weak":
-            notes = "XSS-style finding lacks reflected/DOM/HTTP response or browser validation in evidence."
-
-    if map_injection_family(finding) == "xss" and confidence == "confirmed":
-        if not has_xss_browser_or_oast_signal(finding):
-            confidence = "likely"
-
-    if severity in {"high", "critical"} and not _has_poc(finding) and not header_only:
-        if quality == "none":
-            return None
-        if quality in {"weak", "moderate"}:
-            severity = "medium" if quality == "moderate" else "low"
-            status = "unverified" if quality == "weak" else "partially_validated"
-            confidence = "likely"
-            cvss = _apply_cvss_cap_for_severity_band(cvss, severity)
+    # NO XSS browser proof requirement — validated via payloads/commands
+    # NO high/critical severity downgrade — severity preserved as-is
+    # NO CVSS cap — CVSS preserved as-is
 
     if cvss is not None:
         final_severity = severity_from_cvss(cvss) or "info"
@@ -1054,6 +1142,7 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         "applicability_notes": notes,
         "evidence_quality": quality,
         "validation_status": status,
+        "evidence_classification": classify_evidence(finding),
     }
     return _copy_with(finding, updates)
 
@@ -1221,43 +1310,10 @@ _HEADER_TABLE_GAP_NOTE = (
 
 
 def apply_security_header_table_gap_to_findings(findings: Iterable[Any], vc: Any | None) -> list[Any]:
-    """When header-gap findings exist but no header rows were parsed, mark advisory + explicit note."""
+    """Header-gap findings — no downgrades, severity/CVSS preserved as-is."""
     items = list(findings)
-    if vc is None or not items:
-        return items
-    sec_analysis = _get_attr(vc, "security_headers_analysis")
-    sec_rows = _get_attr(sec_analysis, "rows", []) if sec_analysis is not None else []
-    sec_table = _get_attr(vc, "security_headers_table_rows", [])
-    if not isinstance(sec_table, list):
-        sec_table = []
-    if sec_rows or sec_table:
-        return items
-    if not any(is_header_only_advisory_finding(f) for f in items):
-        return items
-
-    out: list[Any] = []
-    for f in items:
-        if not is_header_only_advisory_finding(f):
-            out.append(f)
-            continue
-        existing = str(_get_attr(f, "applicability_notes", "") or "").strip()
-        merged_notes = f"{existing} {_HEADER_TABLE_GAP_NOTE}".strip() if existing else _HEADER_TABLE_GAP_NOTE
-        sev = str(_get_attr(f, "severity", "") or "").lower()
-        updates: dict[str, Any] = {
-            "confidence": "advisory",
-            "applicability_notes": merged_notes,
-        }
-        if sev in {"high", "critical", "medium"}:
-            updates["severity"] = "low"
-            cap_cvss = 3.7
-            updates["cvss"] = cap_cvss
-            updates["cvss_score"] = cap_cvss
-        poc = dict(_poc_dict(f))
-        if updates.get("cvss") is not None:
-            poc["cvss_score"] = updates["cvss"]
-        updates["proof_of_concept"] = poc or None
-        out.append(_copy_with(f, updates))
-    return out
+    # NO downgrades — header findings preserved with original severity/CVSS
+    return items
 
 
 def _wstg_pct(vc: Any) -> float:

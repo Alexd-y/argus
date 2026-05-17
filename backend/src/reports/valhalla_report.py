@@ -164,6 +164,7 @@ class ValhallaReportContext(BaseModel):
     attack_scenarios: list[dict[str, Any]] = Field(default_factory=list)
     exploit_chains: list[dict[str, Any]] = Field(default_factory=list)
     remediation_stages: dict[str, Any] = Field(default_factory=dict)
+    remediation_matrix: list[dict[str, Any]] = Field(default_factory=list)
     zero_day_assessment: dict[str, Any] = Field(default_factory=dict)
     cost_summary: dict[str, Any] = Field(default_factory=dict)
 
@@ -377,6 +378,11 @@ def _build_exploit_chains(exploits: list[dict[str, Any]], findings: list[dict[st
 
 
 def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """VHL-REMEDIATION-001 — Remediation matrix with full traceability.
+
+    Each finding maps to: affected layer, owner team, config/component, fix,
+    priority, rollback risk, verification step, acceptance criteria.
+    """
     critical = [f for f in findings if (f.get("severity") or "").lower() in ("critical", "high")]
     high_cvss = [f for f in findings
                  if isinstance((f.get("cvss") or f.get("cvss_score")), (int, float))
@@ -384,108 +390,109 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
     medium = [f for f in findings if (f.get("severity") or "").lower() == "medium"]
     low = [f for f in findings if (f.get("severity") or "").lower() == "low"]
 
-    _REMEDIATION_MAP = {
+    _REMEDIATION_MATRIX = {
         "SQLI_CANDIDATE": {
             "action": "Use parameterized queries/prepared statements for all database interactions. Input validation alone is insufficient.",
             "verification": "Re-run sqlmap with same parameters — should report 'not injectable'.",
             "owner": "Backend development team",
+            "affected_layer": "app/database",
+            "component": "Database query layer / ORM",
+            "rollback_risk": "Low — parameterized queries are backward compatible",
+            "acceptance_criteria": "All database queries use parameterized statements; sqlmap reports no injection points",
         },
         "XSS": {
             "action": "Apply context-aware output encoding (HTML, JS, URL, CSS). Implement Content-Security-Policy as defense-in-depth.",
             "verification": "Inject <script>alert(1)</script> — should be encoded, not executed. Verify CSP blocks inline scripts.",
             "owner": "Frontend development team",
+            "affected_layer": "app/frontend",
+            "component": "Template engine / output rendering layer",
+            "rollback_risk": "Low — encoding is backward compatible",
+            "acceptance_criteria": "All user input is encoded per context; CSP header present with strict-dynamic or nonce",
         },
         "COMMAND_INJECTION_CANDIDATE": {
             "action": "Eliminate OS command execution from user input. Use language-native APIs instead of shell commands. If unavoidable, use strict allowlist validation.",
             "verification": "Re-run commix — should report no injection points.",
             "owner": "Backend development team",
+            "affected_layer": "app/backend",
+            "component": "System command execution layer",
+            "rollback_risk": "Medium — may require API changes if shell commands are deeply integrated",
+            "acceptance_criteria": "No shell metacharacters accepted; commix reports no injection points",
         },
         "RATE_LIMIT": {
             "action": "Implement per-IP and per-account rate limiting with exponential backoff. Add CAPTCHA after threshold. Monitor and alert on repeated failures.",
             "verification": "Send 20+ rapid login requests — should receive HTTP 429 after threshold.",
             "owner": "Infrastructure / API team",
+            "affected_layer": "API/infrastructure",
+            "component": "Rate limiter middleware / reverse proxy",
+            "rollback_risk": "Low — rate limiting is additive",
+            "acceptance_criteria": "HTTP 429 returned after threshold; CAPTCHA triggered; no account lockout bypass",
         },
         "SECURITY_HEADER": {
             "action": "Add missing HTTP security headers at reverse proxy or application level. Verify with curl -sS -I <url>.",
             "verification": "curl -sS -I https://<target> | grep -iE 'content-security-policy|x-content-type-options|referrer-policy|permissions-policy'",
             "owner": "Infrastructure / DevOps team",
+            "affected_layer": "infrastructure/reverse-proxy",
+            "component": "Nginx/Apache/Cloudflare configuration",
+            "rollback_risk": "Low — headers are additive",
+            "acceptance_criteria": "All recommended headers present; curl verification passes",
         },
     }
 
-    tier1: list[dict[str, Any]] = []
-    for f in (critical + [h for h in high_cvss if h not in critical])[:8]:
+    def _build_matrix_entry(f: dict[str, Any], priority: str, deadline: str, effort: str) -> dict[str, Any]:
         f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
         remediation = None
-        for key, rem in _REMEDIATION_MAP.items():
+        for key, rem in _REMEDIATION_MATRIX.items():
             if key in f_type:
                 remediation = rem
                 break
-        tier1.append(
-            {
-                "finding_id": str(f.get("id") or ""),
-                "title": str(f.get("title") or ""),
-                "severity": f.get("severity"),
-                "effort": "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate",
-                "deadline": "48 hours",
-                "action": remediation["action"] if remediation else "Review and apply fix per finding details",
-                "verification": remediation["verification"] if remediation else "Re-test after fix",
-                "owner": remediation["owner"] if remediation else "Development team",
-            }
-        )
+
+        poc = f.get("proof_of_concept") or {}
+        affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")[:512]
+        affected_parameter = str(poc.get("parameter") or poc.get("affected_parameter") or "")[:256]
+
+        return {
+            "finding_id": str(f.get("id") or ""),
+            "title": str(f.get("title") or ""),
+            "severity": f.get("severity"),
+            "cvss": f.get("cvss") or f.get("cvss_score"),
+            "cvss_vector": poc.get("cvss_vector") if isinstance(poc, dict) else None,
+            "priority": priority,
+            "deadline": deadline,
+            "effort": effort,
+            "affected_layer": remediation["affected_layer"] if remediation else "app/unknown",
+            "owner_team": remediation["owner"] if remediation else "Development team",
+            "config_component": remediation["component"] if remediation else "Unknown component",
+            "affected_url": affected_url,
+            "affected_parameter": affected_parameter,
+            "fix": remediation["action"] if remediation else "Review and apply fix per finding details",
+            "rollback_risk": remediation["rollback_risk"] if remediation else "Unknown — assess before deployment",
+            "verification_step": remediation["verification"] if remediation else "Re-test after fix",
+            "acceptance_criteria": remediation["acceptance_criteria"] if remediation else "Finding no longer reproducible",
+        }
+
+    tier1: list[dict[str, Any]] = []
+    for f in (critical + [h for h in high_cvss if h not in critical])[:8]:
+        tier1.append(_build_matrix_entry(f, "P0", "48 hours", "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate"))
 
     tier2: list[dict[str, Any]] = []
     for f in medium[:6]:
-        f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
-        remediation = None
-        for key, rem in _REMEDIATION_MAP.items():
-            if key in f_type:
-                remediation = rem
-                break
-        tier2.append(
-            {
-                "finding_id": str(f.get("id") or ""),
-                "title": str(f.get("title") or ""),
-                "severity": f.get("severity"),
-                "effort": "Quick Fix",
-                "deadline": "2 weeks",
-                "action": remediation["action"] if remediation else "Review and apply fix",
-                "verification": remediation["verification"] if remediation else "Re-test after fix",
-                "owner": remediation["owner"] if remediation else "Development team",
-            }
-        )
+        tier2.append(_build_matrix_entry(f, "P1", "2 weeks", "Quick Fix"))
 
     for f in low[:4]:
-        f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
-        remediation = None
-        for key, rem in _REMEDIATION_MAP.items():
-            if key in f_type:
-                remediation = rem
-                break
-        tier2.append(
-            {
-                "finding_id": str(f.get("id") or ""),
-                "title": str(f.get("title") or ""),
-                "severity": f.get("severity"),
-                "effort": "Quick Fix",
-                "deadline": "1 month",
-                "action": remediation["action"] if remediation else "Review and apply fix",
-                "verification": remediation["verification"] if remediation else "Re-test after fix",
-                "owner": remediation["owner"] if remediation else "Development team",
-            }
-        )
+        tier2.append(_build_matrix_entry(f, "P2", "1 month", "Quick Fix"))
 
     tier3: list[dict[str, Any]] = [
-        {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team"},
-        {"category": "Monitoring", "action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team"},
-        {"category": "Dependencies", "action": "Implement automated dependency scanning and SBOM generation", "effort": "Moderate", "owner": "Development team"},
+        {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team", "affected_layer": "CI/CD", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Medium", "acceptance_criteria": "Security gates in CI/CD pipeline"},
+        {"category": "Monitoring", "action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team", "affected_layer": "infrastructure", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Low", "acceptance_criteria": "WAF rules active; logs centralized"},
+        {"category": "Dependencies", "action": "Implement automated dependency scanning and SBOM generation", "effort": "Moderate", "owner": "Development team", "affected_layer": "CI/CD", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Low", "acceptance_criteria": "SBOM generated per build; dependency scan passes"},
     ]
 
     return {
         "tier_1_immediate": tier1,
         "tier_2_short_term": tier2,
         "tier_3_architectural": tier3,
+        "remediation_matrix": tier1 + tier2,
     }
-
 
 def _build_zero_day_assessment(findings: list[dict[str, Any]]) -> dict[str, Any]:
     non_standard = 0
@@ -852,6 +859,7 @@ async def build_valhalla_report_context(
         attack_scenarios=attack_s,
         exploit_chains=exploit_chains_list,
         remediation_stages=remediation_stages,
+        remediation_matrix=remediation_stages.get("remediation_matrix", []),
         zero_day_assessment=zero_day,
         cost_summary=cost_summary,
     )
@@ -1049,6 +1057,7 @@ def _valhalla_ai_payload(context: ValhallaReportContext) -> dict[str, Any]:
         "attack_scenarios": context.attack_scenarios,
         "exploit_chains": context.exploit_chains,
         "remediation_stages": context.remediation_stages,
+        "remediation_matrix": context.remediation_matrix,
         "zero_day_assessment": context.zero_day_assessment,
         "cost_summary": context.cost_summary,
     }

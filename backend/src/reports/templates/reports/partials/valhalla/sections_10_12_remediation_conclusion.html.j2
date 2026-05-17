@@ -9,6 +9,165 @@
             <p>Use stack-neutral controls until the technology stack is verified: application middleware, reverse proxy or WAF rules, identity provider settings, monitoring, and repeatable validation evidence.</p>
         {% endif %}
     </div>
+
+    <h3>Remediation Matrix</h3>
+    {% set rem_matrix = remediation_matrix if remediation_matrix is defined else [] %}
+    {% if rem_matrix %}
+    <table>
+        <thead>
+            <tr>
+                <th>Finding ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>CVSS</th>
+                <th>Priority</th>
+                <th>Deadline</th>
+                <th>Effort</th>
+                <th>Affected Layer</th>
+                <th>Owner Team</th>
+                <th>Component</th>
+                <th>Affected URL</th>
+                <th>Parameter</th>
+                <th>Fix</th>
+                <th>Rollback Risk</th>
+                <th>Verification</th>
+                <th>Acceptance Criteria</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in rem_matrix %}
+            <tr>
+                <td><code>{{ entry.finding_id | e }}</code></td>
+                <td>{{ entry.title | e }}</td>
+                <td>{{ entry.severity | e }}</td>
+                <td>{{ entry.cvss | e }}</td>
+                <td>{{ entry.priority | e }}</td>
+                <td>{{ entry.deadline | e }}</td>
+                <td>{{ entry.effort | e }}</td>
+                <td>{{ entry.affected_layer | e }}</td>
+                <td>{{ entry.owner_team | e }}</td>
+                <td>{{ entry.config_component | e }}</td>
+                <td><code>{{ entry.affected_url | e }}</code></td>
+                <td>{{ entry.affected_parameter | e }}</td>
+                <td>{{ entry.fix | e }}</td>
+                <td>{{ entry.rollback_risk | e }}</td>
+                <td>{{ entry.verification_step | e }}</td>
+                <td>{{ entry.acceptance_criteria | e }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No remediation matrix available. Refer to findings table for remediation guidance.</p>
+    {% endif %}
+
+    <h3>Tier 1 — Immediate (P0)</h3>
+    {% set tier1 = remediation_stages.get("tier_1_immediate", []) if remediation_stages is defined else [] %}
+    {% if tier1 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Finding ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>Effort</th>
+                <th>Deadline</th>
+                <th>Action</th>
+                <th>Verification</th>
+                <th>Owner</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in tier1 %}
+            <tr>
+                <td><code>{{ entry.finding_id | e }}</code></td>
+                <td>{{ entry.title | e }}</td>
+                <td>{{ entry.severity | e }}</td>
+                <td>{{ entry.effort | e }}</td>
+                <td>{{ entry.deadline | e }}</td>
+                <td>{{ entry.action | e }}</td>
+                <td>{{ entry.verification | e }}</td>
+                <td>{{ entry.owner | e }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No Tier 1 remediation items.</p>
+    {% endif %}
+
+    <h3>Tier 2 — Short-Term (P1/P2)</h3>
+    {% set tier2 = remediation_stages.get("tier_2_short_term", []) if remediation_stages is defined else [] %}
+    {% if tier2 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Finding ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>Effort</th>
+                <th>Deadline</th>
+                <th>Action</th>
+                <th>Verification</th>
+                <th>Owner</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in tier2 %}
+            <tr>
+                <td><code>{{ entry.finding_id | e }}</code></td>
+                <td>{{ entry.title | e }}</td>
+                <td>{{ entry.severity | e }}</td>
+                <td>{{ entry.effort | e }}</td>
+                <td>{{ entry.deadline | e }}</td>
+                <td>{{ entry.action | e }}</td>
+                <td>{{ entry.verification | e }}</td>
+                <td>{{ entry.owner | e }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No Tier 2 remediation items.</p>
+    {% endif %}
+
+    <h3>Tier 3 — Architectural (P3)</h3>
+    {% set tier3 = remediation_stages.get("tier_3_architectural", []) if remediation_stages is defined else [] %}
+    {% if tier3 %}
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Action</th>
+                <th>Effort</th>
+                <th>Owner</th>
+                <th>Affected Layer</th>
+                <th>Priority</th>
+                <th>Deadline</th>
+                <th>Rollback Risk</th>
+                <th>Acceptance Criteria</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in tier3 %}
+            <tr>
+                <td>{{ entry.category | e }}</td>
+                <td>{{ entry.action | e }}</td>
+                <td>{{ entry.effort | e }}</td>
+                <td>{{ entry.owner | e }}</td>
+                <td>{{ entry.affected_layer | e }}</td>
+                <td>{{ entry.priority | e }}</td>
+                <td>{{ entry.deadline | e }}</td>
+                <td>{{ entry.rollback_risk | e }}</td>
+                <td>{{ entry.acceptance_criteria | e }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No Tier 3 architectural items.</p>
+    {% endif %}
+
     <h3>Priority Roadmap</h3>
     <div class="ai-slot-body">
         {% set road = ai_sections.get("prioritization_roadmap") if ai_sections is defined else "" %}

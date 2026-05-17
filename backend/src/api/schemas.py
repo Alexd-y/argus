@@ -816,6 +816,7 @@ class ReportSummary(BaseModel):
 FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"]
 FindingValidationStatusLiteral = Literal["missing", "unverified", "partially_validated", "validated"]
 FindingEvidenceQualityLiteral = Literal["none", "weak", "moderate", "strong"]
+FindingEvidenceClassificationLiteral = Literal["validated", "candidate", "inconclusive"]
 FindingEvidenceTypeLiteral = Literal[
     "observed",
     "tool_output",
@@ -842,12 +843,23 @@ class Finding(BaseModel):
     confidence: FindingConfidenceLiteral = "likely"
     validation_status: FindingValidationStatusLiteral = "unverified"
     evidence_quality: FindingEvidenceQualityLiteral = "none"
+    evidence_classification: FindingEvidenceClassificationLiteral = "candidate"
     evidence_type: FindingEvidenceTypeLiteral | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
     applicability_notes: str | None = None
     adversarial_score: float | None = None
     dedup_status: str | None = None
+    # Evidence gate fields (VHL-EVIDENCE-001)
+    affected_asset: str | None = None
+    affected_endpoint: str | None = None
+    affected_parameter: str | None = None
+    raw_request: str | None = None
+    raw_response: str | None = None
+    browser_proof_url: str | None = None
+    manual_validation_result: str | None = None
+    owner_team: str | None = None
+    verification_command: str | None = None
     # ARG-044 — intel-enrichment fields (all optional / backward-compat).
     epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
     epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -876,6 +888,7 @@ class FindingDetailResponse(BaseModel):
     confidence: FindingConfidenceLiteral = "likely"
     validation_status: FindingValidationStatusLiteral = "unverified"
     evidence_quality: FindingEvidenceQualityLiteral = "none"
+    evidence_classification: FindingEvidenceClassificationLiteral = "candidate"
     evidence_type: FindingEvidenceTypeLiteral | None = None
     evidence_refs: list[str] = Field(default_factory=list)
     reproducible_steps: str | None = None
@@ -883,6 +896,15 @@ class FindingDetailResponse(BaseModel):
     adversarial_score: float | None = None
     dedup_status: str | None = None
     created_at: str | None = None
+    affected_asset: str | None = None
+    affected_endpoint: str | None = None
+    affected_parameter: str | None = None
+    raw_request: str | None = None
+    raw_response: str | None = None
+    browser_proof_url: str | None = None
+    manual_validation_result: str | None = None
+    owner_team: str | None = None
+    verification_command: str | None = None
     # ARG-044 — intel-enrichment fields (all optional / backward-compat).
     epss_score: float | None = Field(default=None, ge=0.0, le=1.0)
     epss_percentile: float | None = Field(default=None, ge=0.0, le=1.0)
