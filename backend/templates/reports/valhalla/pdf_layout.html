@@ -6,7 +6,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ARGUS Valhalla Report — {{ target | e }}</title>
+  <title>Svalbard Security Inc. Valhalla Report — {{ target | e }}</title>
   <link rel="stylesheet" href="pdf_styles.css" />
 </head>
 <body class="tier-valhalla">
@@ -14,15 +14,11 @@
   {# ----------------------- COVER PAGE ----------------------- #}
   <section class="cover-page">
     <div class="cover-brand">
-      <div class="brand-mark" aria-label="ARGUS logo">
-        <svg viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ARGUS shield">
-          <circle cx="32" cy="32" r="30" fill="#1f1f24" stroke="#0d0d10" stroke-width="2" />
-          <path d="M20 24 L32 14 L44 24 L44 38 L32 50 L20 38 Z" fill="#c9a64a" opacity="0.95" />
-          <circle cx="32" cy="30" r="6" fill="#1f1f24" />
-        </svg>
+      <div class="brand-mark" aria-label="{{ brand_alt_text | e }}">
+        <img src="{{ brand_logo_data_uri }}" alt="{{ brand_alt_text | e }}" width="120" height="51" />
       </div>
       <div class="brand-text">
-        <div class="brand-name">ARGUS</div>
+        <div class="brand-name">{{ brand_name | e }}</div>
         <div class="brand-sub">Security Pentest Platform</div>
       </div>
     </div>
@@ -44,7 +40,7 @@
     </div>
 
     <div class="cover-confidential">
-      ARGUS Confidential · Restricted to executive leadership
+      {{ brand_name | e }} Confidential · Restricted to executive leadership
     </div>
   </section>
 

@@ -5,12 +5,16 @@ Safe defaults: empty lists / false / None. No secrets in logs; raw excerpts are 
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import dataclasses
+import hashlib
 import json
 import logging
+import os
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -28,6 +32,62 @@ from src.reports.report_quality_gate import (
     is_header_only_advisory_finding,
 )
 from src.storage.s3 import download_by_key
+
+BRAND_NAME = "Svalbard Security Inc."
+LOGO_FILENAME = "logo.svg"
+LOGO_MIME = "image/svg+xml"
+_LOGO_PATH_ENV = "ARGUS_LOGO_PATH"
+
+
+def _resolve_logo_path() -> Path:
+    env_path = os.environ.get(_LOGO_PATH_ENV)
+    if env_path:
+        return Path(env_path)
+    candidates = [
+        Path(__file__).parent.parent.parent / "templates" / "reports" / LOGO_FILENAME,
+        Path("/app/templates/reports") / LOGO_FILENAME,
+        Path.cwd() / "templates" / "reports" / LOGO_FILENAME,
+    ]
+    for p in candidates:
+        if p.exists():
+            return p
+    return candidates[0]
+
+
+class BrandModel(BaseModel):
+    """Report branding: logo, name, integrity hashes for all export formats."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = BRAND_NAME
+    logo_file: str = LOGO_FILENAME
+    logo_mime: str = LOGO_MIME
+    logo_sha256: str = ""
+    logo_base64_svg: str = ""
+    logo_base64_png: str = ""
+    alt_text: str = "Svalbard Security Inc. logo"
+
+    def hydrate_logo(self) -> None:
+        logo_path = _resolve_logo_path()
+        if not logo_path.exists():
+            return
+        raw = logo_path.read_bytes()
+        self.logo_sha256 = hashlib.sha256(raw).hexdigest()
+        self.logo_base64_svg = base64.b64encode(raw).decode("ascii")
+        # For PDF rendering, convert SVG to data URI
+        self.logo_base64_png = ""
+
+
+_CACHED_BRAND: BrandModel | None = None
+
+
+def get_brand() -> BrandModel:
+    global _CACHED_BRAND
+    if _CACHED_BRAND is None:
+        _CACHED_BRAND = BrandModel()
+        _CACHED_BRAND.hydrate_logo()
+    return _CACHED_BRAND
+
 
 ValhallaSectionCoverageStatus = Literal[
     "completed",

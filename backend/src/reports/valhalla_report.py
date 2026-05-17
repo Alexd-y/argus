@@ -1489,6 +1489,10 @@ def render_valhalla_report(
             "</tbody></table></section>"
         )
 
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    logo_b64 = brand.logo_base64_svg
+
     full_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1543,6 +1547,16 @@ def render_valhalla_report(
     color: var(--accent);
     margin-bottom: 10px;
     font-weight: 700;
+  }}
+  .brand-row {{
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 10px;
+  }}
+  .brand-logo {{
+    height: 36px;
+    width: auto;
   }}
   .header-content h1 {{
     font-size: 32px;
@@ -1702,7 +1716,10 @@ def render_valhalla_report(
 <header class="valhalla-header">
   <div class="header-content">
     <div class="tier-badge">Valhalla Tier</div>
-    <p class="brand">ARGUS Offensive Security Platform</p>
+    <div class="brand-row">
+      <img src="data:image/svg+xml;base64,{logo_b64}" alt="{brand.alt_text}" class="brand-logo" width="120" height="51" />
+      <p class="brand">{brand.name}</p>
+    </div>
     <h1>{context.engagement_title}</h1>
     <div class="meta-line">
       <span>Target: {context.target_url}</span>
@@ -1847,7 +1864,7 @@ def render_valhalla_report(
 </main>
 
 <footer class="valhalla-footer">
-  <span>ARGUS Valhalla Report &mdash; {context.scan_id[:12]}…</span>
+  <span>{brand.name} Valhalla Report &mdash; {context.scan_id[:12]}…</span>
   <span>Generated: {context.generated_at[:19]}Z</span>
   <span>Tier: Valhalla</span>
 </footer>
@@ -1864,13 +1881,20 @@ def render_valhalla_report(
 
 
 def _render_valhalla_markdown(context: ValhallaReportContext) -> bytes:
-    """Render Valhalla report as Markdown."""
+    """Render Valhalla report as Markdown with Svalbard Security Inc. branding."""
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
     lines: list[str] = [
+        f"![{brand.alt_text}](./logo.svg)",
+        "",
+        f"Prepared by {brand.name}",
+        "",
         f"# {context.engagement_title}",
         "",
         f"**Target:** {context.target_url}",
         f"**Scan ID:** {context.scan_id}",
         f"**Tier:** Valhalla",
+        f"**Report prepared by:** {brand.name}",
         f"**Generated:** {context.generated_at}",
         "",
         "---",

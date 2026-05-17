@@ -1030,10 +1030,25 @@ def generate_valhalla_sections_csv(
     *,
     jinja_context: dict[str, Any] | None = None,
 ) -> bytes:
-    """VHL-005 — one row per Valhalla section; text columns plain, structured cells JSON."""
+    """VHL-005 — one row per Valhalla section; text columns plain, structured cells JSON; brand metadata first row."""
     buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["section", "content_markdown_or_json"])
+    writer = csv.writer(buf, lineterminator="\n")
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    writer.writerow(["section", "content_markdown_or_json", "status", "evidence_ids", "parser_status", "updated_at"])
+    writer.writerow([
+        "brand",
+        json.dumps({
+            "name": brand.name,
+            "logo_file": brand.logo_file,
+            "logo_mime": brand.logo_mime,
+            "logo_sha256": brand.logo_sha256,
+        }, ensure_ascii=False),
+        "collected",
+        "",
+        "ok",
+        data.created_at or "",
+    ])
     payload = build_valhalla_report_payload(jinja_context, data)
     text_keys = frozenset(
         {
@@ -1046,10 +1061,10 @@ def generate_valhalla_sections_csv(
     for key in _VALHALLA_REPORT_SECTION_ORDER:
         val = payload.get(key)
         if key in text_keys:
-            writer.writerow([key, str(val or "")])
+            writer.writerow([key, str(val or ""), "", "", "", ""])
         else:
             writer.writerow(
-                [key, json.dumps(_canonical_json_nested(val), ensure_ascii=False)]
+                [key, json.dumps(_canonical_json_nested(val), ensure_ascii=False), "", "", "", ""]
             )
     return buf.getvalue().encode("utf-8")
 
@@ -1057,7 +1072,7 @@ def generate_valhalla_sections_csv(
 def generate_json(
     data: ReportData, *, jinja_context: dict[str, Any] | None = None
 ) -> bytes:
-    """Generate JSON report — full schema with metadata, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation, executive summary."""
+    """Generate JSON / JSOC report — full schema with brand, metadata, export_integrity, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation."""
     ai_list = (
         data.ai_insights
         if isinstance(data.ai_insights, list)
@@ -1121,7 +1136,17 @@ def generate_json(
     ]
     ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     active_web_scan = _jinja_active_web_scan(jinja_context)
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
     output = {
+        "brand": {
+            "name": brand.name,
+            "logo_file": brand.logo_file,
+            "logo_mime": brand.logo_mime,
+            "logo_sha256": brand.logo_sha256,
+            "logo_base64_svg": brand.logo_base64_svg,
+            "alt_text": brand.alt_text,
+        },
         "report_id": data.report_id,
         "target": data.target,
         "scan_id": data.scan_id,
@@ -1144,6 +1169,11 @@ def generate_json(
         "scan_artifacts": _canonical_json_nested(scan_artifacts),
         "active_web_scan": _canonical_json_nested(active_web_scan),
         "raw_artifacts": data.raw_artifacts,
+        "export_integrity": _build_export_integrity(
+            jinja_context=jinja_context,
+            data=data,
+            json_bytes=b"",  # filled after serialization
+        ),
     }
     if _tier_from_jinja(jinja_context) == "valhalla":
         output["valhalla_report"] = build_valhalla_report_payload(jinja_context, data)
@@ -1159,29 +1189,107 @@ def generate_json(
         and isinstance(jinja_context.get("asgard_report"), dict)
     ):
         output["asgard_report"] = _canonical_json_nested(jinja_context["asgard_report"])
+    result = json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
+    output["export_integrity"]["json_sha256"] = hashlib.sha256(result).hexdigest()
     return json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
+
+
+def _build_export_integrity(
+    *,
+    jinja_context: dict[str, Any] | None,
+    data: ReportData,
+    json_bytes: bytes,
+) -> dict[str, str | bool]:
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    return {
+        "html_sha256": "",
+        "pdf_sha256": "",
+        "md_sha256": "",
+        "csv_sha256": "",
+        "json_sha256": hashlib.sha256(json_bytes).hexdigest() if json_bytes else "",
+        "logo_sha256": brand.logo_sha256,
+        "generated_from_same_dataset": True,
+    }
 
 
 def generate_csv(
     data: ReportData, *, jinja_context: dict[str, Any] | None = None
 ) -> bytes:
-    """Generate CSV report — findings as rows (same severity order as JSON, RPT-009); optional AI/artifacts appendix."""
-    # Force LF line terminator so the generator is byte-deterministic across
-    # platforms (Python's csv module defaults to CRLF on every host). This
-    # matters for snapshot stability and for reproducible content hashes.
+    """Generate findings CSV — 35+ columns per finding, RFC4180-compatible, UTF-8 LF-terminated."""
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["Severity", "Title", "Description", "CWE", "CVSS"])
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    writer.writerow([
+        "brand_name", "report_id", "scan_id", "target",
+        "finding_id", "status", "severity", "confidence", "title",
+        "affected_asset", "endpoint", "method", "parameter",
+        "authentication_state",
+        "cwe", "owasp", "cvss_vector", "cvss_score",
+        "evidence_ids", "raw_request_ref", "raw_response_ref",
+        "response_status", "response_headers",
+        "timestamp_utc",
+        "tool_name", "tool_version", "tool_command", "tool_output_excerpt",
+        "manual_validation_result", "browser_proof_url",
+        "observed_impact", "affected_layer", "owner_team",
+        "exact_remediation", "verification_command",
+        "acceptance_criteria", "retest_status",
+        "exploit_demonstrated", "epss_score", "kev_listed",
+    ])
     for f in _findings_sorted(data.findings):
-        writer.writerow(
-            [
-                f.severity,
-                f.title or "",
-                (f.description or "").replace("\n", " "),
-                f.cwe or "",
-                str(f.cvss) if f.cvss is not None else "",
-            ]
-        )
+        poc = getattr(f, "proof_of_concept", {}) or {}
+        if not isinstance(poc, dict):
+            poc = {}
+        finding_id = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+        status = _safe_attr(f, "evidence_classification",
+                           getattr(f, "validation_status", "unverified") or "candidate")
+        writer.writerow([
+            brand.name,
+            data.report_id or "",
+            data.scan_id or "",
+            data.target or "",
+            finding_id,
+            str(status).upper() if status else "CANDIDATE",
+            _safe_attr(f, "severity") or "",
+            _safe_attr(f, "confidence", "likely") or "",
+            _safe_attr(f, "title") or "",
+            _safe_attr(f, "affected_asset") or "",
+            _safe_attr(f, "affected_endpoint",
+                       poc.get("request_url") if isinstance(poc, dict) else "") or "",
+            _safe_attr(f, "http_method",
+                       poc.get("request_method") if isinstance(poc, dict) else "") or "",
+            _safe_attr(f, "affected_parameter",
+                       poc.get("parameter") if isinstance(poc, dict) else "") or "",
+            _safe_attr(f, "auth_state") or "",
+            _safe_attr(f, "cwe") or "",
+            _safe_attr(f, "owasp_category") or "",
+            _safe_attr(f, "cvss_vector") or "",
+            str(_safe_attr(f, "cvss_score", _safe_attr(f, "cvss", ""))) or "",
+            json.dumps(getattr(f, "evidence_refs", []) or [], ensure_ascii=False),
+            _safe_attr(f, "raw_request") or "",
+            _safe_attr(f, "raw_response") or "",
+            str(_safe_attr(f, "response_status", "")) or "",
+            json.dumps(getattr(f, "response_headers", {}) or {}, ensure_ascii=False),
+            _safe_attr(f, "timestamp_utc") or "",
+            _safe_attr(f, "tool_name") or "",
+            _safe_attr(f, "tool_version") or "",
+            _safe_attr(f, "tool_command") or "",
+            (_safe_attr(f, "tool_output_excerpt") or "")[:2000],
+            _safe_attr(f, "manual_validation_result") or "",
+            _safe_attr(f, "browser_proof_url") or "",
+            _safe_attr(f, "observed_impact") or "",
+            _safe_attr(f, "affected_layer") or "",
+            _safe_attr(f, "owner_team") or "",
+            _safe_attr(f, "fix_action",
+                       getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "") or "",
+            _safe_attr(f, "verification_command") or "",
+            _safe_attr(f, "acceptance_criteria") or "",
+            _safe_attr(f, "retest_result") or "",
+            "yes" if getattr(f, "exploit_demonstrated", False) else "no",
+            str(_safe_attr(f, "epss_score", "")) or "",
+            "yes" if getattr(f, "kev_listed", False) else "no",
+        ])
     ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     writer.writerow([])
     writer.writerow(["# ai_sections (section_key, text)"])
@@ -1194,6 +1302,15 @@ def generate_csv(
         [json.dumps(_canonical_json_nested(scan_artifacts), ensure_ascii=False)]
     )
     return buf.getvalue().encode("utf-8")
+
+
+def _safe_attr(obj: Any, name: str, default: Any = "") -> Any:
+    val = getattr(obj, name, None)
+    if val is None:
+        pd = getattr(obj, "proof_of_concept", {}) or {}
+        if isinstance(pd, dict):
+            val = pd.get(name)
+    return val if val is not None else default
 
 
 def generate_html(
@@ -1287,6 +1404,12 @@ def _build_branded_pdf_context(
         scan_id=data.scan_id,
         scan_completed_at=data.created_at,
     )
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    ctx["brand_name"] = brand.name
+    ctx["brand_logo_data_uri"] = f"data:image/svg+xml;base64,{brand.logo_base64_svg}"
+    ctx["brand_logo_sha256"] = brand.logo_sha256
+    ctx["brand_alt_text"] = brand.alt_text
     return ctx
 
 

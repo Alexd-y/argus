@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% set scan_label = scan_id | default("scan") %}
     {% set target_label = recon_summary.target_url if recon_summary is defined and recon_summary.target_url else scan_label %}
-    <title>ROGNAREK Security Report - {{ target_label }}</title>
+    <title>Svalbard Security Inc. Report - {{ target_label }}</title>
     <style>
         :root {
             --bg: #0a0c10;
@@ -499,7 +499,7 @@
 <body>
 <div id="app" class="valhalla-secreport">
     <header class="app-header">
-        <h1>ROGNAREK <span>Security Report</span></h1>
+        <h1>Svalbard Security Inc. <span>Security Report</span></h1>
         {% set header_title = (valhalla_context.valhalla_engagement_title if valhalla_context is defined and valhalla_context.valhalla_engagement_title is defined and valhalla_context.valhalla_engagement_title else (report_quality.report_mode_label if report_quality is defined and report_quality.report_mode_label is defined and report_quality.report_mode_label else "Valhalla Security Assessment")) %}
         <div class="subtitle">{{ header_title | e }}</div>
         <div class="header-meta">
@@ -544,7 +544,7 @@
     </div>
 
     <footer class="rpt-footer">
-        <span>ROGNAREK Valhalla</span>
+        <span>Svalbard Security Inc. Valhalla</span>
         <span>{{ scan_label }}</span>
     </footer>
 </div>
