@@ -260,11 +260,15 @@ def _effective_validation_status(finding: Any, quality: str) -> str:
 
 
 def _strip_legacy_cvss_from_poc(poc: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Remove legacy CVSS keys from PoC dict to prevent cvss_conflict validation failures."""
+    """Remove all CVSS keys from PoC dict to prevent cvss_conflict validation failures.
+
+    Canonical CVSS lives on the top-level Finding object (cvss, cvss_score, cvss_vector).
+    PoC-level CVSS fields are legacy and cause false-positive conflict detection.
+    """
     if poc is None:
         return None
     out = dict(poc)
-    for k in ("cvss_base_score", "base_score", "cvss"):
+    for k in ("cvss_score", "cvss_base_score", "base_score", "cvss"):
         out.pop(k, None)
     return out
 

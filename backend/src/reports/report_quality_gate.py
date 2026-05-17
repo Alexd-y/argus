@@ -889,7 +889,7 @@ def _normalize_exploit_fields(finding: Any, header_only_advisory: bool) -> tuple
 
 
 def _strip_legacy_cvss_from_poc(poc: dict[str, Any]) -> None:
-    for k in ("cvss_base_score", "base_score", "cvss"):
+    for k in ("cvss_score", "cvss_base_score", "base_score", "cvss"):
         poc.pop(k, None)
 
 
