@@ -8,7 +8,7 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -1170,6 +1170,9 @@ def generate_json(
         "active_web_scan": _canonical_json_nested(active_web_scan),
         "raw_artifacts": data.raw_artifacts,
         "retest_checklist": build_retest_checklist_export(data.findings),
+        "unresolved_gaps": _unresolved_gaps_from_ctx(jinja_context),
+        "missing_artifacts": _missing_artifacts_from_ctx(jinja_context),
+        "next_scan_commands": _next_scan_commands_from_ctx(jinja_context),
         "export_integrity": _build_export_integrity(
             jinja_context=jinja_context,
             data=data,
@@ -1198,6 +1201,27 @@ def generate_json(
 def build_retest_checklist_export(findings: Iterable[Any]) -> list[dict[str, str]]:
     from src.reports.report_quality_gate import build_retest_checklist
     return build_retest_checklist(findings)
+
+
+def _unresolved_gaps_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+    vc = (jinja_context or {}).get("valhalla_context")
+    if isinstance(vc, dict):
+        return vc.get("unresolved_gaps", [])
+    return getattr(vc, "unresolved_gaps", []) if vc is not None else []
+
+
+def _missing_artifacts_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+    vc = (jinja_context or {}).get("valhalla_context")
+    if isinstance(vc, dict):
+        return vc.get("missing_artifacts", [])
+    return getattr(vc, "missing_artifacts", []) if vc is not None else []
+
+
+def _next_scan_commands_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+    vc = (jinja_context or {}).get("valhalla_context")
+    if isinstance(vc, dict):
+        return vc.get("next_scan_commands", [])
+    return getattr(vc, "next_scan_commands", []) if vc is not None else []
 
 
 def _build_export_integrity(
