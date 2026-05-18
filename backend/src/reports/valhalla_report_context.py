@@ -10,6 +10,7 @@ import contextlib
 import dataclasses
 import hashlib
 import json
+from itertools import islice
 import logging
 import os
 import re
@@ -5511,7 +5512,7 @@ def _parse_full_headers_context(
                             url=url,
                             method=str(data.get("method", "GET"))[:16],
                             status_code=int(data.get("status_code", data.get("status", 0))),
-                            response_headers={str(k): str(v) for k, v in resp_hdrs.items() if isinstance(v, (str, int, float))}[:32],
+                            response_headers=dict(islice(({str(k): str(v) for k, v in resp_hdrs.items() if isinstance(v, (str, int, float))}).items(), 32)),
                             raw_request=str(data.get("raw_request", ""))[:2048],
                             raw_response=str(data.get("raw_response", ""))[:2048],
                             timestamp=str(data.get("timestamp", ""))[:40],
