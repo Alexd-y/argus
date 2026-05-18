@@ -6047,7 +6047,7 @@ def build_valhalla_report_context(
     )
     security_headers_table_rows = build_security_headers_table_rows(sec_hdr)
     port_exposure_table_rows = build_port_exposure_table_rows(port_data, target_hint=target_guess)
-    hibp_data = _parse_hibp_data_from_phases(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_bodies)
+    hibp_data = _parse_hibp_data_from_phases(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
     leaked_email_rows = build_leaked_email_rows(final_emails, hibp_data=hibp_data)
     evidence_inv = build_evidence_inventory_rows(
         finding_dicts,
@@ -6201,7 +6201,7 @@ def build_valhalla_report_context(
         sca_artifact_count=sca_artifact_count,
         active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
         auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
-        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_bodies),
+        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
         remediation_matrix=build_remediation_matrix_rows(finding_dicts),
         unresolved_gaps=build_unresolved_gaps(finding_dicts),
         missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),
