@@ -42,10 +42,29 @@ def scan_phase_task(
             async with session_factory() as session:
                 await set_session_tenant(session, tenant_id)
                 try:
-                    await run_scan_state_machine(
-                        session, scan_id, tenant_id, target_url, options
+                    await asyncio.wait_for(
+                        run_scan_state_machine(
+                            session, scan_id, tenant_id, target_url, options
+                        ),
+                        timeout=86400,
                     )
                     return {"status": "completed", "scan_id": scan_id}
+                except asyncio.TimeoutError:
+                    from src.db.models import Scan
+
+                    async with session_factory() as err_session:
+                        await set_session_tenant(err_session, tenant_id)
+                        await err_session.execute(
+                            update(Scan)
+                            .where(cast(Scan.id, String) == scan_id)
+                            .values(status="failed", phase="timeout")
+                        )
+                        await err_session.commit()
+                    logger.error(
+                        "Scan timed out after 24h",
+                        extra={"scan_id": scan_id},
+                    )
+                    return {"status": "timeout", "scan_id": scan_id}
                 except ExploitationApprovalRequiredError:
                     return {"status": "awaiting_approval", "scan_id": scan_id}
                 except Exception:

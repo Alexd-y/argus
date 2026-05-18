@@ -10,11 +10,12 @@ import { getSafeErrorMessage } from "@/lib/api";
 import type { CreateScanRequest, SSEEventPayload } from "@/lib/types";
 
 const POLL_INTERVAL_MS = 3000;
+const QUEUE_POLL_INTERVAL_MS = 5000;
 
 export interface ScanProgressState {
   progress: number;
   phase: string;
-  status: "idle" | "starting" | "running" | "complete" | "error";
+  status: "idle" | "starting" | "queued" | "running" | "complete" | "error";
   error: string | null;
 }
 
@@ -38,6 +39,76 @@ export function useScanProgress() {
     unsubscribeRef.current = null;
   }, []);
 
+  const startNormalPolling = useCallback((scanId: string) => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await getScanStatus(scanId);
+        setState((s) => ({
+          ...s,
+          progress: status.progress,
+          phase: status.phase,
+          status: status.status === "completed" ? "complete" : "running",
+        }));
+        if (status.status === "completed" || status.status === "failed") {
+          stopPolling();
+          if (status.status === "failed") {
+            setState((s) => ({ ...s, status: "error", error: "Scan failed" }));
+          }
+        }
+      } catch {
+        // keep polling on transient errors
+      }
+    }, POLL_INTERVAL_MS);
+  }, [stopPolling]);
+
+  const startQueuedPolling = useCallback((scanId: string) => {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await getScanStatus(scanId);
+        if (s.status !== "queued") {
+          stopPolling();
+          setState({
+            progress: s.progress,
+            phase: s.phase,
+            status: "running",
+            error: null,
+          });
+          const cleanup = subscribeScanEvents(
+            scanId,
+            (payload: SSEEventPayload) => {
+              setState((prev) => {
+                const next = { ...prev };
+                if (payload.progress !== undefined) next.progress = payload.progress;
+                if (payload.phase) next.phase = payload.phase;
+                if (payload.message) next.phase = payload.message;
+                if (payload.event === "complete") {
+                  next.status = "complete";
+                  next.progress = 100;
+                }
+                if (payload.event === "error") {
+                  next.status = "error";
+                  next.error = getSafeErrorMessage(
+                    (payload as { error?: string }).error ?? "Scan failed",
+                    "Scan failed"
+                  );
+                }
+                return next;
+              });
+            },
+            () => {
+              startNormalPolling(scanId);
+            }
+          );
+          unsubscribeRef.current = cleanup;
+        }
+      } catch {
+        // keep polling on transient errors
+      }
+    }, QUEUE_POLL_INTERVAL_MS);
+  }, [stopPolling, startNormalPolling]);
+
   const startScan = useCallback(
     async (request: CreateScanRequest) => {
       setState({ progress: 0, phase: "", status: "starting", error: null });
@@ -47,30 +118,14 @@ export function useScanProgress() {
         const res = await createScan(request);
         const scanId = res.scan_id;
 
-        setState((s) => ({ ...s, status: "running", phase: "Initializing" }));
+        const initialStatus = await getScanStatus(scanId);
+        if (initialStatus.status === "queued") {
+          setState({ progress: 0, phase: "In queue", status: "queued", error: null });
+          startQueuedPolling(scanId);
+          return;
+        }
 
-        const startPolling = () => {
-          if (pollRef.current) return;
-          pollRef.current = setInterval(async () => {
-            try {
-              const status = await getScanStatus(scanId);
-              setState((s) => ({
-                ...s,
-                progress: status.progress,
-                phase: status.phase,
-                status: status.status === "completed" ? "complete" : "running",
-              }));
-              if (status.status === "completed" || status.status === "failed") {
-                stopPolling();
-                if (status.status === "failed") {
-                  setState((s) => ({ ...s, status: "error", error: "Scan failed" }));
-                }
-              }
-            } catch {
-              // keep polling on transient errors
-            }
-          }, POLL_INTERVAL_MS);
-        };
+        setState((s) => ({ ...s, status: "running", phase: "Initializing" }));
 
         const cleanup = subscribeScanEvents(
           scanId,
@@ -95,7 +150,7 @@ export function useScanProgress() {
             });
           },
           () => {
-            startPolling();
+            startNormalPolling(scanId);
           }
         );
 
@@ -109,7 +164,7 @@ export function useScanProgress() {
         });
       }
     },
-    [stopPolling]
+    [stopPolling, startNormalPolling, startQueuedPolling]
   );
 
   const reset = useCallback(() => {

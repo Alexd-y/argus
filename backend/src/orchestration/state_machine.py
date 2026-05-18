@@ -5,8 +5,9 @@ import json
 import logging
 import time
 import uuid
+from contextlib import suppress
 
-from sqlalchemy import String, cast, select, update
+from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS, ReportSummary
@@ -69,6 +70,37 @@ from src.reports.bundle_enqueue import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SCAN_HEARTBEAT_SEC = 30
+
+
+async def _heartbeat_loop(
+    session: AsyncSession,
+    scan_id: str,
+    interval_sec: int,
+) -> None:
+    """Периодически обновляет Scan.last_heartbeat. Выходит если скан cancelled."""
+    while True:
+        await asyncio.sleep(interval_sec)
+        try:
+            result = await session.execute(
+                select(Scan.status).where(cast(Scan.id, String) == scan_id)
+            )
+            current_status = result.scalar_one_or_none()
+            if current_status == "cancelled":
+                logger.warning(
+                    "Скан отменён — heartbeat остановлен",
+                    extra={"scan_id": scan_id},
+                )
+                return
+            await session.execute(
+                update(Scan)
+                .where(cast(Scan.id, String) == scan_id)
+                .values(last_heartbeat=func.now())
+            )
+            await session.commit()
+        except Exception:
+            logger.exception("Heartbeat update failed", extra={"scan_id": scan_id})
 
 
 async def _upload_raw_phase_snapshot(
@@ -491,6 +523,10 @@ async def run_scan_state_machine(
 
     clear_tool_availability_cache()
 
+    heartbeat_task = asyncio.create_task(
+        _heartbeat_loop(session, scan_id, _SCAN_HEARTBEAT_SEC)
+    )
+
     for order_index, phase in enumerate(PHASE_ORDER):
         progress = _phase_to_progress(phase)
         phase_str = phase.value
@@ -715,6 +751,9 @@ async def run_scan_state_machine(
                 else:
                     output_data = {}
         except Exception as exc:
+            heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat_task
             await session.execute(
                 update(ScanStep)
                 .where(cast(ScanStep.id, String) == step.id)
@@ -804,6 +843,10 @@ async def run_scan_state_machine(
             .values(status="completed")
         )
         await session.commit()
+
+    heartbeat_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await heartbeat_task
 
     assert report_out is not None, "Reporting phase must complete before persist"
     await _persist_report_and_findings(

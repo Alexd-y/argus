@@ -134,6 +134,14 @@ services:
     env_file: .env
     environment:
       VLLM_API_KEY: ${WRB_API_KEY:-argus-wrb-key}
+    deploy:
+      resources:
+        limits:
+          cpus: "8.0"
+          memory: 12G
+        reservations:
+          cpus: "4.0"
+          memory: 6G
     volumes:
       - wrb_models:/models
       - wrb_cache:/root/.cache/huggingface
@@ -181,7 +189,8 @@ services:
       VA_AI_PLAN_ENABLED: "${VA_AI_PLAN_ENABLED:-false}"
       SQLMAP_VA_ENABLED: "${SQLMAP_VA_ENABLED:-false}"
       VA_EXPLOIT_AGGRESSIVE_ENABLED: "${VA_EXPLOIT_AGGRESSIVE_ENABLED:-false}"
-      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-3}
+      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-10}
+      ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY: ${ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY:-10}
       ACTIVE_SCAN_MAX_CAPTURE_BYTES: ${ACTIVE_SCAN_MAX_CAPTURE_BYTES:-4194304}
       VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: ${VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC:-120}
       VA_AGGRESSIVE_SCAN: "${VA_AGGRESSIVE_SCAN:-false}"
@@ -221,28 +230,25 @@ services:
       retries: 5
       start_period: 15s
 
-  worker:
+  worker-scans:
     build:
       context: .
       dockerfile: worker/Dockerfile
-    image: argus-worker
-    container_name: argus-worker
-    # Docker socket requires docker group (GID from host). Override GID if needed:
-    #   DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) docker compose up
+    image: argus-worker-scans
+    container_name: argus-worker-scans
+    command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 1
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
     deploy:
       resources:
         limits:
-          cpus: "4.0"
-          memory: 4G
+          cpus: "2.0"
+          memory: 2G
         reservations:
           cpus: "1.0"
-          memory: 1G
+          memory: 512M
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
-      # SECURITY (H-7): When REDIS_PASSWORD is set, REDIS_URL and CELERY_BROKER_URL
-      # MUST include the password: redis://:PASSWORD@redis:6379/0
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       MINIO_ENDPOINT: minio:9000
@@ -256,11 +262,12 @@ services:
       VA_AI_PLAN_ENABLED: "${VA_AI_PLAN_ENABLED:-false}"
       SQLMAP_VA_ENABLED: "${SQLMAP_VA_ENABLED:-false}"
       VA_EXPLOIT_AGGRESSIVE_ENABLED: "${VA_EXPLOIT_AGGRESSIVE_ENABLED:-false}"
-      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-3}
+      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-10}
       ACTIVE_SCAN_MAX_CAPTURE_BYTES: ${ACTIVE_SCAN_MAX_CAPTURE_BYTES:-4194304}
       VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: ${VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC:-120}
       VA_AGGRESSIVE_SCAN: "${VA_AGGRESSIVE_SCAN:-false}"
       VA_CUSTOM_XSS_POC_ENABLED: "${VA_CUSTOM_XSS_POC_ENABLED:-true}"
+      ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY: ${ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY:-10}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -271,16 +278,11 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      # SECURITY: docker.sock is required for VA active-scan sandbox exec.
-      # In production, prefer a dedicated sandbox REST API (see docs/security.md).
-      # Risk: container compromise → host control. Mitigate with read-only mount + network isolation.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
       - data
     depends_on:
-      backend:
-        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
@@ -293,6 +295,66 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  worker-general:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: argus-worker-general
+    container_name: argus-worker-general
+    command: celery -A src.celery_app worker -l INFO -Q argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
+    user: "1000:${DOCKER_GID:-999}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 128M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
+      VA_AI_PLAN_ENABLED: "${VA_AI_PLAN_ENABLED:-false}"
+      SQLMAP_VA_ENABLED: "${SQLMAP_VA_ENABLED:-false}"
+      VA_EXPLOIT_AGGRESSIVE_ENABLED: "${VA_EXPLOIT_AGGRESSIVE_ENABLED:-false}"
+      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-10}
+      ACTIVE_SCAN_MAX_CAPTURE_BYTES: ${ACTIVE_SCAN_MAX_CAPTURE_BYTES:-4194304}
+      VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: ${VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC:-120}
+      VA_AGGRESSIVE_SCAN: "${VA_AGGRESSIVE_SCAN:-false}"
+      VA_CUSTOM_XSS_POC_ENABLED: "${VA_CUSTOM_XSS_POC_ENABLED:-true}"
+      ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY: ${ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY:-10}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   sandbox:
     build:
