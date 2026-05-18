@@ -884,6 +884,10 @@ class ValhallaReportContext(BaseModel):
     full_headers: FullHeadersContext = Field(default_factory=FullHeadersContext)
     #: Step 12 — 16-column remediation matrix with acceptance criteria
     remediation_matrix: list[RemediationMatrixRow] = Field(default_factory=list)
+    #: Step 17 — evidence gaps, missing artifacts, next scan commands
+    unresolved_gaps: list[dict[str, str]] = Field(default_factory=list)
+    missing_artifacts: list[dict[str, str]] = Field(default_factory=list)
+    next_scan_commands: list[dict[str, str]] = Field(default_factory=list)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
