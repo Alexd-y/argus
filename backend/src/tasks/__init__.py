@@ -151,7 +151,7 @@ def generate_all_reports_task(
             await engine.dispose()
 
     async def _run_all() -> dict[str, Any]:
-        sem = asyncio.Semaphore(4)
+        sem = asyncio.Semaphore(1)
 
         async def _bounded(rid: str) -> dict[str, Any]:
             async with sem:
