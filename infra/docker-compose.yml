@@ -301,7 +301,6 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     image: argus-worker-general
-    container_name: argus-worker-general
     command: celery -A src.celery_app worker -l INFO -Q argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
