@@ -52,6 +52,7 @@ _MAX_ARG_STRLEN = 4096
 
 
 def _sanitize_argv_list(argv: list[str]) -> list[str] | None:
+    """Basic argv validation only (length + null bytes). Shell metacharacters (;, |, $(), &&, ||) are ALLOWED — required for pentest payloads."""
     if len(argv) > _MAX_ARGV_LEN:
         return None
     out: list[str] = []

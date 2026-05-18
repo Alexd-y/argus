@@ -1424,16 +1424,7 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     cvss_vector = _canonical_cvss_vector(finding, poc)
     header_only = _is_header_only_advisory_finding(finding)
 
-    if header_only:
-        if cvss is None:
-            cvss = HEADER_ONLY_DEFAULT_CVSS_SCORE
-            if not cvss_vector:
-                cvss_vector = HEADER_ONLY_DEFAULT_CVSS_VECTOR
-        elif cvss > HEADER_ONLY_MAX_CVSS_SCORE:
-            cvss = HEADER_ONLY_MAX_CVSS_SCORE
-        if not cvss_vector and cvss is not None:
-            cvss_vector = HEADER_ONLY_DEFAULT_CVSS_VECTOR
-
+    # NO CVSS cap for header-only findings — preserve original score/vector as-is
     exploit_demonstrated, exploit_summary = _normalize_exploit_fields(finding, header_only)
 
     # NO downgrades — all findings validated via payloads/commands/exploits from WRB

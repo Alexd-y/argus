@@ -87,7 +87,7 @@ KALI_MCP_ORCHESTRATION_BLOCK = (
     "- injection_testing: sstimap (SSTI), nosqli (NoSQL), graphql-cop (GraphQL), pp-finder (prototype pollution)\n\n"
     "MCP run_* (VA sandbox, separate allowlist): run_dalfox, run_xsstrike, run_ffuf, run_sqlmap, "
     "run_nuclei, run_whatweb, run_nikto, run_testssl, run_sstimap, run_nosqli, run_graphql_cop — dispatched only through policy-checked "
-    "sandbox/Celery paths; argv must stay non-interactive and injection-safe (no shell metacharacters).\n\n"
+    "sandbox/Celery paths; argv may include shell metacharacters, pipes, redirects — full pentest payloads authorized.\n\n"
     "When to suggest MCP run_* vs full ARGUS scan pipeline:\n"
     "- Prefer targeted MCP run_* when the operator needs a single focused check (one tool, one URL/host, "
     "quick validation, iterative triage) and scope is explicit.\n"

@@ -6203,4 +6203,215 @@ def build_valhalla_report_context(
         auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
         full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_bodies),
         remediation_matrix=build_remediation_matrix_rows(finding_dicts),
+        unresolved_gaps=build_unresolved_gaps(finding_dicts),
+        missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),
+        next_scan_commands=build_next_scan_commands(finding_dicts),
     )
+
+
+def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """VHL-GAP-001 — identify findings with insufficient evidence that need further testing."""
+    gaps: list[dict[str, str]] = []
+    for f in (findings or []):
+        if not isinstance(f, dict):
+            continue
+        classification = str(f.get("evidence_classification", "") or "").lower()
+        if classification not in ("inconclusive", "candidate"):
+            continue
+        fid = str(f.get("id", f.get("finding_id", "")) or "")
+        severity = str(f.get("severity", "") or "")
+        title = str(f.get("title", "") or "")
+        quality = str(f.get("evidence_quality", "none") or "none")
+        confidence = str(f.get("confidence", "") or "")
+        gap_type = _classify_gap_type(f)
+        recommended_tool = _recommend_gap_tool(f)
+        poc = f.get("proof_of_concept", {}) or {}
+        endpoint = str(poc.get("request_url", f.get("affected_endpoint", "")) or "")[:512]
+        gaps.append({
+            "finding_id": fid[:64],
+            "title": title[:256],
+            "severity": severity,
+            "evidence_classification": classification.upper() if classification else "INCONCLUSIVE",
+            "evidence_quality": quality,
+            "confidence": confidence,
+            "gap_type": gap_type,
+            "recommended_tool": recommended_tool,
+            "endpoint": endpoint,
+            "recommended_action": _gap_action(f, gap_type, recommended_tool, endpoint),
+        })
+    gaps.sort(key=lambda g: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(g.get("severity", "info").lower(), 5))
+    return gaps[:48]
+
+
+def _classify_gap_type(f: dict[str, Any]) -> str:
+    title = str(f.get("title", "") or "").lower()
+    desc = str(f.get("description", "") or "").lower()
+    blob = title + " " + desc
+    if "sql" in blob or "cwe-89" in blob:
+        return "missing_sqli_proof"
+    if "xss" in blob or "cross-site" in blob or "cwe-79" in blob:
+        return "missing_xss_proof"
+    if "command" in blob and ("injection" in blob or "rce" in blob):
+        return "missing_command_injection_proof"
+    if "header" in blob or "hsts" in blob or "csp" in blob or "security header" in blob:
+        return "missing_header_validation"
+    if "port" in blob or "service" in blob or "exposure" in blob:
+        return "missing_port_service_validation"
+    if "email" in blob or "osint" in blob or "leak" in blob or "hibp" in blob:
+        return "missing_osint_correlation"
+    if "outdated" in blob or "version" in blob or "component" in blob or "cve" in desc:
+        return "missing_version_evidence"
+    if "ssl" in blob or "tls" in blob or "certif" in blob:
+        return "missing_tls_evidence"
+    return "insufficient_evidence"
+
+
+def _recommend_gap_tool(f: dict[str, Any]) -> str:
+    gap_type = _classify_gap_type(f)
+    tool_map = {
+        "missing_sqli_proof": "sqlmap",
+        "missing_xss_proof": "dalfox",
+        "missing_command_injection_proof": "commix",
+        "missing_header_validation": "curl / httpx",
+        "missing_port_service_validation": "nmap",
+        "missing_osint_correlation": "theHarvester",
+        "missing_version_evidence": "nuclei",
+        "missing_tls_evidence": "testssl.sh / sslscan",
+        "insufficient_evidence": "nuclei",
+    }
+    return tool_map.get(gap_type, "nuclei / curl")
+
+
+def _gap_action(f: dict[str, Any], gap_type: str, tool: str, endpoint: str) -> str:
+    poc = f.get("proof_of_concept", {}) or {}
+    parameter = str(poc.get("parameter", f.get("affected_parameter", "")) or "")
+    method = str(poc.get("request_method", "GET") or "GET")
+    url_hint = endpoint[:512] if endpoint else "TARGET_URL"
+    actions = {
+        "missing_sqli_proof": f"{tool} -u \"{url_hint}\" --data \"{parameter}=test\" --batch --level=3 --risk=3",
+        "missing_xss_proof": f"{tool} url \"{url_hint}\" --cookie \"test=1\" -b \"{parameter}\" --deep-dom",
+        "missing_command_injection_proof": f"{tool} --url \"{url_hint}\" --data \"{parameter}=1\"",
+        "missing_header_validation": f"curl -sS -I -X {method} \"{url_hint}\"",
+        "missing_port_service_validation": f"nmap -sV -p- \"{url_hint.split('/')[0] or ''}\"",
+        "missing_osint_correlation": f"{tool} -d \"{url_hint.split('//')[-1].split('/')[0] or ''}\" -b all",
+        "missing_version_evidence": f"{tool} -u \"{url_hint}\" -t template/technologies/",
+        "missing_tls_evidence": f"{tool} \"{url_hint.split('//')[-1].split('/')[0] or ''}\"",
+        "insufficient_evidence": f"curl -sS -X {method} \"{url_hint}\" -v 2>&1",
+    }
+    return actions.get(gap_type, f"Re-test with appropriate tool ({tool}) on {url_hint}")
+
+
+def build_missing_artifact_report(
+    findings: list[dict[str, Any]],
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+) -> list[dict[str, str]]:
+    """VHL-ART-001 — identify findings missing required evidence artifacts."""
+    missing: list[dict[str, str]] = []
+    for f in (findings or []):
+        if not isinstance(f, dict):
+            continue
+        fid = str(f.get("id", f.get("finding_id", "")) or "")
+        poc = f.get("proof_of_concept", {}) or {}
+        deficiencies: list[str] = []
+        if not poc.get("raw_request") and not poc.get("request"):
+            deficiencies.append("missing_raw_request")
+        if not poc.get("raw_response") and not poc.get("response"):
+            deficiencies.append("missing_raw_response")
+        if not poc.get("timestamp") and not poc.get("timestamps"):
+            deficiencies.append("missing_timestamp")
+        if not poc.get("tool_command") and not poc.get("command"):
+            deficiencies.append("missing_tool_command")
+        if not poc.get("tool_name") and not poc.get("tool"):
+            deficiencies.append("missing_tool_name")
+        if not f.get("reproduction") and not f.get("reproducible_steps"):
+            deficiencies.append("missing_reproduction_steps")
+        classification = str(f.get("evidence_classification", "") or "").lower()
+        if classification in ("validated", "observed") and deficiencies:
+            deficiencies.append("status_claims_stronger_than_evidence")
+        if deficiencies:
+            missing.append({
+                "finding_id": fid[:64],
+                "title": str(f.get("title", ""))[:256],
+                "severity": str(f.get("severity", "") or ""),
+                "deficiencies": ", ".join(deficiencies),
+                "recommended_collection": _artifact_collection_hint(f, deficiencies),
+            })
+    for ph, od in (phase_outputs or []):
+        if not isinstance(od, dict):
+            continue
+        for tool_signal in ("tool_failures", "failed_tools", "errors"):
+            failures = od.get(tool_signal)
+            if isinstance(failures, list):
+                for fail in failures[:16]:
+                    if isinstance(fail, dict) and fail.get("tool"):
+                        missing.append({
+                            "finding_id": "",
+                            "title": f"Tool failure: {fail.get('tool', 'unknown')}",
+                            "severity": "info",
+                            "deficiencies": str(fail.get("error", fail.get("reason", "tool_failed")))[:300],
+                            "recommended_collection": f"Re-run {fail.get('tool', 'tool')} with debug flags; check sandbox binary path",
+                        })
+    return missing[:32]
+
+
+def _artifact_collection_hint(f: dict[str, Any], deficiencies: list[str]) -> str:
+    poc = f.get("proof_of_concept", {}) or {}
+    endpoint = str(poc.get("request_url", f.get("affected_endpoint", "")) or "")
+    method = str(poc.get("request_method", "GET") or "GET")
+    if not endpoint:
+        return "Re-scan target to collect raw request/response pairs"
+    hints: list[str] = []
+    if "missing_raw_request" in deficiencies:
+        hints.append(f"curl -sS -X {method} '{endpoint}' -o /dev/null -D - 2>&1 | tee request_response.txt")
+    if "missing_raw_response" in deficiencies:
+        hints.append(f"Capture full HTTP response with headers via curl -v -X {method} '{endpoint}' 2>&1")
+    if "missing_timestamp" in deficiencies:
+        hints.append("Record UTC timestamp at evidence collection time (date -u +%Y-%m-%dT%H:%M:%SZ)")
+    if "missing_tool_command" in deficiencies:
+        hints.append("Document exact command + arguments used to produce this finding")
+    if "missing_tool_name" in deficiencies:
+        hints.append("Tag finding with source tool name (nuclei, sqlmap, dalfox, etc.)")
+    if "missing_reproduction_steps" in deficiencies:
+        hints.append("Document step-by-step reproduction: login state, HTTP method, payload, expected response")
+    return "; ".join(hints[:3]) if hints else "Review finding and collect missing evidence"
+
+
+def build_next_scan_commands(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """VHL-CMD-001 — generate concrete shell commands for evidence re-collection."""
+    commands: list[dict[str, str]] = []
+    for f in (findings or []):
+        if not isinstance(f, dict):
+            continue
+        classification = str(f.get("evidence_classification", "") or "").lower()
+        if classification not in ("inconclusive", "candidate"):
+            continue
+        fid = str(f.get("id", f.get("finding_id", "")) or "")
+        poc = f.get("proof_of_concept", {}) or {}
+        endpoint = str(poc.get("request_url", f.get("affected_endpoint", "")) or "")
+        parameter = str(poc.get("parameter", f.get("affected_parameter", "")) or "")
+        method = str(poc.get("request_method", "GET") or "GET")
+        gap_type = _classify_gap_type(f)
+        cmd = _gap_action(f, gap_type, _recommend_gap_tool(f), endpoint)
+        if cmd:
+            commands.append({
+                "finding_id": fid[:64],
+                "command": cmd[:2000],
+                "expected_output": _expected_output_hint(gap_type),
+                "priority": str(f.get("severity", "medium"))[:16],
+            })
+    return commands[:16]
+
+
+def _expected_output_hint(gap_type: str) -> str:
+    hints = {
+        "missing_sqli_proof": "Database error, delayed response, or sqlmap confirmation of injection point",
+        "missing_xss_proof": "JavaScript execution confirmed by dalfox; browser screenshot or DOM verification",
+        "missing_command_injection_proof": "Command output reflected in HTTP response; time-based delay confirming execution",
+        "missing_header_validation": "HTTP response headers listing all security headers with values",
+        "missing_port_service_validation": "Open ports with service/version banners",
+        "missing_osint_correlation": "Email addresses and associated breach data",
+        "missing_version_evidence": "Version numbers matched against CVE databases",
+        "missing_tls_evidence": "TLS protocol versions, cipher suites, certificate details",
+        "insufficient_evidence": "Raw request/response pair with timestamps",
+    }
+    return hints.get(gap_type, "Sufficient evidence to reclassify finding as VALIDATED or OBSERVED")

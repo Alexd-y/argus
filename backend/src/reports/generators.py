@@ -1169,6 +1169,7 @@ def generate_json(
         "scan_artifacts": _canonical_json_nested(scan_artifacts),
         "active_web_scan": _canonical_json_nested(active_web_scan),
         "raw_artifacts": data.raw_artifacts,
+        "retest_checklist": build_retest_checklist_export(data.findings),
         "export_integrity": _build_export_integrity(
             jinja_context=jinja_context,
             data=data,
@@ -1192,6 +1193,11 @@ def generate_json(
     result = json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
     output["export_integrity"]["json_sha256"] = hashlib.sha256(result).hexdigest()
     return json.dumps(output, indent=2, ensure_ascii=False).encode("utf-8")
+
+
+def build_retest_checklist_export(findings: Iterable[Any]) -> list[dict[str, str]]:
+    from src.reports.report_quality_gate import build_retest_checklist
+    return build_retest_checklist(findings)
 
 
 def _build_export_integrity(
