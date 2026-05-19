@@ -1559,7 +1559,6 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
         rate_limit_working = _is_rate_limit_working(primary) or _is_rate_limit_working(secondary)
 
         if rate_limit_working:
-            # Rate limiting IS working — record as positive observation, not a finding
             groups[key] = _copy_with(
                 primary,
                 {
@@ -1569,14 +1568,6 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
                         "indicating that rate limiting controls are active. This is a positive observation. "
                         "Account lockout, CAPTCHA, and full login POST behavior were not fully validated."
                     ),
-                    "cwe": None,
-                    "owasp_category": "A07",
-                    "severity": "info",
-                    "cvss": 0.0,
-                    "cvss_score": 0.0,
-                    "confidence": "likely",
-                    "validation_status": "partially_validated",
-                    "evidence_quality": "moderate",
                     "evidence_refs": refs,
                     "proof_of_concept": poc,
                 },
@@ -1592,16 +1583,6 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
                         "authentication-control signals, but account lockout, CAPTCHA, and full login "
                         "POST behavior were not validated."
                     ),
-                    "cwe": _get_attr(primary, "cwe") or _get_attr(secondary, "cwe") or "CWE-307",
-                    "owasp_category": _get_attr(primary, "owasp_category")
-                    or _get_attr(secondary, "owasp_category")
-                    or "A07",
-                    "severity": "low",
-                    "cvss": 3.7,
-                    "cvss_score": 3.7,
-                    "confidence": "possible",
-                    "validation_status": "unverified",
-                    "evidence_quality": "weak",
                     "evidence_refs": refs,
                     "proof_of_concept": poc,
                 },
@@ -1621,14 +1602,6 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
                             "HTTP 429 Too Many Requests responses were observed during login-path testing, "
                             "indicating that rate limiting controls are active. This is a positive observation."
                         ),
-                        "cwe": None,
-                        "owasp_category": "A07",
-                        "severity": "info",
-                        "cvss": 0.0,
-                        "cvss_score": 0.0,
-                        "confidence": "likely",
-                        "validation_status": "partially_validated",
-                        "evidence_quality": "moderate",
                         "proof_of_concept": poc or None,
                     },
                 )
@@ -1641,14 +1614,6 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
                             "Possible missing or insufficient rate limiting on the login endpoint. "
                             "Evidence quality is weak unless full authentication flow behavior is validated."
                         ),
-                        "cwe": _get_attr(f, "cwe") or "CWE-307",
-                        "owasp_category": _get_attr(f, "owasp_category") or "A07",
-                        "severity": "low",
-                        "cvss": 3.7,
-                        "cvss_score": 3.7,
-                        "confidence": "possible",
-                        "validation_status": "unverified",
-                        "evidence_quality": "weak",
                         "proof_of_concept": poc or None,
                     },
                 )
@@ -1656,33 +1621,15 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
 
 
 def normalize_findings_for_report(findings: Iterable[Any]) -> list[Any]:
-    """Normalize evidence status, CVSS surface, confidence, rate-limit duplicates, and enforce severity rules."""
+    """Normalize evidence status, CVSS surface, confidence, rate-limit duplicates. NO severity downgrades."""
     from src.reports.finding_dedup import merge_http_security_header_gaps, merge_reflected_xss_findings
 
     base = merge_http_security_header_gaps(list(findings))
     normalized: list[Any] = []
-    severity_issues = enforce_severity_rules(base)
-    downgraded_ids: dict[str, str] = {}
-    for si in severity_issues:
-        if "downgrade" in si.get("action", ""):
-            fid = si["finding_id"]
-            if "to_medium" in si["action"]:
-                downgraded_ids[fid] = "medium"
-            elif "to_info" in si["action"]:
-                downgraded_ids[fid] = "info"
     for finding in base:
-        fid = str(_get_attr(finding, "id", _get_attr(finding, "finding_id", "")) or "")
         norm = _normalize_one_finding(finding)
         if norm is None:
             continue
-        if fid in downgraded_ids:
-            if isinstance(norm, dict):
-                norm["severity"] = downgraded_ids[fid]
-            elif hasattr(norm, "severity"):
-                try:
-                    setattr(norm, "severity", downgraded_ids[fid])
-                except Exception:
-                    pass
         normalized.append(norm)
     return merge_reflected_xss_findings(_merge_rate_limit_findings(normalized))
 

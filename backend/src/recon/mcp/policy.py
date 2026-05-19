@@ -527,6 +527,10 @@ THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset({
     "pentesttools", "projectdiscovery", "rapiddns", "sublist3r", "threatminer",
     "urlscan", "bing", "google", "duckduckgo", "baidu", "yahoo", "yandex",
     "shodan", "censys", "hunter", "fullhunt", "virustotal", "securitytrails",
+    "certspotter", "threatcrowd", "alienvault", "binaryedge", "fofa", "github",
+    "intelx", "leakix", "netcraft", "pastebin", "pulsedive", "spyse", "twitter",
+    "zoomeye", "dnsdb", "dogpile", "qwant", "linkedin", "vhost", "exalead",
+    "sitedossier", "torsearch", "waybackmachine", "wigle", "all",
 })
 
 # NO injection pattern blocking — shell metacharacters are required for pentest payloads
