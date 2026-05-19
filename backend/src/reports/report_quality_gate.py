@@ -1411,6 +1411,8 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     quality = score_evidence_quality(finding)
     status = validation_status_for_quality(quality)
     confidence = str(_get_attr(finding, "confidence", "likely") or "likely").lower()
+    if confidence == "confirmed" and quality in {"none", "weak"}:
+        confidence = "likely"
     severity = str(_get_attr(finding, "severity", "") or "").lower()
     poc = dict(_poc_dict(finding))
     refs = list(_get_attr(finding, "evidence_refs", []) or [])
