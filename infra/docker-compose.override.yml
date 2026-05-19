@@ -31,6 +31,10 @@ services:
     volumes:
       - ../backend:/app
 
+  worker-reports:
+    volumes:
+      - ../backend:/app
+
   backend:
     # Next.js на хосте (Frontend/.env.local) проксирует на 127.0.0.1:8080 — без публикации порта nginx может быть недоступен.
     ports:

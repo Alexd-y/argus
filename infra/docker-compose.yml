@@ -301,7 +301,7 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     image: argus-worker-general
-    command: celery -A src.celery_app worker -l INFO -Q argus.reports,argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
+    command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
     deploy:
@@ -312,6 +312,66 @@ services:
         reservations:
           cpus: "0.5"
           memory: 128M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      MINIO_REPORTS_BUCKET: ${MINIO_REPORTS_BUCKET:-argus-reports}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      SANDBOX_ENABLED: "${SANDBOX_ENABLED:-true}"
+      VA_AI_PLAN_ENABLED: "${VA_AI_PLAN_ENABLED:-false}"
+      SQLMAP_VA_ENABLED: "${SQLMAP_VA_ENABLED:-false}"
+      VA_EXPLOIT_AGGRESSIVE_ENABLED: "${VA_EXPLOIT_AGGRESSIVE_ENABLED:-false}"
+      ACTIVE_SCAN_MAX_CONCURRENT_JOBS: ${ACTIVE_SCAN_MAX_CONCURRENT_JOBS:-10}
+      ACTIVE_SCAN_MAX_CAPTURE_BYTES: ${ACTIVE_SCAN_MAX_CAPTURE_BYTES:-4194304}
+      VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: ${VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC:-120}
+      VA_AGGRESSIVE_SCAN: "${VA_AGGRESSIVE_SCAN:-false}"
+      VA_CUSTOM_XSS_POC_ENABLED: "${VA_CUSTOM_XSS_POC_ENABLED:-true}"
+      ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY: ${ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY:-10}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      KIMI_API_KEY: ${KIMI_API_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker-reports:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: argus-worker-reports
+    container_name: argus-worker-reports
+    command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
+    user: "1000:${DOCKER_GID:-999}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
