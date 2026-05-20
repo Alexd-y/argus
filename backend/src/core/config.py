@@ -497,7 +497,7 @@ class Settings(BaseSettings):
     xsstrike_script_path: str | None = None
     recon_max_concurrent_jobs: int = 5
     # VA active scan / sandbox (OWASP-002): max concurrent async tool runs
-    active_scan_max_concurrent_jobs: int = 3
+    active_scan_max_concurrent_jobs: int = 10
     active_scan_max_capture_bytes: int = 4 * 1024 * 1024
     # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
     sqlmap_va_enabled: bool = False
@@ -816,7 +816,7 @@ class Settings(BaseSettings):
         ),
     )
     argus_active_injection_max_concurrency: int = Field(
-        default=3,
+        default=10,
         ge=1,
         validation_alias=AliasChoices(
             "ARGUS_ACTIVE_INJECTION_MAX_CONCURRENCY",

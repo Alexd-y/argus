@@ -21,7 +21,7 @@ from src.llm_gateway.router import AllProvidersFailedError
 logger = logging.getLogger(__name__)
 
 _PROVIDER_TIMEOUT = 300.0
-_WRB_TIMEOUT = 300.0
+_WRB_TIMEOUT = 120.0
 _CLOUD_TIMEOUT = 120.0
 
 

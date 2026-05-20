@@ -32,18 +32,18 @@ from src.llm.task_router import call_llm_for_task as _task_router_call
 
 logger = logging.getLogger(__name__)
 
-_SYNC_TIMEOUT_SECONDS = 600
+_SYNC_TIMEOUT_SECONDS = 300
 
 _tiktoken_enc = None
 
-# WRB request queue — max 1 concurrent request to avoid context overflow
-# and llama.cpp memory pressure. Other requests wait in order.
+# WRB request concurrency — balanced for throughput vs. llama.cpp memory pressure.
 _wrb_semaphore: asyncio.Semaphore | None = None
+_WRB_CONCURRENCY = 3
 
 def _get_wrb_semaphore() -> asyncio.Semaphore:
     global _wrb_semaphore
     if _wrb_semaphore is None:
-        _wrb_semaphore = asyncio.Semaphore(1)
+        _wrb_semaphore = asyncio.Semaphore(_WRB_CONCURRENCY)
     return _wrb_semaphore
 
 # Tasks where cloud fallback is ALLOWED (report supplements / OSINT).
