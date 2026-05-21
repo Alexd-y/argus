@@ -127,9 +127,9 @@ def find_duplicate_paragraphs(text: str, threshold: float = 0.80) -> list[str]:
     """Find paragraphs that appear nearly-identical across sections."""
     paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 50]
     duplicates = []
-    seen_terms: set[str] = set()
+    seen_terms: list[frozenset[str]] = []
     for p in paragraphs:
-        words = set(p.lower().split())
+        words = frozenset(p.lower().split())
         if not words:
             continue
         best_overlap = 0.0
@@ -139,5 +139,5 @@ def find_duplicate_paragraphs(text: str, threshold: float = 0.80) -> list[str]:
                 best_overlap = overlap
         if best_overlap > threshold:
             duplicates.append(p[:120] + "..." if len(p) > 120 else p)
-        seen_terms.add(words)
+        seen_terms.append(words)
     return duplicates
