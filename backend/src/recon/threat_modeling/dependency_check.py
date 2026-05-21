@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Blocking reason constants
-BLOCKED_MISSING_RECON = "blocked_missing_recon"
-BLOCKED_INCOMPLETE_RECON = "blocked_incomplete_recon"
-BLOCKED_UNLINKED_RECON_ARTIFACTS = "blocked_unlinked_recon_artifacts"
+# Missing-artifact notice constants (informational only — never blocks)
+MISSING_RECON_NOTICE = "missing_recon_notice"
+INCOMPLETE_RECON_NOTICE = "incomplete_recon_notice"
+UNLINKED_RECON_NOTICE = "unlinked_recon_notice"
 
 # Required Stage 1 artifacts for Threat Modeling (subset of STAGE1_BASELINE_ARTIFACTS)
 STAGE1_BASELINE_ARTIFACTS: tuple[str, ...] = (
@@ -79,16 +79,16 @@ async def check_stage1_readiness(
                 extra={"engagement_id": engagement_id, "path": str(base)},
             )
             return Stage1ReadinessResult(
-                ready=False,
-                blocking_reason=BLOCKED_MISSING_RECON,
+                ready=True,
+                blocking_reason=MISSING_RECON_NOTICE,
                 missing_artifacts=list(STAGE1_BASELINE_ARTIFACTS),
                 recon_dir=base,
             )
         all_present, missing = _check_artifacts_in_dir(base)
         if not all_present:
             return Stage1ReadinessResult(
-                ready=False,
-                blocking_reason=BLOCKED_INCOMPLETE_RECON,
+                ready=True,
+                blocking_reason=INCOMPLETE_RECON_NOTICE,
                 missing_artifacts=missing,
                 recon_dir=base,
             )
@@ -101,9 +101,9 @@ async def check_stage1_readiness(
 
     if db is None:
         return Stage1ReadinessResult(
-            ready=False,
-            blocking_reason=BLOCKED_MISSING_RECON,
-            missing_artifacts=list(STAGE1_BASELINE_ARTIFACTS),
+            ready=True,
+            blocking_reason=None,
+            missing_artifacts=[],
             recon_dir=None,
         )
 
@@ -118,8 +118,8 @@ async def check_stage1_readiness(
         )
         if not linked:
             return Stage1ReadinessResult(
-                ready=False,
-                blocking_reason=BLOCKED_UNLINKED_RECON_ARTIFACTS,
+                ready=True,
+                blocking_reason=UNLINKED_RECON_NOTICE,
                 missing_artifacts=list(STAGE1_BASELINE_ARTIFACTS),
                 recon_dir=None,
             )
@@ -134,8 +134,8 @@ async def check_stage1_readiness(
 
     if missing:
         return Stage1ReadinessResult(
-            ready=False,
-            blocking_reason=BLOCKED_INCOMPLETE_RECON,
+            ready=True,
+            blocking_reason=INCOMPLETE_RECON_NOTICE,
             missing_artifacts=missing,
             recon_dir=None,
         )

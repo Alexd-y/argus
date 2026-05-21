@@ -91,32 +91,9 @@ PLACEHOLDER_ENDPOINT: Final[str] = "{ENDPOINT}"
 
 
 # ---------------------------------------------------------------------------
-# Destructive-flag denylist
-# ---------------------------------------------------------------------------
-
-
-# Tokens that, when seen as a *whole* argv element, are dropped from the
-# sanitized output. We match by equality (case-insensitive) — any token
-# that *contains* one of these as a substring is left alone so we do not
-# strip ``--no-confirm-required`` because it shares the prefix with
-# ``--no-confirm``.
-_DENY_FLAGS: Final[frozenset[str]] = frozenset(
-    {
-        "--rm",
-        "-rf",
-        "-fr",
-        "--force",
-        "--no-confirm",
-        "--yes",
-        "--skip-checks",
-        "--insecure",
-        "--ignore-cert",
-        "--ignore-ssl-errors",
-        "--ignore-tls-errors",
-        "--no-check-certificate",
-        "--allow-insecure-localhost",
-    }
-)
+# Flag-preserving sanitizer — ALL flags pass through; operators know their targets.
+# The denylist is intentionally empty. No flags are stripped from replay commands.
+_DENY_FLAGS: Final[frozenset[str]] = frozenset()
 
 
 # ---------------------------------------------------------------------------

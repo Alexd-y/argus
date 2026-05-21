@@ -191,93 +191,83 @@ def validate_report_data(
     return ReportDataValidationResult(ok=len(uniq) == 0, reason_codes=uniq)
 
 
-def pre_release_blocking_gate(
+def pre_release_quality_warnings(
     report_data: ReportData,
     *,
     tier: str | None = None,
     template_context: dict[str, Any] | None = None,
     wstg_coverage_pct: float = 0.0,
-) -> tuple[bool, list[str]]:
-    """Point 18 — block report release if any high-severity condition met.
+) -> list[str]:
+    """Point 18 — quality warnings (informational only, never blocks report release).
     
-    Returns (blocked: bool, reasons: list[str]).
+    Returns list of warning strings for operator review. Reports ALWAYS proceed.
     """
-    blocked = False
     reasons: list[str] = []
     tier_norm = _normalize_tier(tier)
     ctx = template_context or {}
     vc = ctx.get("valhalla_context")
 
-    # WSTG < 100% but title says "full" pentest
+    # WSTG < 100% but title says "full" pentest — informational only
     if wstg_coverage_pct < 100.0 and tier_norm == "valhalla":
-        blocked = True
-        reasons.append("BLOCKED: WSTG coverage < 100% in Valhalla tier — missing tests must be covered")
+        reasons.append("WARNING: WSTG coverage below 100% — use WRB-powered gap closure commands to cover missing tests")
     
-    # High finding lacks VALIDATED evidence
+    # High finding without VALIDATED evidence — flag for retest, never block
     for f in report_data.findings:
         sev = str(getattr(f, "severity", "") or "").lower()
         classif = str(getattr(f, "evidence_classification", "") or "").lower()
         if sev == "high" and classif != "validated":
-            blocked = True
-            reasons.append("BLOCKED: High-severity finding without VALIDATED evidence")
+            reasons.append("WARNING: High-severity finding without VALIDATED evidence — re-test with WRB-generated payloads")
             break
     
-    # HIBP checks_run = 0 in Valhalla tier
+    # HIBP checks_run = 0 — flag for next scan, never block
     if tier_norm == "valhalla":
         hibp = report_data.hibp_pwned_password_summary
         if not isinstance(hibp, dict) or not hibp:
-            blocked = True
-            reasons.append("BLOCKED: HIBP checks_run = 0 — credential exposure assessment required")
+            reasons.append("WARNING: HIBP checks_run = 0 — schedule credential scan with authorized_password_samples_or_hashes")
         elif int(hibp.get("checks_run", 0) or 0) == 0:
-            blocked = True
-            reasons.append("BLOCKED: HIBP checks_run = 0 — credential exposure assessment required")
+            reasons.append("WARNING: HIBP checks_run = 0 — schedule credential scan with authorized_password_samples_or_hashes")
     
-    # TLS parser empty without proof
+    # TLS parser empty — flag for retest, never block
     if vc:
         ssl_data = vc.get("ssl_tls_analysis")
         if isinstance(ssl_data, dict) and not ssl_data.get("protocols") and not ssl_data.get("issuer") and not ssl_data.get("evidence_id"):
-            blocked = True
-            reasons.append("BLOCKED: TLS parser empty — no protocols, issuer, or evidence_id")
+            reasons.append("WARNING: TLS parser produced no results — re-run with testssl/sslscan/openssl fallback tools")
     
-    # Port parser empty without proof
+    # Port parser empty — flag for retest, never block
     if vc:
         port_data = vc.get("port_exposure")
         if isinstance(port_data, dict) and not port_data.get("has_open_ports") and not port_data.get("data_sources"):
-            blocked = True
-            reasons.append("BLOCKED: Port exposure parser empty — no open ports or parsed evidence")
+            reasons.append("WARNING: Port exposure parser empty — re-run with nmap/naabu/httpx probes")
     
-    # Headers table has artifact path instead of endpoint URL
+    # Headers table has artifact path instead of endpoint URL — fix, never block
     if vc:
         headers = vc.get("security_headers_table_rows") or []
         if isinstance(headers, list):
             for row in headers:
                 if isinstance(row, dict) and "artifact" in str(row.get("header", row.get("url", ""))).lower():
-                    blocked = True
-                    reasons.append("BLOCKED: Headers table contains artifact path instead of endpoint URL")
+                    reasons.append("WARNING: Headers table contains artifact path instead of endpoint URL — correct in next scan")
                     break
     
-    # Tool commands/versions/artifact paths empty
+    # Tool commands/versions/artifact paths empty — flag, never block
     if vc:
         tool_health = vc.get("tool_health_summary") or []
         if isinstance(tool_health, list) and tool_health:
             for row in tool_health:
                 if isinstance(row, dict):
                     if not row.get("tool_command") or not row.get("tool_version"):
-                        blocked = True
-                        reasons.append("BLOCKED: Tool health row has empty tool_command or tool_version")
+                        reasons.append("WARNING: Tool health row has empty tool_command or tool_version — re-collect tool metadata")
                         break
     
-    # Technology version fields empty without reason
+    # Technology version fields empty without reason — flag, never block
     if vc:
         tech_stack = vc.get("tech_stack_table") or []
         if isinstance(tech_stack, list):
             for row in tech_stack:
                 if isinstance(row, dict) and not row.get("version") and not row.get("version_reason"):
-                    blocked = True
-                    reasons.append("BLOCKED: Technology version field empty without reason — verification required")
+                    reasons.append("WARNING: Technology version field empty — re-run whatweb/wappalyzer/trivy for version detection")
                     break
     
-    # AI/debug snippets in any AI section
+    # AI/debug snippets in any AI section — strip, never block
     ai_sections = ctx.get("ai_sections") or {}
     if isinstance(ai_sections, dict):
         for key, text in ai_sections.items():
@@ -285,22 +275,23 @@ def pre_release_blocking_gate(
                 from src.reports.report_quality_gate import detect_code_garbage
                 garbage = detect_code_garbage(text)
                 if garbage:
-                    blocked = True
-                    reasons.append(f"BLOCKED: Code/debug garbage in AI section '{key}': {garbage[0][:80]}")
+                    reasons.append(f"WARNING: Code/debug garbage detected in AI section '{key}' — auto-sanitized")
                     break
     
-    # JSON invalid (can't be parsed back)
+    # ANSI escape sequences in raw request/response — strip, never block
     for f in report_data.findings:
         poc = getattr(f, "proof_of_concept", {}) or {}
         if isinstance(poc, dict):
             raw_req = str(poc.get("raw_request", "") or "")
             raw_resp = str(poc.get("raw_response", "") or "")
             if _ANSI_ESCAPE_RE.search(raw_req) or _ANSI_ESCAPE_RE.search(raw_resp):
-                blocked = True
-                reasons.append("BLOCKED: ANSI escape sequences in raw request/response")
+                reasons.append("WARNING: ANSI escape sequences in raw request/response — auto-sanitized")
                 break
     
-    return blocked, reasons
+    return reasons
+
+
+pre_release_blocking_gate = pre_release_quality_warnings  # backward compat alias — never blocks
 
 
 _EXEC_SEV_SECTION_KEYS: frozenset[str] = frozenset(

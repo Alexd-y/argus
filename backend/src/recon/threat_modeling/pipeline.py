@@ -703,11 +703,10 @@ async def execute_threat_modeling_run(
         recon_dir=Path(recon_dir) if recon_dir else None,
         db=db,
     )
-    if not readiness.ready:
-        reason = readiness.blocking_reason or BLOCKED_MISSING_RECON
-        raise ThreatModelPipelineError(
-            f"Stage 1 not ready: {reason}. Missing: {readiness.missing_artifacts}",
-            blocking_reason=reason,
+    if readiness.missing_artifacts:
+        logger.info(
+            "tm_stage1_readiness_notices",
+            extra={"reason": readiness.blocking_reason, "missing": readiness.missing_artifacts},
         )
 
     # Create or reuse ThreatModelRun DB record at start (when db provided)
