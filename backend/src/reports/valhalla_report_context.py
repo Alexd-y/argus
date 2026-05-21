@@ -832,12 +832,33 @@ class AuthTestingContext(BaseModel):
     auth_method_used: str = ""
     roles_tested: list[str] = Field(default_factory=list)
     auth_matrix: list[AuthMatrixRow] = Field(default_factory=list)
+    idor_tested: list[IdorRowModel] = Field(default_factory=list)
     auth_findings_count: int = 0
     auth_bypass_attempts: int = 0
     session_management_tested: bool = False
     token_validation_tested: bool = False
     mfa_status: Literal["not_tested", "absent", "present_bypassed", "present_secure"] = "not_tested"
     notes: str = ""
+
+
+class IdorRowModel(BaseModel):
+    """IDOR / authorization bypass test row (Point 6)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_a: str = ""
+    user_b: str = ""
+    object_owned_by_a: str = ""
+    object_owned_by_b: str = ""
+    request_a_to_b_object: str = ""
+    request_b_to_a_object: str = ""
+    expected_status: str = ""
+    actual_status: str = ""
+    raw_request: str = ""
+    raw_response: str = ""
+    ownership_proof: str = ""
+    evidence_id: str = ""
+    retest_after_fix: str = ""
 
 
 class EndpointHeaderData(BaseModel):
