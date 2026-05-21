@@ -2501,9 +2501,19 @@ def _tech_rows_from_http_and_urls(
             seen,
             category="cms",
             name="WordPress",
-            detail="wp-content/wp-includes marker",
+            detail="wp-content/wp-includes marker — verify with /wp-login.php, /wp-json/, wpscan",
             source="robots/sitemap/HTML/JS artifact",
             confidence="medium",
+        )
+    if any(kw in low_joined for kw in ("wp-login", "wp-json", "wp-admin")):
+        _add_unique_tech_row(
+            rows,
+            seen,
+            category="cms",
+            name="WordPress",
+            detail="WordPress confirmed — wp-login.php or wp-json endpoint reachable",
+            source="recon crawl / whatweb",
+            confidence="high",
         )
     gen_match = re.search(
         r"<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']([^\"']+)[\"']",
@@ -6494,3 +6504,103 @@ def _expected_output_hint(gap_type: str) -> str:
         "insufficient_evidence": "Raw request/response pair with timestamps",
     }
     return hints.get(gap_type, "Sufficient evidence to reclassify finding as VALIDATED or OBSERVED")
+
+
+def build_wstg_gap_closure_commands(wstg_coverage: dict[str, Any] | None) -> list[dict[str, str]]:
+    """Point 2 — generate concrete tool commands for not_covered/partial WSTG tests."""
+    commands: list[dict[str, str]] = []
+    if not wstg_coverage or not isinstance(wstg_coverage, dict):
+        return commands
+    tests = wstg_coverage.get("tests", wstg_coverage.get("test_list", []))
+    if not isinstance(tests, list):
+        return commands
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        status = str(test.get("status", "") or "").lower()
+        if status not in ("not_covered", "partial"):
+            continue
+        test_id = str(test.get("id", test.get("test_id", "WSTG-???")) or "").upper()
+        test_name = str(test.get("name", "") or "")
+        category = str(test.get("category", "") or "").upper()
+        existing_tools = test.get("tools", [])
+        # Generate relevant commands per WSTG category
+        cmd = _wstg_command_for_test(test_id, test_name, category)
+        commands.append({
+            "wstg_id": test_id,
+            "test_name": test_name,
+            "category": category,
+            "status": status,
+            "current_tools": ", ".join(existing_tools) if isinstance(existing_tools, list) else str(existing_tools),
+            "recommended_command": cmd,
+            "expected_output": "Evidence that test was performed with tool output or manual validation",
+            "priority": "HIGH" if status == "not_covered" else "MEDIUM",
+        })
+    return commands[:64]
+
+
+def _wstg_command_for_test(test_id: str, _name: str, category: str) -> str:
+    tid = test_id.upper()
+    if tid.startswith("WSTG-INFO"):
+        return "subfinder -d TARGET; amass enum -d TARGET; whatweb TARGET_URL; curl -sS TARGET_URL/robots.txt"
+    if tid.startswith("WSTG-CONF"):
+        return "nmap -sV -p- TARGET_HOST; curl -sS -I TARGET_URL; testssl TARGET_HOST"
+    if tid.startswith("WSTG-IDNT"):
+        return "curl -sS TARGET_URL/login -X POST -d 'user=admin&pass=test'; theHarvester -d TARGET_DOMAIN -b all"
+    if tid.startswith("WSTG-ATHN"):
+        return "hydra -L users.txt -P passwords.txt TARGET_URL/login; curl -sS TARGET_URL/password-reset"
+    if tid.startswith("WSTG-ATHZ"):
+        return "curl -H 'Cookie: user_a_session=...' TARGET_URL/object_B; curl -H 'Cookie: user_b_session=...' TARGET_URL/object_A"
+    if tid.startswith("WSTG-SESS"):
+        return "curl -sS -D- TARGET_URL/logout; curl -sS -D- -b old_cookie TARGET_URL/dashboard; jwt_tool TOKEN"
+    if tid.startswith("WSTG-INPV"):
+        return "sqlmap -u TARGET_URL --batch; dalfox url TARGET_URL; commix --url TARGET_URL --data 'param=1'"
+    if tid.startswith("WSTG-ERRH"):
+        return "curl -sS TARGET_URL/%00; curl -sS TARGET_URL/..%5c..%5c; ffuf -u TARGET_URL/FUZZ -w error_paths.txt"
+    if tid.startswith("WSTG-CRYP"):
+        return "testssl TARGET_HOST; sslscan TARGET_HOST; nmap --script ssl-enum-ciphers TARGET_HOST"
+    if tid.startswith("WSTG-BUSL"):
+        return "curl -sS TARGET_URL/checkout -X POST -d 'price=0.01&qty=999'; ffuf -u TARGET_URL/api/FUZZ -w api_endpoints.txt"
+    if tid.startswith("WSTG-CLNT"):
+        return "nuclei -u TARGET_URL -t ~/nuclei-templates/http/cves/; retire.js --jspath TARGET_PATH"
+    return f"curl -sS TARGET_URL -v 2>&1 | tee evidence_{tid}.txt"
+
+
+def build_credential_exposure_from_hibp(hibp_results: dict[str, Any] | None, target_domain: str = "") -> dict[str, Any]:
+    """Point 4 — build CredentialExposureModel from HIBP breach/pwned data."""
+    result: dict[str, Any] = {
+        "checks_run": 0, "password_samples_available": False,
+        "hash_samples_available": False, "hibp_api_used": False,
+        "rows": [], "missing_artifacts": [],
+    }
+    if not hibp_results or not isinstance(hibp_results, dict):
+        result["missing_artifacts"].append("authorized_password_samples_or_hashes")
+        return result
+    checks = int(hibp_results.get("checks_run", 0) or 0)
+    result["checks_run"] = checks
+    result["hibp_api_used"] = bool(hibp_results.get("hibp_api_used", False))
+    result["password_samples_available"] = bool(hibp_results.get("password_samples", []))
+    result["hash_samples_available"] = bool(hibp_results.get("hash_samples", []))
+    breaches = hibp_results.get("breaches", hibp_results.get("results", []))
+    if isinstance(breaches, list):
+        for b in breaches[:100]:
+            if not isinstance(b, dict):
+                continue
+            result["rows"].append({
+                "checks_run": checks,
+                "authorized_source": str(b.get("source", b.get("breach_name", "")) or ""),
+                "sample_type": str(b.get("sample_type", "password_sample")),
+                "hibp_range_prefix": str(b.get("prefix", "") or "")[:5],
+                "pwned_count": int(b.get("pwned_count", b.get("count", 0)) or 0),
+                "matched": "yes" if int(b.get("pwned_count", b.get("count", 0)) or 0) > 0 else "no",
+                "account_or_email": str(b.get("email", b.get("account", "masked@***")) or "masked@***"),
+                "plaintext_stored": "no",
+                "evidence_id": str(b.get("evidence_id", f"hibp_{target_domain}") or ""),
+                "timestamp": str(b.get("timestamp", "") or ""),
+                "api_status": str(b.get("api_status", "completed") or ""),
+                "legal_basis": str(b.get("legal_basis", "authorized assessment") or ""),
+                "result_confidence": str(b.get("confidence", "high") or ""),
+            })
+    if checks == 0:
+        result["missing_artifacts"].append("authorized_password_samples_or_hashes")
+    return result
