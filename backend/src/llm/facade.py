@@ -32,7 +32,7 @@ from src.llm.task_router import call_llm_for_task as _task_router_call
 
 logger = logging.getLogger(__name__)
 
-_SYNC_TIMEOUT_SECONDS = 300
+_SYNC_TIMEOUT_SECONDS = 900
 
 _tiktoken_enc = None
 
