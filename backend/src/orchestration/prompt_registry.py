@@ -214,50 +214,32 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
             "Options: {options}\n\n"
             + KALI_MCP_ORCHESTRATION_BLOCK
             + "\n"
-            + "Below is REAL output from security tools. Analyze it carefully.\n\n"
-            + "=== TOOL RESULTS ===\n{tool_results}\n=== END TOOL RESULTS ===\n\n"
-            + "Based on the real tool output above, return a JSON object with:\n"
-            + '- "assets": array of discovered assets (IPs, domains, services with versions)\n'
-            + '- "subdomains": array of discovered subdomains\n'
-            + '- "ports": array of open port numbers (integers)\n\n'
-            + "Extract ONLY real data from the tool output. Do NOT invent or guess.\n"
-            + 'Return JSON: {{"assets": ["string"], "subdomains": ["string"], "ports": [number]}}'
+            + "REAL tool output below. Analyze carefully.\n\n"
+            + "=== TOOL RESULTS ===\n{tool_results}\n=== END ===\n\n"
+            + 'Return JSON: {{"assets": ["str"], "subdomains": ["str"], "ports": [int]}}. '
+            + "Extract ONLY real data — no inventions."
         ),
     ),
     THREAT_MODELING: (
         SYSTEM_PROMPT_THREAT_MODELING,
-        "Build a STRIDE-based threat model for the following target using real recon data.\n\n"
+        "STRIDE threat model for target using real recon data.\n\n"
         "Assets: {assets}\n\n"
-        "=== ENRICHED RECON CONTEXT ===\n{recon_context}\n=== END RECON CONTEXT ===\n\n"
-        "=== NVD CVE DATA ===\n{nvd_data}\n=== END NVD DATA ===\n\n"
-        "Instructions:\n"
-        "1. For EACH detected technology with a version, look up relevant CVEs from the NVD data above. "
-        "If a CVE matches a detected version range, include it with severity and description.\n"
-        "2. For EACH identified entry point (login form, API endpoint, file upload, admin panel), "
-        "perform STRIDE analysis and produce specific attack vectors.\n"
-        "3. Map every threat to the concrete component it affects.\n"
-        "4. Provide specific, actionable mitigations per threat — not generic advice.\n\n"
-        "Return a JSON object with this structure:\n"
-        '{{"threat_model": {{\n'
-        '  "attack_surface": [\n'
-        '    {{"component": "string", "type": "web_form|api_endpoint|file_upload|admin_panel|service", '
-        '"exposure_level": "external|internal|authenticated", "url": "string"}}\n'
-        "  ],\n"
-        '  "threats": [\n'
-        '    {{"category": "S|T|R|I|D|E", "description": "string", '
-        '"component": "string", "likelihood": "high|medium|low", "impact": "high|medium|low"}}\n'
-        "  ],\n"
-        '  "cves": [\n'
-        '    {{"cve_id": "CVE-XXXX-XXXX", "technology": "string", '
-        '"severity": "critical|high|medium|low", "description": "string"}}\n'
-        "  ],\n"
-        '  "mitigations": [\n'
-        '    {{"threat_ref": "string", "recommendation": "string", "priority": "high|medium|low"}}\n'
-        "  ]\n"
-        "}}}}\n\n"
-        "STRIDE categories: S=Spoofing, T=Tampering, R=Repudiation, I=Information Disclosure, "
-        "D=Denial of Service, E=Elevation of Privilege.\n"
-        "Extract ONLY real data. Do NOT invent technologies, endpoints, or CVEs not present in the input.",
+        "=== ENRICHED RECON ===\n{recon_context}\n=== END RECON ===\n\n"
+        "=== NVD CVE DATA ===\n{nvd_data}\n=== END NVD ===\n\n"
+        "1. For each detected tech+version, map relevant CVEs from NVD above.\n"
+        "2. For each entry point (login form, API, file upload, admin panel), "
+        "STRIDE-analyze and produce attack vectors.\n"
+        "3. Map threats to concrete components. Use specific mitigations.\n\n"
+        'Return JSON: {{"threat_model": {{'
+        '"attack_surface": [{{"component": "s", "type": "web_form|api_endpoint|file_upload|admin_panel|service", '
+        '"exposure_level": "external|internal|authenticated", "url": "s"}}], '
+        '"threats": [{{"category": "S|T|R|I|D|E", "description": "s", '
+        '"component": "s", "likelihood": "high|medium|low", "impact": "high|medium|low"}}], '
+        '"cves": [{{"cve_id": "CVE-XXXX-XXXX", "technology": "s", '
+        '"severity": "critical|high|medium|low", "description": "s"}}], '
+        '"mitigations": [{{"threat_ref": "s", "recommendation": "s", "priority": "high|medium|low"}}]}}}}\n'
+        "STRIDE: S=Spoofing,T=Tampering,R=Repudiation,I=InfoDisclosure,D=DoS,E=Elevation. "
+        "No invented tech/endpoints/CVEs.",
     ),
     VULN_ANALYSIS: (
         SYSTEM_PROMPT_VULN_ANALYSIS,
@@ -266,96 +248,59 @@ PHASE_PROMPTS: dict[str, tuple[str, str]] = {
             + "\n"
             + VA_SANDBOX_MCP_RUN_BLOCK
             + "\n"
-            + "Analyze vulnerabilities based on the real threat model and assets.\n\n"
+            + "Analyze vulnerabilities from real threat model and assets.\n\n"
             + "Threat model: {threat_model}\n"
             + "Assets: {assets}\n\n"
             + "{active_scan_context}"
-            + "For each vulnerability, provide:\n"
-            + '- "severity": critical/high/medium/low/info\n'
-            + '- "title": descriptive title\n'
-            + '- "cwe": CWE identifier (e.g. CWE-79)\n'
-            + '- "cvss": CVSS score (float)\n'
-            + '- "description": detailed description\n'
-            + '- "affected_asset": which asset is affected\n'
-            + '- "remediation": recommended fix\n'
-            + '- "confidence": confirmed | likely | possible | advisory (match evidence strength)\n'
-            + '- "evidence_type": observed | tool_output | version_match | cve_correlation | threat_model_inference\n'
-            + '- "evidence_refs": array of short strings (tool ids, URLs, artifact keys, CVE ids)\n'
-            + '- "reproducible_steps": optional string (how to verify)\n'
-            + '- "applicability_notes": optional string (stack/hosting limits)\n\n'
-            + "Only report vulnerabilities supported by evidence from the threat model.\n"
-            + "If active scan findings are provided above, incorporate them into your analysis — "
-            + "confirm, correlate, or augment them with additional context.\n"
-            + 'Return JSON: {{"findings": [{{"severity": "string", "title": "string", "cwe": "string", '
-            + '"cvss": 0.0, "description": "string", "affected_asset": "string", "remediation": "string", '
-            + '"confidence": "string", "evidence_type": "string", "evidence_refs": ["string"], '
-            + '"reproducible_steps": "string", "applicability_notes": "string"}}]}}'
+            + "Per finding: severity(critical|high|medium|low|info), title, cwe, cvss(float), "
+            + "description, affected_asset, remediation, "
+            + "confidence(confirmed|likely|possible|advisory), "
+            + "evidence_type(observed|tool_output|version_match|cve_correlation|threat_model_inference), "
+            + "evidence_refs[str], reproducible_steps, applicability_notes.\n"
+            + "Evidence-bound only. Incorporate active scan findings — confirm/correlate/augment.\n"
+            + 'Return JSON: {{"findings": [{{"severity":"s","title":"s","cwe":"s","cvss":0.0,'
+            + '"description":"s","affected_asset":"s","remediation":"s","confidence":"s",'
+            + '"evidence_type":"s","evidence_refs":["s"],"reproducible_steps":"s","applicability_notes":"s"}}]}}'
         ),
     ),
     EXPLOITATION: (
         SYSTEM_PROMPT_EXPLOITATION,
-        "Based on the following vulnerability findings, plan and validate exploit paths. "
-        "You ARE authorized to generate and execute exploits on in-scope targets in the sandbox. "
-        "For each finding, provide concrete, executable exploit steps and expected outcomes. "
-        "Include payload selection, tool recommendations, and verification methods. "
-        "Analyze evidence gaps: identify missing PoC data, unvalidated claims, and insufficient evidence. "
-        "Generate targeted payloads to fill these gaps.\n\n"
+        "Plan/validate exploits against findings. Generate executable steps+payloads.\n\n"
         "Findings: {findings}\n\n"
-        "For each exploitable finding:\n"
-        '- "finding_id": reference to the finding\n'
-        '- "status": "executed" | "verified" | "theoretical"\n'
-        '- "title": exploit name\n'
-        '- "technique": MITRE ATT&CK technique ID if applicable\n'
-        '- "tool": recommended sandbox tool (dalfox, xsstrike, sqlmap, nuclei, ffuf, commix)\n'
-        '- "args": list of CLI arguments for the tool\n'
-        '- "payload": the payload to use\n'
-        '- "payload_type": "xss" | "sqli" | "rce" | "lfi" | "ssrf" | "auth_bypass" | "other"\n'
-        '- "description": how the exploit works\n'
-        '- "impact": potential impact\n'
-        '- "difficulty": easy/medium/hard\n'
-        '- "evidence_gap": description of missing evidence this exploit addresses\n'
-        '- "expected_response": expected HTTP status/response pattern if successful\n\n'
-        'Also include evidence gap analysis:\n'
-        '- "gap_finding_id": finding with insufficient evidence\n'
-        '- "gap_type": "missing_poc" | "missing_raw_req" | "missing_raw_resp" | "unvalidated_impact" | "missing_tool_cmd"\n'
-        '- "recommended_action": specific test/payload to fill the gap\n'
-        '- "priority": "high" | "medium" | "low"\n\n'
-        'Return JSON: {{"exploits": [{{"finding_id": "string", "status": "string", '
-        '"title": "string", "technique": "string", "tool": "string", "args": ["string"], '
-        '"payload": "string", "payload_type": "string", "description": "string", '
-        '"impact": "string", "difficulty": "string", "evidence_gap": "string", '
-        '"expected_response": "string"}}], '
-        '"evidence": [{{"type": "string", "description": "string", "finding_id": "string"}}], '
-        '"evidence_gaps": [{{"gap_finding_id": "string", "gap_type": "string", '
-        '"recommended_action": "string", "priority": "string"}}]}}',
+        "Per exploitable finding: finding_id, status(executed|verified|theoretical), title, technique(MITRE AT&CK), "
+        "tool(dalfox|xsstrike|sqlmap|nuclei|ffuf|commix), args[str], payload, "
+        "payload_type(xss|sqli|rce|lfi|ssrf|auth_bypass|other), description, impact, difficulty(easy|medium|hard), "
+        "evidence_gap, expected_response.\n"
+        "Evidence gaps: gap_finding_id, gap_type(missing_poc|missing_raw_req|missing_raw_resp|unvalidated_impact|missing_tool_cmd), "
+        "recommended_action, priority(high|medium|low).\n"
+        'Return JSON: {{"exploits": [{{"finding_id":"s","status":"s","title":"s","technique":"s",'
+        '"tool":"s","args":["s"],"payload":"s","payload_type":"s","description":"s",'
+        '"impact":"s","difficulty":"s","evidence_gap":"s","expected_response":"s"}}], '
+        '"evidence": [{{"type":"s","description":"s","finding_id":"s"}}], '
+        '"evidence_gaps": [{{"gap_finding_id":"s","gap_type":"s","recommended_action":"s","priority":"s"}}]}}',
     ),
     POST_EXPLOITATION: (
         SYSTEM_PROMPT_POST_EXPLOITATION,
-        "Based on the following theoretical exploits, analyze post-exploitation scenarios.\n\n"
+        "Analyze post-exploitation from verified exploits.\n\n"
         "Exploits: {exploits}\n\n"
-        "Analyze:\n"
-        '- "lateral": lateral movement opportunities\n'
-        '- "persistence": persistence mechanisms an attacker could establish\n'
-        "Each item should reference the exploit and describe the technique.\n\n"
-        'Return JSON: {{"lateral": [{{"technique": "string", "description": "string", '
-        '"from_exploit": "string"}}], '
-        '"persistence": [{{"type": "string", "description": "string", "risk_level": "string"}}]}}',
+        "lateral: technique, description, from_exploit.\n"
+        "persistence: type, description, risk_level.\n"
+        'Return JSON: {{"lateral": [{{"technique":"s","description":"s","from_exploit":"s"}}], '
+        '"persistence": [{{"type":"s","description":"s","risk_level":"s"}}]}}',
     ),
     REPORTING: (
         SYSTEM_PROMPT_REPORTING,
-        "Generate all text in English. Keep technical terms (CVE, CVSS, CWE, OWASP) in English.\n\n"
-        "Generate an evidence-bound security assessment report from the following real data.\n\n"
-        "=== FULL PENTEST SUMMARY ===\n{summary}\n=== END SUMMARY ===\n\n"
-        "The report must include:\n"
-        '- "summary": object with counts by severity (critical, high, medium, low, info) and overall risk rating\n'
-        '- "executive_summary": high-level overview for management (2-3 paragraphs)\n'
-        '- "sections": array of report section strings (scope, methodology, findings, recommendations)\n'
-        '- "findings_detail": array of detailed findings with severity, description, impact, remediation\n'
-        '- "ai_insights": array of strategic security insights and recommendations\n'
-        '- "risk_rating": overall risk rating (critical/high/medium/low)\n\n'
-        'Return JSON: {{"report": {{"summary": {{"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 0, '
-        '"risk_rating": "string"}}, "executive_summary": "string", '
-        '"sections": ["string"], "findings_detail": [object], "ai_insights": ["string"]}}}}',
+        "Generate in English. Keep tech terms (CVE,CVSS,CWE,OWASP) as-is.\n\n"
+        "Evidence-bound security report from real data.\n\n"
+        "=== FULL PENTEST SUMMARY ===\n{summary}\n=== END ===\n\n"
+        "summary: counts by severity(critical,high,medium,low,info)+risk_rating.\n"
+        "executive_summary: 2-3 paragraphs for management.\n"
+        "sections: [str] (scope,methodology,findings,recommendations).\n"
+        "findings_detail: [{severity,description,impact,remediation}].\n"
+        "ai_insights: [str] strategic insights.\n"
+        'Return JSON: {{"report": {{"summary": {{"critical":0,"high":0,"medium":0,"low":0,"info":0,'
+        '"risk_rating":"s"}}, "executive_summary":"s", "sections":["s"], '
+        '"findings_detail": [object], "ai_insights":["s"]}}}}',
     ),
 }
 
@@ -407,57 +352,54 @@ SYSTEM_PROMPT_REPORT_ASSEMBLY = (
 
 _PHASE_REPORT_SECTION_USER: dict[str, str] = {
     RECON: (
-        "Generate the Reconnaissance report section from the FULL RAW DATA below.\n\n"
-        "=== RECON DATA ===\n{phase_data}\n=== END RECON DATA ===\n\n"
+        "Recon report section from RAW DATA below.\n\n"
+        "=== RECON DATA ===\n{phase_data}\n=== END ===\n\n"
         'Return JSON: {{"section": {{"discovered_assets": [...], '
         '"subdomain_inventory": [...], "port_scan_results": [...], '
         '"technology_stack": [...], "http_headers": [...], '
         '"ssl_tls": {{...}}, "entry_points": [...], '
-        '"recon_summary": "string"}}}}'
+        '"recon_summary": "s"}}}}'
     ),
     THREAT_MODELING: (
-        "Generate the Threat Modeling report section from the FULL RAW DATA below.\n\n"
-        "=== THREAT MODEL DATA ===\n{phase_data}\n=== END THREAT MODEL DATA ===\n\n"
+        "Threat Model report section from RAW DATA below.\n\n"
+        "=== THREAT MODEL DATA ===\n{phase_data}\n=== END ===\n\n"
         'Return JSON: {{"section": {{"threats_by_asset": [...], '
         '"cve_correlations": [...], "mitre_attack_mapping": [...], '
-        '"risk_matrix": {{...}}, "threat_model_summary": "string"}}}}'
+        '"risk_matrix": {{...}}, "threat_model_summary": "s"}}}}'
     ),
     VULN_ANALYSIS: (
-        "Generate the Vulnerability Analysis report section from the FULL RAW DATA below.\n\n"
-        "=== VULNERABILITY ANALYSIS DATA ===\n{phase_data}\n=== END VULNERABILITY ANALYSIS DATA ===\n\n"
+        "Vuln Analysis report section from RAW DATA below.\n\n"
+        "=== VULN DATA ===\n{phase_data}\n=== END ===\n\n"
         'Return JSON: {{"section": {{"findings_index": [...], '
         '"severity_distribution": {{...}}, "owasp_coverage": {{...}}, '
-        '"vuln_analysis_summary": "string"}}}}'
+        '"vuln_analysis_summary": "s"}}}}'
     ),
     EXPLOITATION: (
-        "Generate the Exploitation report section from the FULL RAW DATA below.\n\n"
-        "=== EXPLOITATION DATA ===\n{phase_data}\n=== END EXPLOITATION DATA ===\n\n"
+        "Exploitation report section from RAW DATA below.\n\n"
+        "=== EXPLOIT DATA ===\n{phase_data}\n=== END ===\n\n"
         'Return JSON: {{"section": {{"exploit_inventory": [...], '
         '"poc_evidence": [...], "attack_chain": [...], '
-        '"exploitation_summary": "string"}}}}'
+        '"exploitation_summary": "s"}}}}'
     ),
     POST_EXPLOITATION: (
-        "Generate the Post-Exploitation report section from the FULL RAW DATA below.\n\n"
-        "=== POST-EXPLOITATION DATA ===\n{phase_data}\n=== END POST-EXPLOITATION DATA ===\n\n"
+        "Post-Exploitation report section from RAW DATA below.\n\n"
+        "=== POST-EXPLOIT DATA ===\n{phase_data}\n=== END ===\n\n"
         'Return JSON: {{"section": {{"lateral_movement": [...], '
         '"persistence": [...], "privilege_escalation": [...], '
-        '"credential_exposure": [...], "post_exploitation_summary": "string"}}}}'
+        '"credential_exposure": [...], "post_exploitation_summary": "s"}}}}'
     ),
 }
 
 _REPORT_ASSEMBLY_USER = (
-    "Assemble the final security assessment report from the 5 section summaries below.\n\n"
-    "=== RECON SUMMARY ===\n{recon_summary}\n=== END RECON ===\n\n"
-    "=== THREAT MODEL SUMMARY ===\n{threat_model_summary}\n=== END THREAT MODEL ===\n\n"
-    "=== VULN ANALYSIS SUMMARY ===\n{vuln_summary}\n=== END VULN ANALYSIS ===\n\n"
-    "=== EXPLOITATION SUMMARY ===\n{exploit_summary}\n=== END EXPLOITATION ===\n\n"
-    "=== POST-EXPLOITATION SUMMARY ===\n{post_exploit_summary}\n=== END POST-EXPLOITATION ===\n\n"
+    "Assemble final report from 5 section summaries below.\n\n"
+    "=== RECON ===\n{recon_summary}\n=== THREAT MODEL ===\n{threat_model_summary}\n"
+    "=== VULN ANALYSIS ===\n{vuln_summary}\n=== EXPLOITATION ===\n{exploit_summary}\n"
+    "=== POST-EXPLOITATION ===\n{post_exploit_summary}\n\n"
     "Target: {target}\n\n"
-    'Return JSON: {{"report": {{"summary": {{"critical": 0, "high": 0, "medium": 0, '
-    '"low": 0, "info": 0, "risk_rating": "string"}}, "executive_summary": "string", '
-    '"sections": ["string"], "findings_detail": [{{"severity": "string", '
-    '"description": "string", "impact": "string", "remediation": "string"}}], '
-    '"ai_insights": ["string"]}}}}'
+    'Return JSON: {{"report": {{"summary": {{"critical":0,"high":0,"medium":0,"low":0,"info":0,'
+    '"risk_rating":"s"}}, "executive_summary":"s", "sections":["s"], '
+    '"findings_detail": [{{"severity":"s","description":"s","impact":"s","remediation":"s"}}], '
+    '"ai_insights":["s"]}}}}'
 )
 
 _PHASE_REPORT_SECTION_SYSTEM: dict[str, str] = {
