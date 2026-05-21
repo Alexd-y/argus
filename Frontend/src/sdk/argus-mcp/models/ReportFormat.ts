@@ -8,4 +8,4 @@
  * The MCP server intentionally does NOT expose ``valhalla_sections_csv``
  * (a debug helper) — only the canonical formats listed here.
  */
-export type ReportFormat = 'html' | 'pdf' | 'json' | 'csv' | 'sarif' | 'junit';
+export type ReportFormat = 'html' | 'pdf' | 'json' | 'csv' | 'md' | 'sarif' | 'junit';

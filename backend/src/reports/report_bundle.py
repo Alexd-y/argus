@@ -46,7 +46,7 @@ class ReportTier(StrEnum):
 class ReportFormat(StrEnum):
     """Canonical export formats supported by :class:`ReportService`.
 
-    ``HTML`` / ``PDF`` / ``CSV`` / ``JSON`` are produced via the existing
+    ``HTML`` / ``PDF`` / ``CSV`` / ``JSON`` / ``MARKDOWN`` are produced via the existing
     Jinja-based generators (``src.reports.generators``). ``SARIF`` and
     ``JUNIT`` are emitted by the dedicated generators in this package.
     """
@@ -55,6 +55,7 @@ class ReportFormat(StrEnum):
     PDF = "pdf"
     JSON = "json"
     CSV = "csv"
+    MARKDOWN = "md"
     SARIF = "sarif"
     JUNIT = "junit"
 
@@ -67,6 +68,7 @@ _MIME_TYPES: dict[ReportFormat, str] = {
     ReportFormat.PDF: "application/pdf",
     ReportFormat.JSON: "application/json; charset=utf-8",
     ReportFormat.CSV: "text/csv; charset=utf-8",
+    ReportFormat.MARKDOWN: "text/markdown; charset=utf-8",
     ReportFormat.SARIF: "application/sarif+json",
     ReportFormat.JUNIT: "application/xml; charset=utf-8",
 }
@@ -80,6 +82,7 @@ _FILE_EXTENSIONS: dict[ReportFormat, str] = {
     ReportFormat.PDF: "pdf",
     ReportFormat.JSON: "json",
     ReportFormat.CSV: "csv",
+    ReportFormat.MARKDOWN: "md",
     ReportFormat.SARIF: "sarif",
     ReportFormat.JUNIT: "xml",
 }

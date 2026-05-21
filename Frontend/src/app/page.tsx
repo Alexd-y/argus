@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useScanProgress } from "@/hooks/useScanProgress";
 
 type ScanType = "quick" | "light" | "deep" | "lab";
-type ReportFormat = "pdf" | "html" | "json" | "xml";
+type ReportFormat = "pdf" | "html" | "json" | "xml" | "md";
 type RateLimit = "slow" | "normal" | "fast" | "aggressive";
 type UserAgentOption = "chrome" | "firefox" | "mobile" | "bot";
 
@@ -943,7 +943,7 @@ export default function Home() {
                         </Tooltip>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {(["pdf", "html", "json", "xml"] as ReportFormat[]).map((format) => (
+                      {(["pdf", "html", "json", "xml", "md"] as ReportFormat[]).map((format) => (
                         <button
                           key={format}
                           type="button"

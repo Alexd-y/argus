@@ -112,6 +112,7 @@ export type ReportDownloadFormat =
   | "html"
   | "json"
   | "csv"
+  | "md"
   | "valhalla_sections.csv";
 
 export type GetReportDownloadUrlOptions = {

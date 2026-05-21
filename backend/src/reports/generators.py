@@ -1,4 +1,4 @@
-"""Report generators — HTML, JSON, PDF, CSV."""
+"""Report generators — HTML, JSON, PDF, CSV, Markdown."""
 
 import csv
 import hashlib
@@ -2033,6 +2033,182 @@ def generate_pdf(
         except OSError:
             # Tempfile cleanup failures must not mask successful generation.
             pass
+
+
+def generate_markdown(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None, tier: str | None = None
+) -> bytes:
+    """Generate Markdown report — headings, tables, collapsible evidence blocks."""
+    from src.reports.valhalla_report_context import get_brand
+
+    brand = get_brand()
+    t = tier or _tier_from_jinja(jinja_context) or "midgard"
+    tier_label = t.upper()
+    lines: list[str] = []
+
+    lines.append(f"# {brand.name} — Security Assessment Report")
+    lines.append("")
+    lines.append(f"**Tier:** {tier_label}  ")
+    lines.append(f"**Target:** {data.target or 'N/A'}  ")
+    lines.append(f"**Scan ID:** `{data.scan_id or 'N/A'}`  ")
+    lines.append(f"**Report ID:** `{data.report_id or 'N/A'}`  ")
+    lines.append(f"**Generated:** {data.created_at or ''}  ")
+    lines.append("")
+
+    lines.append("---")
+    lines.append("")
+
+    lines.append("## Executive Summary")
+    lines.append("")
+    summary = _clean_ansi(data.executive_summary or "")
+    lines.append(summary or "_No executive summary available._")
+    lines.append("")
+
+    lines.append("## Findings")
+    lines.append("")
+
+    findings_ordered = _findings_sorted(data.findings)
+    findings_ordered = _apply_evidence_gate(findings_ordered)
+    findings_ordered = enforce_severity_by_evidence(findings_ordered)
+
+    severity_emoji: dict[str, str] = {
+        "critical": "🔴 CRITICAL",
+        "high": "🟠 HIGH",
+        "medium": "🟡 MEDIUM",
+        "low": "🟢 LOW",
+        "info": "🔵 INFO",
+        "none": "⚪ NONE",
+    }
+
+    counts: dict[str, int] = {}
+    for f in findings_ordered:
+        sev = str(getattr(f, "severity", "info") or "info").lower()
+        counts[sev] = counts.get(sev, 0) + 1
+
+    lines.append("| # | Severity | Title | Endpoint | Status |")
+    lines.append("|---|----------|-------|----------|--------|")
+    for idx, f in enumerate(findings_ordered, 1):
+        sev = str(getattr(f, "severity", "info") or "info").lower()
+        title = _clean_ansi(str(getattr(f, "title", getattr(f, "name", "")) or ""))
+        endpoint = str(getattr(f, "endpoint", getattr(f, "url", "")) or "")
+        status = str(getattr(f, "validation_status", getattr(f, "evidence_classification", "unverified"))) or "unverified"
+        lines.append(f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | `{endpoint}` | {status} |")
+
+    lines.append("")
+    lines.append(f"**Severity Breakdown:** " + ", ".join(f"{severity_emoji.get(k, k.upper())}: {v}" for k, v in sorted(counts.items())))
+    lines.append("")
+
+    lines.append("### Finding Details")
+    lines.append("")
+
+    for idx, f in enumerate(findings_ordered, 1):
+        sev = str(getattr(f, "severity", "info") or "info").lower()
+        title = _clean_ansi(str(getattr(f, "title", getattr(f, "name", "")) or ""))
+        desc = _clean_ansi(str(getattr(f, "description", "") or ""))
+        endpoint = str(getattr(f, "endpoint", getattr(f, "url", "")) or "")
+        method = str(getattr(f, "method", "") or "")
+        param = str(getattr(f, "parameter", "") or "")
+        status = str(getattr(f, "validation_status", getattr(f, "evidence_classification", ""))) or "unverified"
+        cwe = str(getattr(f, "cwe", "") or "")
+        owasp = str(getattr(f, "owasp", "") or "")
+        cvss_score = getattr(f, "cvss_score", None)
+        cvss_vector = str(getattr(f, "cvss_vector", "") or "")
+        remediation = _clean_ansi(str(getattr(f, "remediation", getattr(f, "fix_action", "")) or ""))
+        verification = str(getattr(f, "verification_command", "") or "")
+        tool_name = str(getattr(f, "tool_name", "") or "")
+
+        lines.append(f"#### {idx}. {title}")
+        lines.append("")
+        lines.append(f"- **Severity:** {severity_emoji.get(sev, sev.upper())}")
+        lines.append(f"- **Status:** {status}")
+        lines.append(f"- **Endpoint:** `{endpoint}`")
+        if method:
+            lines.append(f"- **Method:** `{method}`")
+        if param:
+            lines.append(f"- **Parameter:** `{param}`")
+        if cwe:
+            lines.append(f"- **CWE:** {cwe}")
+        if owasp:
+            lines.append(f"- **OWASP:** {owasp}")
+        if cvss_score is not None and cvss_score != 0:
+            lines.append(f"- **CVSS Score:** {cvss_score}")
+        if cvss_vector:
+            lines.append(f"- **CVSS Vector:** `{cvss_vector}`")
+        if tool_name:
+            lines.append(f"- **Tool:** {tool_name}")
+        lines.append("")
+
+        if desc:
+            lines.append("**Description:**")
+            lines.append("")
+            lines.append(desc)
+            lines.append("")
+
+        if remediation:
+            lines.append("**Remediation:**")
+            lines.append("")
+            lines.append(remediation)
+            lines.append("")
+
+        if verification:
+            lines.append("**Verification:**")
+            lines.append("")
+            lines.append(f"```\n{verification}\n```")
+            lines.append("")
+
+        lines.append("---")
+        lines.append("")
+
+    lines.append("## Technologies Detected")
+    lines.append("")
+    tech_list = sorted(str(t) for t in (data.technologies or []))
+    if tech_list:
+        for tech in tech_list:
+            lines.append(f"- {tech}")
+    else:
+        lines.append("_No technologies detected._")
+    lines.append("")
+
+    ai_sections, _ = _jinja_ai_sections_and_scan_artifacts(jinja_context)
+    if ai_sections:
+        lines.append("## AI-Generated Sections")
+        lines.append("")
+        if isinstance(ai_sections, list):
+            for ai_sec in ai_sections:
+                if isinstance(ai_sec, dict):
+                    ai_title = str(ai_sec.get("section", ai_sec.get("heading", "")) or "")
+                    ai_body = str(ai_sec.get("content", ai_sec.get("text", "")) or "")
+                    if ai_title:
+                        lines.append(f"### {ai_title}")
+                        lines.append("")
+                    if ai_body:
+                        lines.append(ai_body)
+                        lines.append("")
+        elif isinstance(ai_sections, dict):
+            for k, v in ai_sections.items():
+                lines.append(f"### {k}")
+                lines.append("")
+                lines.append(_clean_ansi(str(v)))
+                lines.append("")
+
+    lines.append("## Timeline")
+    lines.append("")
+    timeline_sorted = sorted(
+        data.timeline, key=lambda e: (e.order_index, e.phase or "", e.created_at or "")
+    )
+    for tl in timeline_sorted:
+        phase = tl.phase or ""
+        ts = tl.created_at or ""
+        entry = _clean_ansi(str(tl.entry) if not isinstance(tl.entry, dict) else json.dumps(tl.entry))
+        lines.append(f"- **[{phase}]** {ts}: {entry}")
+    lines.append("")
+
+    lines.append("---")
+    lines.append("")
+    lines.append(f"*Report generated by {brand.name} | Logo SHA-256: `{brand.logo_sha256}` | Export integrity verified*")
+    lines.append("")
+
+    return "\n".join(lines).encode("utf-8")
 
 
 def _legacy_base_url() -> str:

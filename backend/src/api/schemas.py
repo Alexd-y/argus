@@ -1115,13 +1115,13 @@ class ReportGenerateRequest(BaseModel):
     @field_validator("formats")
     @classmethod
     def validate_formats(cls, v: list[str]) -> list[str]:
-        allowed = frozenset({"pdf", "html", "json", "csv"})
+        allowed = frozenset({"pdf", "html", "json", "csv", "md"})
         if not v:
             raise ValueError("formats must contain at least one value")
         bad = [x for x in v if x not in allowed]
         if bad:
             raise ValueError(
-                f"Invalid format(s): use pdf, html, json, csv (got: {bad})"
+                f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})"
             )
         # de-dupe preserving order
         seen: set[str] = set()
@@ -1142,7 +1142,7 @@ class ReportGenerateAcceptedResponse(BaseModel):
     )
 
 
-DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv")
+DEFAULT_GENERATE_ALL_FORMATS: tuple[str, ...] = ("pdf", "html", "json", "csv", "md")
 
 
 class ReportGenerateAllRequest(BaseModel):
@@ -1171,11 +1171,11 @@ class ReportGenerateAllRequest(BaseModel):
             return None
         if not v:
             raise ValueError("formats must contain at least one value when provided")
-        allowed = frozenset({"pdf", "html", "json", "csv"})
+        allowed = frozenset({"pdf", "html", "json", "csv", "md"})
         bad = [x for x in v if x not in allowed]
         if bad:
             raise ValueError(
-                f"Invalid format(s): use pdf, html, json, csv (got: {bad})"
+                f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})"
             )
         seen: set[str] = set()
         out: list[str] = []

@@ -30,6 +30,7 @@ from src.reports.generators import (
     generate_csv,
     generate_html,
     generate_json,
+    generate_markdown,
     generate_pdf,
     generate_valhalla_sections_csv,
 )
@@ -151,6 +152,7 @@ __all__ = [
     "generate_html",
     "generate_json",
     "generate_junit",
+    "generate_markdown",
     "generate_pdf",
     "generate_sarif",
     "generate_valhalla_sections_csv",

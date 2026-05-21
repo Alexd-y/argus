@@ -68,6 +68,7 @@ from src.reports.generators import (
     generate_csv,
     generate_html,
     generate_json,
+    generate_markdown,
     generate_pdf,
 )
 from src.reports.junit_generator import generate_junit
@@ -395,6 +396,8 @@ class ReportService:
                 return generate_json(data, jinja_context=jinja_context)
             if fmt is ReportFormat.CSV:
                 return generate_csv(data, jinja_context=jinja_context)
+            if fmt is ReportFormat.MARKDOWN:
+                return generate_markdown(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.HTML:
                 return generate_html(data, tier=tier.value, jinja_context=jinja_context)
             if fmt is ReportFormat.PDF:

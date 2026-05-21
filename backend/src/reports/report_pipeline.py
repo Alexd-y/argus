@@ -17,6 +17,7 @@ from src.reports.generators import (
     generate_csv,
     generate_html,
     generate_json,
+    generate_markdown,
     generate_pdf,
     generate_valhalla_sections_csv,
 )
@@ -40,14 +41,15 @@ class ReportGenerationError(Exception):
     """Raised when the report generation pipeline encounters a recoverable failure."""
 
 
-REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv"})
-DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf")
+REPORT_FORMAT_SET: frozenset[str] = frozenset({"pdf", "html", "json", "csv", "md"})
+DEFAULT_REPORT_FORMATS: tuple[str, ...] = ("html", "json", "csv", "pdf", "md")
 
 CONTENT_TYPES: dict[str, str] = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
 
@@ -306,6 +308,10 @@ async def run_generate_report_pipeline(
                 content = generate_json(report_data, jinja_context=built.template_context)
             elif fmt == "csv":
                 content = generate_csv(report_data, jinja_context=built.template_context)
+            elif fmt == "md":
+                content = generate_markdown(
+                    report_data, jinja_context=built.template_context, tier=tier_str
+                )
             else:
                 continue
             key = upload(

@@ -35,6 +35,7 @@ from src.reports.generators import (
     generate_csv,
     generate_html,
     generate_json,
+    generate_markdown,
     generate_pdf,
     generate_valhalla_sections_csv,
 )
@@ -83,12 +84,13 @@ def _hostname_from_target_string(value: str) -> str | None:
         return None
 
 
-VALID_FORMATS = {"pdf", "html", "json", "csv", VALHALLA_SECTIONS_CSV_FORMAT}
+VALID_FORMATS = {"pdf", "html", "json", "csv", "md", VALHALLA_SECTIONS_CSV_FORMAT}
 CONTENT_TYPES = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
     "json": "application/json; charset=utf-8",
     "csv": "text/csv; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
 }
 
@@ -403,6 +405,8 @@ async def download_report(
                 content = generate_html(report_data, jinja_context=jctx, tier=tier_str)
             elif fmt == "json":
                 content = generate_json(report_data, jinja_context=jctx)
+            elif fmt == "md":
+                content = generate_markdown(report_data, jinja_context=jctx, tier=tier_str)
             else:
                 content = generate_csv(report_data, jinja_context=jctx)
 

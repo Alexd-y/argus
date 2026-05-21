@@ -32,6 +32,7 @@ class ReportFormat(StrEnum):
     PDF = "pdf"
     JSON = "json"
     CSV = "csv"
+    MARKDOWN = "md"
     SARIF = "sarif"
     JUNIT = "junit"
 
