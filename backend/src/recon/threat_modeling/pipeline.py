@@ -36,7 +36,6 @@ from src.recon.threat_modeling.ai_task_registry import (
 )
 from src.recon.threat_modeling.artifacts import generate_all_artifacts
 from src.recon.threat_modeling.dependency_check import (
-    BLOCKED_MISSING_RECON,
     check_stage1_readiness,
 )
 from src.recon.threat_modeling.input_loader import (
@@ -684,17 +683,9 @@ async def execute_threat_modeling_run(
             call_llm = get_llm_client()
         except Exception as e:
             logger.warning("LLM client init failed", extra={"error_type": type(e).__name__})
-            if not use_llm_fallback:
-                raise ThreatModelPipelineError(
-                    "LLM required but not configured. Set API key or use_llm_fallback=True.",
-                    blocking_reason="llm_unavailable",
-                ) from e
 
-    if call_llm is None and not use_llm_fallback:
-        raise ThreatModelPipelineError(
-            "No LLM configured and use_llm_fallback=False.",
-            blocking_reason="llm_unavailable",
-        )
+    if call_llm is None:
+        logger.info("tm_pipeline_no_llm_proceeding_without_ai")
 
     # 1. Dependency check
     readiness = await check_stage1_readiness(
@@ -769,10 +760,12 @@ async def execute_threat_modeling_run(
             bundle = await load_threat_model_input_bundle_from_artifacts(db, engagement_id, target_id)
             save_to_dir = None
         else:
-            raise ThreatModelPipelineError(
-                "Either recon_dir or db must be provided.",
-                blocking_reason=BLOCKED_MISSING_RECON,
+            logger.warning(
+                "tm_no_input_source",
+                extra={"engagement_id": engagement_id, "reason": "Neither recon_dir nor db provided"},
             )
+            bundle = None
+            save_to_dir = None
 
         tenant_id_raw: str | None = run_record.tenant_id if run_record is not None else None
         scan_id_raw = job_id
