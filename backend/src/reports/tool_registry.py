@@ -214,6 +214,8 @@ _TOOLS: list[ToolRegistryEntry] = [
     ToolRegistryEntry("nuclei-templates", "vuln_active_scan", "nuclei -version", "nuclei -u {target} -t ~/nuclei-templates/", "text", "nuclei_parser", "high", False, False, "Nuclei Templates"),
     ToolRegistryEntry("nmap scripts", "port_discovery", "nmap --version", "nmap --script vuln {target}", "text", "nmap_parser", "moderate", False, False, "Nmap NSE Scripts"),
     ToolRegistryEntry("vulners nse", "port_discovery", "nmap --version", "nmap --script vulners {target}", "text", "nmap_parser", "safe", False, False, "Vulners NSE"),
+    ToolRegistryEntry("azucar", "cloud_security", "azucar --version", "azucar -a", "json", "json_parser", "safe", True, True, "Azucar", notes="Azure security audit — requires Azure credentials"),
+    ToolRegistryEntry("waf-tester", "security_headers", "waf-tester --version", "waf-tester -u {target}", "text", "text_stdout", "moderate", False, False, "WAF Tester", notes="WAF detection and bypass testing"),
 ]
 
 

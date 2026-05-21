@@ -204,6 +204,9 @@ class TechStackTableRow(BaseModel):
     version: str = ""
     confidence: str = ""
     security_note: str = ""
+    evidence_id: str = ""
+    raw_matched_string: str = ""
+    validation_status: str = ""
 
 
 class TechStackEntryModel(BaseModel):
@@ -722,6 +725,9 @@ class CredentialExposureModel(BaseModel):
     hibp_api_used: bool = False
     rows: list[CredentialExposureRowModel] = Field(default_factory=list)
     missing_artifacts: list[str] = Field(default_factory=list)
+
+
+class RemediationMatrixRow(BaseModel):
     """16-column remediation matrix row with acceptance criteria (Step 12)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -729,6 +735,7 @@ class CredentialExposureModel(BaseModel):
     finding_id: str = ""
     title: str = ""
     severity: str = ""
+    status: str = ""
     cvss_score: float | None = None
     priority: str = ""
     deadline: str = ""
@@ -744,6 +751,7 @@ class CredentialExposureModel(BaseModel):
     acceptance_criteria: str = ""
     dependencies: str = ""
     business_impact: str = ""
+    retest_result: str = ""
 
 
 class ValhallaCoverageModel(BaseModel):
@@ -838,6 +846,10 @@ class AuthTestingContext(BaseModel):
     session_management_tested: bool = False
     token_validation_tested: bool = False
     mfa_status: Literal["not_tested", "absent", "present_bypassed", "present_secure"] = "not_tested"
+    password_policy_tested: bool = False
+    rate_limiting_tested: bool = False
+    username_enumeration_tested: bool = False
+    reset_password_flow_tested: bool = False
     notes: str = ""
 
 
@@ -4602,6 +4614,7 @@ def build_remediation_matrix_rows(
                 finding_id=str(f.get("id", f.get("finding_id", "")))[:64],
                 title=str(f.get("title", ""))[:256],
                 severity=sev.capitalize() if sev else "Info",
+                status=str(f.get("evidence_classification", f.get("validation_status", "unverified")) or "unverified").upper(),
                 cvss_score=cvss_val,
                 priority=priority,
                 deadline=deadline,
@@ -4617,6 +4630,7 @@ def build_remediation_matrix_rows(
                 acceptance_criteria=acceptance,
                 dependencies=dependencies,
                 business_impact=business_impact,
+                retest_result="NOT_RETESTED",
             )
         )
     return rows
