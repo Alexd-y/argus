@@ -37,6 +37,11 @@ from src.reports.finding_metadata import (
     normalize_evidence_type,
 )
 from src.reports.report_quality_gate import score_evidence_quality, validation_status_for_quality
+from src.reports.infra_recommendations import (
+    build_verification_commands,
+    generate_infra_recommendations,
+    build_truthfulness_metrics,
+)
 from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
 logger = logging.getLogger(__name__)
@@ -654,7 +659,19 @@ def build_owasp_compliance_rows(
             display_code = cid
         if n > 0:
             assessed = "Yes" if use_valhalla_owasp_2021_misconfig_labels else "Assessed"
-            result = "Finding present"
+            info_without_cwe_cvss = 0
+            for f in findings:
+                sev = str(f.get("severity", "")).lower()
+                cwe = f.get("cwe")
+                cvss = f.get("cvss")
+                oc = f.get("owasp_category")
+                if isinstance(oc, str) and oc == cid and sev == "info" and not cwe and not cvss:
+                    info_without_cwe_cvss += 1
+            if info_without_cwe_cvss == n:
+                assessed = "Partial"
+                result = "Advisory only (info-level, no CWE/CVSS — not a confirmed finding)"
+            else:
+                result = "Finding present"
             findings_present = str(n) if n > 0 else "0"
         elif low_wstg_coverage:
             assessed = "No" if use_valhalla_owasp_2021_misconfig_labels else "Not assessed"
@@ -1528,6 +1545,35 @@ def generate_json(
             else []
         ),
         "unresolved_gaps": _unresolved_gaps_from_ctx(jinja_context),
+        "verification_commands": [
+            {"finding_id": cmd["finding_id"], "command": cmd["command"]}
+            for cmd in build_verification_commands(
+                [_finding_to_dict(f) for f in findings_ordered]
+            )
+        ],
+        "infra_recommendations": _canonical_json_nested(
+            generate_infra_recommendations(
+                tech_stack=jinja_context.get("valhalla_context", None).tech_stack_structured.model_dump()
+                if isinstance(jinja_context, dict) and hasattr(
+                    jinja_context.get("valhalla_context", None), "tech_stack_structured")
+                else {},
+                findings=[_finding_to_dict(f) for f in findings_ordered],
+                ssl_tls=jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
+                if isinstance(jinja_context, dict) and hasattr(
+                    jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
+                else {},
+                security_headers=jinja_context.get("valhalla_context", None).security_headers_analysis.model_dump()
+                if isinstance(jinja_context, dict) and hasattr(
+                    jinja_context.get("valhalla_context", None), "security_headers_analysis")
+                else {},
+            )
+        ),
+        "truthfulness_metrics": build_truthfulness_metrics(
+            findings=[_finding_to_dict(f) for f in findings_ordered],
+            ai_sections=ai_sections or {},
+            coverage_pct=float(jinja_context.get("wstg_coverage", {}).get("coverage_percentage", 0) or 0)
+            if isinstance(jinja_context, dict) else 0.0,
+        ),
         "timeline": timeline,
         "phase_outputs": phase_outputs,
         "screenshots": screenshots,

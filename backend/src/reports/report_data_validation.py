@@ -278,6 +278,22 @@ def pre_release_quality_warnings(
                     reasons.append(f"WARNING: Code/debug garbage detected in AI section '{key}' — auto-sanitized")
                     break
     
+    # Prompt leakage in AI sections (ROLE:, CONSTRAINTS:, FOCUS:, GROUNDING:) — flag, never block
+    if isinstance(ai_sections, dict):
+        from src.reports.report_text_sanitizer import contains_raw_prompt_leakage
+        leaked = [k for k, v in ai_sections.items()
+                  if isinstance(v, str) and contains_raw_prompt_leakage(v)]
+        if leaked:
+            reasons.append(f"WARNING: Raw prompt leakage detected in AI sections: {', '.join(leaked[:3])} — LLM may have regurgitated prompt instructions")
+    
+    # Remediation deduplication > 2 sections — flag, never block
+    if isinstance(ai_sections, dict):
+        from src.reports.report_text_sanitizer import find_duplicate_paragraphs
+        combined = "\n\n".join(str(v) for v in ai_sections.values() if isinstance(v, str))
+        dups = find_duplicate_paragraphs(combined)
+        if len(dups) > 2:
+            reasons.append(f"WARNING: {len(dups)} duplicate paragraphs across AI sections — content deduplication needed")
+    
     # ANSI escape sequences in raw request/response — strip, never block
     for f in report_data.findings:
         poc = getattr(f, "proof_of_concept", {}) or {}

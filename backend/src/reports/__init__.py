@@ -38,6 +38,11 @@ from src.reports.generators import (
     generate_tool_health_csv,
     generate_valhalla_sections_csv,
 )
+from src.reports.infra_recommendations import (
+    build_truthfulness_metrics,
+    build_verification_commands,
+    generate_infra_recommendations,
+)
 from src.reports.junit_generator import build_junit_tree, generate_junit
 from src.reports.replay_command_sanitizer import (
     PLACEHOLDER_ASSET,
@@ -148,6 +153,8 @@ __all__ = [
     "assemble_valhalla_sections",
     "build_junit_tree",
     "build_sarif_payload",
+    "build_truthfulness_metrics",
+    "build_verification_commands",
     "classify_for_tier",
     "download",
     "exists",
@@ -155,6 +162,7 @@ __all__ = [
     "generate_csv",
     "generate_export_validation_report",
     "generate_html",
+    "generate_infra_recommendations",
     "generate_json",
     "generate_junit",
     "generate_markdown",

@@ -1139,6 +1139,7 @@ def _raw_tool_issues_from_artifacts(
     for tool, info in sorted(state.items()):
         exit_code = info.get("exit_code")
         exit_bad = isinstance(exit_code, int) and exit_code != 0
+        exit_recoverable = exit_code == 127  # binary not found — partial output may still be parseable
         error_reason = str(info.get("error_reason") or "").strip()
         stderr_note = str(info.get("stderr_note") or "").strip()
         stdout_seen = bool(info.get("stdout_seen"))
@@ -1149,7 +1150,10 @@ def _raw_tool_issues_from_artifacts(
         if key in seen:
             continue
         seen.add(key)
-        if error_reason:
+        if exit_recoverable:
+            status = "partial"
+            note = f"raw_meta_exit_code:{exit_code}_recoverable"
+        elif error_reason:
             status = "failed"
             note = f"raw_meta_error:{error_reason}"
         elif exit_bad:
