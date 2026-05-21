@@ -204,9 +204,9 @@ class TechStackTableRow(BaseModel):
     version: str = ""
     confidence: str = ""
     security_note: str = ""
-    evidence_id: str = ""
-    raw_matched_string: str = ""
-    validation_status: str = ""
+    evidence_id: str | None = None
+    raw_matched_string: str | None = None
+    validation_status: str | None = None
 
 
 class TechStackEntryModel(BaseModel):
@@ -735,7 +735,7 @@ class RemediationMatrixRow(BaseModel):
     finding_id: str = ""
     title: str = ""
     severity: str = ""
-    status: str = ""
+    status: str = "open"
     cvss_score: float | None = None
     priority: str = ""
     deadline: str = ""
@@ -846,10 +846,10 @@ class AuthTestingContext(BaseModel):
     session_management_tested: bool = False
     token_validation_tested: bool = False
     mfa_status: Literal["not_tested", "absent", "present_bypassed", "present_secure"] = "not_tested"
-    password_policy_tested: bool = False
-    rate_limiting_tested: bool = False
-    username_enumeration_tested: bool = False
-    reset_password_flow_tested: bool = False
+    password_policy: str | None = None
+    rate_limiting: bool | None = None
+    username_enumeration: bool | None = None
+    reset_password_flow: str | None = None
     notes: str = ""
 
 
