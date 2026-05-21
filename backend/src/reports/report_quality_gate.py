@@ -2305,7 +2305,6 @@ _AI_PATTERN_RE = [
     (re.compile(r"\b(in (spite|defiance|disregard) of)\b", re.I), "despite:"),
     (re.compile(r"\b(notwithstanding (the|this|that|these|those))\b", re.I), "despite:"),
     (re.compile(r"\b(nevertheless|nonetheless|notwithstanding)\b", re.I), "however:"),
-    (re.compile(r"\b(be (that|this|it) as it may)\b", re.I), "regardless:"),
     (re.compile(r"\b(all (the|this|that|these|those) (same|while))\b", re.I), "however:"),
     (re.compile(r"\b(even (so|then|still|though|if))\b", re.I), "however:"),
     (re.compile(r"\b(despite (the|this|that|these|those))\b", re.I), "despite:"),
@@ -2321,6 +2320,20 @@ _AI_PATTERN_RE = [
     (re.compile(r"\b(in (a|the|this|that) (same|similar|like|related) (manner|fashion|vein|light))\b", re.I), "similarly:"),
 ]
 
+# Code-snippet / debug-garbage patterns — remove entire section if found
+_CODE_GARBAGE_RE = [
+    re.compile(r'\bprint\s*\(\s*["\']Hello[,]?\s*World', re.I),
+    re.compile(r'^\s*#\s*This\s+is\s+a\s+comment', re.I),
+    re.compile(r'\bexample\.com\b', re.I),
+    re.compile(r'https?://target[/]', re.I),
+    re.compile(r'\x1b\[[0-9;]*[a-zA-Z]', re.I),
+    re.compile(r'\bprint\s*\(\s*["\'].*["\']\)', re.I),
+    re.compile(r'\bconsole\.log\s*\(', re.I),
+    re.compile(r'\bTODO\s*:', re.I),
+    re.compile(r'\bFIXME\s*:', re.I),
+    re.compile(r'\b(test|debug)\s+(code|snippet|placeholder|entry)\b', re.I),
+]
+
 
 def detect_ai_patterns(text: str) -> list[tuple[str, str]]:
     """Detect AI writing patterns using regex. Returns list of (pattern, replacement) tuples."""
@@ -2329,6 +2342,16 @@ def detect_ai_patterns(text: str) -> list[tuple[str, str]]:
         if pattern.search(text):
             matches.append((pattern.pattern, replacement))
     return matches
+
+
+def detect_code_garbage(text: str) -> list[str]:
+    """Detect code snippets, debug garbage, and ANSI escapes in report text."""
+    issues: list[str] = []
+    for pattern in _CODE_GARBAGE_RE:
+        found = pattern.findall(text)
+        for match in found if isinstance(found, list) else ([found] if found else []):
+            issues.append(f"Code garbage detected: {match}")
+    return issues
 
 
 def sanitize_ai_patterns(text: str) -> tuple[str, list[str]]:

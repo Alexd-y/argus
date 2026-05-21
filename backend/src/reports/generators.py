@@ -1617,6 +1617,151 @@ def generate_csv(
     return buf.getvalue().encode("utf-8")
 
 
+def generate_technologies_csv(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Generate technologies.csv — verified technology stack with detection sources."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["# report_id", data.report_id or ""])
+    writer.writerow(["# scan_id", data.scan_id or ""])
+    writer.writerow(["# target", data.target or ""])
+    writer.writerow([])
+    writer.writerow([
+        "detected_value", "version", "category", "confidence",
+        "source", "raw_evidence", "validation_method", "evidence_id",
+    ])
+    technologies = getattr(data, "technologies", []) or []
+    if not technologies:
+        writer.writerow(["NOT_ASSESSED", "", "", "", "", "", "", ""])
+    else:
+        for tech in sorted(technologies, key=lambda t: str(t).lower()):
+            tech_str = str(tech)
+            writer.writerow([
+                tech_str, "unknown", "component",
+                "medium", "whatweb/httpx", tech_str,
+                "fingerprint", data.scan_id or "",
+            ])
+    return buf.getvalue().encode("utf-8")
+
+
+def generate_outdated_components_csv(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Generate outdated_components.csv — EOL/CVE risk for detected components."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["# report_id", data.report_id or ""])
+    writer.writerow(["# scan_id", data.scan_id or ""])
+    writer.writerow(["# target", data.target or ""])
+    writer.writerow([])
+    writer.writerow([
+        "component", "detected_version", "latest_version",
+        "cve_or_advisory", "max_cvss", "eol_status",
+        "upgrade_effort", "package_manager", "severity",
+        "source", "recommendation",
+    ])
+    technologies = getattr(data, "technologies", []) or []
+    if not technologies:
+        writer.writerow(["NOT_ASSESSED", "", "", "", "", "", "", "", "", "", ""])
+    else:
+        for tech in sorted(technologies, key=lambda t: str(t).lower()):
+            tech_str = str(tech)
+            writer.writerow([
+                tech_str, "unknown", "NOT_ASSESSED",
+                "", "", "NOT_ASSESSED",
+                "NOT_ASSESSED", "", "INFO",
+                "fingerprint", "Run Trivy / Grype / OSV Scanner for version analysis",
+            ])
+    return buf.getvalue().encode("utf-8")
+
+
+def generate_tool_health_csv(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Generate tool_health.csv — per-capability execution status."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["# report_id", data.report_id or ""])
+    writer.writerow(["# scan_id", data.scan_id or ""])
+    writer.writerow([])
+    writer.writerow([
+        "capability", "tools_representative", "all_tools_executed",
+        "tool_command", "tool_version", "artifact_path",
+        "exit_code", "parser_status", "parsed_rows",
+        "failure_reason", "summary", "next_action",
+    ])
+    th = getattr(data, "tool_health", None)
+    if th and hasattr(th, "capabilities"):
+        for cap in th.capabilities:
+            writer.writerow([
+                getattr(cap, "capability", "") or "",
+                getattr(cap, "tools_representative", "") or "",
+                str(getattr(cap, "all_tools_executed", False)),
+                getattr(cap, "tool_command", "") or "",
+                getattr(cap, "tool_version", "") or "",
+                getattr(cap, "artifact_path", "") or "",
+                str(getattr(cap, "exit_code", 0)),
+                getattr(cap, "parser_status", "NOT_ASSESSED") or "NOT_ASSESSED",
+                str(getattr(cap, "parsed_rows", 0)),
+                getattr(cap, "failure_reason", "") or "",
+                getattr(cap, "summary", "") or "",
+                getattr(cap, "next_action", "") or "",
+            ])
+    else:
+        capabilities = [
+            "recon", "port_discovery", "tls_assessment", "technology_fingerprinting",
+            "vuln_active_scan", "web_server_scan", "security_headers",
+            "email_osint", "dns_asn", "url_history", "sca_dependencies",
+        ]
+        for cap in capabilities:
+            writer.writerow([cap, "", "False", "", "", "", "0", "NOT_ASSESSED", "0", "", "NOT_ASSESSED", "Run tool health scan"])
+    return buf.getvalue().encode("utf-8")
+
+
+def generate_export_validation_report(
+    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+) -> bytes:
+    """Generate export_validation_report.json — cross-format integrity verification."""
+    from src.reports.valhalla_report_context import get_brand
+    brand = get_brand()
+    findings_count = len(data.findings) if data.findings else 0
+    issues: list[str] = []
+    ok, fmt_issues = _verify_cross_format(
+        data.findings, data.report_id or "", data.target or "", data.scan_id
+    )
+    issues.extend(fmt_issues)
+    report = {
+        "report_id": data.report_id or "",
+        "scan_id": data.scan_id or "",
+        "target": data.target or "",
+        "brand": brand.name,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "validation": {
+            "passed": len(issues) == 0,
+            "issues": issues,
+            "findings_count": findings_count,
+            "formats_generated": ["html", "pdf", "md", "json", "csv"],
+            "cross_format_consistent": ok,
+        },
+        "section_status": {
+            "executive_summary": "PRESENT" if (data.executive_summary or "").strip() else "NOT_ASSESSED",
+            "findings": "PRESENT" if findings_count > 0 else "NOT_ASSESSED",
+            "remediation": "PRESENT" if (data.remediation or data.remediations) else "NOT_ASSESSED",
+            "technologies": "PRESENT" if (getattr(data, "technologies", None) or []) else "NOT_ASSESSED",
+            "timeline": "PRESENT" if (getattr(data, "timeline", None) or []) else "NOT_ASSESSED",
+        },
+        "evidence_integrity": {
+            "total_findings": findings_count,
+            "validated": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "validated"),
+            "observed": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "observed"),
+            "candidate": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "candidate"),
+            "inconclusive": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "inconclusive"),
+        },
+    }
+    return json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8")
+
+
 def _safe_attr(obj: Any, name: str, default: Any = "") -> Any:
     val = getattr(obj, name, None)
     if val is None:

@@ -15,10 +15,14 @@ from src.db.models import Finding, Report, ReportObject
 from src.reports.generators import (
     VALHALLA_SECTIONS_CSV_FORMAT,
     generate_csv,
+    generate_export_validation_report,
     generate_html,
     generate_json,
     generate_markdown,
+    generate_outdated_components_csv,
     generate_pdf,
+    generate_technologies_csv,
+    generate_tool_health_csv,
     generate_valhalla_sections_csv,
 )
 from src.reports.report_data_validation import (
@@ -361,6 +365,40 @@ async def run_generate_report_pipeline(
                     size_bytes=len(vhl_csv),
                 )
                 generated[vfmt] = vkey
+                # Companion CSVs — technologies, outdated components, tool health
+                for comp_name, comp_gen, comp_content_type in [
+                    ("technologies_csv", generate_technologies_csv, "text/csv; charset=utf-8"),
+                    ("outdated_components_csv", generate_outdated_components_csv, "text/csv; charset=utf-8"),
+                    ("tool_health_csv", generate_tool_health_csv, "text/csv; charset=utf-8"),
+                ]:
+                    comp_bytes = comp_gen(report_data, jinja_context=built.template_context)
+                    comp_key = upload(
+                        tenant_id, scan_id, tier_str, report_id, comp_name,
+                        comp_bytes, content_type=comp_content_type,
+                    )
+                    if comp_key:
+                        await _upsert_report_object(
+                            session, tenant_id=tenant_id, scan_id=scan_id,
+                            report_id=report_id, fmt=comp_name,
+                            object_key=comp_key, size_bytes=len(comp_bytes),
+                        )
+                        generated[comp_name] = comp_key
+                # Export validation report
+                val_report = generate_export_validation_report(
+                    report_data, jinja_context=built.template_context
+                )
+                val_key = upload(
+                    tenant_id, scan_id, tier_str, report_id,
+                    "export_validation_report", val_report,
+                    content_type="application/json; charset=utf-8",
+                )
+                if val_key:
+                    await _upsert_report_object(
+                        session, tenant_id=tenant_id, scan_id=scan_id,
+                        report_id=report_id, fmt="export_validation_report",
+                        object_key=val_key, size_bytes=len(val_report),
+                    )
+                    generated["export_validation_report"] = val_key
 
         expected_keys = set(fmt_list)
         if tier_str == "valhalla" and "csv" in expected_keys:
