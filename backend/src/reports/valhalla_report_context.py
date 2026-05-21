@@ -171,13 +171,18 @@ class RobotsTxtAnalysisModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     found: bool = False
+    status_code: int = 0
+    content_type: str = ""
     raw_excerpt: str | None = None
     disallowed_paths_sample: list[str] = Field(default_factory=list)
     allow_paths_sample: list[str] = Field(default_factory=list)
     sitemap_hints: list[str] = Field(default_factory=list)
     sensitive_path_hints: list[str] = Field(default_factory=list)
+    security_txt_found: bool = False
+    security_txt_excerpt: str = ""
     disallow_rule_count: int = 0
     allow_rule_count: int = 0
+    evidence_id: str = ""
 
 
 class SitemapAnalysisModel(BaseModel):
@@ -252,11 +257,21 @@ class SslTlsAnalysisModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     issuer: str | None = None
+    subject: str | None = None
+    san: list[str] = Field(default_factory=list)
+    valid_from: str | None = None
+    valid_to: str | None = None
     validity: str | None = None
+    chain_length: int = 0
     protocols: list[str] = Field(default_factory=list)
     weak_protocols: list[str] = Field(default_factory=list)
+    cipher_suites: list[str] = Field(default_factory=list)
     weak_ciphers: list[str] = Field(default_factory=list)
     hsts: str | None = None
+    ocsp_stapling: bool = False
+    alpn: list[str] = Field(default_factory=list)
+    grade: str = ""
+    evidence_id: str = ""
 
 
 class SslTlsTableRowModel(BaseModel):
@@ -606,11 +621,18 @@ class PortExposureTableRowModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host: str = ""
+    ip: str = ""
     port: str = ""
     protocol: str = "tcp"
     state: str = "open"
     service: str = ""
     version: str = ""
+    tls: str = ""
+    exposure_reason: str = ""
+    risk: str = ""
+    evidence_id: str = ""
+    timestamp: str = ""
+    source_tool: str = ""
     source: str = ""
     confidence: str = ""
     exposure_note: str = ""
@@ -670,7 +692,36 @@ class ValhallaMandatorySectionsModel(BaseModel):
     port_exposure: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
 
 
-class RemediationMatrixRow(BaseModel):
+class CredentialExposureRowModel(BaseModel):
+    """HIBP-enriched credential exposure row for reporting (Step 4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checks_run: int = 0
+    authorized_source: str = ""
+    sample_type: str = ""
+    hibp_range_prefix: str = ""
+    pwned_count: int = 0
+    matched: str = "no"
+    account_or_email: str = ""
+    plaintext_stored: str = "no"
+    evidence_id: str = ""
+    timestamp: str = ""
+    api_status: str = ""
+    legal_basis: str = ""
+    result_confidence: str = ""
+
+class CredentialExposureModel(BaseModel):
+    """Full credential exposure analysis (Step 4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checks_run: int = 0
+    password_samples_available: bool = False
+    hash_samples_available: bool = False
+    hibp_api_used: bool = False
+    rows: list[CredentialExposureRowModel] = Field(default_factory=list)
+    missing_artifacts: list[str] = Field(default_factory=list)
     """16-column remediation matrix row with acceptance criteria (Step 12)."""
 
     model_config = ConfigDict(extra="forbid")
@@ -882,6 +933,8 @@ class ValhallaReportContext(BaseModel):
     #: Step 3 — Authenticated testing context, authorization matrix, and full header data
     auth_testing: AuthTestingContext = Field(default_factory=AuthTestingContext)
     full_headers: FullHeadersContext = Field(default_factory=FullHeadersContext)
+    #: Step 4 — Credential exposure + HIBP k-anonymity results
+    credential_exposure: CredentialExposureModel = Field(default_factory=CredentialExposureModel)
     #: Step 12 — 16-column remediation matrix with acceptance criteria
     remediation_matrix: list[RemediationMatrixRow] = Field(default_factory=list)
     #: Step 17 — evidence gaps, missing artifacts, next scan commands

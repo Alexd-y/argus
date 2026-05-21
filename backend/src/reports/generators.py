@@ -1141,6 +1141,12 @@ def build_valhalla_report_payload(
     tool_health = vc.get("tool_health_summary")
     if not isinstance(tool_health, list):
         tool_health = []
+    port_exposure = vc.get("port_exposure_table_rows")
+    if not isinstance(port_exposure, list):
+        port_exposure = []
+    credential_exposure = vc.get("credential_exposure")
+    auth_testing = vc.get("auth_testing")
+    wstg = vc.get("wstg_coverage")
     return {
         "title_meta": _canonical_json_nested(title_meta),
         "executive_summary_counts": _canonical_json_nested(exec_counts),
@@ -1151,6 +1157,7 @@ def build_valhalla_report_payload(
             vc.get("outdated_components") or []
         ),
         "emails": _canonical_json_nested(vc.get("leaked_emails") or []),
+        "leaked_email_rows": _canonical_json_nested(vc.get("leaked_email_rows") or []),
         "ssl_tls": _canonical_json_nested(vc.get("ssl_tls_analysis") or {}),
         "ssl_tls_table_rows": _canonical_json_nested(ssl_tls_table_rows),
         "headers": _canonical_json_nested(vc.get("security_headers_analysis") or {}),
@@ -1161,6 +1168,10 @@ def build_valhalla_report_payload(
         "full_valhalla": bool(vc.get("full_valhalla")),
         "evidence_inventory": _canonical_json_nested(evidence_inv),
         "tool_health_summary": _canonical_json_nested(tool_health),
+        "port_exposure": _canonical_json_nested(port_exposure),
+        "credential_exposure": _canonical_json_nested(credential_exposure) if credential_exposure else None,
+        "auth_testing": _canonical_json_nested(auth_testing) if auth_testing else None,
+        "wstg_coverage": _canonical_json_nested(wstg) if wstg else None,
         "threat_modeling_ref": _canonical_json_nested(threat_modeling_ref),
         "findings": findings_canon,
         "exploit_chains_text": exploit_chains_text,
@@ -1349,6 +1360,54 @@ def generate_json(
             jinja_context.get("valhalla_context", None).tool_health_summary
             if isinstance(jinja_context, dict) and
                hasattr(jinja_context.get("valhalla_context", None), "tool_health_summary")
+            else []
+        ),
+        "ssl_tls_analysis": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
+            else {}
+        ),
+        "ssl_tls_table_rows": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).ssl_tls_table_rows
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_table_rows")
+            else []
+        ),
+        "port_exposure": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).port_exposure_table_rows
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "port_exposure_table_rows")
+            else []
+        ),
+        "port_exposure_summary": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).port_exposure.model_dump()
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "port_exposure")
+            else {}
+        ),
+        "robots_sitemap": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).robots_sitemap_analysis.model_dump()
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "robots_sitemap_analysis")
+            else {}
+        ),
+        "credential_exposure": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).credential_exposure.model_dump()
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "credential_exposure")
+            else {}
+        ),
+        "auth_testing": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).auth_testing.model_dump()
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "auth_testing")
+            else {}
+        ),
+        "leaked_emails": _canonical_json_nested(
+            jinja_context.get("valhalla_context", None).leaked_email_rows
+            if isinstance(jinja_context, dict) and
+               hasattr(jinja_context.get("valhalla_context", None), "leaked_email_rows")
             else []
         ),
         "technologies": tech_sorted,
