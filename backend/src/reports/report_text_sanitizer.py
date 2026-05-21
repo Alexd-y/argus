@@ -1,0 +1,143 @@
+"""VHQ-010 — Post-process AI-generated report text to clean:
+- Markdown artifacts (``` fences, **bold** markers, code blocks in HTML)
+- Raw prompt leakage (prompt instructions that LLM regurgitated)
+- Common AI-isms and boilerplate patterns
+- Duplicate paragraph detection
+"""
+
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Patterns that indicate the LLM regurgitated the prompt instead of answering
+_PROMPT_LEAKAGE_PATTERNS = [
+    r"ROLE:\s*You are an?\s",
+    r"FOCUS:\s*(?:assess|describe|explain|outline|list|map|propose)\s",
+    r"\bCONSTRAINTS:\s",
+    r"\bGROUNDING:\s",
+    r"\bSTRICT RULES FOR ALL REPORT SECTIONS:\s",
+    r"\bLANGUAGE:\s*Write in English",
+    r"\bSECTION_ID:\s*\w+",
+    r"\bALREADY WRITTEN SECTIONS\b",
+    r"\bContext JSON:\s*\n?\{",
+    r"^(?:1\.|2\.|3\.|4\.|5\.)\s+Do any findings\b",
+    r"\bDo\s+NOT\s+repeat\s+the\s+findings\s+list\b",
+    r"\bDo NOT repeat content from the Executive Summary\b",
+    r"\bDo NOT summarize individual findings\b",
+    r"\bTie discussion to concrete\b",
+    r"\bseparate known CVE-backed risk\b",
+    r"\bPlain prose, 2–4 paragraphs\.\s+End with the rating line\b",
+]
+
+# Markdown artifacts that shouldn't appear in HTML report
+_MARKDOWN_ARTIFACTS = [
+    (re.compile(r"```(?:json|html|code|text)?\s*\n"), "\n"),
+    (re.compile(r"```"), ""),
+    (re.compile(r"\*\*(.+?)\*\*"), r"\1"),
+    (re.compile(r"`([^`]+)`"), r"\1"),
+]
+
+# Generic AI boilerplate that adds no value
+_AI_BOILERPLATE = [
+    r"\bcomprehensive (?:penetration test|security assessment)\b",
+    r"\bthe assessment revealed\b",
+    r"\bit is (?:important|crucial|essential|vital|critical|key)\s+(?:to|that|for)\b",
+    r"\bin (?:terms|relation) of\b",
+    r"\b(?:relatively stable|positive observation)\b",
+    r"\babsence of critical vulnerabilities\b",
+    r"\bno critical vulnerabilities\b",
+    r"\bno findings means secure\b",
+    r"\bconfirmed these findings without false positives\b",
+    r"\bunauthorized transactions\b",
+    r"\bregulatory fines\b",
+    r"\bfinancial fraud\b",
+    r"\bcomprehensive penetration test\b",
+    r"\bin today's (?:digital|cyber|threat) landscape\b",
+    r"\bstate-of-the-art\b",
+    r"\best?ablished protocols?\b",
+    r"\brobust security measures?\b",
+    r"\bleveraging advanced\b",
+    r"\bseamlessly (?:integrates?|ensures?)\b",
+]
+
+# Section titles that should NOT appear inside generated text
+_SECTION_TITLE_LEAKAGE = [
+    r"^(?:Executive Summary|Vulnerability Description|Remediation Steps?|Business Risk|"
+    r"Compliance Check|Prioritization Roadmap|Hardening Recommendations|"
+    r"Attack Scenarios|Exploit Chains|Remediation Stages|Zero-Day Potential|"
+    r"Cost Summary|Novel Vulnerability Indication)",
+]
+
+_COMPILED_LEAKAGE = [re.compile(p, re.IGNORECASE) for p in _PROMPT_LEAKAGE_PATTERNS]
+_COMPILED_BOILER = [re.compile(p, re.IGNORECASE) for p in _AI_BOILERPLATE]
+_COMPILED_TITLE = [re.compile(p, re.IGNORECASE) for p in _SECTION_TITLE_LEAKAGE]
+
+
+def sanitize_ai_report_text(text: str) -> str:
+    """Clean AI-generated text for HTML/MD embedding. Removes prompt leakage,
+    Markdown artifacts, and AI boilerplate. Returns sanitized string."""
+    if not text or not isinstance(text, str):
+        return text or ""
+
+    original_len = len(text)
+
+    # 1. Remove prompt leakage
+    for pat in _COMPILED_LEAKAGE:
+        text = pat.sub("", text)
+
+    # 2. Clean Markdown artifacts
+    for pat, replacement in _MARKDOWN_ARTIFACTS:
+        text = pat.sub(replacement, text)
+
+    # 3. Remove AI boilerplate
+    for pat in _COMPILED_BOILER:
+        text = pat.sub("", text)
+
+    # 4. Remove section title leakage inside body
+    for pat in _COMPILED_TITLE:
+        text = pat.sub("", text, count=1)  # Only first occurrence
+
+    # 5. Collapse multiple blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # 6. Remove leading/trailing whitespace
+    text = text.strip()
+
+    if len(text) < original_len * 0.3 and original_len > 100:
+        logger.warning(
+            "report_text_sanitizer_heavy_truncation",
+            extra={"original_len": original_len, "sanitized_len": len(text)},
+        )
+
+    return text
+
+
+def contains_raw_prompt_leakage(text: str) -> bool:
+    """Detect if AI output contains unprocessed prompt instructions."""
+    if not text:
+        return False
+    for pat in _COMPILED_LEAKAGE:
+        if pat.search(text):
+            return True
+    return False
+
+
+def find_duplicate_paragraphs(text: str, threshold: float = 0.80) -> list[str]:
+    """Find paragraphs that appear nearly-identical across sections."""
+    paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 50]
+    duplicates = []
+    seen_terms: set[str] = set()
+    for p in paragraphs:
+        words = set(p.lower().split())
+        if not words:
+            continue
+        best_overlap = 0.0
+        for s in seen_terms:
+            overlap = len(words & s) / max(len(words | s), 1)
+            if overlap > best_overlap:
+                best_overlap = overlap
+        if best_overlap > threshold:
+            duplicates.append(p[:120] + "..." if len(p) > 120 else p)
+        seen_terms.add(words)
+    return duplicates

@@ -748,6 +748,90 @@ def _clean_ansi(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
+def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
+    """Demote findings on external domains to OUT_OF_SCOPE + info severity.
+
+    Extracts the target root domain and checks each finding's endpoint/title.
+    Findings on third-party SaaS (zoho, salesforce, hubspot, etc.) or unrelated
+    domains are classified as out_of_scope.
+    """
+    import re as _re
+    from urllib.parse import urlparse
+
+    target_domain = ""
+    if target:
+        try:
+            parsed = urlparse(target if "://" in target else f"https://{target}")
+            target_domain = parsed.hostname or parsed.netloc.split(":")[0] if parsed.netloc else ""
+        except Exception:
+            target_domain = str(target).split("/")[0].split(":")[0]
+
+    _KNOWN_SAAS_DOMAINS = {
+        "zoho", "zohocloud.ca", "zohocorp.com", "zohopublic.com",
+        "salesforce.com", "force.com", "hubspot.com", "hsforms.com",
+        "mailchimp.com", "typeform.com", "google.com", "facebook.com",
+        "linkedin.com", "twitter.com", "youtube.com", "github.com",
+        "aws.amazon.com", "cloudfront.net",
+    }
+
+    def _domain_from_url(u: str) -> str:
+        try:
+            p = urlparse(u if "://" in u else f"https://{u}")
+            return (p.hostname or p.netloc.split(":")[0] if p.netloc else "").lower().lstrip("www.")
+        except Exception:
+            return ""
+
+    def _domain_in_title(title: str) -> str | None:
+        m = _re.search(r"https?://([^\s/)'\"]+)", title or "")
+        return _domain_from_url(m.group(0)) if m else None
+
+    filtered = 0
+    for f in findings:
+        title = str(_safe_attr(f, "title") or "")
+        endpoint = str(_safe_attr(f, "affected_endpoint") or "")
+        affected_url = str(_safe_attr(f, "affected_url") or "")
+
+        check_urls = [endpoint, affected_url]
+        title_dom = _domain_in_title(title)
+        if title_dom:
+            check_urls.append(f"https://{title_dom}")
+
+        is_external = False
+        external_domain = ""
+        for u in check_urls:
+            dom = _domain_from_url(u)
+            if not dom:
+                continue
+            if target_domain and not dom.endswith(target_domain) and not target_domain.endswith(dom):
+                is_external = True
+                external_domain = dom
+            if any(dom.endswith(s) or dom == s for s in _KNOWN_SAAS_DOMAINS):
+                is_external = True
+                external_domain = dom
+
+        if is_external:
+            try:
+                setattr(f, "severity", "info")
+                setattr(f, "evidence_classification", "CANDIDATE")
+                setattr(f, "scope_status", "out_of_scope")
+                setattr(f, "applicability_notes",
+                        f"Finding references external domain '{external_domain}' which is outside the target scope "
+                        f"({target_domain}). This is likely a third-party SaaS/service and should be manually verified.")
+                logger.warning(
+                    "scope_filter_out_of_scope",
+                    extra={"finding_id": getattr(f, "id", "?"),
+                           "external_domain": external_domain,
+                           "target_domain": target_domain},
+                )
+                filtered += 1
+            except Exception:
+                pass
+
+    if filtered:
+        logger.info("scope_filter_applied", extra={"out_of_scope": filtered, "total": len(findings)})
+    return findings
+
+
 def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
     """Enforce evidence gate: VALIDATED requires raw req/res + endpoint + impact + remediation."""
     downgraded = 0
@@ -1298,7 +1382,8 @@ def generate_json(
     brand = get_brand()
     now_utc = datetime.now(timezone.utc).isoformat()
 
-    # evidence gate + severity enforcement
+    # scope filter (out-of-scope external domains → info) + evidence gate + severity enforcement
+    findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
     findings_ordered = _apply_evidence_gate(findings_ordered)
     findings_ordered = enforce_severity_by_evidence(findings_ordered)
 
@@ -2272,6 +2357,7 @@ def generate_markdown(
     lines.append("")
 
     findings_ordered = _findings_sorted(data.findings)
+    findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
     findings_ordered = _apply_evidence_gate(findings_ordered)
     findings_ordered = enforce_severity_by_evidence(findings_ordered)
 

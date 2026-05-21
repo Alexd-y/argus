@@ -21,6 +21,11 @@ from src.reports.report_data_validation import (
     grounded_executive_summary_fallback_text,
     validate_executive_ai_text_against_payload,
 )
+from src.reports.report_text_sanitizer import (
+    sanitize_ai_report_text,
+    contains_raw_prompt_leakage,
+    find_duplicate_paragraphs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -399,6 +404,23 @@ def run_ai_text_generation(
         )
         if settings.ai_text_executive_fact_check_replace:
             generated = grounded_executive_summary_fallback_text(input_payload)
+
+    has_leakage = contains_raw_prompt_leakage(generated)
+    if has_leakage:
+        logger.warning(
+            "ai_text_prompt_leakage_detected",
+            extra={"section_key": section_key, "tier": tier},
+        )
+    generated = sanitize_ai_report_text(generated)
+    if not generated.strip():
+        generated = REPORT_AI_SKIPPED_GENERATION_FAILED
+
+    dups = find_duplicate_paragraphs(generated)
+    if dups:
+        logger.info(
+            "ai_text_duplicate_paragraphs",
+            extra={"section_key": section_key, "dup_count": len(dups)},
+        )
 
     if r is not None and generated and ttl > 0:
         try:

@@ -3833,19 +3833,31 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
     plugs = merged.get("plugins")
     if not isinstance(plugs, dict) or not plugs:
         return []
+    # WhatWeb plugins that are NOT real components — skip them from outdated table
+    _WW_NOISE = frozenset({
+        "cookies", "email", "httponly", "ip", "open-graph-protocol",
+        "script", "title", "uncommonheaders", "x-frame-options",
+        "x-xss-protection", "x-content-type-options", "x-host",
+        "strict-transport-security", "content-security-policy",
+        "referrer-policy", "permissions-policy", "cross-origin-opener-policy",
+        "cross-origin-resource-policy", "cross-origin-embedder-policy",
+        "html5", "charset", "meta", "viewport",
+    })
     rows: list[OutdatedComponentRow] = []
     for name, pval in list(plugs.items())[:80]:
-        pname = str(name).strip()
+        pname = str(name).strip().lower()
         if not pname:
+            continue
+        if pname in _WW_NOISE:
             continue
         detail = _plugin_strings(pval)
         ver_m = re.search(r"\d+(?:\.\d+){1,3}[a-zA-Z0-9._-]*", detail)
         installed = ver_m.group(0) if ver_m else None
-        if not detail.strip() and not installed:
+        if not installed and not detail.strip():
             continue
         rows.append(
             OutdatedComponentRow(
-                component=pname[:256],
+                component=str(name).strip()[:256],
                 installed_version=installed,
                 latest_stable="—",
                 support_status="whatweb",
@@ -4755,7 +4767,7 @@ def _phase_output_excerpt(data: dict[str, Any] | None, max_len: int = 1200) -> s
     return _truncate(text, max_len)
 
 
-def _format_threat_model_for_report(data: dict[str, Any], max_len: int = 2000) -> str:
+def _format_threat_model_for_report(data: dict[str, Any], max_len: int = 4000) -> str:
     """VAL-008 — Human-readable lines; no raw JSON blob in the report body."""
     lines: list[str] = [
         "The following items are model hypotheses or scanner context labels — not independently validated in this run.",
@@ -4763,10 +4775,10 @@ def _format_threat_model_for_report(data: dict[str, Any], max_len: int = 2000) -
     for k, v in list(data.items())[:40]:
         label = str(k).replace("_", " ")
         if isinstance(v, dict) and v:
-            parts = [f"{ik}={_truncate(str(iv), 100)}" for ik, iv in list(v.items())[:12]]
+            parts = [f"{ik}={_truncate(str(iv), 300)}" for ik, iv in list(v.items())[:20]]
             lines.append(f"• {label}: {', '.join(parts)}")
         elif isinstance(v, list):
-            snip = ", ".join(_truncate(str(x), 80) for x in v[:10])
+            snip = ", ".join(_truncate(str(x), 200) for x in v[:15])
             lines.append(f"• {label}: {snip}")
         else:
             lines.append(f"• {label}: {_truncate(str(v), 500)}")
@@ -5894,7 +5906,7 @@ def build_valhalla_report_context(
         if (ph or "").lower() == threat_phase and od:
             tm = od.get("threat_model")
             if isinstance(tm, dict) and tm:
-                threat_excerpt = _format_threat_model_for_report(tm, 2000)
+                threat_excerpt = _format_threat_model_for_report(tm, 4000)
             else:
                 threat_excerpt = _phased_output_narrative(od, 1500)
             break

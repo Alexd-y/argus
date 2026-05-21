@@ -9,7 +9,6 @@ VALHALLA_OWASP_2021_MISCONFIG = "A05:2021"
 
 _HEADER_REMEDIATION = (
     "Prefer a strict Content-Security-Policy (CSP) without unsafe-inline where feasible; use nonces or hashes. "
-    "Do not rely on X-XSS-Protection for XSS defense (deprecated; behavior varies by browser). "
     "Enable HSTS on HTTPS with includeSubDomains when all subdomains are TLS-ready, and use preload only after a sustained commitment. "
     "Set X-Frame-Options DENY/SAMEORIGIN or CSP frame-ancestors, X-Content-Type-Options: nosniff, Referrer-Policy, and Permissions-Policy appropriate to the app."
 )
