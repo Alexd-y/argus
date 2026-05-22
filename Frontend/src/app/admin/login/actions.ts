@@ -99,7 +99,10 @@ function mirrorLoginResponseToCookies(
   body: LoginResponseBody,
   fallbackSubject: string,
 ): void {
-  const isHttpsHint = process.env.NODE_ENV === "production";
+  const isHttpsHint =
+    typeof process !== "undefined" &&
+    typeof (process as Record<string, unknown>).env !== "undefined" &&
+    String((process.env as Record<string, string>).NEXT_PUBLIC_FORCE_HTTPS) === "true";
 
   const role = typeof body.role === "string" ? body.role.trim() : "";
   if (role !== "") {
