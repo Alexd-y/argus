@@ -4,7 +4,7 @@
 
 export interface ScanOptions {
   scanType: "quick" | "light" | "deep" | "lab";
-  reportFormat: "pdf" | "html" | "json" | "xml";
+  reportFormat: "pdf" | "html" | "json" | "xml" | "md";
   rateLimit: "slow" | "normal" | "fast" | "aggressive";
   ports: string;
   followRedirects: boolean;
