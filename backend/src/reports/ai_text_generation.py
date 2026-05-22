@@ -24,6 +24,7 @@ from src.reports.report_data_validation import (
 from src.reports.report_text_sanitizer import (
     sanitize_ai_report_text,
     contains_raw_prompt_leakage,
+    contains_ai_stub_output,
     find_duplicate_paragraphs,
 )
 
@@ -411,6 +412,12 @@ def run_ai_text_generation(
             "ai_text_prompt_leakage_detected",
             extra={"section_key": section_key, "tier": tier},
         )
+    if contains_ai_stub_output(generated):
+        logger.warning(
+            "ai_text_stub_detected_pre_sanitize",
+            extra={"section_key": section_key, "tier": tier},
+        )
+        generated = grounded_executive_summary_fallback_text(input_payload)
     generated = sanitize_ai_report_text(generated)
     if not generated.strip():
         generated = REPORT_AI_SKIPPED_GENERATION_FAILED

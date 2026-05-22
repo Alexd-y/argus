@@ -19,6 +19,8 @@ from src.reports.finding_severity_normalizer import severity_from_cvss
 EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
 EvidenceClassification = Literal["validated", "observed", "candidate", "inconclusive"]
 
+_EVIDENCE_QUALITY_RANK: dict[str, int] = {"none": 0, "weak": 1, "moderate": 2, "strong": 3}
+
 # VAL-001 — header-gap / passive header observation default (CVSS 3.1); severity capped to Medium without chain.
 HEADER_ONLY_DEFAULT_CVSS_VECTOR = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
 HEADER_ONLY_DEFAULT_CVSS_SCORE = 4.3
@@ -498,7 +500,7 @@ _CRITICAL_SCANNER_DOMAINS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("port_exposure", ("nmap", "naabu", "masscan"), "port exposure"),
 )
 _RATE_LIMIT_RE = re.compile(
-    r"\b(rate[-\s]?limit|http\s*429|too many requests|lockout|captcha)\b", re.I
+    r"\b(rate[-\s]?limit(?:ing)?|http\s*429|too many requests|lockout|captcha)\b", re.I
 )
 _LOGIN_RE = re.compile(r"\b(login|signin|sign-in|auth|authentication)\b", re.I)
 _RATE_LIMIT_WORKING_RE = re.compile(
@@ -1783,6 +1785,8 @@ def build_report_quality_gate(data: Any) -> ReportQualityGate:
     gate.wstg_low_coverage = gate.wstg_coverage_pct < 70.0
     if gate.wstg_low_coverage:
         gate.warnings.append(LOW_WSTG_LIMITATION)
+    if not gate.authenticated:
+        gate.warnings.append(AUTHENTICATED_TESTING_GAP_WARNING)
     gate.section_status = _mandatory_sections(vc)
     for section, status in gate.section_status.items():
         if status in {
@@ -1829,6 +1833,9 @@ def build_report_quality_gate(data: Any) -> ReportQualityGate:
             f"Critical scanner execution failed for {failed}. Affected domains are not assessed."
         )
     gate.evidence_confidence = _overall_evidence_quality(findings)
+    if not gate.authenticated and gate.wstg_coverage_pct < 50.0:
+        if _EVIDENCE_QUALITY_RANK.get(gate.evidence_confidence, 0) > _EVIDENCE_QUALITY_RANK.get("moderate", 0):
+            gate.evidence_confidence = "moderate"
     for f in findings:
         mismatch = severity_cvss_band_mismatch_reason(f)
         if mismatch:

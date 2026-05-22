@@ -6232,6 +6232,10 @@ def build_valhalla_report_context(
         if isinstance(inp, dict):
             scan_config_for_lim.update(inp)
             break
+    if isinstance(scan_options, dict) and scan_options.get("auth_testing_enabled"):
+        scan_config_for_lim["auth_testing_enabled"] = True
+    if isinstance(scan_options, dict) and scan_options.get("authenticated"):
+        scan_config_for_lim["authenticated"] = True
 
     scan_results_for_lim: dict[str, Any] = {}
     for _ph, od in phase_outputs:

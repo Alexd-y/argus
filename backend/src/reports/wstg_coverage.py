@@ -570,13 +570,16 @@ def build_test_limitations(
         config.get("credentials")
         or config.get("auth_token")
         or config.get("authenticated")
+        or config.get("auth_testing_enabled")
     )
     if not has_creds:
         limitations.append({
             "category": "access",
             "description": (
                 "Authenticated testing not performed; "
-                "coverage limited to unauthenticated access"
+                "coverage limited to unauthenticated access. "
+                "Business logic flaws, IDOR, privilege escalation, and "
+                "authenticated access control issues were NOT tested."
             ),
             "impact": "high",
         })
