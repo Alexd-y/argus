@@ -236,17 +236,17 @@ services:
       dockerfile: worker/Dockerfile
     image: argus-worker-scans
     container_name: argus-worker-scans
-    command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 1
+    command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 3
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
     deploy:
       resources:
         limits:
-          cpus: "2.0"
-          memory: 2G
+          cpus: "3.0"
+          memory: 6G
         reservations:
           cpus: "1.0"
-          memory: 512M
+          memory: 1G
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
