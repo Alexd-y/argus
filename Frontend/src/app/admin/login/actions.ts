@@ -65,10 +65,6 @@ export type LoginActionState =
 
 const INITIAL_LOGIN_STATE: LoginActionState = { status: "idle" };
 
-export function getInitialLoginState(): LoginActionState {
-  return INITIAL_LOGIN_STATE;
-}
-
 /**
  * TTL for the dev-mirror cookies we keep populating in `auto`/`session`
  * mode so the legacy `AdminAuthContext` (client) and the cookie-shim

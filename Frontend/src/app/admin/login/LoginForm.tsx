@@ -9,10 +9,11 @@ import {
 } from "@/lib/adminAuth";
 
 import {
-  getInitialLoginState,
   loginAction,
   type LoginActionState,
 } from "./actions";
+
+const INITIAL_LOGIN_STATE: LoginActionState = { status: "idle" };
 
 /**
  * Admin login form (B6-T09 / ISS-T20-003 Phase 1 frontend).
@@ -174,7 +175,7 @@ function useRateLimitCountdown(state: LoginActionState): number | null {
 export function LoginForm() {
   const [state, formAction] = useActionState<LoginActionState, FormData>(
     loginAction,
-    getInitialLoginState(),
+    INITIAL_LOGIN_STATE,
   );
 
   const countdown = useRateLimitCountdown(state);
