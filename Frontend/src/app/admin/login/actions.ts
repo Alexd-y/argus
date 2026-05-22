@@ -63,7 +63,11 @@ export type LoginActionState =
       readonly expiresAtMs: number;
     };
 
-export const INITIAL_LOGIN_STATE: LoginActionState = { status: "idle" };
+const INITIAL_LOGIN_STATE: LoginActionState = { status: "idle" };
+
+export function getInitialLoginState(): LoginActionState {
+  return INITIAL_LOGIN_STATE;
+}
 
 /**
  * TTL for the dev-mirror cookies we keep populating in `auto`/`session`

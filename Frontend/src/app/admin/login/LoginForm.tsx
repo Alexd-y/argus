@@ -9,7 +9,7 @@ import {
 } from "@/lib/adminAuth";
 
 import {
-  INITIAL_LOGIN_STATE,
+  getInitialLoginState,
   loginAction,
   type LoginActionState,
 } from "./actions";
@@ -174,7 +174,7 @@ function useRateLimitCountdown(state: LoginActionState): number | null {
 export function LoginForm() {
   const [state, formAction] = useActionState<LoginActionState, FormData>(
     loginAction,
-    INITIAL_LOGIN_STATE,
+    getInitialLoginState(),
   );
 
   const countdown = useRateLimitCountdown(state);
