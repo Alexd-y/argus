@@ -181,6 +181,41 @@
             <p>Prioritize remediation by validated severity, evidence quality, and exposed attack surface. Inconclusive areas require follow-up testing before risk acceptance.</p>
         {% endif %}
     </div>
+    {% if infra_recommendations is defined and infra_recommendations %}
+    <h3>Infrastructure Recommendations</h3>
+    {% set ir = infra_recommendations %}
+    {% if ir.config_snippets %}
+    <h4>Technology-Specific Configuration</h4>
+    {% for tech, snippet in ir.config_snippets %}
+    <pre class="code-block">{{ snippet | e }}</pre>
+    {% endfor %}
+    {% endif %}
+    {% if ir.tls_hardening %}
+    <h4>TLS / SSL Hardening</h4>
+    <pre class="code-block">{{ ir.tls_hardening | e }}</pre>
+    {% endif %}
+    {% if ir.header_recommendations %}
+    <h4>Missing Security Headers</h4>
+    <ul>
+    {% for rec in ir.header_recommendations %}
+        <li><code>{{ rec | e }}</code></li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+    {% if ir.owasp_gap_roadmap %}
+    <h4>OWASP Gap Closure Roadmap</h4>
+    <table>
+        <thead><tr><th>Category</th><th>Manual Test Hint</th><th>Priority</th></tr></thead>
+        <tbody>
+        {% for row in ir.owasp_gap_roadmap %}
+            <tr><td>{{ row.category | e }}</td><td>{{ row.manual_test_hint | e }}</td><td>{{ row.priority | e }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    <hr>
+    {% endif %}
+
     <h3>Responsible Parties and Timelines</h3>
     <table>
         <thead>

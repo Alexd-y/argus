@@ -5579,6 +5579,7 @@ def _parse_full_headers_context(
     raw_artifact_keys: list[tuple[str, str]],
     *,
     fetch_bodies: bool,
+    merged_http_headers: dict[str, dict[str, str]] | None = None,
 ) -> FullHeadersContext:
     """Parse full header data from all scanned endpoints (Step 3)."""
     ctx = FullHeadersContext()
@@ -5586,27 +5587,25 @@ def _parse_full_headers_context(
     for _ph, od in phase_outputs:
         if not isinstance(od, dict):
             continue
-        ph_lower = (_ph or "").lower()
-        if "http" in ph_lower or "headers" in ph_lower or "recon" in ph_lower:
-            http_headers = od.get("http_headers") or od.get("response_headers")
-            if isinstance(http_headers, dict):
-                for url, headers in http_headers.items():
-                    if isinstance(headers, dict):
-                        req_hdrs = headers.get("request_headers", {})
-                        resp_hdrs = headers.get("response_headers", headers)
-                        endpoint_headers.append(
-                            EndpointHeaderData(
-                                url=str(url)[:512],
-                                method=str(headers.get("method", "GET"))[:16],
-                                status_code=int(headers.get("status_code", 0)),
-                                request_headers={str(k): str(v) for k, v in (req_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
-                                response_headers={str(k): str(v) for k, v in (resp_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
-                                raw_request=str(headers.get("raw_request", ""))[:2048],
-                                raw_response=str(headers.get("raw_response", ""))[:2048],
-                                timestamp=str(headers.get("timestamp", ""))[:40],
-                                tool_source=str(headers.get("tool", _ph or ""))[:128],
-                            )
+        http_headers = od.get("http_headers") or od.get("response_headers")
+        if isinstance(http_headers, dict):
+            for url, headers in http_headers.items():
+                if isinstance(headers, dict):
+                    req_hdrs = headers.get("request_headers", {})
+                    resp_hdrs = headers.get("response_headers", headers)
+                    endpoint_headers.append(
+                        EndpointHeaderData(
+                            url=str(url)[:512],
+                            method=str(headers.get("method", "GET"))[:16],
+                            status_code=int(headers.get("status_code", 0)),
+                            request_headers={str(k): str(v) for k, v in (req_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
+                            response_headers={str(k): str(v) for k, v in (resp_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
+                            raw_request=str(headers.get("raw_request", ""))[:2048],
+                            raw_response=str(headers.get("raw_response", ""))[:2048],
+                            timestamp=str(headers.get("timestamp", ""))[:40],
+                            tool_source=str(headers.get("tool", _ph or ""))[:128],
                         )
+                    )
     for key, _phase in raw_artifact_keys:
         if not fetch_bodies:
             break
@@ -5639,6 +5638,28 @@ def _parse_full_headers_context(
                     )
         except (json.JSONDecodeError, ValueError):
             pass
+    if merged_http_headers:
+        existing_urls = {eh.url for eh in endpoint_headers}
+        known_sec_keys = {
+            "strict-transport-security", "content-security-policy", "x-content-type-options",
+            "x-frame-options", "x-xss-protection", "referrer-policy",
+            "permissions-policy", "cross-origin-opener-policy",
+        }
+        for host, hdrs in merged_http_headers.items():
+            if host in existing_urls:
+                continue
+            if not isinstance(hdrs, dict):
+                continue
+            reduced = {k: v for k, v in hdrs.items() if k in known_sec_keys}
+            endpoint_headers.append(
+                EndpointHeaderData(
+                    url=host[:512],
+                    method="GET",
+                    status_code=200,
+                    response_headers=reduced,
+                    tool_source="merged_http_headers",
+                )
+            )
     ctx.endpoint_headers = endpoint_headers[:128]
     ctx.total_endpoints_scanned = len(endpoint_headers)
     sec_headers = frozenset({
@@ -6320,7 +6341,7 @@ def build_valhalla_report_context(
         sca_artifact_count=sca_artifact_count,
         active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
         auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
-        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
+        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies, merged_http_headers=merged_http_headers),
         remediation_matrix=build_remediation_matrix_rows(finding_dicts),
         unresolved_gaps=build_unresolved_gaps(finding_dicts),
         missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),

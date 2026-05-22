@@ -2030,6 +2030,26 @@ def generate_html(
     )
     eff_tier = str(ctx.get("tier") or tier or "midgard")
     ctx = {**ctx, "tier": eff_tier}
+
+    # Build remediation_matrix for HTML template (same logic as JSON generate_json)
+    if "remediation_matrix" not in ctx:
+        from src.reports.valhalla_report_context import build_remediation_matrix_rows
+        html_findings = ctx.get("findings", [])
+        if html_findings:
+            ctx["remediation_matrix"] = build_remediation_matrix_rows(html_findings)
+
+    # Build infra_recommendations for HTML template (same logic as JSON generate_json)
+    if "infra_recommendations" not in ctx:
+        from src.reports.infra_recommendations import generate_infra_recommendations
+        vc = ctx.get("valhalla_context") or {}
+        findings = ctx.get("findings", [])
+        ctx["infra_recommendations"] = generate_infra_recommendations(
+            tech_stack=vc if isinstance(vc, dict) else {},
+            findings=findings,
+            ssl_tls=vc.get("ssl_tls_analysis", {}) if isinstance(vc, dict) else {},
+            security_headers=vc.get("security_headers_analysis", {}) if isinstance(vc, dict) else {},
+        )
+
     html_str = render_tier_report_html(eff_tier, ctx)
     return html_str.encode("utf-8")
 
