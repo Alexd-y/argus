@@ -3,12 +3,43 @@
 - Raw prompt leakage (prompt instructions that LLM regurgitated)
 - Common AI-isms and boilerplate patterns
 - Duplicate paragraph detection
+- Code garbage (C/C++/Python/Java snippets)
+- ANSI escape sequences from terminal output
+- Cross-reference placeholder spam (\"See «...»\")
 """
 
 import re
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ANSI escape sequence stripper — terminal control chars from raw tool output
+_ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+
+# Code garbage patterns (C/C++/Python/Java/Shell)
+_CODE_GARBAGE = [
+    re.compile(r'^\s*#include\s*[<"]', re.I | re.MULTILINE),
+    re.compile(r'\bint\s+main\s*\(\s*\)', re.I),
+    re.compile(r'\bstd::(cout|cin|cerr|endl|vector|string)\b', re.I),
+    re.compile(r'\bSystem\.out\.println', re.I),
+    re.compile(r'\bpublic\s+static\s+void\s+main', re.I),
+    re.compile(r'^\s*#!/bin/(bash|sh|zsh)\b', re.I | re.MULTILINE),
+    re.compile(r'\bdef\s+(main|test|foo|bar)\s*\(\s*\)', re.I),
+]
+
+# Cross-reference placeholder pattern
+_CROSS_REF_RE = re.compile(
+    r'\(See\s+«[^»]+»\s+section\s+for\s+additional\s+details\.\)',
+    re.IGNORECASE,
+)
+
+# HTML tags leaking into AI text sections
+_HTML_TAG_LEAKAGE = [
+    (re.compile(r'<li>\s*', re.I), ''),
+    (re.compile(r'</li>\s*', re.I), ''),
+    (re.compile(r'<p>\s*', re.I), ''),
+    (re.compile(r'</p>\s*', re.I), ''),
+]
 
 # Patterns that indicate the LLM regurgitated the prompt instead of answering
 _PROMPT_LEAKAGE_PATTERNS = [
@@ -76,11 +107,14 @@ _COMPILED_TITLE = [re.compile(p, re.IGNORECASE) for p in _SECTION_TITLE_LEAKAGE]
 
 def sanitize_ai_report_text(text: str) -> str:
     """Clean AI-generated text for HTML/MD embedding. Removes prompt leakage,
-    Markdown artifacts, and AI boilerplate. Returns sanitized string."""
+    Markdown artifacts, AI boilerplate, code garbage, ANSI escapes, and cross-ref spam."""
     if not text or not isinstance(text, str):
         return text or ""
 
     original_len = len(text)
+
+    # 0. Strip ANSI escape sequences first (terminal control chars)
+    text = _ANSI_ESCAPE_RE.sub('', text)
 
     # 1. Remove prompt leakage
     for pat in _COMPILED_LEAKAGE:
@@ -96,12 +130,31 @@ def sanitize_ai_report_text(text: str) -> str:
 
     # 4. Remove section title leakage inside body
     for pat in _COMPILED_TITLE:
-        text = pat.sub("", text, count=1)  # Only first occurrence
+        text = pat.sub("", text, count=1)
 
-    # 5. Collapse multiple blank lines
+    # 5. Strip code garbage (C/C++/Python/Java/Shell snippets)
+    for pat in _CODE_GARBAGE:
+        text = pat.sub('', text)
+
+    # 6. Strip HTML tags leaking into AI text sections
+    for pat, replacement in _HTML_TAG_LEAKAGE:
+        text = pat.sub(replacement, text)
+
+    # 7. Replace cross-reference placeholder spam with meaningful text
+    # Count cross-refs; if > 50% of content is cross-refs, replace whole section
+    cross_refs = _CROSS_REF_RE.findall(text)
+    if cross_refs:
+        text_without_refs = _CROSS_REF_RE.sub('', text).strip()
+        meaningful_chars = sum(1 for c in text_without_refs if c.isalnum())
+        if meaningful_chars < 50:
+            text = "No evidence-backed narrative available. See the relevant technical section for structured findings data."
+        else:
+            text = text_without_refs
+
+    # 8. Collapse multiple blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    # 6. Remove leading/trailing whitespace
+    # 9. Remove leading/trailing whitespace
     text = text.strip()
 
     if len(text) < original_len * 0.3 and original_len > 100:

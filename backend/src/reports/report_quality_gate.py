@@ -2332,6 +2332,20 @@ _CODE_GARBAGE_RE = [
     re.compile(r'\bTODO\s*:', re.I),
     re.compile(r'\bFIXME\s*:', re.I),
     re.compile(r'\b(test|debug)\s+(code|snippet|placeholder|entry)\b', re.I),
+    # C/C++ patterns
+    re.compile(r'^\s*#include\s*[<"]', re.I | re.MULTILINE),
+    re.compile(r'\bint\s+main\s*\(\s*\)', re.I),
+    re.compile(r'\bstd::(cout|cin|cerr|endl|vector|string|map|set)\b', re.I),
+    re.compile(r'\b(cout|cin)\s*<<', re.I),
+    re.compile(r'\b<iostream>', re.I),
+    re.compile(r'\b#include\s', re.I),
+    # Python
+    re.compile(r'\bdef\s+(main|test|foo|bar)\s*\(\s*\)', re.I),
+    re.compile(r'\bSystem\.out\.println', re.I),
+    re.compile(r'\bpublic\s+static\s+void\s+main', re.I),
+    re.compile(r'\bpublic\s+class\s+\w+', re.I),
+    # Shell
+    re.compile(r'^\s*#!/bin/(bash|sh|zsh)\b', re.I | re.MULTILINE),
 ]
 
 

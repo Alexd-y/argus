@@ -1293,7 +1293,10 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
         severity = (f.get("severity") or "").lower()
         cvss = f.get("cvss")
 
-        is_xss = any(kw in title_lower or kw in desc_lower for kw in ("xss", "cross-site scripting"))
+        # Never auto-assign CWE-79/CVSS-7.2 to FUZZ_HIT or COMMAND_INJECTION_CANDIDATE — those are scanner hits, not confirmed XSS
+        is_unconfirmed_scanner_hit = "fuzz_hit" in title_lower or "command_injection_candidate" in title_lower
+
+        is_xss = not is_unconfirmed_scanner_hit and any(kw in title_lower or kw in desc_lower for kw in ("xss", "cross-site scripting"))
         is_sqli = any(kw in title_lower or kw in desc_lower for kw in ("sqli", "sql injection"))
 
         if is_xss:

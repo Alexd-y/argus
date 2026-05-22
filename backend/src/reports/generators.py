@@ -920,6 +920,57 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
     return findings
 
 
+def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
+    """FUZZ_HIT + COMMAND_INJECTION_CANDIDATE without browser proof or server output → demote to info."""
+    downgraded = 0
+    for f in findings:
+        title = str(_safe_attr(f, "title") or "").lower()
+        desc = str(_safe_attr(f, "description") or "").lower()
+        is_fuzz = "fuzz_hit" in title
+        is_cmdi_candidate = "command_injection_candidate" in title
+
+        if not is_fuzz and not is_cmdi_candidate:
+            continue
+
+        poc = getattr(f, "proof_of_concept", {}) or {}
+        if not isinstance(poc, dict):
+            poc = {}
+        verification = str(
+            poc.get("verification_method", poc.get("verification_line", "")) or ""
+        ).lower().strip()
+        reflection = str(poc.get("reflection_context", "") or "").strip()
+        browser_verified = str(poc.get("verified_via_browser", "") or "").lower() == "true"
+        raw_resp = str(_safe_attr(f, "raw_response") or "").strip()
+
+        has_real_proof = (
+            browser_verified
+            or (reflection and len(reflection) > 30)
+            or (raw_resp and len(raw_resp) > 50)
+            or (verification and verification not in ("curl poc present", "verification_method: http reflection", ""))
+        )
+
+        if not has_real_proof:
+            try:
+                old_sev = str(getattr(f, "severity", "?") or "?")
+                setattr(f, "severity", "info")
+                setattr(f, "evidence_classification", "CANDIDATE")
+                setattr(f, "validation_status", "unverified")
+                setattr(f, "evidence_quality", "weak")
+                source = getattr(f, "id", "?")
+                logger.warning(
+                    "fuzz_hit_downgraded",
+                    extra={"finding_id": source, "old_severity": old_sev,
+                           "reason": "no browser proof, reflection context, or raw response"},
+                )
+                downgraded += 1
+            except Exception:
+                pass
+
+    if downgraded:
+        logger.info("fuzz_hit_gate_applied", extra={"downgraded": downgraded, "total": len(findings)})
+    return findings
+
+
 def _verify_cross_format(findings: list[Finding], report_id: str, target: str,
                          scan_id: str | None = None) -> tuple[bool, list[str]]:
     issues: list[str] = []
@@ -1399,9 +1450,10 @@ def generate_json(
     brand = get_brand()
     now_utc = datetime.now(timezone.utc).isoformat()
 
-    # scope filter (out-of-scope external domains → info) + evidence gate + severity enforcement
+    # scope filter + fuzz_hit gate + evidence gate + severity enforcement
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
     findings_ordered = _apply_evidence_gate(findings_ordered)
+    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
     findings_ordered = enforce_severity_by_evidence(findings_ordered)
 
     # build evidence inventory
@@ -2405,6 +2457,7 @@ def generate_markdown(
     findings_ordered = _findings_sorted(data.findings)
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
     findings_ordered = _apply_evidence_gate(findings_ordered)
+    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
     findings_ordered = enforce_severity_by_evidence(findings_ordered)
 
     severity_emoji: dict[str, str] = {
