@@ -27,6 +27,26 @@ _CODE_GARBAGE = [
     re.compile(r'\bdef\s+(main|test|foo|bar)\s*\(\s*\)', re.I),
 ]
 
+# AI stub patterns — telltale signs of unhelpful LLM fallback output
+_AI_STUB_PATTERNS = [
+    re.compile(r'\bHello[,!]\s*World[!.]?\b', re.I),
+    re.compile(r'#include\s*<iostream>', re.I),
+    re.compile(r'#include\s*<stdio\.h>', re.I),
+    re.compile(r'\bint\s+main\s*\(\s*\)\s*\{', re.I),
+    re.compile(r'<h[1-6][^>]*>\s*This is a (?:code block|title|heading)\s*</h[1-6]>', re.I),
+    re.compile(r'\bSee Attack Scenarios\b', re.I),
+    re.compile(r'\bNo remediation matrix available\b', re.I),
+    re.compile(r'\bReview finding details and apply appropriate fix\b', re.I),
+    re.compile(r'\bUnknown component\b', re.I),
+    re.compile(r'\bDevelopment team\b(?!\s+of)'),
+    re.compile(r'high\s*\|\s*medium\s*\|\s*low', re.I),
+    re.compile(r'\(See\s+\w+\s+Scenarios\)', re.I),
+    re.compile(r'iostream>\s*\{', re.I),
+    re.compile(r'cout\s*<<\s*"Hello', re.I),
+    re.compile(r'printf\s*\(\s*"Hello', re.I),
+    re.compile(r'\bprint\s*\(\s*"Hello', re.I),
+]
+
 # Cross-reference placeholder pattern
 _CROSS_REF_RE = re.compile(
     r'\(See\s+«[^»]+»\s+section\s+for\s+additional\s+details\.\)',
@@ -136,6 +156,10 @@ def sanitize_ai_report_text(text: str) -> str:
     for pat in _CODE_GARBAGE:
         text = pat.sub('', text)
 
+    # 5b. Detect and replace AI stub output (Hello World, code blocks, placeholders)
+    if contains_ai_stub_output(text):
+        return "No evidence-backed narrative available for this section. The generated content contained placeholder text and has been replaced with structured data from findings."
+
     # 6. Strip HTML tags leaking into AI text sections
     for pat, replacement in _HTML_TAG_LEAKAGE:
         text = pat.sub(replacement, text)
@@ -171,6 +195,21 @@ def contains_raw_prompt_leakage(text: str) -> bool:
     if not text:
         return False
     for pat in _COMPILED_LEAKAGE:
+        if pat.search(text):
+            return True
+    return False
+
+
+def contains_ai_stub_output(text: str) -> bool:
+    """Detect if AI output is a stub/placeholder instead of real content.
+
+    Catches: Hello World programs, HTML code blocks as section content,
+    placeholder patterns like 'high|medium|low', 'See Attack Scenarios',
+    'No remediation matrix available', generic boilerplate fix actions.
+    """
+    if not text or not isinstance(text, str):
+        return False
+    for pat in _AI_STUB_PATTERNS:
         if pat.search(text):
             return True
     return False

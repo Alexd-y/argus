@@ -436,7 +436,96 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             "rollback_risk": "Low — headers are additive",
             "acceptance_criteria": "All recommended headers present; curl verification passes",
         },
+        "FUZZ_HIT": {
+            "action": "Investigate the discovered path/parameter. If it exposes sensitive functionality, restrict access with authentication and authorization controls. If unexposed (returns public content), document as information-only.",
+            "verification": "Manually verify the endpoint returns expected content. Confirm authentication is required for non-public endpoints.",
+            "owner": "Application security team",
+            "affected_layer": "app/backend",
+            "component": "URL routing / access control layer",
+            "rollback_risk": "Low — access control is additive",
+            "acceptance_criteria": "Endpoint returns expected content; authentication enforced for non-public paths",
+        },
+        "INFORMATION_DISCLOSURE": {
+            "action": "Remove or restrict access to information-leaking endpoints. Disable verbose error messages in production. Remove server version headers.",
+            "verification": "curl -sS -I <url> confirms no version/stack info. Error responses return generic messages.",
+            "owner": "Backend development team",
+            "affected_layer": "app/backend",
+            "component": "Error handling / server configuration",
+            "rollback_risk": "Low — generic errors are safer",
+            "acceptance_criteria": "No stack traces or version info in responses; server headers stripped",
+        },
+        "MISCONFIGURATION": {
+            "action": "Apply security hardening configuration per the affected component. Disable default credentials, enable HTTPS, restrict CORS origins.",
+            "verification": "Re-scan with applicable security scanner; previously flagged misconfiguration no longer appears.",
+            "owner": "Infrastructure / DevOps team",
+            "affected_layer": "infrastructure/configuration",
+            "component": "Server / application configuration",
+            "rollback_risk": "Low to Medium — depends on component",
+            "acceptance_criteria": "Misconfiguration resolved; re-scan confirms absence",
+        },
     }
+
+    _OWNER_BY_LAYER = {
+        "app/database": "Database team",
+        "app/frontend": "Frontend team",
+        "app/backend": "Backend team",
+        "api": "API team",
+        "infrastructure": "Infrastructure / DevOps team",
+        "infrastructure/reverse-proxy": "Infrastructure / DevOps team",
+        "security": "Security team",
+    }
+
+    def _contextual_fallback(f: dict[str, Any], field: str) -> str:
+        poc = f.get("proof_of_concept") or {}
+        if not isinstance(poc, dict):
+            poc = {}
+        cwe = str(f.get("cwe") or "").upper()
+        title = str(f.get("title") or "").lower()
+        affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")
+        affected_parameter = str(poc.get("parameter") or "")
+        severity = str(f.get("severity") or "info").lower()
+
+        if field == "owner":
+            layer = str(f.get("data", {}).get("affected_layer") or "").lower() if isinstance(f.get("data"), dict) else ""
+            if not layer:
+                for key, owner in _OWNER_BY_LAYER.items():
+                    if key in title:
+                        return owner
+            return _OWNER_BY_LAYER.get(layer, "Relevant development team (assign per endpoint ownership)")
+
+        if field == "component":
+            if "xss" in title or "cross-site" in title:
+                return "Template engine / output rendering layer"
+            if "sql" in title or "sqli" in title:
+                return "Database query layer / ORM"
+            if "header" in title or "csp" in title or "hsts" in title:
+                return "HTTP response header configuration (server / CDN)"
+            if "rate" in title:
+                return "Rate limiter middleware / reverse proxy"
+            if "command" in title or "injection" in title:
+                part = f"Parameter: {affected_parameter}" if affected_parameter else "Input handling layer"
+                return part
+            if "disclosure" in title or "info" in title:
+                return "Error handling / server configuration"
+            return f"Component at {affected_url}" if affected_url else "Affected endpoint (specify after investigation)"
+
+        if field == "fix":
+            if "xss" in title or "cross-site" in title:
+                return "Encode user input per context (HTML/JS/URL). Add Content-Security-Policy with nonce-based allowlist."
+            if "sql" in title or "sqli" in title:
+                return "Use parameterized queries. Validate and sanitize all user-supplied input before database interaction."
+            if "header" in title or "csp" in title or "hsts" in title:
+                return "Configure missing HTTP security headers at reverse proxy or application level."
+            if "rate" in title or "limit" in title:
+                return "Implement per-IP and per-account rate limiting with exponential backoff and CAPTCHA."
+            if "command" in title or "injection" in title:
+                param_hint = f" on `{affected_parameter}`" if affected_parameter else ""
+                return f"Eliminate OS command execution from user input{param_hint}. Use language-native APIs or strict allowlist validation."
+            if "disclosure" in title or "info" in title:
+                return "Remove information-leaking endpoints; disable verbose error messages in production."
+            return f"Review and remediate: {title}. Affected URL: {affected_url}" if affected_url else f"Review and remediate: {title}"
+
+        return ""
 
     def _build_matrix_entry(f: dict[str, Any], priority: str, deadline: str, effort: str) -> dict[str, Any]:
         f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
@@ -445,6 +534,14 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             if key in f_type:
                 remediation = rem
                 break
+
+        title = str(f.get("title") or "").lower()
+        if not remediation:
+            for key, rem in _REMEDIATION_MATRIX.items():
+                key_lower = key.lower()
+                if key_lower in title:
+                    remediation = rem
+                    break
 
         poc = f.get("proof_of_concept") or {}
         affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")[:512]
@@ -460,14 +557,14 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             "deadline": deadline,
             "effort": effort,
             "affected_layer": remediation["affected_layer"] if remediation else "app/unknown",
-            "owner_team": remediation["owner"] if remediation else "Development team",
-            "config_component": remediation["component"] if remediation else "Unknown component",
+            "owner_team": remediation["owner"] if remediation else _contextual_fallback(f, "owner"),
+            "config_component": remediation["component"] if remediation else _contextual_fallback(f, "component"),
             "affected_url": affected_url,
             "affected_parameter": affected_parameter,
-            "fix": remediation["action"] if remediation else "Review and apply fix per finding details",
-            "rollback_risk": remediation["rollback_risk"] if remediation else "Unknown — assess before deployment",
-            "verification_step": remediation["verification"] if remediation else "Re-test after fix",
-            "acceptance_criteria": remediation["acceptance_criteria"] if remediation else "Finding no longer reproducible",
+            "fix": remediation["action"] if remediation else _contextual_fallback(f, "fix"),
+            "rollback_risk": remediation["rollback_risk"] if remediation else "Assess before deployment",
+            "verification_step": remediation["verification"] if remediation else "Re-test the affected endpoint after applying the fix",
+            "acceptance_criteria": remediation["acceptance_criteria"] if remediation else "Finding no longer reproducible; re-scan confirms absence",
         }
 
     tier1: list[dict[str, Any]] = []
@@ -556,11 +653,28 @@ def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[
             continue
         cat = f.get("owasp_category") or f.get("category") or "uncategorized"
         categories.setdefault(cat, []).append(f.get("title", "untitled"))
-    return {
+
+    def _clean_placeholder_values(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            cleaned = {}
+            for k, v in obj.items():
+                if isinstance(v, str) and "|" in v and any(
+                    t in v.lower() for t in ("high|medium|low", "low|medium|high", "medium|high|low")
+                ):
+                    cleaned[k] = "unknown"
+                else:
+                    cleaned[k] = _clean_placeholder_values(v)
+            return cleaned
+        elif isinstance(obj, list):
+            return [_clean_placeholder_values(item) for item in obj]
+        return obj
+
+    excerpt = f"Threat model derived from {len(findings)} findings across {len(categories)} categories."
+    return _clean_placeholder_values({
         "threat_categories": categories,
         "finding_count": len(findings),
-        "excerpt": f"Threat model derived from {len(findings)} findings across {len(categories)} categories.",
-    }
+        "excerpt": excerpt,
+    })
 
 
 def _extract_exploitation_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
@@ -766,6 +880,10 @@ async def build_valhalla_report_context(
         hibp_raw = pe.get("hibp") or pe.get("pwned_passwords")
         if isinstance(hibp_raw, dict) and hibp_raw:
             hibp_summary = hibp_raw
+            hibp_checks = hibp_raw.get("checks_run", 0)
+            if isinstance(hibp_checks, (int, float)) and hibp_checks == 0:
+                hibp_summary["inconclusive"] = True
+                hibp_summary["inconclusive_reason"] = "HIBP check was not run (checks_run=0); no conclusion about credential exposure is possible"
 
     tool_list: list[str] = sorted(
         {str(f.get("evidence_type") or "").lower()

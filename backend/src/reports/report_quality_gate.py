@@ -448,13 +448,43 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "transformation into",
     "metamorphosis into",
     "transmutation into",
-    "transfiguration into",
     "transubstantiation into",
+    "no remediation matrix available",
+    "see attack scenarios",
+    "see exploitation scenarios",
+    "review finding details and apply appropriate fix",
+    "unknown component",
+    "development team",
+    "high|medium|low",
+    "review and apply fix per finding details",
+    "review and remediate",
+    "remediation needed",
+    "apply appropriate fix",
+    "implement appropriate measures",
+    "address this finding",
+    "requires further investigation",
+    "requires attention",
+    "further assessment recommended",
+    "additional testing required",
+    "should be reviewed",
+    "should be addressed",
+    "consider implementing",
+    "consider reviewing",
+    "consider addressing",
+    "mitigate this risk",
+    "remediate this issue",
+    "take appropriate action",
 )
 
 LOW_WSTG_LIMITATION = (
     "This assessment does not represent comprehensive application penetration testing. "
     "Several OWASP WSTG categories were not assessed or were only partially assessed."
+)
+
+AUTHENTICATED_TESTING_GAP_WARNING = (
+    "Authenticated testing was NOT performed. All findings are limited to the unauthenticated attack surface. "
+    "Business logic flaws, IDOR, privilege escalation, and authenticated access control issues were NOT tested. "
+    "This is a significant coverage gap that must be disclosed in any report conclusions."
 )
 
 _FAILED_STATUSES = frozenset(
@@ -568,6 +598,20 @@ def _is_rate_limit_working(finding: Any) -> bool:
     """Check if the finding indicates rate limiting is actually working (429 responses)."""
     blob = _text_blob(finding)
     return bool(_RATE_LIMIT_WORKING_RE.search(blob))
+
+
+def classify_rate_limit_finding(finding: Any) -> str:
+    """Classify a rate-limit finding as 'working_observation', 'absent_vulnerability', or 'not_rate_limit'.
+
+    Working rate limiting (429 responses) is a POSITIVE security observation,
+    not a vulnerability. Findings that demonstrate working rate limiting should
+    be classified as OBSERVED and capped at severity=info.
+    """
+    if not _is_rate_limit_finding(finding):
+        return "not_rate_limit"
+    if _is_rate_limit_working(finding):
+        return "working_observation"
+    return "absent_vulnerability"
 
 
 def _poc_dict(finding: Any) -> dict[str, Any]:
@@ -929,7 +973,10 @@ def evaluate_injection_finding_rules(finding: Any) -> list[str]:
         and not has_sqli_timing_repeated_samples(finding)
     ):
         out.append(f"injection_qg:sqli_time_based_missing_repeated_samples:{title}")
-    # NO browser/OAST/command proof requirements — all findings validated via payloads/commands
+    if family == "rce" and not has_command_injection_proof(finding):
+        out.append(f"injection_qg:rce_no_command_output_or_oast:{title}")
+    if family == "xss" and high_assertion and not has_xss_browser_or_oast_signal(finding):
+        out.append(f"injection_qg:xss_confirmed_missing_browser_or_oast:{title}")
     return out
 
 
@@ -990,6 +1037,7 @@ _INJECTION_COVERAGE_FAIL_PREFIXES: tuple[str, ...] = (
     "injection_qg:ssrf_confirmed_missing_oast:",
     "injection_qg:xxe_confirmed_missing_oast:",
     "injection_qg:rce_confirmed_missing_oast:",
+    "injection_qg:rce_no_command_output_or_oast:",
 )
 
 

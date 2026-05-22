@@ -725,6 +725,8 @@ class CredentialExposureModel(BaseModel):
     hibp_api_used: bool = False
     rows: list[CredentialExposureRowModel] = Field(default_factory=list)
     missing_artifacts: list[str] = Field(default_factory=list)
+    inconclusive: bool = False
+    inconclusive_reason: str = ""
 
 
 class RemediationMatrixRow(BaseModel):
@@ -888,6 +890,18 @@ class EndpointHeaderData(BaseModel):
     timestamp: str = ""
     tool_source: str = ""
 
+    def is_valid_endpoint(self) -> bool:
+        url = (self.url or "").strip()
+        if not url:
+            return False
+        if not (url.startswith("http://") or url.startswith("https://")):
+            return False
+        if self.status_code == 0 and not self.response_headers:
+            return False
+        if url.startswith("$") or "{" in url or "}" in url:
+            return False
+        return True
+
 
 class FullHeadersContext(BaseModel):
     """Collection of headers from all scanned endpoints (Step 3)."""
@@ -899,6 +913,9 @@ class FullHeadersContext(BaseModel):
     inconsistent_headers: list[dict[str, str]] = Field(default_factory=list)
     total_endpoints_scanned: int = 0
     notes: str = ""
+
+    def valid_endpoint_headers(self) -> list[EndpointHeaderData]:
+        return [eh for eh in self.endpoint_headers if eh.is_valid_endpoint()]
 
 
 class ValhallaReportContext(BaseModel):
@@ -3846,6 +3863,7 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
         "referrer-policy", "permissions-policy", "cross-origin-opener-policy",
         "cross-origin-resource-policy", "cross-origin-embedder-policy",
         "html5", "charset", "meta", "viewport",
+        "country", "city", "region", "locale", "location",
     })
     rows: list[OutdatedComponentRow] = []
     for name, pval in list(plugs.items())[:80]:
@@ -6024,8 +6042,9 @@ def build_valhalla_report_context(
     ssl_tls_fallback_message: str | None = None
     if _ssl_surface_empty(ssl_out):
         ssl_tls_fallback_message = (
-            "SSL/TLS table was not populated because no parseable testssl.sh, sslscan, nmap ssl-enum-ciphers, "
-            "openssl, or certificate metadata was available for this report context."
+            "CRITICAL GAP: SSL/TLS assessment was not performed. No testssl.sh, sslscan, nmap ssl-enum-ciphers, "
+            "openssl, or certificate metadata was available. TLS misconfigurations (expired certs, weak ciphers, "
+            "missing HSTS) are a common entry vector. Remediation: run `testssl.sh --full <target>` and re-scan."
         )
 
     security_headers_fallback_message: str | None = None

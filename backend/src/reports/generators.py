@@ -921,13 +921,31 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
 
 
 def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
-    """FUZZ_HIT + COMMAND_INJECTION_CANDIDATE without browser proof or server output → demote to info."""
+    """FUZZ_HIT + COMMAND_INJECTION_CANDIDATE without browser/OAST/server proof → demote to info + CANDIDATE.
+
+    Strict evidence requirement: XSS/CMDI findings require at least ONE of:
+    - Browser verification (verified_via_browser)
+    - OAST/out-of-band callback (oast_callback, interactsh)
+    - Command output (command_output, cmd_output)
+    - Raw server response with reflected payload (not just a curl command)
+    - Screenshot/video artifact key
+    - Negative control result
+
+    Simple reflection_context length is NOT sufficient — terminal artifacts like
+    [2K] can produce long strings that mimic reflection.
+    """
+    from src.reports.report_quality_gate import has_command_injection_proof
+
     downgraded = 0
     for f in findings:
         title = str(_safe_attr(f, "title") or "").lower()
         desc = str(_safe_attr(f, "description") or "").lower()
-        is_fuzz = "fuzz_hit" in title
-        is_cmdi_candidate = "command_injection_candidate" in title
+        data = getattr(f, "data", None) or {}
+        if not isinstance(data, dict):
+            data = {}
+        data_type = str(data.get("type") or "").upper()
+        is_fuzz = "fuzz_hit" in title or "FUZZ_HIT" in data_type
+        is_cmdi_candidate = "command_injection_candidate" in title or "COMMAND_INJECTION_CANDIDATE" in data_type
 
         if not is_fuzz and not is_cmdi_candidate:
             continue
@@ -941,17 +959,49 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
         reflection = str(poc.get("reflection_context", "") or "").strip()
         browser_verified = str(poc.get("verified_via_browser", "") or "").lower() == "true"
         raw_resp = str(_safe_attr(f, "raw_response") or "").strip()
+        has_oast = str(poc.get("oast_callback", "") or "").lower() in ("true", "1", "yes", "validated")
+        has_cmd_output = bool(str(poc.get("command_output") or poc.get("cmd_output") or "").strip())
+        has_screenshot = bool(
+            poc.get("screenshot_key") or poc.get("poc_screenshot_url") or poc.get("screenshot_url")
+        )
+        has_negative_control = bool(poc.get("negative_control_url") or poc.get("negative_control_result"))
+
+        if is_cmdi_candidate and not is_fuzz:
+            has_cmd_proof = has_command_injection_proof(f)
+            if has_cmd_proof:
+                continue
 
         has_real_proof = (
             browser_verified
-            or (reflection and len(reflection) > 30)
-            or (raw_resp and len(raw_resp) > 50)
-            or (verification and verification not in ("curl poc present", "verification_method: http reflection", ""))
+            or has_oast
+            or has_cmd_output
+            or has_screenshot
+            or has_negative_control
+            or (raw_resp and len(raw_resp) > 50 and not _is_only_curl_command(raw_resp))
+            or (verification and verification not in (
+                "curl poc present", "verification_method: http reflection", "",
+                "banner_only", "tool_banner", "scanner_banner",
+            ))
         )
+
+        if is_fuzz and not has_real_proof:
+            if reflection and len(reflection) <= 200:
+                has_real_proof = False
+            elif reflection and len(reflection) > 200:
+                has_ansi_artifact = bool(_ANSI_ARTIFACT_RE.search(reflection))
+                has_payload_in_reflection = _payload_reflected_in_context(reflection, poc)
+                if has_ansi_artifact and not has_payload_in_reflection:
+                    has_real_proof = False
 
         if not has_real_proof:
             try:
                 old_sev = str(getattr(f, "severity", "?") or "?")
+                reason_parts = []
+                if is_fuzz:
+                    reason_parts.append("fuzz_hit_without_browser_proof")
+                if is_cmdi_candidate:
+                    reason_parts.append("command_injection_without_server_output")
+                reason = "+".join(reason_parts) if reason_parts else "no_verified_evidence"
                 setattr(f, "severity", "info")
                 setattr(f, "evidence_classification", "CANDIDATE")
                 setattr(f, "validation_status", "unverified")
@@ -960,7 +1010,7 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 logger.warning(
                     "fuzz_hit_downgraded",
                     extra={"finding_id": source, "old_severity": old_sev,
-                           "reason": "no browser proof, reflection context, or raw response"},
+                           "reason": reason},
                 )
                 downgraded += 1
             except Exception:
@@ -969,6 +1019,23 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
     if downgraded:
         logger.info("fuzz_hit_gate_applied", extra={"downgraded": downgraded, "total": len(findings)})
     return findings
+
+
+_ANSI_ARTIFACT_RE = __import__("re").compile(
+    r"\x1b\[[0-9;]*[a-zA-Z]|\[\d+[A-Z]\]|\x1b\]\d+;|\x1b\[2K|\x1b\[K|\x1b\[0m",
+)
+
+
+def _is_only_curl_command(text: str) -> bool:
+    stripped = text.strip().lower()
+    return stripped.startswith("curl ") and "\n" not in stripped and len(stripped) < 500
+
+
+def _payload_reflected_in_context(reflection: str, poc: dict) -> bool:
+    payload = str(poc.get("payload") or poc.get("payload_entered") or "").strip()
+    if not payload or len(payload) < 3:
+        return False
+    return payload[:20].lower() in reflection.lower()
 
 
 def _verify_cross_format(findings: list[Finding], report_id: str, target: str,
