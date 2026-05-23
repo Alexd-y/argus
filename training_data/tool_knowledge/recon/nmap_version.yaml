@@ -1,0 +1,51 @@
+tool_id: nmap_version
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: Nmap service-version detection plus default+safe NSE scripts on previously-discovered
+  ports. Backlog/dev1_md §4.2.
+command_template:
+- nmap
+- -sV
+- -sC
+- -p{ports}
+- --script=default,safe
+- -oX
+- '{out_dir}/nmap_v.xml'
+- '{ip}'
+command_string: nmap -sV -sC -p{ports} --script=default,safe -oX {out_dir}/nmap_v.xml
+  {ip}
+placeholders:
+  -p{ports: <-p{ports>
+  out_dir}/nmap_v.xml: <out_dir}/nmap_v.xml>
+  ip: 10.10.1.100
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/nmap_v.xml
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Service version detection on discovered ports
+  example: nmap -sV --version-intensity 5 -p 22,80,443,3306,8080 -oX /out/nmap_version.xml
+    10.0.0.1
+  output_type: xml_nmap
+  next_steps:
+  - nmap_vuln for vulnerability detection
+related_tools:
+- nmap_tcp_top
+- nmap_vuln
+- whatweb
+when_to_use: Information gathering and discovery phase. Nmap service-version detection
+  plus default+safe NSE scripts on previously-discovered ports. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,40 @@
+tool_id: github_search
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: GitHub code search for accidental secret/key leaks within the target
+  organisation. Requires GITHUB_TOKEN env in the sandbox. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- gh api -X GET search/code -f q=org:{org} > {out_dir}/github_search.json
+command_string: sh -c gh api -X GET search/code -f q=org:{org} > {out_dir}/github_search.json
+placeholders:
+  gh api -X GET search/code -f q=org:{org} > {out_dir}/github_search.json: <gh api
+    -X GET search/code -f q=org:{org} > {out_dir}/github_search.json>
+output_format: custom
+evidence_artifacts: &id001
+- /out/github_search.json
+cwe_ids:
+- 200
+- 540
+owasp_wstg:
+- WSTG-INFO-03
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run github_search against target
+  example: sh -c gh api -X GET search/code -f q=org:{org} > {out_dir}/github_search.json
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. GitHub code search for accidental
+  secret/key leaks within the target organisation. Requires GITHUB_TOKEN env in the
+  sandbox. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

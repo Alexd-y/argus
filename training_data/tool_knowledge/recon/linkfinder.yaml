@@ -1,0 +1,47 @@
+tool_id: linkfinder
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: 'LinkFinder extracts endpoint references from JavaScript bundles served
+  at {url}. Image-side wrapper `linkfinder-wrapper` translates argv-form (`-i <url>
+  -o cli -out <path>`) to upstream stdin/stdout pipe (`linkfinder -i <url> -o cli
+  > <path>`) so the sandbox stays argv-only. Author: GerbenJavado (https://github.com/GerbenJavado/LinkFinder).
+  Backlog/dev1_md §4.6.'
+command_template:
+- linkfinder-wrapper
+- -i
+- '{url}'
+- -o
+- cli
+- -out
+- '{out_dir}/linkfinder.txt'
+command_string: linkfinder-wrapper -i {url} -o cli -out {out_dir}/linkfinder.txt
+placeholders:
+  url: https://target.example.com
+  out_dir}/linkfinder.txt: <out_dir}/linkfinder.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/linkfinder.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-05
+- WSTG-INFO-06
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run linkfinder against target
+  example: linkfinder-wrapper -i {url} -o cli -out {out_dir}/linkfinder.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. LinkFinder extracts endpoint
+  references from JavaScript bundles served at {url}. Image-side wrapper `linkfinder-wrapper`
+  translates argv-form (`-i <url> -o cli -out <path>`) to upstream stdin/stdout p
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

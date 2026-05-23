@@ -1,0 +1,52 @@
+tool_id: curl
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: curl HTTP/S probe capturing response headers and body with redirect following
+  for initial service fingerprinting. Backlog/dev1_md §4.4.
+command_template:
+- curl
+- -sS
+- --fail-with-body
+- --max-time
+- '30'
+- -i
+- -L
+- -o
+- '{out_dir}/curl_body.txt'
+- -D
+- '{out_dir}/curl_headers.txt'
+- '{url}'
+command_string: curl -sS --fail-with-body --max-time 30 -i -L -o {out_dir}/curl_body.txt
+  -D {out_dir}/curl_headers.txt {url}
+placeholders:
+  out_dir}/curl_body.txt: <out_dir}/curl_body.txt>
+  out_dir}/curl_headers.txt: <out_dir}/curl_headers.txt>
+  url: https://target.example.com
+output_format: http_raw
+evidence_artifacts: &id001
+- /out/curl_body.txt
+- /out/curl_headers.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run curl against target
+  example: curl -sS --fail-with-body --max-time 30 -i -L -o {out_dir}/curl_body.txt
+    -D {out_dir}/curl_headers.txt {url}
+  output_type: http_raw
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. curl HTTP/S probe capturing
+  response headers and body with redirect following for initial service fingerprinting.
+  Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

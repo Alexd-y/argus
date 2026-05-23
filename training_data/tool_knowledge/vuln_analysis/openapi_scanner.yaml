@@ -1,0 +1,51 @@
+tool_id: openapi_scanner
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1200
+description: 'openapi_scanner — internal Semgrep-style OpenAPI walker that derives
+  an API surface from an exposed schema (Swagger/OpenAPI 3.x) at {url} and feeds it
+  into nuclei api-templates. Active recon: probes documented endpoints with safe,
+  non-mutating methods (GET / OPTIONS / HEAD). JSON output captures discovered endpoints,
+  auth schemes, and response codes for downstream API security analysis. Parser deferred
+  to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Backlog/dev1_md §4.14.
+  ARG-018.'
+command_template:
+- openapi-scanner
+- --target
+- '{url}'
+- --output
+- '{out_dir}/openapi.json'
+command_string: openapi-scanner --target {url} --output {out_dir}/openapi.json
+placeholders:
+  url: https://target.example.com
+  out_dir}/openapi.json: <out_dir}/openapi.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/openapi.json
+cwe_ids:
+- 200
+- 862
+- 863
+- 20
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run openapi_scanner against target
+  example: openapi-scanner --target {url} --output {out_dir}/openapi.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. openapi_scanner — internal
+  Semgrep-style OpenAPI walker that derives an API surface from an exposed schema
+  (Swagger/OpenAPI 3.x) at {url} and feeds it into nuclei api-templates. Active recon:
+  probes d'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,54 @@
+tool_id: httpx
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: ProjectDiscovery httpx HTTP fingerprinting (status, title, tech, TLS,
+  favicon, JARM). Backlog/dev1_md §4.4.
+command_template:
+- httpx
+- -l
+- '{in_dir}/urls.txt'
+- -json
+- -title
+- -tech-detect
+- -status-code
+- -tls-probe
+- -favicon
+- -jarm
+- -o
+- '{out_dir}/httpx.json'
+command_string: httpx -l {in_dir}/urls.txt -json -title -tech-detect -status-code
+  -tls-probe -favicon -jarm -o {out_dir}/httpx.json
+placeholders:
+  in_dir}/urls.txt: <in_dir}/urls.txt>
+  out_dir}/httpx.json: <out_dir}/httpx.json>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/httpx.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: HTTP fingerprinting of subdomains from subfinder
+  example: subfinder -d example.com -silent | httpx -silent -title -tech-detect -oJ
+    /out/httpx.json
+  output_type: json_lines
+  next_steps:
+  - nuclei for vulnerability scanning
+  - ffuf_dir for directory fuzzing
+related_tools:
+- subfinder
+- amass_passive
+- whatweb
+- nuclei
+when_to_use: Information gathering and discovery phase. ProjectDiscovery httpx HTTP
+  fingerprinting (status, title, tech, TLS, favicon, JARM). Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

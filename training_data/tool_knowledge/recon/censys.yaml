@@ -1,0 +1,41 @@
+tool_id: censys
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: Censys CLI passive search for hosts with TLS certs covering the target
+  domain. Requires CENSYS_API_ID and CENSYS_API_SECRET. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- censys search 'services.tls.certificates.leaf_data.names:{domain}' -o {out_dir}/censys.json
+command_string: sh -c censys search 'services.tls.certificates.leaf_data.names:{domain}'
+  -o {out_dir}/censys.json
+placeholders:
+  censys search 'services.tls.certificates.leaf_data.names:{domain}' -o {out_dir}/censys.json: <censys
+    search 'services.tls.certificates.leaf_data.names:{domain}' -o {out_dir}/censys.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/censys.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run censys against target
+  example: sh -c censys search 'services.tls.certificates.leaf_data.names:{domain}'
+    -o {out_dir}/censys.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Censys CLI passive search
+  for hosts with TLS certs covering the target domain. Requires CENSYS_API_ID and
+  CENSYS_API_SECRET. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,60 @@
+tool_id: bandit
+version: 1.0.0
+phase: vuln_analysis
+category: misc
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+description: 'PyCQA Bandit Python SAST — recursively analyses the Python source tree
+  at {path} (under /in) for common security smells (eval/exec, weak crypto, insecure
+  deserialisation, hardcoded passwords, subprocess shell=True, request without verify,
+  sql concat). Fully offline (offline-no-egress); rule plugins ship inside the image.
+  Parser deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author:
+  PyCQA (https://github.com/PyCQA/bandit). Backlog/dev1_md §4.16. ARG-018.'
+command_template:
+- bandit
+- -r
+- '{path}'
+- -f
+- json
+- -o
+- '{out_dir}/bandit.json'
+- -q
+command_string: bandit -r {path} -f json -o {out_dir}/bandit.json -q
+placeholders:
+  path: <path>
+  out_dir}/bandit.json: <out_dir}/bandit.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/bandit.json
+cwe_ids:
+- 22
+- 78
+- 79
+- 89
+- 94
+- 200
+- 295
+- 327
+- 502
+- 798
+owasp_wstg:
+- WSTG-INPV-05
+- WSTG-CRYP-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run bandit against target
+  example: bandit -r {path} -f json -o {out_dir}/bandit.json -q
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. PyCQA Bandit Python
+  SAST — recursively analyses the Python source tree at {path} (under /in) for common
+  security smells (eval/exec, weak crypto, insecure deserialisation, hardcoded passwords,
+  subproce
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,38 @@
+tool_id: wappalyzer_cli
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: Wappalyzer CLI tech-stack detection (stdout JSON; image wrapper persists
+  to /out/wappalyzer.json). Backlog/dev1_md §4.4.
+command_template:
+- wappalyzer
+- '{url}'
+- --pretty
+command_string: wappalyzer {url} --pretty
+placeholders:
+  url: https://target.example.com
+output_format: json_object
+evidence_artifacts: &id001
+- /out/wappalyzer.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run wappalyzer_cli against target
+  example: wappalyzer {url} --pretty
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Wappalyzer CLI tech-stack
+  detection (stdout JSON; image wrapper persists to /out/wappalyzer.json). Backlog/dev1_md
+  §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

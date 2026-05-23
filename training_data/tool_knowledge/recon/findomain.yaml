@@ -1,0 +1,39 @@
+tool_id: findomain
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+description: Findomain passive subdomain discovery via Certificate Transparency and
+  OSINT. Backlog/dev1_md §4.1.
+command_template:
+- findomain
+- -t
+- '{domain}'
+- -u
+- '{out_dir}/findomain.txt'
+command_string: findomain -t {domain} -u {out_dir}/findomain.txt
+placeholders:
+  domain: <domain>
+  out_dir}/findomain.txt: <out_dir}/findomain.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/findomain.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run findomain against target
+  example: findomain -t {domain} -u {out_dir}/findomain.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Findomain passive subdomain
+  discovery via Certificate Transparency and OSINT. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

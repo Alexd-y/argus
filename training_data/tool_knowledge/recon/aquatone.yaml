@@ -1,0 +1,41 @@
+tool_id: aquatone
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: Aquatone HTTP visual recon and screenshots (image wrapper supplies '-list'
+  shim around stdin-based upstream). Backlog/dev1_md §4.4.
+command_template:
+- aquatone
+- -list
+- '{in_dir}/urls.txt'
+- -out
+- '{out_dir}/aquatone'
+command_string: aquatone -list {in_dir}/urls.txt -out {out_dir}/aquatone
+placeholders:
+  in_dir}/urls.txt: <in_dir}/urls.txt>
+  out_dir}/aquatone: <out_dir}/aquatone>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/aquatone
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run aquatone against target
+  example: aquatone -list {in_dir}/urls.txt -out {out_dir}/aquatone
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Aquatone HTTP visual recon
+  and screenshots (image wrapper supplies '-list' shim around stdin-based upstream).
+  Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

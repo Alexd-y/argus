@@ -1,0 +1,55 @@
+tool_id: ffuf_param
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'ffuf GET parameter discovery via FUZZ=test injection. Caller MUST pass
+  {size} as the baseline response size in bytes; -fs filters that size out. Author:
+  ffuf project. Backlog/dev1_md §4.5.'
+command_template:
+- ffuf
+- -u
+- '{url}?FUZZ=test'
+- -w
+- '{wordlist}'
+- -mc
+- all
+- -fs
+- '{size}'
+- -o
+- '{out_dir}/ffuf_param.json'
+- -of
+- json
+command_string: ffuf -u {url}?FUZZ=test -w {wordlist} -mc all -fs {size} -o {out_dir}/ffuf_param.json
+  -of json
+placeholders:
+  url}?FUZZ=test: <url}?FUZZ=test>
+  wordlist: <wordlist>
+  size: <size>
+  out_dir}/ffuf_param.json: <out_dir}/ffuf_param.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/ffuf_param.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INPV-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run ffuf_param against target
+  example: ffuf -u {url}?FUZZ=test -w {wordlist} -mc all -fs {size} -o {out_dir}/ffuf_param.json
+    -of json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. ffuf GET parameter
+  discovery via FUZZ=test injection. Caller MUST pass {size} as the baseline response
+  size in bytes; -fs filters that size out. Author: ffuf project. Backlog/dev1_md
+  §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

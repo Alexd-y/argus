@@ -1,0 +1,170 @@
+# ARGUS Tool Knowledge Base — SAST, IaC, Container, and Cloud Security
+category: security_scanning
+phase: vuln_analysis
+tools:
+  - tool_id: semgrep
+    typical_commands:
+      - "semgrep --config=auto /src/"
+      - "semgrep --config=p/python /src/app/"
+      - "semgrep --config=p/owasp-top-ten /src/app/"
+      - "semgrep --config=p/jwt /src/app/"
+    common_flags:
+      - flag: "--config=auto"
+        description: "Auto-detect language and apply appropriate rules"
+      - flag: "--config=p/python"
+        description: "Python-specific rules"
+      - flag: "--config=p/owasp-top-ten"
+        description: "OWASP Top 10 rules"
+    when_to_use: "Static analysis for source code. Detects injection, auth issues, misconfigurations in multiple languages."
+    key_outputs: ["code_findings", "cwe_matches", "owasp_matches"]
+    dependencies: []
+    cwe: [89, 79, 78, 287, 502]
+
+  - tool_id: bandit
+    typical_commands:
+      - "bandit -r /src/app/ -f json -o /out/bandit.json"
+      - "bandit -r /src/app/ -ll -f json"
+    when_to_use: "Python-specific security linter. Finds hardcoded passwords, SQL injection, command injection, weak crypto."
+    key_outputs: ["python_findings", "severity", "confidence"]
+    dependencies: []
+    cwe: [89, 78, 287, 327]
+
+  - tool_id: gitleaks
+    typical_commands:
+      - "gitleaks detect --source /repo --report-format json --report-path /out/gitleaks.json"
+      - "gitleaks detect --source /repo --no-git --config /in/gitleaks.toml"
+    when_to_use: "Git secret detection. Scans repository history for leaked API keys, tokens, passwords."
+    key_outputs: ["leaked_secrets", "secret_types", "commit_info"]
+    dependencies: []
+    cwe: [798]
+
+  - tool_id: detect_secrets
+    typical_commands:
+      - "detect-secrets scan /src/ --all-files --output /out/secrets.json"
+    when_to_use: "Alternative secret scanner. Detects high-entropy strings, private keys, API tokens."
+    key_outputs: ["potential_secrets"]
+    dependencies: []
+    cwe: [798]
+
+  - tool_id: trufflehog
+    typical_commands:
+      - "trufflehog filesystem /repo/ --only-verified"
+      - "trufflehog git https://github.com/org/repo --only-verified"
+    when_to_use: "Git secret scanner with verification. Confirms secrets are valid, not just high-entropy strings."
+    key_outputs: ["verified_secrets", "secret_types"]
+    dependencies: []
+    cwe: [798]
+
+  - tool_id: checkov
+    typical_commands:
+      - "checkov -d /terraform/ --output json --output-file /out/checkov.json"
+      - "checkov -f /terraform/main.tf --framework terraform"
+    when_to_use: "Infrastructure-as-Code scanning for Terraform, CloudFormation, Kubernetes manifests."
+    key_outputs: ["iac_findings", "misconfigurations", "compliance_violations"]
+    dependencies: []
+    cwe: [284, 250, 778]
+
+  - tool_id: tfsec
+    typical_commands:
+      - "tfsec /terraform/ --format json --out /out/tfsec.json"
+    when_to_use: "Terraform-specific security scanner. Detects misconfigurations in TF files."
+    key_outputs: ["terraform_findings", "severity", "resource_info"]
+    dependencies: []
+    cwe: [284, 250]
+
+  - tool_id: terrascan
+    typical_commands:
+      - "terrascan scan -d /terraform/ -o json > /out/terrascan.json"
+    when_to_use: "Multi-IaC scanner for Terraform, K8s, Docker, Helm. Detects security misconfigurations."
+    key_outputs: ["iac_findings"]
+    dependencies: []
+
+  - tool_id: kics
+    typical_commands:
+      - "kics scan -d /terraform/ --report-formats json -o /out/kics/"
+    when_to_use: "Multi-IaC vulnerability scanner. Supports Terraform, CloudFormation, Docker, Kubernetes."
+    key_outputs: ["iac_findings", "misconfigurations"]
+    dependencies: []
+
+  - tool_id: trivy_image
+    typical_commands:
+      - "trivy image --format json --output /out/trivy_image.json nginx:latest"
+      - "trivy image --severity HIGH,CRITICAL --format json nginx:latest"
+    when_to_use: "Container image vulnerability scanning. Detects CVEs in OS packages and language dependencies."
+    key_outputs: ["image_vulnerabilities", "cve_ids", "severity_levels"]
+    dependencies: []
+    cwe: [1035, 1104]
+
+  - tool_id: trivy_fs
+    typical_commands:
+      - "trivy fs --format json --output /out/trivy_fs.json /src/"
+      - "trivy fs --security-checks vuln,config /src/"
+    when_to_use: "Filesystem vulnerability scanning. Scans package-lock.json, requirements.txt, go.sum for CVEs."
+    key_outputs: ["dependency_vulnerabilities", "cve_ids"]
+    dependencies: []
+
+  - tool_id: grype
+    typical_commands:
+      - "grype /src/ -o json > /out/grype.json"
+      - "grype nginx:latest -o json"
+    when_to_use: "Vulnerability scanner for container images and filesystems. Matches SBOM against vulnerability database."
+    key_outputs: ["vulnerability_matches", "cve_ids", "severity"]
+    dependencies: ["syft"]
+
+  - tool_id: syft
+    typical_commands:
+      - "syft /src/ -o json > /out/sbom.json"
+      - "syft nginx:latest -o spdx-json > /out/sbom.json"
+    when_to_use: "SBOM (Software Bill of Materials) generation. Creates inventory of packages in container or filesystem."
+    key_outputs: ["sbom", "packages", "versions"]
+    dependencies: []
+
+  - tool_id: kube_bench
+    typical_commands:
+      - "kube-bench run --benchmark cis-1.8 --json > /out/kube_bench.json"
+    when_to_use: "Kubernetes CIS benchmark scanner. Checks node configuration against CIS benchmarks."
+    key_outputs: ["k8s_findings", "cis_violations"]
+    dependencies: []
+
+  - tool_id: kube_hunter
+    typical_commands:
+      - "kube-hunter --kubeconfig /in/kubeconfig --report json --log warning > /out/kube_hunter.json"
+    when_to_use: "Kubernetes security scanner. Finds vulnerabilities in K8s clusters."
+    key_outputs: ["k8s_vulnerabilities", "attack_surface"]
+    dependencies: []
+
+  - tool_id: prowler
+    typical_commands:
+      - "prowler aws --output json --output-file /out/prowler.json"
+    when_to_use: "AWS security posture assessment. Checks against CIS benchmarks and AWS best practices."
+    key_outputs: ["aws_findings", "cis_violations", "risk_items"]
+    dependencies: []
+
+  - tool_id: scoutsuite
+    typical_commands:
+      - "scout aws --report-dir /out/scout/"
+    when_to_use: "Multi-cloud security posture assessment (AWS, Azure, GCP)."
+    key_outputs: ["cloud_findings", "misconfigurations"]
+    dependencies: []
+
+  - tool_id: cloudsploit
+    typical_commands:
+      - "cloudsploit scan --config /in/cloudsploit.yml --json /out/cloudsploit.json"
+    when_to_use: "AWS security scanner. Detects misconfigurations and compliance violations."
+    key_outputs: ["aws_findings"]
+    dependencies: []
+
+  - tool_id: dockle
+    typical_commands:
+      - "dockle nginx:latest --format json --output /out/dockle.json"
+    when_to_use: "Container image linting. Checks for best practices (root user, sensitive mounts, etc.)."
+    key_outputs: ["container_lint_findings"]
+    dependencies: []
+
+  - tool_id: cloud_metadata_check
+    typical_commands:
+      - "cloud_metadata_check --url https://target.example.com/fetch --oast https://oast.argus.local"
+    when_to_use: "SSRF cloud metadata verification. Tests if application leaks cloud metadata (169.254.169.254)."
+    key_outputs: ["cloud_metadata_leak", "iam_credentials", "instance_info"]
+    dependencies: ["httpx"]
+    cwe: [918]

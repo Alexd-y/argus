@@ -1,0 +1,45 @@
+tool_id: grpcurl_probe
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+description: 'grpcurl reflection-based service enumerator — issues one `list` reflection
+  call against {host}:{port} (plaintext). One service/method per line in /out/grpc.txt.
+  Read-only, never invokes RPCs; only enumerates schema when server reflection is
+  enabled. `sh -c` is used solely for stdout redirection (placeholders RFC-validated,
+  no shell injection). Parser deferred to Cycle 3. Author: fullstorydev. Backlog §4.14.
+  ARG-018.'
+command_template:
+- sh
+- -c
+- grpcurl -plaintext {host}:{port} list > {out_dir}/grpc.txt
+command_string: sh -c grpcurl -plaintext {host}:{port} list > {out_dir}/grpc.txt
+placeholders:
+  grpcurl -plaintext {host}:{port} list > {out_dir}/grpc.txt: <grpcurl -plaintext
+    {host}:{port} list > {out_dir}/grpc.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/grpc.txt
+cwe_ids:
+- 200
+- 16
+owasp_wstg:
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run grpcurl_probe against target
+  example: sh -c grpcurl -plaintext {host}:{port} list > {out_dir}/grpc.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. grpcurl reflection-based service
+  enumerator — issues one `list` reflection call against {host}:{port} (plaintext).
+  One service/method per line in /out/grpc.txt. Read-only, never invokes RPCs; only
+  enu
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

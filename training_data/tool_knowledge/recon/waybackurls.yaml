@@ -1,0 +1,47 @@
+tool_id: waybackurls
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: 'waybackurls fetches every historical URL ever recorded by the Internet
+  Archive Wayback Machine for {domain}. Image-side wrapper `waybackurls-wrapper` translates
+  argv-form (`-domain <domain> -out <path>`) to upstream stdin/stdout pipe (`echo
+  <domain> | waybackurls > <path>`) so the sandbox stays argv-only. Passive (no traffic
+  to target). Author: tomnomnom (https://github.com/tomnomnom/waybackurls). Backlog/dev1_md
+  §4.6.'
+command_template:
+- waybackurls-wrapper
+- -domain
+- '{domain}'
+- -out
+- '{out_dir}/wayback.txt'
+command_string: waybackurls-wrapper -domain {domain} -out {out_dir}/wayback.txt
+placeholders:
+  domain: <domain>
+  out_dir}/wayback.txt: <out_dir}/wayback.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/wayback.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-06
+- WSTG-INFO-07
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run waybackurls against target
+  example: waybackurls-wrapper -domain {domain} -out {out_dir}/wayback.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. waybackurls fetches every
+  historical URL ever recorded by the Internet Archive Wayback Machine for {domain}.
+  Image-side wrapper `waybackurls-wrapper` translates argv-form (`-domain <domain>
+  -out <path
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

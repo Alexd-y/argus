@@ -1,0 +1,43 @@
+tool_id: dnsrecon
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1200
+description: dnsrecon multi-mode lookup (std/brt/srv/axfr) emitting one JSON object
+  with discovered records. Backlog/dev1_md §4.1.
+command_template:
+- dnsrecon
+- -d
+- '{domain}'
+- -t
+- std,brt,srv,axfr
+- -j
+- '{out_dir}/dnsrecon.json'
+command_string: dnsrecon -d {domain} -t std,brt,srv,axfr -j {out_dir}/dnsrecon.json
+placeholders:
+  domain: <domain>
+  out_dir}/dnsrecon.json: <out_dir}/dnsrecon.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/dnsrecon.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run dnsrecon against target
+  example: dnsrecon -d {domain} -t std,brt,srv,axfr -j {out_dir}/dnsrecon.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. dnsrecon multi-mode lookup
+  (std/brt/srv/axfr) emitting one JSON object with discovered records. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

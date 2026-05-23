@@ -1,0 +1,56 @@
+tool_id: kics
+version: 1.0.0
+phase: vuln_analysis
+category: iac
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+description: 'Checkmarx KICS (Keeping Infrastructure as Code Secure) — multi-IaC scanner
+  covering Terraform, K8s, Docker, CloudFormation, ARM, OpenAPI, gRPC, Ansible, Helm,
+  Crossplane. Reads the IaC tree at {path} and writes results.json under {out_dir}.
+  Fully offline (offline-no-egress); ships ~2400 queries inside the image. Parser
+  deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: Checkmarx
+  (https://github.com/Checkmarx/kics). Backlog/dev1_md §4.16. ARG-018.'
+command_template:
+- kics
+- scan
+- -p
+- '{path}'
+- -o
+- '{out_dir}'
+- --report-formats
+- json
+- --no-progress
+command_string: kics scan -p {path} -o {out_dir} --report-formats json --no-progress
+placeholders:
+  path: <path>
+  out_dir: /tmp/argus/kics
+output_format: json_object
+evidence_artifacts: &id001
+- /out/results.json
+cwe_ids:
+- 16
+- 200
+- 285
+- 311
+- 732
+- 798
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run kics against target
+  example: kics scan -p {path} -o {out_dir} --report-formats json --no-progress
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. Checkmarx KICS (Keeping
+  Infrastructure as Code Secure) — multi-IaC scanner covering Terraform, K8s, Docker,
+  CloudFormation, ARM, OpenAPI, gRPC, Ansible, Helm, Crossplane. Reads the IaC tree
+  at {path} '
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,44 @@
+tool_id: ike_scan
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: ike-scan — IKEv1/v2 IPsec endpoint discovery against {host} (UDP/500).
+  -A enables aggressive-mode handshake to capture pre-shared-key hash material on
+  misconfigured peers; -M emits multi-line / verbose output. Read-only single-shot
+  probe — does not exhaust DH key material. Output text-only (parser deferred to Cycle
+  3). Backlog/dev1_md §4.17. ARG-019.
+command_template:
+- sh
+- -c
+- ike-scan -M -A {host} > {out_dir}/ike_scan.txt
+command_string: sh -c ike-scan -M -A {host} > {out_dir}/ike_scan.txt
+placeholders:
+  ike-scan -M -A {host} > {out_dir}/ike_scan.txt: <ike-scan -M -A {host} > {out_dir}/ike_scan.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/ike_scan.txt
+cwe_ids:
+- 200
+- 326
+owasp_wstg:
+- WSTG-CRYP-01
+- WSTG-INFO-02
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run ike_scan against target
+  example: sh -c ike-scan -M -A {host} > {out_dir}/ike_scan.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. ike-scan — IKEv1/v2 IPsec
+  endpoint discovery against {host} (UDP/500). -A enables aggressive-mode handshake
+  to capture pre-shared-key hash material on misconfigured peers; -M emits multi-line
+  / verbos
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

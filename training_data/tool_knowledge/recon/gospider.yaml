@@ -1,0 +1,56 @@
+tool_id: gospider
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'Gospider fast Go crawler — concurrency 10, depth 3, follows JS / sitemap.xml
+  / robots.txt; emits JSONL on stdout (one record per discovered URL). Active crawl.
+  Author: jaeles-project (https://github.com/jaeles-project/gospider). Backlog/dev1_md
+  §4.6.'
+command_template:
+- gospider
+- -s
+- '{url}'
+- -c
+- '10'
+- -d
+- '3'
+- --js
+- --sitemap
+- --robots
+- --json
+- -o
+- '{out_dir}/gospider'
+command_string: gospider -s {url} -c 10 -d 3 --js --sitemap --robots --json -o {out_dir}/gospider
+placeholders:
+  url: https://target.example.com
+  out_dir}/gospider: <out_dir}/gospider>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/gospider
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-06
+- WSTG-INFO-07
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Web crawling for URL and endpoint discovery
+  example: gospider -S /in/urls.txt -d 3 -t 10 -o /out/gospider/
+  output_type: text
+  next_steps:
+  - ffuf_dir for directory fuzzing
+  - paramspider for parameter mining
+related_tools:
+- katana
+- hakrawler
+- paramspider
+when_to_use: 'Information gathering and discovery phase. Gospider fast Go crawler
+  — concurrency 10, depth 3, follows JS / sitemap.xml / robots.txt; emits JSONL on
+  stdout (one record per discovered URL). Active crawl. Author: jaeles-project (https://github.c'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,52 @@
+tool_id: tplmap
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: high
+requires_approval: true
+default_timeout_s: 900
+description: 'tplmap SSTI probe — /usr/local/bin/tplmap-runner wraps upstream tplmap.py
+  (interactive-first), fires --level 3 detection + --os-cmd ''id'' confirmation against
+  {url}, writes stdout/stderr to {out_dir}/tplmap.txt. APPROVAL REQUIRED: --os-cmd
+  id is an actual RCE attempt on confirmed engine fingerprint. Parsing deferred to
+  Cycle 3 (TEXT_LINES → parsers.dispatch.unmapped_tool). Author: epinna (https://github.com/epinna/tplmap).
+  Backlog/dev1_md §4.9. ARG-016.'
+command_template:
+- tplmap-runner
+- --url
+- '{url}'
+- --level
+- '3'
+- --os-cmd
+- id
+- --output
+- '{out_dir}/tplmap.txt'
+command_string: tplmap-runner --url {url} --level 3 --os-cmd id --output {out_dir}/tplmap.txt
+placeholders:
+  url: https://target.example.com
+  out_dir}/tplmap.txt: <out_dir}/tplmap.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/tplmap.txt
+cwe_ids:
+- 1336
+- 94
+- 78
+owasp_wstg:
+- WSTG-INPV-18
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run tplmap against target
+  example: tplmap-runner --url {url} --level 3 --os-cmd id --output {out_dir}/tplmap.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. tplmap SSTI probe —
+  /usr/local/bin/tplmap-runner wraps upstream tplmap.py (interactive-first), fires
+  --level 3 detection + --os-cmd 'id' confirmation against {url}, writes stdout/stderr
+  to {out_dir}/t
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,45 @@
+tool_id: ssl_enum_ciphers
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'Nmap NSE ssl-enum-ciphers script: per-protocol cipher table with strength
+  grades. Backlog/dev1_md §4.3.'
+command_template:
+- nmap
+- --script
+- ssl-enum-ciphers
+- -p
+- '{port}'
+- '{host}'
+- -oX
+- '{out_dir}/ssl_ciphers.xml'
+command_string: nmap --script ssl-enum-ciphers -p {port} {host} -oX {out_dir}/ssl_ciphers.xml
+placeholders:
+  port: '443'
+  host: target.example.com
+  out_dir}/ssl_ciphers.xml: <out_dir}/ssl_ciphers.xml>
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/ssl_ciphers.xml
+cwe_ids:
+- 326
+- 327
+owasp_wstg:
+- WSTG-CRYP-01
+image: argus-kali-web:latest
+network_policy_name: tls-handshake
+scenarios:
+- description: Run ssl_enum_ciphers against target
+  example: nmap --script ssl-enum-ciphers -p {port} {host} -oX {out_dir}/ssl_ciphers.xml
+  output_type: xml_nmap
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. Nmap NSE ssl-enum-ciphers
+  script: per-protocol cipher table with strength grades. Backlog/dev1_md §4.3.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

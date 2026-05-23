@@ -1,0 +1,128 @@
+phase: vuln_analysis
+target_types: [web_app, api, cloud]
+description: >-
+  Vulnerability analysis methodology for ARGUS. Defines ordered steps for
+  active vulnerability scanning, injection testing, authentication testing,
+  and security configuration review.
+
+steps:
+  - order: 1
+    action: "Automated vulnerability scanning with nuclei"
+    tools: [nuclei, nikto]
+    verification: "Run template-based detection for known CVEs and misconfigurations"
+    argus_tools: [nuclei, nikto]
+    expected_output: "List of findings with severity, CVE IDs, and evidence"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: [2, 3, 4]
+
+  - order: 2
+    action: "XSS testing on reflected parameters"
+    tools: [dalfox, xsstrike, xsser]
+    verification: "Confirm reflected/stored/DOM XSS with OAST callbacks"
+    argus_tools: [dalfox, xsstrike]
+    expected_output: "XSS findings with reflection context and canary verification"
+    risk_level: "medium"
+    requires_approval: false
+    cwe_ids: [79, 80]
+    owasp_wstg: ["WSTG-INPV-01", "WSTG-INPV-02"]
+    payload_families: [xss, xss_dom, xss_stored, xss_contextual]
+    next_steps: []
+
+  - order: 3
+    action: "SQL injection testing"
+    tools: [sqlmap_safe, ghauri, nosqlmap]
+    verification: "Confirm SQLi via boolean, error, UNION, or time-based techniques"
+    argus_tools: [sqlmap_safe, nosqlmap]
+    expected_output: "Injectable parameters with DBMS type and technique"
+    risk_level: "medium"
+    requires_approval: true
+    cwe_ids: [89, 943]
+    owasp_wstg: ["WSTG-INPV-05"]
+    payload_families: [sqli, sqli_safe, nosqli, nosqli_safe]
+    next_steps: []
+
+  - order: 4
+    action: "SSTI, LFI, SSRF testing"
+    tools: [tplmap, ffuf_param, ssrfmap, gopherus, nuclei]
+    verification: "Verify template injection, file inclusion, and SSRF vectors"
+    argus_tools: [tplmap, ffuf_param, nuclei]
+    expected_output: "Injectable parameters with vulnerability confirmation"
+    risk_level: "medium"
+    requires_approval: false
+    cwe_ids: [1336, 22, 918]
+    owasp_wstg: ["WSTG-INPV-04", "WSTG-INPV-08"]
+    payload_families: [ssti, ssti_safe, lfi_rfi, path_traversal, ssrf, ssrf_oast_safe]
+    next_steps: []
+
+  - order: 5
+    action: "Authentication and authorization testing"
+    tools: [nuclei, jwt_tool, cors_probe]
+    verification: "Test auth bypass, IDOR, JWT manipulation, CORS misconfiguration"
+    argus_tools: [nuclei, jwt_tool, cors_probe]
+    expected_output: "Auth-related findings with evidence"
+    risk_level: "medium"
+    requires_approval: false
+    cwe_ids: [287, 290, 639, 942, 601]
+    owasp_wstg: ["WSTG-ATHN-01", "WSTG-ATHN-04", "WSTG-ATHZ-01"]
+    payload_families: [auth_bypass, idor, jwt, jwt_none_alg, cors_misconfig, csrf_safe, csrf_token_bypass]
+    next_steps: []
+
+  - order: 6
+    action: "TLS and header security review"
+    tools: [sslscan, testssl, tlsx, jarm, ssl_enum_ciphers]
+    verification: "Check for weak ciphers, expired certs, missing headers"
+    argus_tools: [sslscan, testssl, tlsx]
+    expected_output: "TLS findings with cipher grades and header analysis"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [326, 327, 295]
+    owasp_wstg: ["WSTG-CRYP-01", "WSTG-CRYP-02"]
+    next_steps: []
+
+  - order: 7
+    action: "GraphQL and API security testing"
+    tools: [graphql_cop, graphw00f, clairvoyance, kiterunner, openapi_scanner]
+    verification: "Test for introspection, depth limiting, IDOR in mutations"
+    argus_tools: [graphql_cop, graphw00f, kiterunner]
+    expected_output: "GraphQL/API findings with evidence"
+    risk_level: "medium"
+    requires_approval: false
+    cwe_ids: [863, 209, 400]
+    payload_families: [graphql, graphql_safe, idor, mass_assignment, mass_assignment_safe]
+    next_steps: []
+
+  - order: 8
+    action: "Secret and credential scanning"
+    tools: [gitleaks, detect_secrets, trufflehog, secretfinder]
+    verification: "Detect leaked API keys, tokens, and credentials in responses"
+    argus_tools: [gitleaks, detect_secrets, trufflehog]
+    expected_output: "Leaked secrets with type and location"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [798]
+    owasp_wstg: ["WSTG-ATHN-07"]
+    next_steps: []
+
+  - order: 9
+    action: "Container and IaC scanning"
+    tools: [trivy_image, trivy_fs, grype, syft, checkov, tfsec, semgrep, bandit]
+    verification: "CVE analysis, SBOM generation, IaC misconfiguration detection"
+    argus_tools: [trivy_image, trivy_fs, grype, syft, checkov, tfsec, semgrep, bandit]
+    expected_output: "CVE findings, SBOM, and IaC misconfigurations"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [1035, 1104, 284]
+    next_steps: []
+
+phase_transitions:
+  from_va_to_exploitation:
+    trigger: "Vulnerability analysis phase complete with confirmed findings"
+    conditions:
+      - "All target parameters tested for injection"
+      - "Authentication mechanisms tested"
+      - "TLS/header review completed"
+      - "Automated scan completed with findings triaged"
+    next_phase: "exploitation"

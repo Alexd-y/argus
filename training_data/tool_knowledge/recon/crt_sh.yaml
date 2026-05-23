@@ -1,0 +1,43 @@
+tool_id: crt_sh
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: Certificate Transparency lookup via crt.sh; passive subdomain enumeration
+  with no contact to the target. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- curl -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json'
+  -o {out_dir}/crtsh.json
+command_string: sh -c curl -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json'
+  -o {out_dir}/crtsh.json
+placeholders:
+  curl -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json' -o {out_dir}/crtsh.json: <curl
+    -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json'
+    -o {out_dir}/crtsh.json>
+output_format: custom
+evidence_artifacts: &id001
+- /out/crtsh.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-08
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run crt_sh against target
+  example: sh -c curl -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json'
+    -o {out_dir}/crtsh.json
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Certificate Transparency lookup
+  via crt.sh; passive subdomain enumeration with no contact to the target. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

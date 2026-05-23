@@ -1,0 +1,73 @@
+tool_id: semgrep
+version: 1.0.0
+phase: vuln_analysis
+category: misc
+risk_level: passive
+requires_approval: false
+default_timeout_s: 3600
+description: 'Semgrep multi-language SAST — runs `p/owasp-top-ten` + `p/ci` rule packs
+  against the source tree at {path} (/in). Packs are pre-bundled in argus-kali-cloud:latest;
+  pod runs fully offline (offline-no-egress); --metrics off disables telemetry. Per-file
+  timeout 300s. Output is canonical Semgrep JSON consumed by sandbox/parsers/semgrep_parser.py
+  via JSON_OBJECT (severity/metadata drive FindingDTO category, confidence, score).
+  Author: r2c. Backlog §4.16. ARG-018.'
+command_template:
+- semgrep
+- scan
+- --config
+- p/owasp-top-ten
+- --config
+- p/ci
+- --json
+- --output
+- '{out_dir}/semgrep.json'
+- --metrics
+- 'off'
+- --quiet
+- --timeout
+- '300'
+- '{path}'
+command_string: semgrep scan --config p/owasp-top-ten --config p/ci --json --output
+  {out_dir}/semgrep.json --metrics off --quiet --timeout 300 {path}
+placeholders:
+  out_dir}/semgrep.json: <out_dir}/semgrep.json>
+  path: <path>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/semgrep.json
+cwe_ids:
+- 22
+- 78
+- 79
+- 89
+- 94
+- 200
+- 287
+- 311
+- 502
+- 798
+- 918
+owasp_wstg:
+- WSTG-INPV-05
+- WSTG-INPV-01
+- WSTG-INFO-08
+- WSTG-CRYP-04
+image: argus-kali-cloud:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Static analysis for source code vulnerabilities
+  example: semgrep --config=auto /src/
+  output_type: text
+  next_steps:
+  - bandit for Python-specific analysis
+related_tools:
+- bandit
+- gitleaks
+- trivy_fs
+when_to_use: Vulnerability identification and analysis phase. Semgrep multi-language
+  SAST — runs `p/owasp-top-ten` + `p/ci` rule packs against the source tree at {path}
+  (/in). Packs are pre-bundled in argus-kali-cloud:latest; pod runs fully offline
+  (offline-no-e
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

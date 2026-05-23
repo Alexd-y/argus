@@ -1,0 +1,45 @@
+tool_id: kube_bench
+version: 1.0.0
+phase: vuln_analysis
+category: cloud
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: 'Aqua kube-bench CIS Kubernetes Benchmark scanner — runs the local-node
+  assessment (master/node/etcd/policies/managed-services) against k8s config files
+  mounted at /etc/kubernetes (host-path) and /var/lib. Output: canonical kube-bench
+  JSON. Fully offline (offline-no-egress): all evidence is local. `sh -c` is used
+  solely for stdout redirection. Parser deferred to Cycle 3. Author: Aqua. Backlog
+  §4.15. ARG-018.'
+command_template:
+- sh
+- -c
+- kube-bench --json > {out_dir}/kubebench.json
+command_string: sh -c kube-bench --json > {out_dir}/kubebench.json
+placeholders:
+  kube-bench --json > {out_dir}/kubebench.json: <kube-bench --json > {out_dir}/kubebench.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/kubebench.json
+cwe_ids:
+- 16
+- 250
+- 732
+- 285
+owasp_wstg:
+- WSTG-CONF-04
+image: argus-kali-cloud:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run kube_bench against target
+  example: sh -c kube-bench --json > {out_dir}/kubebench.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Aqua kube-bench CIS
+  Kubernetes Benchmark scanner — runs the local-node assessment (master/node/etcd/policies/managed-services)
+  against k8s config files mounted at /etc/kubernetes (host-path) and /var/
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

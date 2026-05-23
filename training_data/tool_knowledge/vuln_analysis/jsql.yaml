@@ -1,0 +1,47 @@
+tool_id: jsql
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: medium
+requires_approval: true
+default_timeout_s: 900
+description: 'jsql-injection (Java) headless wrapper — /usr/local/bin/jsql-cli drives
+  ''java -jar /opt/jsql/jsql.jar'' non-interactively (upstream is GUI-first), writing
+  JSON to {out_dir}/jsql.json. APPROVAL REQUIRED: --get-data exfiltrates injectable
+  column data on confirmation. JSON parsing deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool).
+  Author: ron190 (https://github.com/ron190/jsql-injection). Backlog/dev1_md §4.9.
+  ARG-016.'
+command_template:
+- jsql-cli
+- --url
+- '{url}'
+- --get-data
+- --output
+- '{out_dir}/jsql.json'
+command_string: jsql-cli --url {url} --get-data --output {out_dir}/jsql.json
+placeholders:
+  url: https://target.example.com
+  out_dir}/jsql.json: <out_dir}/jsql.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/jsql.json
+cwe_ids:
+- 89
+owasp_wstg:
+- WSTG-INPV-05
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run jsql against target
+  example: jsql-cli --url {url} --get-data --output {out_dir}/jsql.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. jsql-injection (Java)
+  headless wrapper — /usr/local/bin/jsql-cli drives 'java -jar /opt/jsql/jsql.jar'
+  non-interactively (upstream is GUI-first), writing JSON to {out_dir}/jsql.json.
+  APPROVAL REQUIRED
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

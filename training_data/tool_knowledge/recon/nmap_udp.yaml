@@ -1,0 +1,47 @@
+tool_id: nmap_udp
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+description: Nmap UDP scan across the 100 most common UDP ports; complements TCP discovery.
+  Backlog/dev1_md §4.2.
+command_template:
+- nmap
+- -sU
+- --top-ports
+- '100'
+- -oX
+- '{out_dir}/nmap_udp.xml'
+- '{ip}'
+command_string: nmap -sU --top-ports 100 -oX {out_dir}/nmap_udp.xml {ip}
+placeholders:
+  out_dir}/nmap_udp.xml: <out_dir}/nmap_udp.xml>
+  ip: 10.10.1.100
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/nmap_udp.xml
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-active-udp
+scenarios:
+- description: UDP scan for DNS, SNMP, NTP services
+  example: nmap -sU --top-ports 100 -oX /out/nmap_udp.xml 10.0.0.1
+  output_type: xml_nmap
+  next_steps:
+  - snmp_check if SNMP found
+  - dig for DNS verification
+related_tools:
+- nmap_tcp_top
+- snmp_check
+- onesixtyone
+when_to_use: Information gathering and discovery phase. Nmap UDP scan across the 100
+  most common UDP ports; complements TCP discovery. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

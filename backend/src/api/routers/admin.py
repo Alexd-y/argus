@@ -1549,6 +1549,120 @@ async def list_usage(
     return [UsageMeteringOut.model_validate(r) for r in rows]
 
 
+# --- WhiteRabbitNeo dashboard ---
+
+
+class WrbDashboardOut(BaseModel):
+    status: str
+    model: str = ""
+    provider: str = "whiterabbitneo"
+    error: str = ""
+    models_count: int = 0
+    base_url: str = ""
+    timeout_seconds: float = 600.0
+    gpu_mode: str = ""
+    concurrency_limit: int = 3
+    default_temperature: float = 0.3
+    default_max_tokens: int = 4096
+    max_prompt_bytes: int = 8192
+    api_key_configured: bool = False
+
+
+@router.get("/llm/wrb/dashboard", response_model=WrbDashboardOut)
+async def wrb_dashboard(
+    _: None = Depends(require_admin),
+) -> WrbDashboardOut:
+    from src.llm.whiterabbitneo_adapter import (
+        WRB_DEFAULT_MAX_TOKENS,
+        WRB_DEFAULT_TEMPERATURE,
+        WRB_MAX_PROMPT_BYTES,
+        get_whiterabbitneo_adapter,
+    )
+
+    wrb = get_whiterabbitneo_adapter()
+    gpu_mode = os.environ.get("WRB_GPU_MODE", "cpu")
+
+    if not wrb.is_configured:
+        return WrbDashboardOut(
+            status="unconfigured",
+            base_url="",
+            gpu_mode=gpu_mode,
+            api_key_configured=False,
+        )
+
+    try:
+        health = await wrb.health_check()
+        return WrbDashboardOut(
+            status=health.get("status", "unknown"),
+            model=wrb._base_url.split("/")[-1] if wrb._base_url else "",
+            models_count=health.get("models", 0),
+            error=health.get("error", ""),
+            base_url=wrb._base_url,
+            timeout_seconds=wrb._timeout_sec,
+            gpu_mode=gpu_mode,
+            api_key_configured=bool(wrb._api_key),
+            default_temperature=WRB_DEFAULT_TEMPERATURE,
+            default_max_tokens=WRB_DEFAULT_MAX_TOKENS,
+            max_prompt_bytes=WRB_MAX_PROMPT_BYTES,
+        )
+    except Exception as exc:
+        return WrbDashboardOut(
+            status="unavailable",
+            base_url=wrb._base_url,
+            error=str(exc),
+            gpu_mode=gpu_mode,
+            api_key_configured=bool(wrb._api_key),
+            default_temperature=WRB_DEFAULT_TEMPERATURE,
+            default_max_tokens=WRB_DEFAULT_MAX_TOKENS,
+            max_prompt_bytes=WRB_MAX_PROMPT_BYTES,
+        )
+
+
+class WrbTestPromptIn(BaseModel):
+    prompt: str = Field(min_length=1, max_length=2048)
+    system_prompt: str | None = Field(default=None, max_length=4096)
+
+
+class WrbTestPromptOut(BaseModel):
+    response: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    elapsed_ms: float = 0.0
+
+
+@router.post("/llm/wrb/test-prompt", response_model=WrbTestPromptOut)
+async def wrb_test_prompt(
+    body: WrbTestPromptIn,
+    _: None = Depends(require_admin_mfa_passed),
+) -> WrbTestPromptOut:
+    import time
+
+    from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
+
+    wrb = get_whiterabbitneo_adapter()
+    if not wrb.is_configured:
+        raise HTTPException(status_code=503, detail="WhiteRabbitNeo is not configured")
+
+    start = time.monotonic()
+    try:
+        text, usage = await wrb.call_with_usage(
+            body.prompt,
+            system_prompt=body.system_prompt or None,
+            max_tokens=256,
+        )
+        elapsed = (time.monotonic() - start) * 1000
+        return WrbTestPromptOut(
+            response=text,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
+            elapsed_ms=round(elapsed, 1),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"WhiteRabbitNeo error: {exc}")
+
+
 # --- Health dashboard ---
 
 

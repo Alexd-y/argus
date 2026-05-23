@@ -1,0 +1,59 @@
+tool_id: nmap_tcp_top
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: Nmap TCP SYN scan against the 1000 most common ports; baseline service
+  exposure map. Backlog/dev1_md §4.2.
+command_template:
+- nmap
+- -sS
+- -Pn
+- -T4
+- --top-ports
+- '1000'
+- -oX
+- '{out_dir}/nmap_tcp.xml'
+- '{ip}'
+command_string: nmap -sS -Pn -T4 --top-ports 1000 -oX {out_dir}/nmap_tcp.xml {ip}
+placeholders:
+  out_dir}/nmap_tcp.xml: <out_dir}/nmap_tcp.xml>
+  ip: 10.10.1.100
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/nmap_tcp.xml
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Quick port discovery on a single host
+  example: nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 10.0.0.1
+  output_type: xml_nmap
+  next_steps:
+  - nmap_version on discovered ports
+  - nmap_udp for UDP services
+- description: Scan a subnet for live hosts and open ports
+  example: nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 10.0.0.0/24
+  output_type: xml_nmap
+  next_steps:
+  - httpx for live host verification
+  - nmap_version on interesting ports
+related_tools:
+- nmap_tcp_full
+- nmap_udp
+- nmap_version
+- nmap_vuln
+- naabu
+- masscan
+when_to_use: Information gathering and discovery phase. Nmap TCP SYN scan against
+  the 1000 most common ports; baseline service exposure map. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

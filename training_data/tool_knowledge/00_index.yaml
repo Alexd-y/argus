@@ -1,0 +1,124 @@
+# ARGUS Pentest Command Knowledge Base — Index
+# Maps tools to knowledge files and provides cross-references for LLM RAG
+
+version: "1.0.0"
+created: "2026-05-23"
+task: "TRN-005"
+total_tools: 162
+total_categories: 6
+
+files:
+  - file: 01_network_recon.yaml
+    category: network_recon
+    phase: recon
+    tools: 7
+    tool_ids: [nmap_tcp_top, nmap_tcp_full, nmap_udp, nmap_version, nmap_vuln, masscan, rustscan, naabu]
+
+  - file: 02_web_recon_fuzzing.yaml
+    category: web_recon
+    phase: recon
+    tools: 18
+    tool_ids: [subfinder, amass_passive, httpx, whatweb, gospider, katana, feroxbuster,
+               ffuf_dir, ffuf_param, ffuf_vhost, gobuster_dir, paramspider, arjun,
+               gau, waybackurls, nikto, nuclei, dirsearch]
+
+  - file: 03_web_vuln_analysis.yaml
+    category: web_vuln_analysis
+    phase: vuln_analysis
+    tools: 20
+    tool_ids: [sqlmap_safe, sqlmap_confirm, dalfox, xsstrike, nosqlmap, tplmap, ghauri,
+               nuclei, zap_baseline, graphql_cop, graphw00f, kiterunner, sslscan, testssl,
+               jwt_tool, kxss, wapiti, ssrfmap, w3af_console, arachni]
+
+  - file: 04_exploitation.yaml
+    category: exploitation
+    phase: exploitation
+    tools: 12
+    tool_ids: [hydra, medusa, ncrack, crackmapexec, smbmap, smbclient, evil_winrm,
+               responder, ntlmrelayx, kerbrute, impacket_examples, commix]
+
+  - file: 05_post_exploitation.yaml
+    category: post_exploitation
+    phase: post_exploitation
+    tools: 12
+    tool_ids: [hashcat, john, hashid, hash_analyzer, bloodhound_python, ldapsearch,
+               enum4linux_ng, rpcclient_enum, impacket_secretsdump, ophcrack,
+               puppeteer_screens, playwright_xss_verify]
+
+  - file: 06_sast_iac_cloud.yaml
+    category: security_scanning
+    phase: vuln_analysis
+    tools: 22
+    tool_ids: [semgrep, bandit, gitleaks, detect_secrets, trufflehog, checkov, tfsec,
+               terrascan, kics, trivy_image, trivy_fs, grype, syft, kube_bench,
+               kube_hunter, prowler, scoutsuite, cloudsploit, dockle, cloud_metadata_check]
+
+  - file: 07_tool_scenarios.yaml
+    category: enrichment
+    phase: cross_phase
+    tools: 12
+    tool_ids: [nmap_tcp_top, subfinder, httpx, ffuf_dir, nuclei, sqlmap_safe, dalfox,
+               hydra, crackmapexec, hashcat, bloodhound_python]
+    description: "Scenarios, next_steps, and related_tools enrichment for key tools"
+
+methodology_files:
+  - file: methodology/recon_checklist.yaml
+    phase: recon
+    description: "Reconnaissance methodology checklist with ordered steps"
+
+  - file: methodology/va_checklist.yaml
+    phase: vuln_analysis
+    description: "Vulnerability analysis methodology checklist with payload families"
+
+  - file: methodology/exploitation_checklist.yaml
+    phase: exploitation
+    description: "Exploitation methodology checklist with approval-gated steps"
+
+  - file: methodology/post_exploitation_checklist.yaml
+    phase: post_exploitation
+    description: "Post-exploitation methodology checklist with evidence collection"
+
+  - file: methodology/internal_pentest_workflow.yaml
+    target_type: internal_network
+    description: "Internal network pentest workflow (AD-focused kill chain)"
+
+  - file: methodology/web_pentest_workflow.yaml
+    target_type: web_app
+    description: "Web application pentest workflow with attack chains"
+
+  - file: methodology/ad_attack_workflow.yaml
+    target_type: ad_environment
+    description: "Active Directory attack workflow and common attack chains"
+
+phase_to_file_mapping:
+  recon: [01_network_recon.yaml, 02_web_recon_fuzzing.yaml, methodology/recon_checklist.yaml]
+  vuln_analysis: [03_web_vuln_analysis.yaml, 06_sast_iac_cloud.yaml, methodology/va_checklist.yaml]
+  exploitation: [04_exploitation.yaml, methodology/exploitation_checklist.yaml]
+  post_exploitation: [05_post_exploitation.yaml, methodology/post_exploitation_checklist.yaml]
+
+usage_notes: |
+  This knowledge base is designed for LLM RAG in the ARGUS training pipeline.
+  
+  Each tool YAML file contains:
+  - tool_id: Maps directly to ARGUS backend/config/tools/*.yaml
+  - typical_commands: Real command examples with ARGUS-compatible placeholder paths
+  - common_flags: Flags with descriptions for command generation training
+  - when_to_use: Context for tool selection training
+  - key_outputs: Expected outputs for finding triage training
+  - dependencies: Tool ordering for pipeline planning
+  - cwe/owasp: Associated vulnerability classes for payload family selection
+  - tips: Operational notes for methodology training
+  
+  Tool scenarios file (07_tool_scenarios.yaml) enriches tools with:
+  - scenarios: Concrete usage scenarios with example commands
+  - next_steps: Recommended tools to run after the current one
+  - related_tools: Tools commonly used together
+  
+  Methodology files contain:
+  - Ordered steps with tool recommendations and verification criteria
+  - Phase transitions and conditions for moving to next phase
+  - Attack chains with MITRE ATT&CK techniques
+  - Target-type-specific workflows (web_app, internal_network, ad_environment)
+  
+  No sanitization applied — all real IPs, domains, credentials, and commands
+  preserved as-is per project requirements.

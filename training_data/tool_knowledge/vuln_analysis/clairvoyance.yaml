@@ -1,0 +1,47 @@
+tool_id: clairvoyance
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: 'clairvoyance GraphQL field-suggestion oracle — reconstructs the schema
+  (fields, types, args) of {url}/graphql even when introspection is disabled, by exploiting
+  the field-suggestion mechanism. Reveals hidden mutations and admin endpoints. Read-only,
+  never mutates. Output is the inferred JSON schema. Parser deferred to Cycle 3 (JSON_OBJECT
+  → unmapped_tool). Author: nikitastupin. Backlog §4.14. ARG-018.'
+command_template:
+- clairvoyance
+- '{url}/graphql'
+- -o
+- '{out_dir}/clairvoyance.json'
+command_string: clairvoyance {url}/graphql -o {out_dir}/clairvoyance.json
+placeholders:
+  url}/graphql: <url}/graphql>
+  out_dir}/clairvoyance.json: <out_dir}/clairvoyance.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/clairvoyance.json
+cwe_ids:
+- 200
+- 285
+- 862
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-CONF-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run clairvoyance against target
+  example: clairvoyance {url}/graphql -o {out_dir}/clairvoyance.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. clairvoyance GraphQL
+  field-suggestion oracle — reconstructs the schema (fields, types, args) of {url}/graphql
+  even when introspection is disabled, by exploiting the field-suggestion mechanism.
+  Reveals
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

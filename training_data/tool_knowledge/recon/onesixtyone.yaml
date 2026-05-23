@@ -1,0 +1,45 @@
+tool_id: onesixtyone
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: onesixtyone — fast SNMP community string scanner; UDP/161 sweep against
+  the host list at {in_dir}/hosts.txt using community candidates from {wordlist} (the
+  standard sandbox-rooted wordlist mount). Read-only, but a positive hit is the precursor
+  to §4.17 snmpwalk extraction. Output text-only (parser deferred to Cycle 3). Backlog/dev1_md
+  §4.17. ARG-019.
+command_template:
+- sh
+- -c
+- onesixtyone -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt
+command_string: sh -c onesixtyone -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt
+placeholders:
+  onesixtyone -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt: <onesixtyone
+    -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/onesixtyone.txt
+cwe_ids:
+- 521
+- 287
+owasp_wstg:
+- WSTG-INFO-09
+- WSTG-ATHN-02
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run onesixtyone against target
+  example: sh -c onesixtyone -c {wordlist} -i {in_dir}/hosts.txt -o {out_dir}/onesixtyone.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. onesixtyone — fast SNMP community
+  string scanner; UDP/161 sweep against the host list at {in_dir}/hosts.txt using
+  community candidates from {wordlist} (the standard sandbox-rooted wordlist mount).
+  Rea
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

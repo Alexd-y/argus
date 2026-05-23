@@ -1,0 +1,40 @@
+tool_id: chaos
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: ProjectDiscovery chaos passive subdomain dataset; requires CHAOS_API_KEY
+  env. Backlog/dev1_md §4.1.
+command_template:
+- chaos
+- -d
+- '{domain}'
+- -o
+- '{out_dir}/chaos.txt'
+- -silent
+command_string: chaos -d {domain} -o {out_dir}/chaos.txt -silent
+placeholders:
+  domain: <domain>
+  out_dir}/chaos.txt: <out_dir}/chaos.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/chaos.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run chaos against target
+  example: chaos -d {domain} -o {out_dir}/chaos.txt -silent
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. ProjectDiscovery chaos passive
+  subdomain dataset; requires CHAOS_API_KEY env. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,53 @@
+tool_id: gobuster_auth
+version: 1.0.0
+phase: vuln_analysis
+category: auth
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: gobuster fuzz mode — HTTP form/cookie/header brute-force using wordlist.
+  Suited for response-fingerprint distinguishable login endpoints. Cycle 3 will register
+  text_lines parser. Backlog/dev1_md §4.12 (vuln_analysis class — bypass enumeration,
+  not credential exfil). ARG-017.
+command_template:
+- gobuster
+- fuzz
+- -u
+- '{url}'
+- -w
+- '{wordlist}'
+- -t
+- '10'
+- --timeout
+- 10s
+- -o
+- '{out_dir}/gobuster_auth.txt'
+command_string: gobuster fuzz -u {url} -w {wordlist} -t 10 --timeout 10s -o {out_dir}/gobuster_auth.txt
+placeholders:
+  url: https://target.example.com
+  wordlist: <wordlist>
+  out_dir}/gobuster_auth.txt: <out_dir}/gobuster_auth.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/gobuster_auth.txt
+cwe_ids:
+- 307
+- 521
+owasp_wstg:
+- WSTG-ATHN-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run gobuster_auth against target
+  example: gobuster fuzz -u {url} -w {wordlist} -t 10 --timeout 10s -o {out_dir}/gobuster_auth.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. gobuster fuzz mode —
+  HTTP form/cookie/header brute-force using wordlist. Suited for response-fingerprint
+  distinguishable login endpoints. Cycle 3 will register text_lines parser. Backlog/dev1_md
+  §4.12
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

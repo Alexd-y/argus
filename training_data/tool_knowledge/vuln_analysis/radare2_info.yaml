@@ -1,0 +1,46 @@
+tool_id: radare2_info
+version: 1.0.0
+phase: vuln_analysis
+category: binary
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: radare2 (r2) — read-only binary triage. -A runs the auto-analysis pass;
+  the -c command chain emits binary info (iI), header (ih), strings (iz), entrypoints
+  (iE), and library imports (il) as a single JSON envelope on stdout. -q exits after
+  the script; -2 silences stderr noise. {binary} is the sandbox-rooted /in/-prefixed
+  sample. Pure offline (egress blocked). Parser deferred to Cycle 3. Backlog/dev1_md
+  §4.18. ARG-019.
+command_template:
+- sh
+- -c
+- r2 -2 -q -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json
+command_string: sh -c r2 -2 -q -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json
+placeholders:
+  r2 -2 -q -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json: <r2 -2 -q
+    -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/r2_info.json
+cwe_ids:
+- 200
+- 121
+- 122
+owasp_wstg:
+- WSTG-INFO-08
+image: argus-kali-binary:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run radare2_info against target
+  example: sh -c r2 -2 -q -A -c 'iIj;ihj;izj;iEj;ilj' {binary} > {out_dir}/r2_info.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. radare2 (r2) — read-only
+  binary triage. -A runs the auto-analysis pass; the -c command chain emits binary
+  info (iI), header (ih), strings (iz), entrypoints (iE), and library imports (il)
+  as a single J
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

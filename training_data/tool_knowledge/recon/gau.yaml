@@ -1,0 +1,46 @@
+tool_id: gau
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: 'GetAllUrls (gau) fetches archived URLs for {domain} from the Wayback
+  Machine, Common Crawl, OTX AlienVault and URLScan. Threads 5; JSON output (one record
+  per URL). Passive (no traffic to target). Author: lc (https://github.com/lc/gau).
+  Backlog/dev1_md §4.6.'
+command_template:
+- gau
+- --threads
+- '5'
+- --json
+- --o
+- '{out_dir}/gau.json'
+- '{domain}'
+command_string: gau --threads 5 --json --o {out_dir}/gau.json {domain}
+placeholders:
+  out_dir}/gau.json: <out_dir}/gau.json>
+  domain: <domain>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/gau.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-06
+- WSTG-INFO-07
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run gau against target
+  example: gau --threads 5 --json --o {out_dir}/gau.json {domain}
+  output_type: json_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. GetAllUrls (gau) fetches archived
+  URLs for {domain} from the Wayback Machine, Common Crawl, OTX AlienVault and URLScan.
+  Threads 5; JSON output (one record per URL). Passive (no traffic to target). Aut
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

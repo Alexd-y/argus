@@ -1,0 +1,49 @@
+tool_id: scoutsuite
+version: 1.0.0
+phase: vuln_analysis
+category: cloud
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+description: 'ScoutSuite multi-cloud posture scan — sweeps AWS services (IAM, S3,
+  EC2, RDS, CloudFront, CloudTrail, ELB, KMS, etc.) via the default-credentials chain.
+  Emits an HTML+JSON report dir under {out_dir}/scoutsuite. Approval-gated: needs
+  live cloud creds and produces meaningful API noise. recon-passive covers AWS TCP/443
+  endpoints; pin to `cloud-aws` in Cycle 4. Parser deferred to Cycle 3. Author: NCC
+  Group. Backlog §4.15. ARG-018.'
+command_template:
+- scout
+- aws
+- --report-dir
+- '{out_dir}/scoutsuite'
+- --no-browser
+command_string: scout aws --report-dir {out_dir}/scoutsuite --no-browser
+placeholders:
+  out_dir}/scoutsuite: <out_dir}/scoutsuite>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/scoutsuite
+cwe_ids:
+- 16
+- 200
+- 285
+- 732
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run scoutsuite against target
+  example: scout aws --report-dir {out_dir}/scoutsuite --no-browser
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. ScoutSuite multi-cloud
+  posture scan — sweeps AWS services (IAM, S3, EC2, RDS, CloudFront, CloudTrail, ELB,
+  KMS, etc.) via the default-credentials chain. Emits an HTML+JSON report dir under
+  {out_dir}/s
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

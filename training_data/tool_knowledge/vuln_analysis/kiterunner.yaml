@@ -1,0 +1,45 @@
+tool_id: kiterunner
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'kiterunner (kr) API route discovery using Swagger / OpenAPI wordlists.
+  Author: assetnote (https://github.com/assetnote/kiterunner). Backlog/dev1_md §4.5.'
+command_template:
+- kr
+- scan
+- '{url}'
+- -w
+- '{wordlist}'
+- -o
+- '{out_dir}/kr.json'
+command_string: kr scan {url} -w {wordlist} -o {out_dir}/kr.json
+placeholders:
+  url: https://target.example.com
+  wordlist: <wordlist>
+  out_dir}/kr.json: <out_dir}/kr.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/kr.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-CONFIG-04
+- WSTG-CONFIG-06
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run kiterunner against target
+  example: kr scan {url} -w {wordlist} -o {out_dir}/kr.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. kiterunner (kr) API
+  route discovery using Swagger / OpenAPI wordlists. Author: assetnote (https://github.com/assetnote/kiterunner).
+  Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

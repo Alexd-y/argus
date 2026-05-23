@@ -1,0 +1,45 @@
+tool_id: subjs
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: 'subjs extracts JavaScript file URLs referenced by the URLs in `{in_dir}/urls.txt`.
+  Image-side wrapper `subjs-wrapper` translates argv-form (`-i <urls.txt> -out <path>`)
+  to upstream stdin/stdout pipe (`subjs -i <urls.txt> > <path>`) so the sandbox stays
+  argv-only. Author: lc (https://github.com/lc/subjs). Backlog/dev1_md §4.6.'
+command_template:
+- subjs-wrapper
+- -i
+- '{in_dir}/urls.txt'
+- -out
+- '{out_dir}/subjs.txt'
+command_string: subjs-wrapper -i {in_dir}/urls.txt -out {out_dir}/subjs.txt
+placeholders:
+  in_dir}/urls.txt: <in_dir}/urls.txt>
+  out_dir}/subjs.txt: <out_dir}/subjs.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/subjs.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-05
+- WSTG-INFO-06
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run subjs against target
+  example: subjs-wrapper -i {in_dir}/urls.txt -out {out_dir}/subjs.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. subjs extracts JavaScript
+  file URLs referenced by the URLs in `{in_dir}/urls.txt`. Image-side wrapper `subjs-wrapper`
+  translates argv-form (`-i <urls.txt> -out <path>`) to upstream stdin/stdout pipe
+  (
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

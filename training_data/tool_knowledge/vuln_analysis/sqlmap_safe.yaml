@@ -1,0 +1,66 @@
+tool_id: sqlmap_safe
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+description: 'sqlmap conservative passive sweep — boolean+time-based blind only (--technique=BT),
+  level 2 risk 1, --safe-url between probes to avoid lockout. Output dir under {out_dir}/sqlmap
+  parsed by sandbox/parsers/sqlmap_parser.py via TEXT_LINES. Approval-gated (M1 cycle
+  2): even the safe profile generates WAF noise + DB log churn that violates default-deny.
+  Author: sqlmap project. Backlog §4.9. ARG-016.'
+command_template:
+- sqlmap
+- -u
+- '{url}'
+- --batch
+- --level
+- '2'
+- --risk
+- '1'
+- --technique=BT
+- --safe-url={safe}
+- --flush-session
+- --random-agent
+- --timeout=30
+- --retries=2
+- --threads=2
+- --disable-coloring
+- --output-dir={out_dir}/sqlmap
+command_string: sqlmap -u {url} --batch --level 2 --risk 1 --technique=BT --safe-url={safe}
+  --flush-session --random-agent --timeout=30 --retries=2 --threads=2 --disable-coloring
+  --output-dir={out_dir}/sqlmap
+placeholders:
+  url: https://target.example.com
+  --safe-url={safe: <--safe-url={safe>
+  --output-dir={out_dir}/sqlmap: <--output-dir={out_dir}/sqlmap>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/sqlmap
+cwe_ids:
+- 89
+owasp_wstg:
+- WSTG-INPV-05
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Conservative SQL injection testing on URL parameter
+  example: sqlmap -u 'https://target.example.com/page?id=1' --batch --level 2 --risk
+    1 --technique=BT --safe-url=https://target.example.com/ --flush-session --random-agent
+    --timeout=30 --retries=2 --threads=2 --disable-coloring --output-dir=/out/sqlmap
+  output_type: text_lines
+  next_steps:
+  - sqlmap_confirm if injection found
+  - dalfox for XSS on same parameters
+related_tools:
+- sqlmap_confirm
+- ghauri
+- dalfox
+when_to_use: Vulnerability identification and analysis phase. sqlmap conservative
+  passive sweep — boolean+time-based blind only (--technique=BT), level 2 risk 1,
+  --safe-url between probes to avoid lockout. Output dir under {out_dir}/sqlmap parsed
+  by sandbox/pars
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

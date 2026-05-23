@@ -1,0 +1,53 @@
+tool_id: katana
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'ProjectDiscovery katana headless crawler — depth 3, rate-limited 50
+  req/s, JS-aware. Active crawl emits one JSON object per discovered request. Author:
+  ProjectDiscovery (https://github.com/projectdiscovery/katana). Backlog/dev1_md §4.6.'
+command_template:
+- katana
+- -u
+- '{url}'
+- -jc
+- -d
+- '3'
+- -rl
+- '50'
+- -jsonl
+- -output
+- '{out_dir}/katana.jsonl'
+command_string: katana -u {url} -jc -d 3 -rl 50 -jsonl -output {out_dir}/katana.jsonl
+placeholders:
+  url: https://target.example.com
+  out_dir}/katana.jsonl: <out_dir}/katana.jsonl>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/katana.jsonl
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-06
+- WSTG-INFO-07
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Modern web crawler with JS parsing
+  example: katana -u https://target.example.com -d 3 -js-crawl -o /out/katana.txt
+  output_type: text
+  next_steps:
+  - ffuf_dir for directory fuzzing
+  - nuclei for vulnerability scanning
+related_tools:
+- gospider
+- hakrawler
+- nuclei
+when_to_use: 'Information gathering and discovery phase. ProjectDiscovery katana headless
+  crawler — depth 3, rate-limited 50 req/s, JS-aware. Active crawl emits one JSON
+  object per discovered request. Author: ProjectDiscovery (https://github.com/projectdisc'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

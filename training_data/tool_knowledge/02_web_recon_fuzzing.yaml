@@ -1,0 +1,228 @@
+# ARGUS Tool Knowledge Base — Web Reconnaissance & Fuzzing
+category: web_recon
+phase: recon
+tools:
+  - tool_id: subfinder
+    typical_commands:
+      - "subfinder -d example.com -all -silent -oJ"
+      - "subfinder -d example.com -all -silent -oJ | httpx -silent -oJ /out/httpx.json"
+    common_flags:
+      - flag: "-d"
+        description: "Target domain"
+      - flag: "-all"
+        description: "Use all sources for enumeration"
+      - flag: "-silent"
+        description: "Show only subdomains"
+      - flag: "-oJ"
+        description: "JSON output"
+    when_to_use: "Passive subdomain enumeration as first step. Discovers subdomains via OSINT sources without touching the target."
+    key_outputs: ["subdomains"]
+    dependencies: []
+    tips:
+      - "Combine with httpx for live host verification"
+      - "Use -all flag for maximum coverage from all sources"
+      - "Passive only — no DNS queries to target nameservers"
+
+  - tool_id: amass_passive
+    typical_commands:
+      - "amass enum -passive -d example.com -o /out/amass.txt"
+      - "amass enum -passive -d example.com -oJ /out/amass.json"
+    when_to_use: "Comprehensive passive subdomain enumeration. Slower than subfinder but finds more results from deeper OSINT sources."
+    key_outputs: ["subdomains", "dns_records"]
+    dependencies: []
+
+  - tool_id: httpx
+    typical_commands:
+      - "httpx -l /in/subdomains.txt -silent -oJ /out/httpx.json"
+      - "httpx -l /in/subdomains.txt -status-code -title -tech-detect -oJ /out/httpx.json"
+      - "subfinder -d example.com -silent | httpx -silent -oJ /out/httpx.json"
+    common_flags:
+      - flag: "-l"
+        description: "Input file with subdomains/URLs"
+      - flag: "-status-code"
+        description: "Show HTTP status codes"
+      - flag: "-title"
+        description: "Show page titles"
+      - flag: "-tech-detect"
+        description: "Detect web technologies"
+      - flag: "-oJ"
+        description: "JSON output"
+    when_to_use: "Verify live web servers from subdomain lists. Essential for filtering dead subdomains and fingerprinting technologies."
+    key_outputs: ["live_urls", "status_codes", "titles", "technologies"]
+    dependencies: ["subfinder", "amass_passive"]
+    tips:
+      - "Always pipe subfinder/amass output through httpx"
+      - "Use -tech-detect for technology identification"
+      - "Combine with whatweb for deeper fingerprinting"
+
+  - tool_id: whatweb
+    typical_commands:
+      - "whatweb -v https://target.example.com"
+      - "whatweb -i /in/urls.txt -a 3"
+    common_flags:
+      - flag: "-v"
+        description: "Verbose output"
+      - flag: "-a 3"
+        description: "Aggression level 3 (most aggressive)"
+    when_to_use: "Technology fingerprinting for discovered web servers. Identifies CMS, frameworks, server software."
+    key_outputs: ["technologies", "server_info", "frameworks"]
+    dependencies: ["httpx"]
+
+  - tool_id: gospider
+    typical_commands:
+      - "gospider -S /in/urls.txt -d 3 -t 10 -o /out/gospider/"
+      - "gospider -s https://target.example.com -d 2 -t 5 -o /out/gospider/"
+    when_to_use: "Web crawling for URL and endpoint discovery. Finds JavaScript files, API endpoints, and hidden paths."
+    key_outputs: ["urls", "javascript_files", "forms", "api_endpoints"]
+    dependencies: ["httpx"]
+
+  - tool_id: katana
+    typical_commands:
+      - "katana -u https://target.example.com -d 3 -js-crawl -o /out/katana.txt"
+      - "katana -list /in/urls.txt -d 2 -js-crawl -aff -o /out/katana.txt"
+    common_flags:
+      - flag: "-js-crawl"
+        description: "Crawl JavaScript files for endpoints"
+      - flag: "-d 3"
+        description: "Crawl depth 3"
+      - flag: "-aff"
+        description: "Automatic form filling"
+    when_to_use: "Modern web crawler with JS parsing. Better than gospider for single-page applications."
+    key_outputs: ["urls", "js_endpoints", "forms"]
+    dependencies: ["httpx"]
+
+  - tool_id: feroxbuster
+    typical_commands:
+      - "feroxbuster -u https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x html,php,txt -o /out/ferox.json"
+      - "feroxbuster -u https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/common.txt -t 50 -d 2"
+    common_flags:
+      - flag: "-w"
+        description: "Wordlist path"
+      - flag: "-x"
+        description: "File extensions to fuzz"
+      - flag: "-t"
+        description: "Number of threads"
+      - flag: "-d"
+        description: "Directory recursion depth"
+    when_to_use: "Recursive directory brute-forcing. Best for discovering hidden directories and files."
+    key_outputs: ["directories", "files", "status_codes"]
+    dependencies: ["httpx"]
+    tips:
+      - "Use seclists wordlists: raft-medium-directories.txt is a good default"
+      - "Add -x flag for common extensions: php,html,txt,bak,old"
+      - "Lower threads (-t 20) for rate-limited targets"
+
+  - tool_id: ffuf_dir
+    typical_commands:
+      - "ffuf -u https://target.example.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -mc 200,301,302,403 -o /out/ffuf_dir.json"
+      - "ffuf -u https://target.example.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc all -fc 404 -o /out/ffuf_dir.json"
+    common_flags:
+      - flag: "-u"
+        description: "Target URL with FUZZ keyword"
+      - flag: "-w"
+        description: "Wordlist path"
+      - flag: "-mc"
+        description: "Match HTTP status codes"
+      - flag: "-fc"
+        description: "Filter HTTP status codes"
+      - flag: "-o"
+        description: "Output file"
+      - flag: "-recursion"
+        description: "Recursion depth for directory scanning"
+    when_to_use: "Fast directory and file fuzzer. Good for discovering hidden paths, API endpoints, and backup files."
+    key_outputs: ["directories", "files", "status_codes"]
+    dependencies: ["httpx"]
+    tips:
+      - "Use -mc all -fc 404 to match everything except 404"
+      - "Add -recursion 2 for auto-discovered subdirectories"
+      - "Multiple FUZZ positions supported: -u HOST/FUZZ with -w:wordlist and -H 'Host: FUZZ'"
+
+  - tool_id: ffuf_param
+    typical_commands:
+      - "ffuf -u https://target.example.com/page?id=FUZZ -w /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt -mc 200,301,302 -o /out/ffuf_param.json"
+      - "ffuf -u https://target.example.com/api?FUZZ=test -w params.txt -mc 200,500 -o /out/ffuf_param.json"
+    when_to_use: "Parameter fuzzing to discover hidden parameters that may be vulnerable to injection."
+    key_outputs: ["parameters", "responses"]
+    dependencies: ["httpx"]
+
+  - tool_id: ffuf_vhost
+    typical_commands:
+      - "ffuf -u https://target.example.com -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -H 'Host: FUZZ.target.example.com' -mc 200,301 -o /out/ffuf_vhost.json"
+    when_to_use: "Virtual host discovery. Finds subdomains that resolve to the same IP."
+    key_outputs: ["vhosts", "subdomains"]
+    dependencies: ["httpx"]
+
+  - tool_id: gobuster_dir
+    typical_commands:
+      - "gobuster dir -u https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,html,txt -o /out/gobuster_dir.txt"
+    when_to_use: "Alternative directory brute-forcer. Simpler output than ffuf, good for straightforward scans."
+    key_outputs: ["directories", "files"]
+    dependencies: ["httpx"]
+
+  - tool_id: paramspider
+    typical_commands:
+      - "paramspider -d example.com -o /out/params.txt"
+      - "paramspider -d example.com -l high -o /out/params.txt"
+    when_to_use: "Parameter mining from wayback/gau data. Finds parameters that may be vulnerable to injection attacks."
+    key_outputs: ["parameters", "urls_with_params"]
+    dependencies: []
+
+  - tool_id: arjun
+    typical_commands:
+      - "arjun -u https://target.example.com/page -o /out/arjun.json"
+      - "arjun -i /in/urls.txt -o /out/arjun.json"
+    when_to_use: "Hidden parameter discovery. Tests each parameter individually to find ones that elicit different responses."
+    key_outputs: ["hidden_parameters"]
+    dependencies: ["httpx"]
+
+  - tool_id: gau
+    typical_commands:
+      - "gau --subs example.com -o /out/gau_urls.txt"
+      - "cat /in/subdomains.txt | gau -o /out/gau_urls.txt"
+    when_to_use: "URL discovery from historical archives (Wayback, CommonCrawl, etc.)."
+    key_outputs: ["historical_urls"]
+    dependencies: ["subfinder"]
+
+  - tool_id: waybackurls
+    typical_commands:
+      - "waybackurls example.com | sort -u > /out/wayback_urls.txt"
+    when_to_use: "Simple URL harvesting from Wayback Machine."
+    key_outputs: ["historical_urls"]
+    dependencies: []
+
+  - tool_id: nikto
+    typical_commands:
+      - "nikto -h https://target.example.com -o /out/nikto.html -Format htm"
+      - "nikto -h https://target.example.com -Tuning 12345 -o /out/nikto.txt"
+    common_flags:
+      - flag: "-Tuning 12345"
+        description: "Select specific test categories"
+      - flag: "-Format"
+        description: "Output format (htm, txt, csv, xml)"
+    when_to_use: "Web server vulnerability scanner. Good for finding misconfigurations, outdated software, default files."
+    key_outputs: ["server_misconfigs", "default_files", "outdated_software"]
+    dependencies: ["httpx"]
+    tips:
+      - "Very noisy — will trigger WAF/IPS in production"
+      - "Use -Tuning to select specific test categories"
+      - "Better for quick server health checks than deep vuln scanning"
+
+  - tool_id: nuclei
+    typical_commands:
+      - "nuclei -u https://target.example.com -t cves/ -t vulnerabilities/ -o /out/nuclei.txt"
+      - "nuclei -l /in/urls.txt -t cves/ -severity critical,high -o /out/nuclei.txt"
+      - "nuclei -u https://target.example.com -t http/ -o /out/nuclei.txt"
+    common_flags:
+      - flag: "-t"
+        description: "Template tags/directories"
+      - flag: "-severity critical,high"
+        description: "Filter by severity"
+      - flag: "-o"
+        description: "Output file"
+    when_to_use: "Template-based vulnerability scanning. Massive community template library. Good for CVE detection, misconfigs, exposed panels."
+    key_outputs: ["vulnerabilities", "cve_ids", "misconfigurations"]
+    dependencies: ["httpx"]
+    tips:
+      - "Huge template library — use -t to select categories"
+      - "Prioritize -t cves/ -severity critical,high for quick assessments"
+      - "Custom templates can be written for proprietary applications"

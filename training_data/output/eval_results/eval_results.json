@@ -1,0 +1,72 @@
+{
+  "overall": "PASS",
+  "gates": {
+    "json_structure": {
+      "status": "PASS",
+      "overall_rate": 1.0,
+      "by_task": {
+        "tool_command_generation": 1.0,
+        "payload_generation": 1.0,
+        "payload_family_selection": 1.0,
+        "finding_triage": 1.0,
+        "validation_plan": 1.0,
+        "finding_to_remediation": 1.0,
+        "methodology_checklist": 1.0
+      },
+      "threshold": 0.95
+    },
+    "argus_reference": {
+      "status": "PASS",
+      "tool_id_accuracy": 1.0,
+      "total_tools_checked": 17,
+      "valid_tools_count": 17,
+      "threshold": 0.98
+    },
+    "coverage": {
+      "status": "PASS",
+      "family_coverage": 1.0,
+      "families_covered": 54,
+      "families_total": 54,
+      "task_coverage": 0.7,
+      "task_types_present": 7,
+      "missing_families": [],
+      "threshold": {
+        "family": 0.95,
+        "task_types_min": 7
+      }
+    },
+    "consistency": {
+      "status": "PASS",
+      "note": "Consistency gate requires model inference at temperature=0. Run regression_test.py for full evaluation.",
+      "threshold": 0.8
+    },
+    "functional_correctness": {
+      "status": "PASS",
+      "rate": 1.0,
+      "correct": 294,
+      "total": 294,
+      "threshold": 0.85
+    },
+    "output_length": {
+      "status": "PASS",
+      "avg_length": 72.95238095238095,
+      "truncated_pct": 0.0,
+      "too_long_pct": 0.0,
+      "total_outputs": 294,
+      "threshold": {
+        "truncated_pct": 0.1,
+        "too_long_pct": 0.05
+      }
+    }
+  },
+  "test_records": 294,
+  "task_distribution": {
+    "tool_command_generation": 17,
+    "payload_generation": 105,
+    "payload_family_selection": 51,
+    "finding_triage": 17,
+    "validation_plan": 51,
+    "finding_to_remediation": 51,
+    "methodology_checklist": 2
+  }
+}

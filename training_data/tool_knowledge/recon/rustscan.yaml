@@ -1,0 +1,39 @@
+tool_id: rustscan
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: RustScan fast port-discovery handing results to nmap -sC -sV for service
+  fingerprinting. Backlog/dev1_md §4.2.
+command_template:
+- sh
+- -c
+- rustscan -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml
+command_string: sh -c rustscan -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml
+placeholders:
+  rustscan -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml: <rustscan
+    -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml>
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/rustscan.xml
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run rustscan against target
+  example: sh -c rustscan -a {ip} --ulimit 5000 -- -sC -sV -oX {out_dir}/rustscan.xml
+  output_type: xml_nmap
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. RustScan fast port-discovery
+  handing results to nmap -sC -sV for service fingerprinting. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

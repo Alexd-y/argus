@@ -1,0 +1,50 @@
+tool_id: redis_cli_probe
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+description: redis-cli probe — INFO + CONFIG GET against an unauthenticated Redis
+  instance at {host}:{port}. Read-only commands only (no FLUSHALL / SLAVEOF / DEBUG);
+  surfaces version banner and the dangerous-by-default CONFIG keys (dir / dbfilename
+  / requirepass) that enable §4.15 module-load RCE on unprotected instances. Output
+  text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019.
+command_template:
+- sh
+- -c
+- redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt && redis-cli -h {host}
+  -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt
+command_string: sh -c redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt
+  && redis-cli -h {host} -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt
+placeholders:
+  ? redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt && redis-cli -h
+    {host} -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt
+  : <redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt && redis-cli -h
+    {host} -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/redis_info.txt
+cwe_ids:
+- 200
+- 287
+- 521
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-ATHN-04
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run redis_cli_probe against target
+  example: sh -c redis-cli -h {host} -p {port} INFO > {out_dir}/redis_info.txt &&
+    redis-cli -h {host} -p {port} CONFIG GET '*' >> {out_dir}/redis_info.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. redis-cli probe — INFO + CONFIG
+  GET against an unauthenticated Redis instance at {host}:{port}. Read-only commands
+  only (no FLUSHALL / SLAVEOF / DEBUG); surfaces version banner and the dangerous-by-de
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

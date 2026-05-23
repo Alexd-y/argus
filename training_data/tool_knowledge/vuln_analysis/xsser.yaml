@@ -1,0 +1,49 @@
+tool_id: xsser
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'xsser OWASP Cross-Site Scripter — runs --auto mode (default vector chain)
+  against {url} with JSON report emitted to {out_dir}/xsser.json. Approval-free passive
+  payload tester (no auto-RCE / DOM-write side effects). Parsing deferred to Cycle
+  3 (JSON_OBJECT strategy → parsers.dispatch.unmapped_tool warning until then). Author:
+  epsylon (https://github.com/epsylon/xsser). Backlog/dev1_md §4.10. ARG-016.'
+command_template:
+- xsser
+- -u
+- '{url}'
+- --auto
+- --no-color
+- --Json
+- '{out_dir}/xsser.json'
+command_string: xsser -u {url} --auto --no-color --Json {out_dir}/xsser.json
+placeholders:
+  url: https://target.example.com
+  out_dir}/xsser.json: <out_dir}/xsser.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/xsser.json
+cwe_ids:
+- 79
+- 80
+owasp_wstg:
+- WSTG-INPV-01
+- WSTG-INPV-02
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run xsser against target
+  example: xsser -u {url} --auto --no-color --Json {out_dir}/xsser.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. xsser OWASP Cross-Site
+  Scripter — runs --auto mode (default vector chain) against {url} with JSON report
+  emitted to {out_dir}/xsser.json. Approval-free passive payload tester (no auto-RCE
+  / DOM-write '
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

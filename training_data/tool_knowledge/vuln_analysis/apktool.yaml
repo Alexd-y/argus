@@ -1,0 +1,45 @@
+tool_id: apktool
+version: 1.0.0
+phase: vuln_analysis
+category: binary
+risk_level: low
+requires_approval: false
+default_timeout_s: 900
+description: Apktool — Android APK reverse-engineering. Decompiles {binary} into smali
+  + AndroidManifest.xml + resources tree at /out/apktool/. -f overwrites stale extraction;
+  the resulting smali tree is the input for §4.18 jadx (full Java decompile) and any
+  operator-driven dynamic dataset. Pure offline (egress blocked). Output text-only
+  (parser deferred to Cycle 3). Backlog/dev1_md §4.18. ARG-019.
+command_template:
+- sh
+- -c
+- apktool d -f -o {out_dir}/apktool {binary} 2>&1 | tee {out_dir}/apktool.log
+command_string: sh -c apktool d -f -o {out_dir}/apktool {binary} 2>&1 | tee {out_dir}/apktool.log
+placeholders:
+  apktool d -f -o {out_dir}/apktool {binary} 2>&1 | tee {out_dir}/apktool.log: <apktool
+    d -f -o {out_dir}/apktool {binary} 2>&1 | tee {out_dir}/apktool.log>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/apktool.log
+- /out/apktool
+cwe_ids:
+- 200
+- 312
+owasp_wstg:
+- WSTG-INFO-08
+image: argus-kali-binary:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run apktool against target
+  example: sh -c apktool d -f -o {out_dir}/apktool {binary} 2>&1 | tee {out_dir}/apktool.log
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Apktool — Android APK
+  reverse-engineering. Decompiles {binary} into smali + AndroidManifest.xml + resources
+  tree at /out/apktool/. -f overwrites stale extraction; the resulting smali tree
+  is the input
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

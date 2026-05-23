@@ -1,0 +1,49 @@
+tool_id: urlscan
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: urlscan.io passive submission of the target URL; rendered DOM/screens
+  fetched out-of-band by orchestrator. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- 'curl -sS --fail-with-body --max-time 60 -H "API-Key: ${URLSCAN_API_KEY:?missing}"
+  -H ''Content-Type: application/json'' -X POST ''https://urlscan.io/api/v1/scan/''
+  -d ''{"url":"{url}","visibility":"unlisted"}'' -o {out_dir}/urlscan.json'
+command_string: 'sh -c curl -sS --fail-with-body --max-time 60 -H "API-Key: ${URLSCAN_API_KEY:?missing}"
+  -H ''Content-Type: application/json'' -X POST ''https://urlscan.io/api/v1/scan/''
+  -d ''{"url":"{url}","visibility":"unlisted"}'' -o {out_dir}/urlscan.json'
+placeholders:
+  ? 'curl -sS --fail-with-body --max-time 60 -H "API-Key: ${URLSCAN_API_KEY:?missing}"
+    -H ''Content-Type: application/json'' -X POST ''https://urlscan.io/api/v1/scan/''
+    -d ''{"url":"{url}","visibility":"unlisted"}'' -o {out_dir}/urlscan.json'
+  : '<curl -sS --fail-with-body --max-time 60 -H "API-Key: ${URLSCAN_API_KEY:?missing}"
+    -H ''Content-Type: application/json'' -X POST ''https://urlscan.io/api/v1/scan/''
+    -d ''{"url":"{url}","visibility":"unlisted"}'' -o {out_dir}/urlscan.json>'
+output_format: custom
+evidence_artifacts: &id001
+- /out/urlscan.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-INFO-10
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run urlscan against target
+  example: 'sh -c curl -sS --fail-with-body --max-time 60 -H "API-Key: ${URLSCAN_API_KEY:?missing}"
+    -H ''Content-Type: application/json'' -X POST ''https://urlscan.io/api/v1/scan/''
+    -d ''{"url":"{url}","visibility":"unlisted"}'' -o {out_dir}/urlscan.json'
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. urlscan.io passive submission
+  of the target URL; rendered DOM/screens fetched out-of-band by orchestrator. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

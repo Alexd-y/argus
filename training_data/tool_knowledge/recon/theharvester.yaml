@@ -1,0 +1,43 @@
+tool_id: theharvester
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+description: theHarvester OSINT collection (emails, hosts, IPs) across all configured
+  passive sources. Backlog/dev1_md §4.1.
+command_template:
+- theHarvester
+- -d
+- '{domain}'
+- -b
+- all
+- -f
+- '{out_dir}/theharvester.json'
+command_string: theHarvester -d {domain} -b all -f {out_dir}/theharvester.json
+placeholders:
+  domain: <domain>
+  out_dir}/theharvester.json: <out_dir}/theharvester.json>
+output_format: custom
+evidence_artifacts: &id001
+- /out/theharvester.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-02
+- WSTG-INFO-03
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run theharvester against target
+  example: theHarvester -d {domain} -b all -f {out_dir}/theharvester.json
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. theHarvester OSINT collection
+  (emails, hosts, IPs) across all configured passive sources. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

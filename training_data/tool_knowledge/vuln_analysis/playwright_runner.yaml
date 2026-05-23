@@ -1,0 +1,47 @@
+tool_id: playwright_runner
+version: 1.0.0
+phase: vuln_analysis
+category: browser
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+description: 'Generic headless Playwright runner — executes the operator-supplied
+  {script} (TypeScript scenario file under /in/) against {url}. Approval-gated (medium
+  risk): {script} can drive arbitrary state-changing browser actions (form submissions,
+  OAuth consent, DOM mutations, uploads, session capture). Captures DOM/console/requests/screens/HAR
+  into /out/playwright/. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019
+  + cycle-2 reviewer H1 fix.'
+command_template:
+- sh
+- -c
+- playwright-runner --script {script} --url {url} --output {out_dir}/playwright
+command_string: sh -c playwright-runner --script {script} --url {url} --output {out_dir}/playwright
+placeholders:
+  playwright-runner --script {script} --url {url} --output {out_dir}/playwright: <playwright-runner
+    --script {script} --url {url} --output {out_dir}/playwright>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/playwright
+cwe_ids:
+- 79
+- 200
+- 1021
+owasp_wstg:
+- WSTG-CLNT-01
+- WSTG-CLNT-09
+image: argus-kali-browser:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run playwright_runner against target
+  example: sh -c playwright-runner --script {script} --url {url} --output {out_dir}/playwright
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. Generic headless Playwright
+  runner — executes the operator-supplied {script} (TypeScript scenario file under
+  /in/) against {url}. Approval-gated (medium risk): {script} can drive arbitrary
+  state-chang'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

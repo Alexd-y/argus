@@ -1,0 +1,48 @@
+tool_id: amass_passive
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1200
+description: OWASP Amass passive subdomain enumeration via OSINT only; never queries
+  the target's authoritative DNS. Backlog/dev1_md §4.1.
+command_template:
+- amass
+- enum
+- -passive
+- -d
+- '{domain}'
+- -json
+- '{out_dir}/amass.jsonl'
+- -timeout
+- '20'
+command_string: amass enum -passive -d {domain} -json {out_dir}/amass.jsonl -timeout
+  20
+placeholders:
+  domain: <domain>
+  out_dir}/amass.jsonl: <out_dir}/amass.jsonl>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/amass.jsonl
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-09
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Deep passive subdomain enumeration
+  example: amass enum -passive -d example.com -oJ /out/amass.json
+  output_type: json_lines
+  next_steps:
+  - httpx for live host verification
+related_tools:
+- subfinder
+- httpx
+when_to_use: Information gathering and discovery phase. OWASP Amass passive subdomain
+  enumeration via OSINT only; never queries the target's authoritative DNS. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

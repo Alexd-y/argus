@@ -1,0 +1,37 @@
+tool_id: assetfinder
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: tomnomnom assetfinder passive subdomain discovery; one subdomain per
+  line. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- assetfinder --subs-only {domain} > {out_dir}/assetfinder.txt
+command_string: sh -c assetfinder --subs-only {domain} > {out_dir}/assetfinder.txt
+placeholders:
+  assetfinder --subs-only {domain} > {out_dir}/assetfinder.txt: <assetfinder --subs-only
+    {domain} > {out_dir}/assetfinder.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/assetfinder.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run assetfinder against target
+  example: sh -c assetfinder --subs-only {domain} > {out_dir}/assetfinder.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. tomnomnom assetfinder passive
+  subdomain discovery; one subdomain per line. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

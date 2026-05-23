@@ -1,0 +1,46 @@
+tool_id: cors_probe
+version: 1.0.0
+phase: vuln_analysis
+category: browser
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: CORS misconfiguration probe — fires a curated Origin-header matrix at
+  {url} (null, attacker.tld, sub.attacker.tld, evil.{host}) and observes Access-Control-Allow-Origin
+  / Access-Control-Allow-Credentials reflections. Categorises the response into reflected
+  / wildcard-with-creds / null-origin / pre-flight-bypass buckets. No actual cross-origin
+  call is performed — pure header probe. Parser deferred to Cycle 3. Backlog/dev1_md
+  §4.19. ARG-019.
+command_template:
+- sh
+- -c
+- cors-probe --url {url} --output {out_dir}/cors.json
+command_string: sh -c cors-probe --url {url} --output {out_dir}/cors.json
+placeholders:
+  cors-probe --url {url} --output {out_dir}/cors.json: <cors-probe --url {url} --output
+    {out_dir}/cors.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/cors.json
+cwe_ids:
+- 942
+- 346
+- 200
+owasp_wstg:
+- WSTG-CLNT-07
+- WSTG-ATHN-04
+image: argus-kali-browser:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run cors_probe against target
+  example: sh -c cors-probe --url {url} --output {out_dir}/cors.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. CORS misconfiguration
+  probe — fires a curated Origin-header matrix at {url} (null, attacker.tld, sub.attacker.tld,
+  evil.{host}) and observes Access-Control-Allow-Origin / Access-Control-Allow-Credenti
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

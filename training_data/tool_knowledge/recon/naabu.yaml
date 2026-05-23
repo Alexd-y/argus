@@ -1,0 +1,44 @@
+tool_id: naabu
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+description: ProjectDiscovery naabu full-range TCP SYN port scan emitting JSONL one
+  entry per open port. Backlog/dev1_md §4.2.
+command_template:
+- naabu
+- -host
+- '{ip}'
+- -p
+- '-'
+- -json
+- -o
+- '{out_dir}/naabu.json'
+command_string: naabu -host {ip} -p - -json -o {out_dir}/naabu.json
+placeholders:
+  ip: 10.10.1.100
+  out_dir}/naabu.json: <out_dir}/naabu.json>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/naabu.json
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run naabu against target
+  example: naabu -host {ip} -p - -json -o {out_dir}/naabu.json
+  output_type: json_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. ProjectDiscovery naabu full-range
+  TCP SYN port scan emitting JSONL one entry per open port. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

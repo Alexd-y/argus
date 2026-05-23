@@ -1,0 +1,55 @@
+tool_id: feroxbuster
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'feroxbuster recursive directory / file content discovery, JSON output.
+  Author: epi052 (https://github.com/epi052/feroxbuster). Backlog/dev1_md §4.5.'
+command_template:
+- feroxbuster
+- -u
+- '{url}'
+- -w
+- '{wordlist}'
+- -d
+- '3'
+- -x
+- php,aspx,js,txt
+- --json
+- -o
+- '{out_dir}/ferox.json'
+command_string: feroxbuster -u {url} -w {wordlist} -d 3 -x php,aspx,js,txt --json
+  -o {out_dir}/ferox.json
+placeholders:
+  url: https://target.example.com
+  wordlist: <wordlist>
+  out_dir}/ferox.json: <out_dir}/ferox.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/ferox.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-CONFIG-04
+- WSTG-CONFIG-06
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Recursive directory brute-forcing
+  example: feroxbuster -u https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+    -x html,php,txt -o /out/ferox.json
+  output_type: json
+  next_steps:
+  - ffuf_param for parameter fuzzing
+related_tools:
+- ffuf_dir
+- ffuf_param
+- gobuster_dir
+when_to_use: 'Vulnerability identification and analysis phase. feroxbuster recursive
+  directory / file content discovery, JSON output. Author: epi052 (https://github.com/epi052/feroxbuster).
+  Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,61 @@
+tool_id: nikto
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: 'Nikto2 web server scanner — broad checks for ~7000 dangerous files,
+  outdated versions, server misconfigurations. JSON output via -Format json. -Tuning
+  string requests every check class except module-specific ones. -maxtime caps wall-clock
+  to fit 30 min sandbox window. Author: Chris Sullo / David Lodge (https://github.com/sullo/nikto).
+  Backlog/dev1_md §4.8.'
+command_template:
+- nikto
+- -host
+- '{url}'
+- -Format
+- json
+- -output
+- '{out_dir}/nikto.json'
+- -ask
+- 'no'
+- -nointeractive
+- -Tuning
+- 1234567890abcde
+- -maxtime
+- 1500s
+command_string: nikto -host {url} -Format json -output {out_dir}/nikto.json -ask no
+  -nointeractive -Tuning 1234567890abcde -maxtime 1500s
+placeholders:
+  url: https://target.example.com
+  out_dir}/nikto.json: <out_dir}/nikto.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/nikto.json
+cwe_ids:
+- 16
+- 200
+- 933
+owasp_wstg:
+- WSTG-CONF-01
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Web server vulnerability scan
+  example: nikto -h https://target.example.com -o /out/nikto.html -Format htm
+  output_type: html
+  next_steps:
+  - nuclei for deeper vulnerability scanning
+related_tools:
+- nuclei
+- sslscan
+- testssl
+when_to_use: Vulnerability identification and analysis phase. Nikto2 web server scanner
+  — broad checks for ~7000 dangerous files, outdated versions, server misconfigurations.
+  JSON output via -Format json. -Tuning string requests every check class except module-s
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

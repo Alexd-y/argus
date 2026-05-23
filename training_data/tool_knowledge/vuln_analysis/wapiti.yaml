@@ -1,0 +1,65 @@
+tool_id: wapiti
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: 'Wapiti3 black-box web vulnerability scanner — crawls and audits {url}
+  for XSS, SQLi, command injection, path traversal, file inclusion, CSRF, XXE. -m
+  all enables every audit module; --flush-session ensures a clean per-run state; --max-scan-time
+  fits 30 min sandbox window. Author: Nicolas Surribas / Wapiti team (https://github.com/wapiti-scanner/wapiti).
+  Backlog/dev1_md §4.8.'
+command_template:
+- wapiti
+- -u
+- '{url}'
+- -f
+- json
+- -o
+- '{out_dir}/wapiti.json'
+- --flush-session
+- --scope
+- domain
+- --max-scan-time
+- '1500'
+- --verify-ssl
+- '0'
+- -m
+- all
+command_string: wapiti -u {url} -f json -o {out_dir}/wapiti.json --flush-session --scope
+  domain --max-scan-time 1500 --verify-ssl 0 -m all
+placeholders:
+  url: https://target.example.com
+  out_dir}/wapiti.json: <out_dir}/wapiti.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/wapiti.json
+cwe_ids:
+- 79
+- 89
+- 22
+- 78
+- 200
+owasp_wstg:
+- WSTG-INPV-01
+- WSTG-INPV-05
+- WSTG-INPV-12
+- WSTG-AUTHZ-01
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run wapiti against target
+  example: wapiti -u {url} -f json -o {out_dir}/wapiti.json --flush-session --scope
+    domain --max-scan-time 1500 --verify-ssl 0 -m all
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Wapiti3 black-box web
+  vulnerability scanner — crawls and audits {url} for XSS, SQLi, command injection,
+  path traversal, file inclusion, CSRF, XXE. -m all enables every audit module; --flush-session
+  en
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

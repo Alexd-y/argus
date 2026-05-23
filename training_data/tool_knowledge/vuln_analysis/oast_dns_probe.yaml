@@ -1,0 +1,43 @@
+tool_id: oast_dns_probe
+version: 1.0.0
+phase: vuln_analysis
+category: oast
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: Out-of-band DNS probe — fires a unique {rand}.oast.argus.local query
+  so the OAST plane records the resolver chain that issued it. Used as a hot-path
+  canary check before launching SSRF / blind-RCE campaigns; the {rand} token is later
+  correlated against interactsh callbacks via sandbox/parsers/interactsh_parser.py.
+  Backlog/dev1_md §4.11. ARG-017.
+command_template:
+- sh
+- -c
+- dig +short +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt
+command_string: sh -c dig +short +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt
+placeholders:
+  dig +short +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt: <dig +short
+    +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/oast_dns.txt
+cwe_ids:
+- 918
+owasp_wstg:
+- WSTG-INPV-19
+image: argus-kali-web:latest
+network_policy_name: oast-egress
+scenarios:
+- description: Run oast_dns_probe against target
+  example: sh -c dig +short +time=5 {rand}.oast.argus.local > {out_dir}/oast_dns.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Out-of-band DNS probe
+  — fires a unique {rand}.oast.argus.local query so the OAST plane records the resolver
+  chain that issued it. Used as a hot-path canary check before launching SSRF / blind-RCE
+  camp
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

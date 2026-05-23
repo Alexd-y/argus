@@ -1,0 +1,147 @@
+# ARGUS Tool Scenarios — Enrichment for Tool Knowledge Base
+# Supplements tool_knowledge/ YAML files with scenarios, next_steps, and related_tools
+# Required by TRN-005 plan specification
+
+version: "1.0.0"
+created: "2026-05-23"
+
+tools:
+  # ===== RECON =====
+  - tool_id: nmap_tcp_top
+    scenarios:
+      - description: "Quick port discovery on a single host"
+        example: "nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 10.0.0.1"
+        output_type: "xml_nmap"
+        next_steps: ["nmap_version on discovered ports", "nmap_udp for UDP services"]
+      - description: "Scan a subnet for live hosts and open ports"
+        example: "nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 10.0.0.0/24"
+        output_type: "xml_nmap"
+        next_steps: ["httpx on live hosts", "nmap_version on interesting ports"]
+      - description: "Quick top-100 port scan for speed"
+        example: "nmap -sS -Pn -T4 --top-ports 100 -oX /out/nmap_quick.xml 10.0.0.1"
+        output_type: "xml_nmap"
+        next_steps: ["nmap_tcp_full on discovered hosts"]
+    related_tools: [nmap_tcp_full, nmap_udp, nmap_version, naabu, masscan]
+
+  - tool_id: subfinder
+    scenarios:
+      - description: "Passive subdomain enumeration for a domain"
+        example: "subfinder -d example.com -all -silent -oJ | httpx -silent -oJ /out/httpx.json"
+        output_type: "json_lines"
+        next_steps: ["httpx for live host verification", "katana for web crawling"]
+      - description: "Subdomain enumeration piped to httpx"
+        example: "subfinder -d target.com -all -silent | httpx -silent -title -tech-detect -oJ /out/httpx.json"
+        output_type: "json_lines"
+        next_steps: ["ffuf_dir for directory fuzzing", "nuclei for vulnerability scanning"]
+    related_tools: [amass_passive, httpx, katana, gospider, crt_sh]
+
+  - tool_id: httpx
+    scenarios:
+      - description: "HTTP fingerprinting of subdomains from subfinder"
+        example: "subfinder -d example.com -silent | httpx -silent -title -tech-detect -status-code -oJ /out/httpx.json"
+        output_type: "json_lines"
+        next_steps: ["nuclei for vulnerability scanning", "whatweb for deeper tech detection"]
+      - description: "Probe a list of URLs for live web servers"
+        example: "httpx -l /in/subdomains.txt -status-code -title -tech-detect -oJ /out/httpx.json"
+        output_type: "json_lines"
+        next_steps: ["ffuf_dir for directory fuzzing", "nuclei for vulnerability scanning"]
+    related_tools: [subfinder, amass_passive, whatweb, nuclei]
+
+  - tool_id: ffuf_dir
+    scenarios:
+      - description: "Directory fuzzing with common extensions"
+        example: "ffuf -u https://target.example.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,html,txt -mc 200,301,302,403 -o /out/ffuf_dir.json"
+        output_type: "json"
+        next_steps: ["paramspider for parameter discovery", "dalfox for XSS testing"]
+      - description: "API endpoint discovery"
+        example: "ffuf -u https://api.target.example.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -mc 200,201,401,403 -o /out/ffuf_api.json"
+        output_type: "json"
+        next_steps: ["arjun for parameter discovery", "graphql_cop for GraphQL testing"]
+    related_tools: [feroxbuster, gobuster_dir, dirsearch, paramspider, arjun]
+
+  - tool_id: nuclei
+    scenarios:
+      - description: "Scan for known CVEs and misconfigurations"
+        example: "nuclei -u https://target.example.com -t cves/ -t vulnerabilities/ -severity critical,high,medium -o /out/nuclei.txt"
+        output_type: "text"
+        next_steps: ["dalfox for XSS testing", "sqlmap_safe for SQL injection testing"]
+      - description: "Scan multiple URLs from httpx output"
+        example: "nuclei -l /in/urls.txt -t http/ -severity critical,high -o /out/nuclei.txt"
+        output_type: "text"
+        next_steps: ["Tool-specific validation based on discovered findings"]
+    related_tools: [dalfox, sqlmap_safe, nikto, nuclei]
+
+  # ===== VA =====
+  - tool_id: sqlmap_safe
+    scenarios:
+      - description: "Test a GET parameter for SQL injection (safe mode)"
+        example: "sqlmap -u 'https://target.example.com/page?id=1' --batch --level 2 --risk 1 --technique=BT --safe-url=https://target.example.com/ --flush-session --random-agent --timeout=30 --retries=2 --threads=2 --disable-coloring --output-dir=/out/sqlmap"
+        output_type: "text_lines"
+        next_steps: ["sqlmap_confirm if injection found", "dalfox for XSS on same parameters"]
+      - description: "Test a POST form for SQL injection"
+        example: "sqlmap -u 'https://target.example.com/login' --data='user=admin&pass=test' --batch --level 2 --risk 1 --technique=BT --flush-session"
+        output_type: "text_lines"
+        next_steps: ["sqlmap_confirm for data extraction", "hydra for credential bruteforce if no SQLi"]
+    related_tools: [sqlmap_confirm, ghauri, dalfox, nosqlmap]
+
+  - tool_id: dalfox
+    scenarios:
+      - description: "XSS scanning with OAST callback for verification"
+        example: "dalfox url https://target.example.com/search?q=test --mining-dom --mining-dict --deep-domxss --skip-bav --no-color --format json --output /out/dalfox.json --worker 10 --timeout 10"
+        output_type: "json"
+        next_steps: ["playwright_xss_verify for browser-based confirmation", "nuclei for additional findings"]
+      - description: "Blind XSS testing with callback URL"
+        example: "dalfox url https://target.example.com/profile --blind https://oast.argus.local --format json --output /out/dalfox_blind.json"
+        output_type: "json"
+        next_steps: ["Check OAST callback logs for confirmation"]
+    related_tools: [xsstrike, xsser, playwright_xss_verify, nuclei]
+
+  # ===== EXPLOITATION =====
+  - tool_id: hydra
+    scenarios:
+      - description: "SSH credential bruteforce"
+        example: "hydra -L /in/users.txt -P /in/pass.txt -t 4 -I -f -o /out/hydra.txt ssh://10.10.1.100"
+        output_type: "text"
+        next_steps: ["evil_winrm if SSH succeeds", "crackmapexec for SMB access"]
+      - description: "HTTP POST form bruteforce"
+        example: "hydra -l admin -P /in/pass.txt -t 4 -I -f http-post-form://target.example.com:443/login:user=^USER^&pass=^PASS^:F=incorrect -o /out/hydra.txt"
+        output_type: "text"
+        next_steps: ["nuclei for session management testing", "jwt_tool for token analysis"]
+    related_tools: [medusa, ncrack, crackmapexec]
+
+  - tool_id: crackmapexec
+    scenarios:
+      - description: "SMB credential validation across network"
+        example: "crackmapexec smb 10.10.1.0/24 -u /in/users.txt -p /in/pass.txt --continue-on-success"
+        output_type: "text"
+        next_steps: ["smbmap for share enumeration", "bloodhound_python for AD analysis"]
+      - description: "SMB share enumeration with valid credentials"
+        example: "crackmapexec smb 10.10.1.100 -u admin -p password123 --shares"
+        output_type: "text"
+        next_steps: ["smbclient for file access", "impacket_secretsdump for credential extraction"]
+    related_tools: [smbmap, smbclient, evil_winrm, bloodhound_python]
+
+  # ===== POST-EXPLOITATION =====
+  - tool_id: hashcat
+    scenarios:
+      - description: "Crack NTLM hashes from credential dump"
+        example: "hashcat -m 1000 /in/ntlm_hashes.txt /usr/share/seclists/Passwords/rockyou.txt"
+        output_type: "text"
+        next_steps: ["crackmapexec for credential validation across network", "impacket_secretsdump for more hashes"]
+      - description: "Crack MD5 hashes with rules"
+        example: "hashcat -m 0 /in/hashes.txt /in/wordlist.txt -r /usr/share/hashcat/rules/best64.rule"
+        output_type: "text"
+        next_steps: ["hydra for credential reuse on services"]
+    related_tools: [john, hashid, hash_analyzer, crackmapexec]
+
+  - tool_id: bloodhound_python
+    scenarios:
+      - description: "Collect AD data for attack path analysis"
+        example: "bloodhound-python -d domain.local -u admin -p password123 -ns 10.10.1.100 -c All"
+        output_type: "json"
+        next_steps: ["ldapsearch for detailed user enumeration", "crackmapexec for credential validation"]
+      - description: "Collection of specific data categories"
+        example: "bloodhound-python -d domain.local -u admin -p password123 -ns 10.10.1.100 -c Group,LocalAdmins,Session"
+        output_type: "json"
+        next_steps: ["Identify shortest paths to Domain Admin in BloodHound GUI"]
+    related_tools: [ldapsearch, crackmapexec, kerbrute, impacket_examples]

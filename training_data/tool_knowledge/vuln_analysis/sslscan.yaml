@@ -1,0 +1,44 @@
+tool_id: sslscan
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: sslscan enumerates supported TLS/SSL ciphers and protocol versions, emitting
+  XML for downstream parsers. Backlog/dev1_md §4.3.
+command_template:
+- sslscan
+- --xml={out_dir}/sslscan.xml
+- '{host}:{port}'
+command_string: sslscan --xml={out_dir}/sslscan.xml {host}:{port}
+placeholders:
+  --xml={out_dir}/sslscan.xml: <--xml={out_dir}/sslscan.xml>
+  host}:{port: <host}:{port>
+output_format: xml_generic
+evidence_artifacts: &id001
+- /out/sslscan.xml
+cwe_ids:
+- 326
+- 327
+owasp_wstg:
+- WSTG-CRYP-01
+- WSTG-CRYP-02
+image: argus-kali-web:latest
+network_policy_name: tls-handshake
+scenarios:
+- description: SSL/TLS cipher and certificate analysis
+  example: sslscan target.example.com
+  output_type: text
+  next_steps:
+  - testssl for comprehensive TLS testing
+related_tools:
+- testssl
+- tlsx
+- jarm
+when_to_use: Vulnerability identification and analysis phase. sslscan enumerates supported
+  TLS/SSL ciphers and protocol versions, emitting XML for downstream parsers. Backlog/dev1_md
+  §4.3.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

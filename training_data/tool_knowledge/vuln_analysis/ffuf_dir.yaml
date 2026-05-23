@@ -1,0 +1,59 @@
+tool_id: ffuf_dir
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'ffuf directory / file content discovery with recursion depth 2. Author:
+  ffuf project (https://github.com/ffuf/ffuf). Backlog/dev1_md §4.5.'
+command_template:
+- ffuf
+- -u
+- '{url}/FUZZ'
+- -w
+- '{wordlist}'
+- -mc
+- 200,204,301,302,307,401,403
+- -recursion
+- -recursion-depth
+- '2'
+- -o
+- '{out_dir}/ffuf_dir.json'
+- -of
+- json
+command_string: ffuf -u {url}/FUZZ -w {wordlist} -mc 200,204,301,302,307,401,403 -recursion
+  -recursion-depth 2 -o {out_dir}/ffuf_dir.json -of json
+placeholders:
+  url}/FUZZ: <url}/FUZZ>
+  wordlist: <wordlist>
+  out_dir}/ffuf_dir.json: <out_dir}/ffuf_dir.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/ffuf_dir.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-CONFIG-04
+- WSTG-CONFIG-06
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Directory fuzzing with common extensions
+  example: ffuf -u https://target.example.com/FUZZ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+    -x php,html,txt -mc 200,301,302,403 -o /out/ffuf_dir.json
+  output_type: json
+  next_steps:
+  - paramspider for parameter discovery
+  - dalfox for XSS testing
+related_tools:
+- feroxbuster
+- gobuster_dir
+- paramspider
+- arjun
+when_to_use: 'Vulnerability identification and analysis phase. ffuf directory / file
+  content discovery with recursion depth 2. Author: ffuf project (https://github.com/ffuf/ffuf).
+  Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,44 @@
+tool_id: masscan
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+description: masscan high-speed TCP port discovery across the in-scope CIDR; rate-limited
+  to stay below 10k pps. Backlog/dev1_md §4.2.
+command_template:
+- masscan
+- -p1-65535
+- --rate
+- '10000'
+- -oJ
+- '{out_dir}/masscan.json'
+- '{cidr}'
+command_string: masscan -p1-65535 --rate 10000 -oJ {out_dir}/masscan.json {cidr}
+placeholders:
+  out_dir}/masscan.json: <out_dir}/masscan.json>
+  cidr: <cidr>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/masscan.json
+cwe_ids:
+- 200
+- 668
+owasp_wstg:
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Fast port scan of large network range
+  example: masscan -p1-65535 --rate=10000 -oX /out/masscan.xml 10.0.0.0/24
+  output_type: xml
+  next_steps:
+  - nmap_version for service detection on found ports
+related_tools: []
+when_to_use: Information gathering and discovery phase. masscan high-speed TCP port
+  discovery across the in-scope CIDR; rate-limited to stay below 10k pps. Backlog/dev1_md
+  §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

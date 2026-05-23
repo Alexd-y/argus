@@ -1,0 +1,45 @@
+tool_id: ssrfmap
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: medium
+requires_approval: true
+default_timeout_s: 1800
+description: 'SSRFmap — automated SSRF exploitation pipeline that walks a captured
+  request through the readfiles + portscan modules. APPROVAL REQUIRED: actively probes
+  internal services through the SSRF entry point. Reads the full HTTP request from
+  {in_dir}/req.txt (operator-supplied), hits the parameter list via {params}. Output
+  text-only (full parser deferred to Cycle 3). Backlog/dev1_md §4.11. ARG-017.'
+command_template:
+- sh
+- -c
+- ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o {out_dir}/ssrfmap.txt
+command_string: sh -c ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan
+  -o {out_dir}/ssrfmap.txt
+placeholders:
+  ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o {out_dir}/ssrfmap.txt: <ssrfmap
+    -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o {out_dir}/ssrfmap.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/ssrfmap.txt
+cwe_ids:
+- 918
+owasp_wstg:
+- WSTG-INPV-19
+image: argus-kali-web:latest
+network_policy_name: oast-egress
+scenarios:
+- description: Run ssrfmap against target
+  example: sh -c ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o
+    {out_dir}/ssrfmap.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. SSRFmap — automated
+  SSRF exploitation pipeline that walks a captured request through the readfiles +
+  portscan modules. APPROVAL REQUIRED: actively probes internal services through the
+  SSRF entry point'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

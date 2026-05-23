@@ -1,0 +1,58 @@
+tool_id: nmap_vuln
+version: 1.0.0
+phase: vuln_analysis
+category: network
+risk_level: medium
+requires_approval: false
+default_timeout_s: 3600
+description: Nmap NSE vuln-category scripts on confirmed ports with -sV service fingerprinting
+  (required for the vulners/vulscan NSE scripts to fire CPE→CVE correlation; without
+  -sV the vuln family produces zero CVE matches). Includes vuln + vulners + vulscan
+  with mincvss=4.0 noise filter, polite -T2 timing because vuln scripts are probe-heavy.
+  Medium risk because some scripts send active probes. Backlog/dev1_md §4.2 + ARG-019
+  C3 fix.
+command_template:
+- nmap
+- -sV
+- -T2
+- --script
+- vuln,vulners,vulscan
+- --script-args=mincvss=4.0
+- -p{ports}
+- -oX
+- '{out_dir}/nmap_vuln.xml'
+- '{ip}'
+command_string: nmap -sV -T2 --script vuln,vulners,vulscan --script-args=mincvss=4.0
+  -p{ports} -oX {out_dir}/nmap_vuln.xml {ip}
+placeholders:
+  -p{ports: <-p{ports>
+  out_dir}/nmap_vuln.xml: <out_dir}/nmap_vuln.xml>
+  ip: 10.10.1.100
+output_format: xml_nmap
+evidence_artifacts: &id001
+- /out/nmap_vuln.xml
+cwe_ids:
+- 1006
+- 200
+owasp_wstg:
+- WSTG-INFO-04
+- WSTG-CONF-01
+image: argus-kali-recon:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: NSE vulnerability scan on discovered services
+  example: nmap --script=vuln -p 80,443,3306 -oX /out/nmap_vuln.xml 10.0.0.1
+  output_type: xml_nmap
+  next_steps:
+  - nuclei for comprehensive vulnerability scanning
+related_tools:
+- nmap_version
+- nuclei
+- nikto
+when_to_use: Vulnerability identification and analysis phase. Nmap NSE vuln-category
+  scripts on confirmed ports with -sV service fingerprinting (required for the vulners/vulscan
+  NSE scripts to fire CPE→CVE correlation; without -sV the vuln family produces zero
+  C
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

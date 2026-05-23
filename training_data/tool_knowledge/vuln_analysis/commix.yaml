@@ -1,0 +1,38 @@
+tool_id: commix
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: high
+requires_approval: true
+default_timeout_s: 600
+description: ''
+command_template:
+- commix
+- --url
+- '{url}'
+- --batch
+- --level
+- '1'
+command_string: commix --url {url} --batch --level 1
+placeholders:
+  url: https://target.example.com
+output_format: discovery_text
+evidence_artifacts: &id001
+- /out/commix_output.txt
+cwe_ids:
+- 77
+- 78
+owasp_wstg: []
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run commix against target
+  example: commix --url {url} --batch --level 1
+  output_type: discovery_text
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. '
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

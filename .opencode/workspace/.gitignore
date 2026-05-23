@@ -1,0 +1,8 @@
+# Ignore all workspace content (temporary state)
+active/
+completed/
+failed/
+
+# Keep this README
+!README.md
+!.gitignore

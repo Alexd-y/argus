@@ -1,0 +1,39 @@
+tool_id: whois
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: Classic WHOIS protocol lookup returning registrant, NS, dates, and contact
+  metadata (no RDAP fallback). Backlog/dev1_md §4.1.
+command_template:
+- whois
+- '{domain}'
+- '>'
+- '{out_dir}/whois.txt'
+command_string: whois {domain} > {out_dir}/whois.txt
+placeholders:
+  domain: <domain>
+  out_dir}/whois.txt: <out_dir}/whois.txt>
+output_format: whois_text
+evidence_artifacts: &id001
+- /out/whois.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run whois against target
+  example: whois {domain} > {out_dir}/whois.txt
+  output_type: whois_text
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Classic WHOIS protocol lookup
+  returning registrant, NS, dates, and contact metadata (no RDAP fallback). Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

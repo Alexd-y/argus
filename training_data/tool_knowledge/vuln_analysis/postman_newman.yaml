@@ -1,0 +1,54 @@
+tool_id: postman_newman
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: 'newman Postman collection runner — executes the operator-curated collection
+  at {path} (mounted under /in) against the configured env, capturing per-request
+  status, latency, assertions and response excerpts. Replay-style API tests and contract
+  validation against staging. Collection JSON is the only mutable input; auth tokens
+  belong inside it. --insecure tolerates self-signed staging certs. Parser deferred
+  to Cycle 3. Author: Postman. Backlog §4.14. ARG-018.'
+command_template:
+- newman
+- run
+- '{path}'
+- -r
+- json
+- --reporter-json-export
+- '{out_dir}/newman.json'
+- --insecure
+command_string: newman run {path} -r json --reporter-json-export {out_dir}/newman.json
+  --insecure
+placeholders:
+  path: <path>
+  out_dir}/newman.json: <out_dir}/newman.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/newman.json
+cwe_ids:
+- 200
+- 285
+- 287
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-CONF-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run postman_newman against target
+  example: newman run {path} -r json --reporter-json-export {out_dir}/newman.json
+    --insecure
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. newman Postman collection
+  runner — executes the operator-curated collection at {path} (mounted under /in)
+  against the configured env, capturing per-request status, latency, assertions and
+  response exc
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

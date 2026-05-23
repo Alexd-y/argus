@@ -1,0 +1,43 @@
+tool_id: paramspider
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: 'paramspider mines URL parameters from the Wayback Machine archive (passive,
+  no traffic to target). Author: devanshbatham (https://github.com/devanshbatham/ParamSpider).
+  Backlog/dev1_md §4.5.'
+command_template:
+- paramspider
+- -d
+- '{domain}'
+- -o
+- '{out_dir}/paramspider.txt'
+command_string: paramspider -d {domain} -o {out_dir}/paramspider.txt
+placeholders:
+  domain: <domain>
+  out_dir}/paramspider.txt: <out_dir}/paramspider.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/paramspider.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INPV-04
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Parameter mining from wayback/gau data
+  example: paramspider -d example.com -o /out/params.txt
+  output_type: text
+  next_steps:
+  - arjun for hidden parameter discovery
+  - dalfox for XSS testing
+related_tools: []
+when_to_use: 'Information gathering and discovery phase. paramspider mines URL parameters
+  from the Wayback Machine archive (passive, no traffic to target). Author: devanshbatham
+  (https://github.com/devanshbatham/ParamSpider). Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

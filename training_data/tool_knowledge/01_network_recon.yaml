@@ -1,0 +1,173 @@
+# ARGUS Tool Knowledge Base — Network Reconnaissance
+# LLM RAG source for tool command generation, tool selection, and methodology checklists
+# No sanitization — all real commands and flags preserved
+
+category: network_recon
+phase: recon
+tools:
+  - tool_id: nmap_tcp_top
+    typical_commands:
+      - "nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 10.10.1.100"
+      - "nmap -sS -Pn -T4 --top-ports 1000 -oX /out/nmap_tcp.xml 192.168.1.0/24"
+    common_flags:
+      - flag: "-sS"
+        description: "TCP SYN scan (stealth half-open scan)"
+      - flag: "-sT"
+        description: "TCP connect scan (full handshake)"
+      - flag: "-Pn"
+        description: "Skip host discovery, treat all hosts as online"
+      - flag: "-T4"
+        description: "Aggressive timing template for faster scans"
+      - flag: "-T1"
+        description: "Sneaky timing template for IDS evasion"
+      - flag: "--top-ports 1000"
+        description: "Scan top 1000 most common ports"
+      - flag: "--top-ports 100"
+        description: "Scan top 100 most common ports (quick scan)"
+      - flag: "-p-"
+        description: "Scan all 65535 ports"
+      - flag: "-sV"
+        description: "Probe open ports for service/version info"
+      - flag: "-O"
+        description: "OS detection via TCP/IP fingerprinting"
+      - flag: "-A"
+        description: "Aggressive scan: OS detection + version + script traceroute"
+      - flag: "-oX"
+        description: "Output in XML format"
+      - flag: "-oN"
+        description: "Output in normal format"
+      - flag: "-oG"
+        description: "Output in grepable format"
+      - flag: "--script=vuln"
+        description: "Run NSE vulnerability scripts"
+      - flag: "--script=default"
+        description: "Run default NSE scripts"
+    when_to_use: "Initial port discovery on target network. First scan in recon phase. Use top-ports for speed, full port scan for thorough enumeration."
+    key_outputs: ["open_ports", "service_versions", "os_fingerprint"]
+    dependencies: []
+    tips:
+      - "Start with --top-ports 1000 for speed, then scan specific ports found"
+      - "Use -Pn if targets block ICMP (common in hardened environments)"
+      - "Combine -sV with --version-intensity 5 for good service detection"
+      - "Save output in XML (-oX) for automated parsing by ARGUS"
+
+  - tool_id: nmap_tcp_full
+    typical_commands:
+      - "nmap -sS -Pn -p- -T4 -oX /out/nmap_tcp_full.xml 10.10.1.100"
+      - "nmap -sS -Pn -p- -T3 -oX /out/nmap_tcp_full.xml 192.168.1.50"
+    common_flags:
+      - flag: "-p-"
+        description: "Scan all 65535 TCP ports"
+      - flag: "-T3"
+        description: "Normal timing template (balanced speed/stealth)"
+    when_to_use: "After initial top-ports scan reveals interesting services. Use for thorough enumeration of high-value targets. Slower but finds services on non-standard ports."
+    key_outputs: ["all_open_ports", "service_banners"]
+    dependencies: ["nmap_tcp_top"]
+    tips:
+      - "Only run on high-value targets after initial top-ports scan"
+      - "Use -T3 for better stealth on sensitive networks"
+      - "This scan can take 30+ minutes per host"
+
+  - tool_id: nmap_udp
+    typical_commands:
+      - "nmap -sU --top-ports 100 -oX /out/nmap_udp.xml 10.10.1.100"
+      - "nmap -sU -sV --top-ports 50 -oX /out/nmap_udp.xml 10.10.1.100"
+    common_flags:
+      - flag: "-sU"
+        description: "UDP scan"
+      - flag: "--top-ports 100"
+        description: "Top 100 UDP ports (UDP scanning is very slow)"
+    when_to_use: "After TCP scan to find UDP services like DNS (53), SNMP (161), NTP (123), DHCP (67/68). Essential for internal network assessments."
+    key_outputs: ["udp_open_ports", "udp_service_info"]
+    dependencies: ["nmap_tcp_top"]
+    tips:
+      - "UDP scanning is very slow; limit to --top-ports 50-100"
+      - "Key ports to check: 53 (DNS), 161 (SNMP), 123 (NTP), 500 (IKE)"
+      - "Combine with -sV for service version detection on discovered ports"
+
+  - tool_id: nmap_version
+    typical_commands:
+      - "nmap -sV --version-intensity 5 -p 22,80,443,3306,8080 -oX /out/nmap_version.xml 10.10.1.100"
+    common_flags:
+      - flag: "-sV"
+        description: "Service version detection"
+      - flag: "--version-intensity 5"
+        description: "Moderate version probing (0-9 scale)"
+      - flag: "--version-all"
+        description: "Maximum version probing (intensity 9)"
+    when_to_use: "After port discovery to identify exact service versions. Critical for vulnerability mapping and CVE lookup."
+    key_outputs: ["service_names", "service_versions", "cpe_info"]
+    dependencies: ["nmap_tcp_top"]
+    tips:
+      - "Run against only previously discovered open ports for speed"
+      - "Version info is critical for vulnerability correlation"
+      - "--version-intensity 5 is a good balance between speed and accuracy"
+
+  - tool_id: nmap_vuln
+    typical_commands:
+      - "nmap --script=vuln -p 80,443,3306 -oX /out/nmap_vuln.xml 10.10.1.100"
+      - "nmap --script=vuln --script-args=mincvss=5.0 -oX /out/nmap_vuln.xml 10.10.1.100"
+    common_flags:
+      - flag: "--script=vuln"
+        description: "Run NSE vulnerability category scripts"
+      - flag: "--script-args=mincvss=5.0"
+        description: "Only report vulnerabilities with CVSS >= 5.0"
+    when_to_use: "After service version detection to check for known vulnerabilities on discovered services."
+    key_outputs: ["vulnerability_findings", "cve_ids", "cvss_scores"]
+    dependencies: ["nmap_version"]
+    tips:
+      - "Can be noisy and slow; only target specific ports"
+      - "Results need manual verification — NSE scripts can have FPs"
+      - "Use mincvss=5.0 to reduce noise from low-severity findings"
+
+  - tool_id: masscan
+    typical_commands:
+      - "masscan -p1-65535 --rate=10000 -oX /out/masscan.xml 10.10.1.0/24"
+      - "masscan -p80,443,8080 --rate=5000 -oL /out/masscan.txt 192.168.0.0/16"
+    common_flags:
+      - flag: "--rate=10000"
+        description: "Packets per second rate"
+      - flag: "-p1-65535"
+        description: "Scan all ports"
+      - flag: "-oX"
+        description: "XML output"
+      - flag: "-oL"
+        description: "List output"
+    when_to_use: "Fast port scanning of large network ranges. Use for initial sweep, then follow up with nmap for service version detection."
+    key_outputs: ["open_ports", "host_discovery"]
+    dependencies: []
+    tips:
+      - "Much faster than nmap for large ranges but less accurate service detection"
+      - "Always follow up with nmap -sV for detailed service info"
+      - "Be careful with rate setting — too high may trigger IPS/IDS"
+
+  - tool_id: rustscan
+    typical_commands:
+      - "rustscan -a 10.10.1.100 --ulimit 5000 -t 2000 -- -sV -oX /out/rustscan.xml"
+    common_flags:
+      - flag: "--ulimit 5000"
+        description: "File descriptor limit"
+      - flag: "-t 2000"
+        description: "Timeout in ms"
+    when_to_use: "Alternative to masscan for fast port discovery. Pipes results to nmap for service detection."
+    key_outputs: ["open_ports"]
+    dependencies: []
+    tips:
+      - "Faster than nmap alone, pairs well with nmap -sV"
+      - "Good for CTF-style quick enumeration"
+
+  - tool_id: naabu
+    typical_commands:
+      - "naabu -host 10.10.1.100 -top-ports 1000 -oJ /out/naabu.json"
+      - "naabu -list /in/targets.txt -top-ports 100 -oJ /out/naabu.json"
+    common_flags:
+      - flag: "-top-ports 1000"
+        description: "Scan top 1000 ports"
+      - flag: "-oJ"
+        description: "JSON output"
+    when_to_use: "Fast SYN scanner alternative to nmap. Good for quick port discovery on multiple hosts."
+    key_outputs: ["open_ports", "service_banners"]
+    dependencies: []
+    tips:
+      - "ProjectDiscovery tool — integrates well with other PD tools (httpx, nuclei)"
+      - "Faster than nmap for simple port enumeration"

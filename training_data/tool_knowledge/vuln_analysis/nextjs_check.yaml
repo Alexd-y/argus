@@ -1,0 +1,63 @@
+tool_id: nextjs_check
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'Next.js exposure check — runs nuclei with the `nextjs` tag set against
+  {url}. Detects classic CVE-2025-29927 middleware bypass and known config / build-output
+  disclosures. Parser handled by ARG-015 (nuclei_jsonl strategy). Backlog/dev1_md
+  §4.7. Templates: https://github.com/projectdiscovery/nuclei-templates'
+command_template:
+- nuclei
+- -target
+- '{url}'
+- -tags
+- nextjs
+- -severity
+- info,low,medium,high,critical
+- -jsonl
+- -output
+- '{out_dir}/nextjs_check.jsonl'
+- -disable-update-check
+- -no-color
+- -rate-limit
+- '50'
+- -c
+- '10'
+- -stats
+command_string: nuclei -target {url} -tags nextjs -severity info,low,medium,high,critical
+  -jsonl -output {out_dir}/nextjs_check.jsonl -disable-update-check -no-color -rate-limit
+  50 -c 10 -stats
+placeholders:
+  url: https://target.example.com
+  out_dir}/nextjs_check.jsonl: <out_dir}/nextjs_check.jsonl>
+output_format: nuclei_jsonl
+evidence_artifacts: &id001
+- /out/nextjs_check.jsonl
+cwe_ids:
+- 1395
+- 200
+- 16
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run nextjs_check against target
+  example: nuclei -target {url} -tags nextjs -severity info,low,medium,high,critical
+    -jsonl -output {out_dir}/nextjs_check.jsonl -disable-update-check -no-color -rate-limit
+    50 -c 10 -stats
+  output_type: nuclei_jsonl
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Next.js exposure check
+  — runs nuclei with the `nextjs` tag set against {url}. Detects classic CVE-2025-29927
+  middleware bypass and known config / build-output disclosures. Parser handled by
+  ARG-015 (n
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

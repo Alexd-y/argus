@@ -1,0 +1,49 @@
+tool_id: subfinder
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+description: ProjectDiscovery subfinder passive subdomain enumeration via OSINT sources.
+  Backlog/dev1_md §4.1.
+command_template:
+- subfinder
+- -d
+- '{domain}'
+- -all
+- -silent
+- -oJ
+- -o
+- '{out_dir}/subfinder.json'
+command_string: subfinder -d {domain} -all -silent -oJ -o {out_dir}/subfinder.json
+placeholders:
+  domain: <domain>
+  out_dir}/subfinder.json: <out_dir}/subfinder.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/subfinder.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Passive subdomain enumeration for a domain
+  example: subfinder -d example.com -all -silent -oJ
+  output_type: json_lines
+  next_steps:
+  - httpx for live host verification
+  - katana for web crawling
+related_tools:
+- amass_passive
+- httpx
+- crt_sh
+- chaos
+- findomain
+when_to_use: Information gathering and discovery phase. ProjectDiscovery subfinder
+  passive subdomain enumeration via OSINT sources. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

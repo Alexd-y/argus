@@ -1,0 +1,50 @@
+tool_id: dnsx
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1200
+description: ProjectDiscovery dnsx fast DNS resolver for A/AAAA/CNAME/MX/NS/TXT records
+  over public resolvers. Backlog/dev1_md §4.1.
+command_template:
+- dnsx
+- -l
+- '{in_dir}/subs.txt'
+- -a
+- -aaaa
+- -cname
+- -mx
+- -ns
+- -txt
+- -resp
+- -json
+- -o
+- '{out_dir}/dnsx.json'
+command_string: dnsx -l {in_dir}/subs.txt -a -aaaa -cname -mx -ns -txt -resp -json
+  -o {out_dir}/dnsx.json
+placeholders:
+  in_dir}/subs.txt: <in_dir}/subs.txt>
+  out_dir}/dnsx.json: <out_dir}/dnsx.json>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/dnsx.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run dnsx against target
+  example: dnsx -l {in_dir}/subs.txt -a -aaaa -cname -mx -ns -txt -resp -json -o {out_dir}/dnsx.json
+  output_type: json_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. ProjectDiscovery dnsx fast
+  DNS resolver for A/AAAA/CNAME/MX/NS/TXT records over public resolvers. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

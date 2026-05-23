@@ -1,0 +1,45 @@
+tool_id: chrome_csp_probe
+version: 1.0.0
+phase: vuln_analysis
+category: browser
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: Headless Chromium Content-Security-Policy probe — loads {url} and emits
+  the merged CSP / CSP-Report-Only header set, plus inline-handler / unsafe-eval /
+  unsafe-inline detections seen in the rendered DOM. Passive observation only (no
+  actual injection). Surfaces the misconfigurations the §4.10 XSS engine (dalfox /
+  xsstrike) needs to bypass. Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019.
+command_template:
+- sh
+- -c
+- chrome-csp-probe --url {url} --output {out_dir}/csp.json
+command_string: sh -c chrome-csp-probe --url {url} --output {out_dir}/csp.json
+placeholders:
+  chrome-csp-probe --url {url} --output {out_dir}/csp.json: <chrome-csp-probe --url
+    {url} --output {out_dir}/csp.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/csp.json
+cwe_ids:
+- 79
+- 1021
+- 693
+owasp_wstg:
+- WSTG-CONF-12
+- WSTG-CLNT-09
+image: argus-kali-browser:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run chrome_csp_probe against target
+  example: sh -c chrome-csp-probe --url {url} --output {out_dir}/csp.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Headless Chromium Content-Security-Policy
+  probe — loads {url} and emits the merged CSP / CSP-Report-Only header set, plus
+  inline-handler / unsafe-eval / unsafe-inline detections seen in the rendered D
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

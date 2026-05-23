@@ -1,0 +1,49 @@
+tool_id: dockle
+version: 1.0.0
+phase: vuln_analysis
+category: cloud
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+description: 'Goodwith Dockle container best-practice checker — runs the CIS Docker
+  Benchmark + OWASP container Top 10 against {image}. Detects misconfigured users
+  (root in CMD/ENTRYPOINT), missing HEALTHCHECK, world-writable paths, embedded credentials,
+  hardening gaps. Read-only, only inspects metadata + layers. recon-passive = TCP/443
+  to registries. Parser deferred to Cycle 3. Author: Goodwith. Backlog §4.15. ARG-018.'
+command_template:
+- dockle
+- -f
+- json
+- -o
+- '{out_dir}/dockle.json'
+- '{image}'
+command_string: dockle -f json -o {out_dir}/dockle.json {image}
+placeholders:
+  out_dir}/dockle.json: <out_dir}/dockle.json>
+  image: <image>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/dockle.json
+cwe_ids:
+- 16
+- 250
+- 732
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run dockle against target
+  example: dockle -f json -o {out_dir}/dockle.json {image}
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Goodwith Dockle container
+  best-practice checker — runs the CIS Docker Benchmark + OWASP container Top 10 against
+  {image}. Detects misconfigured users (root in CMD/ENTRYPOINT), missing HEALTHCHECK,
+  wor
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

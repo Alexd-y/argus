@@ -1,0 +1,48 @@
+tool_id: graphw00f
+version: 1.0.0
+phase: recon
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'graphw00f GraphQL fingerprinter — sends 12 small introspection-friendly
+  queries to {url} and identifies the underlying engine (Apollo, Hasura, Yoga, Graphene,
+  etc.) plus version. Pure recon, no mutating queries. Critical for Cycle 3 attack-tree
+  generation since each engine has distinct CVE history and bypass techniques. Parser
+  deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: dolevf
+  (https://github.com/dolevf/graphw00f). Backlog/dev1_md §4.14. ARG-018.'
+command_template:
+- graphw00f
+- -d
+- -t
+- '{url}'
+- -o
+- '{out_dir}/graphw00f.json'
+command_string: graphw00f -d -t {url} -o {out_dir}/graphw00f.json
+placeholders:
+  url: https://target.example.com
+  out_dir}/graphw00f.json: <out_dir}/graphw00f.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/graphw00f.json
+cwe_ids:
+- 200
+- 16
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-CONF-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run graphw00f against target
+  example: graphw00f -d -t {url} -o {out_dir}/graphw00f.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. graphw00f GraphQL fingerprinter
+  — sends 12 small introspection-friendly queries to {url} and identifies the underlying
+  engine (Apollo, Hasura, Yoga, Graphene, etc.) plus version. Pure recon, no mutati
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,65 @@
+tool_id: trivy_image
+version: 1.0.0
+phase: vuln_analysis
+category: cloud
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1800
+description: 'Aqua Trivy container image scanner — pulls {image} from the registry
+  and scans for OS-package CVEs, language CVEs, container misconfigs and embedded
+  secrets. Output is canonical Trivy v2 JSON (Results[].Vulnerabilities/Misconfigurations/Secrets)
+  consumed by sandbox/parsers/trivy_parser.py via JSON_OBJECT. recon-passive = TCP/443
+  to registries (Docker Hub, GHCR, ECR, GCR, ACR). Author: Aqua Security. Backlog
+  §4.15. ARG-018.'
+command_template:
+- trivy
+- image
+- --format
+- json
+- -o
+- '{out_dir}/trivy.json'
+- --scanners
+- vuln,config,secret
+- --severity
+- UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+- --no-progress
+- --quiet
+- '{image}'
+command_string: trivy image --format json -o {out_dir}/trivy.json --scanners vuln,config,secret
+  --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL --no-progress --quiet {image}
+placeholders:
+  out_dir}/trivy.json: <out_dir}/trivy.json>
+  image: <image>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/trivy.json
+cwe_ids:
+- 16
+- 200
+- 732
+- 798
+- 1395
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Container image vulnerability scanning
+  example: trivy image --format json --output /out/trivy_image.json nginx:latest
+  output_type: json
+  next_steps:
+  - grype for vulnerability matching
+  - syft for SBOM generation
+related_tools:
+- trivy_fs
+- grype
+- syft
+- checkov
+when_to_use: Vulnerability identification and analysis phase. Aqua Trivy container
+  image scanner — pulls {image} from the registry and scans for OS-package CVEs, language
+  CVEs, container misconfigs and embedded secrets. Output is canonical Trivy v2 JSON
+  (Results
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

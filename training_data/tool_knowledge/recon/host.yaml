@@ -1,0 +1,41 @@
+tool_id: host
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: host -a (all records) DNS lookup, equivalent to nslookup-style zone enumeration
+  over public resolvers. Backlog/dev1_md §4.1.
+command_template:
+- host
+- -a
+- '{domain}'
+- '>'
+- '{out_dir}/host.txt'
+command_string: host -a {domain} > {out_dir}/host.txt
+placeholders:
+  domain: <domain>
+  out_dir}/host.txt: <out_dir}/host.txt>
+output_format: dns_zone_text
+evidence_artifacts: &id001
+- /out/host.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run host against target
+  example: host -a {domain} > {out_dir}/host.txt
+  output_type: dns_zone_text
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. host -a (all records) DNS
+  lookup, equivalent to nslookup-style zone enumeration over public resolvers. Backlog/dev1_md
+  §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

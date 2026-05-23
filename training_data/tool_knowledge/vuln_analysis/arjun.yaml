@@ -1,0 +1,44 @@
+tool_id: arjun
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'arjun HTTP parameter discovery via reflection / behaviour analysis.
+  Author: s0md3v (https://github.com/s0md3v/Arjun). Backlog/dev1_md §4.5.'
+command_template:
+- arjun
+- -u
+- '{url}'
+- -oJ
+- '{out_dir}/arjun.json'
+- -m
+- GET,POST
+command_string: arjun -u {url} -oJ {out_dir}/arjun.json -m GET,POST
+placeholders:
+  url: https://target.example.com
+  out_dir}/arjun.json: <out_dir}/arjun.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/arjun.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INPV-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Hidden parameter discovery
+  example: arjun -u https://target.example.com/page -o /out/arjun.json
+  output_type: json
+  next_steps:
+  - sqlmap_safe for injection testing
+  - dalfox for XSS
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. arjun HTTP parameter
+  discovery via reflection / behaviour analysis. Author: s0md3v (https://github.com/s0md3v/Arjun).
+  Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

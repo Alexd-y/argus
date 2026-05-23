@@ -1,0 +1,56 @@
+tool_id: ghauri
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: medium
+requires_approval: true
+default_timeout_s: 900
+description: 'ghauri lightweight SQLi detector — Python rewrite of sqlmap''s blind/error/UNION
+  techniques. --batch --level 2 --dbs runs schema enumeration on confirmation. APPROVAL
+  REQUIRED: fires real injection payloads against {url}. Image-side wrapper redirects
+  verbose stdout into /out/ghauri.log; parsing deferred to Cycle 3 (TEXT_LINES → parsers.dispatch.unmapped_tool
+  until then). Author: r0oth3x49 (https://github.com/r0oth3x49/ghauri). Backlog/dev1_md
+  §4.9. ARG-016.'
+command_template:
+- ghauri
+- -u
+- '{url}'
+- --batch
+- --level
+- '2'
+- --dbs
+- --timeout
+- '30'
+- --retries
+- '2'
+- --threads
+- '2'
+- --no-logging
+command_string: ghauri -u {url} --batch --level 2 --dbs --timeout 30 --retries 2 --threads
+  2 --no-logging
+placeholders:
+  url: https://target.example.com
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/ghauri.log
+cwe_ids:
+- 89
+owasp_wstg:
+- WSTG-INPV-05
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run ghauri against target
+  example: ghauri -u {url} --batch --level 2 --dbs --timeout 30 --retries 2 --threads
+    2 --no-logging
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. ghauri lightweight
+  SQLi detector — Python rewrite of sqlmap''s blind/error/UNION techniques. --batch
+  --level 2 --dbs runs schema enumeration on confirmation. APPROVAL REQUIRED: fires
+  real injection pay'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

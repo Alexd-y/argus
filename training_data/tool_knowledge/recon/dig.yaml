@@ -1,0 +1,44 @@
+tool_id: dig
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: dig ANY-record DNS query using public resolvers for A/AAAA/MX/NS/SOA/TXT
+  discovery. Backlog/dev1_md §4.1.
+command_template:
+- dig
+- +noall
+- +answer
+- +comments
+- +nocmd
+- '{domain}'
+- ANY
+- '>'
+- '{out_dir}/dig.txt'
+command_string: dig +noall +answer +comments +nocmd {domain} ANY > {out_dir}/dig.txt
+placeholders:
+  domain: <domain>
+  out_dir}/dig.txt: <out_dir}/dig.txt>
+output_format: dns_zone_text
+evidence_artifacts: &id001
+- /out/dig.txt
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run dig against target
+  example: dig +noall +answer +comments +nocmd {domain} ANY > {out_dir}/dig.txt
+  output_type: dns_zone_text
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. dig ANY-record DNS query using
+  public resolvers for A/AAAA/MX/NS/SOA/TXT discovery. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

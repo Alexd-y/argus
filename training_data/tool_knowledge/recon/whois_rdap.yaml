@@ -1,0 +1,43 @@
+tool_id: whois_rdap
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: Combined classic WHOIS + RFC 9082 RDAP lookup for registrant, NS, and
+  contact metadata. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30 https://rdap.org/domain/{domain}
+  -o {out_dir}/rdap.json
+command_string: sh -c whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body
+  --max-time 30 https://rdap.org/domain/{domain} -o {out_dir}/rdap.json
+placeholders:
+  ? whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30
+    https://rdap.org/domain/{domain} -o {out_dir}/rdap.json
+  : <whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30
+    https://rdap.org/domain/{domain} -o {out_dir}/rdap.json>
+output_format: custom
+evidence_artifacts: &id001
+- /out/whois.txt
+- /out/rdap.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-01
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run whois_rdap against target
+  example: sh -c whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body
+    --max-time 30 https://rdap.org/domain/{domain} -o {out_dir}/rdap.json
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Combined classic WHOIS + RFC
+  9082 RDAP lookup for registrant, NS, and contact metadata. Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

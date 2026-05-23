@@ -1,0 +1,219 @@
+# ARGUS Tool Knowledge Base — Web Vulnerability Analysis
+category: web_vuln_analysis
+phase: vuln_analysis
+tools:
+  - tool_id: sqlmap_safe
+    typical_commands:
+      - "sqlmap -u 'https://target.example.com/page?id=1' --batch --level 2 --risk 1 --technique=BT --safe-url=https://target.example.com/ --flush-session --random-agent --timeout=30 --retries=2 --threads=2 --disable-coloring --output-dir=/out/sqlmap"
+      - "sqlmap -u 'https://target.example.com/login' --data='user=admin&pass=test' --batch --level 2 --risk 1 --technique=BT"
+      - "sqlmap -u 'https://target.example.com/api/users/1' --batch --level 3 --risk 1 --technique=BT --cookie='session=abc123'"
+    common_flags:
+      - flag: "-u"
+        description: "Target URL"
+      - flag: "--batch"
+        description: "Non-interactive mode (never ask for user input)"
+      - flag: "--level"
+        description: "Testing level (1-5, higher = more tests)"
+      - flag: "--risk"
+        description: "Risk level (1-3, higher = more aggressive)"
+      - flag: "--technique=BT"
+        description: "Boolean and Time-based only (safe techniques)"
+      - flag: "--safe-url"
+        description: "URL to visit between requests to avoid lockout"
+      - flag: "--flush-session"
+        description: "Start fresh session, ignore cached results"
+      - flag: "--random-agent"
+        description: "Use random HTTP User-Agent"
+      - flag: "--data"
+        description: "POST data string"
+      - flag: "--cookie"
+        description: "HTTP Cookie header"
+      - flag: "--threads"
+        description: "Number of concurrent threads"
+    when_to_use: "SQL injection detection with conservative settings. First-line testing for all database-backed web applications. Approval-gated because even safe-mode generates WAF noise."
+    key_outputs: ["injectable_parameters", "dbms_type", "injection_technique", "data_extraction_potential"]
+    dependencies: ["httpx", "paramspider"]
+    cwe: [89]
+    owasp: ["A03:2021"]
+    tips:
+      - "Always use --batch for non-interactive execution"
+      - "Use --technique=BT to restrict to boolean and time-based (safest)"
+      - "Start with --level 2 --risk 1, escalate if needed"
+      - "Provide --safe-url to avoid account lockout during testing"
+      - "Use --flush-session to avoid stale results from previous runs"
+
+  - tool_id: sqlmap_confirm
+    typical_commands:
+      - "sqlmap -u 'https://target.example.com/page?id=1' --batch --level 3 --risk 2 --technique=BEUSTQ --dbs"
+      - "sqlmap -u 'https://target.example.com/page?id=1' --batch --current-db --tables"
+      - "sqlmap -u 'https://target.example.com/page?id=1' --batch --dump -T users -D webapp"
+    common_flags:
+      - flag: "--technique=BEUSTQ"
+        description: "All SQLi techniques: Boolean, Error, Union, Stacked, Time, inline Query"
+      - flag: "--dbs"
+        description: "Enumerate databases"
+      - flag: "--tables"
+        description: "Enumerate tables"
+      - flag: "--dump"
+        description: "Dump table data"
+      - flag: "--os-shell"
+        description: "Get OS shell (requires high privilege)"
+    when_to_use: "SQL injection confirmation and data extraction AFTER sqlmap_safe confirms injection. Full exploitation mode — requires approval."
+    key_outputs: ["databases", "tables", "columns", "data_dump"]
+    dependencies: ["sqlmap_safe"]
+    cwe: [89]
+    owasp: ["A03:2021"]
+    tips:
+      - "Only use AFTER sqlmap_safe confirms vulnerability"
+      - "Higher risk — requires explicit approval"
+      - "Use --dbs before --dump to understand DB structure"
+
+  - tool_id: dalfox
+    typical_commands:
+      - "dalfox url https://target.example.com/search?q=test --mining-dom --mining-dict --deep-domxss --skip-bav --no-color --format json --output /out/dalfox.json --worker 10 --timeout 10"
+      - "dalfox url https://target.example.com/page --param name --blind https://oast.argus.local --format json --output /out/dalfox.json"
+      - "dalfox file /in/urls.txt --blind https://oast.argus.local --format json --output /out/dalfox.json"
+    common_flags:
+      - flag: "url"
+        description: "Target URL"
+      - flag: "--mining-dom"
+        description: "DOM-based XSS mining"
+      - flag: "--mining-dict"
+        description: "Dictionary-based parameter mining"
+      - flag: "--deep-domxss"
+        description: "Deep DOM XSS analysis"
+      - flag: "--skip-bav"
+        description: "Skip basic attack vectors (focus on XSS)"
+      - flag: "--blind"
+        description: "Blind XSS testing with OAST callback URL"
+      - flag: "--format json"
+        description: "JSON output format"
+      - flag: "--worker"
+        description: "Number of worker threads"
+    when_to_use: "XSS scanning with parameter mining and blind XSS testing. Primary tool for all XSS testing contexts."
+    key_outputs: ["xss_findings", "reflection_points", "parameter_vulnerability"]
+    dependencies: ["httpx", "paramspider"]
+    cwe: [79, 80]
+    owasp: ["A03:2021", "WSTG-INPV-01"]
+    tips:
+      - "Use --blind with OAST callback for blind XSS detection"
+      - "Use --deep-domxss for DOM XSS on SPA applications"
+      - "--skip-bav focuses on XSS instead of basic attacks"
+
+  - tool_id: xsstrike
+    typical_commands:
+      - "xsstrike -u 'https://target.example.com/search?q=test' --crawl"
+      - "xsstrike -u 'https://target.example.com/page' --data 'user=admin&pass=test' --headers 'Cookie: session=abc123'"
+    when_to_use: "Alternative XSS scanner. Good for crawling and finding XSS in complex page structures."
+    key_outputs: ["xss_findings"]
+    dependencies: ["httpx"]
+    cwe: [79]
+    owasp: ["A03:2021"]
+
+  - tool_id: nosqlmap
+    typical_commands:
+      - "nosqlmap -u 'https://target.example.com/api/users' --data '{\"user\":\"admin\"}' --injection"
+    when_to_use: "NoSQL injection testing for MongoDB, CouchDB, and other NoSQL databases. Essential for API testing."
+    key_outputs: ["nosql_injection_points", "data_extraction"]
+    dependencies: ["httpx"]
+    cwe: [943, 89]
+    owasp: ["A03:2021"]
+
+  - tool_id: tplmap
+    typical_commands:
+      - "tplmap -u 'https://target.example.com/page?name=test' --os-shell"
+      - "tplmap -u 'https://target.example.com/render' -d 'template={{7*7}}'"
+    when_to_use: "SSTI (Server-Side Template Injection) testing. Tests Jinja2, Twig, Freemarker, ERB, Mako, Velocity themes."
+    key_outputs: ["ssti_type", "template_engine", "code_execution"]
+    dependencies: ["httpx"]
+    cwe: [1336, 94]
+    owasp: ["A03:2021"]
+
+  - tool_id: ghauri
+    typical_commands:
+      - "ghauri -u 'https://target.example.com/page?id=1' --batch --level 3"
+    when_to_use: "SQL injection detection alternative to sqlmap. Better WAF bypass capabilities in some cases."
+    key_outputs: ["injectable_parameters", "injection_technique"]
+    dependencies: ["httpx"]
+    cwe: [89]
+
+  - tool_id: nuclei
+    typical_commands:
+      - "nuclei -u https://target.example.com -t http/cves/ -t http/vulnerabilities/ -t http/misconfiguration/ -severity critical,high,medium -o /out/nuclei.txt"
+      - "nuclei -l /in/urls.txt -t http/ -severity critical,high -o /out/nuclei.txt"
+      - "nuclei -u https://target.example.com -t http/technologies/ -t http/exposures/ -o /out/nuclei_tech.txt"
+    when_to_use: "Primary vulnerability scanner for known CVEs, misconfigurations, exposed panels, and technology detection. Massive template library."
+    key_outputs: ["vulnerabilities", "cve_ids", "misconfigurations", "tech_detection"]
+    dependencies: ["httpx"]
+    cwe: [200]
+    owasp: ["A05:2021"]
+    tips:
+      - "Start with -severity critical,high for quick triage"
+      - "Use -t http/cves/ for CVE-specific scanning"
+      - "Combine with dalfox for comprehensive testing"
+
+  - tool_id: zap_baseline
+    typical_commands:
+      - "zap-cli quick-scan https://target.example.com -o /out/zap_report.html"
+    when_to_use: "OWASP ZAP baseline scan for quick security overview. Good for CI/CD integration."
+    key_outputs: ["alerts", "vulnerabilities", "miscategorized_headers"]
+    dependencies: ["httpx"]
+
+  - tool_id: graphql_cop
+    typical_commands:
+      - "graphql-cop -u https://target.example.com/graphql -o /out/graphql_cop.json"
+    when_to_use: "GraphQL security testing — introspection, depth limiting, field suggestions."
+    key_outputs: ["graphql_issues", "introspection_enabled", "depth_limit"]
+    dependencies: ["httpx"]
+    cwe: [863, 209]
+
+  - tool_id: graphw00f
+    typical_commands:
+      - "graphw00f -u https://target.example.com/graphql -o /out/graphw00f.json"
+    when_to_use: "GraphQL engine fingerprinting. Identifies GraphQL implementation."
+    key_outputs: ["graphql_engine", "version"]
+    dependencies: ["httpx"]
+
+  - tool_id: kiterunner
+    typical_commands:
+      - "kite run https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt -o /out/kiterunner.json"
+    when_to_use: "API endpoint discovery. Tests REST API routes against OpenAPI specs."
+    key_outputs: ["api_endpoints", "hidden_routes"]
+    dependencies: ["httpx"]
+
+  - tool_id: sslscan
+    typical_commands:
+      - "sslscan target.example.com"
+      - "sslscan --no-colour target.example.com | tee /out/sslscan.txt"
+    when_to_use: "SSL/TLS cipher and certificate analysis. Identifies weak ciphers, expired certs, protocol versions."
+    key_outputs: ["ssl_versions", "ciphers", "certificate_info", "weak_ciphers"]
+    dependencies: []
+    cwe: [326, 327]
+    tips:
+      - "Check for SSLv2, SSLv3, TLS 1.0, TLS 1.1 (all deprecated)"
+      - "Look for weak ciphers: RC4, DES, EXPORT"
+      - "Verify certificate chain validity"
+
+  - tool_id: testssl
+    typical_commands:
+      - "testssl.sh --full --json /out/testssl.json https://target.example.com"
+      - "testssl.sh -U --sneaky https://target.example.com"
+    when_to_use: "Comprehensive TLS testing. More thorough than sslscan. Tests for BEAST, POODLE, Heartbleed, etc."
+    key_outputs: ["tls_vulnerabilities", "cipher_suites", "protocol_versions", "cert_issues"]
+    dependencies: []
+    cwe: [326, 327, 295]
+
+  - tool_id: jwt_tool
+    typical_commands:
+      - "jwt_tool https://target.example.com/api/login -rh 'Authorization: Bearer TOKEN_HERE'"
+    when_to_use: "JWT security testing — none algorithm, algorithm confusion, key disclosure."
+    key_outputs: ["jwt_vulnerabilities", "algorithm_confusion", "key_disclosure"]
+    dependencies: ["httpx"]
+    cwe: [347, 287, 290]
+
+  - tool_id: kxss
+    typical_commands:
+      - "echo 'https://target.example.com/search?q=test' | kxss"
+    when_to_use: "Reflected parameter detection for XSS. Identifies which parameters reflect input."
+    key_outputs: ["reflecting_parameters"]
+    dependencies: []

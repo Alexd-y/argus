@@ -1,0 +1,41 @@
+tool_id: gopherus
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: Gopherus — SSRF payload-template generator (gopher://, ftp://, smtp://
+  chains) for blind SSRF exploitation. Runs offline (NO egress) because it only synthesises
+  payload strings; the operator pastes them into ssrfmap or curl. Output text-only
+  (full parser deferred to Cycle 3). Backlog/dev1_md §4.11. ARG-017.
+command_template:
+- sh
+- -c
+- gopherus --exploit mysql > {out_dir}/gopher.txt
+command_string: sh -c gopherus --exploit mysql > {out_dir}/gopher.txt
+placeholders:
+  gopherus --exploit mysql > {out_dir}/gopher.txt: <gopherus --exploit mysql > {out_dir}/gopher.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/gopher.txt
+cwe_ids:
+- 918
+owasp_wstg:
+- WSTG-INPV-19
+image: argus-kali-web:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run gopherus against target
+  example: sh -c gopherus --exploit mysql > {out_dir}/gopher.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Gopherus — SSRF payload-template
+  generator (gopher://, ftp://, smtp:// chains) for blind SSRF exploitation. Runs
+  offline (NO egress) because it only synthesises payload strings; the operator pastes
+  th
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

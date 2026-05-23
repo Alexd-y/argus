@@ -1,0 +1,39 @@
+tool_id: smbmap
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: smbmap recursively enumerates SMB shares and access rights using anonymous
+  credentials by default. Backlog/dev1_md §4.2.
+command_template:
+- sh
+- -c
+- smbmap -H {ip} -R -q > {out_dir}/smbmap.txt
+command_string: sh -c smbmap -H {ip} -R -q > {out_dir}/smbmap.txt
+placeholders:
+  smbmap -H {ip} -R -q > {out_dir}/smbmap.txt: <smbmap -H {ip} -R -q > {out_dir}/smbmap.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/smbmap.txt
+cwe_ids:
+- 200
+- 285
+owasp_wstg:
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-smb
+scenarios:
+- description: Run smbmap against target
+  example: sh -c smbmap -H {ip} -R -q > {out_dir}/smbmap.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. smbmap recursively enumerates
+  SMB shares and access rights using anonymous credentials by default. Backlog/dev1_md
+  §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,48 @@
+tool_id: kxss
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: 'kxss reflected-XSS surface enumerator — image ships /usr/local/bin/kxss-runner
+  deriving a wayback/gau URL list from {url}, piping it into upstream kxss (stdin-only),
+  writing per-parameter reflection report to {out_dir}/kxss.txt. Passive risk: kxss
+  only fetches URLs and grep-matches reflected unfiltered payloads, no injection.
+  Parsing deferred to Cycle 3 (TEXT_LINES → parsers.dispatch.unmapped_tool). Author:
+  Tom Hudson (https://github.com/Emoe/kxss). Backlog/dev1_md §4.10. ARG-016.'
+command_template:
+- kxss-runner
+- --url
+- '{url}'
+- --output
+- '{out_dir}/kxss.txt'
+command_string: kxss-runner --url {url} --output {out_dir}/kxss.txt
+placeholders:
+  url: https://target.example.com
+  out_dir}/kxss.txt: <out_dir}/kxss.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/kxss.txt
+cwe_ids:
+- 79
+- 80
+owasp_wstg:
+- WSTG-INPV-01
+- WSTG-INPV-02
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run kxss against target
+  example: kxss-runner --url {url} --output {out_dir}/kxss.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. kxss reflected-XSS surface
+  enumerator — image ships /usr/local/bin/kxss-runner deriving a wayback/gau URL list
+  from {url}, piping it into upstream kxss (stdin-only), writing per-parameter reflection
+  r
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

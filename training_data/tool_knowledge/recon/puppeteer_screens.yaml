@@ -1,0 +1,45 @@
+tool_id: puppeteer_screens
+version: 1.0.0
+phase: recon
+category: browser
+risk_level: passive
+requires_approval: false
+default_timeout_s: 900
+description: Puppeteer-driven full-page screenshot + DOM snapshot of {url}. Headless
+  Chromium loads the URL with default navigation timeout, waits for network-idle,
+  captures a viewport + full-page PNG and the rendered HTML to /out/puppeteer/. Pure
+  passive recon — no form submission, no script injection. Used as the cheap visual
+  triage step before §4.4 httpx / §4.7 wpscan deeper enumeration. Parser deferred
+  to Cycle 3. Backlog/dev1_md §4.19. ARG-019.
+command_template:
+- sh
+- -c
+- puppeteer-screens --url {url} --output {out_dir}/puppeteer
+command_string: sh -c puppeteer-screens --url {url} --output {out_dir}/puppeteer
+placeholders:
+  puppeteer-screens --url {url} --output {out_dir}/puppeteer: <puppeteer-screens --url
+    {url} --output {out_dir}/puppeteer>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/puppeteer
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-browser:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run puppeteer_screens against target
+  example: sh -c puppeteer-screens --url {url} --output {out_dir}/puppeteer
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Puppeteer-driven full-page
+  screenshot + DOM snapshot of {url}. Headless Chromium loads the URL with default
+  navigation timeout, waits for network-idle, captures a viewport + full-page PNG
+  and the rend
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

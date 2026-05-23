@@ -1,0 +1,48 @@
+tool_id: testssl
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: testssl.sh comprehensive TLS/SSL configuration audit (ciphers, protocols,
+  vulns) with JSON severity-tagged output. Backlog/dev1_md §4.3.
+command_template:
+- testssl.sh
+- --jsonfile
+- '{out_dir}/testssl.json'
+- --severity
+- LOW
+- '{host}:{port}'
+command_string: testssl.sh --jsonfile {out_dir}/testssl.json --severity LOW {host}:{port}
+placeholders:
+  out_dir}/testssl.json: <out_dir}/testssl.json>
+  host}:{port: <host}:{port>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/testssl.json
+cwe_ids:
+- 326
+- 327
+- 295
+owasp_wstg:
+- WSTG-CRYP-01
+- WSTG-CRYP-02
+- WSTG-CRYP-03
+image: argus-kali-web:latest
+network_policy_name: tls-handshake
+scenarios:
+- description: Comprehensive TLS vulnerability testing
+  example: testssl.sh --full --json /out/testssl.json https://target.example.com
+  output_type: json
+  next_steps:
+  - nuclei for additional vulnerability scanning
+related_tools:
+- sslscan
+- nuclei
+when_to_use: Vulnerability identification and analysis phase. testssl.sh comprehensive
+  TLS/SSL configuration audit (ciphers, protocols, vulns) with JSON severity-tagged
+  output. Backlog/dev1_md §4.3.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

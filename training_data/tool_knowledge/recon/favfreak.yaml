@@ -1,0 +1,40 @@
+tool_id: favfreak
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: FavFreak favicon-hash fingerprinting (Shodan/Censys lookups). Backlog/dev1_md
+  §4.4.
+command_template:
+- favfreak
+- -l
+- '{in_dir}/urls.txt'
+- -o
+- '{out_dir}/favfreak.json'
+command_string: favfreak -l {in_dir}/urls.txt -o {out_dir}/favfreak.json
+placeholders:
+  in_dir}/urls.txt: <in_dir}/urls.txt>
+  out_dir}/favfreak.json: <out_dir}/favfreak.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/favfreak.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run favfreak against target
+  example: favfreak -l {in_dir}/urls.txt -o {out_dir}/favfreak.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. FavFreak favicon-hash fingerprinting
+  (Shodan/Censys lookups). Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

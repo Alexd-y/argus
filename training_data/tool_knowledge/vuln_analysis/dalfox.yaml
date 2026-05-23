@@ -1,0 +1,67 @@
+tool_id: dalfox
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'dalfox parameter-aware XSS scanner — DOM mining (--mining-dom), payload
+  mining (--mining-dict), deep DOM-XSS traversal (--deep-domxss) against {url}; BAV
+  skipped to focus on XSS. JSON envelope at {out_dir}/dalfox.json parsed by sandbox/parsers/dalfox_parser.py
+  via JSON_OBJECT: V→CONFIRMED, S→LIKELY, R→SUSPECTED INFO. Approval-free (reflection
+  contexts only, no auto-RCE/fileread). Author: hahwul (https://github.com/hahwul/dalfox).
+  Backlog/dev1_md §4.10. ARG-016.'
+command_template:
+- dalfox
+- url
+- '{url}'
+- --mining-dom
+- --mining-dict
+- --deep-domxss
+- --skip-bav
+- --no-color
+- --format
+- json
+- --output
+- '{out_dir}/dalfox.json'
+- --worker
+- '10'
+- --timeout
+- '10'
+command_string: dalfox url {url} --mining-dom --mining-dict --deep-domxss --skip-bav
+  --no-color --format json --output {out_dir}/dalfox.json --worker 10 --timeout 10
+placeholders:
+  url: https://target.example.com
+  out_dir}/dalfox.json: <out_dir}/dalfox.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/dalfox.json
+cwe_ids:
+- 79
+- 80
+owasp_wstg:
+- WSTG-INPV-01
+- WSTG-INPV-02
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: XSS scanning with OAST callback
+  example: dalfox url https://target.example.com/search?q=test --mining-dom --mining-dict
+    --deep-domxss --skip-bav --no-color --format json --output /out/dalfox.json --worker
+    10
+  output_type: json
+  next_steps:
+  - playwright_xss_verify for browser confirmation
+  - nuclei for additional findings
+related_tools:
+- xsstrike
+- xsser
+- playwright_xss_verify
+- nuclei
+when_to_use: Vulnerability identification and analysis phase. dalfox parameter-aware
+  XSS scanner — DOM mining (--mining-dom), payload mining (--mining-dict), deep DOM-XSS
+  traversal (--deep-domxss) against {url}; BAV skipped to focus on XSS. JSON envelope
+  at {out
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

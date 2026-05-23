@@ -1,0 +1,53 @@
+tool_id: wfuzz
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'wfuzz HTTP parameter / path fuzzer with 404 hidden. Stdout printer (-o
+  json) and file printer suffix (-f path,json) both forced to JSON so the file is
+  real JSON, not raw text. Author: Xavi Mendez (https://github.com/xmendez/wfuzz).
+  Backlog/dev1_md §4.5.'
+command_template:
+- wfuzz
+- -c
+- -z
+- file,{wordlist}
+- --hc
+- '404'
+- -o
+- json
+- -f
+- '{out_dir}/wfuzz.json,json'
+- '{url}/FUZZ'
+command_string: wfuzz -c -z file,{wordlist} --hc 404 -o json -f {out_dir}/wfuzz.json,json
+  {url}/FUZZ
+placeholders:
+  file,{wordlist: <file,{wordlist>
+  out_dir}/wfuzz.json,json: <out_dir}/wfuzz.json,json>
+  url}/FUZZ: <url}/FUZZ>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/wfuzz.json
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INPV-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run wfuzz against target
+  example: wfuzz -c -z file,{wordlist} --hc 404 -o json -f {out_dir}/wfuzz.json,json
+    {url}/FUZZ
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. wfuzz HTTP parameter
+  / path fuzzer with 404 hidden. Stdout printer (-o json) and file printer suffix
+  (-f path,json) both forced to JSON so the file is real JSON, not raw text. Author:
+  Xavi Mendez (htt'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

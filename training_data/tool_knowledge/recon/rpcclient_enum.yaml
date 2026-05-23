@@ -1,0 +1,41 @@
+tool_id: rpcclient_enum
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: rpcclient null-session enumeration of domain users, groups, and basic
+  domain info via SMB. Backlog/dev1_md §4.2.
+command_template:
+- sh
+- -c
+- rpcclient -U '' -N {ip} -c 'enumdomusers; enumdomgroups; querydominfo' > {out_dir}/rpc.txt
+command_string: sh -c rpcclient -U '' -N {ip} -c 'enumdomusers; enumdomgroups; querydominfo'
+  > {out_dir}/rpc.txt
+placeholders:
+  rpcclient -U '' -N {ip} -c 'enumdomusers; enumdomgroups; querydominfo' > {out_dir}/rpc.txt: <rpcclient
+    -U '' -N {ip} -c 'enumdomusers; enumdomgroups; querydominfo' > {out_dir}/rpc.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/rpc.txt
+cwe_ids:
+- 200
+- 285
+owasp_wstg:
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-smb
+scenarios:
+- description: Run rpcclient_enum against target
+  example: sh -c rpcclient -U '' -N {ip} -c 'enumdomusers; enumdomgroups; querydominfo'
+    > {out_dir}/rpc.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. rpcclient null-session enumeration
+  of domain users, groups, and basic domain info via SMB. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,44 @@
+tool_id: snmpwalk
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: Net-SNMP snmpwalk — full SNMPv2c MIB walk against {host} using {community}.
+  Read-only GETNEXT sweep (-t 5 -r 2 keeps the agent within typical timeout budgets).
+  Surfaces interface tables, ARP / route / process inventories on weakly-configured
+  devices that ship with default community strings (public/private). Output text-only
+  (parser deferred to Cycle 3). Backlog/dev1_md §4.17. ARG-019.
+command_template:
+- sh
+- -c
+- snmpwalk -v 2c -c {community} -t 5 -r 2 {host} > {out_dir}/snmpwalk.txt
+command_string: sh -c snmpwalk -v 2c -c {community} -t 5 -r 2 {host} > {out_dir}/snmpwalk.txt
+placeholders:
+  snmpwalk -v 2c -c {community} -t 5 -r 2 {host} > {out_dir}/snmpwalk.txt: <snmpwalk
+    -v 2c -c {community} -t 5 -r 2 {host} > {out_dir}/snmpwalk.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/snmpwalk.txt
+cwe_ids:
+- 200
+- 521
+owasp_wstg:
+- WSTG-INFO-09
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run snmpwalk against target
+  example: sh -c snmpwalk -v 2c -c {community} -t 5 -r 2 {host} > {out_dir}/snmpwalk.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Net-SNMP snmpwalk — full SNMPv2c
+  MIB walk against {host} using {community}. Read-only GETNEXT sweep (-t 5 -r 2 keeps
+  the agent within typical timeout budgets). Surfaces interface tables, ARP / route
+  /
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

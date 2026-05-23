@@ -1,0 +1,52 @@
+tool_id: mkcert_verify
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+description: 'Local TLS chain validation: pulls the live certificate chain via openssl
+  s_client and verifies it against the system CA bundle. Backlog/dev1_md §4.3.'
+command_template:
+- sh
+- -c
+- openssl s_client -connect {host}:{port} -servername {host} -showcerts </dev/null
+  2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs {out_dir}/chain.pem
+  > {out_dir}/mkcert_verify.txt 2>&1
+command_string: sh -c openssl s_client -connect {host}:{port} -servername {host} -showcerts
+  </dev/null 2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs
+  {out_dir}/chain.pem > {out_dir}/mkcert_verify.txt 2>&1
+placeholders:
+  ? openssl s_client -connect {host}:{port} -servername {host} -showcerts </dev/null
+    2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs {out_dir}/chain.pem
+    > {out_dir}/mkcert_verify.txt 2>&1
+  : <openssl s_client -connect {host}:{port} -servername {host} -showcerts </dev/null
+    2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs {out_dir}/chain.pem
+    > {out_dir}/mkcert_verify.txt 2>&1>
+output_format: custom
+evidence_artifacts: &id001
+- /out/chain.pem
+- /out/mkcert_verify.txt
+cwe_ids:
+- 295
+- 296
+- 297
+owasp_wstg:
+- WSTG-CRYP-03
+image: argus-kali-web:latest
+network_policy_name: tls-handshake
+scenarios:
+- description: Run mkcert_verify against target
+  example: sh -c openssl s_client -connect {host}:{port} -servername {host} -showcerts
+    </dev/null 2>/dev/null > {out_dir}/chain.pem && openssl verify -CApath /etc/ssl/certs
+    {out_dir}/chain.pem > {out_dir}/mkcert_verify.txt 2>&1
+  output_type: custom
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. Local TLS chain validation:
+  pulls the live certificate chain via openssl s_client and verifies it against the
+  system CA bundle. Backlog/dev1_md §4.3.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

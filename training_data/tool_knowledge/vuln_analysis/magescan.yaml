@@ -1,0 +1,46 @@
+tool_id: magescan
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 900
+description: 'MageScan Magento e-commerce security scanner — scan:all surface (version,
+  modules, patches, sitemap, admin path); JSON output on stdout, kept text-only in
+  Cycle 2 since the schema is shop-dependent (parser deferred to Cycle 3). Author:
+  Steve Robbins (https://github.com/steverobbins/magescan). Backlog/dev1_md §4.7.'
+command_template:
+- magescan
+- scan:all
+- '{url}'
+- --format=json
+- --no-ansi
+- --quiet
+command_string: magescan scan:all {url} --format=json --no-ansi --quiet
+placeholders:
+  url: https://target.example.com
+output_format: text_lines
+evidence_artifacts: []
+cwe_ids:
+- 1395
+- 200
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-CONF-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run magescan against target
+  example: magescan scan:all {url} --format=json --no-ansi --quiet
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. MageScan Magento e-commerce
+  security scanner — scan:all surface (version, modules, patches, sitemap, admin path);
+  JSON output on stdout, kept text-only in Cycle 2 since the schema is shop-dependent
+  (p
+key_outputs:
+- tool_output
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

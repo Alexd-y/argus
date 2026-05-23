@@ -1,0 +1,41 @@
+tool_id: snmp_check
+version: 1.0.0
+phase: recon
+category: auth
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: snmp-check — SNMPv1/v2c walk against {host} using {community} string
+  (default-community recon). Single-shot read — no write OIDs touched. Output text-only
+  (full parser deferred to Cycle 3). Backlog/dev1_md §4.12. ARG-017.
+command_template:
+- sh
+- -c
+- snmp-check -c {community} {host} > {out_dir}/snmp.txt
+command_string: sh -c snmp-check -c {community} {host} > {out_dir}/snmp.txt
+placeholders:
+  snmp-check -c {community} {host} > {out_dir}/snmp.txt: <snmp-check -c {community}
+    {host} > {out_dir}/snmp.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/snmp.txt
+cwe_ids:
+- 200
+- 521
+owasp_wstg:
+- WSTG-INFO-09
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run snmp_check against target
+  example: sh -c snmp-check -c {community} {host} > {out_dir}/snmp.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. snmp-check — SNMPv1/v2c walk
+  against {host} using {community} string (default-community recon). Single-shot read
+  — no write OIDs touched. Output text-only (full parser deferred to Cycle 3). Backlog/de
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

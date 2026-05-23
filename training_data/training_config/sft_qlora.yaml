@@ -1,0 +1,381 @@
+# ARGUS WhiteRabbitNeo — SFT/QLoRA Training Pipeline Configuration
+# Model: WhiteRabbitNeo-V3-7B (base model for fine-tuning)
+# Framework: Axolotl (primary) / LLaMA-Factory (alternative)
+# No DPO/preference tuning stage — only RAG → SFT → Methodology SFT (3 stages)
+
+# =============================================================================
+# STAGE 1: RAG Knowledge Injection (offline, no training)
+# =============================================================================
+# This stage is NOT a training stage. It prepares the RAG knowledge base
+# from the tool_knowledge/ YAML files for the LLM to reference during inference.
+# The RAG index is built separately and used at inference time by the ARGUS pipeline.
+
+rag_config:
+  knowledge_sources:
+    - path: "training_data/tool_knowledge/"
+      format: "yaml"
+      description: "ARGUS tool command knowledge base (162 tools)"
+    - path: "training_data/repo_mapping.md"
+      format: "markdown"
+      description: "Repository-to-architecture mapping"
+    - path: "docs/tool-catalog.md"
+      format: "markdown"
+      description: "ARGUS 157-tool catalog reference"
+    - path: "docs/payload-registry.md"
+      format: "markdown"
+      description: "54 payload families reference"
+    - path: "docs/prompt-registry.md"
+      format: "markdown"
+      description: "67 prompt templates reference"
+  embedding_model: "BAAI/bge-small-en-v1.5"
+  chunk_size: 512
+  chunk_overlap: 64
+  retrieval_top_k: 5
+  retrieval_mode: "cosine_similarity"
+  vector_store: "FAISS"
+  index_output: "training_data/rag_index/"
+
+# =============================================================================
+# STAGE 2: SFT — Core Payload Generation & Tool Command Training
+# =============================================================================
+# Fine-tune WhiteRabbitNeo-V3-7B on the full ARGUS training dataset.
+# This teaches the model all 54 payload families, 162 tool commands,
+# finding triage, validation plans, and remediation.
+# 
+# Dataset: training_data/final/{train,valid,test}.jsonl
+# Format: messages format (system, user, assistant)
+
+sft_config:
+  # === Model ===
+  base_model: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  model_type: "AutoModelForCausalLM"
+  tokenizer_type: "AutoTokenizer"
+  tokenizer_config: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  
+  # === QLoRA Configuration ===
+  load_in_4bit: true
+  load_in_8bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_storage: "uint8"
+  
+  adapter: "qlora"
+  lora_model_dir:
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  lora_target_linear: true
+  lora_fan_in_fan_out:
+  lora_modules_to_save:
+    - embed_tokens
+    - lm_head
+  
+  # === Dataset ===
+  datasets:
+    - path: "training_data/final/train.jsonl"
+      type: "chatml.argus"
+      split: "train"
+  val_datasets:
+    - path: "training_data/final/valid.jsonl"
+      type: "chatml.argus"
+      split: "valid"
+  test_datasets:
+    - path: "training_data/final/test.jsonl"
+      type: "chatml.argus"
+      split: "test"
+  
+  # === Data Format (chatml) ===
+  dataset_format: "chatml"
+  chat_template: "chatml"
+  system_prompt_format: "system"
+  user_prompt_format: "user"
+  assistant_prompt_format: "assistant"
+  
+  # === Tokenizer ===
+  sequence_len: 4096
+  max_prompt_length: 2048
+  pad_to_sequence_len: true
+  train_on_inputs: false
+  
+  # === Training Hyperparameters ===
+  micro_batch_size: 2
+  gradient_accumulation_steps: 8
+  num_epochs: 3
+  warmup_ratio: 0.1
+  learning_rate: 2.0e-4
+  lr_scheduler: "cosine"
+  lr_scheduler_kwargs:
+    min_lr_ratio: 0.1
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-8
+  max_grad_norm: 1.0
+  
+  # === Optimization ===
+  optimizer: "paged_adamw_8bit"
+  torch_dtype: "bfloat16"
+  flash_attention: true
+  xformers_attention:
+  sdp_attention: true
+  gradient_checkpointing: true
+  gradient_checkpointing_kwargs:
+    use_reentrant: false
+  
+  # === Logging ===
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 200
+  save_total_limit: 3
+  output_dir: "training_data/output/sft_stage2"
+  
+  # === Evaluation ===
+  eval_table_size: 10
+  eval_max_new_tokens: 1024
+  
+  # === Hardware ===
+  bf16: true
+  tf32: true
+  deepspeed:
+  fsdp:
+  
+  # === Wandb ===
+  wandb_project: "argus-whiterabbitneo"
+  wandb_entity:
+  wandb_name: "sft_stage2_qlora"
+
+# =============================================================================
+# STAGE 3: Methodology SFT — Penetration Testing Methodology Alignment
+# =============================================================================
+# Fine-tune on methodology-specific data to improve the model's ability to
+# generate structured pentest methodology checklists, attack chains, and reports.
+# Uses the same QLoRA adapter from Stage 2, continued training.
+#
+# This stage focuses on higher-order reasoning:
+# - methodology_checklist generation
+# - attack_chain_summary construction  
+# - report_section writing
+# - tool_selection multi-step reasoning
+
+methodology_sft_config:
+  base_model: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  resume_from_checkpoint: "training_data/output/sft_stage2"
+  
+  # Same QLoRA config, continued from Stage 2
+  load_in_4bit: true
+  adapter: "qlora"
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  
+  # Methodology-focused dataset (augmented with repo-sourced methodology data)
+  datasets:
+    - path: "training_data/final/train.jsonl"
+      type: "chatml.argus"
+      split: "train"
+      weight: 1.0
+    - path: "training_data/methodology_supplement.jsonl"
+      type: "chatml.argus"
+      split: "train"
+      weight: 2.0
+  val_datasets:
+    - path: "training_data/final/valid.jsonl"
+      type: "chatml.argus"
+  
+  # Shorter, focused training
+  sequence_len: 8192
+  micro_batch_size: 1
+  gradient_accumulation_steps: 16
+  num_epochs: 2
+  warmup_ratio: 0.05
+  learning_rate: 5.0e-5
+  lr_scheduler: "cosine"
+  
+  # Same optimization settings
+  optimizer: "paged_adamw_8bit"
+  flash_attention: true
+  gradient_checkpointing: true
+  bf16: true
+  
+  output_dir: "training_data/output/methodology_sft_stage3"
+  wandb_name: "methodology_sft_stage3_qlora"
+
+# =============================================================================
+# Alternative: LLaMA-Factory Configuration
+# =============================================================================
+# Use this if Axolotl is unavailable or for simpler training setup.
+
+llamafactory_config:
+  model_name_or_path: "WhiteRabbitNeo/WhiteRabbitNeo-V3-7B"
+  stage: "sft"
+  finetuning_type: "lora"
+  lora_rank: 64
+  lora_alpha: 128
+  lora_target: "all"
+  template: "chatml"
+  dataset: "argus_training"
+  dataset_dir: "training_data/llamafactory_data"
+  cutoff_len: 4096
+  max_samples: 100000
+  overwrite_cache: true
+  preprocessing_num_workers: 4
+  
+  output_dir: "training_data/output/llamafactory_sft"
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-4
+  num_train_epochs: 3
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+  bf16: true
+  fp16: false
+  
+  quantization_bit: 4
+  quantization_type: "nf4"
+  
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 100
+  save_total_limit: 3
+  
+  lora_dropout: 0.05
+  lora_target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+# =============================================================================
+# Training Run Commands
+# =============================================================================
+
+# Export for inference:
+#   python -m transformers --model training_data/output/argus-whiterabbitneo-v3-7b-sft --export-gguf --output training_data/output/argus-whiterabbitneo-v3-7b-sft.Q4_K_M.gguf
+
+# =============================================================================
+# INFRASTRUCTURE & SERVING CONFIGURATION
+# =============================================================================
+
+infrastructure:
+  # Minimum GPU requirements for QLoRA training
+  training_gpu:
+    option_1:
+      gpu: "1x NVIDIA A100 80GB"
+      description: "Single A100 80GB — recommended for fastest training"
+      batch_size_effective: 16  # micro_batch_size * gradient_accumulation * num_gpus
+      estimated_stage2_time: "4-6 hours"
+      estimated_stage3_time: "2-3 hours"
+    option_2:
+      gpu: "2x NVIDIA RTX 4090 24GB (48GB total)"
+      description: "Dual RTX 4090 — budget option, requires model parallelism"
+      batch_size_effective: 8
+      estimated_stage2_time: "8-12 hours"
+      estimated_stage3_time: "4-6 hours"
+    option_3:
+      gpu: "1x NVIDIA RTX 4090 24GB + QLoRA 4-bit"
+      description: "Single RTX 4090 with aggressive QLoRA — minimum viable"
+      batch_size_effective: 4
+      estimated_stage2_time: "16-24 hours"
+      estimated_stage3_time: "8-12 hours"
+
+  # Disk requirements
+  disk_space:
+    base_model: "15GB (WhiteRabbitNeo-V3-7B in bf16)"
+    training_data: "200MB (JSONL files)"
+    checkpoints: "2-5GB per checkpoint, 3 checkpoints max = 15GB"
+    merged_model: "15GB (full model after LoRA merge)"
+    gguf_export: "4-5GB (Q4_K_M quantized)"
+    total_estimated: "50-60GB"
+
+  # Memory requirements during training
+  memory:
+    qLoRA_4bit_peak: "~22GB VRAM (batch_size=2, seq_len=4096)"
+    qLoRA_4bit_peak_8k: "~40GB VRAM (batch_size=1, seq_len=8192)"
+    inference_peak: "~8GB VRAM (bf16, 4-bit quantized)"
+    ram_minimum: "32GB system RAM"
+
+serving:
+  # vLLM serving configuration for production inference
+  engine: "vllm"
+  model_name: "argus-whiterabbitneo-v3-7b-sft"
+  model_path: "training_data/output/argus-whiterabbitneo-v3-7b-sft"
+  
+  # Inference server settings
+  host: "0.0.0.0"
+  port: 8000
+  trust_remote_code: true
+  
+  # Performance settings
+  tensor_parallel_size: 1  # Increase for multi-GPU serving
+  gpu_memory_utilization: 0.90
+  max_model_len: 4096
+  max_num_seqs: 8
+  max_num_batched_tokens: 4096
+  
+  # Quantization for inference
+  quantization: null  # Use bf16 for full precision, or "awq" / "gptq" for quantized
+  
+  # Chat template
+  chat_template: "chatml"
+  system_prompt_prefix: "You are ARGUS"
+  
+  # Health and monitoring
+  enable_health_endpoint: true
+  enable_metrics_endpoint: true
+  
+  # ARGUS pipeline integration
+  argus_integration:
+    llm_gateway_endpoint: "http://argus-llm-gateway:8001/v1/completions"
+    timeout_seconds: 120
+    retry_count: 3
+    model_id: "argus-whiterabbitneo-v3-7b"
+    
+  # Alternative: llama.cpp server for CPU/edge deployment
+  llamacpp:
+    model_path: "training_data/output/argus-whiterabbitneo-v3-7b-sft.Q4_K_M.gguf"
+    threads: 8
+    ctx_size: 4096
+    batch_size: 512
+    host: "0.0.0.0"
+    port: 8080
+
+# =============================================================================
+# TRAINING RUN COMMANDS
+# =============================================================================
+
+# Axolotl (primary):
+#   Stage 2 (SFT):
+#     accelerate launch -m axolotl.cli training_data/training_config/sft_qlora.yaml
+#   Stage 3 (Methodology SFT):
+#     accelerate launch -m axolotl.cli training_data/training_config/methodology_sft_qlora.yaml
+#
+# LLaMA-Factory (alternative):
+#   llamafactory-cli train training_data/training_config/llamafactory_sft.yaml
+#
+# Merge LoRA adapter:
+#   python -m axolotl.cli merge_lora --lora-model training_data/output/sft_stage2 --base-model WhiteRabbitNeo/WhiteRabbitNeo-V3-7B --output training_data/output/argus-whiterabbitneo-v3-7b-sft
+#
+# Export for inference (vLLM):
+#   python -m vllm.entrypoint.openai.api_server --model training_data/output/argus-whiterabbitneo-v3-7b-sft --host 0.0.0.0 --port 8000 --trust-remote-code --chat-template chatml
+#
+# Export for inference (llama.cpp GGUF):
+#   python convert_hf_to_gguf.py training_data/output/argus-whiterabbitneo-v3-7b-sft --outfile training_data/output/argus-whiterabbitneo-v3-7b-sft.Q4_K_M.gguf --outtype q4_K_M

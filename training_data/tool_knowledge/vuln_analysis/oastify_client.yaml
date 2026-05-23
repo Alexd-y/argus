@@ -1,0 +1,46 @@
+tool_id: oastify_client
+version: 1.0.0
+phase: vuln_analysis
+category: oast
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: oastify-client — wire-compatible mirror of interactsh that polls the
+  ARGUS OAST plane for OOB callbacks. Same JSONL contract as interactsh_client; both
+  route through sandbox/parsers/interactsh_parser.py. Used as a hot-standby OAST receiver
+  when the upstream interactsh image is unavailable. Backlog/dev1_md §4.11. ARG-017.
+command_template:
+- oastify-client
+- -server
+- https://oast.argus.local
+- -json
+- -o
+- '{out_dir}/interactsh.jsonl'
+- -v
+command_string: oastify-client -server https://oast.argus.local -json -o {out_dir}/interactsh.jsonl
+  -v
+placeholders:
+  out_dir}/interactsh.jsonl: <out_dir}/interactsh.jsonl>
+output_format: json_lines
+evidence_artifacts: &id001
+- /out/interactsh.jsonl
+cwe_ids:
+- 918
+owasp_wstg:
+- WSTG-INPV-19
+image: argus-kali-web:latest
+network_policy_name: oast-egress
+scenarios:
+- description: Run oastify_client against target
+  example: oastify-client -server https://oast.argus.local -json -o {out_dir}/interactsh.jsonl
+    -v
+  output_type: json_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. oastify-client — wire-compatible
+  mirror of interactsh that polls the ARGUS OAST plane for OOB callbacks. Same JSONL
+  contract as interactsh_client; both route through sandbox/parsers/interactsh_parser.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

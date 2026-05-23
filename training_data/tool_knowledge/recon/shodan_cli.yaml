@@ -1,0 +1,41 @@
+tool_id: shodan_cli
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 600
+description: Shodan CLI passive lookup of exposed services for hostnames matching
+  the target domain. Requires SHODAN_API_KEY. Backlog/dev1_md §4.1.
+command_template:
+- sh
+- -c
+- shodan search --fields ip_str,port,org,hostnames hostname:{domain} > {out_dir}/shodan.csv
+command_string: sh -c shodan search --fields ip_str,port,org,hostnames hostname:{domain}
+  > {out_dir}/shodan.csv
+placeholders:
+  shodan search --fields ip_str,port,org,hostnames hostname:{domain} > {out_dir}/shodan.csv: <shodan
+    search --fields ip_str,port,org,hostnames hostname:{domain} > {out_dir}/shodan.csv>
+output_format: csv
+evidence_artifacts: &id001
+- /out/shodan.csv
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-04
+image: argus-kali-recon:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run shodan_cli against target
+  example: sh -c shodan search --fields ip_str,port,org,hostnames hostname:{domain}
+    > {out_dir}/shodan.csv
+  output_type: csv
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. Shodan CLI passive lookup
+  of exposed services for hostnames matching the target domain. Requires SHODAN_API_KEY.
+  Backlog/dev1_md §4.1.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

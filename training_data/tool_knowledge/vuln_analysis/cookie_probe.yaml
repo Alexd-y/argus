@@ -1,0 +1,47 @@
+tool_id: cookie_probe
+version: 1.0.0
+phase: vuln_analysis
+category: browser
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: Headless cookie attribute auditor — drives the {url} login / landing
+  flow with Chromium and inspects every Set-Cookie header for Secure / HttpOnly /
+  SameSite / Domain / Path / Max-Age. Flags session cookies missing Secure on HTTPS,
+  missing HttpOnly on session ids, SameSite=None without Secure, and overly-broad
+  Domain / Path scopes. No mutation of the target's cookie store — pure observation.
+  Parser deferred to Cycle 3. Backlog/dev1_md §4.19. ARG-019.
+command_template:
+- sh
+- -c
+- cookie-probe --url {url} --output {out_dir}/cookies.json
+command_string: sh -c cookie-probe --url {url} --output {out_dir}/cookies.json
+placeholders:
+  cookie-probe --url {url} --output {out_dir}/cookies.json: <cookie-probe --url {url}
+    --output {out_dir}/cookies.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/cookies.json
+cwe_ids:
+- 614
+- 1004
+- 1275
+owasp_wstg:
+- WSTG-SESS-02
+- WSTG-SESS-09
+image: argus-kali-browser:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run cookie_probe against target
+  example: sh -c cookie-probe --url {url} --output {out_dir}/cookies.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Headless cookie attribute
+  auditor — drives the {url} login / landing flow with Chromium and inspects every
+  Set-Cookie header for Secure / HttpOnly / SameSite / Domain / Path / Max-Age. Flags
+  session c
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

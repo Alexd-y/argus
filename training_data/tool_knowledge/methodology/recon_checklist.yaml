@@ -1,0 +1,138 @@
+phase: recon
+target_types: [web_app, internal_network, api, cloud, ad_environment]
+description: >-
+  Reconnaissance methodology for ARGUS pentest pipeline. Defines ordered steps,
+  tool selection, and verification criteria for the initial information gathering
+  phase. Covers passive and active enumeration, subdomain discovery, port scanning,
+  and technology fingerprinting.
+
+steps:
+  - order: 1
+    action: "Passive subdomain enumeration via OSINT sources"
+    tools: [subfinder, amass_passive, crt_sh, chaos, findomain, assetfinder]
+    verification: "Count discovered subdomains; compare across tools for coverage"
+    argus_tools: [subfinder, amass_passive]
+    expected_output: "List of subdomains with source attribution"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-02"]
+    next_steps: [2]
+
+  - order: 2
+    action: "HTTP fingerprinting of discovered subdomains"
+    tools: [httpx, whatweb, wappalyzer_cli, webanalyze]
+    verification: "Confirm live web servers; extract titles, status codes, technologies"
+    argus_tools: [httpx, whatweb]
+    expected_output: "JSON list of live URLs with status, title, tech stack"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: [3, 5]
+
+  - order: 3
+    action: "TCP port scanning on live hosts"
+    tools: [nmap_tcp_top, nmap_tcp_full, nmap_udp, masscan, naabu, rustscan]
+    verification: "Identify open ports, service versions, and operating systems"
+    argus_tools: [nmap_tcp_top, nmap_udp, nmap_version]
+    expected_output: "XML/JSON port scan results with service versions"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200, 668]
+    owasp_wstg: ["WSTG-INFO-02", "WSTG-INFO-04"]
+    next_steps: [4]
+
+  - order: 4
+    action: "Service version detection on discovered ports"
+    tools: [nmap_version, nmap_vuln, sslscan, testssl, tlsx]
+    verification: "Accurate service version identification for vulnerability mapping"
+    argus_tools: [nmap_version, nmap_vuln]
+    expected_output: "Service versions, CPEs, and potential vulnerability hints"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: []
+
+  - order: 5
+    action: "Web technology detection and screenshot capture"
+    tools: [whatweb, wappalyzer_cli, webanalyze, gowitness, eyewitness]
+    verification: "Identified CMS, frameworks, server software versions"
+    argus_tools: [whatweb, wappalyzer_cli]
+    expected_output: "Technology stack with versions and categories"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: [6]
+
+  - order: 6
+    action: "Directory and file fuzzing on web targets"
+    tools: [ffuf_dir, feroxbuster, gobuster_dir, dirsearch, ffuf_param, ffuf_vhost]
+    verification: "Discover hidden paths, API endpoints, backup files, and virtual hosts"
+    argus_tools: [ffuf_dir, ffuf_param, ffuf_vhost]
+    expected_output: "List of discovered paths with status codes and sizes"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: [7, 8]
+
+  - order: 7
+    action: "Parameter mining and hidden endpoint discovery"
+    tools: [paramspider, arjun, gospider, katana, hakrawler, linkfinder, subjs]
+    verification: "Identify all user-controllable input parameters"
+    argus_tools: [paramspider, arjun, gospider, katana]
+    expected_output: "List of URLs with discoverable parameters"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-04"]
+    next_steps: []
+
+  - order: 8
+    action: "URL and content discovery from historical data"
+    tools: [gau, waybackurls, urlscan, shodan_cli, censys, theharvester, otx_alienvault]
+    verification: "Collect historical URLs, old endpoints, and changed content"
+    argus_tools: [gau, waybackurls, theharvester]
+    expected_output: "Unique URLs from Wayback, CommonCrawl, and OSINT sources"
+    risk_level: "low"
+    requires_approval: false
+    cwe_ids: [200]
+    owasp_wstg: ["WSTG-INFO-01"]
+    next_steps: []
+
+phase_transitions:
+  from_recon_to_va:
+    trigger: "Recon phase complete with identified assets, open ports, and technology stack"
+    conditions:
+      - "All live web servers identified (httpx completed)"
+      - "Port scan finished (nmap completed)"
+      - "Technology stack fingerprinted"
+      - "Directories and parameters enumerated"
+    next_phase: "vuln_analysis"
+
+ad_enumeration_substeps:
+  - action: "Enumerate Active Directory users and groups"
+    tools: [kerbrute, ldapsearch, enum4linux_ng, rpcclient_enum]
+    verification: "List of domain users, groups, and policies"
+    argus_tools: [kerbrute, ldapsearch, enum4linux_ng]
+  - action: "Collect AD topology data for BloodHound analysis"
+    tools: [bloodhound_python]
+    verification: "JSON files ready for BloodHound GUI import"
+    argus_tools: [bloodhound_python]
+  - action: "Enumerate SMB shares and access"
+    tools: [smbmap, smbclient, crackmapexec]
+    verification: "List of accessible shares and their permissions"
+    argus_tools: [smbmap, smbclient, crackmapexec]
+
+cloud_enumeration_substeps:
+  - action: "Enumerate cloud infrastructure and services"
+    tools: [cloudsploit, prowler, scoutsuite, cloud_metadata_check]
+    verification: "Cloud posture assessment and exposed metadata"
+    argus_tools: [cloudsploit, prowler, scoutsuite]
+  - action: "Scan container images and IaC"
+    tools: [trivy_image, trivy_fs, grype, syft, checkov, tfsec, kics]
+    verification: "CVE list, SBOM, and IaC misconfigurations"
+    argus_tools: [trivy_image, trivy_fs, grype, syft, checkov]

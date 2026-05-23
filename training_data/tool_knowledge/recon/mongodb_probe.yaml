@@ -1,0 +1,56 @@
+tool_id: mongodb_probe
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 300
+description: mongosh probe — anonymous MongoDB enumeration against {host}:{port}.
+  Read-only serverStatus + listDatabases roundtrip; surfaces version, build flags,
+  and the database inventory exposed by missing-auth deployments (the canonical 'open
+  mongo' misconfiguration). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md
+  §4.17. ARG-019.
+command_template:
+- sh
+- -c
+- 'mongosh --host {host} --port {port} --quiet --eval ''JSON.stringify({serverStatus:
+  db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1,
+  nameOnly:true})})'' > {out_dir}/mongo_info.json'
+command_string: 'sh -c mongosh --host {host} --port {port} --quiet --eval ''JSON.stringify({serverStatus:
+  db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1,
+  nameOnly:true})})'' > {out_dir}/mongo_info.json'
+placeholders:
+  ? 'mongosh --host {host} --port {port} --quiet --eval ''JSON.stringify({serverStatus:
+    db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1,
+    nameOnly:true})})'' > {out_dir}/mongo_info.json'
+  : '<mongosh --host {host} --port {port} --quiet --eval ''JSON.stringify({serverStatus:
+    db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1,
+    nameOnly:true})})'' > {out_dir}/mongo_info.json>'
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/mongo_info.json
+cwe_ids:
+- 200
+- 287
+- 521
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-ATHN-04
+image: argus-kali-network:latest
+network_policy_name: auth-bruteforce
+scenarios:
+- description: Run mongodb_probe against target
+  example: 'sh -c mongosh --host {host} --port {port} --quiet --eval ''JSON.stringify({serverStatus:
+    db.serverStatus({asserts:0,connections:1,host:1,version:1}), dbs: db.adminCommand({listDatabases:1,
+    nameOnly:true})})'' > {out_dir}/mongo_info.json'
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. mongosh probe — anonymous
+  MongoDB enumeration against {host}:{port}. Read-only serverStatus + listDatabases
+  roundtrip; surfaces version, build flags, and the database inventory exposed by
+  missing-auth
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

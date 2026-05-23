@@ -1,0 +1,43 @@
+tool_id: eyewitness
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 300
+description: EyeWitness web screenshots and HTTP report (--no-prompt --web). Backlog/dev1_md
+  §4.4.
+command_template:
+- eyewitness
+- -f
+- '{in_dir}/urls.txt'
+- -d
+- '{out_dir}/eyewitness'
+- --no-prompt
+- --web
+command_string: eyewitness -f {in_dir}/urls.txt -d {out_dir}/eyewitness --no-prompt
+  --web
+placeholders:
+  in_dir}/urls.txt: <in_dir}/urls.txt>
+  out_dir}/eyewitness: <out_dir}/eyewitness>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/eyewitness
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run eyewitness against target
+  example: eyewitness -f {in_dir}/urls.txt -d {out_dir}/eyewitness --no-prompt --web
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. EyeWitness web screenshots
+  and HTTP report (--no-prompt --web). Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

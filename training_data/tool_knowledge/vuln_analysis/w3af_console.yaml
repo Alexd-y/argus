@@ -1,0 +1,54 @@
+tool_id: w3af_console
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+description: 'w3af Web Application Attack & Audit Framework console — runs the user-supplied
+  profile from {in_dir}/w3af.profile (target URL pinned in the profile), non-interactive,
+  plain-text report. Approval-gated due to active audit modules (xss / sqli / rce
+  probes). Profile is the canonical injection point for {url}. Author: Andres Riancho
+  (https://github.com/andresriancho/w3af). Backlog/dev1_md §4.8.'
+command_template:
+- w3af_console
+- -y
+- -n
+- -s
+- '{in_dir}/w3af.profile'
+- -o
+- '{out_dir}/w3af.txt'
+command_string: w3af_console -y -n -s {in_dir}/w3af.profile -o {out_dir}/w3af.txt
+placeholders:
+  in_dir}/w3af.profile: <in_dir}/w3af.profile>
+  out_dir}/w3af.txt: <out_dir}/w3af.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/w3af.txt
+cwe_ids:
+- 79
+- 89
+- 22
+- 78
+- 200
+- 287
+owasp_wstg:
+- WSTG-INPV-01
+- WSTG-INPV-05
+- WSTG-INPV-12
+- WSTG-AUTHZ-01
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run w3af_console against target
+  example: w3af_console -y -n -s {in_dir}/w3af.profile -o {out_dir}/w3af.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. w3af Web Application
+  Attack & Audit Framework console — runs the user-supplied profile from {in_dir}/w3af.profile
+  (target URL pinned in the profile), non-interactive, plain-text report. Approval-gated
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

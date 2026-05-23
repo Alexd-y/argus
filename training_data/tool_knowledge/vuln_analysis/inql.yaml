@@ -1,0 +1,49 @@
+tool_id: inql
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: 'inql GraphQL introspection + query-template generator — pulls the schema
+  of {url}/graphql via standard introspection and emits skeleton queries/mutations
+  plus Cycle 3 fuzz candidates (auth-protected fields, dangerous mutations, IDOR-prone
+  args). Read-only. Output is canonical inql JSON: {schema, queries, mutations, subscriptions}.
+  Parser deferred to Cycle 3 (JSON_OBJECT → unmapped_tool). Author: doyensec. Backlog
+  §4.14. ARG-018.'
+command_template:
+- inql
+- -t
+- '{url}/graphql'
+- -o
+- '{out_dir}/inql.json'
+command_string: inql -t {url}/graphql -o {out_dir}/inql.json
+placeholders:
+  url}/graphql: <url}/graphql>
+  out_dir}/inql.json: <out_dir}/inql.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/inql.json
+cwe_ids:
+- 200
+- 862
+- 863
+owasp_wstg:
+- WSTG-INFO-08
+- WSTG-IDNT-04
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Run inql against target
+  example: inql -t {url}/graphql -o {out_dir}/inql.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. inql GraphQL introspection
+  + query-template generator — pulls the schema of {url}/graphql via standard introspection
+  and emits skeleton queries/mutations plus Cycle 3 fuzz candidates (auth-protected
+  f
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

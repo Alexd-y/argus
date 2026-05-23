@@ -1,0 +1,48 @@
+tool_id: jadx
+version: 1.0.0
+phase: vuln_analysis
+category: binary
+risk_level: low
+requires_approval: false
+default_timeout_s: 1800
+description: JADX — DEX-to-Java decompiler. Translates the DEX bytecode inside {binary}
+  (APK or .dex) into readable Java sources at /out/jadx/sources/, surfacing hard-coded
+  secrets, plaintext URLs, and weak crypto. --show-bad-code keeps partially-decompiled
+  methods for manual review; --no-imports keeps the diff-friendly. Pure offline (egress
+  blocked). Output text-only (parser deferred to Cycle 3). Backlog/dev1_md §4.18.
+  ARG-019.
+command_template:
+- sh
+- -c
+- jadx --no-imports --show-bad-code -d {out_dir}/jadx {binary} 2>&1 | tee {out_dir}/jadx.log
+command_string: sh -c jadx --no-imports --show-bad-code -d {out_dir}/jadx {binary}
+  2>&1 | tee {out_dir}/jadx.log
+placeholders:
+  jadx --no-imports --show-bad-code -d {out_dir}/jadx {binary} 2>&1 | tee {out_dir}/jadx.log: <jadx
+    --no-imports --show-bad-code -d {out_dir}/jadx {binary} 2>&1 | tee {out_dir}/jadx.log>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/jadx.log
+- /out/jadx
+cwe_ids:
+- 200
+- 312
+- 798
+owasp_wstg:
+- WSTG-INFO-08
+image: argus-kali-binary:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run jadx against target
+  example: sh -c jadx --no-imports --show-bad-code -d {out_dir}/jadx {binary} 2>&1
+    | tee {out_dir}/jadx.log
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. JADX — DEX-to-Java decompiler.
+  Translates the DEX bytecode inside {binary} (APK or .dex) into readable Java sources
+  at /out/jadx/sources/, surfacing hard-coded secrets, plaintext URLs, and weak crypto
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,41 @@
+tool_id: unicornscan
+version: 1.0.0
+phase: recon
+category: network
+risk_level: low
+requires_approval: false
+default_timeout_s: 3600
+description: unicornscan asynchronous TCP/UDP port discovery with PCAP-style logging.
+  Backlog/dev1_md §4.2.
+command_template:
+- unicornscan
+- -mT
+- '{ip}:a'
+- -I
+- -l
+- '{out_dir}/unicornscan.txt'
+command_string: unicornscan -mT {ip}:a -I -l {out_dir}/unicornscan.txt
+placeholders:
+  ip}:a: <ip}:a>
+  out_dir}/unicornscan.txt: <out_dir}/unicornscan.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/unicornscan.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-INFO-02
+image: argus-kali-recon:latest
+network_policy_name: recon-active-udp
+scenarios:
+- description: Run unicornscan against target
+  example: unicornscan -mT {ip}:a -I -l {out_dir}/unicornscan.txt
+  output_type: text_lines
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. unicornscan asynchronous TCP/UDP
+  port discovery with PCAP-style logging. Backlog/dev1_md §4.2.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

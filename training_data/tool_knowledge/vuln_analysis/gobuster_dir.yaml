@@ -1,0 +1,49 @@
+tool_id: gobuster_dir
+version: 1.0.0
+phase: vuln_analysis
+category: web_va
+risk_level: low
+requires_approval: false
+default_timeout_s: 600
+description: 'gobuster directory / file discovery, plain text output. Author: OJ Reeves
+  (https://github.com/OJ/gobuster). Backlog/dev1_md §4.5.'
+command_template:
+- gobuster
+- dir
+- -u
+- '{url}'
+- -w
+- '{wordlist}'
+- -x
+- php,txt,html
+- -o
+- '{out_dir}/gobuster.txt'
+command_string: gobuster dir -u {url} -w {wordlist} -x php,txt,html -o {out_dir}/gobuster.txt
+placeholders:
+  url: https://target.example.com
+  wordlist: <wordlist>
+  out_dir}/gobuster.txt: <out_dir}/gobuster.txt>
+output_format: text_lines
+evidence_artifacts: &id001
+- /out/gobuster.txt
+cwe_ids:
+- 200
+owasp_wstg:
+- WSTG-CONFIG-04
+- WSTG-CONFIG-06
+image: argus-kali-web:latest
+network_policy_name: recon-active-tcp
+scenarios:
+- description: Directory enumeration
+  example: gobuster dir -u https://target.example.com -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+    -x php,html,txt -o /out/gobuster_dir.txt
+  output_type: text
+  next_steps:
+  - ffuf_param for parameter fuzzing
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. gobuster directory
+  / file discovery, plain text output. Author: OJ Reeves (https://github.com/OJ/gobuster).
+  Backlog/dev1_md §4.5.'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

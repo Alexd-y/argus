@@ -1,0 +1,50 @@
+tool_id: terrascan
+version: 1.0.0
+phase: vuln_analysis
+category: iac
+risk_level: passive
+requires_approval: false
+default_timeout_s: 1200
+description: 'Tenable Terrascan IaC scanner — analyses the Terraform module tree at
+  {path} (under /in) using the bundled OPA / Rego policy library (CIS, AWS / Azure
+  / GCP / k8s benchmarks). Fully offline (offline-no-egress) — Terrascan ships its
+  full policy DB inside the image. Wrapped in `sh -c` for stdout redirection. Parser
+  deferred to Cycle 3 (JSON_OBJECT → parsers.dispatch.unmapped_tool). Author: Tenable
+  / Accurics (https://github.com/tenable/terrascan). Backlog/dev1_md §4.16. ARG-018.'
+command_template:
+- sh
+- -c
+- terrascan scan -i terraform -d {path} -o json > {out_dir}/terrascan.json
+command_string: sh -c terrascan scan -i terraform -d {path} -o json > {out_dir}/terrascan.json
+placeholders:
+  terrascan scan -i terraform -d {path} -o json > {out_dir}/terrascan.json: <terrascan
+    scan -i terraform -d {path} -o json > {out_dir}/terrascan.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/terrascan.json
+cwe_ids:
+- 16
+- 200
+- 285
+- 311
+- 732
+- 798
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: offline-no-egress
+scenarios:
+- description: Run terrascan against target
+  example: sh -c terrascan scan -i terraform -d {path} -o json > {out_dir}/terrascan.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Vulnerability identification and analysis phase. Tenable Terrascan IaC
+  scanner — analyses the Terraform module tree at {path} (under /in) using the bundled
+  OPA / Rego policy library (CIS, AWS / Azure / GCP / k8s benchmarks). Fully offline
+  (offline-n
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

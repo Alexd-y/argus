@@ -1,0 +1,40 @@
+tool_id: whatweb
+version: 1.0.0
+phase: recon
+category: recon
+risk_level: passive
+requires_approval: false
+default_timeout_s: 120
+description: WhatWeb aggressive (level 3) tech fingerprinting. Backlog/dev1_md §4.4.
+command_template:
+- whatweb
+- -a
+- '3'
+- --log-json
+- '{out_dir}/whatweb.json'
+- '{url}'
+command_string: whatweb -a 3 --log-json {out_dir}/whatweb.json {url}
+placeholders:
+  out_dir}/whatweb.json: <out_dir}/whatweb.json>
+  url: https://target.example.com
+output_format: json_object
+evidence_artifacts: &id001
+- /out/whatweb.json
+cwe_ids: []
+owasp_wstg:
+- WSTG-INFO-02
+- WSTG-INFO-08
+image: argus-kali-web:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run whatweb against target
+  example: whatweb -a 3 --log-json {out_dir}/whatweb.json {url}
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: Information gathering and discovery phase. WhatWeb aggressive (level
+  3) tech fingerprinting. Backlog/dev1_md §4.4.
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning

@@ -1,0 +1,51 @@
+tool_id: cloudsploit
+version: 1.0.0
+phase: vuln_analysis
+category: cloud
+risk_level: medium
+requires_approval: true
+default_timeout_s: 3600
+description: 'Aqua CloudSploit multi-cloud posture scan — operator config bundle at
+  {path} (JS wiring AWS profile/regions/output prefs) drives the scan. Approval-gated:
+  read-only scans still inventory live cloud APIs and may surface sensitive metadata.
+  Output: single JSON document. recon-passive = broad TCP/443 to AWS APIs; production
+  should pin `cloud-aws` (Cycle 4). Parser deferred to Cycle 3. Author: Aqua Security.
+  Backlog §4.15. ARG-018.'
+command_template:
+- cloudsploit
+- scan
+- --config
+- '{path}'
+- --json
+- '{out_dir}/cloudsploit.json'
+command_string: cloudsploit scan --config {path} --json {out_dir}/cloudsploit.json
+placeholders:
+  path: <path>
+  out_dir}/cloudsploit.json: <out_dir}/cloudsploit.json>
+output_format: json_object
+evidence_artifacts: &id001
+- /out/cloudsploit.json
+cwe_ids:
+- 16
+- 200
+- 285
+- 732
+owasp_wstg:
+- WSTG-CONF-04
+- WSTG-INFO-08
+image: argus-kali-cloud:latest
+network_policy_name: recon-passive
+scenarios:
+- description: Run cloudsploit against target
+  example: cloudsploit scan --config {path} --json {out_dir}/cloudsploit.json
+  output_type: json_object
+  next_steps:
+  - Follow up with related ARGUS tools based on findings
+related_tools: []
+when_to_use: 'Vulnerability identification and analysis phase. Aqua CloudSploit multi-cloud
+  posture scan — operator config bundle at {path} (JS wiring AWS profile/regions/output
+  prefs) drives the scan. Approval-gated: read-only scans still inventory live cloud
+  AP'
+key_outputs: *id001
+tips:
+- Start with default flags, then add aggressive options for thorough scanning
