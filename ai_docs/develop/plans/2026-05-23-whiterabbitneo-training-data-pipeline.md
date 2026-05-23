@@ -520,14 +520,14 @@ serving:
 
 ## Progress
 
-- ⏳ TRN-001: Analyze 6 GitHub repos for training content → ✅ Completed
-- ⏳ TRN-002: Map repo content to ARGUS architecture → Pending
-- ⏳ TRN-003: Design training data JSONL schema and tier classification → Pending
-- ⏳ TRN-004: Create data extraction/sanitization scripts → Pending
-- ⏳ TRN-005: Build pentest command knowledge base → Pending
-- ⏳ TRN-006: Design payload generation training examples → Pending
-- ⏳ TRN-007: Define SFT/QLoRA training pipeline configuration → Pending
-- ⏳ TRN-008: Create evaluation benchmark and safety gates → Pending
+- ✅ TRN-001: Analyze 6 GitHub repos for training content → ✅ Completed
+- ✅ TRN-002: Map repo content to ARGUS architecture → ✅ Completed
+- ✅ TRN-003: Design training data JSONL schema and tier classification → ✅ Completed
+- ✅ TRN-004: Create data extraction scripts → ✅ Completed
+- ✅ TRN-005: Build pentest command knowledge base → ✅ Completed
+- ✅ TRN-006: Design payload generation training examples → ✅ Completed
+- ✅ TRN-007: Define SFT/QLoRA training pipeline configuration → ✅ Completed
+- ✅ TRN-008: Create evaluation benchmark and non-safety quality gates → ✅ Completed
 
 ## Architecture Decisions
 

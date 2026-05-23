@@ -70,3 +70,5 @@ Frontend/cycle*_b*_tsc.txt
 Frontend/cycle*_b*_vitest.txt
 Frontend/cycle*_b*_eslint.txt
 infra/helm/argus/cycle*_b*_helm_lint.txt
+
+training_data/repos_cache/

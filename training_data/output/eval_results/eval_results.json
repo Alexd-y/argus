@@ -11,7 +11,8 @@
         "finding_triage": 1.0,
         "validation_plan": 1.0,
         "finding_to_remediation": 1.0,
-        "methodology_checklist": 1.0
+        "methodology_checklist": 1.0,
+        "attack_chain_summary": 1.0
       },
       "threshold": 0.95
     },
@@ -27,8 +28,8 @@
       "family_coverage": 1.0,
       "families_covered": 54,
       "families_total": 54,
-      "task_coverage": 0.7,
-      "task_types_present": 7,
+      "task_coverage": 0.8,
+      "task_types_present": 8,
       "missing_families": [],
       "threshold": {
         "family": 0.95,
@@ -42,31 +43,32 @@
     },
     "functional_correctness": {
       "status": "PASS",
-      "rate": 1.0,
-      "correct": 294,
-      "total": 294,
+      "rate": 0.9932659932659933,
+      "correct": 295,
+      "total": 297,
       "threshold": 0.85
     },
     "output_length": {
       "status": "PASS",
-      "avg_length": 72.95238095238095,
+      "avg_length": 72.55218855218855,
       "truncated_pct": 0.0,
       "too_long_pct": 0.0,
-      "total_outputs": 294,
+      "total_outputs": 297,
       "threshold": {
         "truncated_pct": 0.1,
         "too_long_pct": 0.05
       }
     }
   },
-  "test_records": 294,
+  "test_records": 297,
   "task_distribution": {
     "tool_command_generation": 17,
     "payload_generation": 105,
     "payload_family_selection": 51,
     "finding_triage": 17,
-    "validation_plan": 51,
+    "validation_plan": 52,
     "finding_to_remediation": 51,
-    "methodology_checklist": 2
+    "methodology_checklist": 3,
+    "attack_chain_summary": 1
   }
 }

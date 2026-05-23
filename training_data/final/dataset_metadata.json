@@ -1,19 +1,19 @@
 {
-  "total_records": 1898,
+  "total_records": 1927,
   "splits": {
     "train": {
-      "count": 1354,
+      "count": 1375,
       "task_distribution": {
         "tool_command_generation": 129,
         "payload_generation": 432,
         "payload_family_selection": 216,
         "tool_selection": 3,
         "finding_triage": 129,
-        "validation_plan": 216,
+        "validation_plan": 224,
         "finding_to_remediation": 216,
-        "methodology_checklist": 11,
-        "attack_chain_summary": 1,
-        "report_section": 1
+        "methodology_checklist": 16,
+        "attack_chain_summary": 6,
+        "report_section": 4
       },
       "family_distribution": {
         "integer_overflow": 20,
@@ -23,7 +23,7 @@
         "nosqli_safe": 20,
         "xxe": 20,
         "deserialization": 20,
-        "auth_bypass": 20,
+        "auth_bypass": 21,
         "xss_stored": 20,
         "ldapi": 20,
         "ssrf": 21,
@@ -41,7 +41,7 @@
         "cors_misconfig": 20,
         "prototype_pollution": 20,
         "xss_contextual": 20,
-        "idor": 20,
+        "idor": 21,
         "oauth_misconfig": 20,
         "jwt_safe": 20,
         "rce": 20,
@@ -57,10 +57,10 @@
         "race_condition": 20,
         "open_redirect": 20,
         "crlf_safe": 20,
-        "xss": 22,
+        "xss": 23,
         "xpathi_safe": 20,
         "ssti": 20,
-        "sqli": 22,
+        "sqli": 23,
         "http_smuggling": 20,
         "mass_assignment": 20,
         "ssti_safe": 20,
@@ -73,16 +73,18 @@
       }
     },
     "valid": {
-      "count": 250,
+      "count": 255,
       "task_distribution": {
         "tool_command_generation": 16,
         "payload_generation": 54,
         "payload_family_selection": 54,
         "tool_selection": 1,
         "finding_triage": 16,
-        "validation_plan": 54,
+        "validation_plan": 55,
         "finding_to_remediation": 54,
-        "methodology_checklist": 1
+        "methodology_checklist": 2,
+        "attack_chain_summary": 2,
+        "report_section": 1
       },
       "family_distribution": {
         "integer_overflow": 4,
@@ -113,7 +115,7 @@
         "idor": 4,
         "oauth_misconfig": 4,
         "jwt_safe": 4,
-        "rce": 4,
+        "rce": 5,
         "nosqli": 4,
         "csrf_token_bypass": 4,
         "sqli_safe": 4,
@@ -129,7 +131,7 @@
         "xss": 4,
         "xpathi_safe": 4,
         "ssti": 4,
-        "sqli": 4,
+        "sqli": 5,
         "http_smuggling": 4,
         "mass_assignment": 4,
         "ssti_safe": 4,
@@ -142,15 +144,16 @@
       }
     },
     "test": {
-      "count": 294,
+      "count": 297,
       "task_distribution": {
         "tool_command_generation": 17,
         "payload_generation": 105,
         "payload_family_selection": 51,
         "finding_triage": 17,
-        "validation_plan": 51,
+        "validation_plan": 52,
         "finding_to_remediation": 51,
-        "methodology_checklist": 2
+        "methodology_checklist": 3,
+        "attack_chain_summary": 1
       },
       "family_distribution": {
         "integer_overflow": 5,
