@@ -377,7 +377,7 @@ def _build_exploit_chains(exploits: list[dict[str, Any]], findings: list[dict[st
     return chains
 
 
-def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[str, Any] | None = None) -> dict[str, Any]:
     """VHL-REMEDIATION-001 — Remediation matrix with full traceability.
 
     Each finding maps to: affected layer, owner team, config/component, fix,
@@ -432,8 +432,8 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             "verification": "curl -sS -I https://<target> | grep -iE 'content-security-policy|x-content-type-options|referrer-policy|permissions-policy'",
             "owner": "Infrastructure / DevOps team",
             "affected_layer": "infrastructure/reverse-proxy",
-            "component": "Nginx/Apache/Cloudflare configuration",
-            "rollback_risk": "Low — headers are additive",
+            "component": "CloudFront Distribution / nginx / Apache configuration",
+            "rollback_risk": "Low — headers are additive; use Content Security Policy with report-only first",
             "acceptance_criteria": "All recommended headers present; curl verification passes",
         },
         "FUZZ_HIT": {
@@ -444,6 +444,24 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             "component": "URL routing / access control layer",
             "rollback_risk": "Low — access control is additive",
             "acceptance_criteria": "Endpoint returns expected content; authentication enforced for non-public paths",
+        },
+        "LINE_FINDING": {
+            "action": "Validate and sanitize all input parameters on the endpoint. Check for information disclosure in HTTP response lines (headers, body, error messages).",
+            "verification": "curl -sS -D- -o /dev/null <affected_url> | head -1",
+            "owner": "Backend development team",
+            "affected_layer": "app/backend",
+            "component": "HTTP response handler / error page template",
+            "rollback_risk": "Low — response sanitization is backward compatible",
+            "acceptance_criteria": "Response contains no sensitive information in status line or headers; re-scan confirms absence",
+        },
+        "WHATWEB_PLUGIN": {
+            "action": "Remove or obfuscate technology version disclosures from HTTP headers (Server, X-Powered-By, X-AspNet-Version) and error pages. Configure server to return generic version strings.",
+            "verification": "whatweb -a 1 <affected_url> | grep -E '(Version|HTTPServer)' — should return no version strings",
+            "owner": "Infrastructure / DevOps team",
+            "affected_layer": "infrastructure/reverse-proxy",
+            "component": "Web server configuration (Server header, X-Powered-By, error pages)",
+            "rollback_risk": "Low — removing version headers does not affect functionality",
+            "acceptance_criteria": "whatweb detects no version strings; server headers return generic values",
         },
         "INFORMATION_DISCLOSURE": {
             "action": "Remove or restrict access to information-leaking endpoints. Disable verbose error messages in production. Remove server version headers.",
@@ -475,7 +493,7 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
         "security": "Security team",
     }
 
-    def _contextual_fallback(f: dict[str, Any], field: str) -> str:
+    def _contextual_fallback(f: dict[str, Any], field: str, tech_stack: dict[str, Any] | None = None) -> str:
         poc = f.get("proof_of_concept") or {}
         if not isinstance(poc, dict):
             poc = {}
@@ -484,16 +502,32 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
         affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")
         affected_parameter = str(poc.get("parameter") or "")
         severity = str(f.get("severity") or "info").lower()
+        ts = tech_stack or {}
+        web_server = str(ts.get("web_server") or "").lower()
+        frameworks = str(ts.get("frameworks") or "").lower()
 
         if field == "owner":
             layer = str(f.get("data", {}).get("affected_layer") or "").lower() if isinstance(f.get("data"), dict) else ""
             if not layer:
+                if "cloudfront" in web_server:
+                    return "CloudFront / CDN team"
                 for key, owner in _OWNER_BY_LAYER.items():
                     if key in title:
                         return owner
+            result = _OWNER_BY_LAYER.get(layer, "")
+            if result:
+                return result
+            if "cloudfront" in web_server:
+                return "CloudFront / CDN team"
+            if "next" in frameworks or "nextjs" in frameworks:
+                return "Frontend development team (Next.js)"
             return _OWNER_BY_LAYER.get(layer, "Relevant development team (assign per endpoint ownership)")
 
         if field == "component":
+            if "cloudfront" in web_server:
+                return "CloudFront Distribution — Response Headers Policy"
+            if "next" in frameworks or "nextjs" in frameworks:
+                return "Next.js configuration (next.config.js)"
             if "xss" in title or "cross-site" in title:
                 return "Template engine / output rendering layer"
             if "sql" in title or "sqli" in title:
@@ -511,10 +545,14 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
 
         if field == "fix":
             if "xss" in title or "cross-site" in title:
+                if "cloudfront" in web_server:
+                    return "Configure Content-Security-Policy in CloudFront Distribution → Response Headers Policy with nonce-based script-src; add X-Content-Type-Options: nosniff; X-Frame-Options: DENY"
                 return "Encode user input per context (HTML/JS/URL). Add Content-Security-Policy with nonce-based allowlist."
             if "sql" in title or "sqli" in title:
                 return "Use parameterized queries. Validate and sanitize all user-supplied input before database interaction."
             if "header" in title or "csp" in title or "hsts" in title:
+                if "cloudfront" in web_server:
+                    return "Add Response Headers Policy in CloudFront Distribution with: Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy"
                 return "Configure missing HTTP security headers at reverse proxy or application level."
             if "rate" in title or "limit" in title:
                 return "Implement per-IP and per-account rate limiting with exponential backoff and CAPTCHA."
@@ -525,9 +563,16 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
                 return "Remove information-leaking endpoints; disable verbose error messages in production."
             return f"Review and remediate: {title}. Affected URL: {affected_url}" if affected_url else f"Review and remediate: {title}"
 
+        if field == "rollback_risk":
+            if "header" in title or "csp" in title or "hsts" in title:
+                if "cloudfront" in web_server:
+                    return "Low — CloudFront header changes are reversible via continuous deployment; use report-only CSP first"
+                return "Low — headers are additive; use CSP report-only first"
+            return ""
+
         return ""
 
-    def _build_matrix_entry(f: dict[str, Any], priority: str, deadline: str, effort: str) -> dict[str, Any]:
+    def _build_matrix_entry(f: dict[str, Any], priority: str, deadline: str, effort: str, tech_stack: dict[str, Any] | None = None) -> dict[str, Any]:
         f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
         remediation = None
         for key, rem in _REMEDIATION_MATRIX.items():
@@ -557,26 +602,26 @@ def _build_remediation_stages(findings: list[dict[str, Any]]) -> dict[str, Any]:
             "deadline": deadline,
             "effort": effort,
             "affected_layer": remediation["affected_layer"] if remediation else "app/unknown",
-            "owner_team": remediation["owner"] if remediation else _contextual_fallback(f, "owner"),
-            "config_component": remediation["component"] if remediation else _contextual_fallback(f, "component"),
+            "owner_team": remediation["owner"] if remediation else _contextual_fallback(f, "owner", tech_stack=tech_stack),
+            "config_component": remediation["component"] if remediation else _contextual_fallback(f, "component", tech_stack=tech_stack),
             "affected_url": affected_url,
             "affected_parameter": affected_parameter,
-            "fix": remediation["action"] if remediation else _contextual_fallback(f, "fix"),
-            "rollback_risk": remediation["rollback_risk"] if remediation else "Assess before deployment",
+            "fix": remediation["action"] if remediation else _contextual_fallback(f, "fix", tech_stack=tech_stack),
+            "rollback_risk": remediation["rollback_risk"] if remediation else (_contextual_fallback(f, "rollback_risk", tech_stack=tech_stack) or "Assess before deployment"),
             "verification_step": remediation["verification"] if remediation else "Re-test the affected endpoint after applying the fix",
             "acceptance_criteria": remediation["acceptance_criteria"] if remediation else "Finding no longer reproducible; re-scan confirms absence",
         }
 
     tier1: list[dict[str, Any]] = []
     for f in (critical + [h for h in high_cvss if h not in critical])[:8]:
-        tier1.append(_build_matrix_entry(f, "P0", "48 hours", "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate"))
+        tier1.append(_build_matrix_entry(f, "P0", "48 hours", "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate", tech_stack=tech_stack))
 
     tier2: list[dict[str, Any]] = []
     for f in medium[:6]:
-        tier2.append(_build_matrix_entry(f, "P1", "2 weeks", "Quick Fix"))
+        tier2.append(_build_matrix_entry(f, "P1", "2 weeks", "Quick Fix", tech_stack=tech_stack))
 
     for f in low[:4]:
-        tier2.append(_build_matrix_entry(f, "P2", "1 month", "Quick Fix"))
+        tier2.append(_build_matrix_entry(f, "P2", "1 month", "Quick Fix", tech_stack=tech_stack))
 
     tier3: list[dict[str, Any]] = [
         {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team", "affected_layer": "CI/CD", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Medium", "acceptance_criteria": "Security gates in CI/CD pipeline"},
@@ -845,7 +890,7 @@ async def build_valhalla_report_context(
             exploits_list = [dict(e) for e in ex_list if isinstance(e, dict)]
 
     exploit_chains_list = _build_exploit_chains(exploits_list, resolved_findings)
-    remediation_stages = _build_remediation_stages(resolved_findings)
+    remediation_stages = _build_remediation_stages(resolved_findings, tech_stack=tech_stack)
     zero_day = _build_zero_day_assessment(resolved_findings)
 
     ssl_tls: dict[str, Any] = {}

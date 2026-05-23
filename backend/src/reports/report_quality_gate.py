@@ -154,6 +154,28 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "business-critical",
     "highly sensitive",
     "extremely vulnerable",
+    # Additional AI-isms from pentest report analysis (VHL-AI-001-v3)
+    "see «",
+    "potential security compromise",
+    "review finding details",
+    "apply appropriate fix",
+    "implement appropriate measures",
+    "should be addressed",
+    "consider implementing",
+    "consider reviewing",
+    "consider addressing",
+    "mitigate this risk",
+    "remediate this issue",
+    "take appropriate action",
+    "validate all input",
+    "regularly update",
+    "keep up to date",
+    "is a significant concern",
+    "poses a risk",
+    "could allow",
+    "requires further investigation",
+    "additional testing required",
+    "further assessment recommended",
     "severely impacted",
     "critically exposed",
     "immediate attention required",
@@ -476,6 +498,19 @@ FORBIDDEN_CERTAINTY_PHRASES: tuple[str, ...] = (
     "mitigate this risk",
     "remediate this issue",
     "take appropriate action",
+    "potential security compromise",
+    "assess before deployment",
+    "finding no longer reproducible under same conditions",
+    "verify finding is no longer reproducible",
+    "validate all input",
+    "regularly update",
+    "keep up to date",
+    "follow security best practices",
+    "implement proper security measures",
+    "is a significant concern",
+    "poses a risk",
+    "could allow",
+    "requires further assessment",
 )
 
 LOW_WSTG_LIMITATION = (
@@ -2545,3 +2580,36 @@ def verify_cross_format_consistency(
     if formats_with_hashes > 0 and formats_with_findings == 0:
         issues.append("Content hashes present but no findings recorded; possible empty render")
     return len(issues) == 0, issues
+
+
+def validate_tls_analysis_status(ssl_tls_status: str) -> list[str]:
+    """Check TLS analysis status and return warnings for critical gaps."""
+    warnings: list[str] = []
+    critical_statuses = {"no_observed_items_after_parsing", "not_executed", "no_data", "not_assessed", ""}
+    if ssl_tls_status.strip().lower() in critical_statuses:
+        warnings.append(
+            "CRITICAL GAP: TLS/SSL assessment was not performed (status: {}). "
+            "TLS misconfigurations (expired certs, weak ciphers, missing HSTS) are a common entry vector. "
+            "Re-scan with testssl.sh installed and configured.".format(ssl_tls_status or "empty")
+        )
+    return warnings
+
+
+def validate_mandatory_sections_health(
+    mandatory_section_status: dict[str, str],
+) -> list[str]:
+    """Validate that mandatory report sections meet minimum data quality thresholds."""
+    minimum_status: dict[str, set[str]] = {
+        "ssl_tls_analysis": {"completed", "completed_with_fallback", "parsed_from_fallback", "partial"},
+        "security_headers_analysis": {"completed", "completed_with_fallback", "parsed_from_fallback", "partial"},
+        "outdated_components": {"completed", "completed_with_fallback", "partial"},
+    }
+    warnings: list[str] = []
+    for section, ok_statuses in minimum_status.items():
+        status = (mandatory_section_status.get(section) or "").strip().lower()
+        if status not in ok_statuses:
+            warnings.append(
+                "Section '{}' has status '{}' which is below minimum quality threshold. "
+                "Missing data reduces report provability and must be re-scanned.".format(section, status or "empty")
+            )
+    return warnings

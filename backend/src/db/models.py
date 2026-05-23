@@ -426,11 +426,19 @@ class Report(Base):
     report_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     technologies: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    parent_report_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="SET NULL"), nullable=True
+    )
+    assigned_to: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    compliance_tags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_reports_tenant_target_created", "tenant_id", "target", "created_at"),
         Index("ix_reports_scan_tier", "scan_id", "tier"),
+        Index("ix_reports_parent_report_id", "parent_report_id"),
     )
 
 
@@ -692,6 +700,31 @@ class ReportObject(Base):
     object_key: Mapped[str] = mapped_column(String(512), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReportShareLink(Base):
+    """Time-limited share link for public report access."""
+
+    __tablename__ = "report_share_links"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    report_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    token: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+
+    __table_args__ = (
+        Index("ix_report_share_links_token", "token", unique=True),
+        Index("ix_report_share_links_report_id", "report_id"),
+    )
 
 
 class Screenshot(Base):

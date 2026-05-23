@@ -275,6 +275,18 @@ class SslTlsAnalysisModel(BaseModel):
     alpn: list[str] = Field(default_factory=list)
     grade: str = ""
     evidence_id: str = ""
+    tls_versions: list[str] = Field(default_factory=list)
+    cipher_detail: list[dict[str, str]] = Field(default_factory=list)
+    cert_subject: str = ""
+    cert_issuer: str = ""
+    cert_expiry: str = ""
+    hsts_present: bool = False
+    hsts_max_age: int = 0
+    hsts_include_subdomains: bool = False
+    hsts_preload: bool = False
+    protocols_table: list[dict] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    assessment_note: str = ""
 
 
 class SslTlsTableRowModel(BaseModel):
@@ -4643,6 +4655,24 @@ def build_remediation_matrix_rows(
             component = "Nginx/Apache/Cloudflare configuration"
             rollback = "Low — headers are additive"
             acceptance = "All recommended headers present; curl verification passes"
+        elif "LINE_FINDING" in f_type:
+            fix_action = "Validate and sanitize all input parameters on the endpoint. Check for information disclosure in HTTP response lines"
+            verification = "curl -sS -D- -o /dev/null <affected_url> | head -1"
+            test_case = "Verify response contains no sensitive information in status line or headers"
+            owner = "Backend development team"
+            layer = "app/backend"
+            component = "HTTP response handler / error page template"
+            rollback = "Low — response sanitization is backward compatible"
+            acceptance = "Response contains no sensitive information; re-scan confirms no LINE_FINDING"
+        elif "WHATWEB" in f_type or "PLUGIN" in f_type:
+            fix_action = "Remove or obfuscate technology version disclosures from HTTP headers and error pages"
+            verification = "whatweb -a 1 <affected_url> | grep -E '(Version|HTTPServer)' — should return no version strings"
+            test_case = "Verify server headers and error pages reveal no version information"
+            owner = "Infrastructure / DevOps team"
+            layer = "infrastructure/reverse-proxy"
+            component = "Web server configuration (Server header, X-Powered-By, error pages)"
+            rollback = "Low — removing version headers does not affect functionality"
+            acceptance = "whatweb detects no version strings; server headers return generic values"
         rows.append(
             RemediationMatrixRow(
                 finding_id=str(f.get("id", f.get("finding_id", "")))[:64],
@@ -5181,16 +5211,19 @@ def _compute_mandatory_sections_and_coverage(
     elif tls_failed:
         if not (raw_hints.get("has_tls") or tls_completed):
             ssl_env = _envelope("not_assessed", _no_conclusion_tool_reason("testssl/sslscan"))
+            ssl_out.assessment_note = "testssl.sh was not available or failed to execute (exit code non-zero). TLS data not collected. Re-scan with testssl.sh installed."
         elif fetch_raw_bodies and not tls_raw_body:
             ssl_env = _envelope(
                 "artifact_missing_body",
                 "TLS scanner failure; testssl/sslscan stdout/body was not stored or was empty.",
             )
+            ssl_out.assessment_note = "testssl.sh execution failed with no output. Install testssl.sh and re-scan."
         else:
             ssl_env = _envelope(
-                "no_observed_items_after_parsing",
-                "TLS tool produced output bodies, but no SSL/TLS table values were parsed from them.",
+                "not_executed",
+                "TLS tool produced output bodies, but no SSL/TLS table values were parsed from them. This is a critical gap — TLS misconfigurations are a common entry vector.",
             )
+            ssl_out.assessment_note = "testssl.sh output was present but could not be parsed. Verify testssl.sh installation and re-scan."
     elif not _ssl_surface_empty(ssl_out):
         ssl_env = (
             _envelope_completed()
@@ -5232,6 +5265,7 @@ def _compute_mandatory_sections_and_coverage(
             "no_data",
             (fallback_messages.get("ssl_tls") or "SSL/TLS: no testssl/sslscan output and no certificate data."),
         )
+        ssl_out.assessment_note = "No TLS/SSL assessment data available. Install testssl.sh and re-scan for TLS configuration analysis."
 
     if sec_hdr.rows:
         if security_headers_from_findings and not merged_http_headers:

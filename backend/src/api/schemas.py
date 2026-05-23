@@ -1202,6 +1202,111 @@ class ReportGenerateAllAcceptedResponse(BaseModel):
     count: int = Field(description="Number of report rows created (tiers × formats)")
 
 
+# --- Admin Reports ---
+class AdminReportListItem(BaseModel):
+    id: str
+    tenant_id: str
+    scan_id: str | None = None
+    target: str
+    tier: str
+    generation_status: str
+    requested_formats: list[str] | None = None
+    version: int = 1
+    parent_report_id: str | None = None
+    assigned_to: str | None = None
+    compliance_tags: list[str] | None = None
+    severity_counts: dict[str, int] | None = None
+    created_at: str
+
+
+class AdminReportListResponse(BaseModel):
+    reports: list[AdminReportListItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool = False
+
+
+class AdminReportDetailResponse(BaseModel):
+    id: str
+    tenant_id: str
+    scan_id: str | None = None
+    target: str
+    tier: str
+    generation_status: str
+    requested_formats: list[str] | None = None
+    created_at: str
+    summary: dict[str, int] | None = None
+    technologies: list[str] | None = None
+    available_formats: list[str] = Field(default_factory=list)
+    findings_count: int = 0
+    last_error_message: str | None = None
+    version: int = 1
+    parent_report_id: str | None = None
+    assigned_to: str | None = None
+    compliance_tags: list[str] | None = None
+    severity_counts: dict[str, int] | None = None
+
+
+class AdminReportGenerateRequest(BaseModel):
+    tenant_id: str
+    scan_id: str
+    target: str = ""
+    tier: str = "midgard"
+    formats: list[str] = Field(default_factory=lambda: ["pdf", "html", "json"])
+    assigned_to: str | None = None
+    compliance_tags: list[str] | None = None
+    executive_summary: str | None = None
+    parent_report_id: str | None = None
+
+    @field_validator("formats", mode="before")
+    @classmethod
+    def normalize_formats(cls, v: Any) -> list[str]:
+        if not isinstance(v, list):
+            raise TypeError("formats must be a list")
+        return [str(x).lower().strip() for x in v if str(x).strip()]
+
+
+class AdminReportGenerateResponse(BaseModel):
+    report_id: str
+    status: str = "pending"
+
+
+class AdminReportDownloadResponse(BaseModel):
+    report_id: str
+    format: str
+    download_url: str | None = None
+    size_bytes: int | None = None
+
+
+class ReportShareLinkResponse(BaseModel):
+    id: str
+    report_id: str
+    token: str
+    share_url: str | None = None
+    expires_at: str
+    created_by: str | None = None
+    view_count: int = 0
+
+
+class ReportShareLinkCreateRequest(BaseModel):
+    report_id: str
+    expires_in_days: int = Field(default=7, ge=1, le=90)
+    created_by: str | None = None
+
+
+class AdminReportRegenerateRequest(BaseModel):
+    formats: list[str] | None = None
+    assigned_to: str | None = None
+
+
+class AdminReportRegenerateResponse(BaseModel):
+    report_id: str
+    parent_report_id: str | None = None
+    version: int
+    status: str = "pending"
+
+
 # --- Health ---
 class HealthResponse(BaseModel):
     """GET /health response."""

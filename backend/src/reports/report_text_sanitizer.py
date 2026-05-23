@@ -45,11 +45,23 @@ _AI_STUB_PATTERNS = [
     re.compile(r'cout\s*<<\s*"Hello', re.I),
     re.compile(r'printf\s*\(\s*"Hello', re.I),
     re.compile(r'\bprint\s*\(\s*"Hello', re.I),
+    re.compile(r'\bpotential security compromise\b', re.I),
+    re.compile(r'\bassess before deployment\b', re.I),
+    re.compile(r'\bfollow security best practices\b', re.I),
+    re.compile(r'\bimplement proper (?:security )?measures?\b', re.I),
+    re.compile(r'\bregularly (?:update|patch|review)\b', re.I),
+    re.compile(r'\bcould (?:allow|lead to|result in|enable)\b', re.I),
+    re.compile(r'\bposes? a risk\b', re.I),
+    re.compile(r'\bis a significant concern\b', re.I),
+    re.compile(r'\bvalidate all input\b', re.I),
+    re.compile(r'\bfinding no longer reproducible under same conditions\b', re.I),
+    re.compile(r'\bverify finding is no longer reproducible\b', re.I),
+    re.compile(r'\bSee\s+«[^»]+»\s+(?:section|Section)\b', re.I),
 ]
 
 # Cross-reference placeholder pattern
 _CROSS_REF_RE = re.compile(
-    r'\(See\s+«[^»]+»\s+section\s+for\s+additional\s+details\.\)',
+    r'\(See\s+«[^»]+»\s+(?:section|Section)\s+for\s+additional\s+details\.?\)',
     re.IGNORECASE,
 )
 

@@ -202,7 +202,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CRYP-01", "WSTG-CRYP-04",
     ],
     "arjun": [
-        "WSTG-INFO-06",
+        "WSTG-INFO-06", "WSTG-ATHZ-02", "WSTG-ATHZ-04", "WSTG-INPV-05",
     ],
     "subjack": [
         "WSTG-CONF-10",
@@ -244,7 +244,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-INPV-18",
     ],
     "jwt_tool": [
-        "WSTG-SESS-01", "WSTG-ATHN-04",
+        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-03", "WSTG-ATHN-06",
     ],
     "burp": [
         "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
@@ -263,10 +263,10 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CRYP-01",
     ],
     "hydra": [
-        "WSTG-ATHN-02", "WSTG-ATHN-03", "WSTG-ATHN-07",
+        "WSTG-ATHN-01", "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-07",
     ],
     "patator": [
-        "WSTG-ATHN-02", "WSTG-ATHN-03", "WSTG-ATHN-07",
+        "WSTG-ATHN-01", "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-07",
     ],
     "rate_limit_signal": [
         "WSTG-ATHN-03",
