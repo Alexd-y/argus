@@ -969,7 +969,7 @@ class Settings(BaseSettings):
 
     # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
     # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN
-    hibp_password_check_opt_in: bool = False
+    hibp_password_check_opt_in: bool = True
 
     # KAL-003 — Multi-phase nmap recon (sandbox + KAL network_scanning policy).
     nmap_recon_cycle: bool = True  # env NMAP_RECON_CYCLE

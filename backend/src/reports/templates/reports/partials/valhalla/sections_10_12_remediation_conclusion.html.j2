@@ -250,6 +250,71 @@
     </table>
 </section>
 
+<section class="valhalla-ownership panel" id="ownership-evidence">
+    <h3>Endpoint Ownership Evidence</h3>
+    {% set oe = vc.ownership_evidence if vc is defined and vc.ownership_evidence is defined else none %}
+    {% if oe and (oe.whois_org or oe.tls_subject or oe.tls_issuer or oe.dns_ns_records or oe.ip_whois_org) %}
+    <table>
+        <thead>
+            <tr><th>Attribute</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Domain</td><td>{{ oe.domain | e }}</td></tr>
+            {% if oe.whois_registrar %}<tr><td>WHOIS Registrar</td><td>{{ oe.whois_registrar | e }}</td></tr>{% endif %}
+            {% if oe.whois_org %}<tr><td>WHOIS Organization</td><td>{{ oe.whois_org | e }}</td></tr>{% endif %}
+            {% if oe.whois_creation_date %}<tr><td>WHOIS Creation Date</td><td>{{ oe.whois_creation_date | e }}</td></tr>{% endif %}
+            {% if oe.whois_expiry_date %}<tr><td>WHOIS Expiry Date</td><td>{{ oe.whois_expiry_date | e }}</td></tr>{% endif %}
+            {% if oe.tls_subject %}<tr><td>TLS Certificate Subject</td><td>{{ oe.tls_subject | e }}</td></tr>{% endif %}
+            {% if oe.tls_issuer %}<tr><td>TLS Certificate Issuer</td><td>{{ oe.tls_issuer | e }}</td></tr>{% endif %}
+            {% if oe.tls_SANs %}<tr><td>TLS SANs</td><td>{{ oe.tls_SANs | join(", ") | e }}</td></tr>{% endif %}
+            {% if oe.dns_soa_primary_ns %}<tr><td>DNS SOA Primary NS</td><td>{{ oe.dns_soa_primary_ns | e }}</td></tr>{% endif %}
+            {% if oe.dns_ns_records %}<tr><td>DNS NS Records</td><td>{{ oe.dns_ns_records | join(", ") | e }}</td></tr>{% endif %}
+            {% if oe.dns_mx_records %}<tr><td>DNS MX Records</td><td>{{ oe.dns_mx_records | join(", ") | e }}</td></tr>{% endif %}
+            {% if oe.ip_whois_org %}<tr><td>IP WHOIS Organization</td><td>{{ oe.ip_whois_org | e }}</td></tr>{% endif %}
+            {% if oe.ip_whois_asn %}<tr><td>IP ASN</td><td>{{ oe.ip_whois_asn | e }}</td></tr>{% endif %}
+            {% if oe.ip_country %}<tr><td>IP Country</td><td>{{ oe.ip_country | e }}</td></tr>{% endif %}
+            <tr><td>Ownership Confidence</td><td>{{ oe.ownership_confidence | e }}</td></tr>
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">No ownership evidence (WHOIS, TLS certificate, DNS, IP) was collected for this engagement. Ownership of the target could not be independently verified.</p>
+    {% endif %}
+</section>
+
+{% set rp = vc.retest_plan if vc is defined and vc.retest_plan is defined else none %}
+{% if rp and rp.retest_scope %}
+<section class="valhalla-retest panel" id="retest-plan">
+    <h3>Retest After Remediation Plan</h3>
+    {% if rp.retest_timeline %}<p><strong>Timeline:</strong> {{ rp.retest_timeline | e }}</p>{% endif %}
+    {% if rp.retest_methodology %}<p><strong>Methodology:</strong> {{ rp.retest_methodology | e }}</p>{% endif %}
+    {% if rp.retest_acceptance_criteria %}<p><strong>Acceptance Criteria:</strong> {{ rp.retest_acceptance_criteria | e }}</p>{% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>Finding ID</th>
+                <th>Title</th>
+                <th>Severity</th>
+                <th>Verification Command</th>
+                <th>Expected Result</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in rp.retest_scope %}
+            <tr>
+                <td><code>{{ item.finding_id | e }}</code></td>
+                <td>{{ item.title | e }}</td>
+                <td>{{ item.severity | e }}</td>
+                <td><code>{{ item.verification_command | e }}</code></td>
+                <td>{{ item.expected_result | e }}</td>
+                <td>{{ item.retest_status | e }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
 <section class="valhalla-zero-day panel" id="zero-day-potential">
     <h2>Novel Vulnerability Indication</h2>
     <div class="ai-slot-body">

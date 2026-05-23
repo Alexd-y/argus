@@ -28,8 +28,10 @@ class WstgCoverageResult:
     partial: int
     not_covered: int
     coverage_percentage: float
-    by_category: dict[str, dict[str, Any]] = field(default_factory=dict)
+    by_category: dict[str, Any] = field(default_factory=dict)
     tests: list[dict[str, Any]] = field(default_factory=list)
+    auth_testing_enabled: bool = False
+    not_covered_reasons: dict[str, str] = field(default_factory=dict)
 
 
 _WSTG_TESTS: list[WstgTestCase] = [
@@ -164,10 +166,10 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-INPV-05",
     ],
     "testssl": [
-        "WSTG-CRYP-01", "WSTG-CONF-07",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CONF-07",
     ],
     "testssl.sh": [
-        "WSTG-CRYP-01", "WSTG-CONF-07",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CONF-07",
     ],
     "whatweb": [
         "WSTG-INFO-02", "WSTG-INFO-08", "WSTG-INFO-09",
@@ -199,7 +201,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-IDNT-04",
     ],
     "sslyze": [
-        "WSTG-CRYP-01", "WSTG-CRYP-04",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04",
     ],
     "arjun": [
         "WSTG-INFO-06", "WSTG-ATHZ-02", "WSTG-ATHZ-04", "WSTG-INPV-05",
@@ -217,7 +219,13 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CONF-04",
     ],
     "wappalyzer": [
-        "WSTG-INFO-08", "WSTG-INFO-09",
+        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
+    ],
+    "wappalyzer_cli": [
+        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
+    ],
+    "webanalyze": [
+        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
     ],
     "curl": [
         "WSTG-INFO-03", "WSTG-CONF-06",
@@ -297,7 +305,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CLNT-01",
     ],
     "playwright": [
-        "WSTG-CLNT-01", "WSTG-CLNT-02", "WSTG-CLNT-07",
+        "WSTG-CLNT-01", "WSTG-CLNT-02", "WSTG-CLNT-06", "WSTG-CLNT-07",
     ],
     "katana": [
         "WSTG-INFO-04", "WSTG-CONF-03", "WSTG-CONF-05",
@@ -307,6 +315,9 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
     ],
     "gau": [
         "WSTG-INFO-04", "WSTG-CONF-03",
+    ],
+    "cookie_probe": [
+        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-03", "WSTG-SESS-05",
     ],
     "httpx_tool": [
         "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-CONF-07",

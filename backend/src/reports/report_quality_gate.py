@@ -1420,6 +1420,50 @@ def is_http_header_gap_topic(finding: Any) -> bool:
     return bool(_HEADER_ADVISORY_RE.search(f"{title}\n{desc}"))
 
 
+def get_xss_validation_status(finding: Any) -> tuple[str, str]:
+    """Determine XSS finding validation status and mandatory warning.
+
+    Returns (validation_status, warning_message).
+    - If browser-verified OAST callback exists → ("validated", "")
+    - If HTTP reflection only, no browser verification → ("unvalidated", warning)
+    - Otherwise → ("partially_validated", "")
+    """
+    if has_xss_browser_or_oast_signal(finding):
+        return "validated", ""
+    poc = _poc_dict(finding)
+    verification = str(poc.get("verification_method") or "").lower()
+    if "http reflection" in verification or "reflection" in verification:
+        return (
+            "unvalidated",
+            "XSS finding not verified via browser. Reflected payload may not execute "
+            "in a real browser context due to CSP, encoding, or context mismatch. "
+            "Manual browser verification required."
+        )
+    return "partially_validated", ""
+
+
+def get_command_injection_validation_status(finding: Any) -> tuple[str, str]:
+    """Determine command injection finding validation status.
+
+    Returns (validation_status, warning_message).
+    - If RCE confirmed with command output or OAST → ("validated", "")
+    - If CANDIDATE with no RCE proof → ("possible", warning)
+    - Otherwise → ("likely", "")
+    """
+    if has_command_injection_proof(finding):
+        return "validated", ""
+    title = str(_get_attr(finding, "title") or "").lower()
+    f_type = str(_get_attr(finding, "type") or
+                  (_get_attr(finding, "data") or {}).get("type", "")).upper()
+    if "CANDIDATE" in f_type or "CANDIDATE" in title:
+        return (
+            "possible",
+            "Command injection candidate not confirmed. Commix did not demonstrate RCE. "
+            "This finding requires manual verification with authenticated access."
+        )
+    return "likely", ""
+
+
 def _normalize_exploit_fields(finding: Any, header_only_advisory: bool) -> tuple[bool, str | None]:
     poc = _poc_dict(finding)
     ed_raw = _get_attr(finding, "exploit_demonstrated")

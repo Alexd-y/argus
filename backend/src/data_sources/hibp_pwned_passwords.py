@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -22,6 +23,26 @@ import httpx
 from src.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class BreachDetail:
+    name: str = ""
+    domain: str = ""
+    breach_date: str = ""
+    data_classes: tuple[str, ...] = ()
+    is_verified: bool = False
+    description: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "domain": self.domain,
+            "breach_date": self.breach_date,
+            "data_classes": list(self.data_classes),
+            "is_verified": self.is_verified,
+            "description": self.description[:500],
+        }
 
 _PWNED_RANGE_URL = "https://api.pwnedpasswords.com/range"
 

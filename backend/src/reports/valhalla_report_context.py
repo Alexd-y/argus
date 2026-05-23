@@ -28,6 +28,8 @@ from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
     parse_whatweb_text_fallback,
     parse_whatweb_to_tech_stack,
 )
+from src.reports.infra_recommendations import generate_infra_recommendations
+from src.reports.ownership_evidence import build_ownership_evidence
 from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
@@ -315,6 +317,9 @@ class SecurityHeadersAnalysisModel(BaseModel):
     rows: list[dict[str, Any]] = Field(default_factory=list)
     missing_recommended: list[str] = Field(default_factory=list)
     summary: str | None = None
+    per_url_rows: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    endpoint_header_map: dict[str, dict[str, list[str]]] = Field(default_factory=dict)
+    total_endpoints_scanned: int = 0
 
 
 class DependencyAnalysisRow(BaseModel):
@@ -642,6 +647,8 @@ class PortExposureTableRowModel(BaseModel):
     state: str = "open"
     service: str = ""
     version: str = ""
+    banner: str = ""
+    service_product: str = ""
     tls: str = ""
     exposure_reason: str = ""
     risk: str = ""
@@ -726,6 +733,19 @@ class CredentialExposureRowModel(BaseModel):
     legal_basis: str = ""
     result_confidence: str = ""
 
+class BreachDetailModel(BaseModel):
+    """Per-email breach evidence row from HIBP."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email_masked: str = ""
+    breach_count: int = 0
+    breach_names: list[str] = Field(default_factory=list)
+    data_classes: list[str] = Field(default_factory=list)
+    password_exposed: bool = False
+    last_breach_date: str = ""
+
+
 class CredentialExposureModel(BaseModel):
     """Full credential exposure analysis (Step 4)."""
 
@@ -736,6 +756,7 @@ class CredentialExposureModel(BaseModel):
     hash_samples_available: bool = False
     hibp_api_used: bool = False
     rows: list[CredentialExposureRowModel] = Field(default_factory=list)
+    breach_details: list[BreachDetailModel] = Field(default_factory=list)
     missing_artifacts: list[str] = Field(default_factory=list)
     inconclusive: bool = False
     inconclusive_reason: str = ""
@@ -865,6 +886,12 @@ class AuthTestingContext(BaseModel):
     username_enumeration: bool | None = None
     reset_password_flow: str | None = None
     notes: str = ""
+    privilege_escalation_tested: bool = False
+    privilege_escalation_findings: int = 0
+    business_logic_tested: bool = False
+    business_logic_findings: int = 0
+    auth_flow_documented: bool = False
+    tested_endpoints: list[str] = Field(default_factory=list)
 
 
 class IdorRowModel(BaseModel):
@@ -885,6 +912,52 @@ class IdorRowModel(BaseModel):
     ownership_proof: str = ""
     evidence_id: str = ""
     retest_after_fix: str = ""
+
+
+class OwnershipEvidenceModel(BaseModel):
+    """Endpoint ownership evidence for pentest report provability."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    domain: str = ""
+    whois_registrar: str = ""
+    whois_org: str = ""
+    whois_creation_date: str = ""
+    whois_expiry_date: str = ""
+    tls_subject: str = ""
+    tls_issuer: str = ""
+    tls_SANs: list[str] = Field(default_factory=list)
+    dns_soa_primary_ns: str = ""
+    dns_ns_records: list[str] = Field(default_factory=list)
+    dns_mx_records: list[str] = Field(default_factory=list)
+    ip_whois_org: str = ""
+    ip_whois_asn: str = ""
+    ip_country: str = ""
+    ownership_confidence: str = ""
+
+
+class RetestItemModel(BaseModel):
+    """Single retest item for remediation verification."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str = ""
+    title: str = ""
+    severity: str = ""
+    verification_command: str = ""
+    expected_result: str = ""
+    retest_status: Literal["pending", "confirmed_fixed", "partially_fixed", "not_fixed", "risk_accepted"] = "pending"
+
+
+class RetestPlanModel(BaseModel):
+    """Retest after remediation plan."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    retest_scope: list[RetestItemModel] = Field(default_factory=list)
+    retest_timeline: str = "14-30 days after remediation"
+    retest_methodology: str = "Re-run all active scan tools + manual verification"
+    retest_acceptance_criteria: str = "All P0 findings confirmed fixed; P1 findings confirmed fixed or risk accepted"
 
 
 class EndpointHeaderData(BaseModel):
@@ -999,6 +1072,10 @@ class ValhallaReportContext(BaseModel):
     credential_exposure: CredentialExposureModel = Field(default_factory=CredentialExposureModel)
     #: Step 12 — 16-column remediation matrix with acceptance criteria
     remediation_matrix: list[RemediationMatrixRow] = Field(default_factory=list)
+    #: Ownership evidence (domain, TLS, WHOIS, DNS)
+    ownership_evidence: OwnershipEvidenceModel = Field(default_factory=OwnershipEvidenceModel)
+    #: Retest plan after remediation
+    retest_plan: RetestPlanModel = Field(default_factory=RetestPlanModel)
     #: Step 17 — evidence gaps, missing artifacts, next scan commands
     unresolved_gaps: list[dict[str, str]] = Field(default_factory=list)
     missing_artifacts: list[dict[str, str]] = Field(default_factory=list)
@@ -2709,6 +2786,46 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
             low = str(detail).lower()
             if "weak" in low or "cbc" in low or "rc4" in low:
                 weak.append(f"{label}: {detail}"[:400])
+    cert_subject = None
+    cert_issuer = issuer
+    cert_expiry = None
+    hsts_present = hsts is not None
+    hsts_max_age = 0
+    hsts_include_subdomains = False
+    hsts_preload = False
+    if hsts:
+        ma_m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.IGNORECASE)
+        if ma_m:
+            hsts_max_age = int(ma_m.group(1))
+        hsts_include_subdomains = "includesubdomains" in hsts.lower()
+        hsts_preload = "preload" in hsts.lower()
+    subject_m = re.search(r"(?:subject|CN)\s*[=:]\s*([^,\n]+)", str(blob.get("scanResult") or ""))
+    if not subject_m and isinstance(scan_result, list):
+        for entry in scan_result:
+            if not isinstance(entry, dict):
+                continue
+            f = str(entry.get("finding") or "")
+            sm = re.search(r"(?:subject|CN)\s*[=:]\s*([^,\n]+)", f)
+            if sm:
+                subject_m = sm
+                break
+    if subject_m:
+        cert_subject = subject_m.group(1).strip()[:512]
+    cert_date_m = re.search(r"(?:not\s+after|validity\s+to|expires?)\s*[=:]\s*(.+)", str(blob), re.IGNORECASE)
+    if cert_date_m:
+        cert_expiry = cert_date_m.group(1).strip()[:256]
+    tls_versions = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
+    cipher_detail_list: list[dict[str, str]] = []
+    if isinstance(ciphers, dict):
+        for label, detail in list(ciphers.items())[:24]:
+            cipher_detail_list.append({"name": label, "detail": str(detail)[:400]})
+    recommendations_list: list[str] = []
+    if weak_proto:
+        recommendations_list.append("Disable weak protocols: " + ", ".join(weak_proto[:4]))
+    if weak:
+        recommendations_list.append("Remove weak ciphers: configure server to prefer ECDHE-AESGCM suites")
+    if not hsts_present:
+        recommendations_list.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
         issuer=issuer,
         validity=None,
@@ -2716,6 +2833,16 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
         weak_protocols=weak_proto[:32],
         weak_ciphers=weak[:32],
         hsts=hsts,
+        tls_versions=tls_versions[:32],
+        cipher_detail=cipher_detail_list[:24],
+        cert_subject=cert_subject or "",
+        cert_issuer=cert_issuer or "",
+        cert_expiry=cert_expiry or "",
+        hsts_present=hsts_present,
+        hsts_max_age=hsts_max_age,
+        hsts_include_subdomains=hsts_include_subdomains,
+        hsts_preload=hsts_preload,
+        recommendations=recommendations_list[:8],
     )
 
 
@@ -2821,6 +2948,32 @@ def _parse_openssl_sclient_output(stdout: str) -> SslTlsAnalysisModel:
     hsts_m = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
     if hsts_m:
         hsts = _truncate(hsts_m.group(1).strip(), 500)
+    hsts_present = hsts is not None
+    hsts_max_age = 0
+    hsts_include_subdomains = False
+    hsts_preload = False
+    cert_subject = ""
+    cert_expiry = validity or ""
+    if hsts:
+        ma_m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.IGNORECASE)
+        if ma_m:
+            hsts_max_age = int(ma_m.group(1))
+        hsts_include_subdomains = "includesubdomains" in hsts.lower()
+        hsts_preload = "preload" in hsts.lower()
+    subject_m = re.search(r"(?:subject|CN)\s*[=:]\s*([^,\n]+)", stdout)
+    if subject_m:
+        cert_subject = subject_m.group(1).strip()[:512]
+    tls_versions = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
+    cipher_detail_list: list[dict[str, str]] = []
+    for c in weak_ciphers[:16]:
+        cipher_detail_list.append({"name": c, "detail": "weak"})
+    recommendations_list: list[str] = []
+    if weak_protocols:
+        recommendations_list.append("Disable weak protocols: " + ", ".join(weak_protocols[:4]))
+    if weak_ciphers:
+        recommendations_list.append("Remove weak ciphers; prefer ECDHE-AESGCM suites")
+    if not hsts_present:
+        recommendations_list.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
         issuer=issuer,
         validity=validity,
@@ -2828,6 +2981,16 @@ def _parse_openssl_sclient_output(stdout: str) -> SslTlsAnalysisModel:
         weak_protocols=weak_protocols[:32],
         weak_ciphers=weak_ciphers[:48],
         hsts=hsts,
+        tls_versions=tls_versions[:32],
+        cipher_detail=cipher_detail_list[:16],
+        cert_subject=cert_subject,
+        cert_issuer=issuer or "",
+        cert_expiry=cert_expiry,
+        hsts_present=hsts_present,
+        hsts_max_age=hsts_max_age,
+        hsts_include_subdomains=hsts_include_subdomains,
+        hsts_preload=hsts_preload,
+        recommendations=recommendations_list[:8],
     )
 
 
@@ -2868,6 +3031,28 @@ def _parse_nmap_ssl_scripts_output(stdout: str) -> SslTlsAnalysisModel:
     hsts_m = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
     if hsts_m:
         hsts = _truncate(hsts_m.group(1).strip(), 500)
+    hsts_present_n = hsts is not None
+    hsts_max_age_n = 0
+    hsts_include_subdomains_n = False
+    hsts_preload_n = False
+    if hsts:
+        ma_m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.IGNORECASE)
+        if ma_m:
+            hsts_max_age_n = int(ma_m.group(1))
+        hsts_include_subdomains_n = "includesubdomains" in hsts.lower()
+        hsts_preload_n = "preload" in hsts.lower()
+    cert_subject_n = ""
+    cn_m_n = re.search(r"Subject:.*?CN\s*=\s*([^\s,]+)", stdout)
+    if cn_m_n:
+        cert_subject_n = cn_m_n.group(1).strip()[:512]
+    tls_versions_n = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
+    recommendations_n: list[str] = []
+    if weak_protocols:
+        recommendations_n.append("Disable weak protocols: " + ", ".join(weak_protocols[:4]))
+    if weak_ciphers:
+        recommendations_n.append("Remove weak ciphers; prefer ECDHE-AESGCM suites")
+    if not hsts_present_n:
+        recommendations_n.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
         issuer=issuer,
         validity=validity,
@@ -2875,6 +3060,15 @@ def _parse_nmap_ssl_scripts_output(stdout: str) -> SslTlsAnalysisModel:
         weak_protocols=weak_protocols[:32],
         weak_ciphers=weak_ciphers[:48],
         hsts=hsts,
+        tls_versions=tls_versions_n[:32],
+        cert_subject=cert_subject_n,
+        cert_issuer=issuer or "",
+        cert_expiry=validity or "",
+        hsts_present=hsts_present_n,
+        hsts_max_age=hsts_max_age_n,
+        hsts_include_subdomains=hsts_include_subdomains_n,
+        hsts_preload=hsts_preload_n,
+        recommendations=recommendations_n[:8],
     )
 
 
@@ -2982,6 +3176,31 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         for v in sorted(vuln_ciphers_seen):
             weak_ciphers.append(f"VULN:{v}")
 
+    hsts_present_tt = hsts is not None
+    hsts_max_age_tt = 0
+    hsts_include_subdomains_tt = False
+    hsts_preload_tt = False
+    if hsts:
+        ma_m = re.search(r"max-age\s*=\s*(\d+)", hsts, re.IGNORECASE)
+        if ma_m:
+            hsts_max_age_tt = int(ma_m.group(1))
+        hsts_include_subdomains_tt = "includesubdomains" in hsts.lower()
+        hsts_preload_tt = "preload" in hsts.lower()
+    cert_subject_tt = ""
+    cn_m_tt = re.search(r"CN\s*=\s*([^\s,]+)", stdout)
+    if cn_m_tt:
+        cert_subject_tt = cn_m_tt.group(1).strip()[:512]
+    tls_versions_tt = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
+    cipher_detail_tt: list[dict[str, str]] = []
+    for cs in sorted(cipher_set)[:16]:
+        cipher_detail_tt.append({"name": cs, "detail": "observed"})
+    recommendations_tt: list[str] = []
+    if weak_protocols:
+        recommendations_tt.append("Disable weak protocols: " + ", ".join(weak_protocols[:4]))
+    if weak_ciphers:
+        recommendations_tt.append("Remove weak ciphers; prefer ECDHE-AESGCM suites")
+    if not hsts_present_tt:
+        recommendations_tt.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
         issuer=issuer,
         validity=validity,
@@ -2989,6 +3208,16 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         weak_protocols=weak_protocols[:32],
         weak_ciphers=weak_ciphers[:48],
         hsts=hsts,
+        tls_versions=tls_versions_tt[:32],
+        cipher_detail=cipher_detail_tt[:16],
+        cert_subject=cert_subject_tt,
+        cert_issuer=issuer or "",
+        cert_expiry=validity or "",
+        hsts_present=hsts_present_tt,
+        hsts_max_age=hsts_max_age_tt,
+        hsts_include_subdomains=hsts_include_subdomains_tt,
+        hsts_preload=hsts_preload_tt,
+        recommendations=recommendations_tt[:8],
     )
 
 
@@ -3575,6 +3804,28 @@ def _collect_dependency_rows(
     rows: list[DependencyAnalysisRow] = []
     if not fetch_bodies:
         return rows
+    if tech_stack_structured or ssl_tls_analysis or security_headers_analysis:
+        infra = generate_infra_recommendations(
+            tech_stack=tech_stack_structured,
+            findings=findings[:max_rows],
+            ssl_tls=ssl_tls_analysis,
+            security_headers=security_headers_analysis,
+        )
+        if infra.get("config_snippets"):
+            infra_fix = "\n\n".join(snippet for _, snippet in infra["config_snippets"][:3])
+            for row in rows:
+                if row.affected_layer == "infrastructure/reverse-proxy":
+                    row.fix_action = infra_fix[:2000] or row.fix_action
+                    row.config_component = (
+                        tech_stack_structured.get("web_server", "") or "reverse-proxy"
+                    ) if tech_stack_structured else row.config_component
+        if infra.get("tls_hardening"):
+            for row in rows:
+                ftype = (row.title or "").upper()
+                if any(k in ftype for k in ("SSL", "TLS", "HSTS", "CIPHER", "PROTOCOL")):
+                    row.fix_action = (infra["tls_hardening"][:2000]) or row.fix_action
+
+    return rows
     for key, _p in raw_keys:
         if not _artifact_name_matches(key, _DEP_ARTIFACT_HINTS):
             continue
@@ -3866,7 +4117,6 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
     plugs = merged.get("plugins")
     if not isinstance(plugs, dict) or not plugs:
         return []
-    # WhatWeb plugins that are NOT real components — skip them from outdated table
     _WW_NOISE = frozenset({
         "cookies", "email", "httponly", "ip", "open-graph-protocol",
         "script", "title", "uncommonheaders", "x-frame-options",
@@ -3887,13 +4137,25 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
         detail = _plugin_strings(pval)
         ver_m = re.search(r"\d+(?:\.\d+){1,3}[a-zA-Z0-9._-]*", detail)
         installed = ver_m.group(0) if ver_m else None
-        if not installed and not detail.strip():
+        product_info = ""
+        if isinstance(pval, dict):
+            product_info = str(pval.get("product") or pval.get("banner") or "")[:256]
+        elif isinstance(pval, list):
+            for item in pval:
+                if isinstance(item, dict):
+                    product_info = str(item.get("product") or item.get("banner") or "")[:256]
+                    if product_info:
+                        break
+        if not installed and not detail.strip() and not product_info:
             continue
+        component_name = str(name).strip()[:256]
+        if product_info and product_info.lower() not in component_name.lower():
+            component_name = f"{component_name} ({product_info})"[:256]
         rows.append(
             OutdatedComponentRow(
-                component=str(name).strip()[:256],
+                component=component_name,
                 installed_version=installed,
-                latest_stable="—",
+                latest_stable="\u2014",
                 support_status="whatweb",
                 cves=[],
                 source="whatweb",
@@ -4312,6 +4574,11 @@ def _ssl_surface_empty(s: SslTlsAnalysisModel) -> bool:
             s.weak_protocols,
             s.weak_ciphers,
             (s.hsts or "").strip(),
+            s.tls_versions,
+            s.cipher_detail,
+            (s.cert_subject or "").strip(),
+            (s.cert_issuer or "").strip(),
+            s.hsts_present,
         ]
     )
 
@@ -4516,6 +4783,8 @@ def build_port_exposure_table_rows(
         state: str = "open",
         service: str = "",
         version: str = "",
+        banner: str = "",
+        service_product: str = "",
         source: str = "",
         confidence: str = "medium",
         note: str = "",
@@ -4535,6 +4804,8 @@ def build_port_exposure_table_rows(
                 state=state[:32],
                 service=service[:128],
                 version=version[:256],
+                banner=banner[:512],
+                service_product=service_product[:256],
                 source=source[:256],
                 confidence=confidence,
                 exposure_note=note[:500]
@@ -4546,11 +4817,16 @@ def build_port_exposure_table_rows(
         text = str(hint).strip()
         m = _PORT_DETAILED_RE.match(text)
         if m:
+            ver_str = (m.group("version") or "")
+            svc_str = (m.group("service") or "")
+            product_m = re.search(r"(\S+?)\s+(\S+)", ver_str)
             add(
                 port=m.group("port"),
                 state=m.group("state").lower(),
-                service=(m.group("service") or ""),
-                version=(m.group("version") or ""),
+                service=svc_str[:128],
+                version=ver_str[:256],
+                banner=ver_str[:512] if ver_str else "",
+                service_product=product_m.group(1)[:256] if product_m else "",
                 source="nmap" if "nmap" in (port_data.data_sources or []) else "port scan artifact",
                 confidence="high" if port_data.has_nmap_hits else "medium",
             )
@@ -4577,6 +4853,9 @@ def build_remediation_matrix_rows(
     findings: list[dict[str, Any]],
     *,
     max_rows: int = 48,
+    tech_stack_structured: dict[str, Any] | None = None,
+    ssl_tls_analysis: dict[str, Any] | None = None,
+    security_headers_analysis: dict[str, Any] | None = None,
 ) -> list[RemediationMatrixRow]:
     """Build 16-column remediation matrix rows from findings (Step 12)."""
     rows: list[RemediationMatrixRow] = []
@@ -5893,6 +6172,16 @@ def build_valhalla_report_context(
             weak_protocols=(merged.weak_protocols or ssl_part.weak_protocols),
             weak_ciphers=merged.weak_ciphers or ssl_part.weak_ciphers,
             hsts=merged.hsts or ssl_part.hsts,
+            tls_versions=merged.tls_versions or ssl_part.tls_versions,
+            cipher_detail=merged.cipher_detail or ssl_part.cipher_detail,
+            cert_subject=merged.cert_subject or ssl_part.cert_subject,
+            cert_issuer=merged.cert_issuer or ssl_part.cert_issuer,
+            cert_expiry=merged.cert_expiry or ssl_part.cert_expiry,
+            hsts_present=merged.hsts_present or ssl_part.hsts_present,
+            hsts_max_age=merged.hsts_max_age or ssl_part.hsts_max_age,
+            hsts_include_subdomains=merged.hsts_include_subdomains or ssl_part.hsts_include_subdomains,
+            hsts_preload=merged.hsts_preload or ssl_part.hsts_preload,
+            recommendations=merged.recommendations or ssl_part.recommendations,
         )
     else:
         ssl_out = ssl_part
@@ -5907,6 +6196,16 @@ def build_valhalla_report_context(
                 weak_protocols=text_ssl.weak_protocols or ssl_out.weak_protocols,
                 weak_ciphers=text_ssl.weak_ciphers or ssl_out.weak_ciphers,
                 hsts=text_ssl.hsts or ssl_out.hsts,
+                tls_versions=text_ssl.tls_versions or ssl_out.tls_versions,
+                cipher_detail=text_ssl.cipher_detail or ssl_out.cipher_detail,
+                cert_subject=text_ssl.cert_subject or ssl_out.cert_subject,
+                cert_issuer=text_ssl.cert_issuer or ssl_out.cert_issuer,
+                cert_expiry=text_ssl.cert_expiry or ssl_out.cert_expiry,
+                hsts_present=text_ssl.hsts_present or ssl_out.hsts_present,
+                hsts_max_age=text_ssl.hsts_max_age or ssl_out.hsts_max_age,
+                hsts_include_subdomains=text_ssl.hsts_include_subdomains or ssl_out.hsts_include_subdomains,
+                hsts_preload=text_ssl.hsts_preload or ssl_out.hsts_preload,
+                recommendations=text_ssl.recommendations or ssl_out.recommendations,
             )
 
     merged_http_headers = _http_headers_merged_from_recon_and_phases(recon_results, phase_outputs)
@@ -6399,7 +6698,17 @@ def build_valhalla_report_context(
         active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
         auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
         full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies, merged_http_headers=merged_http_headers),
-        remediation_matrix=build_remediation_matrix_rows(finding_dicts),
+        remediation_matrix=build_remediation_matrix_rows(
+            finding_dicts,
+            tech_stack_structured=structured.model_dump() if hasattr(structured, 'model_dump') else {},
+            ssl_tls_analysis=ssl_out.model_dump() if hasattr(ssl_out, 'model_dump') else {},
+            security_headers_analysis=sec_hdr.model_dump() if hasattr(sec_hdr, 'model_dump') else {},
+        ),
+        ownership_evidence=build_ownership_evidence(
+            target_url=target_guess,
+            recon_results=recon_results if isinstance(recon_results, dict) else None,
+            ssl_tls=ssl_out,
+        ),
         unresolved_gaps=build_unresolved_gaps(finding_dicts),
         missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),
         next_scan_commands=build_next_scan_commands(finding_dicts),

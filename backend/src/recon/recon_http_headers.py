@@ -38,6 +38,8 @@ class SecurityHeadersResult(BaseModel):
     headers_missing: list[HeaderFinding] = Field(default_factory=list)
     headers_present: list[HeaderFinding] = Field(default_factory=list)
     all_response_headers: dict[str, str] = Field(default_factory=dict)
+    per_endpoint_headers: dict[str, dict[str, str]] = Field(default_factory=dict)
+    total_endpoints_scanned: int = 0
     score: int = 0
     findings: list[HeaderFinding] = Field(default_factory=list)
     error: str | None = None
@@ -307,8 +309,13 @@ def _ensure_https_url(target: str) -> str:
 # ── public API ────────────────────────────────────────────────────────────────
 
 
-async def collect_security_headers(target: str) -> SecurityHeadersResult:
-    """Fetch target URL and analyze security-relevant headers."""
+async def collect_security_headers(target: str, endpoints: list[str] | None = None) -> SecurityHeadersResult:
+    """Fetch target URL and analyze security-relevant headers.
+
+    When *endpoints* is provided, also scans each additional path and
+    aggregates per-endpoint header data into ``per_endpoint_headers``
+    and ``endpoint_header_map``.
+    """
     base_result = SecurityHeadersResult(target=target)
     url = _ensure_https_url(target)
     if not url:
@@ -339,7 +346,7 @@ async def collect_security_headers(target: str) -> SecurityHeadersResult:
             present = [f for f in findings if f.present]
             missing = [f for f in findings if not f.present]
 
-            return SecurityHeadersResult(
+            result = SecurityHeadersResult(
                 target=target,
                 status_code=response.status_code,
                 server=lower_headers.get("server"),
@@ -351,6 +358,11 @@ async def collect_security_headers(target: str) -> SecurityHeadersResult:
                 score=score,
                 findings=findings,
             )
+
+            if endpoints:
+                result = await _scan_extra_endpoints(client, result, target, endpoints)
+
+            return result
 
         except httpx.TimeoutException:
             last_error = f"timeout:{attempt_url}"
@@ -393,3 +405,53 @@ async def collect_security_headers(target: str) -> SecurityHeadersResult:
 def security_headers_result_to_dict(result: SecurityHeadersResult) -> dict[str, Any]:
     """Serialize result to a JSON-compatible dict safe for MinIO / tool_results."""
     return result.model_dump(mode="json")
+
+
+async def _scan_extra_endpoints(
+    client: httpx.AsyncClient,
+    base_result: SecurityHeadersResult,
+    base_target: str,
+    endpoints: list[str],
+) -> SecurityHeadersResult:
+    """Scan additional endpoints and aggregate per-endpoint header data."""
+    per_endpoint: dict[str, dict[str, str]] = {}
+    base_url = _ensure_https_url(base_target) or base_target
+
+    for ep in endpoints[:8]:
+        ep = ep if ep.startswith("/") else f"/{ep}"
+        full_url = f"{base_url.rstrip('/')}{ep}"
+        try:
+            resp = await client.get(full_url, follow_redirects=True)
+            headers = {k.lower(): v for k, v in resp.headers.items()}
+            per_endpoint[ep] = headers
+        except Exception:
+            per_endpoint[ep] = {}
+
+    base_result.per_endpoint_headers = per_endpoint
+    base_result.total_endpoints_scanned = 1 + len(per_endpoint)
+
+    if per_endpoint:
+        all_headers: dict[str, dict[str, list[str]]] = {}
+        base_hdrs = {k.lower(): v for k, v in (base_result.all_response_headers or {}).items()}
+        for hdr_name in sorted(set(list(base_hdrs.keys()) + [h for ep_hdrs in per_endpoint.values() for h in ep_hdrs])):
+            endpoints_with: list[str] = []
+            endpoints_without: list[str] = []
+            base_has = hdr_name in base_hdrs
+            if base_has:
+                endpoints_with.append("/")
+            any_ep_has = False
+            for ep, ep_hdrs in per_endpoint.items():
+                if hdr_name in ep_hdrs:
+                    endpoints_with.append(ep)
+                    any_ep_has = True
+                else:
+                    endpoints_without.append(ep)
+            if not base_has and not any_ep_has:
+                continue
+            all_headers[hdr_name] = {
+                "endpoints_with": endpoints_with,
+                "endpoints_without": endpoints_without,
+            }
+        base_result.endpoint_header_map = all_headers
+
+    return base_result

@@ -30,13 +30,55 @@ Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 """
 
-_CLOUDFLARE_HEADERS_SNIPPET = """# Cloudflare Workers / Transform Rules — security headers
-# Use Cloudflare Dashboard > Rules > Transform Rules > Modify Response Header
-# 1. Content-Security-Policy: default-src 'self'; script-src 'self'; frame-ancestors 'none'
-# 2. X-Content-Type-Options: nosniff
-# 3. X-Frame-Options: SAMEORIGIN
-# 4. Referrer-Policy: strict-origin-when-cross-origin
-# 5. Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+_CLOUDFRONT_HEADERS_SNIPPET = """# AWS CloudFront Distribution — Response Headers Policy
+# AWS Console → CloudFront → Policies → Response Headers Policy → Create
+# Or use AWS CLI:
+#   aws cloudfront create-response-headers-policy --response-headers-policy-config file://policy.json
+Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+
+# Rollback: CloudFront → Policies → Response Headers Policy → Delete custom policy
+# Verification: curl -sS -D- -o /dev/null https://licensespring.com/ | grep -i 'content-security-policy'
+"""
+
+_NEXTJS_HEADERS_SNIPPET = """// next.config.js — Security headers for Next.js deployment
+module.exports = {
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=(), payment=()' },
+          // Note: CSP and HSTS should be set at CloudFront/CDN level for maximum effectiveness
+        ],
+      },
+    ],
+  },
+}
+
+// Rollback: Remove headers array from next.config.js → redeploy
+// Verification: curl -sS -D- -o /dev/null http://localhost:3000/ | grep X-Content-Type-Options
+"""
+
+_CLOUDFLARE_HEADERS_SNIPPET = """# Cloudflare — Security Headers via Transform Rules
+# Cloudflare Dashboard → Rules → Transform Rules → Modify Response Header
+# Add headers:
+#   Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+#   X-Content-Type-Options: nosniff
+#   X-Frame-Options: DENY
+#   Referrer-Policy: strict-origin-when-cross-origin
+#   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+#   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload (use Cloudflare HSTS setting instead if enabled)
+#
+# Rollback: Cloudflare Dashboard → Rules → Transform Rules → Delete the rule
+# Verification: curl -sS -D- -o /dev/null https://target/ | grep -i 'content-security-policy'
 """
 
 _TLS_HARDENING = """# TLS Hardening Checklist
@@ -60,6 +102,7 @@ _TECH_STACK_RECOMMENDATIONS: dict[str, str] = {
 # 2. Ensure origin server is not directly accessible (IP whitelisting)
 # 3. Configure rate limiting at WAF layer for login endpoints
 # 4. Enable bot protection / JS challenge for suspicious requests""",
+    "cloudfront": _CLOUDFRONT_HEADERS_SNIPPET + "\n# Also verify: Distribution cache behavior, origin access identity, geographic restrictions",
     "nginx": _NGINX_HEADERS_SNIPPET + "\n# Also verify: ssl_protocols, ssl_ciphers, client_max_body_size, limit_req_zone",
     "apache": _APACHE_HEADERS_SNIPPET + "\n# Also verify: SSLCipherSuite, SSLProtocol, LimitRequestBody, mod_evasive",
     "cloudflare": _CLOUDFLARE_HEADERS_SNIPPET,
@@ -74,6 +117,8 @@ _TECH_STACK_RECOMMENDATIONS: dict[str, str] = {
 # 2. Set cookie: { httpOnly: true, secure: true, sameSite: 'strict' }
 # 3. Rate-limit login endpoints with express-rate-limit
 # 4. Use parameterized queries (no string concatenation for SQL)""",
+    "next": _NEXTJS_HEADERS_SNIPPET,
+    "nextjs": _NEXTJS_HEADERS_SNIPPET,
     "django": """# Django Hardening
 # 1. Set SECURE_HSTS_SECONDS, SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE = True
 # 2. Use django-axes for login rate limiting
@@ -107,9 +152,21 @@ def generate_infra_recommendations(
     if isinstance(tech_stack, dict):
         structured = tech_stack.get("structured", tech_stack)
         web_server = str(structured.get("web_server", "") or "").lower()
+        frameworks = str(structured.get("frameworks", "") or "").lower()
+        cms = str(structured.get("cms", "") or "").lower()
+        matched = False
         for tech_key, snippet in _TECH_STACK_RECOMMENDATIONS.items():
-            if tech_key in web_server:
+            if tech_key in web_server or tech_key in frameworks or tech_key in cms:
                 result["config_snippets"].append((tech_key, snippet))
+                matched = True
+        # If CloudFront detected as CDN, always include CloudFront snippet
+        if "cloudfront" in web_server and not any("cloudfront" == k for k, _ in result["config_snippets"]):
+            result["config_snippets"].append(("cloudfront", _CLOUDFRONT_HEADERS_SNIPPET))
+            matched = True
+        # If Next.js detected, always include Next.js snippet
+        if "next" in frameworks and not any(k.startswith("next") for k, _ in result["config_snippets"]):
+            result["config_snippets"].append(("next", _NEXTJS_HEADERS_SNIPPET))
+            matched = True
         if not result["config_snippets"]:
             result["config_snippets"].append(("generic", _NGINX_HEADERS_SNIPPET))
 

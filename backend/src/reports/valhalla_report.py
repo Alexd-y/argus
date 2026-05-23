@@ -165,6 +165,7 @@ class ValhallaReportContext(BaseModel):
     exploit_chains: list[dict[str, Any]] = Field(default_factory=list)
     remediation_stages: dict[str, Any] = Field(default_factory=dict)
     remediation_matrix: list[dict[str, Any]] = Field(default_factory=list)
+    retest_plan: dict[str, Any] = Field(default_factory=dict)
     zero_day_assessment: dict[str, Any] = Field(default_factory=dict)
     cost_summary: dict[str, Any] = Field(default_factory=dict)
 
@@ -660,6 +661,50 @@ def _build_zero_day_assessment(findings: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
+_RETEST_VERIFICATION_COMMANDS: dict[str, str] = {
+    "XSS": "curl -sS '{url}' | grep -i '{payload_fragment}'",
+    "SQLI": "sqlmap --url '{url}' --batch --level 1 --threads 1",
+    "HEADER": "curl -sS -D- -o /dev/null '{url}' | grep -i '{header_name}'",
+    "COMMAND_INJECTION": "commix --url '{url}' --batch --level 1",
+    "FUZZ_HIT": "curl -sS '{url}' | grep -i '{payload_fragment}'",
+    "INFORMATION_DISCLOSURE": "whatweb -a 1 '{url}' | grep -E '(Version|HTTPServer)'",
+    "LINE_FINDING": "curl -sS -D- -o /dev/null '{url}' | head -1",
+    "WHATWEB_PLUGIN": "whatweb -a 3 '{url}' | grep -E '(Version|HTTPServer)'",
+    "RATE_LIMIT": "for i in $(seq 1 20); do curl -sS -o /dev/null -w '%{http_code}' '{url}'; done | sort | uniq -c",
+}
+
+
+def _build_retest_plan(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a retest-after-remediation plan with per-finding verification commands."""
+    items: list[dict[str, Any]] = []
+    f_type = ""
+    for f in sorted(findings, key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(str(x.get("severity", "info")).lower(), 5)):
+        if not isinstance(f, dict):
+            continue
+        f_type = str(f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "") or "").upper()
+        affected_url = str(f.get("affected_url") or (f.get("proof_of_concept") or {}).get("request_url") or "")
+        for key, cmd_template in _RETEST_VERIFICATION_COMMANDS.items():
+            if key in f_type:
+                verification = cmd_template.format(url=affected_url, payload_fragment="", header_name=key.lower())
+                break
+        else:
+            verification = f"curl -sS -D- -o /dev/null '{affected_url}'"
+        items.append({
+            "finding_id": str(f.get("id", f.get("finding_id", "")))[:64],
+            "title": str(f.get("title", ""))[:256],
+            "severity": str(f.get("severity", "info")).lower(),
+            "verification_command": verification,
+            "expected_result": f"Finding {f.get('id', '?')} no longer reproducible",
+            "retest_status": "pending",
+        })
+    return {
+        "retest_scope": items[:25],
+        "retest_timeline": "14-30 days after remediation",
+        "retest_methodology": "Re-run all active scan tools + manual verification + browser-based XSS confirmation",
+        "retest_acceptance_criteria": "All P0 findings confirmed fixed; P1 findings confirmed fixed or risk accepted; P2/P3 findings verified or documented as accepted risk",
+    }
+
+
 def _extract_recon_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
     """Extract recon-like structured data from findings when recon_output is empty."""
     tech_entries = []
@@ -892,6 +937,7 @@ async def build_valhalla_report_context(
     exploit_chains_list = _build_exploit_chains(exploits_list, resolved_findings)
     remediation_stages = _build_remediation_stages(resolved_findings, tech_stack=tech_stack)
     zero_day = _build_zero_day_assessment(resolved_findings)
+    retest_plan = _build_retest_plan(resolved_findings)
 
     ssl_tls: dict[str, Any] = {}
     if isinstance(rec, dict):
@@ -1023,6 +1069,7 @@ async def build_valhalla_report_context(
         exploit_chains=exploit_chains_list,
         remediation_stages=remediation_stages,
         remediation_matrix=remediation_stages.get("remediation_matrix", []),
+        retest_plan=retest_plan,
         zero_day_assessment=zero_day,
         cost_summary=cost_summary,
     )

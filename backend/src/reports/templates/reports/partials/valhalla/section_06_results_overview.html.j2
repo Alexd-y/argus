@@ -331,6 +331,21 @@
     {% else %}
     <p class="empty">No customer-facing TLS rows were parsed for this run.</p>
     {% endif %}
+    {% if vc.ssl_tls_analysis and (vc.ssl_tls_analysis.hsts_present or vc.ssl_tls_analysis.tls_versions or vc.ssl_tls_analysis.cert_issuer or vc.ssl_tls_analysis.recommendations) %}
+    <h4>TLS Assessment Details</h4>
+    <table class="valhalla-tls-details">
+        <tbody>
+            {% if vc.ssl_tls_analysis.cert_subject %}<tr><th>Certificate Subject</th><td>{{ vc.ssl_tls_analysis.cert_subject | e }}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.cert_issuer %}<tr><th>Certificate Issuer</th><td>{{ vc.ssl_tls_analysis.cert_issuer | e }}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.cert_expiry %}<tr><th>Certificate Expiry</th><td>{{ vc.ssl_tls_analysis.cert_expiry | e }}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.hsts_present %}<tr><th>HSTS Present</th><td>Yes{% if vc.ssl_tls_analysis.hsts_max_age %} (max-age={{ vc.ssl_tls_analysis.hsts_max_age }}){% endif %}{% if vc.ssl_tls_analysis.hsts_include_subdomains %}; includeSubDomains{% endif %}{% if vc.ssl_tls_analysis.hsts_preload %}; preload{% endif %}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.tls_versions %}<tr><th>TLS Versions Detected</th><td>{{ vc.ssl_tls_analysis.tls_versions | join(", ") | e }}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.cipher_detail %}<tr><th>Cipher Details</th><td>{% for cd in vc.ssl_tls_analysis.cipher_detail %}{{ cd.name | e }}{% if cd.detail %} ({{ cd.detail | e }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.recommendations %}<tr><th>Recommendations</th><td><ul>{% for rec in vc.ssl_tls_analysis.recommendations %}<li>{{ rec | e }}</li>{% endfor %}</ul></td></tr>{% endif %}
+            {% if vc.ssl_tls_analysis.assessment_note %}<tr><th>Assessment Note</th><td class="warning">{{ vc.ssl_tls_analysis.assessment_note | e }}</td></tr>{% endif %}
+        </tbody>
+    </table>
+    {% endif %}
 
     <h3>HTTP Security Headers Analysis</h3>
     {{ section_envelope(vc, "security_headers_analysis") }}
