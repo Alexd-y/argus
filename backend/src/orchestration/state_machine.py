@@ -882,3 +882,7 @@ async def run_scan_state_machine(
     if post_scan_bundle:
         b_id, r_ids = post_scan_bundle
         schedule_generate_all_reports_task_safe(tenant_id, scan_id, b_id, r_ids)
+
+    from src.policy.scan_queue import notify_scan_finished
+
+    await notify_scan_finished(tenant_id)

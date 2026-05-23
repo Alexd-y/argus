@@ -38,6 +38,8 @@ app = Celery(
         # T33 — operator-managed scan_schedules; the trigger task is
         # scheduled dynamically via celery-redbeat (see redbeat block below).
         "src.scheduling.scan_trigger",
+        # Scan queue poller — safety-net for picking up queued scans.
+        "src.celery.tasks.scan_queue_poll",
     ],
 )
 
@@ -84,6 +86,8 @@ app.conf.update(
         # T33 — scheduled scans fire onto the same queue as ad-hoc scans
         # so the existing worker pool drains them with no extra config.
         "argus.scheduling.run_scheduled_scan": {"queue": "argus.scans"},
+        # Scan queue poller — safety-net for queued scans.
+        "argus.scan_queue.poll": {"queue": "argus.scans"},
     },
     task_default_queue="argus.default",
 )

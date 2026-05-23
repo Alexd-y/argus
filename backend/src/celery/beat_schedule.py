@@ -95,6 +95,14 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "schedule": _interval(seconds=QUEUE_DEPTH_REFRESH_INTERVAL_SECONDS),
         "options": {"queue": "argus.intel"},
     },
+    # Scan queue poller — every 30 seconds, check for queued scans that
+    # can be started because a slot freed up (safety-net for lost
+    # notifications).
+    "argus.scan_queue.poll": {
+        "task": "argus.scan_queue.poll",
+        "schedule": _interval(seconds=30),
+        "options": {"queue": "argus.scans"},
+    },
 }
 
 

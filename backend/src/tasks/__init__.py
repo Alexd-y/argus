@@ -64,6 +64,9 @@ def scan_phase_task(
                         "Scan timed out after 24h",
                         extra={"scan_id": scan_id},
                     )
+                    from src.policy.scan_queue import notify_scan_finished
+
+                    await notify_scan_finished(tenant_id)
                     return {"status": "timeout", "scan_id": scan_id}
                 except ExploitationApprovalRequiredError:
                     return {"status": "awaiting_approval", "scan_id": scan_id}
@@ -78,6 +81,10 @@ def scan_phase_task(
                             .values(status="failed", phase="failed")
                         )
                         await err_session.commit()
+
+                    from src.policy.scan_queue import notify_scan_finished
+
+                    await notify_scan_finished(tenant_id)
                     raise
         finally:
             await engine.dispose()

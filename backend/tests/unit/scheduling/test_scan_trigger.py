@@ -398,7 +398,7 @@ class TestRunScheduledScanAsyncHappyPath:
                 scan_trigger, "_ensure_tenant", new=AsyncMock()
             ) as ensure_tenant_mock,
             patch.object(
-                scan_trigger, "check_scan_concurrency", new=AsyncMock()
+                scan_trigger, "try_pick_queued_scan", new=AsyncMock(return_value="scan-uuid-123")
             ),
             patch.object(
                 scan_trigger,
@@ -413,7 +413,7 @@ class TestRunScheduledScanAsyncHappyPath:
                 "_update_run_timestamps",
                 new=AsyncMock(),
             ) as update_mock,
-            patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
+            patch.object(scan_trigger, "try_pick_queued_scan", new=AsyncMock(return_value="scan-uuid-123")),
         ):
             result = await _run_scheduled_scan_async(
                 schedule_id=_SCHEDULE_ID,
@@ -422,7 +422,7 @@ class TestRunScheduledScanAsyncHappyPath:
             )
 
         assert result == {
-            "status": "dispatched",
+            "status": "queued",
             "schedule_id": _SCHEDULE_ID,
             "scan_id": "scan-uuid-123",
         }
@@ -444,11 +444,6 @@ class TestRunScheduledScanAsyncHappyPath:
         )
         session.commit.assert_awaited_once()
         engine.dispose.assert_awaited_once()
-        dispatch_mock.assert_called_once_with(
-            scan_id="scan-uuid-123",
-            tenant_id=_TENANT_ID,
-            target_url="https://t.example.com/api",
-        )
 
     @pytest.mark.asyncio
     async def test_dispatch_proceeds_even_when_next_run_unknown(self) -> None:
@@ -476,12 +471,13 @@ class TestRunScheduledScanAsyncHappyPath:
                 "_persist_scheduled_scan",
                 new=AsyncMock(return_value="scan-1"),
             ),
-            patch.object(scan_trigger, "check_scan_concurrency", new=AsyncMock()),
             patch.object(scan_trigger, "_compute_next_run_at", return_value=None),
+            patch.object(
+                scan_trigger, "try_pick_queued_scan", new=AsyncMock()
+            ),
             patch.object(
                 scan_trigger, "_update_run_timestamps", new=AsyncMock()
             ) as update_mock,
-            patch.object(scan_trigger, "_dispatch_scan_phase") as dispatch_mock,
         ):
             result = await _run_scheduled_scan_async(
                 schedule_id=_SCHEDULE_ID,
@@ -489,14 +485,13 @@ class TestRunScheduledScanAsyncHappyPath:
                 fired_at=_FIRED_AT,
             )
 
-        assert result["status"] == "dispatched"
+        assert result["status"] == "queued"
         update_mock.assert_awaited_once_with(
             session,
             schedule_id=_SCHEDULE_ID,
             fired_at=_FIRED_AT,
             next_run_at=None,
         )
-        dispatch_mock.assert_called_once()
 
 
 # ===========================================================================
