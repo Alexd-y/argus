@@ -57,6 +57,7 @@ from src.db.session import (
     set_session_tenant,
 )
 from src.policy.kill_switch import KillSwitchService, KillSwitchUnavailableError
+from src.policy.scan_concurrency import ScanConcurrencyError, check_scan_concurrency
 from src.scheduling.cron_parser import (
     CronValidationError,
     is_in_maintenance_window,
@@ -73,6 +74,7 @@ logger = logging.getLogger(__name__)
 #: automatic skips.
 EVENT_SKIPPED_EMERGENCY_STOP: str = "scan_schedule.skipped_emergency_stop"
 EVENT_SKIPPED_MAINTENANCE_WINDOW: str = "scan_schedule.skipped_maintenance_window"
+EVENT_SKIPPED_CONCURRENT_SCAN: str = "scan_schedule.skipped_concurrent_scan"
 
 #: Default duration assumed for a maintenance window when the schedule
 #: stores only the *opening* cron. Matches the
@@ -445,6 +447,49 @@ async def _run_scheduled_scan_async(
                 }
 
             await _ensure_tenant(session, schedule.tenant_id)
+
+            try:
+                await check_scan_concurrency(session, schedule.tenant_id)
+            except ScanConcurrencyError as exc:
+                logger.info(
+                    "scan_trigger.skipped_concurrent_scan",
+                    extra={
+                        "event": "scan_trigger.skipped_concurrent_scan",
+                        "schedule_id": schedule_id,
+                        "tenant_hash": tenant_hash(schedule.tenant_id),
+                        "active_count": exc.active_count,
+                        "max_concurrent": exc.max_concurrent,
+                    },
+                )
+                try:
+                    session.add(
+                        _build_skip_audit_row(
+                            action=EVENT_SKIPPED_CONCURRENT_SCAN,
+                            tenant_id=schedule.tenant_id,
+                            schedule_id=schedule_id,
+                            reason="concurrent_scan_limit_reached",
+                            extra={
+                                "active_count": exc.active_count,
+                                "max_concurrent": exc.max_concurrent,
+                            },
+                        )
+                    )
+                    await session.commit()
+                except Exception:
+                    logger.warning(
+                        "scan_trigger.skip_audit_persist_failed",
+                        extra={
+                            "event": "scan_trigger.skip_audit_persist_failed",
+                            "action": EVENT_SKIPPED_CONCURRENT_SCAN,
+                            "schedule_id": schedule_id,
+                        },
+                        exc_info=True,
+                    )
+                return {
+                    "status": "skipped_concurrent_scan",
+                    "schedule_id": schedule_id,
+                }
+
             scan_id = await _persist_scheduled_scan(
                 session,
                 tenant_id=schedule.tenant_id,

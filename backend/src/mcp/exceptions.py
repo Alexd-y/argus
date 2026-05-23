@@ -105,6 +105,13 @@ class RateLimitedError(MCPError):
     http_status = 429
 
 
+class ConcurrencyError(MCPError):
+    """Tenant already has an active scan; new scan rejected."""
+
+    code = "mcp_scan_already_active"
+    http_status = 409
+
+
 class UpstreamServiceError(MCPError):
     """An internal ARGUS service raised an error we could not recover from."""
 
@@ -123,6 +130,7 @@ _ALL_ERROR_CODES: Final[frozenset[str]] = frozenset(
         ResourceNotFoundError.code,
         ValidationError.code,
         RateLimitedError.code,
+        ConcurrencyError.code,
         UpstreamServiceError.code,
     }
 )
@@ -144,6 +152,7 @@ __all__ = [
     "ResourceNotFoundError",
     "ValidationError",
     "RateLimitedError",
+    "ConcurrencyError",
     "UpstreamServiceError",
     "is_known_error_code",
 ]

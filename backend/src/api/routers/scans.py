@@ -43,6 +43,7 @@ from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
+from src.policy.scan_concurrency import ScanConcurrencyError, check_scan_concurrency
 from src.llm.cost_tracker import ScanCostTracker
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
@@ -174,10 +175,16 @@ async def _persist_scan_start(
     options_dict: dict[str, Any],
     scan_mode: ScanCreateMode,
 ) -> str:
-    """Insert tenant/target/scan and return scan_id."""
+    """Insert tenant/target/scan and return scan_id.
+
+    Raises :class:`ScanConcurrencyError` if the tenant already has
+    ``SCAN_MAX_CONCURRENT`` (default 3) active scans.
+    """
     scan_id = str(uuid.uuid4())
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
+        await check_scan_concurrency(session, tenant_id)
+
         result = await session.execute(
             select(Tenant).where(cast(Tenant.id, String) == tenant_id)
         )
@@ -271,7 +278,18 @@ async def create_smart_scan(
     options_dict["smart_objective"] = req.objective
     options_dict["max_phases"] = req.max_phases
 
-    scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    try:
+        scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    except ScanConcurrencyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "scan_concurrency_limit",
+                "active_count": exc.active_count,
+                "max_concurrent": exc.max_concurrent,
+                "message": str(exc),
+            },
+        ) from exc
     record_scan_started()
     scan_phase_task.delay(
         scan_id,
@@ -298,7 +316,18 @@ async def create_skill_scan(
     scan_mode: Literal["quick", "standard", "deep"] = "deep"
     options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
 
-    scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    try:
+        scan_id = await _persist_scan_start(tenant_id, req.target, options_dict, scan_mode)
+    except ScanConcurrencyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "scan_concurrency_limit",
+                "active_count": exc.active_count,
+                "max_concurrent": exc.max_concurrent,
+                "message": str(exc),
+            },
+        ) from exc
     record_scan_started()
     scan_phase_task.delay(
         scan_id,
@@ -323,39 +352,52 @@ async def create_scan(
     options_dict = req.options.model_dump() if req.options else {}
     options_dict = _sync_scan_depth_options(options_dict, req.scan_mode, target=req.target)
 
-    async with async_session_factory() as session:
-        await set_session_tenant(session, tenant_id)
-        # DB has VARCHAR(36) for id; ORM uses UUID — cast for comparison
-        result = await session.execute(
-            select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-        )
-        if not result.scalar_one_or_none():
-            tenant = Tenant(id=tenant_id, name="default")
-            session.add(tenant)
+    try:
+        async with async_session_factory() as session:
+            await set_session_tenant(session, tenant_id)
+            await check_scan_concurrency(session, tenant_id)
+
+            # DB has VARCHAR(36) for id; ORM uses UUID — cast for comparison
+            result = await session.execute(
+                select(Tenant).where(cast(Tenant.id, String) == tenant_id)
+            )
+            if not result.scalar_one_or_none():
+                tenant = Tenant(id=tenant_id, name="default")
+                session.add(tenant)
+                await session.flush()
+
+            target = Target(
+                id=str(uuid.uuid4()),
+                tenant_id=tenant_id,
+                url=req.target,
+            )
+            session.add(target)
             await session.flush()
 
-        target = Target(
-            id=str(uuid.uuid4()),
-            tenant_id=tenant_id,
-            url=req.target,
-        )
-        session.add(target)
-        await session.flush()
-
-        scan = Scan(
-            id=scan_id,
-            tenant_id=tenant_id,
-            target_id=target.id,
-            target_url=req.target,
-            status="queued",
-            progress=0,
-            phase="init",
-            options=options_dict,
-            scan_mode=req.scan_mode,
-            email=req.email,
-        )
-        session.add(scan)
-        await session.commit()
+            scan = Scan(
+                id=scan_id,
+                tenant_id=tenant_id,
+                target_id=target.id,
+                target_url=req.target,
+                status="queued",
+                progress=0,
+                phase="init",
+                options=options_dict,
+                scan_mode=req.scan_mode,
+                email=req.email,
+            )
+            session.add(scan)
+            await session.commit()
+    except ScanConcurrencyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "scan_concurrency_limit",
+                "active_count": exc.active_count,
+                "max_concurrent": exc.max_concurrent,
+                "message": str(exc),
+            },
+        ) from exc
 
     # Sandbox tool cache is keyed by command hash; optional per-scan scope is via
     # POST /sandbox/execute ``scan_id`` (see cache_key_for_execute). Target-based

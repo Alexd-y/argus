@@ -123,6 +123,9 @@ _LAZY_MAP: dict[str, str] = {
     "ScopeKind": "src.policy.scope",
     "ScopeRule": "src.policy.scope",
     "ScopeViolation": "src.policy.scope",
+    # scan_concurrency
+    "ScanConcurrencyError": "src.policy.scan_concurrency",
+    "check_scan_concurrency": "src.policy.scan_concurrency",
 }
 
 
@@ -199,6 +202,7 @@ __all__ = [
     "PreflightDecision",
     "PreflightDeniedError",
     "RateLimit",
+    "ScanConcurrencyError",
     "SCOPE_FAILURE_REASONS",
     "ScopeDecision",
     "ScopeEngine",
@@ -206,5 +210,6 @@ __all__ = [
     "ScopeRule",
     "ScopeViolation",
     "TenantPolicy",
+    "check_scan_concurrency",
     "hash_identifier",
 ]

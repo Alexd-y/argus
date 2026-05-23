@@ -233,6 +233,16 @@ class Settings(BaseSettings):
         return bool(v)
 
     celery_broker_url: str | None = None  # Defaults to redis_url if unset
+
+    scan_max_concurrent: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        description="Maximum number of concurrently active scans per tenant. "
+        "New scan requests that would exceed this limit are rejected with 409.",
+        validation_alias=AliasChoices("SCAN_MAX_CONCURRENT", "scan_max_concurrent"),
+    )
+
     sandbox_container_name: str = "argus-sandbox"
     sandbox_enabled: bool = False  # Enable docker exec into sandbox when True
 

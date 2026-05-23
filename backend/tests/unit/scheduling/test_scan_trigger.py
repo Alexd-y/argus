@@ -398,6 +398,9 @@ class TestRunScheduledScanAsyncHappyPath:
                 scan_trigger, "_ensure_tenant", new=AsyncMock()
             ) as ensure_tenant_mock,
             patch.object(
+                scan_trigger, "check_scan_concurrency", new=AsyncMock()
+            ),
+            patch.object(
                 scan_trigger,
                 "_persist_scheduled_scan",
                 new=AsyncMock(return_value="scan-uuid-123"),
@@ -473,6 +476,7 @@ class TestRunScheduledScanAsyncHappyPath:
                 "_persist_scheduled_scan",
                 new=AsyncMock(return_value="scan-1"),
             ),
+            patch.object(scan_trigger, "check_scan_concurrency", new=AsyncMock()),
             patch.object(scan_trigger, "_compute_next_run_at", return_value=None),
             patch.object(
                 scan_trigger, "_update_run_timestamps", new=AsyncMock()

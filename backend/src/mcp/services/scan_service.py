@@ -23,6 +23,7 @@ from src.db.models import Finding as FindingModel
 from src.db.models import Scan, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.mcp.exceptions import (
+    ConcurrencyError,
     ResourceNotFoundError,
     UpstreamServiceError,
     ValidationError,
@@ -35,6 +36,7 @@ from src.mcp.schemas.scan import (
     ScanStatus,
     ScanStatusResult,
 )
+from src.policy.scan_concurrency import ScanConcurrencyError, check_scan_concurrency
 
 _logger = logging.getLogger(__name__)
 
@@ -154,6 +156,8 @@ async def enqueue_scan(
     try:
         async with async_session_factory() as session:
             await set_session_tenant(session, tenant_id)
+            await check_scan_concurrency(session, tenant_id)
+
             tenant_existing = await session.execute(
                 select(Tenant).where(cast(Tenant.id, String) == tenant_id)
             )
@@ -182,6 +186,12 @@ async def enqueue_scan(
             )
             session.add(scan_row)
             await session.commit()
+    except ScanConcurrencyError as exc:
+        raise ConcurrencyError(
+            f"Tenant {tenant_id} already has {exc.active_count} active scan(s), "
+            f"which meets the concurrency limit ({exc.max_concurrent}). "
+            f"Wait for a scan to finish before starting a new one.",
+        ) from exc
     except Exception as exc:
         _logger.exception(
             "mcp.scan.enqueue_failed",
