@@ -106,7 +106,7 @@ async def try_pick_queued_scan(
             },
         )
 
-        await _dispatch_scan_phase(
+        _dispatch_scan_phase(
             scan_id=scan_id,
             tenant_id=tenant_id,
             target_url=target_url,
