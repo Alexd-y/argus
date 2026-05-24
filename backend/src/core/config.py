@@ -1250,6 +1250,8 @@ class Settings(BaseSettings):
     def get_cors_origins_list(self) -> list[str]:
         """Merge VERCEL_FRONTEND_URL, CORS_ORIGINS, and localhost dev origins (deduped)."""
         dev_defaults = [
+            "http://localhost:5000",
+            "http://127.0.0.1:5000",
             "http://localhost:6100",
             "http://127.0.0.1:6100",
             "http://localhost:3000",
