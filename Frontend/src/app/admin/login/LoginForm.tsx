@@ -279,6 +279,12 @@ export function LoginForm() {
       ) : null}
 
       <SubmitButton locked={isLockedOut} countdownSeconds={countdown} />
+
+      <p className="text-center text-sm text-[var(--text-muted)]">
+        <a href="/admin/login/reset-password" className="text-[var(--accent)] hover:underline">
+          Забыли пароль? / Forgot password?
+        </a>
+      </p>
     </form>
   );
 }

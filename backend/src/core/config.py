@@ -501,6 +501,47 @@ class Settings(BaseSettings):
             return s
         return "super-admin"
 
+    # ── SMTP / Email (admin password reset) ───────────────────────────────────
+    # Gmail SMTP: smtp.gmail.com:587 with app password.
+    # Other providers: set SMTP_HOST / SMTP_PORT accordingly.
+    # When SMTP_HOST is empty (default), email sending is disabled and
+    # password-reset request returns 503.
+    smtp_host: str = Field(
+        default="smtp.gmail.com",
+        validation_alias=AliasChoices("SMTP_HOST", "smtp_host"),
+    )
+    smtp_port: int = Field(
+        default=587,
+        ge=1,
+        le=65535,
+        validation_alias=AliasChoices("SMTP_PORT", "smtp_port"),
+    )
+    smtp_user: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_USER", "smtp_user"),
+    )
+    smtp_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_PASSWORD", "smtp_password"),
+    )
+    smtp_from: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_FROM", "smtp_from"),
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SMTP_USE_TLS", "smtp_use_tls"),
+    )
+    # Password-reset token TTL in minutes (default 30).
+    admin_reset_token_ttl_minutes: int = Field(
+        default=30,
+        ge=5,
+        le=1440,
+        validation_alias=AliasChoices(
+            "ADMIN_RESET_TOKEN_TTL_MINUTES", "admin_reset_token_ttl_minutes"
+        ),
+    )
+
     # Recon Module (Phase 8)
     recon_tools_timeout: int = 300
     # Optional path to xsstrike.py on the host (see plugins/tools/xsstrike). Env: XSSTRIKE_SCRIPT_PATH
@@ -1209,8 +1250,8 @@ class Settings(BaseSettings):
     def get_cors_origins_list(self) -> list[str]:
         """Merge VERCEL_FRONTEND_URL, CORS_ORIGINS, and localhost dev origins (deduped)."""
         dev_defaults = [
-            "http://localhost:5000",
-            "http://127.0.0.1:5000",
+            "http://localhost:6000",
+            "http://127.0.0.1:6000",
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:5800",

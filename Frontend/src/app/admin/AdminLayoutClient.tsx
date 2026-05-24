@@ -20,6 +20,7 @@ const NAV = [
   { href: "/admin/operations", label: "Operations" },
   { href: "/admin/webhooks/dlq", label: "Webhooks DLQ" },
   { href: "/admin/llm", label: "LLM" },
+  { href: "/admin/settings", label: "Settings" },
   { href: "/admin/system", label: "System" },
 ] as const;
 

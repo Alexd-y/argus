@@ -3,6 +3,7 @@
 # Regenerate: python backend/scripts/sync_requirements.py
 # CI check:   python backend/scripts/sync_requirements.py --check
 
+aiosmtplib>=3.0.0
 alembic>=1.13.0
 asyncpg>=0.29.0
 azure-core>=1.30.0

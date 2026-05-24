@@ -899,6 +899,38 @@ class AdminSession(Base):
     )
 
 
+class AdminPasswordResetToken(Base):
+    """One-time password-reset token for admin users (email verification).
+
+    Created when an admin requests a password reset via
+    ``POST /api/v1/auth/admin/request-reset``. The reset link carries a
+    CSPRNG URL-safe token (looked up via HMAC-SHA256 hash, mirroring the
+    admin_sessions pattern). A separate 6-digit OTP is also stored for the
+    confirmation step, providing dual-channel verification.
+
+    Cross-tenant table (no RLS) — the token is identified by its hash,
+    not by tenant. Revoked/used tokens are tombstoned via ``used_at``.
+    """
+
+    __tablename__ = "admin_password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    otp_code: Mapped[str] = mapped_column(String(6), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        Index("ix_admin_reset_tokens_subject", "subject"),
+        Index("ix_admin_reset_tokens_expires_at", "expires_at"),
+    )
+
+
 # ===== Phase 1: Ingestion & Knowledge Graph =====
 
 class Repo(Base):

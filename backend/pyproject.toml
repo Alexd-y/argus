@@ -60,6 +60,8 @@ dependencies = [
     "pyotp==2.9.0",
     # Token counting for LLM cost tracking (facade.py fallback path).
     "tiktoken>=0.7.0",
+    # Async SMTP for admin password-reset emails.
+    "aiosmtplib>=3.0.0",
 ]
 
 [project.optional-dependencies]
