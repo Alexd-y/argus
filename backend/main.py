@@ -14,6 +14,7 @@ from src.api.routers import (
     admin,
     admin_auth,
     admin_password,
+    admin_profile,
     auth,
     cache,
     findings,
@@ -153,6 +154,7 @@ app.include_router(queues_health.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(admin_password.router, prefix="/api/v1")
+app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 app.include_router(findings.router, prefix="/api/v1")
