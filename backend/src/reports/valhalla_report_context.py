@@ -3804,28 +3804,6 @@ def _collect_dependency_rows(
     rows: list[DependencyAnalysisRow] = []
     if not fetch_bodies:
         return rows
-    if tech_stack_structured or ssl_tls_analysis or security_headers_analysis:
-        infra = generate_infra_recommendations(
-            tech_stack=tech_stack_structured,
-            findings=findings[:max_rows],
-            ssl_tls=ssl_tls_analysis,
-            security_headers=security_headers_analysis,
-        )
-        if infra.get("config_snippets"):
-            infra_fix = "\n\n".join(snippet for _, snippet in infra["config_snippets"][:3])
-            for row in rows:
-                if row.affected_layer == "infrastructure/reverse-proxy":
-                    row.fix_action = infra_fix[:2000] or row.fix_action
-                    row.config_component = (
-                        tech_stack_structured.get("web_server", "") or "reverse-proxy"
-                    ) if tech_stack_structured else row.config_component
-        if infra.get("tls_hardening"):
-            for row in rows:
-                ftype = (row.title or "").upper()
-                if any(k in ftype for k in ("SSL", "TLS", "HSTS", "CIPHER", "PROTOCOL")):
-                    row.fix_action = (infra["tls_hardening"][:2000]) or row.fix_action
-
-    return rows
     for key, _p in raw_keys:
         if not _artifact_name_matches(key, _DEP_ARTIFACT_HINTS):
             continue
@@ -4976,6 +4954,26 @@ def build_remediation_matrix_rows(
                 retest_result="NOT_RETESTED",
             )
         )
+    if tech_stack_structured or ssl_tls_analysis or security_headers_analysis:
+        infra = generate_infra_recommendations(
+            tech_stack=tech_stack_structured or {},
+            findings=findings[:max_rows],
+            ssl_tls=ssl_tls_analysis or {},
+            security_headers=security_headers_analysis or {},
+        )
+        if infra.get("config_snippets"):
+            infra_fix = "\n\n".join(snippet for _, snippet in infra["config_snippets"][:3])
+            for row in rows:
+                if row.affected_layer == "infrastructure/reverse-proxy":
+                    row.fix_action = infra_fix[:2000] or row.fix_action
+                    row.config_component = (
+                        tech_stack_structured.get("web_server", "") or "reverse-proxy"
+                    ) if tech_stack_structured else row.config_component
+        if infra.get("tls_hardening"):
+            for row in rows:
+                ftype = (row.title or "").upper()
+                if any(k in ftype for k in ("SSL", "TLS", "HSTS", "CIPHER", "PROTOCOL")):
+                    row.fix_action = (infra["tls_hardening"][:2000]) or row.fix_action
     return rows
 
 
