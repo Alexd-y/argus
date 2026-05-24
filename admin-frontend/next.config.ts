@@ -49,12 +49,12 @@ const nextConfig: NextConfig = {
     proxyTimeout: 86_400_000,
   },
   // Next 16+ dev: allow Turbopack /_next/* when Origin is not localhost (e.g. EC2 public URL).
-  // Set NEXT_ALLOWED_DEV_ORIGINS=http://YOUR_IP:6000 in .env.local (comma-separated for several).
+  // Set NEXT_ALLOWED_DEV_ORIGINS=http://YOUR_IP:6100 in .env.local (comma-separated for several).
   allowedDevOrigins: [
-    "http://localhost:6000",
-    "http://127.0.0.1:6000",
-    "localhost:6000",
-    "127.0.0.1:6000",
+    "http://localhost:6100",
+    "http://127.0.0.1:6100",
+    "localhost:6100",
+    "127.0.0.1:6100",
     ...expandAllowedDevOrigins(process.env.NEXT_ALLOWED_DEV_ORIGINS ?? ""),
   ],
   async rewrites() {
