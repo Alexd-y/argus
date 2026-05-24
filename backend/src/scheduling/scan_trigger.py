@@ -52,7 +52,6 @@ from src.celery_app import app
 from src.core.observability import tenant_hash
 from src.db.models import AuditLog, ScanSchedule, Target, Tenant, gen_uuid
 from src.db.session import (
-    async_session_factory,
     create_task_engine_and_session,
     set_session_tenant,
 )
@@ -269,17 +268,21 @@ async def _emit_skip_audit_standalone(
     loop on every beat tick.
     """
     try:
-        async with async_session_factory() as session:
-            session.add(
-                _build_skip_audit_row(
-                    action=action,
-                    tenant_id=tenant_id,
-                    schedule_id=schedule_id,
-                    reason=reason,
-                    extra=extra,
+        engine, session_factory = create_task_engine_and_session()
+        try:
+            async with session_factory() as session:
+                session.add(
+                    _build_skip_audit_row(
+                        action=action,
+                        tenant_id=tenant_id,
+                        schedule_id=schedule_id,
+                        reason=reason,
+                        extra=extra,
+                    )
                 )
-            )
-            await session.commit()
+                await session.commit()
+        finally:
+            await engine.dispose()
     except Exception:
         logger.warning(
             "scan_trigger.skip_audit_persist_failed",

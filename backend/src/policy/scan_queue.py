@@ -29,7 +29,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.db.models import Scan
-from src.db.session import async_session_factory, set_session_tenant
+from src.db.session import (
+    create_task_engine_and_session,
+    set_session_tenant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,60 +62,64 @@ async def try_pick_queued_scan(
     """
     limit = max_concurrent or _max_concurrent()
 
-    async with async_session_factory() as session:
-        await set_session_tenant(session, tenant_id)
+    engine, session_factory = create_task_engine_and_session()
+    try:
+        async with session_factory() as session:
+            await set_session_tenant(session, tenant_id)
 
-        running_count = await _count_running(session, tenant_id)
-        if running_count >= limit:
-            logger.debug(
-                "scan_queue.slot_full",
+            running_count = await _count_running(session, tenant_id)
+            if running_count >= limit:
+                logger.debug(
+                    "scan_queue.slot_full",
+                    extra={
+                        "event": "argus.scan_queue.slot_full",
+                        "tenant_id_hash": _safe_hash(tenant_id),
+                        "running_count": running_count,
+                        "max_concurrent": limit,
+                    },
+                )
+                return None
+
+            candidate = await _oldest_queued(session, tenant_id)
+            if candidate is None:
+                return None
+
+            scan_id: str = str(candidate[0])
+            target_url: str = str(candidate[1])
+            options: Any = candidate[2]
+
+            won = await _claim_queued(session, scan_id, tenant_id)
+            if not won:
+                logger.debug(
+                    "scan_queue.claim_lost",
+                    extra={
+                        "event": "argus.scan_queue.claim_lost",
+                        "scan_id": scan_id,
+                        "tenant_id_hash": _safe_hash(tenant_id),
+                    },
+                )
+                return None
+
+            logger.info(
+                "scan_queue.picked",
                 extra={
-                    "event": "argus.scan_queue.slot_full",
+                    "event": "argus.scan_queue.picked",
+                    "scan_id": scan_id,
                     "tenant_id_hash": _safe_hash(tenant_id),
                     "running_count": running_count,
                     "max_concurrent": limit,
                 },
             )
-            return None
 
-        candidate = await _oldest_queued(session, tenant_id)
-        if candidate is None:
-            return None
-
-        scan_id: str = str(candidate[0])
-        target_url: str = str(candidate[1])
-        options: Any = candidate[2]
-
-        won = await _claim_queued(session, scan_id, tenant_id)
-        if not won:
-            logger.debug(
-                "scan_queue.claim_lost",
-                extra={
-                    "event": "argus.scan_queue.claim_lost",
-                    "scan_id": scan_id,
-                    "tenant_id_hash": _safe_hash(tenant_id),
-                },
+            _dispatch_scan_phase(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                target_url=target_url,
+                options=options or {},
             )
-            return None
-
-        logger.info(
-            "scan_queue.picked",
-            extra={
-                "event": "argus.scan_queue.picked",
-                "scan_id": scan_id,
-                "tenant_id_hash": _safe_hash(tenant_id),
-                "running_count": running_count,
-                "max_concurrent": limit,
-            },
-        )
-
-        _dispatch_scan_phase(
-            scan_id=scan_id,
-            tenant_id=tenant_id,
-            target_url=target_url,
-            options=options or {},
-        )
-        return scan_id
+            return scan_id
+    finally:
+        await engine.dispose()
 
 
 async def notify_scan_finished(tenant_id: str) -> str | None:
@@ -132,14 +139,18 @@ async def poll_queued_scans() -> list[str]:
     """
     dispatched: list[str] = []
 
-    async with async_session_factory() as session:
-        stmt = (
-            select(Scan.tenant_id)
-            .where(Scan.status == _QUEUED_STATUS)
-            .distinct()
-        )
-        result = await session.execute(stmt)
-        tenant_ids = [str(row[0]) for row in result.all()]
+    engine, session_factory = create_task_engine_and_session()
+    try:
+        async with session_factory() as session:
+            stmt = (
+                select(Scan.tenant_id)
+                .where(Scan.status == _QUEUED_STATUS)
+                .distinct()
+            )
+            result = await session.execute(stmt)
+            tenant_ids = [str(row[0]) for row in result.all()]
+    finally:
+        await engine.dispose()
 
     for tid in tenant_ids:
         try:

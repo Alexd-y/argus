@@ -173,12 +173,16 @@ def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None
     """
     import asyncio
 
-    from src.db.session import async_session_factory
+    from src.db.session import create_task_engine_and_session
     from src.scheduling.redbeat_loader import sync_all_from_db
 
     async def _run() -> None:
-        async with async_session_factory() as session:
-            await sync_all_from_db(session)
+        engine, session_factory = create_task_engine_and_session()
+        try:
+            async with session_factory() as session:
+                await sync_all_from_db(session)
+        finally:
+            await engine.dispose()
 
     try:
         asyncio.run(_run())
