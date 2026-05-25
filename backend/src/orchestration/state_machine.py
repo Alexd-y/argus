@@ -533,6 +533,15 @@ async def run_scan_state_machine(
 
     clear_tool_availability_cache()
 
+    from src.orchestration.phase_resume import freeze_scan_scope
+    with suppress(Exception):
+        await freeze_scan_scope(
+            session, scan_id,
+            vuln_classes=options.get("vuln_classes") if options else None,
+            exploit_enabled=options.get("exploit_enabled", True) if options else True,
+            target_url=target,
+        )
+
     completed_phases = await get_completed_phases(session, scan_id)
     resume_plan = compute_resume_plan(completed_phases)
 

@@ -177,6 +177,41 @@ def filter_findings_by_domain(
     return relevant
 
 
+def build_agent_tasks(
+    target: str,
+    findings: list[dict[str, Any]],
+    scan_id: str = "",
+    tenant_id: str = "",
+) -> list[dict[str, Any]]:
+    """Build per-domain agent task descriptors for Celery fan-out.
+
+    Returns a list of task descriptors, one per domain that has
+    relevant findings. Each descriptor contains the agent spec,
+    filtered findings, and execution context.
+
+    The caller (state_machine or Celery chord) dispatches these
+    as parallel tasks and collects results.
+    """
+    tasks: list[dict[str, Any]] = []
+    for domain in ALL_AGENT_DOMAINS:
+        spec = VULN_AGENT_SPECS[domain]
+        relevant = filter_findings_by_domain(findings, domain)
+        if not relevant:
+            continue
+        tasks.append({
+            "domain": domain.value,
+            "display_name": spec.display_name,
+            "prompt_key": spec.prompt_key,
+            "tool_allowlist": list(spec.tool_allowlist),
+            "cwe_focus": list(spec.cwe_focus),
+            "findings": relevant,
+            "target": target,
+            "scan_id": scan_id,
+            "tenant_id": tenant_id,
+        })
+    return tasks
+
+
 __all__ = [
     "ALL_AGENT_DOMAINS",
     "ALL_VULN_CLASSES",

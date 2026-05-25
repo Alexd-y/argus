@@ -50,10 +50,14 @@ MAX_JSON_RETRIES = 1
 
 def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     """Get phase prompt, preferring Jinja2 templates when available."""
+    scope_context = kwargs.pop("scope_context", "")
     try:
-        return _render_jinja2(phase, **kwargs)
+        system, user = _render_jinja2(phase, **kwargs)
     except Exception:
-        return get_prompt(phase, **kwargs)
+        system, user = get_prompt(phase, **kwargs)
+    if scope_context:
+        system = system + "\n\n=== RULES OF ENGAGEMENT ===\n" + scope_context + "\n=== END ==="
+    return system, user
 
 _PHASE_TO_TASK: dict[str, LLMTask] = {
     RECON: LLMTask.ORCHESTRATION,

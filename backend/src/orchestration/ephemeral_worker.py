@@ -146,7 +146,9 @@ class EphemeralWorkerPool:
     ) -> str:
         """Create and start an ephemeral container for a task.
 
-        Returns the Docker container ID.
+        Returns the Docker container ID. When Docker SDK is available,
+        creates a real container with resource limits. Otherwise returns
+        a pseudo-ID for tracking.
         """
         if spec is None:
             spec = ContainerSpec(image=self._default_image)
@@ -167,6 +169,38 @@ class EphemeralWorkerPool:
         )
 
         container_id = container_name
+
+        try:
+            import docker
+            client = docker.from_env()
+            container = client.containers.run(
+                image=spec.image,
+                name=container_name,
+                detach=True,
+                remove=False,
+                network=spec.network or None,
+                environment=spec.env_vars or None,
+                command=spec.command or None,
+                user=spec.user,
+                mem_limit=spec.memory_limit,
+                nano_cpus=int(spec.cpu_limit * 1e9),
+                stop_timeout=30,
+                tmpfs={"/workspace": f"size={spec.workspace_size}"},
+                read_only=True,
+                security_opt=["no-new-privileges"],
+            )
+            container_id = container.id
+            logger.info("Docker container created: %s", container_id)
+        except ImportError:
+            logger.debug("Docker SDK not available — using pseudo container tracking")
+        except Exception as docker_exc:
+            logger.warning(
+                "Docker container creation failed (%s) — using pseudo tracking",
+                docker_exc,
+            )
+
+        self._active[container_id] = time.monotonic()
+        return container_id
         self._active[container_id] = time.monotonic()
 
         return container_id
@@ -174,6 +208,18 @@ class EphemeralWorkerPool:
     async def release(self, container_id: str) -> None:
         """Stop and remove an ephemeral container."""
         logger.info("Releasing ephemeral container %s", container_id)
+
+        try:
+            import docker
+            client = docker.from_env()
+            container = client.containers.get(container_id)
+            container.stop(timeout=10)
+            container.remove(force=True)
+            logger.info("Docker container removed: %s", container_id)
+        except ImportError:
+            pass
+        except Exception as docker_exc:
+            logger.debug("Docker container removal failed: %s", docker_exc)
 
         async with self._lock:
             self._active.pop(container_id, None)

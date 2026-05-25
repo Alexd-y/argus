@@ -326,3 +326,92 @@ class TestEphemeralWorkerIntegration:
         from src.orchestration.ephemeral_worker import EphemeralWorkerPool
         pool = EphemeralWorkerPool(max_containers=3)
         assert pool.active_count == 0
+
+
+class TestTierEscalationIntegration:
+    def test_check_tier_escalation_no_escalation(self):
+        from src.llm.task_router import check_tier_escalation, LLMTier, LLMTask
+        result = check_tier_escalation(LLMTask.ORCHESTRATION, confidence=0.9)
+        assert result.escalated is False
+
+    def test_check_tier_escalation_triggered(self):
+        from src.llm.task_router import check_tier_escalation, LLMTier, LLMTask
+        result = check_tier_escalation(LLMTask.EXECUTIVE_SUMMARY, confidence=0.3)
+        assert result.escalated is True
+        assert result.original_tier == LLMTier.SMALL
+        assert result.escalated_tier == LLMTier.MEDIUM
+
+    def test_check_tier_escalation_already_large(self):
+        from src.llm.task_router import check_tier_escalation, LLMTier, LLMTask
+        result = check_tier_escalation(LLMTask.EXPLOIT_GENERATION, confidence=0.1)
+        assert result.escalated is False
+        assert result.original_tier == LLMTier.LARGE
+
+
+class TestVulnAgentsFanOut:
+    def test_build_agent_tasks(self):
+        from src.orchestration.vuln_agents import build_agent_tasks
+        findings = [
+            {"cwe": [89], "title": "SQL Injection"},
+            {"cwe": [79], "title": "XSS"},
+            {"cwe": [918], "title": "SSRF"},
+        ]
+        tasks = build_agent_tasks("https://example.com", findings, scan_id="scan-1")
+        domains = [t["domain"] for t in tasks]
+        assert "injection" in domains
+        assert "xss" in domains
+        assert "ssrf" in domains
+
+    def test_build_agent_tasks_empty(self):
+        from src.orchestration.vuln_agents import build_agent_tasks
+        tasks = build_agent_tasks("https://example.com", [])
+        assert len(tasks) == 0
+
+    def test_task_descriptor_has_tool_allowlist(self):
+        from src.orchestration.vuln_agents import build_agent_tasks
+        findings = [{"cwe": [89], "title": "SQLi"}]
+        tasks = build_agent_tasks("https://example.com", findings)
+        assert len(tasks) >= 1
+        injection_task = next((t for t in tasks if t["domain"] == "injection"), None)
+        assert injection_task is not None
+        assert "tool_allowlist" in injection_task
+        assert len(injection_task["tool_allowlist"]) > 0
+
+
+class TestScopeContextInPrompts:
+    def test_scope_context_injected_into_system_prompt(self):
+        from src.orchestration.ai_prompts import _get_phase_prompt
+        system, user = _get_phase_prompt(
+            "recon",
+            target="https://example.com",
+            options="{}",
+            scope_context="TEST RULES: do not attack /admin",
+        )
+        assert "RULES OF ENGAGEMENT" in system
+        assert "TEST RULES" in system
+
+    def test_no_scope_context_no_injection(self):
+        from src.orchestration.ai_prompts import _get_phase_prompt
+        system, user = _get_phase_prompt(
+            "recon",
+            target="https://example.com",
+            options="{}",
+        )
+        assert "RULES OF ENGAGEMENT" not in system
+
+
+class TestFreezeScope:
+    def test_freeze_scan_scope_importable(self):
+        from src.orchestration.phase_resume import freeze_scan_scope, get_frozen_scope
+        assert freeze_scan_scope is not None
+        assert get_frozen_scope is not None
+
+
+class TestBrowserInterceptMCP:
+    def test_browser_intercept_in_registry(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "mcp-server", "tools", "kali_registry.py"))
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            assert "browser_intercept" in content

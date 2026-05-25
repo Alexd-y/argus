@@ -459,3 +459,75 @@ def get_model_for_tier(tier: LLMTier, provider: str | None = None) -> dict[str, 
         if model_name:
             return {provider: model_name}
     return tier_models
+
+
+class LLMTierEscalationResult:
+    """Result of tier-based LLM escalation check."""
+
+    __slots__ = ("escalated", "original_tier", "escalated_tier", "confidence", "threshold")
+
+    def __init__(
+        self,
+        escalated: bool,
+        original_tier: LLMTier,
+        escalated_tier: LLMTier | None = None,
+        confidence: float = 1.0,
+        threshold: float = 0.7,
+    ) -> None:
+        self.escalated = escalated
+        self.original_tier = original_tier
+        self.escalated_tier = escalated_tier
+        self.confidence = confidence
+        self.threshold = threshold
+
+
+def check_tier_escalation(
+    task: LLMTask,
+    confidence: float,
+) -> LLMTierEscalationResult:
+    """Check if a task result should be escalated to a higher tier.
+
+    When confidence is below the task's escalation_threshold,
+    the task should be re-run on the next higher tier.
+
+    Parameters
+    ----------
+    task:
+        The LLM task that was executed.
+    confidence:
+        The confidence score of the result (0.0-1.0).
+
+    Returns
+    -------
+    LLMTierEscalationResult indicating whether escalation is needed.
+    """
+    tier_info = TASK_TIERS.get(task, {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.7})
+    current_tier = tier_info["tier"]
+    threshold = tier_info["escalation_threshold"]
+
+    if confidence >= threshold:
+        return LLMTierEscalationResult(
+            escalated=False,
+            original_tier=current_tier,
+            confidence=confidence,
+            threshold=threshold,
+        )
+
+    tier_order = [LLMTier.SMALL, LLMTier.MEDIUM, LLMTier.LARGE]
+    current_idx = tier_order.index(current_tier)
+    if current_idx >= len(tier_order) - 1:
+        return LLMTierEscalationResult(
+            escalated=False,
+            original_tier=current_tier,
+            confidence=confidence,
+            threshold=threshold,
+        )
+
+    escalated_tier = tier_order[current_idx + 1]
+    return LLMTierEscalationResult(
+        escalated=True,
+        original_tier=current_tier,
+        escalated_tier=escalated_tier,
+        confidence=confidence,
+        threshold=threshold,
+    )
