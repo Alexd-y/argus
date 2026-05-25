@@ -60,8 +60,17 @@ from src.orchestration.phases import (
     ReconOutput,
     ReportingOutput,
     ScanPhase,
+    SourceAnalysisInput,
+    SourceAnalysisOutput,
     ThreatModelOutput,
     VulnAnalysisOutput,
+)
+from src.orchestration.exploitation_queue import ExploitationQueue
+from src.orchestration.phase_resume import (
+    ResumeDecision,
+    compute_resume_plan,
+    get_completed_phases,
+    restore_phase_context,
 )
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.reports.bundle_enqueue import (
@@ -511,6 +520,7 @@ async def run_scan_state_machine(
     exploitation -> post_exploitation -> reporting.
     Records scan_steps, scan_events, updates scan.phase/status.
     """
+    source_out: SourceAnalysisOutput | None = None
     recon_out: ReconOutput | None = None
     threat_out: ThreatModelOutput | None = None
     vuln_out: VulnAnalysisOutput | None = None
@@ -523,27 +533,106 @@ async def run_scan_state_machine(
 
     clear_tool_availability_cache()
 
+    completed_phases = await get_completed_phases(session, scan_id)
+    resume_plan = compute_resume_plan(completed_phases)
+
+    if completed_phases:
+        logger.info(
+            "Resuming scan %s: completed phases=%s",
+            scan_id,
+            [p.value for p in completed_phases],
+        )
+        for restored_phase in completed_phases:
+            restored = await restore_phase_context(session, scan_id, restored_phase)
+            if restored is None:
+                continue
+            if restored_phase == ScanPhase.SOURCE_ANALYSIS:
+                try:
+                    source_out = SourceAnalysisOutput.model_validate(restored)
+                except Exception:
+                    pass
+            elif restored_phase == ScanPhase.RECON:
+                try:
+                    recon_out = ReconOutput.model_validate(restored)
+                except Exception:
+                    pass
+            elif restored_phase == ScanPhase.THREAT_MODELING:
+                try:
+                    threat_out = ThreatModelOutput.model_validate(restored)
+                except Exception:
+                    pass
+            elif restored_phase == ScanPhase.VULN_ANALYSIS:
+                try:
+                    vuln_out = VulnAnalysisOutput.model_validate(restored)
+                except Exception:
+                    pass
+            elif restored_phase == ScanPhase.EXPLOITATION:
+                try:
+                    exploit_out = ExploitationOutput.model_validate(restored)
+                except Exception:
+                    pass
+            elif restored_phase == ScanPhase.POST_EXPLOITATION:
+                try:
+                    post_out = PostExploitationOutput.model_validate(restored)
+                except Exception:
+                    pass
+
     heartbeat_task = asyncio.create_task(
         _heartbeat_loop(session, scan_id, _SCAN_HEARTBEAT_SEC)
     )
 
     for order_index, phase in enumerate(PHASE_ORDER):
+        if phase in completed_phases and resume_plan.get(phase) == ResumeDecision.SKIP:
+            logger.info("Skipping completed phase %s (resume)", phase.value)
+            continue
         progress = _phase_to_progress(phase)
         phase_str = phase.value
         phase_start_time = time.monotonic()
 
         # Build phase input and persist
-        if phase == ScanPhase.RECON:
+        _auth_config_obj = None
+        if options and phase in (ScanPhase.EXPLOITATION, ScanPhase.REPORTING):
+            try:
+                from src.orchestration.auth_config import TargetConfig as _TC
+                _auth_config_obj = _TC.from_scan_options(options)
+            except Exception:
+                pass
+
+        _scope_context = ""
+        if options and phase == ScanPhase.REPORTING:
+            try:
+                from src.orchestration.scope_integration import rules_of_engagement_to_prompt_context
+                if _auth_config_obj is not None:
+                    _scope_context = rules_of_engagement_to_prompt_context(_auth_config_obj)
+            except Exception:
+                pass
+
+        if phase == ScanPhase.SOURCE_ANALYSIS:
+            repo_path = options.get("repo_path") if options else None
+            repo_url = options.get("repo_url") if options else None
+            input_data = {
+                "target": target,
+                "repo_path": repo_path,
+                "repo_url": repo_url,
+                "options": options,
+            }
+        elif phase == ScanPhase.RECON:
             input_data = {"target": target, "options": options}
         elif phase == ScanPhase.THREAT_MODELING:
-            input_data = {"assets": recon_out.assets if recon_out else []}
+            input_data = {
+                "assets": recon_out.assets if recon_out else [],
+                "source_analysis_summary": source_out.summary if source_out and not source_out.skipped else None,
+            }
         elif phase == ScanPhase.VULN_ANALYSIS:
             input_data = {
                 "threat_model": threat_out.threat_model if threat_out else {},
                 "assets": recon_out.assets if recon_out else [],
             }
         elif phase == ScanPhase.EXPLOITATION:
-            input_data = {"findings": vuln_out.findings if vuln_out else []}
+            input_data = {
+                "findings": vuln_out.findings if vuln_out else [],
+                "auth_config": _auth_config_obj.model_dump() if _auth_config_obj else None,
+            }
         elif phase == ScanPhase.POST_EXPLOITATION:
             input_data = {"exploits": exploit_out.exploits if exploit_out else []}
         elif phase == ScanPhase.REPORTING:
@@ -554,6 +643,8 @@ async def run_scan_state_machine(
                 "vuln_analysis": vuln_out.model_dump() if vuln_out else None,
                 "exploitation": exploit_out.model_dump() if exploit_out else None,
                 "post_exploitation": post_out.model_dump() if post_out else None,
+                "scope_context": _scope_context,
+                "source_analysis": source_out.model_dump() if source_out else None,
             }
         else:
             input_data = {}
@@ -628,7 +719,29 @@ async def run_scan_state_machine(
 
         try:
             with trace_phase(scan_id, phase_str):
-                if phase == ScanPhase.RECON:
+                if phase == ScanPhase.SOURCE_ANALYSIS:
+                    try:
+                        from src.orchestration.source_analysis.analyzer import SourceAnalyzer
+                        sa_input = SourceAnalysisInput(
+                            target=target,
+                            repo_path=options.get("repo_path") if options else None,
+                            repo_url=options.get("repo_url") if options else None,
+                            options=options or {},
+                        )
+                        analyzer = SourceAnalyzer(sa_input)
+                        source_out = analyzer.analyze()
+                    except ImportError:
+                        logger.warning("source_analysis module unavailable, skipping")
+                        source_out = SourceAnalysisOutput(
+                            skipped=True, summary="Source analysis module not available"
+                        )
+                    except Exception as sa_exc:
+                        logger.warning("source_analysis failed: %s", sa_exc)
+                        source_out = SourceAnalysisOutput(
+                            skipped=True, summary=f"Source analysis error: {sa_exc}"
+                        )
+                    output_data = source_out.model_dump()
+                elif phase == ScanPhase.RECON:
                     record_tool_run("recon")
                     _recon_cfg = build_recon_runtime_config(options)
                     logger.debug(
@@ -674,6 +787,26 @@ async def run_scan_state_machine(
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:
                     findings = vuln_out.findings if vuln_out else []
+
+                    try:
+                        from src.orchestration.exploitation_queue import ExploitationQueue as _EQ
+                        exploitation_queue = _EQ.from_vuln_analysis_output(vuln_out)
+                        structured_findings = exploitation_queue.to_exploitation_input()
+                        logger.info(
+                            "ExploitationQueue: %d hypotheses for %s",
+                            len(exploitation_queue.hypotheses),
+                            scan_id,
+                        )
+                    except Exception as eq_exc:
+                        logger.debug("ExploitationQueue build failed, using raw findings: %s", eq_exc)
+                        structured_findings = None
+
+                    try:
+                        from src.orchestration.auth_config import TargetConfig as _TC
+                        auth_config_obj = _TC.from_scan_options(options) if options else None
+                    except Exception:
+                        auth_config_obj = None
+
                     maybe_run_aggressive_exploit_tools(
                         findings,
                         tenant_id,

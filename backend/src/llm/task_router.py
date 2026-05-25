@@ -440,3 +440,22 @@ async def call_llm_for_task(
     if skipped_no_key:
         msg += ". Skipped (no or empty API key): " + ", ".join(skipped_no_key)
     raise LLMAllProvidersFailedError(msg)
+
+
+def get_tier_for_task(task: LLMTask) -> dict[str, Any]:
+    """Return tier config for a task from TASK_TIERS (for reporting/logging)."""
+    return TASK_TIERS.get(task, {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.7})
+
+
+def get_model_for_tier(tier: LLMTier, provider: str | None = None) -> dict[str, str]:
+    """Return provider/model mapping for a given tier.
+
+    When ``provider`` is specified, returns only that provider's model.
+    Otherwise returns all providers for the tier.
+    """
+    tier_models = TIER_MODELS.get(tier, TIER_MODELS[LLMTier.MEDIUM])
+    if provider:
+        model_name = tier_models.get(provider)
+        if model_name:
+            return {provider: model_name}
+    return tier_models

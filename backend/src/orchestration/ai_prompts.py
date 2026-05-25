@@ -40,11 +40,20 @@ from src.orchestration.prompt_registry import (
     get_report_section_prompt,
     get_schema,
 )
+from src.orchestration.prompt_loader import render_phase_prompts as _render_jinja2
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 
 logger = logging.getLogger(__name__)
 
 MAX_JSON_RETRIES = 1
+
+
+def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
+    """Get phase prompt, preferring Jinja2 templates when available."""
+    try:
+        return _render_jinja2(phase, **kwargs)
+    except Exception:
+        return get_prompt(phase, **kwargs)
 
 _PHASE_TO_TASK: dict[str, LLMTask] = {
     RECON: LLMTask.ORCHESTRATION,
@@ -156,7 +165,7 @@ async def ai_recon(
     """Analyze real tool output via LLM to produce structured recon."""
     _require_llm()
     try:
-        system, user = get_prompt(
+        system, user = _get_phase_prompt(
             RECON, target=inp.target, options=inp.options, tool_results=tool_results
         )
         data = _require_json(
@@ -188,7 +197,7 @@ async def ai_threat_modeling(
     """Build threat model from real assets, NVD CVEs, and enriched recon context via LLM."""
     _require_llm()
     try:
-        system, user = get_prompt(
+        system, user = _get_phase_prompt(
             THREAT_MODELING, assets=inp.assets, nvd_data=nvd_data, recon_context=recon_context,
         )
         data = _require_json(
@@ -212,7 +221,7 @@ async def ai_vuln_analysis(
     """Call LLM to analyze vulns from threat model. Returns empty findings on failure."""
     _require_llm()
     try:
-        system, user = get_prompt(
+        system, user = _get_phase_prompt(
             VULN_ANALYSIS, threat_model=inp.threat_model,
             assets=inp.assets, active_scan_context=active_scan_context,
         )
@@ -234,7 +243,7 @@ async def ai_exploitation(
     """Call LLM to plan exploitation. Returns empty on failure."""
     _require_llm()
     try:
-        system, user = get_prompt(EXPLOITATION, findings=inp.findings)
+        system, user = _get_phase_prompt(EXPLOITATION, findings=inp.findings)
         data = _require_json(
             await _call_llm_with_json_retry(EXPLOITATION, user, system, scan_id=scan_id),
             EXPLOITATION,
@@ -259,7 +268,7 @@ async def ai_post_exploitation(
     """Call LLM for lateral movement / persistence. Returns empty on failure."""
     _require_llm()
     try:
-        system, user = get_prompt(POST_EXPLOITATION, exploits=inp.exploits)
+        system, user = _get_phase_prompt(POST_EXPLOITATION, exploits=inp.exploits)
         data = _require_json(
             await _call_llm_with_json_retry(
                 POST_EXPLOITATION, user, system,

@@ -354,6 +354,24 @@ class TargetConfig(BaseModel):
         """Load a :class:`TargetConfig` from a JSON-compatible dict."""
         return cls.model_validate(data)
 
+    @classmethod
+    def from_scan_options(cls, options: dict[str, Any]) -> "TargetConfig | None":
+        """Build a TargetConfig from scan options dict (engagement API).
+
+        Looks for ``auth_config`` or ``target_config`` keys in options.
+        Returns None if neither key is present.
+        """
+        if not isinstance(options, dict):
+            return None
+        cfg_data = options.get("auth_config") or options.get("target_config")
+        if cfg_data is None:
+            return None
+        if isinstance(cfg_data, str):
+            return cls.from_yaml(cfg_data)
+        if isinstance(cfg_data, dict):
+            return cls.from_json(cfg_data)
+        return None
+
 
 __all__ = [
     "AuthConfig",

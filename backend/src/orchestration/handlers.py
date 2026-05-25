@@ -1671,6 +1671,36 @@ async def run_vuln_analysis(
     )
     assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
     llm_output.active_injection_coverage = active_injection_coverage
+
+    try:
+        from src.orchestration.vuln_agents import (
+            VULN_AGENT_SPECS,
+            AgentDomain,
+            filter_findings_by_domain,
+        )
+        agent_findings_map: dict[str, list[dict[str, Any]]] = {}
+        for domain in AgentDomain:
+            spec = VULN_AGENT_SPECS[domain]
+            relevant = filter_findings_by_domain(
+                llm_output.findings, domain
+            )
+            if relevant:
+                agent_findings_map[domain.value] = relevant
+                logger.debug(
+                    "vuln_agent_mapping",
+                    extra={
+                        "domain": domain.value,
+                        "agent": spec.display_name,
+                        "relevant_findings": len(relevant),
+                        "tools": list(spec.tool_allowlist),
+                        "scan_id": scan_id,
+                    },
+                )
+        if agent_findings_map:
+            llm_output.exploitation_queues = agent_findings_map
+    except Exception as va_exc:
+        logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
+
     return llm_output
 
 
@@ -1680,13 +1710,36 @@ async def run_exploit_attempt(
     scan_id: str | None = None,
     target: str = "",
     tenant_id: str = "",
+    auth_config: dict[str, Any] | None = None,
 ) -> ExploitationOutput:
     """Exploitation: generates payloads via PayloadBuilder, executes tools in sandbox,
-    verifies exploitability via WRB analysis. Falls back to LLM-only if sandbox unavailable."""
-    from src.orchestration.exploitation_executor import execute_exploitation
+    verifies exploitability via WRB analysis. Falls back to LLM-only if sandbox unavailable.
+
+    When auth_config is provided, attempts browser-based login via PlaywrightAdapter
+    before exploitation to establish authenticated sessions.
+    """
+    from src.orchestration.exploitation_executors import execute_exploitation
 
     if not findings:
         return ExploitationOutput(exploits=[], evidence=[])
+
+    _browser_context: dict[str, Any] = {}
+    if auth_config:
+        try:
+            from src.orchestration.auth_config import TargetConfig as _TC
+            from src.sandbox.playwright_adapter import PlaywrightAdapter
+            tc = _TC.from_json(auth_config) if isinstance(auth_config, dict) else None
+            if tc and tc.authentication:
+                pa = PlaywrightAdapter(target_url=target)
+                session = await pa.login_flow(tc.authentication)
+                if session.authenticated:
+                    _browser_context = {
+                        "cookies": session.cookies,
+                        "authenticated": True,
+                    }
+                    logger.info("Playwright login successful for %s", target)
+        except Exception as pa_exc:
+            logger.debug("Playwright auth failed (non-fatal): %s", pa_exc)
 
     try:
         exploits, evidence = await execute_exploitation(
