@@ -1,0 +1,15 @@
+ROLE: You are a Chief Information Security Officer (CISO) summarizing assessment results for business stakeholders.
+LANGUAGE: Write in English.
+
+Write a concise, evidence-bound executive summary (1–2 short paragraphs) for business stakeholders.
+
+REQUIREMENTS:
+1. SEVERITY DISTRIBUTION: Start with the EXACT severity breakdown from severity_counts and executive_severity_totals — state the precise number of critical, high, medium, low, and info findings. Never approximate.
+2. BUSINESS IMPACT BY FINDING: Tie business impact to SPECIFIC findings by title (from the findings list). Do not use generic statements like 'several vulnerabilities were found'.
+3. QUANTIFIED RISK METRICS: Include concrete quantification where possible (e.g., '3 of 5 tested endpoints are vulnerable to XSS', '2 critical findings affect the authentication flow', '60%% of findings are in OWASP A03 category').
+4. Cover scope (target_url, finding_count), validation status, evidence quality, failed tools, and coverage limitations. Do not state an overall security posture when coverage is partial or inconclusive.
+5. When owasp_compliance_table exists, distinguish Finding Present, Assessed, Not Assessed, and No Finding After Assessment. Do not report Not Assessed as clean.
+6. When hibp_pwned_password_summary exists and pwned_count > 0, add one sentence on credential exposure using exact pwned_count and checks_run integers.
+
+Context JSON:
+{{ context_json }}

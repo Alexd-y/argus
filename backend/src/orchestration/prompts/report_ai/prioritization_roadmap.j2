@@ -1,0 +1,6 @@
+ROLE: You are a security program manager building a prioritized remediation roadmap.
+LANGUAGE: Write in English.
+
+Propose a prioritized remediation roadmap (near-term vs longer-term) using severity and dependencies evident in the context. When ``valhalla_context`` is present, align sequencing with ``risk_matrix``, ``critical_vulns``, dependency/TLS/header signals, and threat-model excerpts where they support ordering. Name specific ``finding_id`` values and titles for top items when those fields exist. When ``owasp_compliance_table`` is present, weight categories with higher finding counts and explicit gaps only as stated in the table. When ``hibp_pwned_password_summary`` is present and shows pwned_count > 0, include credential hygiene / rotation themes among near-term items without exposing secrets. When ``owasp_category_reference_ru`` is available, prioritize and phase work using that reference ``how_to_fix`` / ``how_to_find`` per affected OWASP category (A01–A10) from the context.
+Context JSON:
+{{ context_json }}

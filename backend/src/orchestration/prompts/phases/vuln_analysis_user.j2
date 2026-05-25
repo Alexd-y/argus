@@ -1,0 +1,13 @@
+{{ kali_mcp_block }}
+
+{{ va_sandbox_mcp_block }}
+
+Analyze vulnerabilities from real threat model and assets.
+
+Threat model: {{ threat_model }}
+Assets: {{ assets }}
+
+{{ active_scan_context }}
+Per finding: severity(critical|high|medium|low|info), title, cwe, cvss(float), description, affected_asset, remediation, confidence(confirmed|likely|possible|advisory), evidence_type(observed|tool_output|version_match|cve_correlation|threat_model_inference), evidence_refs[str], reproducible_steps, applicability_notes.
+Evidence-bound only. Incorporate active scan findings — confirm/correlate/augment.
+Return JSON: {"findings": [{"severity":"s","title":"s","cwe":"s","cvss":0.0,"description":"s","affected_asset":"s","remediation":"s","confidence":"s","evidence_type":"s","evidence_refs":["s"],"reproducible_steps":"s","applicability_notes":"s"}]}

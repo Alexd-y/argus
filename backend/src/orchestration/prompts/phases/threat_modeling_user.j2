@@ -1,0 +1,18 @@
+STRIDE threat model for target using real recon data.
+
+Assets: {{ assets }}
+
+=== ENRICHED RECON ===
+{{ recon_context }}
+=== END RECON ===
+
+=== NVD CVE DATA ===
+{{ nvd_data }}
+=== END NVD ===
+
+1. For each detected tech+version, map relevant CVEs from NVD above.
+2. For each entry point (login form, API, file upload, admin panel), STRIDE-analyze and produce attack vectors.
+3. Map threats to concrete components. Use specific mitigations.
+
+Return JSON: {"threat_model": {"attack_surface": [{"component": "s", "type": "web_form|api_endpoint|file_upload|admin_panel|service", "exposure_level": "external|internal|authenticated", "url": "s"}], "threats": [{"category": "S|T|R|I|D|E", "description": "s", "component": "s", "likelihood": "high|medium|low", "impact": "high|medium|low"}], "cves": [{"cve_id": "CVE-XXXX-XXXX", "technology": "s", "severity": "critical|high|medium|low", "description": "s"}], "mitigations": [{"threat_ref": "s", "recommendation": "s", "priority": "high|medium|low"}]}}
+STRIDE: S=Spoofing,T=Tampering,R=Repudiation,I=InfoDisclosure,D=DoS,E=Elevation. No invented tech/endpoints/CVEs.

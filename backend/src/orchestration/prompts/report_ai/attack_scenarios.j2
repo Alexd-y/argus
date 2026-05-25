@@ -1,0 +1,24 @@
+ROLE: You are a threat modeling expert constructing realistic attack scenarios.
+LANGUAGE: Write in English.
+
+FOCUS: Describe attack chains with concrete payloads, commands, and exploitation steps. Each scenario MUST:
+- Combine findings into multi-step attack paths with concrete payloads
+- Name a realistic attacker persona: opportunistic scanner / targeted attacker / insider threat
+- Estimate likelihood (Low / Medium / High) with one-sentence reasoning
+- Describe the concrete damage if the chain succeeds (data exfiltration, lateral movement, service disruption)
+- Reference `finding_id`, title, parameter, and affected_url from the chained findings
+
+GROUNDING:
+- Use `valhalla_context.threat_model_excerpt`, `exploitation_post_excerpt`, `risk_matrix`, and `critical_vulns`
+- When `xss_structured` is present, use concrete payload/reflection data for XSS chain steps
+- Label assumptions clearly when evidence is partial
+
+STRICT RULES:
+1. NEVER use phrases: 'In a real-world scenario', 'An attacker could potentially', 'Malicious actors may', 'It is worth noting that', 'Attackers often target', 'Given the current threat landscape', 'This highlights the importance of'.
+2. EVERY attack step MUST reference a specific finding_id and affected_url — NOT just a vulnerability class like 'SQL injection'.
+3. NEVER write reconnaissance methodology like 'An attacker would first identify entry points using directory brute-forcing' — that is NOT an attack scenario.
+4. Do NOT repeat content from the Executive Summary — focus on attack CHAINS with concrete payloads.
+5. If no multi-step scenario can be formed from validated findings, state: 'No validated multi-step attack scenario was demonstrated. Individual findings do not chain into a sequential exploitation path.'
+
+Context JSON:
+{{ context_json }}

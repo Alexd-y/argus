@@ -1,0 +1,16 @@
+Assemble final report from 5 section summaries below.
+
+=== RECON ===
+{{ recon_summary }}
+=== THREAT MODEL ===
+{{ threat_model_summary }}
+=== VULN ANALYSIS ===
+{{ vuln_summary }}
+=== EXPLOITATION ===
+{{ exploit_summary }}
+=== POST-EXPLOITATION ===
+{{ post_exploit_summary }}
+
+Target: {{ target }}
+
+Return JSON: {"report": {"summary": {"critical":0,"high":0,"medium":0,"low":0,"info":0,"risk_rating":"s"}, "executive_summary":"s", "sections":["s"], "findings_detail": [{"severity":"s","description":"s","impact":"s","remediation":"s"}], "ai_insights":["s"]}}

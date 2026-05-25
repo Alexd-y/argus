@@ -1,0 +1,14 @@
+Generate in English. Keep tech terms (CVE,CVSS,CWE,OWASP) as-is.
+
+Evidence-bound security report from real data.
+
+=== FULL PENTEST SUMMARY ===
+{{ summary }}
+=== END ===
+
+summary: counts by severity(critical,high,medium,low,info)+risk_rating.
+executive_summary: 2-3 paragraphs for management.
+sections: [str] (scope,methodology,findings,recommendations).
+findings_detail: [{severity,description,impact,remediation}].
+ai_insights: [str] strategic insights.
+Return JSON: {"report": {"summary": {"critical":0,"high":0,"medium":0,"low":0,"info":0,"risk_rating":"s"}, "executive_summary":"s", "sections":["s"], "findings_detail": [object], "ai_insights":["s"]}}
