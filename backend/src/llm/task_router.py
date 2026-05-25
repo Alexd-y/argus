@@ -1,4 +1,10 @@
-"""Task-based LLM routing — maps task types to optimal provider/model/params."""
+"""Task-based LLM routing — maps task types to optimal provider/model/params.
+
+Extended with 3-tier model routing (small/medium/large) and confidence-based
+escalation: tasks start on cheap models and escalate to expensive ones when
+confidence is low, inspired by Shannon's tiered approach but adapted for
+ARGUS's multi-provider architecture.
+"""
 
 import logging
 import os
@@ -12,6 +18,19 @@ from src.llm.adapters import _get_key
 from src.llm.errors import LLMAllProvidersFailedError
 
 logger = logging.getLogger(__name__)
+
+
+class LLMTier(Enum):
+    """Model tiers for cost-aware routing with escalation.
+
+    SMALL: Fast, cheap models for summarization, classification, dedup
+    MEDIUM: Balanced models for analysis, threat modeling, report generation
+    LARGE: Expensive, high-reasoning models for exploit generation, zero-day
+    """
+
+    SMALL = "small"
+    MEDIUM = "medium"
+    LARGE = "large"
 
 
 class LLMTask(Enum):
@@ -227,6 +246,47 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         temperature=0.2,
     ),
 }
+
+# --- 3-Tier Model Routing with Escalation ---
+
+TASK_TIERS: dict[LLMTask, dict[str, Any]] = {
+    LLMTask.EXECUTIVE_SUMMARY: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
+    LLMTask.THREAT_MODELING: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.EXPLOIT_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
+    LLMTask.VALIDATION_ONESHOT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
+    LLMTask.REMEDIATION_PLAN: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
+    LLMTask.ZERO_DAY_ANALYSIS: {"tier": LLMTier.LARGE, "escalation_threshold": 0.8},
+    LLMTask.DEDUP_ANALYSIS: {"tier": LLMTier.SMALL, "escalation_threshold": 0.4},
+    LLMTask.PERPLEXITY_OSINT: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.7},
+    LLMTask.REPORT_SECTION: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.ORCHESTRATION: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.POC_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
+    LLMTask.COST_SUMMARY: {"tier": LLMTier.SMALL, "escalation_threshold": 0.3},
+}
+
+TIER_MODELS: dict[LLMTier, dict[str, str]] = {
+    LLMTier.SMALL: {
+        "default_provider": "DEEPSEEK_API_KEY",
+        "default_model": "deepseek-chat",
+        "escalation_provider": "OPENAI_API_KEY",
+        "escalation_model": "gpt-4o-mini",
+    },
+    LLMTier.MEDIUM: {
+        "default_provider": "OPENAI_API_KEY",
+        "default_model": "gpt-4o",
+        "escalation_provider": "OPENROUTER_API_KEY",
+        "escalation_model": "anthropic/claude-sonnet-4-20250514",
+    },
+    LLMTier.LARGE: {
+        "default_provider": "OPENROUTER_API_KEY",
+        "default_model": "anthropic/claude-opus-4-20250514",
+        "escalation_provider": "OPENAI_API_KEY",
+        "escalation_model": "o3-pro",
+    },
+}
+
+# Confidence threshold below which we escalate to the next tier
+ESCALATION_CONFIDENCE_THRESHOLD = 0.7
 
 
 async def _call_gemini_route(
