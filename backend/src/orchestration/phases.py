@@ -1,7 +1,7 @@
 """Scan phases enum and input/output contracts (Pydantic models).
 
-Extended with structured exploitation queue (ExploitationQueue) and
-evidence tier (EvidenceTier) contracts bridging vuln analysis → exploitation.
+Extended with structured exploitation queue (ExploitationQueue),
+evidence tier (EvidenceTier), and source analysis phase.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from src.orchestration.exploitation_queue import (
 
 # Progress mapping per phase (0-100)
 PHASE_PROGRESS: dict[str, int] = {
+    "source_analysis": 5,
     "recon": 15,
     "threat_modeling": 25,
     "vuln_analysis": 45,
@@ -42,8 +43,9 @@ class PhaseDefinition:
 
 
 class ScanPhase(str, Enum):
-    """6 phases of pentest pipeline."""
+    """7 phases of pentest pipeline (source_analysis added as phase 0)."""
 
+    SOURCE_ANALYSIS = "source_analysis"
     RECON = "recon"
     THREAT_MODELING = "threat_modeling"
     VULN_ANALYSIS = "vuln_analysis"
@@ -53,6 +55,7 @@ class ScanPhase(str, Enum):
 
 
 PHASE_ORDER: list[ScanPhase] = [
+    ScanPhase.SOURCE_ANALYSIS,
     ScanPhase.RECON,
     ScanPhase.THREAT_MODELING,
     ScanPhase.VULN_ANALYSIS,
@@ -69,12 +72,128 @@ class ExploitationSubPhase(str, Enum):
     EXPLOIT_VERIFY = "exploit_verify"
 
 
+# --- Source Analysis ---
+class SourceAnalysisInput(BaseModel):
+    """Input for source_analysis phase (phase 0).
+
+    Receives the target URL and optional repository path for white-box analysis.
+    If ``repo_path`` is None, source analysis is skipped and the pipeline
+    proceeds directly to recon.
+    """
+
+    target: str
+    repo_path: str | None = Field(
+        default=None,
+        description="Local path to cloned repository (None = skip source analysis).",
+    )
+    repo_url: str | None = Field(
+        default=None,
+        description="Remote repository URL for git clone if not yet cloned.",
+    )
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class CodeSink(BaseModel):
+    """A security-relevant sink identified in source code."""
+
+    file_path: str = Field(description="Relative file path in the repository.")
+    line_number: int | None = Field(default=None, description="Line number.")
+    sink_type: str = Field(
+        description="Type: sql_query, command_exec, html_render, http_request, file_read, etc.",
+    )
+    code_snippet: str = Field(default="", max_length=2000, description="Surrounding code.")
+    function_name: str | None = Field(default=None, description="Containing function/method.")
+    severity: str = Field(default="medium", description="Estimated severity: low, medium, high, critical.")
+
+
+class CodeSource(BaseModel):
+    """A user-input source identified in source code."""
+
+    file_path: str = Field(description="Relative file path.")
+    line_number: int | None = Field(default=None, description="Line number.")
+    source_type: str = Field(
+        description="Type: http_param, form_input, cookie, header, url_path, websocket, etc.",
+    )
+    parameter_name: str | None = Field(default=None, description="Parameter/variable name.")
+    code_snippet: str = Field(default="", max_length=2000, description="Surrounding code.")
+
+
+class TaintPath(BaseModel):
+    """A source-to-sink data flow path identified by static analysis."""
+
+    source: CodeSource
+    sink: CodeSink
+    intermediate_nodes: list[str] = Field(
+        default_factory=list,
+        description="Intermediate function calls in the data flow.",
+    )
+    sanitizers: list[str] = Field(
+        default_factory=list,
+        description="Sanitizer/validation functions applied along the path.",
+    )
+    is_sanitized: bool = Field(
+        default=False,
+        description="Whether the sanitization is sufficient for this vulnerability class.",
+    )
+
+
+class SourceAnalysisOutput(BaseModel):
+    """Output of source_analysis phase (phase 0).
+
+    Provides architectural intelligence from static source code analysis
+    that feeds into recon and threat modeling phases.
+    """
+
+    framework: str | None = Field(
+        default=None,
+        description="Detected application framework (e.g., Django, Express, Spring Boot).",
+    )
+    language: str | None = Field(default=None, description="Primary programming language.")
+    entry_points: list[CodeSource] = Field(
+        default_factory=list,
+        description="All identified user-input sources (HTTP params, form fields, etc.).",
+    )
+    sinks: list[CodeSink] = Field(
+        default_factory=list,
+        description="All identified dangerous sinks (SQL queries, command exec, HTML render).",
+    )
+    taint_paths: list[TaintPath] = Field(
+        default_factory=list,
+        description="Source-to-sink data flow paths with sanitization analysis.",
+    )
+    auth_patterns: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Identified authentication/authorization patterns.",
+    )
+    api_endpoints: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="API endpoints discovered from code (routes, controllers, handlers).",
+    )
+    file_tree: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Simplified repository file tree for context.",
+    )
+    summary: str = Field(
+        default="",
+        max_length=10000,
+        description="Executive summary of source analysis findings.",
+    )
+    skipped: bool = Field(
+        default=True,
+        description="Whether source analysis was skipped (no repository provided).",
+    )
+
+
 # --- Recon ---
 class ReconInput(BaseModel):
     """Input for recon phase."""
 
     target: str
     options: dict[str, Any] = Field(default_factory=dict)
+    source_analysis: SourceAnalysisOutput | None = Field(
+        default=None,
+        description="Results from source_analysis phase (if available).",
+    )
 
 
 class ReconOutput(BaseModel):
@@ -93,6 +212,10 @@ class ThreatModelInput(BaseModel):
     """Input for threat modeling phase."""
 
     assets: list[str] = Field(default_factory=list)
+    source_analysis: SourceAnalysisOutput | None = Field(
+        default=None,
+        description="Source code analysis results for code-aware threat modeling.",
+    )
 
 
 class ThreatModelOutput(BaseModel):
@@ -218,6 +341,16 @@ class ReportingOutput(BaseModel):
 
 # --- Phase definitions (input/output schemas, prompt keys) ---
 
+SOURCE_ANALYSIS_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["target"],
+    "properties": {
+        "target": {"type": "string"},
+        "repo_path": {"type": "string"},
+        "repo_url": {"type": "string"},
+        "options": {"type": "object"},
+    },
+}
 RECON_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["target", "options"],
@@ -272,6 +405,7 @@ def get_phase_definition(phase: str) -> PhaseDefinition:
     """Return PhaseDefinition for phase name."""
     schemas = _get_output_schemas()
     input_schemas = {
+        "source_analysis": SOURCE_ANALYSIS_INPUT_SCHEMA,
         "recon": RECON_INPUT_SCHEMA,
         "threat_modeling": THREAT_MODELING_INPUT_SCHEMA,
         "vuln_analysis": VULN_ANALYSIS_INPUT_SCHEMA,
