@@ -1,10 +1,22 @@
-"""Scan phases enum and input/output contracts (Pydantic models)."""
+"""Scan phases enum and input/output contracts (Pydantic models).
+
+Extended with structured exploitation queue (ExploitationQueue) and
+evidence tier (EvidenceTier) contracts bridging vuln analysis → exploitation.
+"""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+from src.orchestration.evidence_tier import EvidenceTier
+from src.orchestration.exploitation_queue import (
+    ExploitationQueue,
+    VulnClass,
+)
 
 
 # Progress mapping per phase (0-100)
@@ -98,24 +110,70 @@ class VulnAnalysisInput(BaseModel):
 
 
 class VulnAnalysisOutput(BaseModel):
-    """Output of vuln_analysis phase."""
+    """Output of vuln_analysis phase.
+
+    Extended with ``exploitation_queues`` — a structured mapping of
+    vulnerability class to ``ExploitationQueue``.  When present, the
+    exploitation phase consumes this instead of raw ``findings`` dicts.
+
+    The ``exploitation_queues`` field is optional for backward
+    compatibility: older pipeline producers that only populate
+    ``findings`` continue to work unchanged.
+    """
 
     findings: list[dict[str, Any]] = Field(default_factory=list)
     active_injection_coverage: dict[str, Any] = Field(default_factory=dict)
+    exploitation_queues: dict[str, ExploitationQueue] | None = Field(
+        default=None,
+        description=(
+            "Structured queues of exploit hypotheses keyed by VulnClass. "
+            "When present, these replace raw findings as input to exploitation."
+        ),
+    )
 
 
 # --- Exploitation ---
 class ExploitationInput(BaseModel):
-    """Input for exploitation phase."""
+    """Input for exploitation phase.
+
+    Supports both legacy ``findings`` dicts and the new structured
+    ``exploitation_queue``.  When ``exploitation_queue`` is present,
+    exploit agents should prefer its hypotheses over raw findings.
+    """
 
     findings: list[dict[str, Any]] = Field(default_factory=list)
+    exploitation_queue: ExploitationQueue | None = Field(
+        default=None,
+        description=(
+            "Structured exploitation queue from vuln_analysis. "
+            "When present, provides typed hypotheses with confidence, "
+            "evidence tier, and suggested payloads."
+        ),
+    )
+    auth_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Authentication configuration for the target (serialized AuthConfig).",
+    )
 
 
 class ExploitationOutput(BaseModel):
-    """Output of exploitation phase."""
+    """Output of exploitation phase.
+
+    Extended with ``evidence_tiers`` — a mapping from finding/stable IDs
+    to their final evidence tier after exploitation.  This enables the
+    reporting phase to classify findings as EXPLOITED, CONFIRMED,
+    SUSPECTED, or INFORMATIONAL.
+    """
 
     exploits: list[dict[str, Any]] = Field(default_factory=list)
     evidence: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_tiers: dict[str, EvidenceTier] = Field(
+        default_factory=dict,
+        description=(
+            "Mapping of finding/stable IDs to their EvidenceTier after "
+            "exploitation. Keys are finding IDs, values are tier integers (1-4)."
+        ),
+    )
 
 
 # --- Post Exploitation ---
@@ -144,6 +202,12 @@ class ReportingInput(BaseModel):
     post_exploitation: PostExploitationOutput | None = None
     # Server-side enrichment (e.g. HIBP aggregate); no secrets — merged into LLM summary in ai_reporting.
     report_context: dict[str, Any] = Field(default_factory=dict)
+    # Scoping configuration for the report — what to focus/avoid,
+    # minimum severity/confidence thresholds, and free-form guidance.
+    scope_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Serialized TargetConfig with rules of engagement for the report.",
+    )
 
 
 class ReportingOutput(BaseModel):

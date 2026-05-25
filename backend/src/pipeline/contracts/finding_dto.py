@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime, timezone
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import Self
 from uuid import UUID
 
@@ -76,6 +76,20 @@ class FindingStatus(StrEnum):
     FALSE_POSITIVE = "false_positive"
     ACCEPTED_RISK = "accepted_risk"
     FIXED = "fixed"
+
+
+class EvidenceTier(IntEnum):
+    """4-level evidence classification for pentest findings.
+
+    Higher values mean stronger evidence of exploitability.
+    Inspired by Shannon's ""No Exploit, No Report"" policy but
+    more granular — findings are never silently discarded.
+    """
+
+    INFORMATIONAL = 1
+    SUSPECTED = 2
+    CONFIRMED = 3
+    EXPLOITED = 4
 
 
 class EvidenceKind(StrEnum):
@@ -181,6 +195,34 @@ class FindingDTO(BaseModel):
     remediation: RemediationDTO | None = None
     first_seen: datetime = Field(default_factory=_utcnow)
     last_seen: datetime = Field(default_factory=_utcnow)
+    evidence_tier: EvidenceTier | None = Field(
+        default=None,
+        description=(
+            "4-level evidence classification. "
+            "EXPLOITED=4 (working payload), CONFIRMED=3 (reproduced), "
+            "SUSPECTED=2 (code analysis only), INFORMATIONAL=1 (no direct exploitation)."
+        ),
+    )
+    payload_attempted: list[StrictStr] = Field(
+        default_factory=list,
+        max_length=32,
+        description="All exploit payloads attempted (successful and failed).",
+    )
+    payload_successful: list[StrictStr] = Field(
+        default_factory=list,
+        max_length=32,
+        description="Only confirmed working exploit payloads.",
+    )
+    taint_path: list[StrictStr] | None = Field(
+        default=None,
+        max_length=64,
+        description="Source-to-sink taint path from code analysis (None = no code analysis done).",
+    )
+    code_location: StrictStr | None = Field(
+        default=None,
+        max_length=512,
+        description="File:line location from white-box source analysis.",
+    )
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
