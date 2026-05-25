@@ -1,8 +1,22 @@
-"""Filter out incomplete/degenerate findings before report generation."""
+"""Filter, classify, and sort findings by evidence tier before report generation.
+
+Implements the ARGUS dual reporting policy: ALL findings are included in
+the report, but each is classified by evidence tier (EXPLOITED > CONFIRMED
+> SUSPECTED > INFORMATIONAL). Findings are sorted by tier so that the
+strongest evidence appears first, ensuring CISOs see the full picture.
+"""
 
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from src.orchestration.evidence_tier import (
+    EVIDENCE_TIER_LABELS,
+    EvidenceTier,
+    classify_finding,
+)
+from src.pipeline.contracts.finding_dto import ConfidenceLevel
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +43,16 @@ def _title_preview(title: object) -> str:
 
 
 def filter_valid_findings(findings: list) -> list:
-    """
-    Remove degenerate findings that would add noise to the report.
+    """Remove degenerate findings that would add noise to the report.
 
     A finding is removed if:
     - title is empty or matches a known placeholder pattern
     - description is empty or too short (< 10 chars)
+
+    IMPORTANT: Findings are NEVER removed based on evidence tier.
+    Even SUSPECTED and INFORMATIONAL findings are preserved — they are
+    classified, not filtered. This is the key difference from Shannon's
+    "No Exploit, No Report" policy.
     """
     if not findings:
         return findings
@@ -66,11 +84,103 @@ def filter_valid_findings(findings: list) -> list:
 
     if removed_count > 0:
         logger.info(
-            "Quality filter removed %d findings (%d → %d)",
+            "Quality filter removed %d findings (%d -> %d)",
             removed_count, len(findings), len(valid),
         )
 
     return valid
+
+
+def classify_finding_evidence_tier(finding: Any) -> EvidenceTier:
+    """Classify a finding into an EvidenceTier based on its attributes.
+
+    Uses the explicit ``evidence_tier`` field if present, otherwise
+    derives it from ``confidence`` level and available evidence.
+    """
+    explicit_tier = _get_attr(finding, "evidence_tier")
+    if explicit_tier is not None:
+        if isinstance(explicit_tier, EvidenceTier):
+            return explicit_tier
+        try:
+            return EvidenceTier(int(explicit_tier))
+        except (ValueError, TypeError):
+            pass
+
+    confidence_str = _get_attr(finding, "confidence")
+    if confidence_str is None:
+        confidence = ConfidenceLevel.SUSPECTED
+    elif isinstance(confidence_str, ConfidenceLevel):
+        confidence = confidence_str
+    else:
+        try:
+            confidence = ConfidenceLevel(str(confidence_str).lower())
+        except ValueError:
+            confidence = ConfidenceLevel.SUSPECTED
+
+    has_payload = bool(_get_attr(finding, "payload_successful") or _get_attr(finding, "poc"))
+    has_evidence = bool(
+        _get_attr(finding, "evidence")
+        or _get_attr(finding, "tool_output")
+        or _get_attr(finding, "screenshot_urls")
+    )
+
+    return classify_finding(confidence, has_payload=has_payload, has_evidence=has_evidence)
+
+
+def sort_findings_by_evidence_tier(findings: list) -> list:
+    """Sort findings by evidence tier (EXPLOITED first, INFORMATIONAL last).
+
+    Within the same tier, findings are sorted by CVSS score descending.
+    This ensures the report leads with the most impactful, best-evidenced
+    findings while preserving ALL findings for completeness.
+    """
+    if not findings:
+        return findings
+
+    def sort_key(f):
+        tier = classify_finding_evidence_tier(f)
+        cvss = float(_get_attr(f, "cvss_v3_score") or 0)
+        return (-tier, -cvss)
+
+    return sorted(findings, key=sort_key)
+
+
+def group_findings_by_evidence_tier(findings: list) -> dict[str, list]:
+    """Group findings into evidence tier buckets for report sections.
+
+    Returns a dict with keys "exploited", "confirmed", "suspected",
+    "informational" — each containing the list of findings in that tier.
+    """
+    groups: dict[str, list] = {
+        "exploited": [],
+        "confirmed": [],
+        "suspected": [],
+        "informational": [],
+    }
+
+    for f in findings:
+        tier = classify_finding_evidence_tier(f)
+        if tier == EvidenceTier.EXPLOITED:
+            groups["exploited"].append(f)
+        elif tier == EvidenceTier.CONFIRMED:
+            groups["confirmed"].append(f)
+        elif tier == EvidenceTier.SUSPECTED:
+            groups["suspected"].append(f)
+        else:
+            groups["informational"].append(f)
+
+    return groups
+
+
+def format_evidence_tier_badge(tier: EvidenceTier) -> str:
+    """Format an evidence tier as a human-readable badge string for reports."""
+    labels = {
+        EvidenceTier.EXPLOITED: "[EXPLOITED]",
+        EvidenceTier.CONFIRMED: "[CONFIRMED]",
+        EvidenceTier.SUSPECTED: "[SUSPECTED]",
+        EvidenceTier.INFORMATIONAL: "[INFO]",
+    }
+    return labels.get(tier, "[UNKNOWN]")
 
 
 def _is_valid_title(title) -> bool:
