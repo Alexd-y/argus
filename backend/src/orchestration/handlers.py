@@ -1825,7 +1825,7 @@ async def run_vuln_analysis(
         except Exception as _sa_exc:
             logger.debug("sub_agent_spawn_failed: %s", _sa_exc)
 
-    if scan_options.get("fanout_agents") and agent_findings_map:
+    if agent_findings_map:
         try:
             import asyncio as _asyncio
             from src.orchestration.vuln_agents import VULN_AGENT_SPECS, AgentDomain
@@ -1836,7 +1836,12 @@ async def run_vuln_analysis(
                 _fo_spec = VULN_AGENT_SPECS[_fo_domain]
                 _fo_relevant = agent_findings_map[_fo_domain.value]
                 _fo_domain_inp = VulnAnalysisInput(
-                    threat_model={"domain": _fo_domain.value, "focus": _fo_spec.cwe_focus[:5]},
+                    threat_model={
+                        "domain": _fo_domain.value,
+                        "focus": _fo_spec.cwe_focus[:5],
+                        "prompt_key": _fo_spec.prompt_key,
+                        "tools": list(_fo_spec.tool_allowlist),
+                    },
                     assets=assets,
                 )
                 try:

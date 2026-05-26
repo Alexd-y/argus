@@ -309,6 +309,83 @@ __all__ = [
     "BrowserAction",
     "BrowserRequest",
     "BrowserResponse",
+    "MCP_BROWSER_TOOLS",
     "PlaywrightAdapter",
     "PlaywrightSession",
+    "register_browser_tools",
 ]
+
+
+MCP_BROWSER_TOOLS: dict[str, dict[str, str]] = {
+    "browser_navigate": {
+        "description": "Navigate browser to a URL. Args: url (str)",
+        "handler": "navigate",
+    },
+    "browser_click": {
+        "description": "Click an element by selector. Args: selector (str)",
+        "handler": "click",
+    },
+    "browser_type": {
+        "description": "Type text into an element. Args: selector (str), text (str)",
+        "handler": "type_text",
+    },
+    "browser_screenshot": {
+        "description": "Take a screenshot of the current page. Args: selector (optional str)",
+        "handler": "screenshot",
+    },
+    "browser_execute_js": {
+        "description": "Execute JavaScript in the browser. Args: script (str)",
+        "handler": "execute_js",
+    },
+    "browser_intercept": {
+        "description": "Intercept network requests. Args: url_pattern (str), action (str)",
+        "handler": "intercept",
+    },
+    "browser_login": {
+        "description": "Execute a browser login flow from AuthConfig. Args: login_url (str), steps (list[dict])",
+        "handler": "login_flow",
+    },
+}
+
+
+async def register_browser_tools(adapter: PlaywrightAdapter | None = None) -> dict[str, Any]:
+    """Register browser MCP tools with their handlers.
+
+    Returns a dict of tool_name -> {description, handler_function} that
+    can be integrated into MCP server tool registration.
+    """
+    _adapter = adapter or PlaywrightAdapter()
+    tool_registry: dict[str, Any] = {}
+
+    for tool_name, tool_info in MCP_BROWSER_TOOLS.items():
+        handler_name = tool_info["handler"]
+
+        if handler_name == "navigate":
+            async def _navigate(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.navigate(kwargs.get("url", ""))
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _navigate}
+        elif handler_name == "click":
+            async def _click(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.click(kwargs.get("selector", ""))
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _click}
+        elif handler_name == "type_text":
+            async def _type_text(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.type_text(kwargs.get("selector", ""), kwargs.get("text", ""))
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _type_text}
+        elif handler_name == "screenshot":
+            async def _screenshot(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.screenshot(kwargs.get("selector"))
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _screenshot}
+        elif handler_name == "execute_js":
+            async def _execute_js(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.execute_js(kwargs.get("script", ""))
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _execute_js}
+        elif handler_name == "login_flow":
+            async def _login_flow(**kwargs: Any) -> dict[str, Any]:
+                return await _adapter.login_flow(
+                    kwargs.get("login_url", ""),
+                    steps=kwargs.get("steps", []),
+                )
+            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _login_flow}
+
+    return tool_registry

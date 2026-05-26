@@ -155,15 +155,98 @@ class LanguageDetector:
 
 @dataclass
 class TreeSitterParser:
-    """Lightweight AST-based sink/source identification.
+    """AST-based sink/source identification with tree-sitter when available.
 
-    Uses pattern matching over file content (regex-based) since
-    tree-sitter binary queries require language grammars.
-    A production version would replace this with actual tree-sitter
-    queries for precise AST-level taint analysis.
+    Uses real tree-sitter parsing when the tree-sitter Python bindings and
+    language grammars are installed. Falls back to regex pattern matching
+    when tree-sitter is unavailable.
     """
 
     repo_path: Path
+
+    _TREE_SITTER_AVAILABLE: ClassVar[bool | None] = None
+    _TREE_SITTER_LANGUAGE_MAP: ClassVar[dict[str, str]] = {
+        "python": "python",
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "java": "java",
+        "go": "go",
+        "ruby": "ruby",
+        "php": "php",
+        "c_cpp": "c",
+        "csharp": "c_sharp",
+        "rust": "rust",
+    }
+
+    @classmethod
+    def _check_tree_sitter(cls) -> bool:
+        if cls._TREE_SITTER_AVAILABLE is not None:
+            return cls._TREE_SITTER_AVAILABLE
+        try:
+            import tree_sitter_python
+            cls._TREE_SITTER_AVAILABLE = True
+        except ImportError:
+            cls._TREE_SITTER_AVAILABLE = False
+        return cls._TREE_SITTER_AVAILABLE
+
+    def _parse_with_tree_sitter(self, file_path: Path, language: str) -> list[dict[str, Any]] | None:
+        """Parse a file with tree-sitter and return AST nodes of interest.
+
+        Returns None if tree-sitter is not available or parsing fails.
+        """
+        if not self._check_tree_sitter():
+            return None
+
+        ts_lang_name = self._TREE_SITTER_LANGUAGE_MAP.get(language)
+        if ts_lang_name is None:
+            return None
+
+        try:
+            import tree_sitter
+
+            lang_module_name = f"tree_sitter_{ts_lang_name.replace('_', '')}"
+            lang_module = __import__(lang_module_name)
+            lang = tree_sitter.Language(lang_module.language())
+
+            parser = tree_sitter.Parser(lang)
+            content = file_path.read_bytes()
+            tree = parser.parse(content)
+            root = tree.root_node
+
+            sinks: list[dict[str, Any]] = []
+            rel_path = str(file_path.relative_to(self.repo_path))
+
+            def _walk(node: Any, depth: int = 0) -> None:
+                if depth > 50 or len(sinks) >= 500:
+                    return
+                node_type = node.type
+                if node_type in ("call_expression", "function_call", "method_invocation"):
+                    text = node.text.decode("utf-8", errors="replace")[:300] if hasattr(node, 'text') else ""
+                    for pattern, sink_type in [
+                        (r"cursor\.execute|\.raw\(|\.query\(|executeQuery|createStatement|nativeQuery|sequelize\.query", "sql_query"),
+                        (r"os\.system|subprocess\.(call|run|Popen)|os\.popen|child_process\.(exec|spawn)|exec\s*\(", "command_exec"),
+                        (r"innerHTML|document\.write|dangerouslySetInnerHTML|render_template_string|Markup\s*\(", "html_render"),
+                        (r"requests\.(get|post|put|delete|patch)|urllib\.request\.urlopen|httpx\.Client\.(get|post)|axios\.(get|post)|fetch\s*\(|got\s*\(", "http_request"),
+                    ]:
+                        import re
+                        if re.search(pattern, text):
+                            sinks.append({
+                                "file_path": rel_path,
+                                "line_number": node.start_point[0] + 1,
+                                "sink_type": sink_type,
+                                "code_snippet": text[:200],
+                                "severity": "high" if sink_type in ("sql_query", "command_exec") else "medium",
+                                "parser": "tree_sitter",
+                            })
+                            break
+                for child in node.children:
+                    _walk(child, depth + 1)
+
+            _walk(root)
+            return sinks if sinks else None
+        except Exception as exc:
+            logger.debug("tree_sitter_parse_failed", extra={"file": str(file_path), "error": str(exc)})
+            return None
 
     # Sink patterns by language (class-level constants)
     SQL_SINK_PATTERNS: ClassVar[dict[str, list[str]]] = {
@@ -224,10 +307,25 @@ class TreeSitterParser:
     }
 
     def find_sinks(self, language: str, files: list[Path] | None = None) -> list[dict[str, Any]]:
-        """Find security-relevant sinks in source files."""
+        """Find security-relevant sinks in source files.
+
+        Uses tree-sitter AST parsing when available for precise node identification.
+        Falls back to regex-based pattern matching when tree-sitter is not installed.
+        """
         import re
 
-        sinks = []
+        source_files = files or self._get_source_files(language)
+        sinks: list[dict[str, Any]] = []
+
+        if self._check_tree_sitter():
+            for file_path in source_files[:200]:
+                ts_result = self._parse_with_tree_sitter(file_path, language)
+                if ts_result is not None:
+                    sinks.extend(ts_result)
+            if sinks:
+                logger.info("tree_sitter_sinks_found", extra={"count": len(sinks), "language": language})
+                return sinks[:500]
+
         patterns = {}
         for pattern_dict, sink_type in [
             (self.SQL_SINK_PATTERNS, "sql_query"),
@@ -238,8 +336,6 @@ class TreeSitterParser:
             lang_patterns = pattern_dict.get(language, [])
             for p in lang_patterns:
                 patterns[p] = sink_type
-
-        source_files = files or self._get_source_files(language)
 
         for file_path in source_files:
             try:
