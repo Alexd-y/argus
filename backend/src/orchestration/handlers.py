@@ -1781,6 +1781,60 @@ async def run_vuln_analysis(
                         "scan_id": scan_id,
                     },
                 )
+
+                # Fan-out: run domain-specific LLM analysis for each domain with relevant findings
+                if scan_options.get("enable_vuln_agents", True):
+                    try:
+                        from src.llm.facade import call_llm_with_escalation
+                        from src.llm.task_router import LLMTask
+                        domain_context = "\n".join(
+                            f"- [{f.get('severity','?').upper()}] {f.get('title','?')} (CWE {f.get('cwe','?')})"
+                            for f in relevant[:10]
+                        )
+                        domain_prompt = (
+                            f"You are the {spec.display_name} — a CWE-specialized vulnerability analyst.\n"
+                            f"Focus domains: {', '.join(str(c) for c in spec.cwe_focus)}\n"
+                            f"Available tools: {', '.join(spec.tool_allowlist)}\n\n"
+                            f"Target: {target}\n\n"
+                            f"Findings requiring deeper analysis:\n{domain_context}\n\n"
+                            f"For each finding, produce an ExploitHypothesis JSON:\n"
+                            f'{{"vuln_type": "...", "location": "...", "method": "...", '
+                            f'"parameter": "...", "evidence": "...", "suggested_payload": "...", '
+                            f'"confidence": 0.0-1.0}}\n\n'
+                            f"Return a JSON array of hypotheses."
+                        )
+                        domain_analysis = await call_llm_with_escalation(
+                            system_prompt=f"You are {spec.display_name}. {spec.description}",
+                            user_prompt=domain_prompt,
+                            task=LLMTask.VULN_ANALYSIS,
+                            scan_id=scan_id,
+                            phase=f"vuln_agent_{domain.value}",
+                        )
+                        if domain_analysis:
+                            import json as _json
+                            try:
+                                hypotheses = _json.loads(domain_analysis)
+                                if isinstance(hypotheses, list):
+                                    for h in hypotheses[:20]:
+                                        h["source_domain"] = domain.value
+                                        h["source_agent"] = spec.display_name
+                                    llm_output.hypotheses.extend(hypotheses)
+                            except (_json.JSONDecodeError, TypeError):
+                                for line in domain_analysis.splitlines():
+                                    if line.strip().startswith("{"):
+                                        try:
+                                            h = _json.loads(line.strip())
+                                            h["source_domain"] = domain.value
+                                            h["source_agent"] = spec.display_name
+                                            llm_output.hypotheses.append(h)
+                                        except (_json.JSONDecodeError, TypeError):
+                                            pass
+                    except Exception as _agent_llm_exc:
+                        logger.debug(
+                            "vuln_agent_llm_failed",
+                            extra={"domain": domain.value, "error": str(_agent_llm_exc)},
+                        )
+
         if agent_findings_map:
             llm_output.exploitation_queues = agent_findings_map
     except Exception as va_exc:
@@ -1959,18 +2013,31 @@ async def run_exploit_attempt(
     _browser_context: dict[str, Any] = {}
     if auth_config:
         try:
-            from src.orchestration.auth_config import TargetConfig as _TC
-            from src.sandbox.playwright_adapter import PlaywrightAdapter
+            from src.orchestration.auth_config import TargetConfig as _TC, AuthConfig as _AC
+            from src.sandbox.playwright_adapter import PlaywrightAdapter, BrowserAction
             tc = _TC.from_json(auth_config) if isinstance(auth_config, dict) else None
             if tc and tc.authentication:
-                pa = PlaywrightAdapter(target_url=target)
-                session = await pa.login_flow(tc.authentication)
-                if session.authenticated:
+                pa = PlaywrightAdapter()
+                await pa._start_session()
+                login_steps = [
+                    {"instruction": step.instruction, "selector": step.selector or "", "value": step.value or ""}
+                    for step in (tc.authentication.login_flow or [])
+                ]
+                login_resp = await pa.login_flow(
+                    url=tc.authentication.login_url or target,
+                    steps=login_steps,
+                    success_condition={"type": tc.authentication.success_condition.type, "value": tc.authentication.success_condition.value} if tc.authentication.success_condition else None,
+                )
+                if login_resp.success:
                     _browser_context = {
-                        "cookies": session.cookies,
+                        "cookies": login_resp.cookies,
                         "authenticated": True,
+                        "page_url": login_resp.url,
+                        "page_title": login_resp.title,
                     }
                     logger.info("Playwright login successful for %s", target)
+                else:
+                    logger.debug("Playwright login failed: %s", login_resp.error)
         except Exception as pa_exc:
             logger.debug("Playwright auth failed (non-fatal): %s", pa_exc)
 
@@ -2022,6 +2089,33 @@ async def run_exploit_attempt(
                 logger.info("symbolic_execution_result", extra={"scan_id": scan_id, "proven": _sym_result.proven, "error": _sym_result.error[:200] if _sym_result.error else ""})
             except Exception as _sym_exc:
                 logger.debug("symbolic_execution_failed", extra={"scan_id": scan_id, "error": str(_sym_exc)})
+
+    # Playwright screenshot evidence for browser-verifiable exploits (XSS, auth bypass)
+    _xss_vuln_types = {"xss", "cross-site scripting", "reflected xss", "stored xss", "dom xss"}
+    _browser_vuln_types = {"xss", "cross-site scripting", "auth", "authentication", "csrf", "open-redirect"}
+    for _exploit in (exploit_out.exploits or []):
+        _vtype = str(_exploit.get("vuln_type", "")).lower()
+        _is_browser_verifiable = any(_bt in _vtype for _bt in _browser_vuln_types)
+        if _is_browser_verifiable and _exploit.get("poc_url") or _exploit.get("poc_curl"):
+            try:
+                from src.sandbox.playwright_adapter import PlaywrightAdapter, BrowserAction
+                _pa = PlaywrightAdapter()
+                await _pa._start_session()
+                _poc_url = _exploit.get("poc_url", target)
+                _nav_resp = await _pa.navigate(_poc_url)
+                if _nav_resp.success:
+                    _shot_resp = await _pa.screenshot()
+                    if _shot_resp.success and _shot_resp.screenshot_path:
+                        _exploit["screenshot_path"] = _shot_resp.screenshot_path
+                        _exploit["browser_evidence"] = {
+                            "url": _nav_resp.url,
+                            "title": _nav_resp.title,
+                            "body_snippet": (_nav_resp.body_text or "")[:500],
+                        }
+                        logger.info("Playwright screenshot captured", extra={"scan_id": scan_id, "url": _poc_url})
+                _pa._session.stop()
+            except Exception as _pw_exc:
+                logger.debug("Playwright screenshot failed (non-fatal): %s", _pw_exc)
 
     return exploit_out
 

@@ -253,6 +253,14 @@ class VulnAnalysisOutput(BaseModel):
             "When present, these replace raw findings as input to exploitation."
         ),
     )
+    hypotheses: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Exploit hypotheses from CWE-specialized vuln agents. "
+            "Each hypothesis includes vuln_type, location, method, parameter, "
+            "evidence, suggested_payload, confidence, source_domain, source_agent."
+        ),
+    )
 
 
 # --- Exploitation ---

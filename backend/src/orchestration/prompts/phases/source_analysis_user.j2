@@ -1,0 +1,31 @@
+You are performing source code analysis on: {{ target }}.
+
+Repository has been cloned to: {{ repo_path }}
+Primary language: {{ language }}
+Framework: {{ framework }}
+
+{{ kali_mcp_block }}
+
+Analyze the source code structure below. Identify:
+1. Entry points (routes, handlers, controllers, API endpoints)
+2. Authentication/authorization patterns and gaps
+3. Data sinks (SQL queries, OS commands, file operations, network calls)
+4. Taint sources (user input, HTTP parameters, headers, cookies)
+5. Taint paths: source → transformation → sink where user data flows unsafely
+6. Framework-specific patterns (ORM misuse, template injection, deserialization)
+
+=== SOURCE CODE ANALYSIS DATA ===
+{{ source_data }}
+=== END ===
+
+Return JSON:
+{
+  "framework": "str",
+  "language": "str",
+  "entry_points": [{"path": "str", "type": "str", "method": "str"}],
+  "sinks": [{"file": "str", "line": "int", "function": "str", "sink_type": "str"}],
+  "auth_patterns": [{"file": "str", "type": "str", "gaps": ["str"]}],
+  "taint_paths": [{"source": "str", "sink": "str", "path": ["str"], "confidence": "float"}],
+  "api_endpoints": [{"path": "str", "method": "str", "auth_required": "bool"}],
+  "summary": "str"
+}

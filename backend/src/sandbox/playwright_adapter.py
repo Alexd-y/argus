@@ -82,14 +82,23 @@ class PlaywrightSession:
     _started: bool = field(default=False, repr=False)
 
     def start(self) -> None:
-        """Start the browser process."""
+        """Start the browser process (no-op for sandbox-executed sessions).
+
+        The actual browser lifecycle is managed per-script execution:
+        each _generate_script() output launches and closes the browser.
+        The _started flag enables the session for use.
+        """
         if self._started:
             return
         self._started = True
         logger.info("Playwright session %s started", self.session_id)
 
     def stop(self) -> None:
-        """Stop the browser process."""
+        """Stop the browser session.
+
+        Marks session as inactive. Any in-flight scripts will still
+        complete since each manages its own browser lifecycle.
+        """
         if not self._started:
             return
         self._started = False
@@ -120,12 +129,39 @@ class PlaywrightAdapter:
         self._session = PlaywrightSession(session_id=session_id)
         self._screenshots_dir = tempfile.mkdtemp(prefix="argus_pw_")
 
+    async def _start_session(self) -> None:
+        """Ensure Playwright is available in the sandbox container.
+
+        Verifies that Chromium is installed by running a quick check.
+        If the sandbox is not reachable, marks session as started anyway
+        (scripts will fail gracefully).
+        """
+        self._session.start()
+        try:
+            if self._runner is not None:
+                result = await asyncio.to_thread(
+                    self._runner.execute, "npx", ["playwright", "--version"], timeout=30
+                )
+                logger.debug("Playwright available: %s", getattr(result, "stdout", "ok"))
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    "docker", "exec", self._container, "npx", "playwright", "--version",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await asyncio.wait_for(proc.communicate(), timeout=30)
+        except Exception as exc:
+            logger.debug("Playwright availability check failed (non-fatal): %s", exc)
+
     async def execute(self, request: BrowserRequest) -> BrowserResponse:
         """Execute a browser action inside the sandbox.
 
         Generates a Node.js script that uses Playwright to perform the
         requested action, then executes it inside the sandbox container.
+        If the session is not started, auto-starts it.
         """
+        if not self._session.is_running:
+            await self._start_session()
         script = self._generate_script(request)
         script_path = Path(tempfile.mktemp(suffix=".mjs", prefix="argus_pw_"))
         try:
@@ -249,6 +285,16 @@ class PlaywrightAdapter:
             safe_js = request.js_code.replace("`", "\\`")
             lines.append(f"  const result = await page.evaluate(`{safe_js}`);")
             lines.append("  console.log(JSON.stringify({ success: true, js_result: result }));")
+
+        elif request.action == BrowserAction.INTERCEPT:
+            lines.append("  const intercepted = [];")
+            lines.append("  await page.route('**/*', async (route) => {")
+            lines.append("    const req = route.request();")
+            lines.append("    intercepted.push({ url: req.url(), method: req.method(), resourceType: req.resourceType() });")
+            lines.append("    await route.continue();")
+            lines.append("  });")
+            lines.append(f"  await page.goto({json.dumps(request.url or 'about:blank')}, {{ waitUntil: 'networkidle', timeout: {request.timeout_ms} }});")
+            lines.append("  console.log(JSON.stringify({ success: true, intercepted, url: page.url() }));")
 
         else:
             lines.append("  console.log(JSON.stringify({ success: false, error: 'Unknown action' }));")

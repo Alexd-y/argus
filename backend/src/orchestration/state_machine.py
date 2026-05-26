@@ -926,8 +926,24 @@ async def run_scan_state_machine(
                     findings = vuln_out.findings if vuln_out else []
 
                     try:
-                        from src.orchestration.exploitation_queue import ExploitationQueue as _EQ
+                        from src.orchestration.exploitation_queue import ExploitationQueue as _EQ, ExploitHypothesis as _EH
                         exploitation_queue = _EQ.from_vuln_analysis_output(vuln_out)
+                        # Merge CWE-agent hypotheses into the queue
+                        for _hyp_dict in (vuln_out.hypotheses or []):
+                            try:
+                                _hyp = _EH(
+                                    vuln_type=_hyp_dict.get("vuln_type", "unknown"),
+                                    location=_hyp_dict.get("location", "unknown"),
+                                    method=_hyp_dict.get("method", "GET"),
+                                    parameter=_hyp_dict.get("parameter", ""),
+                                    evidence=_hyp_dict.get("evidence", ""),
+                                    suggested_payload=_hyp_dict.get("suggested_payload", ""),
+                                    confidence=float(_hyp_dict.get("confidence", 0.5)),
+                                    source_phase=f"vuln_agent_{_hyp_dict.get('source_domain', 'unknown')}",
+                                )
+                                exploitation_queue.hypotheses.append(_hyp)
+                            except Exception:
+                                pass
                         structured_findings = exploitation_queue.to_exploitation_input()
                         logger.info(
                             "ExploitationQueue: %d hypotheses for %s",
@@ -973,8 +989,18 @@ async def run_scan_state_machine(
                         except Exception as _ewp_exc:
                             logger.warning("ephemeral_worker_pool_init_failed: %s", _ewp_exc)
 
+                    _auth_config_dict = None
+                    try:
+                        if auth_config_obj and hasattr(auth_config_obj, "model_dump"):
+                            _auth_config_dict = auth_config_obj.model_dump()
+                        elif auth_config_obj and isinstance(auth_config_obj, dict):
+                            _auth_config_dict = auth_config_obj
+                    except Exception:
+                        pass
+
                     attempt_out = await run_exploit_attempt(
-                        findings, scan_id=scan_id, target=target, tenant_id=tenant_id
+                        findings, scan_id=scan_id, target=target, tenant_id=tenant_id,
+                        auth_config=_auth_config_dict,
                     )
                     await _record_event(
                         session,
