@@ -90,7 +90,7 @@ _PHASE_ORDER: list[str] = [RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, 
 
 
 def _parse_llm_json(text: str) -> dict[str, Any] | None:
-    """Extract and parse JSON from LLM response. Handles ```json blocks."""
+    """Extract and parse JSON from LLM response. Handles ```json blocks and truncated JSON."""
     if not text or not text.strip():
         return None
     text = text.strip()
@@ -100,7 +100,41 @@ def _parse_llm_json(text: str) -> dict[str, Any] | None:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return None
+        pass
+    if text.startswith("{") and not text.rstrip().endswith("}"):
+        try:
+            return json.loads(text.rstrip() + "}")
+        except json.JSONDecodeError:
+            pass
+    if text.startswith("[") and not text.rstrip().endswith("]"):
+        try:
+            return json.loads(text.rstrip() + "]")
+        except json.JSONDecodeError:
+            pass
+    try:
+        obj_start = text.find("{")
+        arr_start = text.find("[")
+        if obj_start >= 0 and (arr_start < 0 or obj_start <= arr_start):
+            depth = 0
+            for i in range(obj_start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return json.loads(text[obj_start : i + 1])
+        elif arr_start >= 0:
+            depth = 0
+            for i in range(arr_start, len(text)):
+                if text[i] == "[":
+                    depth += 1
+                elif text[i] == "]":
+                    depth -= 1
+                    if depth == 0:
+                        return json.loads(text[arr_start : i + 1])
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return None
 
 
 async def _call_llm_with_json_retry(

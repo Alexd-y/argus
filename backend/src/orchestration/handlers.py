@@ -2005,7 +2005,7 @@ async def run_exploit_attempt(
     When auth_config is provided, attempts browser-based login via PlaywrightAdapter
     before exploitation to establish authenticated sessions.
     """
-    from src.orchestration.exploitation_executors import execute_exploitation
+    from src.orchestration.exploitation_executor import execute_exploitation
 
     if not findings:
         return ExploitationOutput(exploits=[], evidence=[])
