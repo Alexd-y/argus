@@ -51,7 +51,7 @@ RUN DALFOX_VERSION=$(curl -sL https://api.github.com/repos/hahwul/dalfox/release
     rm -f /tmp/dalfox.tar.gz
 
 # xsstrike (Python tool — not in Kali apt)
-RUN pip3 install --no-cache-dir xsstrike
+RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
