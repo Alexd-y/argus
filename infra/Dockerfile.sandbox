@@ -32,12 +32,12 @@ RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
     sqlmap nikto wpscan dirsearch \
     hydra medusa crackmapexec impacket-scripts smbclient \
     sslscan testssl.sh \
-    jq whois netcat-openbsd \
+    jq whois \
     && rm -rf /var/lib/apt/lists/*
 
 # dalfox (Go binary — not in Kali apt, download pre-built release)
