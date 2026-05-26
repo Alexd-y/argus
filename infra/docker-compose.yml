@@ -418,7 +418,7 @@ services:
   sandbox:
     build:
       context: ..
-      dockerfile: sandbox/Dockerfile
+      dockerfile: infra/sandbox/Dockerfile
       args:
         SANDBOX_PROFILE: ${SANDBOX_PROFILE:-standard}
         INSTALL_MSF: ${INSTALL_MSF:-false}
@@ -446,6 +446,41 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # Ephemeral sandbox for fuzzing, symbolic execution, and binary analysis.
+  # Uses the 'binary' profile with AFL++, angr, Z3, Jazzer, radare2, binwalk.
+  # Spawned per-scan by EphemeralWorkerPool for isolated task execution.
+  kali-runner:
+    build:
+      context: ..
+      dockerfile: infra/sandbox/Dockerfile
+      args:
+        SANDBOX_PROFILE: binary
+    image: argus-kali-runner
+    container_name: argus-kali-runner
+    volumes:
+      - sandbox_tmp:/tmp/argus-sandbox
+    networks:
+      - data
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+        reservations:
+          cpus: "0.5"
+          memory: 1024M
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "argus-tool-check || exit 1"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+    profiles:
+      - binary
 
   # Adminer — lightweight web DB admin (PostgreSQL, MySQL, SQLite)
   adminer:

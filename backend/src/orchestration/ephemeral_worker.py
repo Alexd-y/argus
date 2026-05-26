@@ -95,7 +95,7 @@ logger = logging.getLogger(__name__)
 class ContainerSpec:
     """Specification for an ephemeral task container."""
 
-    image: str = "argus/kali-runner:latest"
+    image: str = "argus-kali-runner:latest"
     cpu_limit: float = 1.0
     memory_limit: str = "512m"
     workspace_size: str = "2g"
@@ -130,7 +130,7 @@ class EphemeralWorkerPool:
     def __init__(
         self,
         max_containers: int = 5,
-        default_image: str = "argus/kali-runner:latest",
+        default_image: str = "argus-kali-runner:latest",
         prune_interval: int = 120,
     ) -> None:
         self._max_containers = max_containers

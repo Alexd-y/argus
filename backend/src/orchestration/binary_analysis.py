@@ -15,9 +15,9 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 BINARY_TOOLS = {
-    "binwalk": {"docker_image": "argus/binwalk:latest", "description": "Firmware extraction and entropy analysis"},
-    "ghidra": {"docker_image": "argus/ghidra:latest", "description": "Headless decompilation and analysis"},
-    "radare2": {"docker_image": "argus/radare2:latest", "description": "Disassembly and binary diffing"},
+    "binwalk": {"docker_image": "argus-kali-runner:latest", "description": "Firmware extraction and entropy analysis"},
+    "ghidra": {"docker_image": "argus-kali-runner:latest", "description": "Headless decompilation and analysis"},
+    "radare2": {"docker_image": "argus-kali-runner:latest", "description": "Disassembly and binary diffing"},
 }
 
 

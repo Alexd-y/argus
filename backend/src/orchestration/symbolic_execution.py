@@ -18,8 +18,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 SYMBOLIC_ENGINES = {
-    "angr": {"languages": ["python", "c", "cpp"], "pip": "angr", "install_hint": "pip install angr"},
-    "z3": {"languages": ["python", "c", "cpp"], "pip": "z3-solver", "install_hint": "pip install z3-solver"},
+    "angr": {"languages": ["python", "c", "cpp"], "pip": "angr", "docker_image": "argus-kali-runner:latest", "install_hint": "installed in argus-kali-runner image"},
+    "z3": {"languages": ["python", "c", "cpp"], "pip": "z3-solver", "docker_image": "argus-kali-runner:latest", "install_hint": "installed in argus-kali-runner image"},
 }
 
 

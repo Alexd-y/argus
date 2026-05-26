@@ -24,21 +24,21 @@ logger = logging.getLogger(__name__)
 FUZZER_ENGINES = {
     "afl_plus_plus": {
         "languages": ["c", "cpp", "go", "rust"],
-        "docker_image": "argus/aflplusplus:latest",
+        "docker_image": "argus-kali-runner:latest",
         "command_template": "afl-fuzz -i {input_dir} -o {output_dir} -m none -- {target_binary}",
-        "install_hint": "apt-get install -y afl++",
+        "install_hint": "installed in argus-kali-runner image",
     },
     "libfuzzer": {
         "languages": ["c", "cpp", "rust"],
-        "docker_image": "argus/libfuzzer:latest",
+        "docker_image": "argus-kali-runner:latest",
         "command_template": "{target_binary} -artifact_prefix={output_dir} {input_dir}",
-        "install_hint": "clang -fsanitize=fuzzer",
+        "install_hint": "clang -fsanitize=fuzzer in argus-kali-runner image",
     },
     "jazzer": {
         "languages": ["java"],
-        "docker_image": "argus/jazzer:latest",
-        "command_template": "jazzer --cp={classpath} --target_class={target_class}",
-        "install_hint": "pip install jazzer",
+        "docker_image": "argus-kali-runner:latest",
+        "command_template": "java -jar /opt/jazzer/target/jazzer-*.jar --cp={classpath} --target_class={target_class}",
+        "install_hint": "installed in argus-kali-runner image at /opt/jazzer",
     },
 }
 
