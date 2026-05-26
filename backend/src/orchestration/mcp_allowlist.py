@@ -52,7 +52,11 @@ class MCPAllowlist:
     def guard_tool_call(self, tool_name: str, phase: str, vuln_domain: str | None = None) -> ToolAccessDenied | None:
         allowed = self.get_allowed_tools(phase, vuln_domain)
         if not allowed:
-            return None
+            return ToolAccessDenied(
+                tool_name=tool_name,
+                phase=phase,
+                reason=f"No tools allowed in phase '{phase}' (domain={vuln_domain})",
+            )
         if tool_name not in allowed:
             return ToolAccessDenied(
                 tool_name=tool_name,
