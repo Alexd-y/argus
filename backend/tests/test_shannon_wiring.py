@@ -1403,3 +1403,81 @@ class TestWebSocketDelivery:
         assert msg.scan_id == "s1"
         assert msg.message == "hello"
         assert msg.timestamp is not None
+
+
+class TestModuleIntegrityFixes:
+    """Audit fixes — modules with honest defaults (no false positives)."""
+
+    def test_adversarial_critic_run_no_executor(self):
+        from src.orchestration.adversarial_critic import run_adversarial_critic
+        import asyncio
+        result = asyncio.run(run_adversarial_critic([{"cwe": "CWE-79"}], llm_executor=None))
+        assert result.findings_reviewed == 1
+        assert "skipped" in result.overall_assessment.lower() or "no" in result.overall_assessment.lower()
+
+    def test_adversarial_critic_run_empty_findings(self):
+        from src.orchestration.adversarial_critic import run_adversarial_critic
+        import asyncio
+        result = asyncio.run(run_adversarial_critic([], llm_executor=None))
+        assert result.findings_reviewed == 0
+
+    def test_detection_engineering_run_no_executor(self):
+        from src.orchestration.detection_engineering import run_detection_engineering
+        import asyncio
+        result = asyncio.run(run_detection_engineering([{"cwe": "CWE-89"}], llm_executor=None))
+        assert result.total_findings_processed == 1
+        assert result.rules_generated == 0
+
+    def test_detection_engineering_run_empty_findings(self):
+        from src.orchestration.detection_engineering import run_detection_engineering
+        import asyncio
+        result = asyncio.run(run_detection_engineering([], llm_executor=None))
+        assert result.total_findings_processed == 0
+
+    def test_auto_patch_verify_no_sandbox_is_honest(self):
+        from src.orchestration.auto_patch import PatchCandidate, verify_patch_in_sandbox
+        import asyncio
+        candidate = PatchCandidate(
+            finding_id="f1", file_path="app.py", patch_diff="--- a\n+++ b",
+            description="Fix XSS",
+        )
+        result = asyncio.run(verify_patch_in_sandbox(candidate, sandbox_executor=None))
+        assert result.vulnerability_fixed is None
+        assert result.no_regressions is None
+        assert result.test_results.get("verified") is False
+
+    def test_re_verify_no_scanner_is_unverified(self):
+        from src.orchestration.re_verification import ReVerificationTracker, ReVerificationRequest
+        import asyncio
+        tracker = ReVerificationTracker()
+        req = ReVerificationRequest(
+            finding_id="f1", scan_id="s1", original_cwe="CWE-79", original_endpoint="/login",
+        )
+        result = asyncio.run(tracker.re_verify(req, scanner_func=None))
+        assert result.still_vulnerable is None
+        assert result.status == "unverified"
+
+    def test_aiml_security_mcp_tool_validation(self):
+        from src.orchestration.aiml_security import AIMLSecurityScanner
+        scanner = AIMLSecurityScanner()
+        tools = [
+            {"name": "tool1", "args_schema": [
+                {"name": "url", "validation": ""},
+                {"name": "token", "sensitive": True, "encrypted": False},
+            ]},
+            {"name": "tool2", "args_schema": [
+                {"name": "id", "validation": "regex"},
+            ]},
+        ]
+        risks = scanner.scan_mcp_tools(tools)
+        risk_types = [r.risk_type for r in risks]
+        assert "unvalidated_argument" in risk_types
+        assert "sensitive_argument_unencrypted" in risk_types
+
+    def test_sub_agent_spawner_token_tracking(self):
+        from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+        spawner = SubAgentSpawner()
+        task = SubAgentTask(task_description="test")
+        result = spawner.spawn(task, executor=lambda desc: {"result": "ok", "tokens_used": 150})
+        assert result.output["tokens_used"] == 150
+        assert spawner.total_tokens_used == 150

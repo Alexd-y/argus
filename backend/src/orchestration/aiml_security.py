@@ -99,8 +99,21 @@ class AIMLSecurityScanner:
                 ))
             args = tool.get("args_schema", [])
             for arg in args:
+                arg_name = arg.get("name", "unnamed")
                 if not arg.get("validation", ""):
-                    pass
+                    risks.append(MCPSupplyChainRisk(
+                        tool_name=name,
+                        risk_type="unvalidated_argument",
+                        severity="low",
+                        description=f"Tool '{name}' argument '{arg_name}' lacks input validation",
+                    ))
+                if arg.get("sensitive", False) and not arg.get("encrypted", False):
+                    risks.append(MCPSupplyChainRisk(
+                        tool_name=name,
+                        risk_type="sensitive_argument_unencrypted",
+                        severity="medium",
+                        description=f"Tool '{name}' argument '{arg_name}' is sensitive but not encrypted",
+                    ))
         return risks
 
     def scan_training_data_leaks(

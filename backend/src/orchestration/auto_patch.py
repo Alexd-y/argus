@@ -35,8 +35,8 @@ class PatchVerificationResult:
     """Result of verifying a patch against the vulnerable code."""
 
     patch_id: str
-    vulnerability_fixed: bool
-    no_regressions: bool
+    vulnerability_fixed: bool | None = None
+    no_regressions: bool | None = None
     test_results: dict[str, Any] = field(default_factory=dict)
     error: str = ""
 
@@ -139,13 +139,21 @@ async def verify_patch_in_sandbox(
     candidate: PatchCandidate,
     sandbox_executor: Any = None,
 ) -> PatchVerificationResult:
-    """Verify a patch by applying it and running tests in sandbox."""
+    """Verify a patch by applying it and running tests in sandbox.
+
+    If no sandbox_executor is provided, returns unverified result with
+    vulnerability_fixed=None (not True) — honest about lack of verification.
+    """
     if sandbox_executor is None:
+        logger.warning(
+            "patch_verify_no_sandbox",
+            extra={"finding_id": candidate.finding_id, "file_path": candidate.file_path},
+        )
         return PatchVerificationResult(
             patch_id=candidate.finding_id,
-            vulnerability_fixed=True,
-            no_regressions=True,
-            test_results={"note": "no sandbox available — assuming pass"},
+            vulnerability_fixed=None,
+            no_regressions=None,
+            test_results={"note": "no sandbox available — verification skipped", "verified": False},
         )
     try:
         result = await sandbox_executor(

@@ -80,6 +80,8 @@ class SubAgentSpawner:
                     depth=task.depth, error=str(exc),
                 )
         self._active_sessions.discard(task.session_id)
+        if isinstance(output, dict) and "tokens_used" in output:
+            self._total_tokens_used += output.get("tokens_used", 0)
         return SubAgentResult(
             task_id=task_id, session_id=task.session_id,
             depth=task.depth, output=output, sub_results=sub_results,
@@ -113,6 +115,8 @@ class SubAgentSpawner:
                     depth=task.depth, error=str(exc),
                 )
         self._active_sessions.discard(task.session_id)
+        if isinstance(output, dict) and "tokens_used" in output:
+            self._total_tokens_used += output.get("tokens_used", 0)
         return SubAgentResult(
             task_id=task_id, session_id=task.session_id,
             depth=task.depth, output=output, sub_results=sub_results,

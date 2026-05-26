@@ -131,6 +131,71 @@ def sigma_rule_template(
     )
 
 
+async def run_detection_engineering(
+    findings: list[dict[str, Any]],
+    llm_executor: Any = None,
+    rule_types: list[str] | None = None,
+) -> DetectionEngineeringResult:
+    """Run the detection engineering co-pilot on findings using an LLM executor.
+
+    Args:
+        findings: List of finding dicts from vuln_analysis/exploitation.
+        llm_executor: Async callable that accepts (system_prompt, user_prompt)
+                      and returns the LLM response dict with 'content' key.
+        rule_types: Optional list of rule types to generate (sigma, suricata, waf_modsec).
+
+    Returns:
+        DetectionEngineeringResult with generated detection rules.
+    """
+    if not findings:
+        return DetectionEngineeringResult()
+
+    system_prompt, user_prompt = build_detection_prompt(findings)
+
+    if rule_types:
+        type_list = ", ".join(rule_types)
+        user_prompt += f"\n\nFocus on these rule types: {type_list}"
+
+    if llm_executor is None:
+        logger.warning("detection_engineering_no_executor", extra={"findings_count": len(findings)})
+        return DetectionEngineeringResult(
+            total_findings_processed=len(findings),
+            rules_generated=0,
+        )
+
+    try:
+        result = llm_executor(system_prompt, user_prompt)
+        if hasattr(result, "__await__"):
+            result = await result
+    except Exception as exc:
+        logger.warning("detection_engineering_llm_failed", extra={"error": str(exc)})
+        return DetectionEngineeringResult(
+            total_findings_processed=len(findings),
+            rules_generated=0,
+        )
+
+    response_text = ""
+    if isinstance(result, dict):
+        response_text = result.get("content", result.get("text", ""))
+    elif isinstance(result, str):
+        response_text = result
+
+    if not response_text:
+        return DetectionEngineeringResult(total_findings_processed=len(findings))
+
+    try:
+        start = response_text.index("{")
+        end = response_text.rindex("}") + 1
+        parsed = json.loads(response_text[start:end])
+    except (ValueError, json.JSONDecodeError):
+        logger.warning("detection_engineering_parse_failed")
+        return DetectionEngineeringResult(total_findings_processed=len(findings))
+
+    de_result = parse_detection_response(parsed)
+    de_result.total_findings_processed = len(findings)
+    return de_result
+
+
 __all__ = [
     "DE_SYSTEM_PROMPT",
     "DE_USER_TEMPLATE",
@@ -139,5 +204,6 @@ __all__ = [
     "DetectionRuleType",
     "build_detection_prompt",
     "parse_detection_response",
+    "run_detection_engineering",
     "sigma_rule_template",
 ]

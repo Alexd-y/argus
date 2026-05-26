@@ -35,7 +35,7 @@ class ReVerificationResult:
 
     finding_id: str
     status: str
-    still_vulnerable: bool
+    still_vulnerable: bool | None
     verification_attempts: int = 1
     verified_fixed_at: str = ""
     details: str = ""
@@ -53,8 +53,12 @@ class ReVerificationTracker:
         request: ReVerificationRequest,
         scanner_func: Any = None,
     ) -> ReVerificationResult:
-        """Re-verify a finding. If scanner_func provided, actually re-scan."""
-        still_vulnerable = True
+        """Re-verify a finding. If scanner_func provided, actually re-scan.
+
+        Without a scanner_func, records as 'unverified' rather than assuming
+        still_vulnerable — honest about lack of verification capability.
+        """
+        still_vulnerable: bool | None = None
         details = ""
 
         if scanner_func is not None:
@@ -65,10 +69,24 @@ class ReVerificationTracker:
             except Exception as exc:
                 logger.warning("Re-verification scan failed: %s", exc)
                 details = f"Scan error: {exc}"
+                still_vulnerable = True
+        else:
+            logger.info(
+                "re_verify_no_scanner",
+                extra={"finding_id": request.finding_id},
+            )
+            still_vulnerable = None
+            details = "No scanner function provided — verification not performed"
 
-        status = "still_vulnerable" if still_vulnerable else "verified_fixed"
+        if still_vulnerable is None:
+            status = "unverified"
+        elif still_vulnerable:
+            status = "still_vulnerable"
+        else:
+            status = "verified_fixed"
+
         verified_fixed_at = ""
-        if not still_vulnerable:
+        if status == "verified_fixed":
             verified_fixed_at = datetime.now(timezone.utc).isoformat()
 
         rv_result = ReVerificationResult(

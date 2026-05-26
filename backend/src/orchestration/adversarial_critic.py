@@ -105,6 +105,69 @@ def parse_critic_response(response_data: dict[str, Any]) -> AdversarialCritiqueR
     )
 
 
+async def run_adversarial_critic(
+    findings: list[dict[str, Any]],
+    llm_executor: Any = None,
+) -> AdversarialCritiqueResult:
+    """Run the adversarial critic on findings using an LLM executor.
+
+    Args:
+        findings: List of finding dicts from vuln_analysis.
+        llm_executor: Async callable that accepts (system_prompt, user_prompt)
+                      and returns the LLM response dict with 'content' key.
+
+    Returns:
+        AdversarialCritiqueResult with critiques, blind spots, and challenges.
+    """
+    if not findings:
+        return AdversarialCritiqueResult(findings_reviewed=0)
+
+    system_prompt, user_prompt = build_critic_prompt(findings)
+
+    if llm_executor is None:
+        logger.warning("adversarial_critic_no_executor", extra={"findings_count": len(findings)})
+        return AdversarialCritiqueResult(
+            findings_reviewed=len(findings),
+            critiques=[],
+            blind_spots=["No LLM executor provided — adversarial review skipped"],
+            overall_assessment="skipped: no executor",
+        )
+
+    try:
+        result = llm_executor(system_prompt, user_prompt)
+        if hasattr(result, "__await__"):
+            result = await result
+    except Exception as exc:
+        logger.warning("adversarial_critic_llm_failed", extra={"error": str(exc)})
+        return AdversarialCritiqueResult(
+            findings_reviewed=len(findings),
+            critiques=[],
+            overall_assessment=f"error: {exc}",
+        )
+
+    response_text = ""
+    if isinstance(result, dict):
+        response_text = result.get("content", result.get("text", ""))
+    elif isinstance(result, str):
+        response_text = result
+
+    if not response_text:
+        return AdversarialCritiqueResult(findings_reviewed=len(findings))
+
+    try:
+        start = response_text.index("{")
+        end = response_text.rindex("}") + 1
+        parsed = json.loads(response_text[start:end])
+    except (ValueError, json.JSONDecodeError):
+        logger.warning("adversarial_critic_parse_failed")
+        return AdversarialCritiqueResult(
+            findings_reviewed=len(findings),
+            overall_assessment="parse_error: could not extract JSON from LLM response",
+        )
+
+    return parse_critic_response(parsed)
+
+
 __all__ = [
     "AdversarialCritiqueResult",
     "CRITIC_SYSTEM_PROMPT",
@@ -112,4 +175,5 @@ __all__ = [
     "CritiqueItem",
     "build_critic_prompt",
     "parse_critic_response",
+    "run_adversarial_critic",
 ]
