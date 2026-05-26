@@ -1,7 +1,6 @@
 "use server";
 
 import { callAdminBackendJson } from "@/lib/serverAdminBackend";
-import { getServerAdminSession } from "@/services/admin/serverSession";
 
 type WrbDashboardData = {
   status: string;
@@ -29,41 +28,30 @@ type WrbTestPromptResult = {
 
 export type { WrbDashboardData, WrbTestPromptResult };
 
-export async function getWrbDashboard(): Promise<WrbDashboardData> {
-  const session = await getServerAdminSession();
-  if (session.role === null) {
-    throw new Error("Unauthorized");
-  }
+const WRB_FALLBACK_DASHBOARD: WrbDashboardData = {
+  status: "unconfigured",
+  model: "",
+  provider: "whiterabbitneo",
+  error: "",
+  models_count: 0,
+  base_url: "",
+  timeout_seconds: 600,
+  gpu_mode: "",
+  concurrency_limit: 3,
+  default_temperature: 0.3,
+  default_max_tokens: 4096,
+  max_prompt_bytes: 8192,
+  api_key_configured: false,
+};
 
+export async function getWrbDashboard(): Promise<WrbDashboardData> {
   const result = await callAdminBackendJson<WrbDashboardData>(
     "/llm/wrb/dashboard",
-    {
-      method: "GET",
-      headers: {
-        "X-Admin-Role": session.role,
-        "X-Operator-Subject": session.subject,
-      },
-    },
+    { method: "GET" },
   );
 
   if (!result.ok) {
-    if (result.status === 503) {
-      return {
-        status: "unconfigured",
-        model: "",
-        provider: "whiterabbitneo",
-        error: "",
-        models_count: 0,
-        base_url: "",
-        timeout_seconds: 600,
-        gpu_mode: "",
-        concurrency_limit: 3,
-        default_temperature: 0.3,
-        default_max_tokens: 4096,
-        max_prompt_bytes: 8192,
-        api_key_configured: false,
-      };
-    }
+    if (result.status === 503) return { ...WRB_FALLBACK_DASHBOARD };
     throw new Error(`Failed to fetch WRB dashboard: ${result.status}`);
   }
 
@@ -74,20 +62,10 @@ export async function wrbTestPrompt(
   prompt: string,
   systemPrompt?: string,
 ): Promise<WrbTestPromptResult> {
-  const session = await getServerAdminSession();
-  if (session.role === null) {
-    throw new Error("Unauthorized");
-  }
-
   const result = await callAdminBackendJson<WrbTestPromptResult>(
     "/llm/wrb/test-prompt",
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Role": session.role,
-        "X-Operator-Subject": session.subject,
-      },
       body: JSON.stringify({
         prompt,
         system_prompt: systemPrompt || null,

@@ -19,22 +19,24 @@ export type AdminLlmProviderRow = {
   created_at: string;
 };
 
-function assertOk<T>(
-  result: Awaited<ReturnType<typeof callAdminBackendJson<T>>>,
-): T {
-  if (result.ok) return result.data;
-  throw new Error(result.error);
-}
+const FALLBACK_RUNTIME: LlmRuntimeSummary = {
+  execution_uses_global_env: false,
+  global_env_providers: {},
+};
 
 function enc(s: string): string {
   return encodeURIComponent(s);
 }
 
-export async function getLlmRuntimeSummary(): Promise<LlmRuntimeSummary> {
+export async function getLlmRuntimeSummary(): Promise<LlmRuntimeSummary | null> {
   const result = await callAdminBackendJson<LlmRuntimeSummary>("/llm/runtime-summary", {
     method: "GET",
   });
-  return assertOk(result);
+  if (!result.ok) {
+    if (result.status === 503) return { ...FALLBACK_RUNTIME };
+    return null;
+  }
+  return result.data;
 }
 
 export async function listLlmProvidersForTenant(
@@ -46,7 +48,10 @@ export async function listLlmProvidersForTenant(
     `/providers?${sp.toString()}`,
     { method: "GET" },
   );
-  return assertOk(result);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
 export async function createLlmProviderRow(params: {
@@ -61,7 +66,10 @@ export async function createLlmProviderRow(params: {
       enabled: true,
     }),
   });
-  return assertOk(result);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
 export async function patchLlmProvider(params: {
@@ -83,5 +91,8 @@ export async function patchLlmProvider(params: {
       body: JSON.stringify(body),
     },
   );
-  return assertOk(result);
+  if (!result.ok) {
+    throw new Error(result.error);
+  }
+  return result.data;
 }

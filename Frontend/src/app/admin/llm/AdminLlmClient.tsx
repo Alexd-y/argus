@@ -29,9 +29,118 @@ function errMsg(e: unknown): string {
 }
 
 function formatKeyDisplay(row: AdminLlmProviderRow): string {
-  if (!row.api_key_set) return "—";
+  if (!row.api_key_set) return "\u2014";
   if (row.api_key_last4) return `***${row.api_key_last4}`;
   return "***";
+}
+
+type ProviderStats = {
+  enabled: number;
+  disabled: number;
+  withKey: number;
+  total: number;
+};
+
+function ProviderStatCards({ stats, isLoading }: { stats: ProviderStats; isLoading: boolean }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-[var(--accent)] bg-[var(--bg-secondary)] p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Всего</div>
+        {isLoading ? (
+          <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
+        ) : (
+          <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.total}</div>
+        )}
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">провайдеров</div>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-emerald-500 bg-[var(--bg-secondary)] p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Активны</div>
+        {isLoading ? (
+          <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
+        ) : (
+          <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.enabled}</div>
+        )}
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">включены</div>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-zinc-500 bg-[var(--bg-secondary)] p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Отключены</div>
+        {isLoading ? (
+          <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
+        ) : (
+          <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.disabled}</div>
+        )}
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">выключены</div>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-amber-500 bg-[var(--bg-secondary)] p-4">
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">С ключом</div>
+        {isLoading ? (
+          <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
+        ) : (
+          <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.withKey}</div>
+        )}
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">API ключ задан</div>
+      </div>
+    </div>
+  );
+}
+
+function ProviderRow({
+  row,
+  busy,
+  onToggle,
+  onEdit,
+}: {
+  row: AdminLlmProviderRow;
+  busy: boolean;
+  onToggle: (r: AdminLlmProviderRow) => void;
+  onEdit: (r: AdminLlmProviderRow) => void;
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`inline-block size-2 rounded-full ${row.enabled ? "bg-emerald-400" : "bg-zinc-500"}`}
+            aria-hidden="true"
+          />
+          <span className="font-medium text-[var(--text-primary)]">{row.provider_key}</span>
+          <span
+            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
+              row.enabled
+                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                : "border border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
+            }`}
+          >
+            {row.enabled ? "Active" : "Disabled"}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[var(--text-muted)]">
+          <span>API key: {formatKeyDisplay(row)}</span>
+          {row.model_fallback_chain && row.model_fallback_chain.length > 0 ? (
+            <span>Models: {row.model_fallback_chain.join(" \u2192 ")}</span>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy}
+          onClick={() => onToggle(row)}
+        >
+          {row.enabled ? "Disable" : "Enable"}
+        </button>
+        <button
+          type="button"
+          className="rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={busy}
+          onClick={() => onEdit(row)}
+        >
+          Edit
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function AdminLlmBody() {
@@ -50,6 +159,17 @@ function AdminLlmBody() {
   const [editKey, setEditKey] = useState<string>("");
   const [editFallback, setEditFallback] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const providerStats = useMemo<ProviderStats>(() => {
+    const enabled = rows.filter((r) => r.enabled).length;
+    const withKey = rows.filter((r) => r.api_key_set).length;
+    return {
+      enabled,
+      disabled: rows.length - enabled,
+      withKey,
+      total: rows.length,
+    };
+  }, [rows]);
 
   const loadTenants = useCallback(() => {
     startTransition(async () => {
@@ -70,7 +190,8 @@ function AdminLlmBody() {
   const loadRuntime = useCallback(() => {
     startTransition(async () => {
       try {
-        setRuntime(await getLlmRuntimeSummary());
+        const result = await getLlmRuntimeSummary();
+        setRuntime(result);
       } catch {
         setRuntime(null);
       }
@@ -191,252 +312,227 @@ function AdminLlmBody() {
     if (!ok) setNewKey(missingKeys[0]);
   }, [missingKeys, newKey]);
 
+  const editingRow = editingId ? rows.find((r) => r.id === editingId) : null;
+
   return (
-    <div className="space-y-4">
-        <div>
-          <h1 className="text-lg font-semibold text-[var(--text-primary)]">LLM providers</h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Per-tenant provider rows and secrets. API keys are write-only; responses show last four
-            characters only.
+    <div className="space-y-6">
+      <header>
+        <h1 className="text-lg font-semibold text-[var(--text-primary)]">Cloud Providers</h1>
+        <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
+          Per-tenant LLM provider configuration. API keys are write-only; only the last 4 characters are shown.
+        </p>
+      </header>
+
+      {runtime?.execution_uses_global_env ? (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text-secondary)]"
+          role="status"
+        >
+          <span className="font-medium text-[var(--text-primary)]">Runtime note:</span>{" "}
+          The orchestration stack currently resolves LLM calls from{" "}
+          <span className="text-[var(--text-primary)]">global environment variables</span>.
+          Per-tenant keys stored here are persisted for upcoming tenant-scoped routing.
+        </div>
+      ) : null}
+
+      {!tenantId && !isPending && tenants.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-6 py-12 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-[var(--bg-tertiary)]">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-muted)]">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <h3 className="text-sm font-medium text-[var(--text-primary)]">No tenants found</h3>
+          <p className="max-w-sm text-xs text-[var(--text-muted)]">
+            Create a tenant first, then configure LLM providers for it.
           </p>
         </div>
-
-        {runtime?.execution_uses_global_env ? (
-          <div
-            className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-sm text-[var(--text-secondary)]"
-            role="status"
-          >
-            <span className="font-medium text-[var(--text-primary)]">Runtime note: </span>
-            The orchestration stack currently resolves LLM calls from{' '}
-            <span className="text-[var(--text-primary)]">global environment variables</span>.
-            Per-tenant keys stored here are not yet wired into the worker; they are persisted for
-            upcoming tenant-scoped routing.
-          </div>
-        ) : null}
-
-        {runtime ? (
-          <div className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] p-3 text-xs text-[var(--text-muted)]">
-            <div className="mb-1 font-medium text-[var(--text-secondary)]">
-              Global env (process) — configured flags only
-            </div>
-            <ul className="grid gap-1 sm:grid-cols-2 md:grid-cols-3">
-              {Object.entries(runtime.global_env_providers).map(([k, on]) => (
-                <li key={k}>
-                  <span className="text-[var(--text-primary)]">{k}</span>
-                  {on ? (
-                    <span className="text-[var(--text-muted)]"> — set</span>
-                  ) : (
-                    <span className="text-[var(--text-muted)]"> — not set</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[12rem] flex-1">
-            <label className="text-xs text-[var(--text-muted)]" htmlFor={tenantSelectId}>
-              Tenant
-            </label>
-            <select
-              id={tenantSelectId}
-              className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              disabled={isPending && tenants.length === 0}
-            >
-              {tenants.length === 0 ? <option value="">No tenants</option> : null}
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.id.slice(0, 8)}…)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-              value={missingKeys.length === 0 ? "" : newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              disabled={!tenantId || missingKeys.length === 0}
-            >
-              {missingKeys.length === 0 ? (
-                <option value="">All providers added</option>
-              ) : (
-                missingKeys.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
+      ) : (
+        <>
+          <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border-light)] bg-[var(--bg-secondary)] px-4 py-3">
+            <div className="min-w-[12rem] flex-1">
+              <label className="text-[11px] uppercase tracking-wide text-[var(--text-muted)]" htmlFor={tenantSelectId}>
+                Tenant
+              </label>
+              <select
+                id={tenantSelectId}
+                className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                value={tenantId}
+                onChange={(e) => setTenantId(e.target.value)}
+                disabled={isPending && tenants.length === 0}
+              >
+                {tenants.length === 0 ? <option value="">No tenants</option> : null}
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.id.slice(0, 8)}…)
                   </option>
-                ))
-              )}
-            </select>
-            <button
-              type="button"
-              className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50"
-              disabled={!tenantId || missingKeys.length === 0 || busyId !== null}
-              onClick={addProvider}
-            >
-              Add provider
-            </button>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                value={missingKeys.length === 0 ? "" : newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                disabled={!tenantId || missingKeys.length === 0}
+              >
+                {missingKeys.length === 0 ? (
+                  <option value="">All providers added</option>
+                ) : (
+                  missingKeys.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                type="button"
+                className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!tenantId || missingKeys.length === 0 || busyId !== null}
+                onClick={addProvider}
+              >
+                Add provider
+              </button>
+            </div>
+          </div>
+
+          {listError ? (
+            <div className="rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-2 text-sm text-red-200" role="alert">
+              {listError}
+            </div>
+          ) : null}
+          {actionError ? (
+            <div className="rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-2 text-sm text-red-200" role="alert">
+              {actionError}
+            </div>
+          ) : null}
+
+          <ProviderStatCards stats={providerStats} isLoading={isPending && rows.length === 0} />
+
+          {rows.length === 0 && !isPending ? (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-6 py-12 text-center">
+              <div className="flex size-12 items-center justify-center rounded-full bg-[var(--bg-tertiary)]">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-muted)]">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-medium text-[var(--text-primary)]">No providers configured</h3>
+              <p className="max-w-sm text-xs text-[var(--text-muted)]">
+                Select a provider above and click &ldquo;Add provider&rdquo; to configure LLM access for this tenant.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {rows.map((r) => (
+                <ProviderRow
+                  key={r.id}
+                  row={r}
+                  busy={busyId !== null}
+                  onToggle={toggleEnabled}
+                  onEdit={openEdit}
+                />
+              ))}
+            </div>
+          )}
+
+          {runtime ? (
+            <details className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                Global env providers (process-level)
+              </summary>
+              <div className="border-t border-[var(--border)] px-4 py-3">
+                <ul className="grid gap-1 sm:grid-cols-2 md:grid-cols-3">
+                  {Object.entries(runtime.global_env_providers).map(([k, on]) => (
+                    <li key={k} className="flex items-center gap-2 text-xs">
+                      <span className={`inline-block size-2 rounded-full ${on ? "bg-emerald-400" : "bg-zinc-500"}`} />
+                      <span className="text-[var(--text-primary)]">{k}</span>
+                      <span className="text-[var(--text-muted)]">{on ? "configured" : "not set"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
+
+      {editingRow ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-6 shadow-lg">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              Edit {editingRow.provider_key} provider
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Leave API key blank to keep the current secret. Use comma-separated model IDs for the fallback chain (empty clears the chain).
+            </p>
+            <label className="mt-4 block text-xs text-[var(--text-muted)]">
+              New API key (optional)
+              <input
+                type="password"
+                autoComplete="off"
+                className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                value={editKey}
+                onChange={(e) => setEditKey(e.target.value)}
+              />
+            </label>
+            <label className="mt-3 block text-xs text-[var(--text-muted)]">
+              Model fallback chain (comma-separated)
+              <input
+                className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+                value={editFallback}
+                onChange={(e) => setEditFallback(e.target.value)}
+                placeholder="gpt-4o-mini, gpt-4o"
+              />
+            </label>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={busyId !== null}
+                onClick={() => {
+                  if (!editingId) return;
+                  setActionError(null);
+                  setBusyId(editingId);
+                  startTransition(async () => {
+                    try {
+                      await patchLlmProvider({ providerId: editingId, apiKey: "" });
+                      closeEdit();
+                      refreshProviders();
+                    } catch (e) {
+                      setActionError(errMsg(e));
+                    } finally {
+                      setBusyId(null);
+                    }
+                  });
+                }}
+              >
+                Remove API key
+              </button>
+              <button
+                type="button"
+                className="rounded border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)]"
+                onClick={closeEdit}
+                disabled={busyId !== null}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] transition-colors hover:bg-[var(--accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={saveEdit}
+                disabled={busyId !== null}
+              >
+                Save
+              </button>
+            </div>
           </div>
         </div>
-
-        {listError ? (
-          <div className="rounded border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-red-200">
-            {listError}
-          </div>
-        ) : null}
-        {actionError ? (
-          <div className="rounded border border-red-900/40 bg-red-950/20 px-3 py-2 text-sm text-red-200">
-            {actionError}
-          </div>
-        ) : null}
-
-        {!tenantId ? (
-          <p className="text-sm text-[var(--text-muted)]">Select a tenant to manage providers.</p>
-        ) : (
-          <div className="overflow-x-auto rounded border border-[var(--border)]">
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-              <thead className="border-b border-[var(--border)] bg-[var(--bg-secondary)] text-xs text-[var(--text-muted)]">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Provider</th>
-                  <th className="px-3 py-2 font-medium">Enabled</th>
-                  <th className="px-3 py-2 font-medium">API key</th>
-                  <th className="px-3 py-2 font-medium">Model fallback</th>
-                  <th className="px-3 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-3 py-6 text-center text-[var(--text-muted)]">
-                      No provider rows for this tenant. Add one above.
-                    </td>
-                  </tr>
-                ) : null}
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-[var(--border)]">
-                    <td className="px-3 py-2 font-medium text-[var(--text-primary)]">
-                      {r.provider_key}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--text-secondary)]">
-                      {r.enabled ? "yes" : "no"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs text-[var(--text-secondary)]">
-                      {formatKeyDisplay(r)}
-                    </td>
-                    <td className="px-3 py-2 text-[var(--text-secondary)]">
-                      {r.model_fallback_chain && r.model_fallback_chain.length > 0 ? (
-                        <span className="text-xs">{r.model_fallback_chain.join(" → ")}</span>
-                      ) : (
-                        <span className="text-[var(--text-muted)]">Not configured</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
-                          disabled={busyId !== null}
-                          onClick={() => toggleEnabled(r)}
-                        >
-                          {r.enabled ? "Disable" : "Enable"}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--accent)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
-                          disabled={busyId !== null}
-                          onClick={() => openEdit(r)}
-                        >
-                          Edit key / chain
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {editingId ? (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="w-full max-w-md rounded border border-[var(--border)] bg-[var(--bg-secondary)] p-4 shadow-lg">
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-                Update provider secret / fallback
-              </h2>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Leave API key blank to keep the current secret. Use comma-separated model ids for the
-                fallback chain (empty clears the chain).
-              </p>
-              <label className="mt-3 block text-xs text-[var(--text-muted)]">
-                New API key (optional)
-                <input
-                  type="password"
-                  autoComplete="off"
-                  className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-                  value={editKey}
-                  onChange={(e) => setEditKey(e.target.value)}
-                />
-              </label>
-              <label className="mt-3 block text-xs text-[var(--text-muted)]">
-                Model fallback chain (comma-separated)
-                <input
-                  className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-                  value={editFallback}
-                  onChange={(e) => setEditFallback(e.target.value)}
-                  placeholder="gpt-4o-mini, gpt-4o"
-                />
-              </label>
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  className="rounded border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)] disabled:opacity-50"
-                  disabled={busyId !== null}
-                  onClick={() => {
-                    if (!editingId) return;
-                    setActionError(null);
-                    setBusyId(editingId);
-                    startTransition(async () => {
-                      try {
-                        await patchLlmProvider({ providerId: editingId, apiKey: "" });
-                        closeEdit();
-                        refreshProviders();
-                      } catch (e) {
-                        setActionError(errMsg(e));
-                      } finally {
-                        setBusyId(null);
-                      }
-                    });
-                  }}
-                >
-                  Remove API key
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-[var(--border)] px-3 py-1.5 text-sm text-[var(--text-secondary)]"
-                  onClick={closeEdit}
-                  disabled={busyId !== null}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-[var(--accent-strong)] px-3 py-1.5 text-sm font-medium text-[var(--on-accent)] disabled:opacity-50"
-                  onClick={saveEdit}
-                  disabled={busyId !== null}
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+      ) : null}
     </div>
   );
 }
