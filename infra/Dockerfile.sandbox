@@ -70,18 +70,21 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # angr — binary analysis framework (Python)
 RUN pip3 install --no-cache-dir --break-system-packages angr z3-solver pyelftools lief
 
-# Jazzer — JVM fuzzing (requires JDK)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    default-jdk maven \
-    && git clone --depth=1 https://github.com/CodeIntelligenceTesting/jazzer /opt/jazzer \
-    && cd /opt/jazzer && mvn package -DskipTests -q \
-    && rm -rf /opt/jazzer/.git /root/.m2/repository \
-    && rm -rf /var/lib/apt/lists/*
+# Jazzer — JVM fuzzing (pre-built release, avoid OOM from Maven build)
+RUN JAZZER_VERSION=$(curl -sL https://api.github.com/repos/CodeIntelligenceTesting/jazzer/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then JAZZER_ARCH="arm64"; else JAZZER_ARCH="x86-64"; fi && \
+    mkdir -p /opt/jazzer && \
+    curl -sL "https://github.com/CodeIntelligenceTesting/jazzer/releases/download/${JAZZER_VERSION}/jazzer-linux-${JAZZER_ARCH}.tar.gz" -o /tmp/jazzer.tar.gz && \
+    tar xzf /tmp/jazzer.tar.gz -C /opt/jazzer/ && \
+    find /opt/jazzer -maxdepth 1 -name 'jazzer_standalone*' -type f -executable -exec ln -sf {} /usr/local/bin/jazzer_standalone \; && \
+    find /opt/jazzer -maxdepth 1 -name 'jazzer' -type f -executable -exec ln -sf {} /usr/local/bin/jazzer \; && \
+    rm -f /tmp/jazzer.tar.gz
 
-# radare2 — reverse engineering
-RUN git clone --depth=1 https://github.com/radareorg/radare2 /opt/radare2 \
-    && cd /opt/radare2 && sys/install.sh \
-    && rm -rf /opt/radare2/.git
+# radare2 — reverse engineering (from Kali repos to avoid source build OOM)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+    radare2 \
+    && rm -rf /var/lib/apt/lists/*
 
 # binwalk — firmware extraction
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -111,7 +114,7 @@ RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
     echo "which r2 && echo 'radare2: OK' || echo 'radare2: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which binwalk && echo 'binwalk: OK' || echo 'binwalk: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which clang && echo 'libFuzzer: OK' || echo 'libFuzzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "ls /opt/jazzer/target/jazzer-*.jar >/dev/null 2>&1 && echo 'Jazzer: OK' || echo 'Jazzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which jazzer_standalone && echo 'Jazzer: OK' || echo 'Jazzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which nmap && echo 'nmap: OK' || echo 'nmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which sqlmap && echo 'sqlmap: OK' || echo 'sqlmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which dalfox && echo 'dalfox: OK' || echo 'dalfox: MISSING'" >> /usr/local/bin/argus-tool-check && \
