@@ -76,6 +76,22 @@ BINARY_USER_TEMPLATE = (
 
 
 def build_binary_prompt(binary_path: str, architecture: str, functions: str) -> tuple[str, str]:
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "binary_analysis",
+                    binary_path=binary_path, architecture=architecture,
+                    functions=functions[:20000],
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     return BINARY_SYSTEM_PROMPT, BINARY_USER_TEMPLATE.format(
         binary_path=binary_path, architecture=architecture,
         functions=functions[:20000],

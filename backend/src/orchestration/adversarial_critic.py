@@ -67,6 +67,20 @@ def build_critic_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
     Returns (system_prompt, user_prompt).
     """
     findings_json = json.dumps(findings, default=str, ensure_ascii=False)
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "adversarial_critic", findings_json=findings_json[:50000]
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     user = CRITIC_USER_TEMPLATE.format(findings_json=findings_json[:50000])
     return CRITIC_SYSTEM_PROMPT, user
 

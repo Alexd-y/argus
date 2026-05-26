@@ -170,6 +170,24 @@ class PromptLoader:
         )
         return system_prompt, user_prompt
 
+    def render_extended(self, template_name: str, **kwargs: Any) -> str:
+        """Render an extended-phase template (adversarial_critic, auto_patch, etc.).
+
+        Looks up prompts/extended/{template_name}.j2
+        """
+        return self.render(f"extended/{template_name}.j2", **kwargs)
+
+    def render_extended_system_user(
+        self, module_name: str, **kwargs: Any
+    ) -> tuple[str, str]:
+        """Render (system, user) for an extended module.
+
+        Looks up prompts/extended/{module_name}_system.j2 and _user.j2
+        """
+        system = self.render_extended(f"{module_name}_system", **kwargs)
+        user = self.render_extended(f"{module_name}_user", **kwargs)
+        return system, user
+
     def list_templates(self) -> list[str]:
         """List all available .j2 template files."""
         if self._env is not None:

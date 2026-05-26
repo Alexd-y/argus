@@ -79,6 +79,24 @@ SYMBOLIC_USER_TEMPLATE = (
 
 
 def build_symbolic_prompt(request: SymbolicExecutionRequest) -> tuple[str, str]:
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "symbolic_execution",
+                    binary_path=request.binary_path,
+                    source_function=request.source_function,
+                    sink_function=request.sink_function,
+                    source_file=request.source_file,
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     return SYMBOLIC_SYSTEM_PROMPT, SYMBOLIC_USER_TEMPLATE.format(
         binary_path=request.binary_path,
         source_function=request.source_function,

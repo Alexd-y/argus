@@ -126,6 +126,21 @@ def build_fuzz_harness_prompt(
     framework: str = "",
     source_context: str = "",
 ) -> tuple[str, str]:
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "fuzzing", language=language, target=target,
+                    framework=framework, source_context=source_context[:20000]
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     return FUZZ_SYSTEM_PROMPT, FUZZ_USER_TEMPLATE.format(
         language=language,
         target=target,

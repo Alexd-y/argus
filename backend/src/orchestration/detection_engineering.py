@@ -70,6 +70,20 @@ DE_USER_TEMPLATE = (
 def build_detection_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
     """Build the detection engineering prompt from findings."""
     findings_json = json.dumps(findings, default=str, ensure_ascii=False)
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "detection_engineering", findings_json=findings_json[:50000]
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     user = DE_USER_TEMPLATE.format(findings_json=findings_json[:50000])
     return DE_SYSTEM_PROMPT, user
 

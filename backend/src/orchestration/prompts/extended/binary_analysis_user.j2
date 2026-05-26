@@ -1,0 +1,9 @@
+Analyze the following binary analysis output for security vulnerabilities:
+
+Binary: {{ binary_path }}
+Architecture: {{ architecture }}
+=== DECOMPILED FUNCTIONS ===
+{{ functions }}
+=== END ===
+
+Return JSON: {"vulnerabilities": [{"function_name": "s", "vuln_type": "s", "severity": "s", "description": "s", "address": "s"}]}

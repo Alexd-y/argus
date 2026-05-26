@@ -1,0 +1,12 @@
+Generate detection rules from the following pentest findings.
+
+=== FINDINGS ===
+{{ findings_json }}
+=== END ===
+
+For each exploitable finding, generate:
+1. A Sigma rule for SIEM detection
+2. A Suricata signature for IDS
+3. A WAF rule for web application firewall
+
+Return JSON: {"rules": [{"rule_type": "sigma|suricata|waf_modsec", "title": "s", "rule_content": "s", "finding_id": "s", "severity": "s", "references": ["s"]}}]}

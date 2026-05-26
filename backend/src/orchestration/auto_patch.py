@@ -82,6 +82,23 @@ def build_autopatch_prompt(
     vulnerable_code: str,
     context: str = "",
 ) -> tuple[str, str]:
+    try:
+        from src.orchestration.prompt_loader import get_loader
+        loader = get_loader()
+        if loader.available:
+            try:
+                system, user = loader.render_extended_system_user(
+                    "auto_patch",
+                    cwe=cwe, description=description, file_path=file_path,
+                    severity=severity, vulnerable_code=vulnerable_code[:20000],
+                    context=context[:10000],
+                )
+                if system.strip() and user.strip():
+                    return system, user
+            except Exception:
+                pass
+    except Exception:
+        pass
     return AUTOPATCH_SYSTEM_PROMPT, AUTOPATCH_USER_TEMPLATE.format(
         cwe=cwe,
         description=description,

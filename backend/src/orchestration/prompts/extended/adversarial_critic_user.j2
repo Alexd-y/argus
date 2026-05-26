@@ -1,0 +1,13 @@
+Review the following pentest findings from an adversarial perspective.
+
+=== FINDINGS ===
+{{ findings_json }}
+=== END ===
+
+For each finding, consider:
+1. BYPASS: How could an attacker circumvent the stated vulnerability or its remediation?
+2. BLIND SPOTS: What related attack vectors did the scan miss?
+3. ASSUMPTIONS: What unstated assumptions does this finding rely on?
+4. CHAINING: Can this finding be combined with others for greater impact?
+
+Return JSON: {"critiques": [{"finding_id": "s", "critique_type": "bypass|blind_spot|assumption|chaining", "description": "s", "suggested_action": "s", "severity": "high|medium|low"}], "blind_spots": ["s"], "assumptions_challenged": ["s"], "overall_assessment": "s"}
