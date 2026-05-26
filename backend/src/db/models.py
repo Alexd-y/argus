@@ -496,6 +496,9 @@ class Finding(Base):
     payload_successful: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     taint_path: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     code_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    exploit_demonstrated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
+    exploit_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cvss_vector: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

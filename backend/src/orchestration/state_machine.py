@@ -463,6 +463,18 @@ async def _persist_report_and_findings(
             row_index=row_index,
         )
         f["finding_id"] = finding_pk
+        _et_raw = f.get("evidence_tier")
+        _et = int(_et_raw) if isinstance(_et_raw, (int, float)) and 1 <= int(_et_raw) <= 4 else None
+        _pa = f.get("payload_attempted")
+        _ps = f.get("payload_successful")
+        _tp = f.get("taint_path")
+        _cl = str(f.get("code_location", ""))[:500] if f.get("code_location") else None
+        _adv = f.get("adversarial_score")
+        _adv = float(_adv) if isinstance(_adv, (int, float)) else None
+        _eds = f.get("exploit_demonstrated")
+        _es = str(f.get("exploit_summary", ""))[:2000] if f.get("exploit_summary") else None
+        _cvss_vec = str(f.get("cvss_vector", ""))[:100] if f.get("cvss_vector") else None
+        _dedup = str(f.get("dedup_status", "unchecked"))[:20] if f.get("dedup_status") else None
         finding = Finding(
             id=finding_pk,
             tenant_id=tenant_id,
@@ -480,6 +492,16 @@ async def _persist_report_and_findings(
             evidence_refs=ev_refs,
             reproducible_steps=rep_steps,
             applicability_notes=app_notes,
+            evidence_tier=_et,
+            payload_attempted=_pa if isinstance(_pa, list) else None,
+            payload_successful=_ps if isinstance(_ps, list) else None,
+            taint_path=_tp if isinstance(_tp, list) else None,
+            code_location=_cl,
+            adversarial_score=_adv,
+            exploit_demonstrated=bool(_eds) if _eds is not None else None,
+            exploit_summary=_es,
+            cvss_vector=_cvss_vec,
+            dedup_status=_dedup,
         )
         session.add(finding)
         if poc_db:
@@ -693,11 +715,15 @@ async def run_scan_state_machine(
                 "options": options,
             }
         elif phase == ScanPhase.RECON:
-            input_data = {"target": target, "options": options}
+            input_data = {
+                "target": target,
+                "options": options,
+                "source_analysis": source_out.model_dump() if source_out and not source_out.skipped else None,
+            }
         elif phase == ScanPhase.THREAT_MODELING:
             input_data = {
                 "assets": recon_out.assets if recon_out else [],
-                "source_analysis_summary": source_out.summary if source_out and not source_out.skipped else None,
+                "source_analysis": source_out.model_dump() if source_out and not source_out.skipped else None,
             }
         elif phase == ScanPhase.VULN_ANALYSIS:
             input_data = {
@@ -723,7 +749,11 @@ async def run_scan_state_machine(
                 "auth_config": _auth_config_obj.model_dump() if _auth_config_obj else None,
             }
         elif phase == ScanPhase.POST_EXPLOITATION:
-            input_data = {"exploits": exploit_out.exploits if exploit_out else []}
+            input_data = {
+                "exploits": exploit_out.exploits if exploit_out else [],
+                "evidence": exploit_out.evidence if exploit_out else [],
+                "evidence_tiers": {k: int(v) if hasattr(v, '__int__') else v for k, v in (exploit_out.evidence_tiers or {}).items()} if exploit_out else {},
+            }
         elif phase == ScanPhase.REPORTING:
             input_data = {
                 "target": target,
@@ -732,7 +762,7 @@ async def run_scan_state_machine(
                 "vuln_analysis": vuln_out.model_dump() if vuln_out else None,
                 "exploitation": exploit_out.model_dump() if exploit_out else None,
                 "post_exploitation": post_out.model_dump() if post_out else None,
-                "scope_context": _scope_context,
+                "scope_config": _scope_context,
                 "source_analysis": source_out.model_dump() if source_out else None,
             }
         else:
@@ -998,8 +1028,20 @@ async def run_scan_state_machine(
                     except Exception:
                         pass
 
+                    _exploitation_findings = findings
+                    try:
+                        if structured_findings and isinstance(structured_findings, dict):
+                            _exploitation_findings = structured_findings.get("findings", findings)
+                            logger.info(
+                                "Using structured_findings from ExploitationQueue (%d hypotheses)",
+                                len(_exploitation_findings),
+                                extra={"scan_id": scan_id},
+                            )
+                    except Exception:
+                        pass
+
                     attempt_out = await run_exploit_attempt(
-                        findings, scan_id=scan_id, target=target, tenant_id=tenant_id,
+                        _exploitation_findings, scan_id=scan_id, target=target, tenant_id=tenant_id,
                         auth_config=_auth_config_dict,
                     )
                     await _record_event(

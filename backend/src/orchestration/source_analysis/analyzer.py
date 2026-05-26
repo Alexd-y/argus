@@ -127,6 +127,25 @@ class SourceAnalyzer:
             f"Identified {len(taint_paths)} potential taint paths."
         )
 
+        # LLM-augmented deep source review for high-value findings
+        llm_sinks, llm_taint_paths, llm_auth_gaps = await self._llm_deep_review(
+            repo, primary_language, frameworks, sinks, sources, taint_paths, auth_patterns
+        )
+        if llm_sinks:
+            sinks.extend(llm_sinks)
+        if llm_taint_paths:
+            taint_paths.extend(llm_taint_paths)
+        if llm_auth_gaps:
+            auth_patterns.extend(llm_auth_gaps)
+
+        # Update summary with LLM-augmented counts
+        summary = (
+            f"Source analysis of {repo.name}: {framework_str} application "
+            f"({primary_language}, {len(sources)} entry points, {len(sinks)} sinks). "
+            f"Identified {len(taint_paths)} potential taint paths. "
+            f"LLM deep review added {len(llm_sinks)} sinks, {len(llm_taint_paths)} taint paths, {len(llm_auth_gaps)} auth gaps."
+        )
+
         return SourceAnalysisOutput(
             framework=frameworks[0] if frameworks else None,
             language=primary_language,
@@ -309,3 +328,145 @@ class SourceAnalyzer:
                 ))
 
         return paths[:200]
+
+    async def _llm_deep_review(
+        self,
+        repo: Path,
+        language: str,
+        frameworks: list[str],
+        sinks: list[CodeSink],
+        sources: list[CodeSource],
+        taint_paths: list[TaintPath],
+        auth_patterns: list[dict[str, Any]],
+    ) -> tuple[list[CodeSink], list[TaintPath], list[dict[str, Any]]]:
+        """LLM-augmented deep source code review.
+
+        Sends a summary of pattern-based findings + key source files to the LLM
+        for deeper vulnerability discovery: missed sinks, cross-file taint paths,
+        and authentication/authorization gaps that patterns miss.
+        """
+        llm_sinks: list[CodeSink] = []
+        llm_taint_paths: list[TaintPath] = []
+        llm_auth_gaps: list[dict[str, Any]] = []
+
+        try:
+            from src.llm.facade import call_llm_with_escalation
+            from src.llm.task_router import LLMTask
+
+            sink_summary = "\n".join(
+                f"- {s.sink_type} at {s.file_path}:{s.line_number or '?'} ({s.severity})"
+                for s in sinks[:20]
+            )
+            source_summary = "\n".join(
+                f"- {s.source_type} at {s.file_path}:{s.line_number or '?'}"
+                for s in sources[:20]
+            )
+            auth_summary = "\n".join(
+                f"- {a.get('type', '?')}: {a.get('file_path', '?')}"
+                for a in auth_patterns[:10]
+            )
+            framework_str = ", ".join(frameworks) if frameworks else language
+
+            user_prompt = (
+                f"You are reviewing source code for security vulnerabilities.\n\n"
+                f"Language: {language}\nFrameworks: {framework_str}\n\n"
+                f"Pattern-based analysis found:\n"
+                f"SINKS:\n{sink_summary or 'None found'}\n\n"
+                f"SOURCES:\n{source_summary or 'None found'}\n\n"
+                f"AUTH PATTERNS:\n{auth_summary or 'None found'}\n\n"
+                f"Based on your expertise, identify:\n"
+                f"1. MISSED SINKS — dangerous function calls the pattern scanner missed\n"
+                f"2. CROSS-FILE TAINT PATHS — data flows across files that patterns can't trace\n"
+                f"3. AUTH/AUTHZ GAPS — missing authorization checks, privilege escalation vectors\n\n"
+                f"Return JSON:\n"
+                f'{{"missed_sinks": [{{"file_path": "...", "line_number": N, "sink_type": "...", "code_snippet": "...", "severity": "high|medium|low"}}], '
+                f'"cross_file_taint": [{{"source_file": "...", "source_function": "...", "sink_file": "...", "sink_function": "..."}}], '
+                f'"auth_gaps": [{{"type": "...", "file_path": "...", "description": "..."}}]}}'
+            )
+
+            response = await call_llm_with_escalation(
+                system_prompt="You are a security source code auditor. Analyze findings and identify what patterns missed. Return ONLY valid JSON.",
+                user_prompt=user_prompt,
+                task=LLMTask.THREAT_MODELING,
+                scan_id="",
+                phase="source_analysis_llm_deep_review",
+            )
+
+            if not response:
+                return llm_sinks, llm_taint_paths, llm_auth_gaps
+
+            import json as _json
+            try:
+                data = _json.loads(response.strip())
+            except _json.JSONDecodeError:
+                for line in response.splitlines():
+                    if line.strip().startswith("{"):
+                        try:
+                            data = _json.loads(line.strip())
+                            break
+                        except _json.JSONDecodeError:
+                            continue
+                else:
+                    return llm_sinks, llm_taint_paths, llm_auth_gaps
+
+            for ms in data.get("missed_sinks", [])[:15]:
+                try:
+                    llm_sinks.append(CodeSink(
+                        file_path=str(ms.get("file_path", "unknown")),
+                        line_number=ms.get("line_number"),
+                        sink_type=str(ms.get("sink_type", "unknown")),
+                        code_snippet=str(ms.get("code_snippet", ""))[:500],
+                        severity=str(ms.get("severity", "medium")),
+                    ))
+                except Exception:
+                    pass
+
+            for ct in data.get("cross_file_taint", [])[:15]:
+                try:
+                    src = CodeSource(
+                        file_path=str(ct.get("source_file", "unknown")),
+                        line_number=None,
+                        source_type="cross_file_source",
+                        code_snippet=str(ct.get("source_function", ""))[:200],
+                    )
+                    snk = CodeSink(
+                        file_path=str(ct.get("sink_file", "unknown")),
+                        line_number=None,
+                        sink_type="cross_file_sink",
+                        code_snippet=str(ct.get("sink_function", ""))[:200],
+                        severity="high",
+                    )
+                    llm_taint_paths.append(TaintPath(
+                        source=src,
+                        sink=snk,
+                        intermediate_nodes=[],
+                        sanitizers=[],
+                        is_sanitized=False,
+                    ))
+                except Exception:
+                    pass
+
+            for ag in data.get("auth_gaps", [])[:10]:
+                try:
+                    llm_auth_gaps.append({
+                        "type": str(ag.get("type", "unknown")),
+                        "file_path": str(ag.get("file_path", "")),
+                        "description": str(ag.get("description", ""))[:1000],
+                        "source": "llm_deep_review",
+                    })
+                except Exception:
+                    pass
+
+            logger.info(
+                "llm_deep_review_completed",
+                extra={
+                    "sinks_added": len(llm_sinks),
+                    "taint_paths_added": len(llm_taint_paths),
+                    "auth_gaps_added": len(llm_auth_gaps),
+                },
+            )
+
+        except Exception as exc:
+            logger.debug("llm_deep_review_failed (non-fatal): %s", exc)
+
+        return llm_sinks, llm_taint_paths, llm_auth_gaps

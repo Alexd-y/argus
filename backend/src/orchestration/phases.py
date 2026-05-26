@@ -312,6 +312,14 @@ class PostExploitationInput(BaseModel):
     """Input for post_exploitation phase."""
 
     exploits: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Evidence artifacts from exploitation phase (screenshots, tool output, PoC data).",
+    )
+    evidence_tiers: dict[str, int] = Field(
+        default_factory=dict,
+        description="Mapping of finding IDs to EvidenceTier (1-4) from exploitation.",
+    )
 
 
 class PostExploitationOutput(BaseModel):
@@ -338,6 +346,10 @@ class ReportingInput(BaseModel):
     scope_config: dict[str, Any] | None = Field(
         default=None,
         description="Serialized TargetConfig with rules of engagement for the report.",
+    )
+    source_analysis: dict[str, Any] | None = Field(
+        default=None,
+        description="Source analysis output for code-level findings (taint paths, code locations).",
     )
 
 

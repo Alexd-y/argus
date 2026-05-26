@@ -861,6 +861,12 @@ async def build_valhalla_report_context(
                         "validation_status": getattr(f, "validation_status", "unverified"),
                         "evidence_quality": getattr(f, "evidence_quality", "none"),
                         "evidence_type": getattr(f, "evidence_type", None),
+                        "evidence_tier": getattr(f, "evidence_tier", None),
+                        "payload_attempted": list(getattr(f, "payload_attempted", []) or []),
+                        "payload_successful": list(getattr(f, "payload_successful", []) or []),
+                        "taint_path": list(getattr(f, "taint_path", []) or []),
+                        "code_location": getattr(f, "code_location", None),
+                        "adversarial_score": getattr(f, "adversarial_score", None),
                         "evidence_refs": list(
                             getattr(f, "evidence_refs", []) or []
                         ),
@@ -1237,6 +1243,7 @@ def _valhalla_ai_payload(context: ValhallaReportContext) -> dict[str, Any]:
             {
                 "finding_id": f.get("id") or f.get("finding_id", ""),
                 "severity": f.get("severity", ""),
+                "evidence_tier": f.get("evidence_tier"),
                 "title": f.get("title", ""),
                 "description": _truncate(str(f.get("description") or ""), 400),
                 "cwe": f.get("cwe"),
@@ -1246,6 +1253,11 @@ def _valhalla_ai_payload(context: ValhallaReportContext) -> dict[str, Any]:
                 "evidence_quality": f.get("evidence_quality"),
                 "owasp_category": f.get("owasp_category"),
                 "exploit_demonstrated": f.get("exploit_demonstrated"),
+                "code_location": f.get("code_location"),
+                "taint_path": f.get("taint_path"),
+                "payload_attempted": f.get("payload_attempted"),
+                "payload_successful": f.get("payload_successful"),
+                "reproducible_steps": f.get("reproducible_steps"),
             }
             for f in context.findings[:60]
         ],
@@ -1398,14 +1410,23 @@ def _findings_table_html(findings: list[dict[str, Any]]) -> str:
         "info": '<span class="badge badge-info">INFO</span>',
         "informational": '<span class="badge badge-info">INFO</span>',
     }
+    et_badge: dict[int, str] = {
+        4: '<span class="badge badge-critical">EXPLOITED</span>',
+        3: '<span class="badge badge-high">CONFIRMED</span>',
+        2: '<span class="badge badge-medium">SUSPECTED</span>',
+        1: '<span class="badge badge-info">INFO</span>',
+    }
     for f in sorted_f:
         sev = (f.get("severity") or "info").lower()
         b = badge.get(sev, badge["info"])
         cvss = f.get("cvss") or f.get("cvss_score")
         cvss_str = f"{float(cvss):.1f}" if isinstance(cvss, (int, float)) else "—"
+        et_raw = f.get("evidence_tier")
+        et = et_badge.get(int(et_raw), "—") if et_raw and str(et_raw).isdigit() else "—"
         rows.append(
             "<tr>"
             f"<td>{b}</td>"
+            f"<td>{et}</td>"
             f"<td>{f.get('title', '')}</td>"
             f"<td>{f.get('cwe', '—')}</td>"
             f"<td>{cvss_str}</td>"
@@ -1414,6 +1435,48 @@ def _findings_table_html(findings: list[dict[str, Any]]) -> str:
             "</tr>"
         )
     return "\n".join(rows)
+
+
+def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
+    """Detailed per-finding section: payloads attempted/successful, taint paths, code locations, reproducible steps."""
+    sections: list[str] = []
+    for f in findings[:30]:
+        title = f.get("title", "Unknown")
+        pa = f.get("payload_attempted") or []
+        ps = f.get("payload_successful") or []
+        tp = f.get("taint_path") or []
+        cl = f.get("code_location") or ""
+        rs = f.get("reproducible_steps") or ""
+
+        if not pa and not ps and not tp and not cl and not rs:
+            continue
+
+        parts: list[str] = [f'<div class="card finding-detail-card"><h3>{title}</h3>']
+
+        if cl:
+            parts.append(f'<p><strong>Code Location:</strong> <code>{cl}</code></p>')
+
+        if tp:
+            tp_html = " → ".join(f'<code>{s}</code>' for s in tp[:10])
+            parts.append(f'<p><strong>Taint Path:</strong> {tp_html}</p>')
+
+        if pa:
+            pa_items = "".join(f"<li><code>{p[:200]}</code></li>" for p in pa[:10])
+            parts.append(f'<p><strong>Payloads Attempted:</strong></p><ul>{pa_items}</ul>')
+
+        if ps:
+            ps_items = "".join(f"<li><code>{p[:200]}</code></li>" for p in ps[:10])
+            parts.append(f'<p><strong>Payloads Successful:</strong></p><ul>{ps_items}</ul>')
+
+        if rs:
+            parts.append(f'<p><strong>Reproducible Steps:</strong></p><pre>{rs[:2000]}</pre>')
+
+        parts.append("</div>")
+        sections.append("\n".join(parts))
+
+    if not sections:
+        return '<div class="card"><p style="color:var(--text-secondary)">No detailed payload, taint path, or code location data available.</p></div>'
+    return "\n".join(sections)
 
 
 def _wstg_coverage_matrix_html(context: ValhallaReportContext) -> str:
@@ -1523,6 +1586,42 @@ def _render_ai_section(key: str, context: ValhallaReportContext) -> str:
         f"<h2>{label}</h2>"
         f"<div class=\"ai-content\"><p>{text_html}</p></div>"
         f"</section>"
+    )
+
+
+def _retest_plan_html(context: ValhallaReportContext) -> str:
+    """Render retest/verification commands per vulnerability type."""
+    plan = context.retest_plan or []
+    if not plan:
+        return '<p style="color:var(--text-secondary)">No retest plan generated.</p>'
+    rows: list[str] = []
+    for item in plan[:20]:
+        vt = item.get("vuln_type", "unknown")
+        cmd = item.get("verification_command", "")
+        fid = item.get("finding_id", "")
+        rows.append(
+            f"<tr><td>{vt}</td><td>{fid}</td><td><code>{cmd[:300]}</code></td></tr>"
+        )
+    return (
+        '<table class="data-table"><thead><tr><th>Vuln Type</th><th>Finding ID</th><th>Verification Command</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
+    )
+
+
+def _timeline_html(context: ValhallaReportContext) -> str:
+    """Render scan timeline events."""
+    tools = context.tools_executed or []
+    if not tools:
+        return '<p style="color:var(--text-secondary)">No timeline data available.</p>'
+    rows: list[str] = []
+    for t in tools[:40]:
+        tool = t.get("tool", "unknown")
+        phase = t.get("phase", "")
+        ts = t.get("timestamp", "")
+        rows.append(f"<tr><td>{ts}</td><td>{phase}</td><td>{tool}</td></tr>")
+    return (
+        '<table class="data-table"><thead><tr><th>Timestamp</th><th>Phase</th><th>Tool</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
     )
 
 
@@ -2036,7 +2135,7 @@ def render_valhalla_report(
     <table class="data-table">
       <thead>
         <tr>
-          <th>Severity</th><th>Title</th><th>CWE</th><th>CVSS</th><th>Confidence</th><th>Evidence</th>
+          <th>Severity</th><th>Evidence Tier</th><th>Title</th><th>CWE</th><th>CVSS</th><th>Confidence</th><th>Evidence</th>
         </tr>
       </thead>
       <tbody>
@@ -2044,6 +2143,12 @@ def render_valhalla_report(
       </tbody>
     </table>
   </div>
+</section>
+
+<!-- Findings Detail — payloads, taint paths, code locations, reproducible steps -->
+<section id="section-findings-detail">
+  <h2>Findings Detail</h2>
+  {_findings_detail_html(context.findings)}
 </section>
 
 <!-- Critical Findings -->
@@ -2113,6 +2218,18 @@ def render_valhalla_report(
 <section id="section-wstg-coverage" class="card">
   <h2>OWASP WSTG Coverage Matrix</h2>
   {_wstg_coverage_matrix_html(context)}
+</section>
+
+<!-- Retest / Verification Plan -->
+<section id="section-retest-plan" class="card">
+  <h2>Verification &amp; Retest Plan</h2>
+  {_retest_plan_html(context)}
+</section>
+
+<!-- Scan Timeline -->
+<section id="section-timeline" class="card">
+  <h2>Scan Timeline</h2>
+  {_timeline_html(context)}
 </section>
 
 <!-- Unverified / Follow-up Items -->
