@@ -1296,6 +1296,62 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             lines.append(f"- By provider: {', '.join(f'{k}: ${v:.4f}' for k, v in by_provider.items())}")
         return "\n".join(lines)
 
+    if section_key == "bounty_hunter_tactics":
+        bounty = context.bounty_plan or {}
+        if bounty:
+            lines = ["Bug Bounty Hunter Tactics:"]
+            surfaces = bounty.get("surfaces_classified", bounty.get("surfaces", []))
+            if surfaces:
+                lines.append(f"- {len(surfaces)} attack surface(s) classified")
+                for s in surfaces[:5]:
+                    if isinstance(s, dict):
+                        lines.append(f"  - {s.get('surface_type', 'unknown')}: {s.get('priority', 'medium')} priority")
+            prioritized = bounty.get("prioritized_vulns", [])
+            if prioritized:
+                lines.append(f"- {len(prioritized)} vulnerability type(s) prioritized for bounty")
+            insights = bounty.get("llm_insights", "")
+            if insights:
+                lines.append(f"- LLM insights: {insights[:300]}")
+            return "\n".join(lines)
+        return "No bounty plan data available for this assessment."
+
+    if section_key == "quick_fuzz_findings":
+        qf = context.quick_fuzz_summary or {}
+        if qf:
+            lines = ["Quick Fuzz Pre-Scan Results:"]
+            fc = qf.get("findings_count", 0)
+            cc = qf.get("candidates_count", 0)
+            cats = qf.get("by_category", [])
+            lines.append(f"- {fc} quick-win finding(s) detected across {len(cats)} category(ies)")
+            lines.append(f"- {cc} endpoint(s) flagged for deep vuln analysis")
+            if cats:
+                lines.append(f"- Categories: {', '.join(str(c) for c in cats[:10])}")
+            return "\n".join(lines)
+        findings_qf = [f for f in findings if f.get("source") == "quick_fuzz" or f.get("category", "").lower() == "quick_fuzz"]
+        if findings_qf:
+            lines = [f"Quick Fuzz: {len(findings_qf)} quick-win finding(s) detected during pre-scan:"]
+            for f in findings_qf[:5]:
+                lines.append(f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
+            return "\n".join(lines)
+        return "Quick fuzz pre-scan did not identify quick-win vulnerabilities."
+
+    if section_key == "ai_security_findings":
+        ai_findings = [f for f in findings if f.get("owasp_category", "").upper().startswith("A05")
+                       and any(kw in f.get("title", "").lower() + f.get("description", "").lower()
+                               for kw in ("prompt injection", "system prompt", "llm", "ai endpoint", "rag poisoning"))]
+        if ai_findings:
+            lines = [f"AI/LLM Security Assessment: {len(ai_findings)} finding(s) related to AI-specific vulnerabilities:"]
+            for f in ai_findings[:5]:
+                lines.append(f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
+                ev = f.get("evidence_type", "")
+                if ev:
+                    lines.append(f"    Evidence tier: {f.get('evidence_tier', 'N/A')}, type: {ev}")
+                taint = f.get("taint_path", [])
+                if taint:
+                    lines.append(f"    Taint path: {' → '.join(str(t) for t in taint[:4])}")
+            return "\n".join(lines)
+        return "No AI/LLM-specific security findings were identified in this assessment."
+
     return f"No evidence-backed narrative available for this section. ({total} finding(s) recorded, WSTG coverage: {wstg_pct:.0f}%)."
 
 

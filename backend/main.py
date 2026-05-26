@@ -16,6 +16,7 @@ from src.api.routers import (
     admin_password,
     admin_profile,
     auth,
+    bounty,
     cache,
     findings,
     health,
@@ -28,7 +29,6 @@ from src.api.routers import (
     queues_health,
     reports,
     sandbox,
-    scans,
     skills_public,
     tools,
     ws,
@@ -58,6 +58,7 @@ from src.api.routers.admin_gateway import router as admin_gateway_router
 from src.api.routers.benchmarks import router as benchmarks_router
 from src.api.routers.release import router as release_router
 from src.api.routers.research import router as research_router
+from src.api.routers.cvss import router as cvss_router
 from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.config import settings
@@ -159,6 +160,8 @@ app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 app.include_router(findings.router, prefix="/api/v1")
+app.include_router(bounty.router, prefix="/api/v1")
+app.include_router(cvss_router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(sandbox.router, prefix="/api/v1")
 app.include_router(tools.router, prefix="/api/v1")

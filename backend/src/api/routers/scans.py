@@ -900,6 +900,72 @@ async def get_scan_cost(
     )
 
 
+@router.get("/{scan_id}/burp-config")
+async def export_burp_config(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> dict[str, Any]:
+    """Export Burp Suite Community Edition configuration JSON for this scan.
+
+    Generates scope items, payload lists, and repeater tabs from findings.
+    """
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+
+        findings_result = await session.execute(
+            select(FindingModel).where(
+                cast(FindingModel.scan_id, String) == scan_id,
+                cast(FindingModel.tenant_id, String) == tenant_id,
+            )
+        )
+        findings_rows = findings_result.scalars().all()
+
+    findings = [
+        {
+            "title": f.title,
+            "severity": f.severity,
+            "url": f.description[:200] if f.description else "",
+            "cwe": f.cwe,
+            "owasp_category": f.owasp_category,
+            "payload_attempted": f.payload_attempted or [],
+            "payload_successful": f.payload_successful or [],
+            "poc": f.proof_of_concept,
+        }
+        for f in findings_rows
+    ]
+
+    try:
+        from src.integrations.burp_export import generate_burp_config, burp_config_to_json
+
+        target_url = str(scan.target_url) if hasattr(scan, "target_url") else ""
+        scope_config = None
+        if scan.options and isinstance(scan.options, dict):
+            scope_data = scan.options.get("scope")
+            if isinstance(scope_data, dict):
+                scope_config = scope_data
+
+        config = generate_burp_config(
+            findings=findings,
+            scope_config=scope_config,
+            target_url=target_url,
+        )
+        return burp_config_to_json(config)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Burp config generation failed: {exc}",
+        )
+
+
 @router.get("/{scan_id}/memory-summary")
 async def get_scan_memory_summary(
     scan_id: str,
