@@ -10,7 +10,8 @@ P1-8: WebSocket delivery layer — ScanEventBus now has:
   - Redis pub/sub fan-out (existing)
   - In-memory subscriber callbacks (existing)
   - Async subscriber support (new) for WebSocket bridging
-  - Broadcast bridge for WebSocket ConnectionManager (new)
+  - Redis subscriber bridge for multi-process fan-out (new)
+  - Broadcast bridge for WebSocket ConnectionManager (new in ws.py)
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -51,6 +53,9 @@ class ScanEventBus:
         self._subscribers: list[Any] = None
         self._async_subscribers: list[Callable[[ScanEvent], Any]] = None
         self._redis_client: Any = None
+        self._redis_pubsub: Any = None
+        self._redis_listener_thread: threading.Thread | None = None
+        self._redis_listener_running: bool = False
         try:
             import redis
             self._redis_client = redis.Redis.from_url("redis://localhost:6379/0")
@@ -92,6 +97,11 @@ class ScanEventBus:
                 sub(event)
             except Exception:
                 pass
+        for asub in self.async_subscribers:
+            try:
+                asub(event)
+            except Exception:
+                pass
 
     def subscribe(self, callback: Any) -> None:
         self.subscribers.append(callback)
@@ -99,6 +109,85 @@ class ScanEventBus:
     def subscribe_async(self, callback: Callable[[ScanEvent], Any]) -> None:
         """Register an async callback for event delivery (e.g., WebSocket bridge)."""
         self.async_subscribers.append(callback)
+
+    def start_redis_subscriber(self, channel_pattern: str = "argus:scan:*") -> None:
+        """Start a background Redis pub/sub subscriber that forwards events
+        to in-memory subscribers. Required for multi-process deployments
+        where one process publishes via Redis and another serves WebSocket clients.
+
+        Runs in a daemon thread; events are dispatched to sync subscribers.
+        For async subscribers, events are queued and dispatched on the event loop.
+        """
+        if self._redis_listener_running:
+            return
+        try:
+            import redis
+            pubsub_client = redis.Redis.from_url("redis://localhost:6379/0")
+            self._redis_pubsub = pubsub_client.pubsub()
+            self._redis_pubsub.psubscribe(channel_pattern)
+            self._redis_pubsub.psubscribe("argus:chat:*")
+        except Exception:
+            logger.debug("Redis subscriber not available — multi-process fan-out disabled")
+            return
+
+        self._redis_listener_running = True
+
+        def _listener():
+            try:
+                for message in self._redis_pubsub.listen():
+                    if not self._redis_listener_running:
+                        break
+                    if message["type"] not in ("pmessage",):
+                        continue
+                    channel_data = message.get("data", b"")
+                    if isinstance(channel_data, bytes):
+                        channel_data = channel_data.decode("utf-8", errors="replace")
+                    if not channel_data:
+                        continue
+                    try:
+                        data = json.loads(channel_data)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    event = ScanEvent(
+                        event_type=data.get("event_type", ""),
+                        scan_id=data.get("scan_id", ""),
+                        tenant_id=data.get("tenant_id", ""),
+                        phase=data.get("phase", ""),
+                        progress=data.get("progress", 0),
+                        message=data.get("message", ""),
+                    )
+                    for sub in self.subscribers:
+                        try:
+                            sub(event)
+                        except Exception:
+                            pass
+                    for asub in self.async_subscribers:
+                        try:
+                            asub(event)
+                        except Exception:
+                            pass
+            except Exception:
+                if self._redis_listener_running:
+                    logger.warning("Redis subscriber listener error", exc_info=True)
+            finally:
+                self._redis_listener_running = False
+
+        self._redis_listener_thread = threading.Thread(target=_listener, daemon=True, name="redis-event-subscriber")
+        self._redis_listener_thread.start()
+        logger.info("Redis event subscriber started", extra={"pattern": channel_pattern})
+
+    def stop_redis_subscriber(self) -> None:
+        """Stop the Redis pub/sub listener thread."""
+        self._redis_listener_running = False
+        if self._redis_pubsub is not None:
+            try:
+                self._redis_pubsub.punsubscribe()
+                self._redis_pubsub.close()
+            except Exception:
+                pass
+        if self._redis_listener_thread is not None:
+            self._redis_listener_thread.join(timeout=5)
+        logger.info("Redis event subscriber stopped")
 
     def publish_chat(self, msg: ChatMessage) -> None:
         payload = json.dumps({

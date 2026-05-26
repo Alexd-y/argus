@@ -1703,6 +1703,30 @@ async def run_vuln_analysis(
                     "cwe": "prompt-injection",
                     "source": "aiml_scanner",
                 })
+            _mcp_tool_list = scan_options.get("mcp_tools", [])
+            if _mcp_tool_list:
+                _mcp_risks = _aiml.scan_mcp_tools(_mcp_tool_list)
+                for _mr in _mcp_risks:
+                    llm_output.findings.append({
+                        "title": f"AI/ML: {_mr.risk_type}",
+                        "severity": _mr.severity,
+                        "description": _mr.description,
+                        "recommendation": f"Review MCP tool '{_mr.tool_name}' for {_mr.risk_type}",
+                        "cwe": "supply-chain",
+                        "source": "aiml_scanner",
+                    })
+            _td_findings = _aiml.scan_training_data_leaks(
+                [str(f) for f in (llm_output.findings or [])],
+            )
+            for _td in _td_findings:
+                llm_output.findings.append({
+                    "title": "AI/ML: Training data leak risk",
+                    "severity": "medium",
+                    "description": _td,
+                    "recommendation": "Review LLM output for sensitive data exposure",
+                    "cwe": "information-disclosure",
+                    "source": "aiml_scanner",
+                })
         except Exception:
             pass
     llm_output.active_injection_coverage = active_injection_coverage
@@ -1803,11 +1827,12 @@ async def run_vuln_analysis(
 
     if scan_options.get("fanout_agents") and agent_findings_map:
         try:
+            import asyncio as _asyncio
             from src.orchestration.vuln_agents import VULN_AGENT_SPECS, AgentDomain
-            _fanout_findings: list[dict[str, Any]] = []
-            for _fo_domain in AgentDomain:
+
+            async def _fanout_domain(_fo_domain: "AgentDomain") -> list[dict[str, Any]]:
                 if _fo_domain.value not in agent_findings_map:
-                    continue
+                    return []
                 _fo_spec = VULN_AGENT_SPECS[_fo_domain]
                 _fo_relevant = agent_findings_map[_fo_domain.value]
                 _fo_domain_inp = VulnAnalysisInput(
@@ -1823,9 +1848,17 @@ async def run_vuln_analysis(
                     )
                     for _fo_df in _fo_domain_out.findings:
                         _fo_df["source_domain"] = _fo_domain.value
-                        _fanout_findings.append(_fo_df)
+                    return _fo_domain_out.findings
                 except Exception as _fo_dexc:
                     logger.debug("fanout_va_domain_failed", extra={"domain": _fo_domain.value, "error": str(_fo_dexc)})
+                    return []
+
+            _fanout_coros = [_fanout_domain(d) for d in AgentDomain]
+            _fanout_results = await _asyncio.gather(*_fanout_coros, return_exceptions=True)
+            _fanout_findings: list[dict[str, Any]] = []
+            for _result in _fanout_results:
+                if isinstance(_result, list):
+                    _fanout_findings.extend(_result)
             if _fanout_findings:
                 _fo_seen = {f.get("title", "").lower() for f in llm_output.findings}
                 for _fo_ff in _fanout_findings:
@@ -2082,21 +2115,22 @@ async def run_reporting(
     _critic_insights: list[dict[str, Any]] = []
     if vuln_analysis and vuln_analysis.findings:
         try:
-            from src.orchestration.adversarial_critic import build_critic_prompt, parse_critic_response
+            from src.orchestration.adversarial_critic import run_adversarial_critic
             from src.llm.facade import call_llm_unified as _call_llm_critic
-            _critic_sys, _critic_user = build_critic_prompt(vuln_analysis.findings[:30])
-            _critic_resp = await _call_llm_critic(
-                _critic_sys, _critic_user, task=LLMTask.REPORT_SECTION,
-                scan_id=scan_id, phase="adversarial_critic",
+
+            async def _critic_executor(sys_prompt: str, user_prompt: str):
+                return await _call_llm_critic(
+                    sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
+                    scan_id=scan_id, phase="adversarial_critic",
+                )
+
+            _critic_result = await run_adversarial_critic(
+                vuln_analysis.findings[:30], llm_executor=_critic_executor,
             )
-            if _critic_resp:
-                import json as _json_c
-                _critic_data = _json_c.loads(_critic_resp) if isinstance(_critic_resp, str) else _critic_resp
-                _critic_result = parse_critic_response(_critic_data)
-                for _bs in (_critic_result.blind_spots or [])[:5]:
-                    _critic_insights.append({"type": "blind_spot", "detail": _bs})
-                for _c in (_critic_result.critiques or [])[:5]:
-                    _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
+            for _bs in (_critic_result.blind_spots or [])[:5]:
+                _critic_insights.append({"type": "blind_spot", "detail": _bs})
+            for _c in (_critic_result.critiques or [])[:5]:
+                _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
         except Exception:
             pass
 
@@ -2120,22 +2154,23 @@ async def run_reporting(
             pass
 
         try:
-            from src.orchestration.detection_engineering import build_detection_prompt, parse_detection_response
+            from src.orchestration.detection_engineering import run_detection_engineering
             from src.llm.facade import call_llm_unified as _call_llm2
-            _de_sys, _de_user = build_detection_prompt(vuln_analysis.findings[:20])
-            _de_resp = await _call_llm2(
-                _de_sys, _de_user, task=LLMTask.REPORT_SECTION,
-                scan_id=scan_id, phase="detection_engineering",
+
+            async def _de_executor(sys_prompt: str, user_prompt: str):
+                return await _call_llm2(
+                    sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
+                    scan_id=scan_id, phase="detection_engineering",
+                )
+
+            _de_result = await run_detection_engineering(
+                vuln_analysis.findings[:20], llm_executor=_de_executor,
             )
-            if _de_resp:
-                import json as _json2
-                _de_data = _json2.loads(_de_resp) if isinstance(_de_resp, str) else _de_resp
-                _de_result = parse_detection_response(_de_data)
-                if _de_result.rules:
-                    _existing = report_out.report.get("detection_rules", [])
-                    for _r in _de_result.rules:
-                        _existing.append({"rule_type": _r.rule_type, "title": _r.title, "content": _r.rule_content})
-                    report_out.report["detection_rules"] = _existing
+            if _de_result.rules:
+                _existing = report_out.report.get("detection_rules", [])
+                for _r in _de_result.rules:
+                    _existing.append({"rule_type": _r.rule_type, "title": _r.title, "content": _r.rule_content})
+                report_out.report["detection_rules"] = _existing
         except Exception:
             pass
 

@@ -1481,3 +1481,60 @@ class TestModuleIntegrityFixes:
         result = spawner.spawn(task, executor=lambda desc: {"result": "ok", "tokens_used": 150})
         assert result.output["tokens_used"] == 150
         assert spawner.total_tokens_used == 150
+
+
+class TestPipelineGapWiring:
+    """Wiring tests for gaps found during audit — handlers.py integration."""
+
+    def test_adversarial_critic_run_function_exists(self):
+        from src.orchestration.adversarial_critic import run_adversarial_critic
+        assert callable(run_adversarial_critic)
+
+    def test_detection_engineering_run_function_exists(self):
+        from src.orchestration.detection_engineering import run_detection_engineering
+        assert callable(run_detection_engineering)
+
+    def test_handlers_imports_run_adversarial_critic(self):
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_reporting)
+        assert "run_adversarial_critic" in source
+
+    def test_handlers_imports_run_detection_engineering(self):
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_reporting)
+        assert "run_detection_engineering" in source
+
+    def test_handlers_calls_scan_mcp_tools(self):
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_vuln_analysis)
+        assert "scan_mcp_tools" in source
+
+    def test_handlers_calls_scan_training_data_leaks(self):
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_vuln_analysis)
+        assert "scan_training_data_leaks" in source
+
+    def test_scan_event_bus_has_redis_subscriber(self):
+        from src.orchestration.scan_events import ScanEventBus
+        bus = ScanEventBus()
+        assert hasattr(bus, "start_redis_subscriber")
+        assert hasattr(bus, "stop_redis_subscriber")
+
+    def test_scan_event_bus_publishes_to_async_subscribers(self):
+        from src.orchestration.scan_events import ScanEventBus, ScanEvent
+        bus = ScanEventBus()
+        received = []
+        bus.subscribe_async(lambda e: received.append(e))
+        bus.publish(ScanEvent(event_type="test", scan_id="s1", tenant_id="t1"))
+        assert len(received) == 1
+        assert received[0].event_type == "test"
+
+    def test_handlers_fanout_uses_asyncio_gather(self):
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_vuln_analysis)
+        assert "asyncio.gather" in source or "_asyncio.gather" in source
