@@ -60,7 +60,6 @@ from src.orchestration.phases import (
     ReconOutput,
     ReportingOutput,
     ScanPhase,
-    SourceAnalysisInput,
     SourceAnalysisOutput,
     ThreatModelOutput,
     VulnAnalysisOutput,
@@ -817,19 +816,17 @@ async def run_scan_state_machine(
             with trace_phase(scan_id, phase_str):
                 if phase == ScanPhase.SOURCE_ANALYSIS:
                     try:
-                        from src.orchestration.source_analysis.analyzer import SourceAnalyzer
-                        sa_input = SourceAnalysisInput(
+                        from src.orchestration.handlers import run_source_analysis
+                        source_out = await run_source_analysis(
                             target=target,
-                            repo_path=options.get("repo_path") if options else None,
-                            repo_url=options.get("repo_url") if options else None,
                             options=options or {},
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
                         )
-                        analyzer = SourceAnalyzer(sa_input)
-                        source_out = analyzer.analyze()
                     except ImportError:
-                        logger.warning("source_analysis module unavailable, skipping")
+                        logger.warning("source_analysis handler unavailable, skipping")
                         source_out = SourceAnalysisOutput(
-                            skipped=True, summary="Source analysis module not available"
+                            skipped=True, summary="Source analysis handler not available"
                         )
                     except Exception as sa_exc:
                         logger.warning("source_analysis failed: %s", sa_exc)
@@ -849,7 +846,7 @@ async def run_scan_state_machine(
                                     _binary_types.append({"file": _path, "type": _btype})
                             if _binary_types:
                                 logger.info("binary_analysis_detected", extra={"scan_id": scan_id, "binaries": len(_binary_types)})
-                            if _binary_types and scan_options.get("binary_analysis_enabled", True):
+                            if _binary_types and options.get("binary_analysis_enabled", True):
                                 _ba_max = min(len(_binary_types), 3)
                                 for _bi in _binary_types[:_ba_max]:
                                     try:

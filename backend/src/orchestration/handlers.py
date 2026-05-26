@@ -41,6 +41,8 @@ from src.orchestration.phases import (
     ReconOutput,
     ReportingInput,
     ReportingOutput,
+    SourceAnalysisInput,
+    SourceAnalysisOutput,
     ThreatModelInput,
     ThreatModelOutput,
     VulnAnalysisInput,
@@ -894,6 +896,30 @@ async def _query_shodan(target: str) -> dict[str, Any]:
     except Exception:
         logger.exception("Shodan query failed")
         return {"success": False, "stdout": "", "stderr": "Shodan query failed"}
+
+
+async def run_source_analysis(
+    target: str,
+    options: dict,
+    *,
+    tenant_id: str | None = None,
+    scan_id: str | None = None,
+) -> SourceAnalysisOutput:
+    from src.orchestration.source_analysis.analyzer import SourceAnalyzer
+
+    sa_input = SourceAnalysisInput(
+        target=target,
+        repo_path=options.get("repo_path"),
+        repo_url=options.get("repo_url"),
+        options=options,
+    )
+    analyzer = SourceAnalyzer(sa_input)
+    try:
+        result = await analyzer.analyze()
+        return result
+    except Exception as exc:
+        logger.warning("source_analysis handler failed: %s", exc)
+        return SourceAnalysisOutput(skipped=True, summary=f"Source analysis failed: {exc}")
 
 
 async def run_recon(
@@ -2215,9 +2241,10 @@ async def run_reporting(
 
         if scan_options and scan_options.get("auto_patch_enabled"):
             try:
-                from src.orchestration.auto_patch import build_autopatch_prompt, parse_patch_response
+                from src.orchestration.auto_patch import build_autopatch_prompt, create_patch_pr, parse_patch_response
                 from src.llm.facade import call_llm_unified as _call_llm3
                 _patches = []
+                _pr_urls = []
                 for _hf in vuln_analysis.findings[:10]:
                     _sev = str(_hf.get("severity", "")).lower()
                     if _sev in ("critical", "high") and _hf.get("code_location"):
@@ -2232,8 +2259,24 @@ async def run_reporting(
                         if _presp:
                             _pc = parse_patch_response(str(_hf.get("finding_id", "")), str(_hf.get("code_location", "")), _presp)
                             _patches.append({"finding_id": _pc.finding_id, "file": _pc.file_path, "diff": _pc.patch_diff[:2000]})
+                            if scan_options.get("auto_patch_create_pr") and scan_options.get("repo_provider") and scan_options.get("repo_token"):
+                                _pr_result = await create_patch_pr(
+                                    _pc,
+                                    owner=str(scan_options.get("repo_owner", "")),
+                                    name=str(scan_options.get("repo_name", "")),
+                                    provider=str(scan_options.get("repo_provider", "github")),
+                                    token=str(scan_options.get("repo_token", "")),
+                                    base_url=str(scan_options.get("repo_base_url", "")),
+                                    scan_id=scan_id or "",
+                                    tenant_id=tenant_id or "",
+                                )
+                                if _pr_result.pr_url:
+                                    _pr_urls.append({"finding_id": _pc.finding_id, "pr_url": _pr_result.pr_url})
+                                    _patches[-1]["pr_url"] = _pr_result.pr_url
                 if _patches:
                     report_out.report.setdefault("auto_patches", []).extend(_patches)
+                if _pr_urls:
+                    report_out.report.setdefault("patch_prs", []).extend(_pr_urls)
             except Exception:
                 pass
 

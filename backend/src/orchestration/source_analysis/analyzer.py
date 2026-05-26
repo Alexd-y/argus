@@ -7,6 +7,7 @@ endpoints. Produces a SourceAnalysisOutput for downstream phases.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,7 @@ class SourceAnalyzer:
         self.repo_path = input_data.repo_path
         self.repo_url = input_data.repo_url
 
-    def analyze(self) -> SourceAnalysisOutput:
+    async def analyze(self) -> SourceAnalysisOutput:
         """Run full source analysis pipeline.
 
         Returns SourceAnalysisOutput with all findings, or a skipped
@@ -62,8 +63,32 @@ class SourceAnalyzer:
         repo = Path(self.repo_path)
         if not repo.exists():
             if self.repo_url:
-                logger.info("source_analysis: repo_path does not exist, would clone from %s", self.repo_url)
-            return SourceAnalysisOutput(skipped=True, summary=f"Repository path does not exist: {self.repo_path}")
+                try:
+                    logger.info("source_analysis: cloning %s into %s", self.repo_url, self.repo_path)
+                    repo.parent.mkdir(parents=True, exist_ok=True)
+                    proc = await asyncio.create_subprocess_exec(
+                        "git", "clone", "--depth=1", self.repo_url, str(repo),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    try:
+                        _stdout, _stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                    except asyncio.TimeoutError:
+                        proc.kill()
+                        await proc.wait()
+                        return SourceAnalysisOutput(skipped=True, summary=f"git clone timed out for {self.repo_url}")
+                    if proc.returncode != 0:
+                        err_msg = _stderr.decode(errors="replace")[:500] if _stderr else "unknown error"
+                        logger.warning("source_analysis: git clone failed: %s", err_msg)
+                        return SourceAnalysisOutput(skipped=True, summary=f"git clone failed: {err_msg}")
+                    if not repo.exists():
+                        return SourceAnalysisOutput(skipped=True, summary=f"Repository path missing after clone: {self.repo_path}")
+                    logger.info("source_analysis: clone successful")
+                except Exception as clone_exc:
+                    logger.warning("source_analysis: clone error: %s", clone_exc)
+                    return SourceAnalysisOutput(skipped=True, summary=f"git clone error: {clone_exc}")
+            else:
+                return SourceAnalysisOutput(skipped=True, summary=f"Repository path does not exist: {self.repo_path}")
 
         logger.info("source_analysis: analyzing %s", repo)
 

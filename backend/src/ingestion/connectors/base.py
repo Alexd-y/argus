@@ -57,6 +57,7 @@ class PullRequestInfo:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     diff_url: str = ""
+    web_url: str = ""
 
 
 class BaseRepoConnector(ABC):
@@ -116,3 +117,37 @@ class BaseRepoConnector(ABC):
         per_page: int = 30,
     ) -> list[PullRequestInfo]:
         """Paginated list of PRs."""
+
+    @abstractmethod
+    async def create_branch(
+        self, owner: str, name: str, *, branch: str, from_branch: str = ""
+    ) -> str:
+        """Create a branch. Returns the new branch ref SHA."""
+
+    @abstractmethod
+    async def commit_file(
+        self,
+        owner: str,
+        name: str,
+        file_path: str,
+        content: str,
+        message: str,
+        *,
+        branch: str,
+        author_name: str = "ARGUS",
+        author_email: str = "argus@bot.local",
+    ) -> str:
+        """Commit a single file. Returns the commit SHA."""
+
+    @abstractmethod
+    async def create_pull_request(
+        self,
+        owner: str,
+        name: str,
+        *,
+        title: str,
+        body: str,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestInfo:
+        """Create a pull request. Returns the PR info with web_url."""

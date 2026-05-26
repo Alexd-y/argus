@@ -222,7 +222,78 @@ class GitHubConnector(BaseRepoConnector):
             created_at=_parse_github_date(data.get("created_at")),
             updated_at=_parse_github_date(data.get("updated_at")),
             diff_url=data.get("diff_url", ""),
+            web_url=data.get("html_url", ""),
         )
+
+    async def _post(self, path: str, json_body: dict) -> dict:
+        url = f"{self._base_url}{path}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, headers=self._headers(), json=json_body)
+            resp.raise_for_status()
+            return resp.json() if resp.status_code != 204 else {}
+
+    async def create_branch(
+        self, owner: str, name: str, *, branch: str, from_branch: str = ""
+    ) -> str:
+        if not from_branch:
+            from_branch = await self.get_default_branch(owner, name)
+        ref_data = await self._get(f"/repos/{owner}/{name}/git/ref/heads/{from_branch}")
+        if not isinstance(ref_data, dict):
+            raise ValueError(f"Cannot resolve ref {from_branch} in {owner}/{name}")
+        sha = ref_data.get("object", {}).get("sha", "")
+        if not sha:
+            raise ValueError(f"No SHA found for ref {from_branch}")
+        result = await self._post(
+            f"/repos/{owner}/{name}/git/refs",
+            {"ref": f"refs/heads/{branch}", "sha": sha},
+        )
+        return result.get("object", {}).get("sha", sha)
+
+    async def commit_file(
+        self,
+        owner: str,
+        name: str,
+        file_path: str,
+        content: str,
+        message: str,
+        *,
+        branch: str,
+        author_name: str = "ARGUS",
+        author_email: str = "argus@bot.local",
+    ) -> str:
+        encoded_content = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        result = await self._post(
+            f"/repos/{owner}/{name}/contents/{file_path}",
+            {
+                "message": message,
+                "content": encoded_content,
+                "branch": branch,
+                "committer": {"name": author_name, "email": author_email},
+                "author": {"name": author_name, "email": author_email},
+            },
+        )
+        return result.get("commit", {}).get("sha", "")
+
+    async def create_pull_request(
+        self,
+        owner: str,
+        name: str,
+        *,
+        title: str,
+        body: str,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestInfo:
+        result = await self._post(
+            f"/repos/{owner}/{name}/pulls",
+            {
+                "title": title,
+                "body": body,
+                "head": head_branch,
+                "base": base_branch,
+            },
+        )
+        return self._parse_pr(result)
 
 
 class GitLabConnector(BaseRepoConnector):
@@ -365,9 +436,91 @@ class GitLabConnector(BaseRepoConnector):
                 state=mr.get("state", ""),
                 created_at=_parse_gitlab_date(mr.get("created_at")),
                 updated_at=_parse_gitlab_date(mr.get("updated_at")),
+                web_url=mr.get("web_url", ""),
             )
             for mr in data if isinstance(mr, dict)
         ]
+
+    async def _post(self, path: str, json_body: dict) -> dict:
+        url = f"{self._base_url}{path}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, headers=self._headers(), json=json_body)
+            resp.raise_for_status()
+            return resp.json() if resp.status_code != 204 else {}
+
+    async def create_branch(
+        self, owner: str, name: str, *, branch: str, from_branch: str = ""
+    ) -> str:
+        encoded = f"{owner}%2F{name}"
+        if not from_branch:
+            from_branch = await self.get_default_branch(owner, name)
+        result = await self._post(
+            f"/projects/{encoded}/repository/branches",
+            {"branch": branch, "ref": from_branch},
+        )
+        return result.get("commit", {}).get("id", "")
+
+    async def commit_file(
+        self,
+        owner: str,
+        name: str,
+        file_path: str,
+        content: str,
+        message: str,
+        *,
+        branch: str,
+        author_name: str = "ARGUS",
+        author_email: str = "argus@bot.local",
+    ) -> str:
+        encoded = f"{owner}%2F{name}"
+        encoded_path = file_path.replace("/", "%2F")
+        encoded_content = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        result = await self._post(
+            f"/projects/{encoded}/repository/files/{encoded_path}",
+            {
+                "branch": branch,
+                "content": encoded_content,
+                "encoding": "base64",
+                "commit_message": message,
+                "author_name": author_name,
+                "author_email": author_email,
+            },
+        )
+        return result.get("commit_id", "")
+
+    async def create_pull_request(
+        self,
+        owner: str,
+        name: str,
+        *,
+        title: str,
+        body: str,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestInfo:
+        encoded = f"{owner}%2F{name}"
+        result = await self._post(
+            f"/projects/{encoded}/merge_requests",
+            {
+                "title": title,
+                "description": body,
+                "source_branch": head_branch,
+                "target_branch": base_branch,
+            },
+        )
+        mr = result if isinstance(result, dict) else {}
+        return PullRequestInfo(
+            number=mr.get("iid", 0),
+            title=mr.get("title", title),
+            body=mr.get("description", body),
+            author=mr.get("author", {}).get("username", "") if isinstance(mr.get("author"), dict) else "",
+            base_branch=mr.get("target_branch", base_branch),
+            head_branch=mr.get("source_branch", head_branch),
+            base_sha=mr.get("diff_refs", {}).get("base_sha", "") if isinstance(mr.get("diff_refs"), dict) else "",
+            head_sha=mr.get("diff_refs", {}).get("head_sha", "") if isinstance(mr.get("diff_refs"), dict) else "",
+            state=mr.get("state", "opened"),
+            web_url=mr.get("web_url", ""),
+        )
 
     def _parse_repo(self, data: dict) -> RepoInfo:
         namespace = data.get("namespace", {})
