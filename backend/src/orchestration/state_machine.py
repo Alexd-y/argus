@@ -46,6 +46,7 @@ from src.orchestration.handlers import (
     run_exploit_attempt,
     run_exploit_verify,
     run_post_exploitation,
+    run_quick_fuzz,
     run_recon,
     run_reporting,
     run_threat_modeling,
@@ -57,6 +58,7 @@ from src.orchestration.phases import (
     ExploitationOutput,
     ExploitationSubPhase,
     PostExploitationOutput,
+    QuickFuzzOutput,
     ReconOutput,
     ReportingOutput,
     ScanPhase,
@@ -218,7 +220,7 @@ def _scan_approval_flags_from_options(options: dict | None) -> dict[str, bool] |
 
 
 def _phase_to_progress(phase: ScanPhase) -> int:
-    """Map phase to progress 0..100 (recon 15, threat_modeling 25, vuln_analysis 45, exploitation 65, post_exploitation 85, reporting 100)."""
+    """Map phase to progress 0..100 (source_analysis 5, recon 15, quick_fuzz 35, threat_modeling 45, vuln_analysis 55, exploitation 70, post_exploitation 85, reporting 100)."""
     return PHASE_PROGRESS.get(phase.value, 0)
 
 
@@ -403,6 +405,14 @@ async def _persist_report_and_findings(
     report_id = str(uuid.uuid4())
     findings_raw = list(vuln_out.findings) if vuln_out and vuln_out.findings else []
     findings_raw = _unique_finding_dicts(findings_raw)
+
+    try:
+        from src.findings.cvss_auto_score import CVSSAutoScorer
+        _cvss_scorer = CVSSAutoScorer()
+        _cvss_scorer.score_all_findings(findings_raw)
+    except Exception as _cvss_exc:
+        logger.debug("cvss_auto_score_failed", extra={"scan_id": scan_id, "error": str(_cvss_exc)})
+
     assign_stable_finding_ids(findings_raw, scan_id=scan_id)
     _dedupe_finding_ids_after_assign(findings_raw, scan_id=scan_id)
     report_dict = report_out.report or {}
@@ -543,6 +553,7 @@ async def run_scan_state_machine(
     """
     source_out: SourceAnalysisOutput | None = None
     recon_out: ReconOutput | None = None
+    quick_fuzz_out: QuickFuzzOutput | None = None
     threat_out: ThreatModelOutput | None = None
     vuln_out: VulnAnalysisOutput | None = None
     exploit_out: ExploitationOutput | None = None
@@ -634,6 +645,11 @@ async def run_scan_state_machine(
                     recon_out = ReconOutput.model_validate(restored)
                 except Exception:
                     pass
+            elif restored_phase == ScanPhase.QUICK_FUZZ:
+                try:
+                    quick_fuzz_out = QuickFuzzOutput.model_validate(restored)
+                except Exception:
+                    pass
             elif restored_phase == ScanPhase.THREAT_MODELING:
                 try:
                     threat_out = ThreatModelOutput.model_validate(restored)
@@ -692,6 +708,7 @@ async def run_scan_state_machine(
         if options and phase in (
             ScanPhase.SOURCE_ANALYSIS,
             ScanPhase.RECON,
+            ScanPhase.QUICK_FUZZ,
             ScanPhase.THREAT_MODELING,
             ScanPhase.VULN_ANALYSIS,
             ScanPhase.EXPLOITATION,
@@ -720,16 +737,26 @@ async def run_scan_state_machine(
                 "options": options,
                 "source_analysis": source_out.model_dump() if source_out and not source_out.skipped else None,
             }
+        elif phase == ScanPhase.QUICK_FUZZ:
+            input_data = {
+                "target": target,
+                "recon_output": recon_out.model_dump() if recon_out else None,
+                "options": options,
+            }
         elif phase == ScanPhase.THREAT_MODELING:
             input_data = {
                 "assets": recon_out.assets if recon_out else [],
                 "source_analysis": source_out.model_dump() if source_out and not source_out.skipped else None,
+                "quick_fuzz_findings": quick_fuzz_out.findings if quick_fuzz_out else [],
+                "quick_fuzz_candidates": quick_fuzz_out.candidates if quick_fuzz_out else [],
             }
         elif phase == ScanPhase.VULN_ANALYSIS:
             input_data = {
                 "threat_model": threat_out.threat_model if threat_out else {},
                 "assets": recon_out.assets if recon_out else [],
             }
+            if quick_fuzz_out and quick_fuzz_out.candidates:
+                input_data["quick_fuzz_candidates"] = quick_fuzz_out.candidates
             if source_out and not source_out.skipped:
                 try:
                     input_data["source_analysis"] = source_out.model_dump()
@@ -764,6 +791,7 @@ async def run_scan_state_machine(
                 "post_exploitation": post_out.model_dump() if post_out else None,
                 "scope_config": _scope_context,
                 "source_analysis": source_out.model_dump() if source_out else None,
+                "quick_fuzz": quick_fuzz_out.model_dump() if quick_fuzz_out else None,
             }
         else:
             input_data = {}
@@ -771,6 +799,10 @@ async def run_scan_state_machine(
         if phase == ScanPhase.RECON:
             await _upload_raw_phase_snapshot(
                 tenant_id, scan_id, "recon", "phase_input", input_data
+            )
+        elif phase == ScanPhase.QUICK_FUZZ:
+            await _upload_raw_phase_snapshot(
+                tenant_id, scan_id, "quick_fuzz", "phase_input", input_data
             )
         elif phase == ScanPhase.VULN_ANALYSIS:
             await _upload_raw_phase_snapshot(
@@ -924,6 +956,16 @@ async def run_scan_state_machine(
                         source_analysis=source_out,
                     )
                     output_data = recon_out.model_dump()
+                elif phase == ScanPhase.QUICK_FUZZ:
+                    record_tool_run("quick_fuzz")
+                    quick_fuzz_out = await run_quick_fuzz(
+                        target,
+                        recon_output=recon_out.model_dump() if recon_out else None,
+                        options=options,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                    )
+                    output_data = quick_fuzz_out.model_dump()
                 elif phase == ScanPhase.THREAT_MODELING:
                     record_tool_run("threat_modeling")
                     assets = recon_out.assets if recon_out else []
@@ -952,6 +994,7 @@ async def run_scan_state_machine(
                         scan_options=options,
                         recon_context=recon_out.tool_results if recon_out else None,
                         source_analysis=source_out,
+                        quick_fuzz_candidates=quick_fuzz_out.candidates if quick_fuzz_out else None,
                     )
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:
@@ -1154,6 +1197,7 @@ async def run_scan_state_machine(
                         scan_options=options,
                         scope_config=_scope_context,
                         source_analysis=source_out,
+                        quick_fuzz=quick_fuzz_out,
                     )
                     output_data = report_out.model_dump()
                 else:
@@ -1228,7 +1272,7 @@ async def run_scan_state_machine(
         await _persist_phase_output(
             session, tenant_id, scan_id, phase_str, output_data
         )
-        if phase in (ScanPhase.RECON, ScanPhase.VULN_ANALYSIS, ScanPhase.POST_EXPLOITATION):
+        if phase in (ScanPhase.RECON, ScanPhase.QUICK_FUZZ, ScanPhase.VULN_ANALYSIS, ScanPhase.POST_EXPLOITATION):
             await _upload_raw_phase_snapshot(
                 tenant_id, scan_id, phase_str, "phase_output_final", output_data
             )
@@ -1435,6 +1479,50 @@ async def run_scan_state_machine(
         vuln_out,
         recon_out,
     )
+
+    try:
+        from src.mcp.services.notifications import (
+            DiscordNotifier,
+            GitHubIssuesNotifier,
+            NotificationDispatcher,
+            NotificationEvent,
+            NotificationSeverity,
+        )
+        findings_for_notify = list(vuln_out.findings) if vuln_out and vuln_out.findings else []
+        _top_sev = "info"
+        for _f in findings_for_notify:
+            _s = str(_f.get("severity", "")).lower()
+            if _s in ("critical", "high", "medium", "low", "info"):
+                if (_s == "critical") or (_s == "high" and _top_sev != "critical") or (
+                    _s == "medium" and _top_sev not in ("critical", "high")
+                ) or (_s == "low" and _top_sev not in ("critical", "high", "medium")) or (
+                    _s == "info" and _top_sev not in ("critical", "high", "medium", "low")
+                ):
+                    _top_sev = _s
+        _sev_map = {
+            "critical": NotificationSeverity.CRITICAL,
+            "high": NotificationSeverity.HIGH,
+            "medium": NotificationSeverity.MEDIUM,
+            "low": NotificationSeverity.LOW,
+            "info": NotificationSeverity.INFO,
+        }
+        _event = NotificationEvent(
+            event_type="scan_completed",
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            target=target,
+            severity=_sev_map.get(_top_sev, NotificationSeverity.INFO),
+            title=f"Scan completed for {target}",
+            message=f"Scan {scan_id} completed. Top severity: {_top_sev}. Findings: {len(findings_for_notify)}.",
+            metadata={"findings_count": len(findings_for_notify), "top_severity": _top_sev},
+        )
+        _notify_dispatcher = NotificationDispatcher(
+            adapters=[DiscordNotifier(), GitHubIssuesNotifier()],
+            enabled=True,
+        )
+        await _notify_dispatcher.dispatch(_event)
+    except Exception as _notify_exc:
+        logger.debug("scan_notification_dispatch_failed", extra={"scan_id": scan_id, "error": str(_notify_exc)})
 
     await _update_scan_phase_status(
         session, scan_id, "complete", "completed", 100

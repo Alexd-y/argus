@@ -37,6 +37,8 @@ from src.orchestration.phases import (
     ExploitationOutput,
     PostExploitationInput,
     PostExploitationOutput,
+    QuickFuzzInput,
+    QuickFuzzOutput,
     ReconInput,
     ReconOutput,
     ReportingInput,
@@ -1062,6 +1064,58 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
     return _safe_json(all_cves, 40000) if all_cves else "No CVE data available"
 
 
+async def run_quick_fuzz(
+    target: str,
+    *,
+    recon_output: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
+    scan_id: str | None = None,
+) -> QuickFuzzOutput:
+    """Run quick pre-scan fuzzing between RECON and THREAT_MODELING.
+
+    Uses discovered endpoints from recon to send targeted payloads
+    and identify quick-win vulnerabilities.  Produces candidate
+    endpoint/parameter pairs that feed into VULN_ANALYSIS for deep
+    testing with heavy tools.
+    """
+    options = options or {}
+    categories = options.get("quick_fuzz_categories")
+    custom_wordlist = options.get("quick_fuzz_wordlist_path")
+    delay = float(options.get("quick_fuzz_delay", 0.3))
+
+    try:
+        from src.recon.quick_fuzz.quick_fuzzer import run_quick_fuzz as _run_qf
+        fuzz_categories = tuple(categories) if categories else None
+        result = await _run_qf(
+            target,
+            categories=fuzz_categories,
+            custom_wordlist_path=custom_wordlist,
+            delay=delay,
+        )
+    except Exception as qf_exc:
+        logger.warning("quick_fuzz_failed: %s", qf_exc, extra={"scan_id": scan_id})
+        result = {"findings": [], "fuzz_results": [], "candidates": []}
+
+    findings = result.get("findings", [])
+    fuzz_results = result.get("fuzz_results", [])
+    candidates = result.get("candidates", [])
+
+    tech_stack: dict[str, Any] = {}
+    baseline_responses: dict[str, Any] = {}
+    if recon_output and isinstance(recon_output, dict):
+        tech_stack = recon_output.get("tech_stack", recon_output.get("technologies", {}))
+        baseline_responses = recon_output.get("baseline_responses", {})
+
+    return QuickFuzzOutput(
+        findings=findings,
+        fuzz_results=fuzz_results,
+        candidates=candidates,
+        tech_stack=tech_stack,
+        baseline_responses=baseline_responses,
+    )
+
+
 async def run_threat_modeling(
     assets: list[str],
     *,
@@ -1423,6 +1477,7 @@ async def run_vuln_analysis(
     scan_options: dict[str, Any] | None = None,
     recon_context: dict[str, Any] | None = None,
     source_analysis: Any | None = None,
+    quick_fuzz_candidates: list[dict[str, Any]] | None = None,
 ) -> VulnAnalysisOutput:
     """Production vuln analysis: optional active scan + LLM analysis.
 
@@ -1680,6 +1735,24 @@ async def run_vuln_analysis(
         except Exception as exc:
             logger.warning("sast_scan_failed", extra={"scan_id": scan_id, "error": str(exc)})
 
+    quick_fuzz_section = ""
+    if quick_fuzz_candidates:
+        try:
+            _qf_lines = []
+            for _cand in quick_fuzz_candidates[:30]:
+                _qf_lines.append(
+                    f"- endpoint={_cand.get('url', _cand.get('endpoint', ''))} "
+                    f"method={_cand.get('method', 'GET')} "
+                    f"params={_cand.get('params', _cand.get('parameters', []))} "
+                    f"category={_cand.get('category', '')}"
+                )
+            quick_fuzz_section = (
+                "\n\n[Quick Fuzz Candidates — endpoints flagged for deep testing]:\n"
+                + "\n".join(_qf_lines)
+            )
+        except Exception:
+            quick_fuzz_section = ""
+
     inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
     code_aware_section = ""
     if source_analysis is not None:
@@ -1695,8 +1768,12 @@ async def run_vuln_analysis(
         memory_context = _em.build_context_prompt(f"vuln_analysis {target}", max_entries=3)
     except Exception:
         pass
+    active_scan_combined = active_scan_context
+    if quick_fuzz_section:
+        active_scan_combined = (active_scan_combined + quick_fuzz_section) if active_scan_combined else quick_fuzz_section
+
     llm_output = await ai_vuln_analysis(
-        inp, active_scan_context=active_scan_context, scan_id=scan_id,
+        inp, active_scan_context=active_scan_combined, scan_id=scan_id,
         code_aware_section=code_aware_section, memory_context=memory_context,
         use_react=scan_options.get("use_react", False),
     )
@@ -1707,6 +1784,26 @@ async def run_vuln_analysis(
             if asf.get("title", "").lower() not in seen_titles:
                 llm_output.findings.append(asf)
                 seen_titles.add(asf.get("title", "").lower())
+
+    if quick_fuzz_candidates:
+        try:
+            from src.recon.quick_fuzz.candidate_builder import FuzzCandidate
+            for _qc in quick_fuzz_candidates[:20]:
+                _sev = _qc.get("severity", "medium")
+                if isinstance(_sev, str) and _sev.lower() not in ("info", "informational"):
+                    _existing_titles = {f.get("title", "").lower() for f in llm_output.findings}
+                    _qtitle = f"Quick-fuzz: {_qc.get('category', 'unknown')} on {_qc.get('url', _qc.get('endpoint', ''))}"
+                    if _qtitle.lower() not in _existing_titles:
+                        llm_output.findings.append({
+                            "title": _qtitle,
+                            "severity": _sev,
+                            "category": _qc.get("category", "quick_fuzz"),
+                            "description": _qc.get("reason", _qc.get("description", "Flagged by quick fuzzer for deep analysis")),
+                            "source": "quick_fuzz",
+                            "url": _qc.get("url", _qc.get("endpoint", "")),
+                        })
+        except Exception as _qf_merge_exc:
+            logger.debug("quick_fuzz_merge_failed", extra={"error": str(_qf_merge_exc)})
 
     llm_output.findings = _postprocess_findings_cvss(llm_output.findings)
     apply_platform_cve_mitigations(
@@ -2266,6 +2363,7 @@ async def run_reporting(
     scan_options: dict[str, Any] | None = None,
     scope_config: dict[str, Any] | None = None,
     source_analysis: Any | None = None,
+    quick_fuzz: QuickFuzzOutput | None = None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
     scan_options = scan_options if isinstance(scan_options, dict) else {}
@@ -2297,6 +2395,16 @@ async def run_reporting(
                 _critic_insights.append({"type": "blind_spot", "detail": _bs})
             for _c in (_critic_result.critiques or [])[:5]:
                 _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
+        except Exception:
+            pass
+
+    if quick_fuzz is not None:
+        try:
+            report_context["quick_fuzz_summary"] = {
+                "findings_count": len(quick_fuzz.findings),
+                "candidates_count": len(quick_fuzz.candidates),
+                "categories": list({f.get("category", "unknown") for f in quick_fuzz.findings}),
+            }
         except Exception:
             pass
 

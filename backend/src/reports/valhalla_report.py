@@ -814,6 +814,7 @@ async def build_valhalla_report_context(
     findings: list[dict[str, Any]] | None = None,
     exploitation_output: dict[str, Any] | None = None,
     post_exploitation_output: dict[str, Any] | None = None,
+    quick_fuzz_output: dict[str, Any] | None = None,
     session: Any = None,
 ) -> ValhallaReportContext:
     """Build complete Valhalla context from all scan phase outputs and DB state.
@@ -1135,6 +1136,19 @@ async def build_valhalla_report_context(
         retest_plan=retest_plan,
         zero_day_assessment=zero_day,
         cost_summary=cost_summary,
+        quick_fuzz_summary=(
+            {
+                "findings_count": len(quick_fuzz_output.get("findings", [])),
+                "candidates_count": len(quick_fuzz_output.get("candidates", [])),
+                "by_category": list({
+                    f.get("category", "unknown")
+                    for f in quick_fuzz_output.get("findings", [])
+                }),
+            }
+            if quick_fuzz_output
+            else {}
+        ),
+        burp_config_available=False,
     )
 
 

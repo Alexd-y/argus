@@ -7,7 +7,8 @@ Public surface:
 * :class:`NotificationDispatcher` / :class:`NotifierProtocol` — the
   fan-out facade (see :mod:`dispatcher`).
 * :class:`SlackNotifier` / :class:`LinearAdapter` / :class:`JiraAdapter`
-  — concrete adapters (see :mod:`slack`, :mod:`linear`, :mod:`jira`).
+  / :class:`DiscordNotifier` / :class:`GitHubIssuesNotifier`
+  — concrete adapters.
 * :class:`CircuitBreaker`, :func:`hash_target`,
   :func:`compute_backoff_seconds` — shared helpers exposed for tests.
 
@@ -35,6 +36,19 @@ from src.mcp.services.notifications.dispatcher import (
     NotificationDispatcher,
     NotifierProtocol,
     is_globally_enabled_via_env,
+)
+from src.mcp.services.notifications.discord import (
+    DISCORD_MIN_SEVERITY_ENV,
+    DISCORD_WEBHOOK_URL_ENV,
+    DiscordNotifier,
+    build_discord_payload,
+)
+from src.mcp.services.notifications.github_issues import (
+    GITHUB_ISSUES_MIN_SEVERITY_ENV,
+    GITHUB_REPOSITORY_ENV,
+    GITHUB_TOKEN_ENV,
+    GitHubIssuesNotifier,
+    build_github_issue_payload,
 )
 from src.mcp.services.notifications.jira import (
     DEFAULT_FINDING_FIELD_ID,
@@ -97,11 +111,16 @@ __all__ = [
     "DEFAULT_LINEAR_API_URL",
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_TIMEOUT_SECONDS",
+    "DISCORD_MIN_SEVERITY_ENV",
+    "DISCORD_WEBHOOK_URL_ENV",
     "DLQ_BACKOFF_BASE_SECONDS",
     "DLQ_BACKOFF_CAP_SECONDS",
     "DLQ_BACKOFF_FACTOR",
     "DLQ_MAX_AGE_DAYS",
     "ENABLE_ENV",
+    "GITHUB_ISSUES_MIN_SEVERITY_ENV",
+    "GITHUB_REPOSITORY_ENV",
+    "GITHUB_TOKEN_ENV",
     "JIRA_API_TOKEN_ENV",
     "JIRA_FINDING_FIELD_ENV",
     "JIRA_PROJECT_KEY_ENV",
@@ -118,7 +137,9 @@ __all__ = [
     "AlreadyTerminalError",
     "CircuitBreaker",
     "CircuitState",
+    "DiscordNotifier",
     "DlqEntryNotFoundError",
+    "GitHubIssuesNotifier",
     "JiraAdapter",
     "LinearAdapter",
     "NotificationDispatcher",
@@ -127,6 +148,8 @@ __all__ = [
     "NotifierBase",
     "NotifierProtocol",
     "SlackNotifier",
+    "build_discord_payload",
+    "build_github_issue_payload",
     "build_jira_payload",
     "build_linear_payload",
     "build_slack_payload",

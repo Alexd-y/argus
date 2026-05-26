@@ -53,6 +53,8 @@ from src.mcp.runtime.rate_limiter import (
     build_rate_limiter,
 )
 from src.mcp.services.notifications import (
+    DiscordNotifier,
+    GitHubIssuesNotifier,
     JiraAdapter,
     LinearAdapter,
     NotificationDispatcher,
@@ -253,6 +255,8 @@ def _build_notification_dispatcher_from_config(
         SlackNotifier(),
         LinearAdapter(),
         JiraAdapter(),
+        DiscordNotifier(),
+        GitHubIssuesNotifier(),
     ]
 
     per_tenant_disabled: dict[str, frozenset[str]] = {}
