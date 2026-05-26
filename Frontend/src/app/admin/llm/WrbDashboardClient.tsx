@@ -68,6 +68,14 @@ function WrbStatCard({
   );
 }
 
+type CapRow = {
+  label: string;
+  value: string;
+  source: string;
+  enhancable: boolean;
+  note: string;
+};
+
 function WrbDashboardBody() {
   const [isPending, startTransition] = useTransition();
   const [dashboard, setDashboard] = useState<WrbDashboardData | null>(null);
@@ -151,8 +159,23 @@ function WrbDashboardBody() {
     );
   }
 
-  const st = dashboard!.status;
+  const d = dashboard!;
+  const st = d.status;
   const borderAccent = STATUS_BORDER_COLORS[st] ?? "border-l-zinc-500";
+
+  const capRows: CapRow[] = [
+    { label: "Base URL", value: d.base_url || "\u2014", source: "WHITERABBITNEO_URL", enhancable: true, note: "Set the WRB inference server URL. Required for all WRB operations." },
+    { label: "API Key", value: d.api_key_configured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "Not set", source: "WHITERABBITNEO_API_KEY", enhancable: true, note: "API key for the WRB server. Required for authenticated inference." },
+    { label: "Default Model", value: d.model || "taico-ai/WhiteRabbitNeo-v3-7B", source: "Code default", enhancable: false, note: "The primary model used for all WRB prompts. Can be overridden per-request." },
+    { label: "GPU Mode", value: d.gpu_mode || "cpu", source: "WRB_GPU_MODE", enhancable: true, note: "Set to \u201cgpu\u201d to enable GPU acceleration. Significant speed improvement for inference." },
+    { label: "Temperature", value: String(d.default_temperature), source: "WRB_DEFAULT_TEMPERATURE", enhancable: true, note: "Controls randomness (0.0 = deterministic, 1.0 = creative). Lower values recommended for security analysis." },
+    { label: "Max Tokens", value: String(d.default_max_tokens), source: "WRB_DEFAULT_MAX_TOKENS", enhancable: true, note: "Maximum output tokens per response. Increase for longer detailed analysis reports." },
+    { label: "Timeout", value: `${d.timeout_seconds}s`, source: "WHITERABBITNEO_TIMEOUT_SEC", enhancable: true, note: "Maximum wait time for inference. Increase for complex multi-step reasoning tasks." },
+    { label: "Concurrency Limit", value: String(d.concurrency_limit), source: "Code default (3)", enhancable: false, note: "Max simultaneous WRB inference requests. Increase for higher throughput." },
+    { label: "Max Prompt Bytes", value: d.max_prompt_bytes.toLocaleString(), source: "WRB_MAX_PROMPT_BYTES", enhancable: true, note: "Maximum input prompt size in bytes. Larger prompts allow more context for complex pentest analysis." },
+    { label: "Models Available", value: String(d.models_count), source: "Runtime", enhancable: false, note: "Number of models loaded on the WRB server. Depends on server configuration." },
+    { label: "Provider", value: d.provider, source: "Runtime", enhancable: false, note: "The inference provider identifier. Always \u201cwhiterabbitneo\u201d for built-in WRB." },
+  ];
 
   return (
     <div className="space-y-6">
@@ -160,7 +183,7 @@ function WrbDashboardBody() {
         <div>
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">WhiteRabbitNeo</h1>
           <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
-            Built-in cybersecurity AI model. Status, configuration, and test prompt.
+            Built-in cybersecurity AI model. Configure, test, and tune all parameters for pentest operations.
           </p>
         </div>
         <button
@@ -179,8 +202,8 @@ function WrbDashboardBody() {
           <div className="text-sm font-semibold text-[var(--text-primary)]">
             WhiteRabbitNeo — {STATUS_LABELS[st] ?? st}
           </div>
-          {dashboard!.error ? (
-            <div className="mt-0.5 text-xs text-red-400">{dashboard!.error}</div>
+          {d.error ? (
+            <div className="mt-0.5 text-xs text-red-400">{d.error}</div>
           ) : null}
         </div>
         <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[st] ?? STATUS_BADGE.unknown}`}>
@@ -190,26 +213,87 @@ function WrbDashboardBody() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <WrbStatCard label="Status" value={STATUS_LABELS[st] ?? st} accent={borderAccent} isLoading={false} />
-        <WrbStatCard label="Models" value={dashboard!.models_count} sub={dashboard!.model || undefined} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
-        <WrbStatCard label="Mode" value={dashboard!.gpu_mode || "cpu"} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
-        <WrbStatCard label="Timeout" value={`${dashboard!.timeout_seconds}s`} sub={`Concurrency: ${dashboard!.concurrency_limit}`} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
+        <WrbStatCard label="Models" value={d.models_count} sub={d.model || undefined} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
+        <WrbStatCard label="Mode" value={d.gpu_mode || "cpu"} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
+        <WrbStatCard label="Timeout" value={`${d.timeout_seconds}s`} sub={`Concurrency: ${d.concurrency_limit}`} accent="border-l-4 border-l-[var(--accent)]" isLoading={false} />
       </div>
 
       <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
         <div className="border-b border-[var(--border)] px-4 py-3">
-          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Configuration</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Configuration & Capabilities</h2>
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-            Read-only. Changes require updating environment variables and restarting the container.
+            All available parameters. Items marked with <span className="inline-flex items-center gap-0.5 rounded bg-emerald-500/10 px-1 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/30">Configurable</span> can be changed via environment variables.
           </p>
         </div>
         <div className="divide-y divide-[var(--border)]">
-          <ConfigRow label="Base URL" value={dashboard!.base_url || "\u2014"} source="WHITERABBITNEO_URL" />
-          <ConfigRow label="API Key" value={dashboard!.api_key_configured ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" : "Not set"} source="WHITERABBITNEO_API_KEY" />
-          <ConfigRow label="Default Model" value="taico-ai/WhiteRabbitNeo-v3-7B" source="Code default" />
-          <ConfigRow label="Temperature" value={String(dashboard!.default_temperature)} source="Code default" />
-          <ConfigRow label="Max Tokens" value={String(dashboard!.default_max_tokens)} source="Code default" />
-          <ConfigRow label="Max Prompt Bytes" value={dashboard!.max_prompt_bytes.toLocaleString()} source="WRB_MAX_PROMPT_BYTES" />
-          <ConfigRow label="GPU Mode" value={dashboard!.gpu_mode || "cpu"} source="WRB_GPU_MODE" />
+          {capRows.map((row) => (
+            <div key={row.label} className="flex items-start justify-between px-4 py-3">
+              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-[var(--text-primary)]">{row.label}</span>
+                  {row.enhancable ? (
+                    <span className="inline-flex items-center rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/30">
+                      Configurable
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded bg-zinc-500/10 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 border border-zinc-500/30">
+                      Read-only
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-muted)]">{row.note}</p>
+              </div>
+              <div className="flex flex-col items-end gap-0.5 shrink-0 ml-4">
+                <span className="font-mono text-sm text-[var(--text-secondary)]">{row.value}</span>
+                <span className="text-[10px] text-[var(--text-muted)]">{row.source}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {d.api_key_configured && d.base_url ? (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-3 text-sm text-[var(--text-secondary)]">
+          <span className="font-medium text-emerald-300">Ready for inference.</span> WRB is configured with an API key and base URL. You can send test prompts below.
+        </div>
+      ) : (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-[var(--text-secondary)]">
+          <span className="font-medium text-amber-300">Not fully configured.</span> Set <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-xs font-mono">WHITERABBITNEO_URL</code> and <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-xs font-mono">WHITERABBITNEO_API_KEY</code> environment variables to enable inference.
+        </div>
+      )}
+
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)]">
+        <div className="border-b border-[var(--border)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--text-primary)]">Enhancement Guide</h2>
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+            How to improve WRB capabilities for pentest operations
+          </p>
+        </div>
+        <div className="space-y-4 p-4">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+            <h3 className="text-xs font-medium text-[var(--text-primary)]">GPU Acceleration</h3>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Set <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">WRB_GPU_MODE=gpu</code> to enable GPU inference. Reduces response time from minutes to seconds. Requires NVIDIA GPU with CUDA support.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+            <h3 className="text-xs font-medium text-[var(--text-primary)]">Temperature Tuning</h3>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Default <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">0.3</code> (low randomness). For creative vulnerability exploration, try 0.5-0.7. For precise exploit analysis, keep at 0.1-0.3. Set via <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">WRB_DEFAULT_TEMPERATURE</code>.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+            <h3 className="text-xs font-medium text-[var(--text-primary)]">Max Tokens & Prompt Size</h3>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Default <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">4096</code> tokens output, <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">8192</code> bytes max input. Increase <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">WRB_DEFAULT_MAX_TOKENS</code> for detailed reports, and <code className="rounded bg-[var(--bg-tertiary)] px-1 py-0.5 text-[10px] font-mono">WRB_MAX_PROMPT_BYTES</code> for longer context inputs. Test prompts are limited to 256 tokens.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+            <h3 className="text-xs font-medium text-[var(--text-primary)]">Cloud Provider Fallback</h3>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              WRB operates independently from cloud providers. If WRB is unavailable, the system falls back to configured cloud providers (OpenAI, DeepSeek, etc.) based on the routing priority. Configure cloud providers on the <a href="/admin/llm" className="text-[var(--accent)] hover:underline">Cloud Providers</a> tab.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -217,7 +301,7 @@ function WrbDashboardBody() {
         <div className="border-b border-[var(--border)] px-4 py-3">
           <h2 className="text-sm font-semibold text-[var(--text-primary)]">Test Prompt</h2>
           <p className="mt-0.5 text-xs text-[var(--text-muted)]">
-            Send a test prompt to the WhiteRabbitNeo model to verify connectivity.
+            Send a test prompt to WhiteRabbitNeo to verify connectivity and inference quality.
           </p>
         </div>
         <div className="space-y-3 p-4">
@@ -227,7 +311,7 @@ function WrbDashboardBody() {
             </label>
             <input
               className="w-full rounded border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none"
-              placeholder="You are a cybersecurity assistant\u2026"
+              placeholder="You are a cybersecurity assistant specialized in penetration testing\u2026"
               value={testSystemPrompt}
               onChange={(e) => setTestSystemPrompt(e.target.value)}
               disabled={st !== "available" || testing}
@@ -276,28 +360,6 @@ function WrbDashboardBody() {
             </div>
           ) : null}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function ConfigRow({
-  label,
-  value,
-  source,
-}: {
-  label: string;
-  value: string;
-  source: string;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4 py-2.5">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-[var(--text-primary)]">{label}</span>
-      </div>
-      <div className="flex flex-col items-end gap-0.5">
-        <span className="font-mono text-sm text-[var(--text-secondary)]">{value}</span>
-        <span className="text-[10px] text-[var(--text-muted)]">{source}</span>
       </div>
     </div>
   );

@@ -24,6 +24,18 @@ const ADDABLE_PROVIDER_KEYS = [
   "anthropic",
 ] as const;
 
+type ProviderKey = (typeof ADDABLE_PROVIDER_KEYS)[number];
+
+const PROVIDER_INFO: Record<ProviderKey, { name: string; desc: string; models: string }> = {
+  openai: { name: "OpenAI", desc: "GPT-4o, GPT-4o-mini, o1, o3 and more", models: "gpt-4o-mini, gpt-4o, o1-mini, o3-mini" },
+  deepseek: { name: "DeepSeek", desc: "DeepSeek-V3, DeepSeek-Reasoner", models: "deepseek-chat, deepseek-reasoner" },
+  openrouter: { name: "OpenRouter", desc: "Multi-model gateway (OpenAI, Anthropic, Google, Mistral, Llama)", models: "openai/gpt-4o-mini, anthropic/claude-3.5-sonnet, google/gemini-pro" },
+  kimi: { name: "Kimi (Moonshot)", desc: "Moonshot AI models with long context", models: "moonshot-v1-8k, moonshot-v1-32k" },
+  perplexity: { name: "Perplexity", desc: "Real-time search-augmented answers", models: "sonar, sonar-pro" },
+  google: { name: "Google (Gemini)", desc: "Gemini 1.5 Flash, Gemini 1.5 Pro", models: "gemini-1.5-flash, gemini-1.5-pro" },
+  anthropic: { name: "Anthropic (Claude)", desc: "Claude 3.5 Sonnet, Claude 3 Opus, Haiku", models: "claude-3-5-sonnet-20241022, claude-3-opus-20240229" },
+};
+
 function errMsg(e: unknown): string {
   return getSafeErrorMessage(e, "Operation failed.");
 }
@@ -45,40 +57,40 @@ function ProviderStatCards({ stats, isLoading }: { stats: ProviderStats; isLoadi
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-[var(--accent)] bg-[var(--bg-secondary)] p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Всего</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Total</div>
         {isLoading ? (
           <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
         ) : (
           <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.total}</div>
         )}
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">провайдеров</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">providers</div>
       </div>
       <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-emerald-500 bg-[var(--bg-secondary)] p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Активны</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Active</div>
         {isLoading ? (
           <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
         ) : (
           <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.enabled}</div>
         )}
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">включены</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">enabled</div>
       </div>
       <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-zinc-500 bg-[var(--bg-secondary)] p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Отключены</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">Disabled</div>
         {isLoading ? (
           <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
         ) : (
           <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.disabled}</div>
         )}
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">выключены</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">disabled</div>
       </div>
       <div className="rounded-lg border border-[var(--border)] border-l-4 border-l-amber-500 bg-[var(--bg-secondary)] p-4">
-        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">С ключом</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)]">With Key</div>
         {isLoading ? (
           <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[var(--bg-tertiary)]" />
         ) : (
           <div className="mt-2 text-2xl font-bold text-[var(--text-primary)]">{stats.withKey}</div>
         )}
-        <div className="mt-1 text-xs text-[var(--text-secondary)]">API ключ задан</div>
+        <div className="mt-1 text-xs text-[var(--text-secondary)]">API key set</div>
       </div>
     </div>
   );
@@ -95,49 +107,63 @@ function ProviderRow({
   onToggle: (r: AdminLlmProviderRow) => void;
   onEdit: (r: AdminLlmProviderRow) => void;
 }) {
+  const info = PROVIDER_INFO[row.provider_key as ProviderKey];
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
-      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span
-            className={`inline-block size-2 rounded-full ${row.enabled ? "bg-emerald-400" : "bg-zinc-500"}`}
-            aria-hidden="true"
-          />
-          <span className="font-medium text-[var(--text-primary)]">{row.provider_key}</span>
-          <span
-            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
-              row.enabled
-                ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                : "border border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
-            }`}
-          >
-            {row.enabled ? "Active" : "Disabled"}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[var(--text-muted)]">
-          <span>API key: {formatKeyDisplay(row)}</span>
-          {row.model_fallback_chain && row.model_fallback_chain.length > 0 ? (
-            <span>Models: {row.model_fallback_chain.join(" \u2192 ")}</span>
+    <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+      <div className="flex items-start gap-3">
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block size-2.5 rounded-full ${row.enabled ? "bg-emerald-400" : "bg-zinc-500"}`}
+              aria-hidden="true"
+            />
+            <span className="font-medium text-[var(--text-primary)]">
+              {info?.name ?? row.provider_key}
+            </span>
+            <span className="text-xs text-[var(--text-muted)]">{row.provider_key}</span>
+            <span
+              className={`inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                row.enabled
+                  ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  : "border border-zinc-500/30 bg-zinc-500/10 text-zinc-400"
+              }`}
+            >
+              {row.enabled ? "Active" : "Disabled"}
+            </span>
+          </div>
+          {info ? (
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">{info.desc}</p>
           ) : null}
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[var(--text-muted)]">
+            <span>API key: {formatKeyDisplay(row)}</span>
+            {row.model_fallback_chain && row.model_fallback_chain.length > 0 ? (
+              <span>Models: {row.model_fallback_chain.join(" \u2192 ")}</span>
+            ) : (
+              <span>Models: default</span>
+            )}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+            Created: {new Date(row.created_at).toLocaleDateString()}
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={busy}
-          onClick={() => onToggle(row)}
-        >
-          {row.enabled ? "Disable" : "Enable"}
-        </button>
-        <button
-          type="button"
-          className="rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={busy}
-          onClick={() => onEdit(row)}
-        >
-          Edit
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
+            onClick={() => onToggle(row)}
+          >
+            {row.enabled ? "Disable" : "Enable"}
+          </button>
+          <button
+            type="button"
+            className="rounded border border-[var(--accent)]/40 bg-[var(--accent)]/10 px-3 py-1.5 text-xs font-medium text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/20 focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
+            onClick={() => onEdit(row)}
+          >
+            Edit
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -319,7 +345,7 @@ function AdminLlmBody() {
       <header>
         <h1 className="text-lg font-semibold text-[var(--text-primary)]">Cloud Providers</h1>
         <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
-          Per-tenant LLM provider configuration. API keys are write-only; only the last 4 characters are shown.
+          Per-tenant LLM provider configuration. Toggle providers on/off, set API keys, and configure model fallback chains for pentest operations.
         </p>
       </header>
 
@@ -342,10 +368,23 @@ function AdminLlmBody() {
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h3 className="text-sm font-medium text-[var(--text-primary)]">No tenants found</h3>
+          <h3 className="text-sm font-medium text-[var(--text-primary)]">
+            {listError ? "Cannot load tenants" : "No tenants found"}
+          </h3>
           <p className="max-w-sm text-xs text-[var(--text-muted)]">
-            Create a tenant first, then configure LLM providers for it.
+            {listError
+              ? "The backend is unreachable. Check your ADMIN_API_KEY configuration and backend connectivity."
+              : "Create a tenant first, then configure LLM providers for it."}
           </p>
+          {listError ? (
+            <button
+              type="button"
+              className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-tertiary)]"
+              onClick={loadTenants}
+            >
+              Retry
+            </button>
+          ) : null}
         </div>
       ) : (
         <>
@@ -361,10 +400,10 @@ function AdminLlmBody() {
                 onChange={(e) => setTenantId(e.target.value)}
                 disabled={isPending && tenants.length === 0}
               >
-                {tenants.length === 0 ? <option value="">No tenants</option> : null}
+                {tenants.length === 0 ? <option value="">Loading\u2026</option> : null}
                 {tenants.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} ({t.id.slice(0, 8)}…)
+                    {t.name} ({t.id.slice(0, 8)}\u2026)
                   </option>
                 ))}
               </select>
@@ -381,7 +420,7 @@ function AdminLlmBody() {
                 ) : (
                   missingKeys.map((k) => (
                     <option key={k} value={k}>
-                      {k}
+                      {PROVIDER_INFO[k]?.name ?? k}
                     </option>
                   ))
                 )}
@@ -410,19 +449,47 @@ function AdminLlmBody() {
 
           <ProviderStatCards stats={providerStats} isLoading={isPending && rows.length === 0} />
 
-          {rows.length === 0 && !isPending ? (
-            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] px-6 py-12 text-center">
-              <div className="flex size-12 items-center justify-center rounded-full bg-[var(--bg-tertiary)]">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-[var(--text-muted)]">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-              </div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)]">No providers configured</h3>
-              <p className="max-w-sm text-xs text-[var(--text-muted)]">
-                Select a provider above and click &ldquo;Add provider&rdquo; to configure LLM access for this tenant.
+          {rows.length === 0 && !isPending && tenantId ? (
+            <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg-secondary)] p-6">
+              <h3 className="text-sm font-medium text-[var(--text-primary)]">Add your first provider</h3>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Select a provider from the dropdown above to configure LLM access. Each provider can have an API key and a model fallback chain.
               </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {ADDABLE_PROVIDER_KEYS.map((k) => {
+                  const info = PROVIDER_INFO[k];
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      className="flex flex-col gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3 text-left transition-colors hover:bg-[var(--bg-tertiary)] disabled:opacity-50"
+                      disabled={busyId !== null || !tenantId}
+                      onClick={() => {
+                        setNewKey(k);
+                        if (tenantId) {
+                          setActionError(null);
+                          setBusyId("__add__");
+                          startTransition(async () => {
+                            try {
+                              await createLlmProviderRow({ tenantId: tenantId.trim(), providerKey: k });
+                              refreshProviders();
+                            } catch (e) {
+                              setActionError(errMsg(e));
+                            } finally {
+                              setBusyId(null);
+                            }
+                          });
+                        }
+                      }}
+                    >
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{info.name}</span>
+                      <span className="text-[10px] text-[var(--text-muted)]">{info.desc}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          ) : (
+          ) : rows.length === 0 && !isPending ? null : (
             <div className="space-y-3">
               {rows.map((r) => (
                 <ProviderRow
@@ -446,7 +513,7 @@ function AdminLlmBody() {
                   {Object.entries(runtime.global_env_providers).map(([k, on]) => (
                     <li key={k} className="flex items-center gap-2 text-xs">
                       <span className={`inline-block size-2 rounded-full ${on ? "bg-emerald-400" : "bg-zinc-500"}`} />
-                      <span className="text-[var(--text-primary)]">{k}</span>
+                      <span className="text-[var(--text-primary)]">{PROVIDER_INFO[k as ProviderKey]?.name ?? k}</span>
                       <span className="text-[var(--text-muted)]">{on ? "configured" : "not set"}</span>
                     </li>
                   ))}
@@ -465,11 +532,19 @@ function AdminLlmBody() {
         >
           <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-6 shadow-lg">
             <h2 className="text-sm font-semibold text-[var(--text-primary)]">
-              Edit {editingRow.provider_key} provider
+              Edit {PROVIDER_INFO[editingRow.provider_key as ProviderKey]?.name ?? editingRow.provider_key} provider
             </h2>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               Leave API key blank to keep the current secret. Use comma-separated model IDs for the fallback chain (empty clears the chain).
             </p>
+            {(() => {
+              const info = PROVIDER_INFO[editingRow.provider_key as ProviderKey];
+              return info ? (
+                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                  Suggested models: {info.models}
+                </p>
+              ) : null;
+            })()}
             <label className="mt-4 block text-xs text-[var(--text-muted)]">
               New API key (optional)
               <input
