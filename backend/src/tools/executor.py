@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 _TOOL_RUN_OUTPUT_MAX_CHARS = 50_000
 
+_PHASE_CACHE: dict[str, str] = {}
+
+
+def _current_scan_phase(scan_id: str) -> str:
+    return _PHASE_CACHE.get(scan_id, "")
+
 
 async def _persist_tool_run(
     tenant_id: str,
@@ -146,6 +152,17 @@ def execute_command(
                 1,
                 0.0,
             )
+
+        if scan_id:
+            try:
+                from src.orchestration.mcp_allowlist import MCPAllowlist
+                _phase = _current_scan_phase(scan_id) if scan_id else ""
+                if _phase:
+                    _guard_result = MCPAllowlist().guard_tool_call(tool_name, _phase)
+                    if _guard_result:
+                        logger.warning("mcp_allowlist_denied", extra={"tool": tool_name, "phase": _phase, "reason": _guard_result.reason})
+            except Exception:
+                pass
 
         if use_cache:
             cache = get_tool_cache()

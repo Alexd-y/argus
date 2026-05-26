@@ -51,12 +51,30 @@ MAX_JSON_RETRIES = 1
 def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     """Get phase prompt, preferring Jinja2 templates when available."""
     scope_context = kwargs.pop("scope_context", "")
+    memory_context = kwargs.pop("memory_context", "")
+    code_aware_section = kwargs.pop("code_aware_section", "")
     try:
         system, user = _render_jinja2(phase, **kwargs)
     except Exception:
         system, user = get_prompt(phase, **kwargs)
+    if code_aware_section:
+        user = user + "\n\n" + code_aware_section
+    if memory_context:
+        user = user + "\n\n" + memory_context
     if scope_context:
         system = system + "\n\n=== RULES OF ENGAGEMENT ===\n" + scope_context + "\n=== END ==="
+    sanitize = kwargs.pop("sanitize", True)
+    if sanitize:
+        try:
+            from src.orchestration.prompt_injection_defense import sanitize_prompt_inputs, InjectionRisk, classify_injection_risk
+            check = classify_injection_risk(user)
+            if check.risk == InjectionRisk.DANGEROUS:
+                logger.warning("dangerous_injection_pattern_in_prompt", extra={"phase": phase, "patterns": check.matched_patterns})
+            enhanced_system, sanitized = sanitize_prompt_inputs(system, {"user_data": user})
+            user = sanitized["user_data"]
+            system = enhanced_system
+        except Exception:
+            pass
     return system, user
 
 _PHASE_TO_TASK: dict[str, LLMTask] = {
@@ -220,14 +238,16 @@ async def ai_vuln_analysis(
     inp: VulnAnalysisInput,
     *,
     active_scan_context: str = "",
+    code_aware_section: str = "",
+    memory_context: str = "",
     scan_id: str | None = None,
 ) -> VulnAnalysisOutput:
-    """Call LLM to analyze vulns from threat model. Returns empty findings on failure."""
     _require_llm()
     try:
         system, user = _get_phase_prompt(
             VULN_ANALYSIS, threat_model=inp.threat_model,
             assets=inp.assets, active_scan_context=active_scan_context,
+            code_aware_section=code_aware_section, memory_context=memory_context,
         )
         data = _require_json(
             await _call_llm_with_json_retry(VULN_ANALYSIS, user, system, scan_id=scan_id),

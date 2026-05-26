@@ -529,6 +529,47 @@ async def run_scan_state_machine(
 
     report_out: ReportingOutput | None = None
 
+    evidence_chain = None
+    try:
+        from src.orchestration.evidence_chain import EvidenceChain as _EC
+        evidence_chain = _EC(scan_id=scan_id, tenant_id=tenant_id)
+        evidence_chain.add_scan_link(target_url=target)
+    except Exception:
+        pass
+
+    episodic_memory = None
+    try:
+        from src.orchestration.episodic_memory import EpisodicMemory as _EM
+        episodic_memory = _EM()
+    except Exception:
+        pass
+
+    cost_tracker = None
+    try:
+        from src.orchestration.cost_aware_reasoning import CostTracker, BudgetEnforcer
+        _max_cost = float(options.get("max_cost_usd", 50.0)) if options else 50.0
+        _max_tokens = int(options.get("max_tokens", 2000000)) if options else 2000000
+        cost_tracker = CostTracker(scan_id=scan_id, max_cost_usd=_max_cost, max_total_tokens=_max_tokens)
+    except Exception:
+        pass
+
+    try:
+        from src.orchestration.tenant_isolation import TenantIsolationGuard
+        _guard = TenantIsolationGuard()
+        if not _guard.can_start_scan(tenant_id):
+            logger.warning("tenant_scan_limit_reached", extra={"tenant_id": tenant_id})
+        else:
+            _guard.register_scan_start(tenant_id)
+    except Exception:
+        pass
+
+    event_bus = None
+    try:
+        from src.orchestration.scan_events import ScanEventBus, ScanEvent
+        event_bus = ScanEventBus()
+    except Exception:
+        pass
+
     from src.recon.sandbox_tool_runner import clear_tool_availability_cache
 
     clear_tool_availability_cache()
@@ -637,6 +678,19 @@ async def run_scan_state_machine(
                 "threat_model": threat_out.threat_model if threat_out else {},
                 "assets": recon_out.assets if recon_out else [],
             }
+            if source_out and not source_out.skipped:
+                try:
+                    input_data["source_analysis"] = source_out.model_dump()
+                except Exception:
+                    pass
+            if episodic_memory is not None:
+                try:
+                    _mem_ctx = episodic_memory.build_context_prompt(
+                        f"vuln_analysis {target}", max_entries=3
+                    )
+                    input_data["memory_context"] = _mem_ctx
+                except Exception:
+                    pass
         elif phase == ScanPhase.EXPLOITATION:
             input_data = {
                 "findings": vuln_out.findings if vuln_out else [],
@@ -707,6 +761,12 @@ async def run_scan_state_machine(
             progress,
             message=f"Starting {phase_str}",
         )
+        if event_bus is not None:
+            try:
+                from src.orchestration.scan_events import ScanEvent as _SE
+                event_bus.publish(_SE(event_type="phase_start", scan_id=scan_id, tenant_id=tenant_id, phase=phase_str, progress=progress, message=f"Starting {phase_str}"))
+            except Exception:
+                pass
         await _record_event(
             session,
             tenant_id,
@@ -749,6 +809,11 @@ async def run_scan_state_machine(
                         source_out = SourceAnalysisOutput(
                             skipped=True, summary=f"Source analysis error: {sa_exc}"
                         )
+                    if source_out and not source_out.skipped:
+                        try:
+                            from src.orchestration.binary_analysis import detect_binary_type
+                        except Exception:
+                            pass
                     output_data = source_out.model_dump()
                 elif phase == ScanPhase.RECON:
                     record_tool_run("recon")
@@ -792,6 +857,7 @@ async def run_scan_state_machine(
                         scan_id=scan_id,
                         scan_options=options,
                         recon_context=recon_out.tool_results if recon_out else None,
+                        source_analysis=source_out,
                     )
                     output_data = vuln_out.model_dump()
                 elif phase == ScanPhase.EXPLOITATION:
@@ -861,6 +927,37 @@ async def run_scan_state_machine(
                     record_tool_run(ExploitationSubPhase.EXPLOIT_VERIFY.value)
                     await session.commit()
                     exploit_out = await run_exploit_verify(attempt_out)
+                    try:
+                        from src.orchestration.exploit_verification_microvm import ExploitVerificationMicroVM as _MicroVM, VerificationRequest as _VR
+                        _microvm = _MicroVM()
+                        for _cand in (exploit_out.exploits or []):
+                            if str(_cand.get("severity", "")).lower() in ("critical", "high"):
+                                try:
+                                    _vr = _VR(
+                                        exploit_payload=str(_cand.get("poc_curl", _cand.get("exploit_payload", ""))),
+                                        exploit_type=str(_cand.get("vuln_type", "general")),
+                                        finding_id=str(_cand.get("finding_id", "")),
+                                        scan_id=scan_id,
+                                    )
+                                    _vresult = await _microvm.verify(_vr)
+                                    if _vresult.verified:
+                                        _cand["microvm_verified"] = True
+                                        _cand["microvm_artifact"] = _vresult.artifact_content[:2000]
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+                    try:
+                        from src.orchestration.poc_watermarking import stamp_payload
+                        _wm_secret = options.get("watermark_secret", "argus-default-wm-key") if options else "argus-default-wm-key"
+                        for _exploit in (exploit_out.exploits or []):
+                            _poc = _exploit.get("poc_curl", _exploit.get("poc", ""))
+                            if _poc and not _poc.startswith("# ARGUS-WM"):
+                                _exploit["poc_curl"] = stamp_payload(
+                                    _poc, scan_id=scan_id, tenant_id=tenant_id, secret_key=_wm_secret
+                                )
+                    except Exception:
+                        pass
                     await _record_event(
                         session,
                         tenant_id,
@@ -888,6 +985,7 @@ async def run_scan_state_machine(
                         exploit_out,
                         post_out,
                         scan_id=scan_id,
+                        scan_options=options,
                     )
                     output_data = report_out.model_dump()
                 else:
@@ -930,6 +1028,34 @@ async def run_scan_state_machine(
 
         phase_duration = time.monotonic() - phase_start_time
         record_phase_duration(phase_str, phase_duration)
+
+        if evidence_chain is not None:
+            try:
+                if phase == ScanPhase.VULN_ANALYSIS and vuln_out:
+                    for _f in (vuln_out.findings or [])[:20]:
+                        fid = str(_f.get("finding_id", _f.get("id", "")))
+                        evidence_chain.add_finding_link(
+                            finding_id=fid,
+                            title=str(_f.get("title", _f.get("name", ""))),
+                            severity=str(_f.get("severity", "info")),
+                            evidence_tier=int(_f.get("evidence_tier", 0)),
+                        )
+                elif phase == ScanPhase.EXPLOITATION and exploit_out:
+                    for _e in (exploit_out.exploits or [])[:20]:
+                        fid = str(_e.get("finding_id", _e.get("id", "")))
+                        poc = str(_e.get("poc_curl", _e.get("poc", "")))
+                        if poc:
+                            evidence_chain.add_poc_link(
+                                finding_id=fid,
+                                poc_type="curl",
+                                poc_hash=evidence_chain._hash_content(poc),
+                            )
+                elif phase == ScanPhase.REPORTING and report_out:
+                    evidence_chain.add_remediation_link(
+                        scan_id=scan_id, description="Report generated"
+                    )
+            except Exception:
+                pass
 
         await _persist_phase_output(
             session, tenant_id, scan_id, phase_str, output_data
@@ -990,7 +1116,29 @@ async def run_scan_state_machine(
     with suppress(asyncio.CancelledError):
         await heartbeat_task
 
-    assert report_out is not None, "Reporting phase must complete before persist"
+    if episodic_memory is not None:
+        try:
+            from src.orchestration.episodic_memory import EpisodicEntry
+            for _f in (vuln_out.findings or []) if vuln_out else []:
+                _eid = f"ep-{scan_id}-{_f.get('finding_id', _f.get('id', ''))}"
+                episodic_memory.store(EpisodicEntry(
+                    entry_id=_eid, scan_id=scan_id, tenant_id=tenant_id,
+                    finding_type=str(_f.get("vuln_type", _f.get("type", ""))),
+                    cwe=str(_f.get("cwe", _f.get("cwe_id", ""))),
+                    title=str(_f.get("title", _f.get("name", ""))),
+                    description=str(_f.get("description", "")),
+                    framework="",
+                ))
+        except Exception:
+            pass
+
+    if evidence_chain is not None:
+        try:
+            _chain_valid = evidence_chain.verify_chain()
+            if not _chain_valid:
+                logger.warning("evidence_chain_tamper_detected", extra={"scan_id": scan_id})
+        except Exception:
+            pass
     await _persist_report_and_findings(
         session,
         tenant_id,

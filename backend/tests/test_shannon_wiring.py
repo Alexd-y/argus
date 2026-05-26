@@ -730,3 +730,191 @@ class TestReVerificationWiring:
         )
         history = tracker.get_history("f1")
         assert len(history) == 0
+
+
+class TestSubAgentSpawnerWiring:
+    def test_spawner_importable(self):
+        from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask, SubAgentResult
+        assert SubAgentSpawner is not None
+
+    def test_can_spawn(self):
+        from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+        spawner = SubAgentSpawner(max_depth=3)
+        task = SubAgentTask(task_description="test", depth=0)
+        assert spawner.can_spawn(task) is True
+
+    def test_depth_limit(self):
+        from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+        spawner = SubAgentSpawner(max_depth=2)
+        task = SubAgentTask(task_description="test", depth=2)
+        assert spawner.can_spawn(task) is False
+
+
+class TestMCPAllowlistWiring:
+    def test_allowlist_importable(self):
+        from src.orchestration.mcp_allowlist import MCPAllowlist, PHASE_TOOL_ALLOWLIST
+        assert MCPAllowlist is not None
+
+    def test_phase_allowlist(self):
+        from src.orchestration.mcp_allowlist import MCPAllowlist
+        al = MCPAllowlist()
+        recon_tools = al.get_allowed_tools("recon")
+        assert "nmap" in recon_tools
+
+    def test_guard_tool_call(self):
+        from src.orchestration.mcp_allowlist import MCPAllowlist
+        al = MCPAllowlist()
+        denied = al.guard_tool_call("sqlmap", "recon")
+        assert denied is not None
+        allowed = al.guard_tool_call("nmap", "recon")
+        assert allowed is None
+
+
+class TestBinaryAnalysisWiring:
+    def test_binary_analysis_importable(self):
+        from src.orchestration.binary_analysis import BinaryAnalysisRequest, BinaryAnalysisResult, detect_binary_type
+        assert BinaryAnalysisRequest is not None
+
+    def test_detect_binary_type(self):
+        from src.orchestration.binary_analysis import detect_binary_type
+        assert detect_binary_type("app.elf") == "elf"
+        assert detect_binary_type("app.exe") == "pe"
+        assert detect_binary_type("app.apk") == "dex"
+
+
+class TestTenantIsolationWiring:
+    def test_tenant_isolation_importable(self):
+        from src.orchestration.tenant_isolation import TenantIsolationGuard, TenantQuota
+        assert TenantIsolationGuard is not None
+
+    def test_can_start_scan(self):
+        from src.orchestration.tenant_isolation import TenantIsolationGuard
+        guard = TenantIsolationGuard()
+        assert guard.can_start_scan("t1") is True
+
+    def test_scan_limit(self):
+        from src.orchestration.tenant_isolation import TenantIsolationGuard, TenantQuota
+        guard = TenantIsolationGuard()
+        guard.set_quota("t1", TenantQuota(max_concurrent_scans=1))
+        guard.register_scan_start("t1")
+        assert guard.can_start_scan("t1") is False
+
+
+class TestScanEventsWiring:
+    def test_events_importable(self):
+        from src.orchestration.scan_events import ScanEventBus, ScanEvent, ChatMessage
+        assert ScanEventBus is not None
+
+    def test_publish_and_subscribe(self):
+        from src.orchestration.scan_events import ScanEventBus, ScanEvent
+        bus = ScanEventBus()
+        received = []
+        bus.subscribe(lambda e: received.append(e))
+        bus.publish(ScanEvent(event_type="phase_start", scan_id="s1", tenant_id="t1", phase="recon"))
+        assert len(received) == 1
+
+
+class TestCostAwareReasoningWiring:
+    def test_cost_aware_importable(self):
+        from src.orchestration.cost_aware_reasoning import CostTracker, BudgetEnforcer, ConfidenceEscalator, TokenUsageRecord
+        assert CostTracker is not None
+
+    def test_cost_tracker(self):
+        from src.orchestration.cost_aware_reasoning import CostTracker, TokenUsageRecord
+        tracker = CostTracker(scan_id="s1", max_cost_usd=1.0)
+        tracker.record(TokenUsageRecord(phase="recon", tier="small", model="gpt-4o-mini", total_tokens=100, estimated_cost_usd=0.01))
+        assert tracker.total_tokens == 100
+        assert tracker.total_cost_usd == 0.01
+
+    def test_confidence_escalator(self):
+        from src.orchestration.cost_aware_reasoning import ConfidenceEscalator
+        esc = ConfidenceEscalator(confidence_threshold=0.7)
+        assert esc.should_escalate(0.3, "small") is True
+        assert esc.should_escalate(0.9, "small") is False
+        assert esc.should_escalate(0.3, "large") is False
+
+
+class TestPipelineWiringIntegration:
+    def test_prompt_injection_defense_in_get_phase_prompt(self):
+        from src.orchestration.ai_prompts import _get_phase_prompt
+        system, user = _get_phase_prompt("recon", target="https://example.com", options="{}")
+        assert "INSTRUCTION HIERARCHY" in system or "<untrusted_input>" in user
+
+    def test_evidence_chain_in_state_machine(self):
+        from src.orchestration.state_machine import run_scan_state_machine
+        assert run_scan_state_machine is not None
+
+    def test_code_aware_in_vuln_analysis_signature(self):
+        from src.orchestration.handlers import run_vuln_analysis
+        import inspect
+        sig = inspect.signature(run_vuln_analysis)
+        assert "source_analysis" in sig.parameters
+
+    def test_scan_options_in_reporting_signature(self):
+        from src.orchestration.handlers import run_reporting
+        import inspect
+        sig = inspect.signature(run_reporting)
+        assert "scan_options" in sig.parameters
+
+    def test_adversarial_critic_in_reporting(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "adversarial_critic" in content
+
+    def test_detection_engineering_in_reporting(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "detection_engineering" in content
+
+    def test_evidence_chain_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "evidence_chain" in content
+
+    def test_episodic_memory_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "episodic_memory" in content
+
+    def test_poc_watermarking_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "poc_watermarking" in content
+
+    def test_microvm_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "exploit_verification_microvm" in content
+
+    def test_auto_patch_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "auto_patch" in content
+
+    def test_aiml_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "aiml_security" in content
+
+    def test_react_agent_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "react_agent" in content

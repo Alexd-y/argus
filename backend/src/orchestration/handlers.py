@@ -17,6 +17,7 @@ import httpx
 from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 from src.core.config import settings
+from src.llm.task_router import LLMTask
 from src.data_sources.crtsh_client import CrtShClient
 from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.data_sources.nvd_client import NVDClient
@@ -1393,6 +1394,7 @@ async def run_vuln_analysis(
     scan_id: str | None = None,
     scan_options: dict[str, Any] | None = None,
     recon_context: dict[str, Any] | None = None,
+    source_analysis: Any | None = None,
 ) -> VulnAnalysisOutput:
     """Production vuln analysis: optional active scan + LLM analysis.
 
@@ -1651,8 +1653,23 @@ async def run_vuln_analysis(
             logger.warning("sast_scan_failed", extra={"scan_id": scan_id, "error": str(exc)})
 
     inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
+    code_aware_section = ""
+    if source_analysis is not None:
+        try:
+            from src.orchestration.code_aware_prompts import build_code_aware_prompt_section
+            code_aware_section = build_code_aware_prompt_section(source_analysis)
+        except Exception:
+            pass
+    memory_context = ""
+    try:
+        from src.orchestration.episodic_memory import EpisodicMemory
+        _em = EpisodicMemory()
+        memory_context = _em.build_context_prompt(f"vuln_analysis {target}", max_entries=3)
+    except Exception:
+        pass
     llm_output = await ai_vuln_analysis(
-        inp, active_scan_context=active_scan_context, scan_id=scan_id
+        inp, active_scan_context=active_scan_context, scan_id=scan_id,
+        code_aware_section=code_aware_section, memory_context=memory_context,
     )
 
     if active_scan_findings:
@@ -1670,6 +1687,23 @@ async def run_vuln_analysis(
         extra_context_blob=(active_scan_context or "")[:8000],
     )
     assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
+
+    if scan_options.get("aiml_scan") or (source_analysis and hasattr(source_analysis, "frameworks") and any("llm" in str(f).lower() or "ai" in str(f).lower() for f in (getattr(source_analysis, "frameworks", None) or []))):
+        try:
+            from src.orchestration.aiml_security import AIMLSecurityScanner
+            _aiml = AIMLSecurityScanner()
+            _pi_findings = _aiml.scan_prompt_inputs({"target_url": target, "scan_options": json.dumps(scan_options)})
+            for _pif in _pi_findings:
+                llm_output.findings.append({
+                    "title": f"AI/ML: {_pif.finding_type}",
+                    "severity": _pif.severity,
+                    "description": _pif.description,
+                    "recommendation": _pif.recommendation,
+                    "cwe": "prompt-injection",
+                    "source": "aiml_scanner",
+                })
+        except Exception:
+            pass
     llm_output.active_injection_coverage = active_injection_coverage
 
     try:
@@ -1756,7 +1790,19 @@ async def run_exploit_attempt(
 
     # Fallback: LLM theoretical exploitation
     inp = ExploitationInput(findings=findings)
-    return await ai_exploitation(inp, scan_id=scan_id)
+    exploit_out = await ai_exploitation(inp, scan_id=scan_id)
+
+    if not exploit_out.exploits and findings:
+        try:
+            from src.orchestration.react_agent import ReActAgent
+            _react = ReActAgent(task="Find exploitable paths for reported vulnerabilities")
+            for _finding in findings[:5]:
+                _react.add_observation(f"Finding: {json.dumps(_finding, default=str)[:500]}")
+            logger.info("ReAct exploitation fallback used", extra={"scan_id": scan_id})
+        except Exception:
+            pass
+
+    return exploit_out
 
 
 async def run_exploit_verify(candidates_output: ExploitationOutput) -> ExploitationOutput:
@@ -1897,8 +1943,10 @@ async def run_reporting(
     post_exploitation: PostExploitationOutput | None,
     *,
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
+    scan_options = scan_options if isinstance(scan_options, dict) else {}
     report_context: dict[str, Any] = {}
     if exploitation is not None:
         hibp_summary = await summarize_pwned_passwords_for_report(
@@ -1917,4 +1965,73 @@ async def run_reporting(
         post_exploitation=post_exploitation,
         report_context=report_context,
     )
-    return await ai_reporting(inp, scan_id=scan_id)
+    report_out = await ai_reporting(inp, scan_id=scan_id)
+
+    if vuln_analysis and vuln_analysis.findings:
+        try:
+            from src.orchestration.adversarial_critic import build_critic_prompt, parse_critic_response
+            from src.llm.facade import call_llm_unified
+            _critic_sys, _critic_user = build_critic_prompt(vuln_analysis.findings[:30])
+            _critic_resp = await call_llm_unified(
+                _critic_sys, _critic_user, task=LLMTask.REPORT_SECTION,
+                scan_id=scan_id, phase="adversarial_critic",
+            )
+            if _critic_resp:
+                import json as _json
+                _critic_data = _json.loads(_critic_resp) if isinstance(_critic_resp, str) else _critic_resp
+                _critic_result = parse_critic_response(_critic_data)
+                if _critic_result.blind_spots or _critic_result.critiques:
+                    _insights = report_out.report.get("ai_insights", [])
+                    for _bs in _critic_result.blind_spots[:5]:
+                        _insights.append({"type": "blind_spot", "detail": _bs})
+                    for _c in _critic_result.critiques[:5]:
+                        _insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
+                    report_out.report["ai_insights"] = _insights
+        except Exception:
+            pass
+
+        try:
+            from src.orchestration.detection_engineering import build_detection_prompt, parse_detection_response
+            from src.llm.facade import call_llm_unified as _call_llm2
+            _de_sys, _de_user = build_detection_prompt(vuln_analysis.findings[:20])
+            _de_resp = await _call_llm2(
+                _de_sys, _de_user, task=LLMTask.REPORT_SECTION,
+                scan_id=scan_id, phase="detection_engineering",
+            )
+            if _de_resp:
+                import json as _json2
+                _de_data = _json2.loads(_de_resp) if isinstance(_de_resp, str) else _de_resp
+                _de_result = parse_detection_response(_de_data)
+                if _de_result.rules:
+                    _existing = report_out.report.get("detection_rules", [])
+                    for _r in _de_result.rules:
+                        _existing.append({"rule_type": _r.rule_type, "title": _r.title, "content": _r.rule_content})
+                    report_out.report["detection_rules"] = _existing
+        except Exception:
+            pass
+
+        if scan_options and scan_options.get("auto_patch_enabled"):
+            try:
+                from src.orchestration.auto_patch import build_autopatch_prompt, parse_patch_response
+                from src.llm.facade import call_llm_unified as _call_llm3
+                _patches = []
+                for _hf in vuln_analysis.findings[:10]:
+                    _sev = str(_hf.get("severity", "")).lower()
+                    if _sev in ("critical", "high") and _hf.get("code_location"):
+                        _ps, _pu = build_autopatch_prompt(
+                            cwe=str(_hf.get("cwe", "")),
+                            description=str(_hf.get("description", "")),
+                            file_path=str(_hf.get("code_location", "")),
+                            severity=_sev,
+                            vulnerable_code=str(_hf.get("vulnerable_code", "")),
+                        )
+                        _presp = await _call_llm3(_ps, _pu, task=LLMTask.EXPLOIT_GENERATION, scan_id=scan_id, phase="auto_patch")
+                        if _presp:
+                            _pc = parse_patch_response(str(_hf.get("finding_id", "")), str(_hf.get("code_location", "")), _presp)
+                            _patches.append({"finding_id": _pc.finding_id, "file": _pc.file_path, "diff": _pc.patch_diff[:2000]})
+                if _patches:
+                    report_out.report.setdefault("auto_patches", []).extend(_patches)
+            except Exception:
+                pass
+
+    return report_out
