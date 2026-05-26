@@ -928,6 +928,7 @@ async def run_recon(
     *,
     tenant_id: str | None = None,
     scan_id: str | None = None,
+    source_analysis: Any | None = None,
 ) -> ReconOutput:
     """
     Production recon: nmap + dig + whois + crt.sh + Shodan -> LLM analysis.
@@ -984,7 +985,7 @@ async def run_recon(
         if ReconStepId.DEPENDENCY_MANIFESTS in planned_steps:
             await _try_fetch_and_upload_dependency_manifests(target, raw_sink)
 
-    inp = ReconInput(target=target, options=options)
+    inp = ReconInput(target=target, options=options, source_analysis=source_analysis)
     recon_out = await ai_recon(
         inp,
         tool_results=tool_results_str,
@@ -1069,6 +1070,7 @@ async def run_threat_modeling(
     target: str = "",
     recon_summary: dict[str, Any] | None = None,
     scan_id: str | None = None,
+    source_analysis: Any | None = None,
 ) -> ThreatModelOutput:
     """Production threat modeling: enriched recon context + NVD CVE lookup + LLM STRIDE analysis."""
     from src.orchestration.threat_model_enrichment import (
@@ -1100,7 +1102,7 @@ async def run_threat_modeling(
     nvd_data = await _query_nvd_for_technologies(assets)
     logger.info("NVD data collected (%d chars), sending to LLM for threat modeling", len(nvd_data))
 
-    inp = ThreatModelInput(assets=assets)
+    inp = ThreatModelInput(assets=assets, source_analysis=source_analysis)
     raw_output = await ai_threat_modeling(
         inp,
         nvd_data=nvd_data,
@@ -2105,8 +2107,11 @@ async def run_exploit_attempt(
                 _nav_resp = await _pa.navigate(_poc_url)
                 if _nav_resp.success:
                     _shot_resp = await _pa.screenshot()
-                    if _shot_resp.success and _shot_resp.screenshot_path:
-                        _exploit["screenshot_path"] = _shot_resp.screenshot_path
+                    if _shot_resp.success and (_shot_resp.screenshot_base64 or _shot_resp.screenshot_path):
+                        if _shot_resp.screenshot_base64:
+                            _exploit["screenshot_base64"] = _shot_resp.screenshot_base64
+                        if _shot_resp.screenshot_path:
+                            _exploit["screenshot_path"] = _shot_resp.screenshot_path
                         _exploit["browser_evidence"] = {
                             "url": _nav_resp.url,
                             "title": _nav_resp.title,
@@ -2259,6 +2264,8 @@ async def run_reporting(
     *,
     scan_id: str | None = None,
     scan_options: dict[str, Any] | None = None,
+    scope_config: dict[str, Any] | None = None,
+    source_analysis: Any | None = None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
     scan_options = scan_options if isinstance(scan_options, dict) else {}
@@ -2301,6 +2308,8 @@ async def run_reporting(
         exploitation=exploitation,
         post_exploitation=post_exploitation,
         report_context=report_context,
+        scope_config=scope_config,
+        source_analysis=source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else source_analysis,
     )
     report_out = await ai_reporting(inp, scan_id=scan_id)
 

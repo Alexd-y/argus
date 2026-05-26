@@ -920,7 +920,8 @@ async def run_scan_state_machine(
                         },
                     )
                     recon_out = await run_recon(
-                        target, options, tenant_id=tenant_id, scan_id=scan_id
+                        target, options, tenant_id=tenant_id, scan_id=scan_id,
+                        source_analysis=source_out,
                     )
                     output_data = recon_out.model_dump()
                 elif phase == ScanPhase.THREAT_MODELING:
@@ -932,6 +933,7 @@ async def run_scan_state_machine(
                         ports=recon_out.ports if recon_out else None,
                         target=target,
                         scan_id=scan_id,
+                        source_analysis=source_out,
                     )
                     output_data = threat_out.model_dump()
                 elif phase == ScanPhase.VULN_ANALYSIS:
@@ -1150,6 +1152,8 @@ async def run_scan_state_machine(
                         post_out,
                         scan_id=scan_id,
                         scan_options=options,
+                        scope_config=_scope_context,
+                        source_analysis=source_out,
                     )
                     output_data = report_out.model_dump()
                 else:

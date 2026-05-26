@@ -941,6 +941,42 @@ async def build_valhalla_report_context(
             exploits_list = [dict(e) for e in ex_list if isinstance(e, dict)]
 
     exploit_chains_list = _build_exploit_chains(exploits_list, resolved_findings)
+
+    # Enrich findings with exploit data (screenshots, payload_attempted/successful from exploits)
+    _exploit_by_finding: dict[str, dict[str, Any]] = {}
+    for _ex in exploits_list:
+        _fid = str(_ex.get("finding_id", ""))
+        if _fid:
+            _exploit_by_finding.setdefault(_fid, {})
+            _cur = _exploit_by_finding[_fid]
+            if _ex.get("screenshot_base64") and not _cur.get("screenshot_base64"):
+                _cur["screenshot_base64"] = _ex["screenshot_base64"]
+            if _ex.get("screenshot_path") and not _cur.get("screenshot_path"):
+                _cur["screenshot_path"] = _ex["screenshot_path"]
+            if _ex.get("payload_attempted"):
+                _cur.setdefault("payload_attempted_from_exploit", []).extend(_ex["payload_attempted"])
+            if _ex.get("payload_successful"):
+                _cur.setdefault("payload_successful_from_exploit", []).extend(_ex["payload_successful"])
+            if _ex.get("payload_used"):
+                _cur.setdefault("payload_used_from_exploit", []).append(_ex["payload_used"])
+
+    for _rf in resolved_findings:
+        _rf_id = str(_rf.get("finding_id") or _rf.get("id", ""))
+        _ex_data = _exploit_by_finding.get(_rf_id, {})
+        if _ex_data:
+            if _ex_data.get("screenshot_base64") and not _rf.get("screenshot_base64"):
+                _rf["screenshot_base64"] = _ex_data["screenshot_base64"]
+            if _ex_data.get("screenshot_path") and not _rf.get("screenshot_path"):
+                _rf["screenshots"] = [_ex_data["screenshot_path"]]
+            _existing_pa = list(_rf.get("payload_attempted") or [])
+            _ex_pa = _ex_data.get("payload_attempted_from_exploit", [])
+            if _ex_pa:
+                _rf["payload_attempted"] = list(dict.fromkeys(_existing_pa + _ex_pa))
+            _existing_ps = list(_rf.get("payload_successful") or [])
+            _ex_ps = _ex_data.get("payload_successful_from_exploit", [])
+            if _ex_ps:
+                _rf["payload_successful"] = list(dict.fromkeys(_existing_ps + _ex_ps))
+
     remediation_stages = _build_remediation_stages(resolved_findings, tech_stack=tech_stack)
     zero_day = _build_zero_day_assessment(resolved_findings)
     retest_plan = _build_retest_plan(resolved_findings)
@@ -1447,11 +1483,20 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
         tp = f.get("taint_path") or []
         cl = f.get("code_location") or ""
         rs = f.get("reproducible_steps") or ""
+        screenshots = f.get("screenshots") or f.get("screenshot_base64") or f.get("screenshot_path") or ""
+        adv_score = f.get("adversarial_score")
+        cvss_vector = f.get("cvss_vector") or ""
 
-        if not pa and not ps and not tp and not cl and not rs:
+        if not pa and not ps and not tp and not cl and not rs and not screenshots and not adv_score and not cvss_vector:
             continue
 
         parts: list[str] = [f'<div class="card finding-detail-card"><h3>{title}</h3>']
+
+        if adv_score is not None:
+            parts.append(f'<p><strong>Adversarial Score:</strong> {adv_score}</p>')
+
+        if cvss_vector:
+            parts.append(f'<p><strong>CVSS Vector:</strong> <code>{cvss_vector}</code></p>')
 
         if cl:
             parts.append(f'<p><strong>Code Location:</strong> <code>{cl}</code></p>')
@@ -1470,6 +1515,29 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
 
         if rs:
             parts.append(f'<p><strong>Reproducible Steps:</strong></p><pre>{rs[:2000]}</pre>')
+
+        if screenshots:
+            if isinstance(screenshots, str) and screenshots.startswith("data:image"):
+                parts.append(f'<p><strong>Screenshot:</strong></p><img src="{screenshots}" alt="Evidence screenshot" style="max-width:100%;border:1px solid var(--border);">')
+            elif isinstance(screenshots, str) and screenshots.startswith("/"):
+                parts.append(f'<p><strong>Screenshot:</strong> <code>{screenshots}</code></p>')
+            elif isinstance(screenshots, list):
+                for idx, sc in enumerate(screens[:5]):
+                    if isinstance(sc, dict):
+                        sc_data = sc.get("data") or sc.get("base64") or sc.get("url", "")
+                        sc_alt = sc.get("alt", f"Screenshot {idx+1}")
+                        if sc_data:
+                            if sc_data.startswith("data:image") or sc_data.startswith("http"):
+                                parts.append(f'<p><strong>{sc_alt}:</strong></p><img src="{sc_data}" alt="{sc_alt}" style="max-width:100%;border:1px solid var(--border);">')
+                            else:
+                                parts.append(f'<p><strong>{sc_alt}:</strong> <code>{sc_data[:200]}</code></p>')
+                    elif isinstance(sc, str):
+                        if sc.startswith("data:image") or sc.startswith("http"):
+                            parts.append(f'<img src="{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">')
+                        elif len(sc) > 100:
+                            parts.append(f'<img src="data:image/png;base64,{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">')
+                        else:
+                            parts.append(f'<p><strong>Screenshot:</strong> <code>{sc}</code></p>')
 
         parts.append("</div>")
         sections.append("\n".join(parts))

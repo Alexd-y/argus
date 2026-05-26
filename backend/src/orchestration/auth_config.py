@@ -115,6 +115,16 @@ class LoginFlowStep(BaseModel):
         max_length=2048,
         description="Natural-language instruction for the login step.",
     )
+    selector: StrictStr | None = Field(
+        default=None,
+        max_length=512,
+        description="CSS/XPath selector for the element to interact with.",
+    )
+    value: StrictStr | None = Field(
+        default=None,
+        max_length=2048,
+        description="Value to input (supports $username/$password/$totp placeholders).",
+    )
 
 
 class AuthConfig(BaseModel):
@@ -306,7 +316,9 @@ class TargetConfig(BaseModel):
 
         resolved_steps = [
             LoginFlowStep(
-                instruction=self._replace_placeholders(step.instruction, placeholder_map)
+                instruction=self._replace_placeholders(step.instruction, placeholder_map),
+                selector=self._replace_placeholders(step.selector, placeholder_map) if step.selector else None,
+                value=self._replace_placeholders(step.value, placeholder_map) if step.value else None,
             )
             for step in self.authentication.login_flow
         ]
@@ -315,6 +327,8 @@ class TargetConfig(BaseModel):
         if data.get("authentication") and data["authentication"].get("login_flow"):
             for i, step in enumerate(resolved_steps):
                 data["authentication"]["login_flow"][i]["instruction"] = step.instruction
+                data["authentication"]["login_flow"][i]["selector"] = step.selector
+                data["authentication"]["login_flow"][i]["value"] = step.value
 
         return TargetConfig.model_validate(data)
 

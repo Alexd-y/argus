@@ -61,6 +61,7 @@ class BrowserResponse(BaseModel):
     body_text: str | None = None
     body_html: str | None = None
     screenshot_path: str | None = None
+    screenshot_base64: str | None = None
     cookies: list[dict[str, Any]] = Field(default_factory=list)
     js_result: Any = None
     error: str | None = None
@@ -277,9 +278,16 @@ class PlaywrightAdapter:
             lines.append("  console.log(JSON.stringify({ success: true }));")
 
         elif request.action == BrowserAction.SCREENSHOT:
-            path = request.screenshot_path or "/tmp/screenshot.png"
-            lines.append(f"  await page.screenshot({{ path: {json.dumps(path)} }});")
-            lines.append(f"  console.log(JSON.stringify({{ success: true, screenshot_path: {json.dumps(path)} }}));")
+            if request.screenshot_path:
+                lines.append(f"  await page.screenshot({{ path: {json.dumps(request.screenshot_path)}, type: 'png' }});")
+                lines.append("  const _buf = await page.screenshot({ type: 'png' });")
+            else:
+                lines.append("  const _buf = await page.screenshot({ type: 'png' });")
+            lines.append("  const _b64 = _buf.toString('base64');")
+            if request.screenshot_path:
+                lines.append(f"  console.log(JSON.stringify({{ success: true, screenshot_path: {json.dumps(request.screenshot_path)}, screenshot_base64: _b64 }}));")
+            else:
+                lines.append("  console.log(JSON.stringify({ success: true, screenshot_base64: _b64 }));")
 
         elif request.action == BrowserAction.EXECUTE_JS and request.js_code:
             safe_js = request.js_code.replace("`", "\\`")
@@ -339,6 +347,7 @@ class PlaywrightAdapter:
                 title=data.get("title", ""),
                 body_text=data.get("body_text"),
                 screenshot_path=data.get("screenshot_path"),
+                screenshot_base64=data.get("screenshot_base64"),
                 cookies=data.get("cookies", []),
                 js_result=data.get("js_result"),
                 elapsed_ms=elapsed,
