@@ -9,7 +9,13 @@ find crashes that translate to vulnerability findings.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import os
+import shlex
+import tempfile
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,16 +26,19 @@ FUZZER_ENGINES = {
         "languages": ["c", "cpp", "go", "rust"],
         "docker_image": "argus/aflplusplus:latest",
         "command_template": "afl-fuzz -i {input_dir} -o {output_dir} -m none -- {target_binary}",
+        "install_hint": "apt-get install -y afl++",
     },
     "libfuzzer": {
         "languages": ["c", "cpp", "rust"],
         "docker_image": "argus/libfuzzer:latest",
         "command_template": "{target_binary} -artifact_prefix={output_dir} {input_dir}",
+        "install_hint": "clang -fsanitize=fuzzer",
     },
     "jazzer": {
         "languages": ["java"],
         "docker_image": "argus/jazzer:latest",
         "command_template": "jazzer --cp={classpath} --target_class={target_class}",
+        "install_hint": "pip install jazzer",
     },
 }
 
@@ -64,6 +73,8 @@ class FuzzingRequest:
     output_dir: str = "/tmp/fuzz-output"
     timeout_seconds: int = 3600
     scan_id: str = ""
+    source_code: str = ""
+    harness_source: str = ""
 
 
 @dataclass
@@ -86,6 +97,7 @@ class FuzzingResult:
     duration_seconds: float = 0.0
     engine: str = ""
     harness_source: str = ""
+    error: str = ""
 
 
 def select_engine(language: str) -> str:
@@ -149,6 +161,123 @@ def build_fuzz_harness_prompt(
     )
 
 
+def _parse_crashes_from_output(output_dir_listing: str, stderr: str) -> list[FuzzCrash]:
+    """Parse crash entries from fuzzer output directory listing and stderr."""
+    crashes: list[FuzzCrash] = []
+    for line in output_dir_listing.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        lower = line.lower()
+        is_crash = any(kw in lower for kw in ("crash", "oom", "timeout", "sig:", " hangs"))
+        if is_crash or (line.startswith("id:") and "," in line):
+            crash_type = "crash"
+            if "oom" in lower:
+                crash_type = "oom"
+            elif "timeout" in lower or "hang" in lower:
+                crash_type = "timeout"
+            filename = line.split("/")[-1] if "/" in line else line.split("\\")[-1]
+            crashes.append(FuzzCrash(
+                crash_id=filename[:64],
+                crash_file=line,
+                crash_type=crash_type,
+            ))
+    for line in stderr.splitlines():
+        stripped = line.strip()
+        if "CRASH" in stripped.upper() or "SUMMARY:" in stripped.upper():
+            crashes.append(FuzzCrash(crash_type="detected", stack_trace=stripped[:500]))
+    return crashes
+
+
+async def run_fuzzing_campaign(
+    request: FuzzingRequest,
+    use_sandbox: bool = True,
+) -> FuzzingResult:
+    """Execute a fuzzing campaign via sandbox container.
+
+    1. Generate or use provided harness
+    2. Write harness + seed corpus to temp directory
+    3. Run fuzzer in sandbox via execute_command
+    4. Parse crashes from output
+    5. Return FuzzingResult with crashes
+    """
+    start = time.monotonic()
+    engine_config = FUZZER_ENGINES.get(request.engine, FUZZER_ENGINES["afl_plus_plus"])
+    harness = request.harness_source or generate_harness_stub(request.language, request.target_binary)
+
+    from src.tools.executor import execute_command
+
+    crash_dir = tempfile.mkdtemp(prefix="argus-fuzz-")
+    input_dir = os.path.join(crash_dir, "input")
+    output_dir = os.path.join(crash_dir, "output")
+    harness_path = os.path.join(crash_dir, f"harness.{request.language}")
+
+    try:
+        os.makedirs(input_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
+
+        seed_file = os.path.join(input_dir, "seed")
+        with open(seed_file, "w") as f:
+            f.write("AA")
+
+        with open(harness_path, "w") as f:
+            f.write(harness)
+
+        command = engine_config["command_template"].format(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            target_binary=request.target_binary,
+            target_class=request.target_class,
+            classpath=getattr(request, "classpath", ""),
+        )
+
+        timeout = min(request.timeout_seconds, 600)
+
+        result = execute_command(
+            command,
+            use_sandbox=use_sandbox,
+            timeout_sec=timeout,
+        )
+
+        crashes = _parse_crashes_from_output(
+            result.get("stdout", ""),
+            result.get("stderr", ""),
+        )
+
+        if use_sandbox:
+            ls_result = execute_command(
+                f"ls -la {output_dir}/",
+                use_sandbox=True,
+                timeout_sec=10,
+            )
+            extra_crashes = _parse_crashes_from_output(ls_result.get("stdout", ""), "")
+            seen_ids = {c.crash_id for c in crashes}
+            for ec in extra_crashes:
+                if ec.crash_id not in seen_ids:
+                    crashes.append(ec)
+                    seen_ids.add(ec.crash_id)
+
+        duration = time.monotonic() - start
+
+        return FuzzingResult(
+            crashes=crashes,
+            total_runs=int(result.get("return_code", -1) != 0) + len(crashes),
+            duration_seconds=round(duration, 2),
+            engine=request.engine,
+            harness_source=harness,
+            error=result.get("stderr", "")[:2000] if not result.get("success", False) else "",
+        )
+
+    except Exception as exc:
+        logger.warning("Fuzzing campaign failed: %s", exc)
+        return FuzzingResult(
+            engine=request.engine,
+            harness_source=harness,
+            error=str(exc),
+            duration_seconds=time.monotonic() - start,
+        )
+
+
 __all__ = [
     "FUZZER_ENGINES",
     "FuzzCrash",
@@ -157,4 +286,5 @@ __all__ = [
     "build_fuzz_harness_prompt",
     "generate_harness_stub",
     "select_engine",
+    "run_fuzzing_campaign",
 ]

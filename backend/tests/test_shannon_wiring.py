@@ -1187,3 +1187,69 @@ class TestWiringRound2:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         assert "re_verification_history" in content
+
+
+class TestFuzzingExecutionWiring:
+
+    def test_run_fuzzing_campaign_importable(self):
+        from src.orchestration.fuzzing import run_fuzzing_campaign, FuzzingRequest
+        assert run_fuzzing_campaign is not None
+        assert FuzzingRequest is not None
+
+    def test_run_fuzzing_campaign_in_handlers(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "run_fuzzing_campaign" in content
+        assert "FuzzingRequest" in content
+
+    def test_fuzzing_crashes_added_to_findings(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "fuzzing_crashes_found" in content or "_fresult.crashes" in content
+
+    def test_fuzz_parse_crashes(self):
+        from src.orchestration.fuzzing import _parse_crashes_from_output
+        crashes = _parse_crashes_from_output("id:000000,sig:11,src:000001,op:flip1\n", "")
+        assert len(crashes) > 0
+
+    def test_fuzz_select_engine(self):
+        from src.orchestration.fuzzing import select_engine
+        assert select_engine("c") == "afl_plus_plus"
+        assert select_engine("java") == "jazzer"
+
+
+class TestSymbolicExecutionWiring:
+
+    def test_run_symbolic_execution_importable(self):
+        from src.orchestration.symbolic_execution import run_symbolic_execution, SymbolicExecutionRequest
+        assert run_symbolic_execution is not None
+        assert SymbolicExecutionRequest is not None
+
+    def test_run_symbolic_execution_in_handlers(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "run_symbolic_execution" in content
+
+    def test_symbolic_proven_field(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "symbolic_execution_proven" in content
+
+    def test_parse_angr_output_vulnerable(self):
+        from src.orchestration.symbolic_execution import _parse_angr_output
+        result = _parse_angr_output("VULNERABLE: path found\nInput: b'AAAA'", "")
+        assert result.vulnerable is True
+        assert result.proven is True
+
+    def test_parse_angr_output_clean(self):
+        from src.orchestration.symbolic_execution import _parse_angr_output
+        result = _parse_angr_output("No path found\n", "")
+        assert result.vulnerable is False

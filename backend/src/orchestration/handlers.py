@@ -1738,18 +1738,43 @@ async def run_vuln_analysis(
 
     if scan_options.get("fuzzing_enabled") and source_analysis is not None:
         try:
-            from src.orchestration.fuzzing import select_engine, build_fuzz_harness_prompt
+            from src.orchestration.fuzzing import select_engine, FuzzingRequest, run_fuzzing_campaign
             _fuzz_targets = []
             _sa_dict = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
             _code_files = _sa_dict.get("code_files", [])
-            for _cf in (_code_files or [])[:5]:
+            for _cf in (_code_files or [])[:3]:
                 _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
                 _engine = select_engine(_lang)
                 _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
             if _fuzz_targets:
-                logger.info("fuzzing_campaign_queued", extra={"scan_id": scan_id, "targets": len(_fuzz_targets)})
-        except Exception:
-            pass
+                logger.info("fuzzing_campaign_starting", extra={"scan_id": scan_id, "targets": len(_fuzz_targets)})
+                for _ft in _fuzz_targets:
+                    try:
+                        _freq = FuzzingRequest(
+                            target_binary=_ft["file"],
+                            language=_ft["language"],
+                            engine=_ft["engine"],
+                            scan_id=scan_id or "",
+                            timeout_seconds=min(int(scan_options.get("fuzz_timeout", 300)), 600),
+                        )
+                        _fresult = await run_fuzzing_campaign(_freq, use_sandbox=bool(settings.sandbox_enabled))
+                        if _fresult.crashes:
+                            for _fc in _fresult.crashes:
+                                llm_output.findings.append({
+                                    "title": f"Fuzz: {_fc.crash_type} in {_ft['file']}",
+                                    "severity": "high" if _fc.crash_type == "crash" else "medium",
+                                    "description": f"Fuzzer ({_ft['engine']}) found {_fc.crash_type}: {_fc.stack_trace[:500]}",
+                                    "source": "fuzzing",
+                                    "cwe": "CWE-20",
+                                    "evidence_tier": 3,
+                                })
+                            logger.info("fuzzing_crashes_found", extra={"scan_id": scan_id, "target": _ft["file"], "crashes": len(_fresult.crashes)})
+                        else:
+                            logger.info("fuzzing_campaign_clean", extra={"scan_id": scan_id, "target": _ft["file"], "runs": _fresult.total_runs})
+                    except Exception as _fuzz_exc:
+                        logger.debug("fuzzing_target_failed", extra={"target": _ft["file"], "error": str(_fuzz_exc)})
+        except Exception as _fuzz_outer:
+            logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
 
     if agent_findings_map:
         try:
@@ -1883,17 +1908,22 @@ async def run_exploit_attempt(
         _sev = str(_exploit.get("severity", "")).lower()
         if _sev in ("critical", "high"):
             try:
-                from src.orchestration.symbolic_execution import SymbolicExecutionRequest, build_symbolic_prompt
+                from src.orchestration.symbolic_execution import SymbolicExecutionRequest, run_symbolic_execution
                 _ser = SymbolicExecutionRequest(
                     binary_path=str(_exploit.get("target_url", target)),
                     source_function=str(_exploit.get("parameter", "input")),
                     sink_function=str(_exploit.get("vuln_type", "unknown")),
+                    scan_id=scan_id or "",
+                    timeout_seconds=300,
                 )
-                _sym_sys, _sym_user = build_symbolic_prompt(_ser)
-                _exploit["symbolic_execution_prompt"] = _sym_user[:500]
-                logger.debug("symbolic_execution_prompt_generated", extra={"scan_id": scan_id})
-            except Exception:
-                pass
+                _sym_result = await run_symbolic_execution(_ser, use_sandbox=bool(settings.sandbox_enabled))
+                if _sym_result.vulnerable:
+                    _exploit["symbolic_execution_proven"] = True
+                    _exploit["symbolic_input_values"] = json.dumps(_sym_result.input_values, default=str)[:1000]
+                _exploit["symbolic_execution_prompt"] = _sym_result.angr_script[:500] if _sym_result.angr_script else ""
+                logger.info("symbolic_execution_result", extra={"scan_id": scan_id, "proven": _sym_result.proven, "error": _sym_result.error[:200] if _sym_result.error else ""})
+            except Exception as _sym_exc:
+                logger.debug("symbolic_execution_failed", extra={"scan_id": scan_id, "error": str(_sym_exc)})
 
     return exploit_out
 

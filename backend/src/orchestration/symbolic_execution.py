@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 SYMBOLIC_ENGINES = {
-    "angr": {"languages": ["python", "c", "cpp"], "pip": "angr"},
-    "z3": {"languages": ["python", "c", "cpp"], "pip": "z3-solver"},
+    "angr": {"languages": ["python", "c", "cpp"], "pip": "angr", "install_hint": "pip install angr"},
+    "z3": {"languages": ["python", "c", "cpp"], "pip": "z3-solver", "install_hint": "pip install z3-solver"},
 }
 
 
@@ -57,6 +59,7 @@ class SymbolicExecutionResult:
     path_length: int = 0
     duration_seconds: float = 0.0
     error: str = ""
+    angr_script: str = ""
 
 
 SYMBOLIC_SYSTEM_PROMPT = (
@@ -133,6 +136,107 @@ def generate_angr_stub(
     )
 
 
+def _parse_angr_output(stdout: str, stderr: str) -> SymbolicExecutionResult:
+    """Parse angr script output for vulnerability evidence."""
+    vulnerable = False
+    input_values: dict[str, Any] = {}
+    constraints: list[SymbolicPathConstraint] = []
+
+    lower_stdout = stdout.lower()
+    if "no path found" in lower_stdout or "no active states" in lower_stdout or "exploitation failed" in lower_stdout:
+        return SymbolicExecutionResult(vulnerable=False, proven=False)
+
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if "VULNERABLE" in line.upper() or ("path found" in line.lower() and "no " not in line.lower()[:line.lower().find("path")] if "path" in line.lower() else True):
+            vulnerable = True
+        if line.startswith("Input:"):
+            try:
+                raw = line.split("Input:", 1)[1].strip()
+                input_values["concrete_input"] = raw
+            except Exception:
+                pass
+        if line.startswith("Constraint:"):
+            try:
+                parts = line.split(":", 1)
+                constraints.append(SymbolicPathConstraint(
+                    variable=parts[0].replace("Constraint", "").strip(),
+                    constraint=parts[1].strip() if len(parts) > 1 else "",
+                    solvable=True,
+                ))
+            except Exception:
+                pass
+
+    return SymbolicExecutionResult(
+        vulnerable=vulnerable,
+        proven=vulnerable,
+        path_constraints=constraints,
+        input_values=input_values,
+    )
+
+
+async def run_symbolic_execution(
+    request: SymbolicExecutionRequest,
+    use_sandbox: bool = True,
+) -> SymbolicExecutionResult:
+    """Execute symbolic analysis via angr/Z3 in a sandbox container.
+
+    1. Generate angr script from request
+    2. Write script to temp file
+    3. Run in sandbox via execute_command
+    4. Parse results for vulnerability proof
+    5. Return SymbolicExecutionResult
+    """
+    start = time.monotonic()
+    angr_script = generate_angr_stub(
+        request.binary_path,
+        source_function=request.source_function,
+        sink_function=request.sink_function,
+    )
+
+    from src.tools.executor import execute_command
+
+    script_path = ""
+    try:
+        script_dir = tempfile.mkdtemp(prefix="argus-symex-")
+        script_path = f"{script_dir}/symex_{request.engine}.py"
+
+        with open(script_path, "w") as f:
+            f.write(angr_script)
+
+        if use_sandbox:
+            command = f"python3 {script_path}"
+        else:
+            command = f"python3 {script_path}"
+
+        timeout = min(request.timeout_seconds, 300)
+
+        result = execute_command(
+            command,
+            use_sandbox=use_sandbox,
+            timeout_sec=timeout,
+        )
+
+        parsed = _parse_angr_output(
+            result.get("stdout", ""),
+            result.get("stderr", ""),
+        )
+        parsed.duration_seconds = round(time.monotonic() - start, 2)
+        parsed.angr_script = angr_script
+        parsed.error = result.get("stderr", "")[:1000] if not result.get("success", False) and not parsed.vulnerable else ""
+        return parsed
+
+    except Exception as exc:
+        logger.warning("Symbolic execution failed: %s", exc)
+        return SymbolicExecutionResult(
+            error=str(exc),
+            angr_script=angr_script,
+            duration_seconds=round(time.monotonic() - start, 2),
+        )
+
+
 __all__ = [
     "SYMBOLIC_ENGINES",
     "SymbolicExecutionRequest",
@@ -140,4 +244,5 @@ __all__ = [
     "SymbolicPathConstraint",
     "build_symbolic_prompt",
     "generate_angr_stub",
+    "run_symbolic_execution",
 ]
