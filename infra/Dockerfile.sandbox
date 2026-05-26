@@ -62,18 +62,13 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # ---- Binary profile: standard + ALL fuzzing/symbolic/reverse tools ----
 FROM standard AS binary
 
-# AFL++ — state-of-the-art fuzzer (C/C++/binary)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential gcc g++ make cmake automake autoconf libtool \
-    libgtk-3-dev wget flex bison \
-    && git clone --depth=1 https://github.com/AFLplusplus/AFLplusplus /opt/aflplusplus \
-    && cd /opt/aflplusplus && make distrib && make install \
-    && rm -rf /opt/aflplusplus/.git \
-    && apt-get purge -y libgtk-3-dev && apt-get autoremove -y \
+# AFL++ — state-of-the-art fuzzer (install from Kali repos to avoid source compilation)
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+    afl++ \
     && rm -rf /var/lib/apt/lists/*
 
 # angr — binary analysis framework (Python)
-RUN pip3 install --no-cache-dir angr z3-solver pyelftools lief
+RUN pip3 install --no-cache-dir --break-system-packages angr z3-solver pyelftools lief
 
 # Jazzer — JVM fuzzing (requires JDK)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -99,12 +94,12 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/*
 
 # Playwright + Chromium — browser automation for XSS/auth verification
-RUN pip3 install --no-cache-dir playwright \
+RUN pip3 install --no-cache-dir --break-system-packages playwright \
     && python3 -m playwright install --with-deps chromium
 
 # Python requirements from ARGUS backend (for sandbox task execution)
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
+RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
     ; rm -f /tmp/requirements.txt
 
 # Verify all tools are available
