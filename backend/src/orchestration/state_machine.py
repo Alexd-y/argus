@@ -534,15 +534,15 @@ async def run_scan_state_machine(
         from src.orchestration.evidence_chain import EvidenceChain as _EC
         evidence_chain = _EC(scan_id=scan_id, tenant_id=tenant_id)
         evidence_chain.add_scan_link(target_url=target)
-    except Exception:
-        pass
+    except Exception as _ec_exc:
+        logger.warning("evidence_chain_init_failed", extra={"scan_id": scan_id, "error": str(_ec_exc)})
 
     episodic_memory = None
     try:
         from src.orchestration.episodic_memory import EpisodicMemory as _EM
         episodic_memory = _EM()
-    except Exception:
-        pass
+    except Exception as _em_exc:
+        logger.warning("episodic_memory_init_failed", extra={"scan_id": scan_id, "error": str(_em_exc)})
 
     cost_tracker = None
     try:
@@ -550,8 +550,8 @@ async def run_scan_state_machine(
         _max_cost = float(options.get("max_cost_usd", 50.0)) if options else 50.0
         _max_tokens = int(options.get("max_tokens", 2000000)) if options else 2000000
         cost_tracker = CostTracker(scan_id=scan_id, max_cost_usd=_max_cost, max_total_tokens=_max_tokens)
-    except Exception:
-        pass
+    except Exception as _cr_exc:
+        logger.warning("cost_tracker_init_failed", extra={"scan_id": scan_id, "error": str(_cr_exc)})
 
     try:
         from src.orchestration.tenant_isolation import TenantIsolationGuard
@@ -560,15 +560,15 @@ async def run_scan_state_machine(
             logger.warning("tenant_scan_limit_reached", extra={"tenant_id": tenant_id})
         else:
             _guard.register_scan_start(tenant_id)
-    except Exception:
-        pass
+    except Exception as _ti_exc:
+        logger.warning("tenant_isolation_init_failed", extra={"tenant_id": tenant_id, "error": str(_ti_exc)})
 
     event_bus = None
     try:
         from src.orchestration.scan_events import ScanEventBus, ScanEvent
         event_bus = ScanEventBus()
-    except Exception:
-        pass
+    except Exception as _se_exc:
+        logger.warning("scan_events_init_failed", extra={"scan_id": scan_id, "error": str(_se_exc)})
 
     from src.recon.sandbox_tool_runner import clear_tool_availability_cache
 
@@ -635,6 +635,18 @@ async def run_scan_state_machine(
         if phase in completed_phases and resume_plan.get(phase) == ResumeDecision.SKIP:
             logger.info("Skipping completed phase %s (resume)", phase.value)
             continue
+
+        if cost_tracker is not None:
+            try:
+                from src.orchestration.cost_aware_reasoning import BudgetEnforcer
+                _budget_enforcer = BudgetEnforcer(cost_tracker)
+                _budget_enforcer.check()
+            except Exception as _budget_exc:
+                if "BudgetExceededError" in type(_budget_exc).__name__ or "BudgetExceeded" in str(type(_budget_exc)):
+                    logger.warning("scan_budget_exceeded", extra={"scan_id": scan_id, "phase": phase.value, "cost_usd": cost_tracker.total_cost_usd})
+                    break
+                logger.debug("budget_check_non_fatal", extra={"error": str(_budget_exc)})
+
         progress = _phase_to_progress(phase)
         phase_str = phase.value
         phase_start_time = time.monotonic()
@@ -645,8 +657,8 @@ async def run_scan_state_machine(
             try:
                 from src.orchestration.auth_config import TargetConfig as _TC
                 _auth_config_obj = _TC.from_scan_options(options)
-            except Exception:
-                pass
+            except Exception as _ac_exc:
+                logger.debug("auth_config_load_failed", extra={"scan_id": scan_id, "phase": phase_str, "error": str(_ac_exc)})
 
         _scope_context = ""
         if options and phase == ScanPhase.REPORTING:
@@ -654,8 +666,8 @@ async def run_scan_state_machine(
                 from src.orchestration.scope_integration import rules_of_engagement_to_prompt_context
                 if _auth_config_obj is not None:
                     _scope_context = rules_of_engagement_to_prompt_context(_auth_config_obj)
-            except Exception:
-                pass
+            except Exception as _sc_exc:
+                logger.debug("scope_context_failed", extra={"scan_id": scan_id, "error": str(_sc_exc)})
 
         if phase == ScanPhase.SOURCE_ANALYSIS:
             repo_path = options.get("repo_path") if options else None
@@ -681,16 +693,16 @@ async def run_scan_state_machine(
             if source_out and not source_out.skipped:
                 try:
                     input_data["source_analysis"] = source_out.model_dump()
-                except Exception:
-                    pass
+                except Exception as _sa_exc:
+                    logger.debug("source_analysis_data_failed", extra={"scan_id": scan_id, "error": str(_sa_exc)})
             if episodic_memory is not None:
                 try:
                     _mem_ctx = episodic_memory.build_context_prompt(
                         f"vuln_analysis {target}", max_entries=3
                     )
                     input_data["memory_context"] = _mem_ctx
-                except Exception:
-                    pass
+                except Exception as _mem_exc:
+                    logger.debug("episodic_memory_recall_failed", extra={"scan_id": scan_id, "error": str(_mem_exc)})
         elif phase == ScanPhase.EXPLOITATION:
             input_data = {
                 "findings": vuln_out.findings if vuln_out else [],
@@ -822,8 +834,8 @@ async def run_scan_state_machine(
                                     _binary_types.append({"file": _path, "type": _btype})
                             if _binary_types:
                                 logger.info("binary_analysis_detected", extra={"scan_id": scan_id, "binaries": len(_binary_types)})
-                        except Exception:
-                            pass
+                        except Exception as _ba_exc:
+                            logger.debug("binary_analysis_failed", extra={"scan_id": scan_id, "error": str(_ba_exc)})
                     output_data = source_out.model_dump()
                 elif phase == ScanPhase.RECON:
                     record_tool_run("recon")
@@ -911,6 +923,16 @@ async def run_scan_state_machine(
                     )
                     record_tool_run(ExploitationSubPhase.EXPLOIT_ATTEMPT.value)
                     await session.commit()
+
+                    _ewp = None
+                    if options and options.get("ephemeral_workers"):
+                        try:
+                            from src.orchestration.ephemeral_worker import EphemeralWorkerPool, ContainerSpec
+                            _ewp = EphemeralWorkerPool(max_containers=options.get("max_ephemeral_containers", 5))
+                            logger.info("ephemeral_worker_pool_active", extra={"scan_id": scan_id, "max": _ewp._max_containers})
+                        except Exception as _ewp_exc:
+                            logger.warning("ephemeral_worker_pool_init_failed: %s", _ewp_exc)
+
                     attempt_out = await run_exploit_attempt(
                         findings, scan_id=scan_id, target=target, tenant_id=tenant_id
                     )
@@ -953,10 +975,16 @@ async def run_scan_state_machine(
                                     if _vresult.verified:
                                         _cand["microvm_verified"] = True
                                         _cand["microvm_artifact"] = _vresult.artifact_content[:2000]
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
+                                except Exception as _vm_cand_exc:
+                                    logger.debug("microvm_verify_cand_failed", extra={"scan_id": scan_id, "error": str(_vm_cand_exc)})
+                    except Exception as _vm_exc:
+                        logger.warning("microvm_verification_failed", extra={"scan_id": scan_id, "error": str(_vm_exc)})
+                    if _ewp is not None:
+                        try:
+                            await _ewp.prune_stale()
+                            logger.info("ephemeral_worker_pool_cleanup", extra={"scan_id": scan_id, "active": _ewp.active_count})
+                        except Exception as _ewp_clean_exc:
+                            logger.debug("ephemeral_cleanup_failed: %s", _ewp_clean_exc)
                     try:
                         from src.orchestration.poc_watermarking import stamp_payload
                         _wm_secret = options.get("watermark_secret", "argus-default-wm-key") if options else "argus-default-wm-key"
@@ -966,8 +994,8 @@ async def run_scan_state_machine(
                                 _exploit["poc_curl"] = stamp_payload(
                                     _poc, scan_id=scan_id, tenant_id=tenant_id, secret_key=_wm_secret
                                 )
-                    except Exception:
-                        pass
+                    except Exception as _wm_exc:
+                        logger.warning("poc_watermarking_failed", extra={"scan_id": scan_id, "error": str(_wm_exc)})
                     await _record_event(
                         session,
                         tenant_id,
@@ -1139,39 +1167,79 @@ async def run_scan_state_machine(
                     description=str(_f.get("description", "")),
                     framework="",
                 ))
-        except Exception:
-            pass
+        except Exception as _em_store_exc:
+            logger.warning("episodic_memory_store_failed", extra={"scan_id": scan_id, "error": str(_em_store_exc)})
 
     if evidence_chain is not None:
         try:
             _chain_valid = evidence_chain.verify_chain()
             if not _chain_valid:
                 logger.warning("evidence_chain_tamper_detected", extra={"scan_id": scan_id})
-        except Exception:
-            pass
+        except Exception as _ec_verify_exc:
+            logger.warning("evidence_chain_verify_failed", extra={"scan_id": scan_id, "error": str(_ec_verify_exc)})
 
     try:
-        from src.orchestration.re_verification import ReVerificationTracker
+        from src.orchestration.re_verification import ReVerificationTracker, ReVerificationRequest
         _rv_tracker = ReVerificationTracker()
+        if options and options.get("auto_reverify") and exploit_out and (exploit_out.exploits or []):
+            async def _scanner_func(req):
+                try:
+                    from src.orchestration.exploit_verify import verify_exploit_poc_async
+                    poc_data = {"poc_curl": req.original_payload, "vuln_type": req.original_cwe, "target_url": req.original_endpoint}
+                    verified = await verify_exploit_poc_async(poc_data)
+                    return {"vulnerable": verified, "details": f"PoC verification: {'still vulnerable' if verified else 'patched'}"}
+                except Exception as _sf_exc:
+                    return {"vulnerable": True, "details": f"Verification error: {_sf_exc}"}
+
+            for _rv_exp in (exploit_out.exploits or [])[:5]:
+                if str(_rv_exp.get("severity", "")).lower() in ("critical", "high"):
+                    try:
+                        _rv_req = ReVerificationRequest(
+                            finding_id=str(_rv_exp.get("finding_id", "")),
+                            scan_id=scan_id,
+                            original_cwe=str(_rv_exp.get("vuln_type", _rv_exp.get("cwe", ""))),
+                            original_endpoint=str(_rv_exp.get("target_url", target)),
+                            original_payload=str(_rv_exp.get("poc_curl", _rv_exp.get("poc", ""))),
+                        )
+                        _rv_res = await _rv_tracker.re_verify(_rv_req, scanner_func=_scanner_func)
+                        if not _rv_res.still_vulnerable:
+                            _rv_exp["re_verified_fixed"] = True
+                            logger.info("re_verification_fixed", extra={"scan_id": scan_id, "finding_id": _rv_req.finding_id})
+                    except Exception as _rv_cand_exc:
+                        logger.debug("re_verification_cand_failed", extra={"error": str(_rv_cand_exc)})
         logger.info("re_verification_tracker_initialized", extra={"scan_id": scan_id})
-    except Exception:
-        pass
+    except Exception as _rv_exc:
+        logger.warning("re_verification_init_failed", extra={"scan_id": scan_id, "error": str(_rv_exc)})
 
     if options and options.get("self_pentest_enabled"):
         try:
             from src.orchestration.self_pentest import SelfPentestRunner, SELF_PENTEST_TARGETS
             _sp_runner = SelfPentestRunner()
-            for _sp_target in _sp_runner.get_targets():
-                logger.info("self_pentest_target_registered", extra={"scan_id": scan_id, "target": _sp_target.name})
-        except Exception:
-            pass
+            _sp_result = await _sp_runner.run(scan_id=scan_id)
+            if _sp_result.findings:
+                logger.warning("self_pentest_findings", extra={"scan_id": scan_id, "count": len(_sp_result.findings)})
+                if evidence_chain is not None:
+                    for _spf in _sp_result.findings[:10]:
+                        try:
+                            evidence_chain.add_finding_link(
+                                finding_id=f"self-pentest-{_spf.target}",
+                                title=_spf.vulnerability,
+                                severity=_spf.severity,
+                                evidence_tier=2,
+                            )
+                        except Exception:
+                            pass
+            else:
+                logger.info("self_pentest_clean", extra={"scan_id": scan_id, "targets_scanned": _sp_result.targets_scanned})
+        except Exception as _sp_exc:
+            logger.warning("self_pentest_run_failed", extra={"scan_id": scan_id, "error": str(_sp_exc)})
 
     try:
         from src.orchestration.tenant_isolation import TenantIsolationGuard as _TIG
         _ti_guard = _TIG()
         _ti_guard.register_scan_end(tenant_id)
-    except Exception:
-        pass
+    except Exception as _ti_end_exc:
+        logger.warning("tenant_isolation_end_failed", extra={"tenant_id": tenant_id, "error": str(_ti_end_exc)})
     await _persist_report_and_findings(
         session,
         tenant_id,

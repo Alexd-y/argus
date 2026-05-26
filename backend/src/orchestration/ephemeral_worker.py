@@ -201,9 +201,6 @@ class EphemeralWorkerPool:
 
         self._active[container_id] = time.monotonic()
         return container_id
-        self._active[container_id] = time.monotonic()
-
-        return container_id
 
     async def release(self, container_id: str) -> None:
         """Stop and remove an ephemeral container."""

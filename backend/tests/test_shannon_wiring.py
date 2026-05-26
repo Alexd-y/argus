@@ -1017,3 +1017,110 @@ class TestPipelineWiringIntegration:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         assert "cost_aware_reasoning" in content or "TokenUsageRecord" in content
+
+
+class TestNewWiringP1ToP12:
+
+    def test_fanout_va_in_handlers(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "fanout_agents" in content
+
+    def test_ephemeral_worker_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "ephemeral_worker" in content
+        assert "EphemeralWorkerPool" in content
+
+    def test_no_silent_evidence_chain_try_except(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        ec_init_pos = content.find("evidence_chain_init_failed")
+        assert ec_init_pos > 0
+
+    def test_no_silent_episodic_memory_try_except(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "episodic_memory_init_failed" in content or "episodic_memory_recall_failed" in content
+
+    def test_no_silent_watermarking_try_except(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "poc_watermarking_failed" in content
+
+    def test_self_pentest_run_method(self):
+        from src.orchestration.self_pentest import SelfPentestRunner
+        runner = SelfPentestRunner()
+        assert hasattr(runner, "run")
+
+    def test_self_pentest_run_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "_sp_result = await _sp_runner.run" in content or "_sp_runner.run" in content
+
+    def test_re_verification_run_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "re_verify" in content
+        assert "scanner_func" in content
+
+    def test_budget_enforcer_in_phase_loop(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "BudgetEnforcer" in content
+        assert "budget_enforcer.check" in content or "_budget_enforcer.check" in content
+
+    def test_budget_check_before_phase(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        budget_pos = content.find("_budget_enforcer.check()")
+        phase_loop_pos = content.find("for order_index, phase in enumerate(PHASE_ORDER)")
+        assert budget_pos > 0
+        assert phase_loop_pos > 0
+        assert budget_pos > phase_loop_pos
+
+    def test_ephemeral_worker_bug_fixed(self):
+        from src.orchestration.ephemeral_worker import EphemeralWorkerPool
+        import inspect
+        src = inspect.getsource(EphemeralWorkerPool.acquire)
+        duplicate_count = src.count("self._active[container_id] = time.monotonic()")
+        assert duplicate_count == 1
+
+    def test_adversarial_critic_wired(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "build_critic_prompt" in content
+
+    def test_detection_engineering_wired(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "build_detection_prompt" in content
+
+    def test_auto_patch_wired(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "build_autopatch_prompt" in content

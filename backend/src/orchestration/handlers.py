@@ -1766,6 +1766,41 @@ async def run_vuln_analysis(
         except Exception:
             pass
 
+    if scan_options.get("fanout_agents") and agent_findings_map:
+        try:
+            from src.orchestration.vuln_agents import VULN_AGENT_SPECS, AgentDomain
+            _fanout_findings: list[dict[str, Any]] = []
+            for _fo_domain in AgentDomain:
+                if _fo_domain.value not in agent_findings_map:
+                    continue
+                _fo_spec = VULN_AGENT_SPECS[_fo_domain]
+                _fo_relevant = agent_findings_map[_fo_domain.value]
+                _fo_domain_inp = VulnAnalysisInput(
+                    threat_model={"domain": _fo_domain.value, "focus": _fo_spec.cwe_focus[:5]},
+                    assets=assets,
+                )
+                try:
+                    _fo_domain_out = await ai_vuln_analysis(
+                        _fo_domain_inp,
+                        active_scan_context=_build_active_scan_context(_fo_relevant),
+                        scan_id=scan_id,
+                        code_aware_section=code_aware_section,
+                    )
+                    for _fo_df in _fo_domain_out.findings:
+                        _fo_df["source_domain"] = _fo_domain.value
+                        _fanout_findings.append(_fo_df)
+                except Exception as _fo_dexc:
+                    logger.debug("fanout_va_domain_failed", extra={"domain": _fo_domain.value, "error": str(_fo_dexc)})
+            if _fanout_findings:
+                _fo_seen = {f.get("title", "").lower() for f in llm_output.findings}
+                for _fo_ff in _fanout_findings:
+                    if _fo_ff.get("title", "").lower() not in _fo_seen:
+                        llm_output.findings.append(_fo_ff)
+                        _fo_seen.add(_fo_ff.get("title", "").lower())
+                logger.info("fanout_va_merged", extra={"scan_id": scan_id, "new_findings": len(_fanout_findings)})
+        except Exception as _fo_exc:
+            logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
+
     return llm_output
 
 
