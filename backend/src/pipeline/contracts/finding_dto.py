@@ -56,6 +56,7 @@ class FindingCategory(StrEnum):
     CRYPTO = "crypto"
     SECRET_LEAK = "secret_leak"
     DOS = "dos"
+    PROMPT_INJECTION = "prompt_injection"
     OTHER = "other"
 
 

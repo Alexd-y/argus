@@ -1,0 +1,1 @@
+"""Bug Bounty Planning Module integration package."""

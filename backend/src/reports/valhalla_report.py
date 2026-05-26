@@ -80,6 +80,9 @@ _VALHALLA_AI_SECTION_ORDER: tuple[str, ...] = (
     REPORT_AI_SECTION_REMEDIATION_STAGES,
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
     REPORT_AI_SECTION_COST_SUMMARY,
+    "bounty_hunter_tactics",
+    "quick_fuzz_findings",
+    "ai_security_findings",
 )
 
 _SEVERITY_RANK: dict[str, int] = {
@@ -168,6 +171,24 @@ class ValhallaReportContext(BaseModel):
     retest_plan: dict[str, Any] = Field(default_factory=dict)
     zero_day_assessment: dict[str, Any] = Field(default_factory=dict)
     cost_summary: dict[str, Any] = Field(default_factory=dict)
+
+    # Quick fuzz phase results
+    quick_fuzz_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Summary of quick_fuzz phase: total_payloads, categories_tested, candidates_found, by_category.",
+    )
+
+    # Bug bounty planning data (when scan originated from a bounty plan)
+    bounty_plan: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Bug bounty scope analysis, surface classification, and test plan data.",
+    )
+
+    # Burp Suite config export availability
+    burp_config_available: bool = Field(
+        default=False,
+        description="True when a Burp Suite config JSON was generated for this scan.",
+    )
 
     # AI-generated section texts
     ai_sections: dict[str, str] = Field(default_factory=dict)

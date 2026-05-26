@@ -48,6 +48,65 @@ OwaspTop102025CategoryId = Literal[
     "A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10"
 ]
 
+OWASP_A05_AI_INDICATORS: tuple[str, ...] = (
+    "prompt injection",
+    "system prompt leakage",
+    "llm output manipulation",
+    "rag poisoning",
+    "ai model misuse",
+    "llm endpoint unprotected",
+    "ai api key exposed",
+    "model config exposed",
+    "ai cost amplification",
+)
+
+OWASP_A05_AI_TEST_STEPS: tuple[str, ...] = (
+    "Test AI/LLM endpoints for prompt injection with override payloads",
+    "Test for system prompt leakage via direct queries",
+    "Test for RAG poisoning via malicious document uploads",
+    "Test for LLM output XSS via reflected AI-generated content",
+    "Check AI endpoint authentication and rate limiting",
+    "Verify AI API keys are not exposed in client-side code",
+    "Test for cost amplification via repeated LLM inference requests",
+)
+
+OWASP_AI_SPECIFIC_GAP_DESCRIPTIONS: dict[str, list[str]] = {
+    "A01": [
+        "LLM endpoints exposed without authentication",
+        "Vector DB / embedding endpoints unprotected",
+        "Admin AI model config routes accessible to regular users",
+    ],
+    "A02": [
+        "AI API keys hardcoded or committed to repository",
+        "Ollama/LM Studio exposed on 0.0.0.0 without auth",
+        "Model config/temperature exposed via API endpoint",
+    ],
+    "A05": [
+        "Prompt injection — user input in LLM prompts without sanitization",
+        "System prompt leakage via crafted input",
+        "RAG poisoning via malicious document retrieval",
+        "LLM output rendered as HTML without escaping",
+    ],
+    "A06": [
+        "No rate limiting on AI inference endpoints (cost amplification)",
+        "No max token limits per user/session",
+        "AI outputs not reviewed before high-stakes actions",
+    ],
+    "A07": [
+        "API keys for AI services shared across tenants",
+        "JWT with none algorithm accepted at AI endpoints",
+        "AI chatbot sessions not isolated between users",
+    ],
+    "A08": [
+        "Model weights loaded without checksum verification",
+        "pickle.loads used to deserialize AI model artifacts",
+    ],
+    "A09": [
+        "AI prompt/response not logged for abuse detection",
+        "No monitoring on AI API cost spikes",
+    ],
+}
+
 
 def findings_owasp_category_check_sql() -> str:
     """PostgreSQL CHECK expression for nullable ``findings.owasp_category``."""

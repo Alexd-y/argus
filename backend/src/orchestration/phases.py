@@ -23,9 +23,10 @@ from src.orchestration.exploitation_queue import (
 PHASE_PROGRESS: dict[str, int] = {
     "source_analysis": 5,
     "recon": 15,
-    "threat_modeling": 25,
-    "vuln_analysis": 45,
-    "exploitation": 65,
+    "quick_fuzz": 35,
+    "threat_modeling": 45,
+    "vuln_analysis": 55,
+    "exploitation": 70,
     "post_exploitation": 85,
     "reporting": 100,
 }
@@ -43,10 +44,11 @@ class PhaseDefinition:
 
 
 class ScanPhase(str, Enum):
-    """7 phases of pentest pipeline (source_analysis added as phase 0)."""
+    """8 phases of pentest pipeline (quick_fuzz added between recon and threat_modeling)."""
 
     SOURCE_ANALYSIS = "source_analysis"
     RECON = "recon"
+    QUICK_FUZZ = "quick_fuzz"
     THREAT_MODELING = "threat_modeling"
     VULN_ANALYSIS = "vuln_analysis"
     EXPLOITATION = "exploitation"
@@ -57,6 +59,7 @@ class ScanPhase(str, Enum):
 PHASE_ORDER: list[ScanPhase] = [
     ScanPhase.SOURCE_ANALYSIS,
     ScanPhase.RECON,
+    ScanPhase.QUICK_FUZZ,
     ScanPhase.THREAT_MODELING,
     ScanPhase.VULN_ANALYSIS,
     ScanPhase.EXPLOITATION,
@@ -205,6 +208,36 @@ class ReconOutput(BaseModel):
     tool_results: dict[str, Any] = Field(default_factory=dict, exclude=True)
     crawl_params: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
     crawl_forms: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
+
+
+# --- Quick Fuzz ---
+class QuickFuzzInput(BaseModel):
+    """Input for quick_fuzz phase (between recon and threat_modeling).
+
+    Receives the target URL and recon output (discovered endpoints, tech
+    stack) to identify quick-win vulnerabilities before deep VULN_ANALYSIS.
+    """
+
+    target: str
+    recon_output: dict[str, Any] = Field(default_factory=dict)
+    options: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuickFuzzOutput(BaseModel):
+    """Output of quick_fuzz phase.
+
+    Produces candidate findings and narrowed-down endpoint/parameter
+    combinations that deserve deep testing in VULN_ANALYSIS.
+    """
+
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    fuzz_results: list[dict[str, Any]] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="FuzzCandidate dicts — endpoints for deep VULN_ANALYSIS testing.",
+    )
+    tech_stack: dict[str, Any] = Field(default_factory=dict)
+    baseline_responses: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Threat Modeling ---
@@ -376,6 +409,15 @@ RECON_INPUT_SCHEMA: dict[str, Any] = {
     "required": ["target", "options"],
     "properties": {"target": {"type": "string"}, "options": {"type": "object"}},
 }
+QUICK_FUZZ_INPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["target"],
+    "properties": {
+        "target": {"type": "string"},
+        "recon_output": {"type": "object"},
+        "options": {"type": "object"},
+    },
+}
 THREAT_MODELING_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["assets"],
@@ -427,6 +469,7 @@ def get_phase_definition(phase: str) -> PhaseDefinition:
     input_schemas = {
         "source_analysis": SOURCE_ANALYSIS_INPUT_SCHEMA,
         "recon": RECON_INPUT_SCHEMA,
+        "quick_fuzz": QUICK_FUZZ_INPUT_SCHEMA,
         "threat_modeling": THREAT_MODELING_INPUT_SCHEMA,
         "vuln_analysis": VULN_ANALYSIS_INPUT_SCHEMA,
         "exploitation": EXPLOITATION_INPUT_SCHEMA,
