@@ -1125,6 +1125,7 @@ async def run_threat_modeling(
     recon_summary: dict[str, Any] | None = None,
     scan_id: str | None = None,
     source_analysis: Any | None = None,
+    quick_fuzz_findings: list[dict[str, Any]] | None = None,
 ) -> ThreatModelOutput:
     """Production threat modeling: enriched recon context + NVD CVE lookup + LLM STRIDE analysis."""
     from src.orchestration.threat_model_enrichment import (
@@ -1142,6 +1143,20 @@ async def run_threat_modeling(
         recon_summary=recon_summary,
     )
     recon_context_str = format_recon_context_for_prompt(recon_ctx)
+    if quick_fuzz_findings:
+        try:
+            _qf_lines = []
+            for _qff in quick_fuzz_findings[:20]:
+                _qf_lines.append(
+                    f"- [{_qff.get('severity', 'medium').upper()}] {_qff.get('title', 'unknown')}"
+                    f" (category: {_qff.get('category', 'unknown')})"
+                )
+            recon_context_str += (
+                "\n\n[Quick Fuzz Pre-Scan Findings]:\n"
+                + "\n".join(_qf_lines)
+            )
+        except Exception:
+            pass
     logger.info(
         "threat_model_recon_context_built",
         extra={

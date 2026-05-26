@@ -1080,6 +1080,12 @@ class ValhallaReportContext(BaseModel):
     unresolved_gaps: list[dict[str, str]] = Field(default_factory=list)
     missing_artifacts: list[dict[str, str]] = Field(default_factory=list)
     next_scan_commands: list[dict[str, str]] = Field(default_factory=list)
+    #: Quick fuzz phase summary
+    quick_fuzz_summary: dict[str, Any] = Field(default_factory=dict)
+    #: Bug bounty planning data
+    bounty_plan: dict[str, Any] = Field(default_factory=dict)
+    #: Whether Burp Suite config export is available
+    burp_config_available: bool = False
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -6075,6 +6081,7 @@ def build_valhalla_report_context(
     tool_run_summaries: list[tuple[str, str]] | None = None,
     extra_feature_flags: dict[str, bool] | None = None,
     scan_options: dict[str, Any] | None = None,
+    quick_fuzz_output: dict[str, Any] | None = None,
 ) -> ValhallaReportContext:
     """Assemble ValhallaReportContext from already-collected scan report inputs."""
     tid = (tenant_id or "").strip()
@@ -6710,6 +6717,20 @@ def build_valhalla_report_context(
         unresolved_gaps=build_unresolved_gaps(finding_dicts),
         missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),
         next_scan_commands=build_next_scan_commands(finding_dicts),
+        quick_fuzz_summary=(
+            {
+                "findings_count": len(quick_fuzz_output.get("findings", [])),
+                "candidates_count": len(quick_fuzz_output.get("candidates", [])),
+                "by_category": list({
+                    f.get("category", "unknown")
+                    for f in quick_fuzz_output.get("findings", [])
+                }),
+            }
+            if quick_fuzz_output
+            else {}
+        ),
+        bounty_plan={},
+        burp_config_available=False,
     )
 
 

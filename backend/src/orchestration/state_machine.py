@@ -976,6 +976,7 @@ async def run_scan_state_machine(
                         target=target,
                         scan_id=scan_id,
                         source_analysis=source_out,
+                        quick_fuzz_findings=quick_fuzz_out.findings if quick_fuzz_out else None,
                     )
                     output_data = threat_out.model_dump()
                 elif phase == ScanPhase.VULN_ANALYSIS:
