@@ -1,23 +1,9 @@
 "use server";
 
 import { callAdminBackendJson } from "@/lib/serverAdminBackend";
+import type { LlmRuntimeSummary, AdminLlmProviderRow } from "./types";
 
-export type LlmRuntimeSummary = {
-  execution_uses_global_env: boolean;
-  global_env_providers: Record<string, boolean>;
-};
-
-export type AdminLlmProviderRow = {
-  id: string;
-  tenant_id: string;
-  provider_key: string;
-  enabled: boolean;
-  config: Record<string, unknown> | null;
-  api_key_last4: string | null;
-  api_key_set: boolean;
-  model_fallback_chain: string[] | null;
-  created_at: string;
-};
+export type { LlmRuntimeSummary, AdminLlmProviderRow };
 
 const FALLBACK_RUNTIME: LlmRuntimeSummary = {
   execution_uses_global_env: false,

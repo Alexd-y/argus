@@ -4,15 +4,15 @@ import { useCallback, useEffect, useId, useMemo, useState, useTransition } from 
 
 import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
 import { getSafeErrorMessage } from "@/lib/api";
-import { listTenants, type AdminTenant } from "@/app/admin/tenants/actions";
+import { listTenants } from "@/app/admin/tenants/actions";
+import type { AdminTenant } from "@/app/admin/tenants/actions";
 import {
   createLlmProviderRow,
   getLlmRuntimeSummary,
   listLlmProvidersForTenant,
   patchLlmProvider,
-  type AdminLlmProviderRow,
-  type LlmRuntimeSummary,
 } from "./actions";
+import type { AdminLlmProviderRow, LlmRuntimeSummary } from "./types";
 
 const ADDABLE_PROVIDER_KEYS = [
   "openai",

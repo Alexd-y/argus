@@ -6,9 +6,8 @@ import { AdminRouteGuard } from "@/components/admin/AdminRouteGuard";
 import {
   getWrbDashboard,
   wrbTestPrompt,
-  type WrbDashboardData,
-  type WrbTestPromptResult,
 } from "./wrbActions";
+import type { WrbDashboardData, WrbTestPromptResult } from "./types";
 
 const STATUS_COLORS: Record<string, string> = {
   available: "bg-emerald-400",

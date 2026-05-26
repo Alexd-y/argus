@@ -1,30 +1,7 @@
 "use server";
 
 import { callAdminBackendJson } from "@/lib/serverAdminBackend";
-
-type WrbDashboardData = {
-  status: string;
-  model: string;
-  provider: string;
-  error: string;
-  models_count: number;
-  base_url: string;
-  timeout_seconds: number;
-  gpu_mode: string;
-  concurrency_limit: number;
-  default_temperature: number;
-  default_max_tokens: number;
-  max_prompt_bytes: number;
-  api_key_configured: boolean;
-};
-
-type WrbTestPromptResult = {
-  response: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  elapsed_ms: number;
-};
+import type { WrbDashboardData, WrbTestPromptResult } from "./types";
 
 export type { WrbDashboardData, WrbTestPromptResult };
 
