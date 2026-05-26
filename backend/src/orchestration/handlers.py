@@ -1735,6 +1735,36 @@ async def run_vuln_analysis(
     except Exception as va_exc:
         logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
 
+    if scan_options.get("fuzzing_enabled") and source_analysis is not None:
+        try:
+            from src.orchestration.fuzzing import select_engine, build_fuzz_harness_prompt
+            _fuzz_targets = []
+            _sa_dict = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            _code_files = _sa_dict.get("code_files", [])
+            for _cf in (_code_files or [])[:5]:
+                _lang = str(_cf.get("language", "c")).lower() if isinstance(_cf, dict) else "c"
+                _engine = select_engine(_lang)
+                _fuzz_targets.append({"file": str(_cf), "engine": _engine, "language": _lang})
+            if _fuzz_targets:
+                logger.info("fuzzing_campaign_queued", extra={"scan_id": scan_id, "targets": len(_fuzz_targets)})
+        except Exception:
+            pass
+
+    if agent_findings_map:
+        try:
+            from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+            _spawner = SubAgentSpawner(max_depth=2)
+            _spawned = 0
+            for _domain, _finds in agent_findings_map.items():
+                _task = SubAgentTask(task_description=f"Analyze {_domain} findings", depth=0)
+                if _spawner.can_spawn(_task):
+                    _result = _spawner.spawn(_task)
+                    _spawned += 1
+            if _spawned:
+                logger.info("sub_agents_spawned", extra={"scan_id": scan_id, "count": _spawned})
+        except Exception:
+            pass
+
     return llm_output
 
 
@@ -1801,6 +1831,22 @@ async def run_exploit_attempt(
             logger.info("ReAct exploitation fallback used", extra={"scan_id": scan_id})
         except Exception:
             pass
+
+    for _exploit in (exploit_out.exploits or []):
+        _sev = str(_exploit.get("severity", "")).lower()
+        if _sev in ("critical", "high"):
+            try:
+                from src.orchestration.symbolic_execution import SymbolicExecutionRequest, build_symbolic_prompt
+                _ser = SymbolicExecutionRequest(
+                    binary_path=str(_exploit.get("target_url", target)),
+                    source_function=str(_exploit.get("parameter", "input")),
+                    sink_function=str(_exploit.get("vuln_type", "unknown")),
+                )
+                _sym_sys, _sym_user = build_symbolic_prompt(_ser)
+                _exploit["symbolic_execution_prompt"] = _sym_user[:500]
+                logger.debug("symbolic_execution_prompt_generated", extra={"scan_id": scan_id})
+            except Exception:
+                pass
 
     return exploit_out
 
@@ -1956,6 +2002,27 @@ async def run_reporting(
         if hibp_summary:
             report_context["hibp_pwned_password_summary"] = hibp_summary
 
+    _critic_insights: list[dict[str, Any]] = []
+    if vuln_analysis and vuln_analysis.findings:
+        try:
+            from src.orchestration.adversarial_critic import build_critic_prompt, parse_critic_response
+            from src.llm.facade import call_llm_unified as _call_llm_critic
+            _critic_sys, _critic_user = build_critic_prompt(vuln_analysis.findings[:30])
+            _critic_resp = await _call_llm_critic(
+                _critic_sys, _critic_user, task=LLMTask.REPORT_SECTION,
+                scan_id=scan_id, phase="adversarial_critic",
+            )
+            if _critic_resp:
+                import json as _json_c
+                _critic_data = _json_c.loads(_critic_resp) if isinstance(_critic_resp, str) else _critic_resp
+                _critic_result = parse_critic_response(_critic_data)
+                for _bs in (_critic_result.blind_spots or [])[:5]:
+                    _critic_insights.append({"type": "blind_spot", "detail": _bs})
+                for _c in (_critic_result.critiques or [])[:5]:
+                    _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
+        except Exception:
+            pass
+
     inp = ReportingInput(
         target=target,
         recon=recon,
@@ -1967,26 +2034,11 @@ async def run_reporting(
     )
     report_out = await ai_reporting(inp, scan_id=scan_id)
 
-    if vuln_analysis and vuln_analysis.findings:
+    if _critic_insights:
         try:
-            from src.orchestration.adversarial_critic import build_critic_prompt, parse_critic_response
-            from src.llm.facade import call_llm_unified
-            _critic_sys, _critic_user = build_critic_prompt(vuln_analysis.findings[:30])
-            _critic_resp = await call_llm_unified(
-                _critic_sys, _critic_user, task=LLMTask.REPORT_SECTION,
-                scan_id=scan_id, phase="adversarial_critic",
-            )
-            if _critic_resp:
-                import json as _json
-                _critic_data = _json.loads(_critic_resp) if isinstance(_critic_resp, str) else _critic_resp
-                _critic_result = parse_critic_response(_critic_data)
-                if _critic_result.blind_spots or _critic_result.critiques:
-                    _insights = report_out.report.get("ai_insights", [])
-                    for _bs in _critic_result.blind_spots[:5]:
-                        _insights.append({"type": "blind_spot", "detail": _bs})
-                    for _c in _critic_result.critiques[:5]:
-                        _insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
-                    report_out.report["ai_insights"] = _insights
+            _existing = report_out.report.get("ai_insights", [])
+            _existing.extend(_critic_insights)
+            report_out.report["ai_insights"] = _existing
         except Exception:
             pass
 

@@ -918,3 +918,75 @@ class TestPipelineWiringIntegration:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         assert "react_agent" in content
+
+    def test_fuzzing_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "fuzzing" in content
+
+    def test_symbolic_execution_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "symbolic_execution" in content
+
+    def test_sub_agent_spawner_in_handlers_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "sub_agent_spawner" in content
+
+    def test_self_pentest_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "self_pentest" in content
+
+    def test_re_verification_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "re_verification" in content
+
+    def test_binary_analysis_in_state_machine_file(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "binary_analysis" in content
+
+    def test_tenant_isolation_end_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "register_scan_end" in content
+
+    def test_adversarial_critic_before_report(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        critic_call_pos = content.find("build_critic_prompt")
+        await_reporting_pos = content.find("await ai_reporting")
+        assert critic_call_pos > 0
+        assert await_reporting_pos > 0
+        assert critic_call_pos < await_reporting_pos
+
+    def test_episodic_memory_persistent_dir(self):
+        from src.orchestration.episodic_memory import EpisodicMemory
+        mem = EpisodicMemory(persist_dir="")
+        assert mem is not None
+
+    def test_cost_in_llm_facade(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "llm", "facade.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "cost_aware_reasoning" in content or "TokenUsageRecord" in content

@@ -57,15 +57,25 @@ class EpisodicMemory:
     Falls back to in-memory exact-match when vector DB is unavailable.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persist_dir: str | None = None) -> None:
         self._entries: list[EpisodicEntry] = []
         self._vector_client: Any = None
+        self._collection: Any = None
 
+        _persist = persist_dir or ""
         try:
             import chromadb
-            self._vector_client = chromadb.Client()
+            if _persist:
+                self._vector_client = chromadb.PersistentClient(path=_persist)
+            else:
+                import os
+                _default_path = os.environ.get("ARGUS_EPISODIC_DIR", "")
+                if _default_path:
+                    self._vector_client = chromadb.PersistentClient(path=_default_path)
+                else:
+                    self._vector_client = chromadb.Client()
             self._collection = self._vector_client.get_or_create_collection("argus_episodic")
-            logger.info("ChromaDB episodic memory initialized")
+            logger.info("ChromaDB episodic memory initialized (persist=%s)", bool(_persist or os.environ.get("ARGUS_EPISODIC_DIR")))
         except ImportError:
             try:
                 pass

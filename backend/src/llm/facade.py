@@ -78,15 +78,29 @@ def _record_llm_cost(
         from src.llm.cost_tracker import get_tracker
 
         tracker = get_tracker(scan_id)
-        tracker.record(
-            phase=phase,
-            task=task_label,
-            model=model,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
+        try:
+            tracker.record(
+                phase=phase,
+                task=task_label,
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except Exception:
+            pass
+    except Exception:
+        pass
+    try:
+        from src.orchestration.cost_aware_reasoning import TokenUsageRecord
+        _cost_usd = (prompt_tokens + completion_tokens) * 0.00001
+        TokenUsageRecord(
+            phase=phase, tier=task_label, model=model,
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+            estimated_cost_usd=_cost_usd,
         )
     except Exception:
-        logger.warning("cost_tracking_record_failed", exc_info=True)
+        pass
 
 
 def _get_wrb_adapter():

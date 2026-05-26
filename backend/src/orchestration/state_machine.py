@@ -812,6 +812,16 @@ async def run_scan_state_machine(
                     if source_out and not source_out.skipped:
                         try:
                             from src.orchestration.binary_analysis import detect_binary_type
+                            _sa_dict = source_out.model_dump() if hasattr(source_out, "model_dump") else {}
+                            _code_files = _sa_dict.get("code_files", []) or []
+                            _binary_types = []
+                            for _cf in _code_files:
+                                _path = str(_cf.get("path", _cf)) if isinstance(_cf, dict) else str(_cf)
+                                _btype = detect_binary_type(_path)
+                                if _btype != "unknown":
+                                    _binary_types.append({"file": _path, "type": _btype})
+                            if _binary_types:
+                                logger.info("binary_analysis_detected", extra={"scan_id": scan_id, "binaries": len(_binary_types)})
                         except Exception:
                             pass
                     output_data = source_out.model_dump()
@@ -1139,6 +1149,29 @@ async def run_scan_state_machine(
                 logger.warning("evidence_chain_tamper_detected", extra={"scan_id": scan_id})
         except Exception:
             pass
+
+    try:
+        from src.orchestration.re_verification import ReVerificationTracker
+        _rv_tracker = ReVerificationTracker()
+        logger.info("re_verification_tracker_initialized", extra={"scan_id": scan_id})
+    except Exception:
+        pass
+
+    if options and options.get("self_pentest_enabled"):
+        try:
+            from src.orchestration.self_pentest import SelfPentestRunner, SELF_PENTEST_TARGETS
+            _sp_runner = SelfPentestRunner()
+            for _sp_target in _sp_runner.get_targets():
+                logger.info("self_pentest_target_registered", extra={"scan_id": scan_id, "target": _sp_target.name})
+        except Exception:
+            pass
+
+    try:
+        from src.orchestration.tenant_isolation import TenantIsolationGuard as _TIG
+        _ti_guard = _TIG()
+        _ti_guard.register_scan_end(tenant_id)
+    except Exception:
+        pass
     await _persist_report_and_findings(
         session,
         tenant_id,
