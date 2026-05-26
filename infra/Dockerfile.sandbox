@@ -33,12 +33,24 @@ RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx \
-    sqlmap nikto wpscan dirsearch dalfox xsstrike \
+    nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
+    sqlmap nikto wpscan dirsearch \
     hydra medusa crackmapexec impacket-scripts smbclient \
     sslscan testssl.sh \
     jq whois netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
+
+# dalfox (Go binary — not in Kali apt, download pre-built release)
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then DALFOX_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then DALFOX_ARCH="arm64"; else DALFOX_ARCH="amd64"; fi && \
+    curl -sL "https://github.com/hahwul/dalfox/releases/latest/download/dalfox_linux_${DALFOX_ARCH}.tar.gz" -o /tmp/dalfox.tar.gz && \
+    tar xzf /tmp/dalfox.tar.gz -C /tmp/ && \
+    find /tmp -maxdepth 2 -name 'dalfox' -type f -executable -exec mv {} /usr/local/bin/dalfox \; && \
+    chmod +x /usr/local/bin/dalfox && \
+    rm -f /tmp/dalfox.tar.gz
+
+# xsstrike (Python tool — not in Kali apt)
+RUN pip3 install --no-cache-dir xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
@@ -106,6 +118,9 @@ RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
     echo "ls /opt/jazzer/target/jazzer-*.jar >/dev/null 2>&1 && echo 'Jazzer: OK' || echo 'Jazzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which nmap && echo 'nmap: OK' || echo 'nmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which sqlmap && echo 'sqlmap: OK' || echo 'sqlmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which dalfox && echo 'dalfox: OK' || echo 'dalfox: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which xsstrike && echo 'xsstrike: OK' || echo 'xsstrike: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which httpx && echo 'httpx: OK' || echo 'httpx: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "python3 -c 'import playwright; print(\"Playwright: OK\")' 2>/dev/null || echo 'Playwright: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which chromium-browser || which chromium || echo 'Chromium: MISSING'" >> /usr/local/bin/argus-tool-check && \
     chmod +x /usr/local/bin/argus-tool-check
