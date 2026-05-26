@@ -41,9 +41,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && rm -rf /var/lib/apt/lists/*
 
 # dalfox (Go binary — not in Kali apt, download pre-built release)
-RUN ARCH=$(uname -m) && \
-    if [ "$ARCH" = "x86_64" ]; then DALFOX_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then DALFOX_ARCH="arm64"; else DALFOX_ARCH="amd64"; fi && \
-    curl -sL "https://github.com/hahwul/dalfox/releases/latest/download/dalfox_linux_${DALFOX_ARCH}.tar.gz" -o /tmp/dalfox.tar.gz && \
+RUN DALFOX_VERSION=$(curl -sL https://api.github.com/repos/hahwul/dalfox/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then DALFOX_ARCH="x86_64"; elif [ "$ARCH" = "aarch64" ]; then DALFOX_ARCH="aarch64"; else DALFOX_ARCH="x86_64"; fi && \
+    curl -sL "https://github.com/hahwul/dalfox/releases/download/${DALFOX_VERSION}/dalfox-${DALFOX_VERSION}-linux-${DALFOX_ARCH}.tar.gz" -o /tmp/dalfox.tar.gz && \
     tar xzf /tmp/dalfox.tar.gz -C /tmp/ && \
     find /tmp -maxdepth 2 -name 'dalfox' -type f -executable -exec mv {} /usr/local/bin/dalfox \; && \
     chmod +x /usr/local/bin/dalfox && \
