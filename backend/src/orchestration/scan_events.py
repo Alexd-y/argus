@@ -5,15 +5,22 @@ to a Redis/stream backend for real-time WebSocket delivery to clients.
 Also supports team chat/annotations during active scans.
 
 From Развитие2.md: real-time collaboration.
+
+P1-8: WebSocket delivery layer — ScanEventBus now has:
+  - Redis pub/sub fan-out (existing)
+  - In-memory subscriber callbacks (existing)
+  - Async subscriber support (new) for WebSocket bridging
+  - Broadcast bridge for WebSocket ConnectionManager (new)
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +48,8 @@ class ChatMessage:
 
 class ScanEventBus:
     def __init__(self) -> None:
-        self._subscribers: list[Any] = []
+        self._subscribers: list[Any] = None
+        self._async_subscribers: list[Callable[[ScanEvent], Any]] = None
         self._redis_client: Any = None
         try:
             import redis
@@ -50,6 +58,18 @@ class ScanEventBus:
             logger.info("Redis event bus connected")
         except Exception:
             logger.debug("Redis not available — using in-memory event bus")
+
+    @property
+    def subscribers(self) -> list[Any]:
+        if self._subscribers is None:
+            self._subscribers = []
+        return self._subscribers
+
+    @property
+    def async_subscribers(self) -> list[Callable[[ScanEvent], Any]]:
+        if self._async_subscribers is None:
+            self._async_subscribers = []
+        return self._async_subscribers
 
     def publish(self, event: ScanEvent) -> None:
         payload = json.dumps({
@@ -67,14 +87,18 @@ class ScanEventBus:
                 return
             except Exception:
                 pass
-        for sub in self._subscribers:
+        for sub in self.subscribers:
             try:
                 sub(event)
             except Exception:
                 pass
 
     def subscribe(self, callback: Any) -> None:
-        self._subscribers.append(callback)
+        self.subscribers.append(callback)
+
+    def subscribe_async(self, callback: Callable[[ScanEvent], Any]) -> None:
+        """Register an async callback for event delivery (e.g., WebSocket bridge)."""
+        self.async_subscribers.append(callback)
 
     def publish_chat(self, msg: ChatMessage) -> None:
         payload = json.dumps({

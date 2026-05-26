@@ -1253,3 +1253,153 @@ class TestSymbolicExecutionWiring:
         from src.orchestration.symbolic_execution import _parse_angr_output
         result = _parse_angr_output("No path found\n", "")
         assert result.vulnerable is False
+
+
+class TestWebSocketDelivery:
+    """P1-8: WebSocket delivery layer for scan_events."""
+
+    def test_ws_router_importable(self):
+        from src.api.routers.ws import router
+        assert router is not None
+
+    def test_connection_manager_importable(self):
+        from src.api.routers.ws import _manager
+        assert _manager is not None
+        assert hasattr(_manager, "connect")
+        assert hasattr(_manager, "disconnect")
+        assert hasattr(_manager, "broadcast")
+        assert hasattr(_manager, "active_count")
+
+    def test_connection_manager_lifecycle(self):
+        from src.api.routers.ws import _ConnectionManager
+        mgr = _ConnectionManager()
+        assert mgr.active_count() == 0
+
+        class FakeWS:
+            pass
+
+        ws1 = FakeWS()
+        ws2 = FakeWS()
+        mgr.connect("scan-1", ws1)
+        mgr.connect("scan-1", ws2)
+        mgr.connect("scan-2", ws1)
+        assert mgr.active_count("scan-1") == 2
+        assert mgr.active_count("scan-2") == 1
+        assert mgr.active_count() == 3
+
+        mgr.disconnect("scan-1", ws1)
+        assert mgr.active_count("scan-1") == 1
+        assert mgr.active_count() == 2
+
+        mgr.disconnect("scan-1", ws2)
+        assert mgr.active_count("scan-1") == 0
+        assert mgr.active_count() == 1
+
+    def test_filter_ws_output_data_phase_complete(self):
+        from src.api.routers.ws import _filter_ws_output_data
+        data = {
+            "phase": "vuln_analysis",
+            "progress": 80,
+            "duration_sec": 45.2,
+            "severity_counts": {"critical": 2},
+            "findings": ["secret"],
+            "exploits": ["rce"],
+        }
+        filtered = _filter_ws_output_data("phase_complete", data)
+        assert "findings" not in filtered
+        assert "exploits" not in filtered
+        assert "phase" in filtered
+        assert "severity_counts" in filtered
+
+    def test_filter_ws_output_data_non_phase_complete(self):
+        from src.api.routers.ws import _filter_ws_output_data
+        data = {"findings": ["xss"], "progress": 50}
+        result = _filter_ws_output_data("phase_start", data)
+        assert result == data
+
+    def test_build_ws_payload_basic(self):
+        from src.api.routers.ws import _build_ws_payload
+        from types import SimpleNamespace
+
+        ev = SimpleNamespace(
+            event="phase_start",
+            phase="recon",
+            progress=10,
+            message="Starting recon",
+            data=None,
+        )
+        payload = _build_ws_payload(ev)
+        assert payload["event"] == "phase_start"
+        assert payload["phase"] == "recon"
+        assert payload["progress"] == 10
+        assert payload["message"] == "Starting recon"
+
+    def test_build_ws_payload_error_event(self):
+        from src.api.routers.ws import _build_ws_payload
+        from types import SimpleNamespace
+
+        ev = SimpleNamespace(
+            event="error",
+            phase=None,
+            progress=None,
+            message="Something failed",
+            data=None,
+        )
+        payload = _build_ws_payload(ev)
+        assert payload["event"] == "error"
+        assert payload["error"] == "Something failed"
+
+    def test_build_ws_payload_phase_complete_filters(self):
+        from src.api.routers.ws import _build_ws_payload
+        from types import SimpleNamespace
+
+        ev = SimpleNamespace(
+            event="phase_complete",
+            phase="exploitation",
+            progress=100,
+            message="",
+            data={
+                "phase": "exploitation",
+                "duration_sec": 120,
+                "severity_counts": {"critical": 1},
+                "exploits": ["rce"],
+            },
+        )
+        payload = _build_ws_payload(ev)
+        assert "data" in payload
+        assert "exploits" not in payload["data"]
+        assert "duration_sec" in payload["data"]
+
+    def test_ws_router_has_scan_events_endpoint(self):
+        from src.api.routers.ws import router
+        routes = [r.path for r in router.routes]
+        assert any("scan_id" in str(r) and "events" in str(r) for r in routes)
+
+    def test_ws_router_has_chat_endpoint(self):
+        from src.api.routers.ws import router
+        routes = [r.path for r in router.routes]
+        assert any("scan_id" in str(r) and "chat" in str(r) for r in routes)
+
+    def test_ws_router_has_stats_endpoint(self):
+        from src.api.routers.ws import router
+        routes = [r.path for r in router.routes]
+        assert any("stats" in str(r) for r in routes)
+
+    def test_ws_router_registered_in_app(self):
+        from main import app
+        ws_routes = [r.path for r in app.routes if hasattr(r, "path") and "/ws/" in getattr(r, "path", "")]
+        assert any("events" in r for r in ws_routes)
+
+    def test_scan_event_bus_has_publish(self):
+        from src.orchestration.scan_events import ScanEventBus
+        bus = ScanEventBus()
+        assert hasattr(bus, "publish")
+        assert hasattr(bus, "subscribe")
+        assert hasattr(bus, "publish_chat")
+
+    def test_chat_message_model(self):
+        from src.orchestration.scan_events import ChatMessage
+        msg = ChatMessage(scan_id="s1", tenant_id="t1", user_id="u1", message="hello")
+        assert msg.scan_id == "s1"
+        assert msg.message == "hello"
+        assert msg.timestamp is not None

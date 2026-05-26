@@ -31,6 +31,7 @@ from src.api.routers import (
     scans,
     skills_public,
     tools,
+    ws,
 )
 import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
 import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
@@ -182,6 +183,7 @@ app.include_router(admin_gateway_router, prefix="/api/v1")
 app.include_router(benchmarks_router, prefix="/api/v1")
 app.include_router(release_router, prefix="/api/v1")
 app.include_router(research_router, prefix="/api/v1")
+app.include_router(ws.router, prefix="/api/v1")
 
 
 @app.get("/")
