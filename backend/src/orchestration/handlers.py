@@ -1670,6 +1670,7 @@ async def run_vuln_analysis(
     llm_output = await ai_vuln_analysis(
         inp, active_scan_context=active_scan_context, scan_id=scan_id,
         code_aware_section=code_aware_section, memory_context=memory_context,
+        use_react=scan_options.get("use_react", False),
     )
 
     if active_scan_findings:
@@ -1820,7 +1821,8 @@ async def run_exploit_attempt(
 
     # Fallback: LLM theoretical exploitation
     inp = ExploitationInput(findings=findings)
-    exploit_out = await ai_exploitation(inp, scan_id=scan_id)
+    _use_react = auth_config is not None and isinstance(auth_config, dict) and auth_config.get("use_react")
+    exploit_out = await ai_exploitation(inp, scan_id=scan_id, use_react=bool(_use_react))
 
     if not exploit_out.exploits and findings:
         try:

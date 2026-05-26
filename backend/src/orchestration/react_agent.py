@@ -129,6 +129,88 @@ class ReActAgent:
             return False
         return True
 
+    async def run(
+        self,
+        system_prompt: str = "",
+        llm_caller: Any = None,
+        tool_executor: Any = None,
+        scan_id: str | None = None,
+    ) -> ReActResult:
+        """Execute the full ReAct loop with LLM calls and tool invocations."""
+        import time
+        start = time.monotonic()
+        confidence = 0.0
+        answer = ""
+
+        for _iteration in range(self.max_iterations):
+            context = self.build_context_for_prompt()
+            prompt = format_react_prompt(
+                system_prompt or "You are a security analysis agent.",
+                self.task_description,
+                agent=self,
+                max_iterations=self.max_iterations,
+            )
+
+            response_text = ""
+            if llm_caller is not None:
+                try:
+                    response_text = await llm_caller(
+                        system_prompt, prompt, scan_id=scan_id, phase="react_loop"
+                    )
+                except Exception as exc:
+                    self.add_observation(f"LLM call failed: {exc}")
+                    break
+            else:
+                break
+
+            if not response_text:
+                break
+
+            thought_match = None
+            action_match = None
+            import re
+            thought_m = re.search(r"Thought:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
+            action_m = re.search(r"Action:\s*(\w+)\((.*?)\)", response_text, re.IGNORECASE)
+            final_m = re.search(r"Final Answer:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
+            conf_m = re.search(r"confidence[:\s]+([0-9.]+)", response_text, re.IGNORECASE)
+
+            if final_m:
+                answer = final_m.group(1).strip()
+                if conf_m:
+                    try:
+                        confidence = float(conf_m.group(1))
+                    except ValueError:
+                        confidence = 0.8
+                else:
+                    confidence = 0.8
+                break
+
+            if thought_m:
+                self.add_thought(thought_m.group(1).strip())
+
+            if action_m:
+                tool_name = action_m.group(1)
+                tool_args_str = action_m.group(2)
+                try:
+                    tool_args = json.loads(tool_args_str) if tool_args_str else {}
+                except Exception:
+                    tool_args = {}
+                self.add_action(tool_name, tool_args)
+
+                if tool_executor is not None:
+                    try:
+                        result = await tool_executor(tool_name, tool_args)
+                        self.add_observation(str(result)[:2000], tool_result=result)
+                    except Exception as exc:
+                        self.add_observation(f"Tool error: {exc}")
+                else:
+                    self.add_observation(f"(tool execution skipped: no executor)")
+
+        duration = time.monotonic() - start
+        if not answer:
+            answer = self.build_context_for_prompt()[:2000]
+        return self.finalize(answer, confidence, duration)
+
     def build_context_for_prompt(self) -> str:
         """Build conversation context from ReAct steps for inclusion in LLM prompt."""
         lines: list[str] = []

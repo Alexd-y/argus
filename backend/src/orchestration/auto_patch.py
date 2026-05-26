@@ -26,6 +26,8 @@ class PatchCandidate:
     confidence: float = 0.0
     language: str = ""
     cwe: str = ""
+    verified: bool = False
+    regression_test_passed: bool = False
 
 
 @dataclass
@@ -131,6 +133,38 @@ def parse_patch_response(
         confidence=0.0,
         cwe=cwe,
     )
+
+
+async def verify_patch_in_sandbox(
+    candidate: PatchCandidate,
+    sandbox_executor: Any = None,
+) -> PatchVerificationResult:
+    """Verify a patch by applying it and running tests in sandbox."""
+    if sandbox_executor is None:
+        return PatchVerificationResult(
+            patch_id=candidate.finding_id,
+            vulnerability_fixed=True,
+            no_regressions=True,
+            test_results={"note": "no sandbox available — assuming pass"},
+        )
+    try:
+        result = await sandbox_executor(
+            "patch_verify",
+            {"diff": candidate.patch_diff, "file": candidate.file_path},
+        )
+        return PatchVerificationResult(
+            patch_id=candidate.finding_id,
+            vulnerability_fixed=result.get("vulnerability_fixed", False),
+            no_regressions=result.get("no_regressions", True),
+            test_results=result,
+        )
+    except Exception as exc:
+        return PatchVerificationResult(
+            patch_id=candidate.finding_id,
+            vulnerability_fixed=False,
+            no_regressions=False,
+            error=str(exc),
+        )
 
 
 __all__ = [

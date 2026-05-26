@@ -240,10 +240,29 @@ async def ai_vuln_analysis(
     active_scan_context: str = "",
     code_aware_section: str = "",
     memory_context: str = "",
+    use_react: bool = False,
     scan_id: str | None = None,
 ) -> VulnAnalysisOutput:
     _require_llm()
     try:
+        if use_react:
+            try:
+                from src.orchestration.react_agent import ReActAgent, format_react_prompt
+                _agent = ReActAgent(
+                    task_description=f"Analyze vulnerabilities for threat model: {json.dumps(inp.threat_model, default=str)[:2000]}",
+                    max_iterations=5,
+                    confidence_threshold=0.85,
+                )
+                _react_result = await _agent.run(
+                    system_prompt="You are a vulnerability analyst. Analyze the threat model and return JSON findings.",
+                    llm_caller=call_llm_unified,
+                    scan_id=scan_id,
+                )
+                data = _parse_llm_json(_react_result.answer)
+                if data and isinstance(data.get("findings"), list):
+                    return VulnAnalysisOutput(findings=data["findings"])
+            except Exception:
+                pass
         system, user = _get_phase_prompt(
             VULN_ANALYSIS, threat_model=inp.threat_model,
             assets=inp.assets, active_scan_context=active_scan_context,
@@ -262,11 +281,30 @@ async def ai_vuln_analysis(
 
 
 async def ai_exploitation(
-    inp: ExploitationInput, *, scan_id: str | None = None
+    inp: ExploitationInput, *, use_react: bool = False, scan_id: str | None = None
 ) -> ExploitationOutput:
-    """Call LLM to plan exploitation. Returns empty on failure."""
     _require_llm()
     try:
+        if use_react:
+            try:
+                from src.orchestration.react_agent import ReActAgent
+                _agent = ReActAgent(
+                    task_description=f"Plan exploitation for findings: {json.dumps(inp.findings, default=str)[:2000]}",
+                    max_iterations=5,
+                )
+                _react_result = await _agent.run(
+                    system_prompt="You are an exploitation planner. Generate exploit hypotheses and return JSON.",
+                    llm_caller=call_llm_unified,
+                    scan_id=scan_id,
+                )
+                data = _parse_llm_json(_react_result.answer)
+                if data and isinstance(data.get("exploits"), list):
+                    return ExploitationOutput(
+                        exploits=data.get("exploits", []),
+                        evidence=data.get("evidence", []),
+                    )
+            except Exception:
+                pass
         system, user = _get_phase_prompt(EXPLOITATION, findings=inp.findings)
         data = _require_json(
             await _call_llm_with_json_retry(EXPLOITATION, user, system, scan_id=scan_id),

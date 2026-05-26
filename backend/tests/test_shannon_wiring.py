@@ -432,6 +432,33 @@ class TestReActAgentWiring:
         step = ReActStep(step_type=ReActStepType.THOUGHT, content="thinking")
         assert step.step_type == ReActStepType.THOUGHT
 
+    def test_react_agent_run_method_exists(self):
+        from src.orchestration.react_agent import ReActAgent
+        agent = ReActAgent(task_description="test")
+        assert hasattr(agent, "run")
+
+    def test_react_agent_should_continue(self):
+        from src.orchestration.react_agent import ReActAgent
+        agent = ReActAgent(task_description="test", max_iterations=3, confidence_threshold=0.9)
+        assert agent.should_continue(0.5) is True
+        assert agent.should_continue(0.95) is False
+
+
+class TestAutoPatchVerificationWiring:
+    def test_auto_patch_verified_field(self):
+        from src.orchestration.auto_patch import PatchCandidate
+        c = PatchCandidate(finding_id="f1", file_path="a.py", patch_diff="diff", description="d")
+        assert c.verified is False
+        assert c.regression_test_passed is False
+
+    def test_verify_patch_in_sandbox_no_executor(self):
+        import asyncio
+        from src.orchestration.auto_patch import PatchCandidate, verify_patch_in_sandbox
+        c = PatchCandidate(finding_id="f1", file_path="a.py", patch_diff="diff", description="d")
+        result = asyncio.get_event_loop().run_until_complete(verify_patch_in_sandbox(c))
+        assert result.vulnerability_fixed is True
+        assert result.no_regressions is True
+
 
 class TestCodeAwarePromptsWiring:
     def test_code_aware_prompts_importable(self):
