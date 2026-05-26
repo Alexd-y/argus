@@ -418,9 +418,9 @@ services:
   sandbox:
     build:
       context: ..
-      dockerfile: infra/sandbox/Dockerfile
+      dockerfile: infra/Dockerfile.sandbox
       args:
-        SANDBOX_PROFILE: ${SANDBOX_PROFILE:-standard}
+        SANDBOX_PROFILE: ${SANDBOX_PROFILE:-binary}
         INSTALL_MSF: ${INSTALL_MSF:-false}
     image: argus-sandbox
     container_name: argus-sandbox
@@ -453,7 +453,7 @@ services:
   kali-runner:
     build:
       context: ..
-      dockerfile: infra/sandbox/Dockerfile
+      dockerfile: infra/Dockerfile.sandbox
       args:
         SANDBOX_PROFILE: binary
     image: argus-kali-runner
@@ -479,8 +479,6 @@ services:
       timeout: 30s
       retries: 3
       start_period: 120s
-    profiles:
-      - binary
 
   # Adminer — lightweight web DB admin (PostgreSQL, MySQL, SQLite)
   adminer:

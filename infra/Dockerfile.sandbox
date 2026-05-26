@@ -1,20 +1,24 @@
 # ARGUS Sandbox — Kali-based pentest runner with fuzzing and symbolic execution tools.
 #
+# Multi-profile Dockerfile for the ARGUS sandbox container.
+# Binary profile (default) includes ALL tools: recon, web VA, network,
+# AFL++, angr, Z3, Jazzer, radare2, binwalk, libFuzzer, Playwright.
+#
 # Profiles:
-#   SANDBOX_PROFILE=standard  — web/network/cloud/browser (default, production)
-#   SANDBOX_PROFILE=full      — all tools including MSF
-#   SANDBOX_PROFILE=binary    — AFL++, angr, Z3, Jazzer (fuzzing + symbolic execution)
+#   SANDBOX_PROFILE=binary   — full pentest + fuzzing + symbolic execution (DEFAULT)
+#   SANDBOX_PROFILE=standard — web/network/cloud/browser tools only
+#   SANDBOX_PROFILE=full     — standard + metasploit
 #
 # Build:
 #   docker compose -f infra/docker-compose.yml build sandbox
-#   # Or standalone for binary profile:
-#   docker build --build-arg SANDBOX_PROFILE=binary -t argus-sandbox -f infra/sandbox/Dockerfile .
+#   # Standalone:
+#   podman build -f infra/Dockerfile.sandbox -t argus-sandbox .
 #
 # Security: runs as non-root user (argus:1000), no Docker socket mount,
 #           read-only root filesystem except /workspace and /tmp.
 
-ARG SANDBOX_PROFILE=standard
-FROM kalilinux/kali-rolling:latest AS base
+ARG SANDBOX_PROFILE=binary
+FROM docker.io/kalilinux/kali-rolling:latest AS base
 
 # Base: common packages shared across all profiles
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -23,21 +27,16 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libssl-dev libffi-dev libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user (matches ephemeral_worker.py ContainerSpec)
+# Create non-root user (matches ephemeral_worker.py ContainerSpec user 1000:1000)
 RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    # Recon
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx \
-    # Web VA
     sqlmap nikto wpscan dirsearch dalfox xsstrike \
-    # Network
     hydra medusa crackmapexec impacket-scripts smbclient \
-    # SSL/TLS
     sslscan testssl.sh \
-    # Misc
     jq whois netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,8 +46,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     metasploit-framework \
     && rm -rf /var/lib/apt/lists/*
 
-# ---- Binary profile: AFL++, angr, Z3, Jazzer for fuzzing + symbolic execution ----
-FROM base AS binary
+# ---- Binary profile: standard + ALL fuzzing/symbolic/reverse tools ----
+FROM standard AS binary
 
 # AFL++ — state-of-the-art fuzzer (C/C++/binary)
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -74,8 +73,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # radare2 — reverse engineering
 RUN git clone --depth=1 https://github.com/radareorg/radare2 /opt/radare2 \
     && cd /opt/radare2 && sys/install.sh \
-    && rm -rf /opt/radare2/.git \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /opt/radare2/.git
 
 # binwalk — firmware extraction
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -87,10 +85,14 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
-# Standard recon tools + web VA (shared with standard profile)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    nmap nuclei httpx sqlmap nikto gobuster ffuf jq curl wget \
-    && rm -rf /var/lib/apt/lists/*
+# Playwright + Chromium — browser automation for XSS/auth verification
+RUN pip3 install --no-cache-dir playwright \
+    && python3 -m playwright install --with-deps chromium
+
+# Python requirements from ARGUS backend (for sandbox task execution)
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt \
+    ; rm -f /tmp/requirements.txt
 
 # Verify all tools are available
 RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
@@ -104,9 +106,11 @@ RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
     echo "ls /opt/jazzer/target/jazzer-*.jar >/dev/null 2>&1 && echo 'Jazzer: OK' || echo 'Jazzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which nmap && echo 'nmap: OK' || echo 'nmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which sqlmap && echo 'sqlmap: OK' || echo 'sqlmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "python3 -c 'import playwright; print(\"Playwright: OK\")' 2>/dev/null || echo 'Playwright: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which chromium-browser || which chromium || echo 'Chromium: MISSING'" >> /usr/local/bin/argus-tool-check && \
     chmod +x /usr/local/bin/argus-tool-check
 
-# Final image selector
+# Final image selector — picks the profile specified by SANDBOX_PROFILE arg
 FROM ${SANDBOX_PROFILE} AS final
 
 # Workspace mount point

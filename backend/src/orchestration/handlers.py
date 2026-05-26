@@ -1800,6 +1800,40 @@ async def run_vuln_analysis(
         except Exception as _fuzz_outer:
             logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
 
+    if scan_options.get("binary_analysis_enabled", True) and source_analysis is not None:
+        try:
+            from src.orchestration.binary_analysis import detect_binary_type, run_binary_analysis, BinaryAnalysisRequest
+            _sa_dict_ba = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
+            _code_files_ba = _sa_dict_ba.get("code_files", []) or []
+            for _cf_ba in _code_files_ba[:3]:
+                _path_ba = str(_cf_ba.get("path", _cf_ba)) if isinstance(_cf_ba, dict) else str(_cf_ba)
+                _btype_ba = detect_binary_type(_path_ba)
+                if _btype_ba != "unknown":
+                    try:
+                        _ba_req = BinaryAnalysisRequest(
+                            binary_path=_path_ba,
+                            analysis_type="full",
+                            architecture=_btype_ba,
+                            scan_id=scan_id or "",
+                        )
+                        _ba_result = await run_binary_analysis(_ba_req, use_sandbox=bool(settings.sandbox_enabled))
+                        if _ba_result and _ba_result.vulnerabilities:
+                            for _bv in _ba_result.vulnerabilities:
+                                llm_output.findings.append({
+                                    "title": f"Binary: {_bv.vuln_type} in {_path_ba}",
+                                    "severity": _bv.severity,
+                                    "description": _bv.description,
+                                    "source": "binary_analysis",
+                                    "cwe": getattr(_bv, "cwe", ""),
+                                    "evidence_tier": 2,
+                                    "code_location": _path_ba,
+                                })
+                            logger.info("binary_analysis_vulns_found", extra={"scan_id": scan_id, "file": _path_ba, "vulns": len(_ba_result.vulnerabilities)})
+                    except Exception as _ba_exc:
+                        logger.debug("binary_analysis_target_failed", extra={"scan_id": scan_id, "file": _path_ba, "error": str(_ba_exc)})
+        except Exception as _ba_outer:
+            logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
+
     if agent_findings_map:
         try:
             from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask

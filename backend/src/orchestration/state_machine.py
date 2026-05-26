@@ -838,7 +838,7 @@ async def run_scan_state_machine(
                         )
                     if source_out and not source_out.skipped:
                         try:
-                            from src.orchestration.binary_analysis import detect_binary_type
+                            from src.orchestration.binary_analysis import detect_binary_type, run_binary_analysis, BinaryAnalysisRequest
                             _sa_dict = source_out.model_dump() if hasattr(source_out, "model_dump") else {}
                             _code_files = _sa_dict.get("code_files", []) or []
                             _binary_types = []
@@ -849,6 +849,34 @@ async def run_scan_state_machine(
                                     _binary_types.append({"file": _path, "type": _btype})
                             if _binary_types:
                                 logger.info("binary_analysis_detected", extra={"scan_id": scan_id, "binaries": len(_binary_types)})
+                            if _binary_types and scan_options.get("binary_analysis_enabled", True):
+                                _ba_max = min(len(_binary_types), 3)
+                                for _bi in _binary_types[:_ba_max]:
+                                    try:
+                                        _ba_req = BinaryAnalysisRequest(
+                                            binary_path=_bi["file"],
+                                            analysis_type="full",
+                                            architecture=_bi["type"],
+                                            scan_id=scan_id or "",
+                                        )
+                                        _ba_result = await run_binary_analysis(_ba_req, use_sandbox=bool(settings.sandbox_enabled))
+                                        if _ba_result and _ba_result.vulnerabilities:
+                                            for _bv in _ba_result.vulnerabilities:
+                                                _sa_dict.setdefault("binary_findings", []).append({
+                                                    "title": f"Binary: {_bv.vuln_type} in {_bi['file']}",
+                                                    "severity": _bv.severity,
+                                                    "description": _bv.description,
+                                                    "source": "binary_analysis",
+                                                    "cwe": "",
+                                                    "evidence_tier": 2,
+                                                })
+                                            logger.info("binary_analysis_vulns_found", extra={"scan_id": scan_id, "file": _bi["file"], "vulns": len(_ba_result.vulnerabilities)})
+                                        elif _ba_result and _ba_result.strings:
+                                            logger.info("binary_analysis_strings_extracted", extra={"scan_id": scan_id, "file": _bi["file"], "strings": len(_ba_result.strings)})
+                                        else:
+                                            logger.info("binary_analysis_no_results", extra={"scan_id": scan_id, "file": _bi["file"]})
+                                    except Exception as _ba_run_exc:
+                                        logger.debug("binary_analysis_run_failed", extra={"scan_id": scan_id, "file": _bi["file"], "error": str(_ba_run_exc)})
                         except Exception as _ba_exc:
                             logger.debug("binary_analysis_failed", extra={"scan_id": scan_id, "error": str(_ba_exc)})
                     output_data = source_out.model_dump()
