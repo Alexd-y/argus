@@ -553,6 +553,13 @@ async def run_scan_state_machine(
     except Exception as _cr_exc:
         logger.warning("cost_tracker_init_failed", extra={"scan_id": scan_id, "error": str(_cr_exc)})
 
+    if cost_tracker is not None:
+        try:
+            from src.orchestration.cost_aware_reasoning import register_cost_tracker
+            register_cost_tracker(cost_tracker)
+        except Exception:
+            pass
+
     try:
         from src.orchestration.tenant_isolation import TenantIsolationGuard
         _guard = TenantIsolationGuard()
@@ -981,6 +988,24 @@ async def run_scan_state_machine(
                         logger.warning("microvm_verification_failed", extra={"scan_id": scan_id, "error": str(_vm_exc)})
                     if _ewp is not None:
                         try:
+                            for _ecand in (exploit_out.exploits or [])[:3]:
+                                if str(_ecand.get("severity", "")).lower() in ("critical", "high"):
+                                    _container_id = await _ewp.acquire(
+                                        f"exploit-{scan_id[:12]}-{_ecand.get('finding_id', 'unk')[:8]}",
+                                    )
+                                    if _container_id:
+                                        logger.info("ephemeral_worker_acquired", extra={"scan_id": scan_id, "container": _container_id, "finding": str(_ecand.get("finding_id", ""))})
+                                        try:
+                                            _artifacts = await _ewp.collect_artifacts(_container_id, scan_id, "exploit_verify", str(_ecand.get("finding_id", "")))
+                                            if _artifacts:
+                                                _ecand["ephemeral_artifacts"] = _artifacts
+                                        except Exception:
+                                            pass
+                                        finally:
+                                            await _ewp.release(_container_id)
+                        except Exception as _ewp_dispatch_exc:
+                            logger.debug("ephemeral_worker_dispatch_failed: %s", _ewp_dispatch_exc)
+                        try:
                             await _ewp.prune_stale()
                             logger.info("ephemeral_worker_pool_cleanup", extra={"scan_id": scan_id, "active": _ewp.active_count})
                         except Exception as _ewp_clean_exc:
@@ -1208,6 +1233,16 @@ async def run_scan_state_machine(
                     except Exception as _rv_cand_exc:
                         logger.debug("re_verification_cand_failed", extra={"error": str(_rv_cand_exc)})
         logger.info("re_verification_tracker_initialized", extra={"scan_id": scan_id})
+        if _rv_tracker and _rv_tracker._history:
+            try:
+                import json as _rv_json
+                _rv_data = {fid: [{"status": r.status, "still_vulnerable": r.still_vulnerable, "verified_fixed_at": r.verified_fixed_at} for r in results] for fid, results in _rv_tracker._history.items()}
+                if tenant_id and scan_id:
+                    from src.orchestration.raw_phase_artifacts import RawPhaseSink as _RPS_rv
+                    _rv_sink = _RPS_rv(tenant_id, scan_id, "re_verification")
+                    await asyncio.to_thread(_rv_sink.upload_text, "re_verification_history", _rv_json.dumps(_rv_data, default=str))
+            except Exception as _rv_persist_exc:
+                logger.debug("re_verification_persist_failed", extra={"error": str(_rv_persist_exc)})
     except Exception as _rv_exc:
         logger.warning("re_verification_init_failed", extra={"scan_id": scan_id, "error": str(_rv_exc)})
 
@@ -1240,6 +1275,52 @@ async def run_scan_state_machine(
         _ti_guard.register_scan_end(tenant_id)
     except Exception as _ti_end_exc:
         logger.warning("tenant_isolation_end_failed", extra={"tenant_id": tenant_id, "error": str(_ti_end_exc)})
+
+    if evidence_chain is not None:
+        try:
+            _chain_data = evidence_chain.to_dict()
+            _chain_json = json.dumps(_chain_data, default=str)
+            logger.info(
+                "evidence_chain_persisted",
+                extra={
+                    "scan_id": scan_id,
+                    "tenant_id": tenant_id,
+                    "link_count": evidence_chain.link_count,
+                    "chain_intact": _chain_data.get("chain_intact", False),
+                },
+            )
+            if tenant_id and scan_id:
+                try:
+                    from src.orchestration.raw_phase_artifacts import RawPhaseSink
+                    _sink = RawPhaseSink(tenant_id, scan_id, "evidence_chain")
+                    await asyncio.to_thread(_sink.upload_text, "evidence_chain", _chain_json)
+                except Exception as _chain_sink_exc:
+                    logger.debug("evidence_chain_minio_upload_failed", extra={"error": str(_chain_sink_exc)})
+        except Exception as _chain_persist_exc:
+            logger.warning("evidence_chain_persist_failed", extra={"scan_id": scan_id, "error": str(_chain_persist_exc)})
+
+    if cost_tracker is not None:
+        try:
+            _cost_summary = cost_tracker.summary()
+            logger.info(
+                "cost_tracker_summary",
+                extra={
+                    "scan_id": scan_id,
+                    "total_tokens": _cost_summary.get("total_tokens", 0),
+                    "total_cost_usd": _cost_summary.get("total_cost_usd", 0),
+                    "budget_remaining_usd": _cost_summary.get("budget_remaining_usd", 0),
+                    "phases": list(_cost_summary.get("by_phase", {}).keys()),
+                },
+            )
+        except Exception as _cost_log_exc:
+            logger.debug("cost_tracker_summary_failed", extra={"error": str(_cost_log_exc)})
+
+    try:
+        from src.orchestration.cost_aware_reasoning import unregister_cost_tracker
+        unregister_cost_tracker(scan_id)
+    except Exception:
+        pass
+
     await _persist_report_and_findings(
         session,
         tenant_id,

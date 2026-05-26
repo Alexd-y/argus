@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +71,43 @@ class SubAgentSpawner:
 
         if executor is not None:
             try:
-                output = executor(task.task_description) or {}
+                result = executor(task.task_description)
+                output = result if isinstance(result, dict) else {"result": str(result)}
             except Exception as exc:
                 logger.warning("Sub-agent execution failed: %s", exc)
+                return SubAgentResult(
+                    task_id=task_id, session_id=task.session_id,
+                    depth=task.depth, error=str(exc),
+                )
+        self._active_sessions.discard(task.session_id)
+        return SubAgentResult(
+            task_id=task_id, session_id=task.session_id,
+            depth=task.depth, output=output, sub_results=sub_results,
+        )
+
+    async def aspawn(self, task: SubAgentTask, executor: Callable | None = None) -> SubAgentResult:
+        """Async spawn — supports async executor callables."""
+        if not self.can_spawn(task):
+            return SubAgentResult(
+                task_id=uuid.uuid4().hex[:12],
+                session_id=task.session_id,
+                depth=task.depth,
+                error="spawn_rejected: depth or budget limit",
+            )
+        self._active_sessions.add(task.session_id)
+        self._spawn_count += 1
+        task_id = uuid.uuid4().hex[:12]
+        output = {}
+        sub_results: list[SubAgentResult] = []
+
+        if executor is not None:
+            try:
+                result = executor(task.task_description)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                output = result if isinstance(result, dict) else {"result": str(result)}
+            except Exception as exc:
+                logger.warning("Sub-agent async execution failed: %s", exc)
                 return SubAgentResult(
                     task_id=task_id, session_id=task.session_id,
                     depth=task.depth, error=str(exc),

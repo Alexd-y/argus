@@ -1124,3 +1124,66 @@ class TestNewWiringP1ToP12:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         assert "build_autopatch_prompt" in content
+
+
+class TestWiringRound2:
+
+    def test_evidence_chain_persisted_to_minio(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "evidence_chain.to_dict()" in content
+        assert "evidence_chain_persisted" in content
+
+    def test_cost_tracker_registered_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "register_cost_tracker" in content
+        assert "unregister_cost_tracker" in content
+
+    def test_cost_tracker_record_in_facade(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "llm", "facade.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "get_cost_tracker" in content
+
+    def test_confidence_escalation_in_vuln_analysis(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "ai_prompts.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "ConfidenceEscalator" in content
+        assert "confidence_escalation_suggested" in content
+
+    def test_sub_agent_spawner_async(self):
+        from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+        sp = SubAgentSpawner()
+        assert hasattr(sp, "aspawn")
+
+    def test_cost_aware_registry_functions(self):
+        from src.orchestration.cost_aware_reasoning import register_cost_tracker, unregister_cost_tracker, get_cost_tracker, CostTracker
+        ct = CostTracker(scan_id="test-scan-123")
+        register_cost_tracker(ct)
+        assert get_cost_tracker("test-scan-123") is ct
+        unregister_cost_tracker("test-scan-123")
+        assert get_cost_tracker("test-scan-123") is None
+
+    def test_ephemeral_worker_acquire_release_in_state_machine(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "_ewp.acquire" in content
+        assert "_ewp.release" in content
+        assert "_ewp.collect_artifacts" in content
+
+    def test_re_verification_history_persisted(self):
+        import os
+        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "state_machine.py"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "re_verification_history" in content

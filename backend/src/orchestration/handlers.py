@@ -1759,12 +1759,22 @@ async def run_vuln_analysis(
             for _domain, _finds in agent_findings_map.items():
                 _task = SubAgentTask(task_description=f"Analyze {_domain} findings", depth=0)
                 if _spawner.can_spawn(_task):
-                    _result = _spawner.spawn(_task)
+                    async def _sub_agent_executor(desc: str, _d=_domain, _f=_finds) -> dict:
+                        try:
+                            _d_inp = VulnAnalysisInput(
+                                threat_model={"domain": _d, "findings_summary": json.dumps(_f[:5], default=str)[:2000]},
+                                assets=assets,
+                            )
+                            _d_out = await ai_vuln_analysis(_d_inp, scan_id=scan_id)
+                            return {"findings_count": len(_d_out.findings)}
+                        except Exception:
+                            return {}
+                    _result = await _spawner.aspawn(_task, executor=_sub_agent_executor)
                     _spawned += 1
             if _spawned:
                 logger.info("sub_agents_spawned", extra={"scan_id": scan_id, "count": _spawned})
-        except Exception:
-            pass
+        except Exception as _sa_exc:
+            logger.debug("sub_agent_spawn_failed: %s", _sa_exc)
 
     if scan_options.get("fanout_agents") and agent_findings_map:
         try:

@@ -91,14 +91,18 @@ def _record_llm_cost(
     except Exception:
         pass
     try:
-        from src.orchestration.cost_aware_reasoning import TokenUsageRecord
+        from src.orchestration.cost_aware_reasoning import TokenUsageRecord, get_cost_tracker
         _cost_usd = (prompt_tokens + completion_tokens) * 0.00001
-        TokenUsageRecord(
+        _record = TokenUsageRecord(
             phase=phase, tier=task_label, model=model,
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
             estimated_cost_usd=_cost_usd,
         )
+        if scan_id:
+            _tracker = get_cost_tracker(scan_id)
+            if _tracker is not None:
+                _tracker.record(_record)
     except Exception:
         pass
 

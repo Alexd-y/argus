@@ -274,7 +274,21 @@ async def ai_vuln_analysis(
         )
         if not isinstance(data.get("findings"), list):
             raise RuntimeError(f"LLM returned invalid response for {VULN_ANALYSIS}")
-        return VulnAnalysisOutput(findings=data["findings"])
+        _findings = data["findings"]
+        try:
+            from src.orchestration.cost_aware_reasoning import ConfidenceEscalator
+            _confidence_values = [float(f.get("confidence", 0.5)) for f in _findings if isinstance(f, dict)]
+            if _confidence_values:
+                _avg_confidence = sum(_confidence_values) / len(_confidence_values)
+                _escalator = ConfidenceEscalator(confidence_threshold=0.7)
+                if _escalator.should_escalate(_avg_confidence, "medium"):
+                    logger.info(
+                        "confidence_escalation_suggested",
+                        extra={"scan_id": scan_id, "avg_confidence": round(_avg_confidence, 3), "phase": "vuln_analysis"},
+                    )
+        except Exception:
+            pass
+        return VulnAnalysisOutput(findings=_findings)
     except Exception:
         logger.exception("vuln_analysis_llm_failed")
         return VulnAnalysisOutput(findings=[])

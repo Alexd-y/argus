@@ -100,10 +100,32 @@ class ConfidenceEscalator:
         return current_idx < 2
 
 
+_scan_cost_trackers: dict[str, CostTracker] = {}
+
+
+def register_cost_tracker(tracker: CostTracker) -> None:
+    """Register a CostTracker for a scan so LLM facade can record into it."""
+    if tracker._scan_id:
+        _scan_cost_trackers[tracker._scan_id] = tracker
+
+
+def unregister_cost_tracker(scan_id: str) -> None:
+    """Remove a CostTracker after scan completes."""
+    _scan_cost_trackers.pop(scan_id, None)
+
+
+def get_cost_tracker(scan_id: str) -> CostTracker | None:
+    """Look up the CostTracker for a scan (used by LLM facade)."""
+    return _scan_cost_trackers.get(scan_id)
+
+
 __all__ = [
     "BudgetEnforcer",
     "BudgetExceededError",
     "ConfidenceEscalator",
     "CostTracker",
     "TokenUsageRecord",
+    "register_cost_tracker",
+    "unregister_cost_tracker",
+    "get_cost_tracker",
 ]
