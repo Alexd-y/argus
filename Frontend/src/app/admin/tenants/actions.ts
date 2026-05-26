@@ -54,7 +54,11 @@ export async function listTenants(
   const result = await callAdminBackendJson<AdminTenant[]>(path, {
     method: "GET",
   });
-  return assertOk(result);
+  if (!result.ok) {
+    if (result.status === 503) return [];
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
 export async function createTenant(body: TenantCreateBody): Promise<AdminTenant> {

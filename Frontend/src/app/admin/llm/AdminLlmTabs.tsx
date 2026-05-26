@@ -6,7 +6,7 @@ import { WrbDashboardClient } from "./WrbDashboardClient";
 
 const TABS = [
   { key: "providers", label: "Cloud Providers", icon: "\u2601" },
-  { key: "wrb", label: "WhiteRabbitNeo", icon: "\uD83D\uDC30" },
+  { key: "wrb", label: "WhiteRabbitNeo", icon: "\uD83D\uDD27" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];

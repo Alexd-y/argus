@@ -143,7 +143,7 @@ function ProviderRow({
             )}
           </div>
           <div className="mt-1 text-[10px] text-[var(--text-muted)]">
-            Created: {new Date(row.created_at).toLocaleDateString()}
+            ID: {row.id.slice(0, 8)}\u2026
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -537,14 +537,11 @@ function AdminLlmBody() {
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               Leave API key blank to keep the current secret. Use comma-separated model IDs for the fallback chain (empty clears the chain).
             </p>
-            {(() => {
-              const info = PROVIDER_INFO[editingRow.provider_key as ProviderKey];
-              return info ? (
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  Suggested models: {info.models}
-                </p>
-              ) : null;
-            })()}
+            {PROVIDER_INFO[editingRow.provider_key as ProviderKey] ? (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Suggested models: {PROVIDER_INFO[editingRow.provider_key as ProviderKey].models}
+              </p>
+            ) : null}
             <label className="mt-4 block text-xs text-[var(--text-muted)]">
               New API key (optional)
               <input
