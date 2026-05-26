@@ -57,6 +57,7 @@ import {
   replayWebhookDlqAction,
 } from "@/app/admin/webhooks/dlq/actions";
 import { DlqTable } from "@/app/admin/webhooks/dlq/DlqTable";
+import { DlqStatsCards } from "@/app/admin/webhooks/dlq/DlqStatsCards";
 import { ReplayDialog } from "@/app/admin/webhooks/dlq/ReplayDialog";
 import { AbandonDialog } from "@/app/admin/webhooks/dlq/AbandonDialog";
 import { listTenants, type AdminTenant } from "@/app/admin/tenants/actions";
@@ -345,23 +346,34 @@ export function WebhookDlqClient({
     return `/admin/audit-logs?${sp.toString()}`;
   }, [selectedTenantId]);
 
+  const stats = useMemo(() => {
+    let pending = 0;
+    let replayed = 0;
+    let abandoned = 0;
+    for (const e of entries) {
+      if (e.triage_status === "pending") pending++;
+      else if (e.triage_status === "replayed") replayed++;
+      else abandoned++;
+    }
+    return { pending, replayed, abandoned };
+  }, [entries]);
+
   const pageStart = total === 0 ? 0 : filters.offset + 1;
   const pageEnd = Math.min(total, filters.offset + entries.length);
   const canPrev = filters.offset > 0;
   const canNext = filters.offset + filters.limit < total;
 
   return (
-    <div className="space-y-4" data-testid="dlq-client">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-6" data-testid="dlq-client">
+      <header className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-[var(--text-primary)]">
-            Очередь dead-letter webhook&rsquo;ов
+            Webhook DLQ
           </h1>
-          <p className="text-sm text-[var(--text-secondary)]">
-            Сообщения, не доставленные после автоматических ретраев.
-            Повтор обходит in-process circuit-breaker и дедуп
-            dispatcher&rsquo;а; abandon помечает запись как окончательно
-            отброшенную (без новых попыток).
+          <p className="mt-0.5 text-sm text-[var(--text-secondary)]">
+            Недоставленные webhook-и, требующие ручного разбора. Повтор
+            отправки обходит автоматические защиты; отбрасывание —
+            окончательное действие.
           </p>
         </div>
         <button
@@ -405,8 +417,16 @@ export function WebhookDlqClient({
         </div>
       ) : null}
 
+      <DlqStatsCards
+        pending={stats.pending}
+        replayed={stats.replayed}
+        abandoned={stats.abandoned}
+        total={total}
+        isLoading={isLoading && entries.length === 0}
+      />
+
       <div
-        className="flex flex-wrap items-end gap-3 rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2"
+        className="flex flex-wrap items-end gap-3 rounded-lg border border-[var(--border-light)] bg-[var(--bg-secondary)] px-4 py-3"
         data-testid="dlq-filters-row"
       >
         {isSuperAdmin ? (
@@ -571,39 +591,49 @@ export function WebhookDlqClient({
         }}
       />
 
-      <nav
-        className="flex flex-col gap-2 rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
-        aria-label="Пагинация DLQ"
-        data-testid="dlq-pagination"
-      >
-        <span data-testid="dlq-pagination-summary">
-          {total === 0
-            ? "Нет записей под текущие фильтры"
-            : `Показано ${pageStart}\u2013${pageEnd} из ${total}`}
-        </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={!canPrev || isLoading}
-            aria-label="Предыдущая страница"
-            className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="dlq-pagination-prev"
-          >
-            ← Назад
-          </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={!canNext || isLoading}
-            aria-label="Следующая страница"
-            className="rounded border border-[var(--border)] px-2 py-1 hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="dlq-pagination-next"
-          >
-            Вперёд →
-          </button>
-        </div>
-      </nav>
+      {total > 0 && (
+        <nav
+          className="flex flex-col gap-2 rounded-lg border border-[var(--border-light)] bg-[var(--bg-secondary)] px-4 py-3 text-xs text-[var(--text-secondary)] sm:flex-row sm:items-center sm:justify-between"
+          aria-label="Пагинация DLQ"
+          data-testid="dlq-pagination"
+        >
+          <div className="flex items-center gap-3">
+            <span data-testid="dlq-pagination-summary">
+              Показано {pageStart}&ndash;{pageEnd} из {total}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)]"
+              aria-label="Автообновление каждые 30 секунд"
+              data-testid="dlq-auto-refresh-indicator"
+            >
+              <span className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-400" />
+              Авто
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={!canPrev || isLoading}
+              aria-label="Предыдущая страница"
+              className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="dlq-pagination-prev"
+            >
+              &larr; Назад
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={!canNext || isLoading}
+              aria-label="Следующая страница"
+              className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--bg-tertiary)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="dlq-pagination-next"
+            >
+              Вперёд &rarr;
+            </button>
+          </div>
+        </nav>
+      )}
 
       <section
         className="rounded border border-[var(--border)] bg-[var(--bg-secondary)] p-3 text-sm"
