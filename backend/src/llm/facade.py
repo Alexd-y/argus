@@ -29,6 +29,7 @@ import httpx
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.task_router import LLMTask
 from src.llm.task_router import call_llm_for_task as _task_router_call
+from src.llm.task_router import check_tier_escalation
 
 logger = logging.getLogger(__name__)
 
@@ -337,3 +338,76 @@ def call_llm_sync(
             return future.result(timeout=_SYNC_TIMEOUT_SECONDS + 30.0)
 
     return _run_bounded()
+
+
+async def call_llm_with_escalation(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    task: LLMTask,
+    confidence_extractor: "callable | None" = None,
+    max_escalations: int = 1,
+    scan_id: str | None = None,
+    phase: str = "unknown",
+) -> str:
+    """Call LLM with automatic tier escalation on low confidence.
+
+    If the initial response confidence is below the task's escalation threshold,
+    automatically re-runs with the next tier model (small -> medium -> large).
+
+    Parameters
+    ----------
+    confidence_extractor : callable or None
+        Function that takes the LLM response text and returns a float 0.0-1.0.
+        If None, a simple heuristic based on hedging language is used.
+    max_escalations : int
+        Maximum number of escalation attempts (1 = at most one re-run).
+    """
+    response_text = await call_llm_unified(
+        system_prompt, user_prompt,
+        task=task, scan_id=scan_id, phase=phase,
+    )
+
+    if not response_text or max_escalations <= 0:
+        return response_text
+
+    confidence = 0.7
+    if confidence_extractor is not None:
+        try:
+            confidence = float(confidence_extractor(response_text))
+        except (TypeError, ValueError):
+            confidence = 0.7
+    else:
+        hedge_words = ["might", "could be", "possibly", "perhaps", "maybe", "it seems", "uncertain"]
+        lower = response_text.lower()
+        hedges_found = sum(1 for w in hedge_words if w in lower)
+        confidence = max(0.3, 1.0 - (hedges_found * 0.1))
+
+    escalation = check_tier_escalation(task, confidence)
+
+    if not escalation.escalated:
+        return response_text
+
+    logger.info(
+        "confidence_escalation",
+        extra={
+            "event": "confidence_escalation",
+            "task": task.value,
+            "original_tier": escalation.original_tier.value if hasattr(escalation.original_tier, 'value') else str(escalation.original_tier),
+            "escalated_tier": escalation.escalated_tier.value if hasattr(escalation.escalated_tier, 'value') else str(escalation.escalated_tier),
+            "confidence": confidence,
+            "threshold": escalation.threshold,
+            "scan_id": scan_id,
+            "phase": phase,
+        },
+    )
+
+    escalated_response = await call_llm_unified(
+        system_prompt,
+        f"[ESCALATED RE-RUN — confidence was {confidence:.2f}, threshold {escalation.threshold:.2f}]\n\n{user_prompt}",
+        task=task,
+        scan_id=scan_id,
+        phase=f"{phase}_escalated",
+    )
+
+    return escalated_response if escalated_response else response_text

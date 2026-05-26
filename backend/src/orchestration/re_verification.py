@@ -53,10 +53,11 @@ class ReVerificationTracker:
         request: ReVerificationRequest,
         scanner_func: Any = None,
     ) -> ReVerificationResult:
-        """Re-verify a finding. If scanner_func provided, actually re-scan.
+        """Re-verify a finding. Uses scanner_func if provided, otherwise
+        attempts a lightweight HTTP re-check of the original endpoint.
 
-        Without a scanner_func, records as 'unverified' rather than assuming
-        still_vulnerable — honest about lack of verification capability.
+        If neither scanner_func nor original_endpoint is available,
+        records as 'unverified' rather than assuming still_vulnerable.
         """
         still_vulnerable: bool | None = None
         details = ""
@@ -70,13 +71,24 @@ class ReVerificationTracker:
                 logger.warning("Re-verification scan failed: %s", exc)
                 details = f"Scan error: {exc}"
                 still_vulnerable = True
+        elif request.original_endpoint:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, verify=False) as client:
+                    resp = await client.get(request.original_endpoint)
+                still_vulnerable = 200 <= resp.status_code < 500
+                details = f"HTTP {resp.status_code} on {request.original_endpoint}"
+            except Exception as exc:
+                logger.debug("re_verify_http_probe_failed: %s", exc)
+                still_vulnerable = None
+                details = f"HTTP probe failed: {exc}"
         else:
             logger.info(
                 "re_verify_no_scanner",
                 extra={"finding_id": request.finding_id},
             )
             still_vulnerable = None
-            details = "No scanner function provided — verification not performed"
+            details = "No scanner function provided and no endpoint to probe — verification not performed"
 
         if still_vulnerable is None:
             status = "unverified"

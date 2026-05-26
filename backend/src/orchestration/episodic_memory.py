@@ -61,6 +61,7 @@ class EpisodicMemory:
         self._entries: list[EpisodicEntry] = []
         self._vector_client: Any = None
         self._collection: Any = None
+        self._backend: str = "memory"
 
         _persist = persist_dir or ""
         try:
@@ -75,16 +76,49 @@ class EpisodicMemory:
                 else:
                     self._vector_client = chromadb.Client()
             self._collection = self._vector_client.get_or_create_collection("argus_episodic")
+            self._backend = "chromadb"
             logger.info("ChromaDB episodic memory initialized (persist=%s)", bool(_persist or os.environ.get("ARGUS_EPISODIC_DIR")))
         except ImportError:
             try:
-                pass
-            except Exception:
-                pass
-            logger.debug("ChromaDB not available — using in-memory episodic store")
+                from qdrant_client import QdrantClient
+                from qdrant_client.models import PointStruct, VectorParams
+                _qdrant_host = os.environ.get("ARGUS_QDRANT_HOST", "")
+                _qdrant_port = int(os.environ.get("ARGUS_QDRANT_PORT", "6333"))
+                if _qdrant_host:
+                    self._vector_client = QdrantClient(host=_qdrant_host, port=_qdrant_port)
+                else:
+                    self._vector_client = QdrantClient(path=os.environ.get("ARGUS_QDRANT_PATH", ":memory:"))
+                _collection_name = "argus_episodic"
+                _collections = [c.name for c in self._vector_client.get_collections().collections]
+                if _collection_name not in _collections:
+                    self._vector_client.create_collection(
+                        collection_name=_collection_name,
+                        vectors_config=VectorParams(size=384, distance="Cosine"),
+                    )
+                self._collection = _collection_name
+                self._backend = "qdrant"
+                logger.info("Qdrant episodic memory initialized")
+            except ImportError:
+                logger.debug("Qdrant not available — using in-memory episodic store")
+            except Exception as qd_exc:
+                logger.debug("Qdrant init failed: %s — using in-memory store", qd_exc)
 
     def store(self, entry: EpisodicEntry) -> None:
-        if self._vector_client is not None:
+        if self._backend == "qdrant" and self._vector_client is not None:
+            try:
+                from qdrant_client.models import PointStruct
+                self._vector_client.upsert(
+                    collection_name=self._collection,
+                    points=[PointStruct(
+                        id=entry.entry_id,
+                        vector=self._compute_vector(entry.to_vector_text()),
+                        payload=entry.to_dict(),
+                    )],
+                )
+                return
+            except Exception as exc:
+                logger.debug("Qdrant store failed: %s", exc)
+        if self._backend == "chromadb" and self._vector_client is not None:
             try:
                 self._collection.add(
                     documents=[entry.to_vector_text()],
@@ -98,7 +132,30 @@ class EpisodicMemory:
 
     def recall(self, query: str, n: int = 5) -> list[EpisodicEntry]:
         """Retrieve similar past experiences."""
-        if self._vector_client is not None:
+        if self._backend == "qdrant" and self._vector_client is not None:
+            try:
+                hits = self._vector_client.search(
+                    collection_name=self._collection,
+                    query_vector=self._compute_vector(query),
+                    limit=n,
+                )
+                entries = []
+                for hit in hits:
+                    payload = hit.payload or {}
+                    entries.append(EpisodicEntry(
+                        entry_id=payload.get("entry_id", str(hit.id)),
+                        scan_id=payload.get("scan_id", ""),
+                        tenant_id="",
+                        finding_type=payload.get("finding_type", ""),
+                        cwe=payload.get("cwe", ""),
+                        title=payload.get("title", ""),
+                        technique=payload.get("technique", ""),
+                        framework=payload.get("framework", ""),
+                    ))
+                return entries
+            except Exception as exc:
+                logger.debug("Qdrant query failed: %s", exc)
+        if self._backend == "chromadb" and self._vector_client is not None:
             try:
                 results = self._collection.query(query_texts=[query], n_results=n)
                 entries = []
@@ -128,6 +185,13 @@ class EpisodicMemory:
                 scored.append((score, entry))
         scored.sort(key=lambda x: x[0], reverse=True)
         return [entry for _, entry in scored[:n]]
+
+    def _compute_vector(self, text: str) -> list[float]:
+        """Produce a simple deterministic embedding for vector search."""
+        h = hashlib.sha256(text.encode()).digest()
+        vec = [float(b) / 255.0 for b in h[:48]]
+        norm = sum(x * x for x in vec) ** 0.5 or 1.0
+        return [x / norm for x in vec]
 
     def build_context_prompt(self, query: str, max_entries: int = 3) -> str:
         """Build a prompt section from recalled episodic memory."""

@@ -228,17 +228,72 @@ class EphemeralWorkerPool:
         phase: str,
         task_id: str,
     ) -> list[str]:
-        """Collect artifacts from container before teardown.
+        """Collect artifacts from container /workspace/artifacts/ before teardown.
 
-        Returns list of MinIO artifact keys.
+        Copies files from the container to a temp directory, then uploads
+        each to MinIO. Returns list of MinIO artifact keys.
         """
+        import os
+        import shutil
+        import tempfile
+
         artifact_prefix = f"{scan_id}/{phase}/{task_id}"
         logger.info(
             "Collecting artifacts from %s -> %s/",
             container_id,
             artifact_prefix,
         )
-        return []
+
+        artifact_keys: list[str] = []
+
+        try:
+            import docker
+            client = docker.from_env()
+            container = client.containers.get(container_id)
+
+            bits, stat = container.get_archive("/workspace/artifacts/")
+            with tempfile.TemporaryDirectory(prefix="argus_artifacts_") as tmpdir:
+                archive_path = os.path.join(tmpdir, "artifacts.tar")
+                with open(archive_path, "wb") as f:
+                    for chunk in bits:
+                        f.write(chunk)
+                import tarfile
+                with tarfile.open(archive_path) as tar:
+                    tar.extractall(path=os.path.join(tmpdir, "extracted"), filter="data")
+
+                artifacts_dir = os.path.join(tmpdir, "extracted", "artifacts")
+                if not os.path.isdir(artifacts_dir):
+                    artifacts_dir = os.path.join(tmpdir, "extracted")
+                    if not os.path.isdir(artifacts_dir):
+                        return artifact_keys
+
+                try:
+                    from src.storage.s3 import upload_finding_poc_json
+                    for root, _dirs, files in os.walk(artifacts_dir):
+                        for fname in files:
+                            fpath = os.path.join(root, fname)
+                            rel = os.path.relpath(fpath, artifacts_dir)
+                            key = f"{artifact_prefix}/{rel}"
+                            try:
+                                with open(fpath, "rb") as fp:
+                                    content = fp.read()
+                                if content:
+                                    await asyncio.to_thread(
+                                        upload_finding_poc_json,
+                                        scan_id, key, {"artifact": fname, "data": content},
+                                    )
+                                    artifact_keys.append(key)
+                            except Exception as fexc:
+                                logger.debug("Artifact upload failed for %s: %s", key, fexc)
+                except ImportError:
+                    logger.debug("MinIO upload not available — storing artifact keys only")
+
+        except ImportError:
+            logger.debug("Docker SDK not available — skipping artifact collection from container")
+        except Exception as exc:
+            logger.warning("Artifact collection from %s failed: %s", container_id, exc)
+
+        return artifact_keys
 
     async def prune_stale(self, max_age_seconds: int = 600) -> int:
         """Remove containers that have been active too long."""

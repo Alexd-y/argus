@@ -57,6 +57,10 @@ def _map_rule_type_to_scope_kind(rule_type: str) -> ScopeKind | None:
         "host": ScopeKind.HOST,
         "ip": ScopeKind.IP,
         "cidr": ScopeKind.CIDR,
+        "method": ScopeKind.URL,
+        "header": ScopeKind.URL,
+        "parameter": ScopeKind.URL,
+        "code_path": ScopeKind.URL,
     }
     return mapping.get(rule_type.lower())
 

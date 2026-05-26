@@ -660,7 +660,7 @@ async def run_scan_state_machine(
 
         # Build phase input and persist
         _auth_config_obj = None
-        if options and phase in (ScanPhase.EXPLOITATION, ScanPhase.REPORTING):
+        if options:
             try:
                 from src.orchestration.auth_config import TargetConfig as _TC
                 _auth_config_obj = _TC.from_scan_options(options)
@@ -668,7 +668,15 @@ async def run_scan_state_machine(
                 logger.debug("auth_config_load_failed", extra={"scan_id": scan_id, "phase": phase_str, "error": str(_ac_exc)})
 
         _scope_context = ""
-        if options and phase == ScanPhase.REPORTING:
+        if options and phase in (
+            ScanPhase.SOURCE_ANALYSIS,
+            ScanPhase.RECON,
+            ScanPhase.THREAT_MODELING,
+            ScanPhase.VULN_ANALYSIS,
+            ScanPhase.EXPLOITATION,
+            ScanPhase.POST_EXPLOITATION,
+            ScanPhase.REPORTING,
+        ):
             try:
                 from src.orchestration.scope_integration import rules_of_engagement_to_prompt_context
                 if _auth_config_obj is not None:
