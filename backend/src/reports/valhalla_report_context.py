@@ -34,6 +34,11 @@ from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
 )
+from src.reports.evidence_gates import (
+    calculate_evidence_gate,
+    EvidenceQuality,
+    get_missing_artifact_message,
+)
 from src.storage.s3 import download_by_key
 
 BRAND_NAME = "Svalbard Security Inc."
@@ -1229,6 +1234,10 @@ class ValhallaReportContext(BaseModel):
     csrf_structured: list[ValhallaCsrfStructuredRowModel] = Field(default_factory=list)
     #: Command Injection structured PoC data
     cmdi_structured: list[ValhallaCmdiStructuredRowModel] = Field(default_factory=list)
+    #: Per-finding evidence gate classification (VALIDATED/OBSERVED/CANDIDATE/INCONCLUSIVE)
+    evidence_gate: dict[str, str] = Field(default_factory=dict)
+    #: Evidence quality summary (gate counts + validation details)
+    evidence_quality: dict[str, Any] = Field(default_factory=dict)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -6862,6 +6871,8 @@ def build_valhalla_report_context(
         unresolved_gaps=build_unresolved_gaps(finding_dicts),
         missing_artifacts=build_missing_artifact_report(finding_dicts, phase_outputs),
         next_scan_commands=build_next_scan_commands(finding_dicts),
+        evidence_gate=_build_evidence_gate_map(finding_dicts),
+        evidence_quality=_build_evidence_quality_summary(finding_dicts),
         quick_fuzz_summary=(
             {
                 "findings_count": len(quick_fuzz_output.get("findings", [])),
@@ -6877,6 +6888,73 @@ def build_valhalla_report_context(
         bounty_plan={},
         burp_config_available=False,
     )
+
+
+def _build_evidence_gate_map(findings: list[dict[str, Any]]) -> dict[str, str]:
+    """Build per-finding evidence gate classification map."""
+    from src.reports.evidence_gates import EvidenceQuality
+    result: dict[str, str] = {}
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        severity = str(f.get("severity", "")).lower()
+        poc = f.get("proof_of_concept", {}) or {}
+        evidence_refs = f.get("evidence_refs", []) or []
+        required = 3 if severity in ("critical", "high") else 2
+        found = 0
+        if poc:
+            found += 1
+        if evidence_refs:
+            found += 1
+        if poc.get("screenshot_key") or poc.get("browser_verified"):
+            found += 1
+        quality = EvidenceQuality(
+            required_evidence_count=required,
+            current_evidence_count=found,
+            missing_evidence=[],
+        )
+        fid = str(f.get("finding_id", f.get("id", "")) or "")
+        result[fid] = calculate_evidence_gate(quality)
+    return result
+
+
+def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build evidence quality summary from per-finding gate classifications."""
+    from src.reports.evidence_gates import EvidenceQuality
+    gate_counts: dict[str, int] = {"validated": 0, "observed": 0, "candidate": 0, "inconclusive": 0}
+    critical_high_gates: list[dict[str, str]] = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        severity = str(f.get("severity", "")).lower()
+        poc = f.get("proof_of_concept", {}) or {}
+        evidence_refs = f.get("evidence_refs", []) or []
+        required = 3 if severity in ("critical", "high") else 2
+        found = 0
+        if poc:
+            found += 1
+        if evidence_refs:
+            found += 1
+        if poc.get("screenshot_key") or poc.get("browser_verified"):
+            found += 1
+        quality = EvidenceQuality(
+            required_evidence_count=required,
+            current_evidence_count=found,
+            missing_evidence=[],
+        )
+        gate = calculate_evidence_gate(quality)
+        gate_counts[gate] = gate_counts.get(gate, 0) + 1
+        if severity in ("critical", "high"):
+            fid = str(f.get("finding_id", f.get("id", "")) or "")
+            critical_high_gates.append({"finding_id": fid, "severity": severity, "gate": gate})
+    validated_required = all(r["gate"] == "validated" for r in critical_high_gates) if critical_high_gates else True
+    return {
+        "total_findings": len(findings),
+        "gate_counts": gate_counts,
+        "critical_high": critical_high_gates,
+        "all_critical_high_validated": validated_required,
+        "score": 100 if validated_required else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
+    }
 
 
 def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
