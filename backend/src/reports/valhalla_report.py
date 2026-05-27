@@ -353,6 +353,67 @@ def _build_xss_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any]
     return out
 
 
+def _build_csrf_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for f in findings:
+        title_l = str(f.get("title") or "").lower()
+        is_csrf = "csrf" in title_l or "cross-site request" in title_l or "session" in title_l
+        if not is_csrf:
+            continue
+        poc = f.get("proof_of_concept")
+        if not isinstance(poc, dict):
+            continue
+        out.append(
+            {
+                "finding_id": str(f.get("id") or f.get("finding_id") or ""),
+                "title": _truncate(str(f.get("title") or ""), 300),
+                "endpoint": _truncate(str(poc.get("url") or poc.get("endpoint") or ""), 512) or None,
+                "method": str(poc.get("method") or "POST"),
+                "state_changing": poc.get("state_changing"),
+                "token_status": str(poc.get("csrf_token_status") or "missing"),
+                "raw_html_form": _truncate(str(poc.get("raw_html_form") or ""), 1024) or None,
+                "raw_post": _truncate(str(poc.get("raw_post") or poc.get("payload") or ""), 512) or None,
+                "cookies": str(poc.get("cookies") or ""),
+                "origin_referer": str(poc.get("origin") or poc.get("referer") or ""),
+                "negative_control": _truncate(str(poc.get("negative_control") or ""), 256) or None,
+                "verified": bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated")),
+            }
+        )
+        if len(out) >= 40:
+            break
+    return out
+
+
+def _build_cmdi_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for f in findings:
+        cwe = str(f.get("cwe") or "").upper()
+        title_l = str(f.get("title") or "").lower()
+        is_cmdi = "78" in cwe or "command" in title_l or "injection" in title_l
+        if not is_cmdi:
+            continue
+        poc = f.get("proof_of_concept")
+        if not isinstance(poc, dict):
+            continue
+        out.append(
+            {
+                "finding_id": str(f.get("id") or f.get("finding_id") or ""),
+                "title": _truncate(str(f.get("title") or ""), 300),
+                "parameter": _truncate(str(poc.get("parameter") or poc.get("input") or ""), 256) or None,
+                "payload": _truncate(str(poc.get("payload") or ""), 512) or None,
+                "harmless_marker": _truncate(str(poc.get("harmless_marker") or ""), 256) or None,
+                "controlled_output": _truncate(str(poc.get("controlled_output") or poc.get("command_output") or ""), 512) or None,
+                "server_proof": _truncate(str(poc.get("server_proof") or poc.get("log_entry") or ""), 512) or None,
+                "output_source": str(poc.get("output_source") or "stdout"),
+                "negative_control": _truncate(str(poc.get("negative_control") or ""), 256) or None,
+                "verified": bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated")),
+            }
+        )
+        if len(out) >= 40:
+            break
+    return out
+
+
 def _build_attack_scenarios(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     validated = [f for f in findings if f.get("confidence") in ("confirmed", "likely")
                  and f.get("evidence_quality") in ("strong", "moderate")]
@@ -958,6 +1019,8 @@ async def build_valhalla_report_context(
     risk_m = _build_risk_matrix(resolved_findings)
     crit_v = _collect_critical_vulns(resolved_findings)
     xss_s = _build_xss_structured(resolved_findings)
+    csrf_s = _build_csrf_structured(resolved_findings)
+    cmdi_s = _build_cmdi_structured(resolved_findings)
     attack_s = _build_attack_scenarios(resolved_findings)
 
     # Exploits
@@ -1126,6 +1189,8 @@ async def build_valhalla_report_context(
         risk_matrix=risk_m,
         critical_vulns=crit_v,
         xss_structured=xss_s,
+        csrf_structured=csrf_s,
+        cmdi_structured=cmdi_s,
         threat_model_excerpt=threat_excerpt,
         exploitation_post_excerpt=exploit_excerpt,
         hibp_pwned_password_summary=hibp_summary,

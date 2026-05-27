@@ -406,6 +406,42 @@ class ValhallaXssStructuredRowModel(BaseModel):
     artifact_urls: list[str] = Field(default_factory=list)
 
 
+class ValhallaCsrfStructuredRowModel(BaseModel):
+    """T7 — CSRF PoC fields passed to LLM context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    title: str = ""
+    endpoint: str | None = None
+    method: str = "POST"
+    state_changing: bool | None = None
+    token_status: str | None = None
+    raw_html_form: str | None = None
+    raw_post: str | None = None
+    cookies: str = ""
+    origin_referer: str = ""
+    negative_control: str | None = None
+    verified: bool = False
+
+
+class ValhallaCmdiStructuredRowModel(BaseModel):
+    """T8 — Command Injection PoC fields passed to LLM context."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    title: str = ""
+    parameter: str | None = None
+    payload: str | None = None
+    harmless_marker: str | None = None
+    controlled_output: str | None = None
+    server_proof: str | None = None
+    output_source: str = "stdout"
+    negative_control: str | None = None
+    verified: bool = False
+
+
 _MAX_XSS_CONTEXT_ROWS = 48
 _MAX_XSS_FIELD_LEN = 600
 
@@ -591,6 +627,107 @@ def build_xss_structured_rows_from_findings(
     return out
 
 
+def build_csrf_structured_rows_from_findings(
+    findings: list[dict[str, Any]],
+    *,
+    max_rows: int = 40,
+) -> list[ValhallaCsrfStructuredRowModel]:
+    """Extract CSRF-oriented PoC fields for Valhalla AI / compact context."""
+    out: list[ValhallaCsrfStructuredRowModel] = []
+    for i, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        title_l = str(f.get("title", "") or "").lower()
+        is_csrf = "csrf" in title_l or "cross-site request" in title_l or "session" in title_l
+        if not is_csrf:
+            continue
+        poc = _poc_as_dict(f)
+        fid = _finding_id_for_risk(f, i)
+        title = _truncate_xss_field(str(f.get("title") or "").strip(), 300) or ""
+        endpoint = poc.get("url") or poc.get("endpoint") or f.get("affected_endpoint", "")
+        endpoint_s = _truncate_xss_field(endpoint.strip() if isinstance(endpoint, str) else None, 512) or None
+        method = str(poc.get("method", "POST") or "POST")
+        state_changing = poc.get("state_changing")
+        token_status = str(poc.get("csrf_token_status", "missing") or "missing")
+        raw_form = str(poc.get("raw_html_form", "") or "")[:1024] or None
+        raw_post = str(poc.get("raw_post", poc.get("payload", "")) or "")[:512] or None
+        cookies = str(poc.get("cookies", "") or "")
+        origin_ref = str(poc.get("origin", poc.get("referer", "")) or "")
+        nc = str(poc.get("negative_control", "") or "")
+        nc_s = _truncate_xss_field(nc, 256) or None
+        verified = bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated"))
+        out.append(
+            ValhallaCsrfStructuredRowModel(
+                finding_id=fid[:256],
+                title=title or "—",
+                endpoint=endpoint_s,
+                method=method,
+                state_changing=state_changing,
+                token_status=token_status,
+                raw_html_form=raw_form,
+                raw_post=raw_post,
+                cookies=cookies,
+                origin_referer=origin_ref,
+                negative_control=nc_s,
+                verified=verified,
+            )
+        )
+        if len(out) >= max_rows:
+            break
+    return out
+
+
+def build_cmdi_structured_rows_from_findings(
+    findings: list[dict[str, Any]],
+    *,
+    max_rows: int = 40,
+) -> list[ValhallaCmdiStructuredRowModel]:
+    """Extract Command Injection-oriented PoC fields for Valhalla AI / compact context."""
+    out: list[ValhallaCmdiStructuredRowModel] = []
+    for i, f in enumerate(findings):
+        if not isinstance(f, dict):
+            continue
+        cwe = str(f.get("cwe", "") or "").upper()
+        title_l = str(f.get("title", "") or "").lower()
+        is_cmdi = "78" in cwe or "command" in title_l or "injection" in title_l
+        if not is_cmdi:
+            continue
+        poc = _poc_as_dict(f)
+        fid = _finding_id_for_risk(f, i)
+        title = _truncate_xss_field(str(f.get("title") or "").strip(), 300) or ""
+        param = poc.get("parameter") or poc.get("input", "")
+        param_s = _truncate_xss_field(param.strip() if isinstance(param, str) else None, 256) or None
+        payload = poc.get("payload", "")
+        payload_s = _truncate_xss_field(payload.strip() if isinstance(payload, str) else None, 512) or None
+        marker = poc.get("harmless_marker", "")
+        marker_s = _truncate_xss_field(marker.strip() if isinstance(marker, str) else None, 256) or None
+        output = poc.get("controlled_output", poc.get("command_output", ""))
+        output_s = _truncate_xss_field(output.strip() if isinstance(output, str) else None, 512) or None
+        proof = poc.get("server_proof", poc.get("log_entry", ""))
+        proof_s = _truncate_xss_field(proof.strip() if isinstance(proof, str) else None, 512) or None
+        source = str(poc.get("output_source", "stdout") or "stdout")
+        nc = str(poc.get("negative_control", "") or "")
+        nc_s = _truncate_xss_field(nc, 256) or None
+        verified = bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated"))
+        out.append(
+            ValhallaCmdiStructuredRowModel(
+                finding_id=fid[:256],
+                title=title or "—",
+                parameter=param_s,
+                payload=payload_s,
+                harmless_marker=marker_s,
+                controlled_output=output_s,
+                server_proof=proof_s,
+                output_source=source,
+                negative_control=nc_s,
+                verified=verified,
+            )
+        )
+        if len(out) >= max_rows:
+            break
+    return out
+
+
 def serialize_xss_structured_for_ai(rows: list[ValhallaXssStructuredRowModel]) -> str:
     """One JSON object per row (newlines); for tests and optional prompt attachment."""
     chunks: list[str] = []
@@ -618,6 +755,7 @@ class ValhallaSectionEnvelopeModel(BaseModel):
 
     status: ValhallaSectionCoverageStatus = "no_data"
     reason: str = ""
+    missing_artifacts: list[str] = Field(default_factory=list)
 
 
 class PortExposureSummaryModel(BaseModel):
@@ -1079,6 +1217,7 @@ class ValhallaReportContext(BaseModel):
     #: Step 17 — evidence gaps, missing artifacts, next scan commands
     unresolved_gaps: list[dict[str, str]] = Field(default_factory=list)
     missing_artifacts: list[dict[str, str]] = Field(default_factory=list)
+    missing_artifacts_summary: list[str] = Field(default_factory=list)
     next_scan_commands: list[dict[str, str]] = Field(default_factory=list)
     #: Quick fuzz phase summary
     quick_fuzz_summary: dict[str, Any] = Field(default_factory=dict)
@@ -1086,6 +1225,10 @@ class ValhallaReportContext(BaseModel):
     bounty_plan: dict[str, Any] = Field(default_factory=dict)
     #: Whether Burp Suite config export is available
     burp_config_available: bool = False
+    #: CSRF structured PoC data
+    csrf_structured: list[ValhallaCsrfStructuredRowModel] = Field(default_factory=list)
+    #: Command Injection structured PoC data
+    cmdi_structured: list[ValhallaCmdiStructuredRowModel] = Field(default_factory=list)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -6686,6 +6829,8 @@ def build_valhalla_report_context(
         coverage=coverage,
         recon_pipeline_summary=recon_pipeline_summary,
         xss_structured=build_xss_structured_rows_from_findings(findings),
+        csrf_structured=build_csrf_structured_rows_from_findings(findings),
+        cmdi_structured=build_cmdi_structured_rows_from_findings(findings),
         wstg_coverage=_dataclass_to_dict(wstg_result),
         test_limitations=test_lim,
         valhalla_engagement_title=engagement_title,

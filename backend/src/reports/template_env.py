@@ -34,6 +34,12 @@ _ALLOWED_ATTRS: dict[str, set[str]] = {
     "th": {"align"},
 }
 
+JINJA2_TEMPLATES: dict[str, str] = {
+    "valhalla": "valhalla.html.j2",
+    "valhalla/partials": "templates/reports/partials/valhalla",
+    "valhalla/partials/findings": "templates/reports/partials/valhalla/findings",
+}
+
 
 def _md_filter(text: str) -> Markup:
     """Convert markdown AI output to sanitized HTML for report slots."""
