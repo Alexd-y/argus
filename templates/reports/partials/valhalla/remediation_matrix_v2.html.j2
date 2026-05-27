@@ -1,0 +1,34 @@
+# Remediation Matrix v2 Table Template
+
+<table class="remediation-matrix-table">
+  <thead>
+    <tr>
+      <th>Finding ID</th>
+      <th>Severity</th>
+      <th>Category</th>
+      <th>Layer</th>
+      <th>Owner Team</th>
+      <th>Component</th>
+      <th>Fix Action</th>
+      <th>Risk</th>
+      <th>Verification</th>
+      <th>Acceptance Criteria</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in remediation_matrix %}
+    <tr>
+      <td>{{ row.finding_id }}</td>
+      <td>{{ row.severity }}</td>
+      <td>{{ row.category }}</td>
+      <td>{{ row.affected_layer }}</td>
+      <td>{{ row.owner_team }}</td>
+      <td>{{ row.config_component }}</td>
+      <td>{{ row.fix_action }}</td>
+      <td>{{ row.rollback_risk }}</td>
+      <td><code>{{ row.verification_step }}</code></td>
+      <td>{{ row.acceptance_criteria }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

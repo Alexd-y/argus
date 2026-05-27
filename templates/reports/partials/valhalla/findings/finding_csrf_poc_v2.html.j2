@@ -1,0 +1,34 @@
+# CSRF PoC v2 Table Template
+
+<table class="csrf-poc-table">
+  <thead>
+    <tr>
+      <th>Endpoint</th>
+      <th>Method</th>
+      <th>State-Changing?</th>
+      <th>Token Status</th>
+      <th>Raw HTML Form</th>
+      <th>Raw POST</th>
+      <th>Cookies</th>
+      <th>Origin/Referer</th>
+      <th>Negative Control</th>
+      <th>Verified</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for csrf in csrf_rows %}
+    <tr>
+      <td>{{ csrf.endpoint }}</td>
+      <td>{{ csrf.method }}</td>
+      <td>{% if csrf.state_changing %}✅ Yes{% else %}❌ No{% endif %}</td>
+      <td>{{ csrf.csrftoken_status or 'N/A' }}</td>
+      <td>{% if csrf.raw_html_form %}{{ csrf.raw_html_form[:50] }}...{% else %}N/A{% endif %}</td>
+      <td><code>{{ csrf.raw_post[:50] if csrf.raw_post else 'N/A' }}</code></td>
+      <td>{{ csrf.cookies or 'N/A' }}</td>
+      <td>{{ csrf.origin_referer or 'N/A' }}</td>
+      <td>{{ csrf.negative_control or 'N/A' }}</td>
+      <td>{% if csrf.verified %}✅ PoC URL{% else %}❌ No{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

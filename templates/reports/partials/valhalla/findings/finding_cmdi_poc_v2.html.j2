@@ -1,0 +1,30 @@
+# Command Injection PoC v2 Table Template
+
+<table class="cmdi-poc-table">
+  <thead>
+    <tr>
+      <th>Parameter</th>
+      <th>Payload</th>
+      <th>Marker Command</th>
+      <th>Command Output</th>
+      <th>Server Proof</th>
+      <th>Output Source</th>
+      <th>Negative Control</th>
+      <th>Verified</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for cmdi in cmdi_rows %}
+    <tr>
+      <td>{{ cmdi.parameter or 'N/A' }}</td>
+      <td>{{ cmdi.payload }}</td>
+      <td>{{ cmdi.harmless_marker or 'N/A' }}</td>
+      <td>{{ cmdi.controlled_output or 'N/A' }}</td>
+      <td>{{ cmdi.server_proof or 'N/A' }}</td>
+      <td>{{ cmdi.output_source or 'N/A' }}</td>
+      <td>{{ cmdi.negative_control or 'N/A' }}</td>
+      <td>{% if cmdi.verified %}✅ PoC{% else %}❌ No{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

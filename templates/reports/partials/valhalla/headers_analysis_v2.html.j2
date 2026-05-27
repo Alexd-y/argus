@@ -1,0 +1,41 @@
+# Security Headers Gap Table Template
+
+<table class="headers-analysis-table">
+  <thead>
+    <tr>
+      <th>Endpoint</th>
+      <th>Status Code</th>
+      <th>Redirect Chain</th>
+      <th>Missing Headers</th>
+      <th>Recommendations</th>
+      <th>Confidence</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for endpoint in endpoints %}
+    <tr>
+      <td>{{ endpoint.url }}</td>
+      <td>{{ endpoint.status_code }}</td>
+      <td>
+        {% if endpoint.redirect_chain %}
+          {% for redirect in endpoint.redirect_chain %}
+            {{ redirect.location }} ({{ redirect.status }})<br/>
+          {% endfor %}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>{{ endpoint.missing_headers | join(', ') }}</td>
+      <td>
+        {% if 'Content-Security-Policy' in endpoint.missing_headers %}
+          Add CSP header
+        {% endif %}
+        {% if 'Strict-Transport-Security' in endpoint.missing_headers %}
+          Add HSTS header
+        {% endif %}
+      </td>
+      <td>{{ endpoint.confidence }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -32,6 +32,31 @@ class WstgCoverageResult:
     tests: list[dict[str, Any]] = field(default_factory=list)
     auth_testing_enabled: bool = False
     not_covered_reasons: dict[str, str] = field(default_factory=dict)
+    missing_artifacts: list[dict] = field(default_factory=list)
+
+
+class WstgCoverageV2Result:
+    """V2 coverage analysis with missing artifact tracking."""
+
+    def __init__(
+        self,
+        total_tests: int,
+        covered: int,
+        partial: int,
+        not_covered: int,
+        coverage_percentage: float,
+        by_category: dict[str, Any],
+        tests: list[dict[str, Any]],
+        missing_artifacts: list[dict],
+    ):
+        self.total_tests = total_tests
+        self.covered = covered
+        self.partial = partial
+        self.not_covered = not_covered
+        self.coverage_percentage = coverage_percentage
+        self.by_category = by_category
+        self.tests = tests
+        self.missing_artifacts = missing_artifacts
 
 
 _WSTG_TESTS: list[WstgTestCase] = [
@@ -666,3 +691,39 @@ def _check_waf_detected(
         if isinstance(waf_output, str) and "is behind" in waf_output.lower():
             return True
     return False
+
+
+def build_wstg_coverage_v2(
+    tools_executed: list[str],
+    findings: list[dict[str, Any]] | None = None,
+    evidence_inventory: list[dict[str, Any]] | None = None,
+) -> WstgCoverageV2Result:
+    """V2 WSTG coverage with missing artifact tracking."""
+    result = build_wstg_coverage(tools_executed, findings)
+    
+    evidence_set = set()
+    if evidence_inventory:
+        for ev in evidence_inventory:
+            if isinstance(ev, dict) and ev.get("test_id"):
+                evidence_set.add(ev["test_id"])
+    
+    missing_artifacts = []
+    for test in result.tests:
+        if test["status"] == "not_covered" and test["id"] not in evidence_set:
+            missing_artifacts.append({
+                "test_id": test["id"],
+                "category": test["category"],
+                "tool_hint": f"tool_{test['tools'][0]}_stdout" if test["tools"] else "unknown",
+                "artifact_hint": f"Not assessed: missing artifact for {test['id']}",
+            })
+    
+    return WstgCoverageV2Result(
+        total_tests=result.total_tests,
+        covered=result.covered,
+        partial=result.partial,
+        not_covered=result.not_covered,
+        coverage_percentage=result.coverage_percentage,
+        by_category=result.by_category,
+        tests=result.tests,
+        missing_artifacts=missing_artifacts,
+    )

@@ -1,0 +1,30 @@
+# XSS PoC v2 Table Template
+
+<table class="xss-poc-table">
+  <thead>
+    <tr>
+      <th>Parameter</th>
+      <th>Payload Entered</th>
+      <th>Payload Reflected</th>
+      <th>Reflection Context</th>
+      <th>Browser Verified</th>
+      <th>Screenshot</th>
+      <th>Negative Control</th>
+      <th>Verified via Browser</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for xss in xss_rows %}
+    <tr>
+      <td>{{ xss.affected_parameter or 'N/A' }}</td>
+      <td>{{ xss.payload_entered or 'N/A' }}</td>
+      <td>{{ xss.payload_reflected or 'N/A' }}</td>
+      <td>{{ xss.reflection_context or 'N/A' }}</td>
+      <td>{% if xss.verified_via_browser %}✅ Yes{% else %}❌ No{% endif %}</td>
+      <td>{% if xss.screenshot_key %}<a href="{{ xss.screenshot_key }}">&#128247;</a>{% else %}N/A{% endif %}</td>
+      <td>{{ xss.negative_control or 'N/A' }}</td>
+      <td>{{ xss.verification_method or 'N/A' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

@@ -1,0 +1,34 @@
+# Evidence Quality Table Template
+
+<table class="evidence-quality-table">
+  <thead>
+    <tr>
+      <th>Finding ID</th>
+      <th>Severity</th>
+      <th>Evidence Gate</th>
+      <th>Validation Status</th>
+      <th>Required Evidence</th>
+      <th>Current Evidence</th>
+      <th>Gaps</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for f in findings %}
+    <tr>
+      <td><a href="#{{ f.finding_id }}">{{ f.finding_id }}</a></td>
+      <td class="severity-{{ f.severity | lower }}">{{ f.severity }}</td>
+      <td>
+        <span class="evidence-badge badge-{{ f.evidence_gate | lower }}">
+          {{ f.evidence_gate | upper }}
+        </span>
+      </td>
+      <td>
+        {% if f.evidence_gate == "validated" %}✅{% elif f.evidence_gate == "observed" %}⚠️{% else %}❌{% endif %}
+      </td>
+      <td>{{ f.required_evidence_count }} items</td>
+      <td>{{ f.current_evidence_count }}/{{ f.required_evidence_count }}</td>
+      <td class="evidence-gaps">{{ f.missing_evidence | join(', ') }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

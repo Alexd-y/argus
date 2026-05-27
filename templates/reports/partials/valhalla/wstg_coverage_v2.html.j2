@@ -1,0 +1,36 @@
+# WSTG Coverage v2 Table Template
+
+<table class="wstg-coverage-table">
+  <thead>
+    <tr>
+      <th>Test ID</th>
+      <th>Test Name</th>
+      <th>Category</th>
+      <th>Tools</th>
+      <th>Status</th>
+      <th>Evidence ID</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for test in tests %}
+    <tr>
+      <td>{{ test.id }}</td>
+      <td>{{ test.name }}</td>
+      <td>{{ test.category }}</td>
+      <td>{{ test.tools | join(', ') }}</td>
+      <td>{{ test.status }}</td>
+      <td>{{ test.evidence_id or '-' }}</td>
+      <td>{% if not test.artifacts %}Not assessed: missing artifact{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3"><strong>Total Tests: {{ summary.total_tests }}</strong></td>
+      <td><strong>Covered: {{ summary.covered }}</strong></td>
+      <td><strong>Not Covered: {{ summary.not_covered }}</strong></td>
+      <td colspan="2"><strong>Coverage: {{ summary.coverage_pct }}%</strong></td>
+    </tr>
+  </tfoot>
+</table>
