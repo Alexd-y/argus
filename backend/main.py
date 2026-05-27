@@ -29,6 +29,7 @@ from src.api.routers import (
     queues_health,
     reports,
     sandbox,
+    scans,
     skills_public,
     tools,
     ws,

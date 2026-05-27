@@ -704,7 +704,7 @@ async def run_scan_state_machine(
             except Exception as _ac_exc:
                 logger.debug("auth_config_load_failed", extra={"scan_id": scan_id, "phase": phase_str, "error": str(_ac_exc)})
 
-        _scope_context = ""
+        _scope_context: dict[str, Any] | None = None
         if options and phase in (
             ScanPhase.SOURCE_ANALYSIS,
             ScanPhase.RECON,
