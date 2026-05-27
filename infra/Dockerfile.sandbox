@@ -21,7 +21,8 @@ ARG SANDBOX_PROFILE=binary
 FROM docker.io/kalilinux/kali-rolling:latest AS base
 
 # Base: common packages shared across all profiles
-# Double apt-get update + --fix-missing to handle Kali rolling mirror sync delays
+# Kali rolling mirrors can go out of sync — remove unstable mirrors and retry
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true
 RUN apt-get update && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     python3 python3-pip python3-venv python3-dev \
     git curl wget gdb strace ltrace \
