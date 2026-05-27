@@ -171,6 +171,11 @@ class ValhallaReportContext(BaseModel):
     retest_plan: dict[str, Any] = Field(default_factory=dict)
     zero_day_assessment: dict[str, Any] = Field(default_factory=dict)
     cost_summary: dict[str, Any] = Field(default_factory=dict)
+    
+    # Evidence quality
+    evidence_gate: dict[str, Any] = Field(default_factory=dict)
+    csrf_structured: list[dict[str, Any]] = Field(default_factory=list)
+    cmdi_structured: list[dict[str, Any]] = Field(default_factory=list)
 
     # Quick fuzz phase results
     quick_fuzz_summary: dict[str, Any] = Field(

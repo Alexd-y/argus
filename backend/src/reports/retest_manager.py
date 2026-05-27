@@ -87,7 +87,7 @@ def generate_acceptance_criteria(finding: dict) -> str:
     elif "csp" in vuln_type:
         return "CSP header configured. Policy enforced."
     else:
-        return "Vulnerability remediated. Tests passing.")
+        return "Vulnerability remediated. Tests passing."
 
 
 def create_retest_manager(

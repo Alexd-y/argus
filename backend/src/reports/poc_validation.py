@@ -62,7 +62,7 @@ class CmdiValidationResult(BaseModel):
         return all(required)
 
 
-def validate_xss poc(proof_of_concept: dict) -> XssValidationResult:
+def validate_xss_poc(proof_of_concept: dict) -> XssValidationResult:
     poc_obj = proof_of_concept.get("proof_of_concept", proof_of_concept)
     xss_obj = poc_obj.get("xss", {})
     return XssValidationResult(
