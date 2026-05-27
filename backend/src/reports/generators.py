@@ -1399,7 +1399,108 @@ def build_valhalla_report_payload(
         "conclusion_text": conclusion_text,
         "hibp_pwned_password_summary": hibp_pwned_password_summary,
         "appendices": appendices,
+        "valhalla_context": _build_valhalla_report_context(jinja_context, data),
     }
+
+
+def _build_valhalla_report_context(
+    jinja_context: dict[str, Any] | None,
+    data: ReportData,
+) -> dict[str, Any] | None:
+    """Build ValhallaReportContext from jinja_context and ReportData."""
+    if not jinja_context:
+        return None
+    from src.reports.valhalla_report import build_valhalla_report_context
+    ctx = jinja_context
+    valhalla_ctx = ctx.get("valhalla_context")
+    if not isinstance(valhalla_ctx, dict):
+        valhalla_ctx = {}
+    ai_ctx = ctx.get("ai_sections")
+    if not isinstance(ai_ctx, dict):
+        ai_ctx = {}
+    findings = list(data.findings)
+    findings_dicts = [f.model_dump(mode="json") for f in findings]
+    engagement_title = valhalla_ctx.get("valhalla_engagement_title", "") or ""
+    full_v = bool(valhalla_ctx.get("full_valhalla"))
+    scan_options = valhalla_ctx.get("scan_options", {}) or {}
+    phase_outputs = valhalla_ctx.get("phase_outputs", {}) or {}
+    raw_artifact_keys = valhalla_ctx.get("raw_artifact_keys", []) or []
+    merged_http_headers = valhalla_ctx.get("merged_http_headers", {}) or {}
+    fetch_raw_bodies = bool(scan_options.get("fetch_raw_bodies", False))
+    threat_ref = valhalla_ctx.get("threat_model_ref", {})
+    exploit_post_excerpt = str(threat_ref.get("exploitation_post_excerpt", "") or "")
+    risk_matrix = valhalla_ctx.get("risk_matrix", {}) or {}
+    critical_vulns = valhalla_ctx.get("critical_vulns", []) or []
+    appendix_tools = valhalla_ctx.get("appendix_tools", []) or []
+    mandatory_sections = valhalla_ctx.get("mandatory_sections", {}) or {}
+    rs_analysis_bundle = valhalla_ctx.get("robots_sitemap_analysis", {}) or {}
+    coverage = valhalla_ctx.get("coverage", {}) or {}
+    recon_pipeline_summary = valhalla_ctx.get("recon_pipeline_summary", {}) or {}
+    wstg_result = valhalla_ctx.get("wstg_coverage", {}) or {}
+    test_lim = valhalla_ctx.get("test_limitations", []) or []
+    port_data = valhalla_ctx.get("port_exposure", {}) or {}
+    evidence_inv = valhalla_ctx.get("evidence_inventory", []) or []
+    th_jinja = valhalla_ctx.get("tool_health_summary", []) or []
+    wstg_exec_degraded = bool(valhalla_ctx.get("wstg_execution_degraded", False))
+    wstg_zero = bool(valhalla_ctx.get("wstg_coverage_zero_executed", False))
+    trivy_run_status = valhalla_ctx.get("trivy_run_status", "") or "not_applicable"
+    sca_mode = valhalla_ctx.get("sca_mode", "") or "none"
+    sca_manifest_count = valhalla_ctx.get("sca_manifest_count", 0) or 0
+    sca_artifact_count = valhalla_ctx.get("sca_artifact_count", 0) or 0
+    active_injection_scan_options = valhalla_ctx.get("active_injection_scan_options", {}) or {}
+    auth_testing = valhalla_ctx.get("auth_testing", {}) or {}
+    full_headers = valhalla_ctx.get("full_headers", {}) or {}
+    remediation_matrix_rows = valhalla_ctx.get("remediation_matrix", []) or []
+    ownership_evidence = valhalla_ctx.get("ownership_evidence", {}) or {}
+    retest_plan = valhalla_ctx.get("retest_plan", {}) or {}
+    unresolved_gaps = valhalla_ctx.get("unresolved_gaps", []) or []
+    missing_artifacts = valhalla_ctx.get("missing_artifacts", []) or []
+    next_scan = valhalla_ctx.get("next_scan_commands", []) or []
+    quick_fuzz = valhalla_ctx.get("quick_fuzz_summary", {}) or {}
+    bounty_plan = valhalla_ctx.get("bounty_plan", {}) or {}
+    burp_config = bool(valhalla_ctx.get("burp_config_available", False))
+    return build_valhalla_report_context(
+        findings=findings_dicts,
+        valhalla_context=valhalla_ctx,
+        engagement_title=engagement_title,
+        full_v=full_v,
+        phase_outputs=phase_outputs,
+        raw_artifact_keys=raw_artifact_keys,
+        merged_http_headers=merged_http_headers,
+        fetch_raw_bodies=fetch_raw_bodies,
+        threat_ref=threat_ref,
+        exploitation_post_excerpt=exploit_post_excerpt,
+        risk_matrix=risk_matrix,
+        critical_vulns=critical_vulns,
+        appendix_tools=appendix_tools,
+        mandatory_sections=mandatory_sections,
+        rs_analysis_bundle=rs_analysis_bundle,
+        coverage=coverage,
+        recon_pipeline_summary=recon_pipeline_summary,
+        wstg_result=wstg_result,
+        test_limits=test_lim,
+        port_data=port_data,
+        evidence_inventory=evidence_inv,
+        tool_health=th_jinja,
+        wstg_exec_degraded=wstg_exec_degraded,
+        wstg_zero=wstg_zero,
+        trivy_run_status=trivy_run_status,
+        sca_mode=sca_mode,
+        sca_manifest_count=sca_manifest_count,
+        sca_artifact_count=sca_artifact_count,
+        active_injection_scan_options=active_injection_scan_options,
+        auth_testing=auth_testing,
+        full_headers=full_headers,
+        remediation_matrix_rows=remediation_matrix_rows,
+        ownership_evidence=ownership_evidence,
+        retest_plan=retest_plan,
+        unresolved_gaps=unresolved_gaps,
+        missing_artifacts=missing_artifacts,
+        next_scan=next_scan,
+        quick_fuzz=quick_fuzz,
+        bounty_plan=bounty_plan,
+        burp_config_available=burp_config,
+    )
 
 
 def generate_valhalla_sections_csv(
