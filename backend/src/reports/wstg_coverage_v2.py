@@ -186,17 +186,18 @@ def build_wstg_coverage_v2(
 
 def map_tool_to_wstg(test_id: str, tools_executed: list[str]) -> list[str]:
     tool_mapping = {
-        "INFO": ["nmap", "httpx", "subfinder"],
-        "CONF": ["httpx", "testssl"],
-        "IDNT": ["nuclei"],
-        "ATHN": ["nuclei", "sqlmap"],
-        "ATHZ": ["nuclei"],
-        "SESS": ["nuclei"],
-        "INPV": ["dalfox", "sqlmap", "nuclei"],
-        "ERRH": ["httpx"],
+        "INFO": ["nmap", "httpx", "subfinder", "argus_recon"],
+        "CONF": ["httpx", "testssl", "argus_active_scan"],
         "CRYP": ["testssl", "sslscan"],
-        "BUSL": ["nuclei"],
-        "CLNT": ["dalfox", "nuclei"],
+        "AUTHN": ["httpx", "nuclei", "argus_active_scan"],
+        "ATHZ": ["nuclei", "argus_active_scan"],
+        "SESS": ["nuclei", "playwright", "argus_active_scan"],
+        "INPV": ["dalfox", "sqlmap", "nuclei", "playwright", "argus_active_scan"],
+        "ERRH": ["nuclei", "httpx"],
+        "DATA": ["nuclei", "sqlmap"],
+        "LOGG": ["nuclei"],
+        "BUSL": ["nuclei", "playwright"],
+        "CLNT": ["nuclei", "playwright"],
     }
     
     for prefix, tools in tool_mapping.items():
