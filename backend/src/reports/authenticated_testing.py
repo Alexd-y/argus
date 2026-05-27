@@ -1,6 +1,20 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
 
+__all__ = [
+    "SessionTesting",
+    "TokenTesting",
+    "MfaTesting",
+    "AuthorizationTesting",
+    "AuthTestingContextV2",
+    "build_auth_testing_context",
+    "build_idor_tests",
+    "detect_session_testing",
+    "detect_token_testing",
+    "detect_mfa_testing",
+    "detect_authorization_testing",
+]
+
 
 class SessionTesting(BaseModel):
     session_fixation: bool = False
@@ -32,7 +46,7 @@ class AuthorizationTesting(BaseModel):
     broken_access_control: bool = False
 
 
-class AuthTestingContext(BaseModel):
+class AuthTestingContextV2(BaseModel):
     session: Optional[SessionTesting] = None
     token: Optional[TokenTesting] = None
     mfa: Optional[MfaTesting] = None
@@ -41,11 +55,15 @@ class AuthTestingContext(BaseModel):
     tools_used: list[str] = []
 
 
-def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTestingContext:
-    context = AuthTestingContext(
+def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTestingContextV2:
+    context = AuthTestingContextV2(
         testing_methodology="OWASP WSTG + PTES",
         tools_used=["nuclei", "sqlmap", "dalfox"],
     )
+    context.session = context.session or SessionTesting()
+    context.token = context.token or TokenTesting()
+    context.mfa = context.mfa or MfaTesting()
+    context.authorization = context.authorization or AuthorizationTesting()
     
     for finding in findings:
         if finding.get("type") == "session_hijacking":

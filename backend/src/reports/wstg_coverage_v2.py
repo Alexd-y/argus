@@ -167,15 +167,16 @@ def build_wstg_coverage_v2(
     
     covered_count = sum(1 for t in tests if t.status == "covered")
     partial_count = sum(1 for t in tests if t.status == "partial")
+    total = len(WSTG_TESTS)
     not_covered_count = sum(1 for t in tests if t.status == "not_covered")
     
     return {
         "summary": {
-            "total_tests": 69,
+            "total_tests": total,
             "covered": covered_count,
             "partial": partial_count,
             "not_covered": not_covered_count,
-            "coverage_pct": round(covered_count / 69 * 100, 1),
+            "coverage_pct": round(covered_count / max(total, 1) * 100, 1),
             "by_category": categorize_tests(tests),
             "missing_artifacts": missing_artifacts[:10]},
         "tests": tests,

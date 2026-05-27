@@ -1,6 +1,8 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
 
+__all__ = ["EndpointHeaders", "FullHeadersContextV2", "RECOMMENDED_HEADERS", "analyze_headers_from_curl", "parse_curl_headers_response", "get_missing_headers", "get_all_missing_recommended"]
+
 
 class EndpointHeaders(BaseModel):
     url: str
@@ -11,7 +13,7 @@ class EndpointHeaders(BaseModel):
     confidence: Literal["high", "medium", "low"] = "medium"
 
 
-class FullHeadersContext(BaseModel):
+class FullHeadersContextV2(BaseModel):
     endpoints: list[EndpointHeaders] = []
     all_endpoints: set[str] = set()
     missing_recommended: list[str] = []
@@ -27,8 +29,8 @@ RECOMMENDED_HEADERS = [
 ]
 
 
-def analyze_headers_from_curl(endpoints: list[str]) -> FullHeadersContext:
-    context = FullHeadersContext()
+def analyze_headers_from_curl(endpoints: list[str]) -> FullHeadersContextV2:
+    context = FullHeadersContextV2()
     
     for endpoint in endpoints:
         response = parse_curl_headers_response(f"curl -sS -D- -o /dev/null {endpoint}")

@@ -1,33 +1,45 @@
-# Remediation Matrix v2 Table Template
+# Remediation Matrix v2 Table Template (16-column)
 
 <table class="remediation-matrix-table">
   <thead>
     <tr>
       <th>Finding ID</th>
+      <th>Title</th>
       <th>Severity</th>
       <th>Category</th>
       <th>Layer</th>
       <th>Owner Team</th>
       <th>Component</th>
       <th>Fix Action</th>
-      <th>Risk</th>
+      <th>Rollback Risk</th>
       <th>Verification</th>
       <th>Acceptance Criteria</th>
+      <th>Priority</th>
+      <th>Deadline</th>
+      <th>Created At</th>
+      <th>Updated At</th>
+      <th>Notes</th>
     </tr>
   </thead>
   <tbody>
     {% for row in remediation_matrix %}
-    <tr>
-      <td>{{ row.finding_id }}</td>
-      <td>{{ row.severity }}</td>
+    <tr class="priority-{{ row.priority | lower }}">
+      <td><a href="#{{ row.finding_id }}">{{ row.finding_id }}</a></td>
+      <td>{{ row.title }}</td>
+      <td class="severity-{{ row.severity | lower }}">{{ row.severity }}</td>
       <td>{{ row.category }}</td>
       <td>{{ row.affected_layer }}</td>
       <td>{{ row.owner_team }}</td>
       <td>{{ row.config_component }}</td>
       <td>{{ row.fix_action }}</td>
-      <td>{{ row.rollback_risk }}</td>
+      <td class="risk-{{ row.rollback_risk | lower }}">{{ row.rollback_risk }}</td>
       <td><code>{{ row.verification_step }}</code></td>
       <td>{{ row.acceptance_criteria }}</td>
+      <td class="priority-badge priority-{{ row.priority | lower }}">{{ row.priority }}</td>
+      <td>{{ row.deadline }}</td>
+      <td>{{ row.created_at }}</td>
+      <td>{{ row.updated_at }}</td>
+      <td>{{ row.notes }}</td>
     </tr>
     {% endfor %}
   </tbody>

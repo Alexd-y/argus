@@ -6957,6 +6957,27 @@ def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str,
     }
 
 
+def validate_report_for_valhalla(context: ValhallaReportContext) -> dict:
+    score = 100
+    details: list[str] = []
+    
+    wstg = context.wstg_coverage or {}
+    if len(wstg.get("tests", [])) < 69:
+        score -= 5
+        details.append("WSTG coverage below 69 tests")
+    
+    eq = context.evidence_quality
+    if eq and not eq.get("all_critical_high_validated", True):
+        score -= 20
+        details.append("Critical/High findings not all VALIDATED")
+    
+    if len(context.missing_artifacts) > 0:
+        score -= 15
+        details.append(f"{len(context.missing_artifacts)} missing artifacts")
+    
+    return {"score": max(score, 0), "total": 100, "details": details}
+
+
 def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
     """VHL-GAP-001 — identify findings with insufficient evidence that need further testing."""
     gaps: list[dict[str, str]] = []

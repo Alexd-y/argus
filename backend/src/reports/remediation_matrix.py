@@ -1,8 +1,23 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
 
+__all__ = [
+    "RemediationMatrixRowV2",
+    "build_remediation_matrix_v2",
+    "build_remediation_row",
+    "map_layer_to_owner",
+    "generate_fix_action",
+    "generate_verification_command",
+    "generate_acceptance_criteria",
+    "determine_priority",
+    "get_deadline",
+    "generate_layer_specific",
+    "priority_order",
+    "severity_order",
+]
 
-class RemediationMatrixRow(BaseModel):
+
+class RemediationMatrixRowV2(BaseModel):
     finding_id: str
     title: str
     severity: str
@@ -26,7 +41,7 @@ class RemediationMatrixRow(BaseModel):
 def build_remediation_matrix_v2(
     findings: list[dict],
     tech_stack: dict
-) -> list[RemediationMatrixRow]:
+) -> list[RemediationMatrixRowV2]:
     matrix = []
     
     for finding in findings:
@@ -39,10 +54,10 @@ def build_remediation_matrix_v2(
     ))
 
 
-def build_remediation_row(finding: dict, tech_stack: dict) -> RemediationMatrixRow:
+def build_remediation_row(finding: dict, tech_stack: dict) -> RemediationMatrixRowV2:
     layer, team = map_layer_to_owner(finding.get("category", ""), tech_stack)
     
-    return RemediationMatrixRow(
+    return RemediationMatrixRowV2(
         finding_id=finding.get("id", "UNKNOWN"),
         title=finding.get("title", "Unknown Vulnerability"),
         severity=finding.get("severity", "medium"),
@@ -133,7 +148,7 @@ def generate_acceptance_criteria(finding: dict) -> str:
     elif "command" in vuln_type:
         return "User input sanitized. No command execution possible. Safe APIs used."
     else:
-        return "Vulnerability remediated. No重现 of issue. Tests passing."
+        return "Vulnerability remediated. No reproduction of issue. Tests passing."
 
 
 def determine_priority(severity: str) -> Literal["P0", "P1", "P2", "P3"]:
