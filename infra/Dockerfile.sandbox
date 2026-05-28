@@ -34,7 +34,8 @@ RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
     sqlmap nikto wpscan dirsearch \
     hydra medusa crackmapexec impacket-scripts smbclient \
@@ -57,7 +58,8 @@ RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     metasploit-framework \
     && rm -rf /var/lib/apt/lists/*
 
@@ -65,7 +67,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 FROM standard AS binary
 
 # AFL++ — state-of-the-art fuzzer (install from Kali repos to avoid source compilation)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     afl++ \
     && rm -rf /var/lib/apt/lists/*
 
@@ -84,17 +87,20 @@ RUN JAZZER_VERSION=$(curl -sL https://api.github.com/repos/CodeIntelligenceTesti
     rm -f /tmp/jazzer.tar.gz
 
 # radare2 — reverse engineering (from Kali repos to avoid source build OOM)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     radare2 \
     && rm -rf /var/lib/apt/lists/*
 
 # binwalk — firmware extraction
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     binwalk python3-binwalk \
     && rm -rf /var/lib/apt/lists/*
 
 # libFuzzer harness support (clang with built-in fuzzer)
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
