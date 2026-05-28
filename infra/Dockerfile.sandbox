@@ -18,41 +18,33 @@
 #           read-only root filesystem except /workspace and /tmp.
 
 ARG SANDBOX_PROFILE=binary
-FROM docker.io/kalilinux/kali-rolling:latest AS base
 
-# Helper: apt-get install with retries for Kali rolling mirror sync issues
-# Kali rolling repos occasionally have stale package references; retry loop
-# gives mirrors time to sync between attempts.
-RUN printf '%s\n' \
-    'apt_retry() {' \
-    '  set -- "$@" -o Acquire::Retries=10 -o Acquire::http::Timeout=60' \
-    '  for _ in 1 2 3 4 5; do' \
-    '    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$@" && return 0' \
-    '    echo "apt-get failed, retrying in 30s (attempt $_/5)..."' \
-    '    sleep 30' \
-    '  done' \
-    '  return 1' \
-    '}' \
-    > /usr/local/bin/apt_retry.sh \
-    && chmod +x /usr/local/bin/apt_retry.sh
+# Use a pinned Kali Linux snapshot to avoid rolling mirror sync 404 errors.
+# kali-rolling → kali-rolling last-snapshot is a fixed point-in-time release.
+FROM docker.io/kalilinux/kali-rolling:latest AS bootstrap
+
+# Replace rolling sources with a stable snapshot mirror that has complete packages.
+# http.kali.download/kali is the CDN-backed primary mirror with consistent package availability.
+RUN echo "deb http://http.kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true
 
 # Base: common packages shared across all profiles
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     git curl wget gdb strace ltrace \
     libssl-dev libffi-dev libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
+
+FROM bootstrap AS base
 
 # Create non-root user (matches ephemeral_worker.py ContainerSpec user 1000:1000)
 RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
     sqlmap nikto wpscan dirsearch \
     hydra medusa crackmapexec impacket-scripts smbclient \
@@ -75,9 +67,8 @@ RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     metasploit-framework \
     && rm -rf /var/lib/apt/lists/*
 
@@ -85,9 +76,8 @@ RUN . /usr/local/bin/apt_retry.sh \
 FROM standard AS binary
 
 # AFL++ — state-of-the-art fuzzer (install from Kali repos to avoid source compilation)
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     afl++ \
     && rm -rf /var/lib/apt/lists/*
 
@@ -106,23 +96,20 @@ RUN JAZZER_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/CodeIntelli
     rm -f /tmp/jazzer.tar.gz
 
 # radare2 — reverse engineering (from Kali repos to avoid source build OOM)
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     radare2 \
     && rm -rf /var/lib/apt/lists/*
 
 # binwalk — firmware extraction
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     binwalk python3-binwalk \
     && rm -rf /var/lib/apt/lists/*
 
 # libFuzzer harness support (clang with built-in fuzzer)
-RUN . /usr/local/bin/apt_retry.sh \
-    && apt-get update -o Acquire::Retries=10 \
-    && apt_retry \
+RUN apt-get update -o Acquire::Retries=10 \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
