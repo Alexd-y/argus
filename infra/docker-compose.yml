@@ -481,6 +481,34 @@ services:
       start_period: 120s
 
   # Adminer — lightweight web DB admin (PostgreSQL, MySQL, SQLite)
+  # Admin frontend — Next.js standalone on port 6100.
+  # Auto-restarts on crash; healthcheck probes /api/v1/health via backend rewrite.
+  admin-frontend:
+    build:
+      context: ../Frontend
+      dockerfile: Dockerfile
+    image: argus-admin-frontend
+    container_name: argus-admin-frontend
+    restart: always
+    environment:
+      PORT: "6100"
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+    ports:
+      - "${ARGUS_ADMIN_PORT:-6100}:6100"
+    networks:
+      - backend
+      - frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:6100/api/v1/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   adminer:
     image: adminer:latest
     container_name: argus-adminer
