@@ -19,30 +19,24 @@
 
 ARG SANDBOX_PROFILE=binary
 
-# Use a pinned Kali Linux snapshot — not rolling — so all packages in the index exist.
-# kali-last-snapshot is a weekly frozen point-in-time, avoiding mirror sync 404 errors.
-FROM docker.io/kalilinux/kali-last-snapshot:latest AS bootstrap
-
-# Ensure single mirror (snapshot images may still have multi-mirror sources)
-RUN echo "deb http://http.kali.download/kali kali-last-snapshot main contrib non-free non-free-firmware" > /etc/apt/sources.list \
-    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true
+# Pinned quarterly release tag — all .deb binaries are preserved (unlike :latest / :last-snapshot
+# where package indices freeze but mirror binaries rotate, causing 404 errors).
+FROM docker.io/kalilinux/kali-rolling:2026.1 AS base
 
 # Base: common packages shared across all profiles
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     git curl wget gdb strace ltrace \
     libssl-dev libffi-dev libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-FROM bootstrap AS base
-
 # Create non-root user (matches ephemeral_worker.py ContainerSpec user 1000:1000)
 RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
     sqlmap nikto wpscan dirsearch \
@@ -66,7 +60,7 @@ RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     metasploit-framework \
     && rm -rf /var/lib/apt/lists/*
@@ -75,7 +69,7 @@ RUN apt-get update -o Acquire::Retries=10 \
 FROM standard AS binary
 
 # AFL++ — state-of-the-art fuzzer (install from Kali repos to avoid source compilation)
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     afl++ \
     && rm -rf /var/lib/apt/lists/*
@@ -95,19 +89,19 @@ RUN JAZZER_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/CodeIntelli
     rm -f /tmp/jazzer.tar.gz
 
 # radare2 — reverse engineering (from Kali repos to avoid source build OOM)
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     radare2 \
     && rm -rf /var/lib/apt/lists/*
 
 # binwalk — firmware extraction
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     binwalk python3-binwalk \
     && rm -rf /var/lib/apt/lists/*
 
 # libFuzzer harness support (clang with built-in fuzzer)
-RUN apt-get update -o Acquire::Retries=10 \
+RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
