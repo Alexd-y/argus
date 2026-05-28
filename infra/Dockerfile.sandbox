@@ -19,13 +19,12 @@
 
 ARG SANDBOX_PROFILE=binary
 
-# Use a pinned Kali Linux snapshot to avoid rolling mirror sync 404 errors.
-# kali-rolling → kali-rolling last-snapshot is a fixed point-in-time release.
-FROM docker.io/kalilinux/kali-rolling:latest AS bootstrap
+# Use a pinned Kali Linux snapshot — not rolling — so all packages in the index exist.
+# kali-last-snapshot is a weekly frozen point-in-time, avoiding mirror sync 404 errors.
+FROM docker.io/kalilinux/kali-last-snapshot:latest AS bootstrap
 
-# Replace rolling sources with a stable snapshot mirror that has complete packages.
-# http.kali.download/kali is the CDN-backed primary mirror with consistent package availability.
-RUN echo "deb http://http.kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+# Ensure single mirror (snapshot images may still have multi-mirror sources)
+RUN echo "deb http://http.kali.download/kali kali-last-snapshot main contrib non-free non-free-firmware" > /etc/apt/sources.list \
     && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true
 
 # Base: common packages shared across all profiles
