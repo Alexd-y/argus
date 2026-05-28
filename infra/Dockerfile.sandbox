@@ -19,9 +19,7 @@
 
 ARG SANDBOX_PROFILE=binary
 
-# Pinned quarterly release tag — all .deb binaries are preserved (unlike :latest / :last-snapshot
-# where package indices freeze but mirror binaries rotate, causing 404 errors).
-FROM docker.io/kalilinux/kali-rolling:2026.1 AS base
+FROM docker.io/kalilinux/kali-rolling:latest AS base
 
 # Base: common packages shared across all profiles
 RUN apt-get update \
