@@ -21,9 +21,10 @@ ARG SANDBOX_PROFILE=binary
 FROM docker.io/kalilinux/kali-rolling:latest AS base
 
 # Base: common packages shared across all profiles
-# Kali rolling mirrors can go out of sync — remove unstable mirrors and retry
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true
-RUN apt-get update && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+# Force single mirror (kali.download) — multiple mirrors in Kali rolling cause 404 on out-of-sync packages
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev \
     git curl wget gdb strace ltrace \
     libssl-dev libffi-dev libxml2-dev libxslt1-dev \
@@ -34,8 +35,9 @@ RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
     sqlmap nikto wpscan dirsearch \
     hydra medusa crackmapexec impacket-scripts smbclient \
@@ -58,8 +60,9 @@ RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     metasploit-framework \
     && rm -rf /var/lib/apt/lists/*
 
@@ -67,8 +70,9 @@ RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.
 FROM standard AS binary
 
 # AFL++ — state-of-the-art fuzzer (install from Kali repos to avoid source compilation)
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     afl++ \
     && rm -rf /var/lib/apt/lists/*
 
@@ -87,20 +91,23 @@ RUN JAZZER_VERSION=$(curl -sL https://api.github.com/repos/CodeIntelligenceTesti
     rm -f /tmp/jazzer.tar.gz
 
 # radare2 — reverse engineering (from Kali repos to avoid source build OOM)
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     radare2 \
     && rm -rf /var/lib/apt/lists/*
 
 # binwalk — firmware extraction
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     binwalk python3-binwalk \
     && rm -rf /var/lib/apt/lists/*
 
 # libFuzzer harness support (clang with built-in fuzzer)
-RUN sed -i '/http\.kali\.org/d' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; true \
-    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing \
+RUN echo "deb http://kali.download/kali kali-rolling main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/*.list 2>/dev/null || true \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
