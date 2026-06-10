@@ -131,7 +131,10 @@ def test_apply_security_header_table_gap_to_findings() -> None:
     assert out.get("cvss") == 3.7
 
 
-def test_threat_model_inference_dropped_by_normalize() -> None:
+def test_threat_model_inference_preserved_and_routed_to_unconfirmed() -> None:
+    """VHL-PROVABLE-001: threat-model inferences are no longer silently dropped — they are
+    preserved and flagged as not provable so the report can list them as unconfirmed."""
+    from src.reports.evidence_partition import is_provable_from_raw, partition_findings
     from src.reports.report_quality_gate import normalize_findings_for_report
 
     out = normalize_findings_for_report(
@@ -146,7 +149,13 @@ def test_threat_model_inference_dropped_by_normalize() -> None:
             }
         ]
     )
-    assert out == []
+    assert len(out) == 1
+    assert out[0]["evidence_type"] == "threat_model_inference"
+    assert is_provable_from_raw(out[0]) is False
+    confirmed, unconfirmed = partition_findings(out)
+    assert confirmed == []
+    assert len(unconfirmed) == 1
+    assert unconfirmed[0]["unconfirmed_reason"]
 
 
 def test_xss_dedup_merges_same_url_cwe() -> None:

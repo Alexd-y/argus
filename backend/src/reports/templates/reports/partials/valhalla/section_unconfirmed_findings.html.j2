@@ -1,0 +1,70 @@
+{# VHL-PROVABLE-001 — findings NOT provable from raw evidence.                              #}
+{# These are never silently dropped: they are listed here with the reason they could not  #}
+{# be confirmed, and are excluded from the headline risk counts and the main findings table.#}
+{% set labels = owasp_top10_labels if owasp_top10_labels is defined else {} %}
+{% set unconfirmed = unconfirmed_findings if unconfirmed_findings is defined else [] %}
+<section class="findings valhalla-unconfirmed-findings" id="unconfirmed-findings">
+    <h2>Unconfirmed Observations — Require Manual Verification</h2>
+    <p class="meta">
+        <small>
+            The following observations could <strong>not</strong> be proven from the captured raw
+            evidence (raw HTTP request/response, raw tool output, out-of-band callback,
+            command output or screenshot). They are reported here for completeness and triage
+            but are <strong>excluded from the validated findings and the headline risk counts</strong>.
+            Each item must be reproduced manually before it can be treated as a confirmed finding.
+        </small>
+    </p>
+    {% if unconfirmed and (unconfirmed | length) > 0 %}
+    <table class="findings-main-table valhalla-unconfirmed-findings-table">
+        <thead>
+            <tr>
+                <th>Severity (claimed)</th>
+                <th>Confidence</th>
+                <th>Classification</th>
+                <th>Vuln-ID</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>CWE</th>
+                <th>OWASP</th>
+                <th>Why unconfirmed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in unconfirmed %}
+                <tr>
+                    <td><span class="sev-{{ (row.severity or "info") | lower | e }}">{{ (row.severity or "") | e }}</span></td>
+                    <td>{{ (row.confidence or "possible") | e }}</td>
+                    <td>{{ (row.evidence_classification or "inconclusive") | e }}</td>
+                    <td><code>{{ (row.id or "—") | e }}</code></td>
+                    <td>{{ (row.title or "") | e }}</td>
+                    <td class="desc">{{ (row.description or "") | e }}</td>
+                    <td>{{ (row.cwe or "—") | e }}</td>
+                    <td class="owasp-finding-cell">
+                        {% set ow_disp = row.owasp_top10_2021 or row.owasp_display_code or row.owasp_category %}
+                        {% if ow_disp %}
+                            <span class="owasp-finding-id"><code>{{ ow_disp | e }}</code></span>
+                            {% if row.owasp_title %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ row.owasp_title | e }}</span>
+                            {% elif row.owasp_category and labels.get(row.owasp_category) %}
+                            <span class="owasp-finding-sep"> — </span>
+                            <span class="owasp-finding-label">{{ labels.get(row.owasp_category) | e }}</span>
+                            {% endif %}
+                        {% else %}
+                            Not mapped
+                        {% endif %}
+                    </td>
+                    <td class="desc">{{ (row.unconfirmed_reason or "Not provable from captured raw evidence. Requires manual verification.") | e }}</td>
+                </tr>
+                {% if row.applicability_notes %}
+                    <tr class="poc-row">
+                        <td colspan="9"><p><strong>Applicability</strong>: {{ row.applicability_notes | e }}</p></td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty">All reported findings are provable from raw evidence — no unconfirmed observations remain.</p>
+    {% endif %}
+</section>

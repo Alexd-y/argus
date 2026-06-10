@@ -36,7 +36,16 @@ from src.reports.finding_metadata import (
     normalize_evidence_refs,
     normalize_evidence_type,
 )
-from src.reports.report_quality_gate import score_evidence_quality, validation_status_for_quality
+from src.reports.report_quality_gate import (
+    classify_evidence,
+    score_evidence_quality,
+    validation_status_for_quality,
+)
+from src.reports.evidence_partition import (
+    is_provable_from_raw,
+    partition_findings,
+    unconfirmed_reason,
+)
 from src.reports.infra_recommendations import (
     build_verification_commands,
     generate_infra_recommendations,
@@ -266,6 +275,32 @@ def _effective_validation_status(finding: Any, quality: str) -> str:
     return status
 
 
+def _effective_evidence_classification(finding: Any) -> str:
+    """Resolve the evidence classification (VHL-PROVABLE-001) consistently with the HTML path.
+
+    Honors a value already computed during normalization; otherwise recomputes it from the
+    same inputs ``classify_evidence`` uses, so JSON/Markdown agree with HTML/PDF.
+    """
+    if isinstance(finding, dict):
+        existing = str(finding.get("evidence_classification") or "").strip().lower()
+    else:
+        existing = str(getattr(finding, "evidence_classification", "") or "").strip().lower()
+    if existing in {"validated", "observed", "candidate", "inconclusive"}:
+        return existing
+    return classify_evidence(finding)
+
+
+def _is_valhalla_context(
+    jinja_context: dict[str, Any] | None, tier: str | None = None
+) -> bool:
+    """VHL-PROVABLE-001 — the provability partition applies to the Valhalla tier only."""
+    if tier and str(tier).strip().lower() == "valhalla":
+        return True
+    if isinstance(jinja_context, dict):
+        return str(jinja_context.get("tier") or "").strip().lower() == "valhalla"
+    return False
+
+
 def _strip_legacy_cvss_from_poc(poc: dict[str, Any] | None) -> dict[str, Any] | None:
     """Remove all CVSS keys from PoC dict to prevent cvss_conflict validation failures.
 
@@ -302,6 +337,9 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
         evidence_refs=normalize_evidence_refs(row.evidence_refs),
         reproducible_steps=row.reproducible_steps,
         applicability_notes=row.applicability_notes,
+        evidence_classification=_effective_evidence_classification(row),
+        is_provable=bool(getattr(row, "is_provable", True)),
+        unconfirmed_reason=getattr(row, "unconfirmed_reason", None),
     )
 
 
@@ -1119,6 +1157,10 @@ def _finding_to_dict(
         "retest_status": _safe_attr(f, "retest_result") or "NOT_ASSESSED",
         "evidence_ids": list(getattr(f, "evidence_refs", []) or []),
         "description": f.description,
+        # VHL-PROVABLE-001 — provability partition flags (consistent across all formats).
+        "evidence_classification": _effective_evidence_classification(f),
+        "is_provable": bool(getattr(f, "is_provable", True)),
+        "unconfirmed_reason": getattr(f, "unconfirmed_reason", None),
     }
     oc = getattr(f, "owasp_category", None)
     if oc is not None:
@@ -1416,15 +1458,17 @@ def _build_valhalla_report_context(
         build_csrf_structured_rows_from_findings,
         build_cmdi_structured_rows_from_findings,
     )
-    from src.reports.evidence_gates import calculate_evidence_gate
     ctx = jinja_context
     valhalla_ctx = ctx.get("valhalla_context")
     if not isinstance(valhalla_ctx, dict):
         valhalla_ctx = {}
     findings = list(data.findings)
     finding_dicts = [f.model_dump(mode="json") if hasattr(f, "model_dump") else dict(f) for f in findings]
+    # The per-finding gate is the evidence classification (validated/observed/candidate/
+    # inconclusive) — the single source of truth populated during report assembly
+    # (VHL-PROVABLE-001). Recompute it for any finding lacking a stored value.
     evidence_gate = {
-        str(f.get("finding_id", f.get("id", ""))): calculate_evidence_gate(f).value
+        str(f.get("finding_id", f.get("id", ""))): _effective_evidence_classification(f)
         for f in finding_dicts
     }
     gate_counts: dict[str, int] = {"validated": 0, "observed": 0, "candidate": 0, "inconclusive": 0}
@@ -1571,11 +1615,18 @@ def generate_json(
     brand = get_brand()
     now_utc = datetime.now(timezone.utc).isoformat()
 
-    # scope filter + fuzz_hit gate + evidence gate + severity enforcement
+    # scope filter is always applied; Valhalla additionally uses the single provability
+    # partition (VHL-PROVABLE-001) shared with HTML/PDF, which routes findings without raw
+    # proof to a separate "unconfirmed" list instead of silently downgrading them.
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
-    findings_ordered = _apply_evidence_gate(findings_ordered)
-    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
-    findings_ordered = enforce_severity_by_evidence(findings_ordered)
+    if _is_valhalla_context(jinja_context):
+        findings_ordered, unconfirmed_findings = partition_findings(findings_ordered)
+        findings_ordered = enforce_severity_by_evidence(findings_ordered)
+    else:
+        findings_ordered = _apply_evidence_gate(findings_ordered)
+        findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
+        findings_ordered = enforce_severity_by_evidence(findings_ordered)
+        unconfirmed_findings = []
 
     # build evidence inventory
     evidence_inventory: list[dict[str, Any]] = []
@@ -1689,6 +1740,13 @@ def generate_json(
         "findings": [
             _finding_to_dict(f, tenant_id=data.tenant_id, scan_id=data.scan_id)
             for f in findings_ordered
+        ],
+        # VHL-PROVABLE-001 — findings NOT provable from raw evidence (threat-model
+        # hypotheses, scanner candidates, inconclusive parser output). Reported here for
+        # triage with the reason; excluded from the validated ``findings`` above.
+        "unconfirmed_findings": [
+            _finding_to_dict(f, tenant_id=data.tenant_id, scan_id=data.scan_id)
+            for f in unconfirmed_findings
         ],
         "evidence": evidence_inventory,
         "remediation_matrix": [
@@ -1850,6 +1908,7 @@ def generate_csv(
         "affected_layer", "owner_team",
         "exact_remediation", "verification_command",
         "acceptance_criteria", "retest_status",
+        "is_provable", "unconfirmed_reason",
     ])
     for f in _findings_sorted(data.findings):
         poc = getattr(f, "proof_of_concept", {}) or {}
@@ -1859,6 +1918,7 @@ def generate_csv(
         ec = getattr(f, "evidence_classification", None)
         vs = getattr(f, "validation_status", "unverified")
         status = str(ec or vs or "candidate").upper()
+        provable = is_provable_from_raw(f)
         row = [
             data.report_id or "", data.scan_id or "", data.target or "",
             finding_id, status or "CANDIDATE",
@@ -1888,6 +1948,8 @@ def generate_csv(
             _safe_attr(f, "verification_command") or "",
             _safe_attr(f, "acceptance_criteria") or "",
             _safe_attr(f, "retest_result") or "",
+            "true" if provable else "false",
+            ("" if provable else (unconfirmed_reason(f) or "")),
         ]
         for i in range(len(row)):
             if row[i] is None or (isinstance(row[i], str) and not row[i].strip()):
@@ -2595,11 +2657,20 @@ def generate_markdown(
     lines.append("## Findings")
     lines.append("")
 
+    # scope filter is always applied; Valhalla additionally uses the single provability
+    # partition (VHL-PROVABLE-001) shared with the HTML/PDF/JSON paths. Unconfirmed
+    # findings are listed in their own section below.
+    is_valhalla_md = _is_valhalla_context(jinja_context, tier)
     findings_ordered = _findings_sorted(data.findings)
     findings_ordered = _apply_scope_filter(findings_ordered, data.target or "")
-    findings_ordered = _apply_evidence_gate(findings_ordered)
-    findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
-    findings_ordered = enforce_severity_by_evidence(findings_ordered)
+    if is_valhalla_md:
+        findings_ordered, unconfirmed_findings = partition_findings(findings_ordered)
+        findings_ordered = enforce_severity_by_evidence(findings_ordered)
+    else:
+        findings_ordered = _apply_evidence_gate(findings_ordered)
+        findings_ordered = _apply_fuzz_hit_evidence_gate(findings_ordered)
+        findings_ordered = enforce_severity_by_evidence(findings_ordered)
+        unconfirmed_findings = []
 
     severity_emoji: dict[str, str] = {
         "critical": "🔴 CRITICAL",
@@ -2687,6 +2758,33 @@ def generate_markdown(
             lines.append("")
 
         lines.append("---")
+        lines.append("")
+
+    if is_valhalla_md:
+        lines.append("## Unconfirmed Observations (require manual verification)")
+        lines.append("")
+        lines.append(
+            "_The items below could not be proven from the captured raw evidence and are "
+            "excluded from the validated findings and the headline risk counts. Reproduce "
+            "each one manually before treating it as a confirmed finding._"
+        )
+        lines.append("")
+        if unconfirmed_findings:
+            lines.append("| # | Severity (claimed) | Title | Classification | Why unconfirmed |")
+            lines.append("|---|--------------------|-------|----------------|-----------------|")
+            for idx, f in enumerate(unconfirmed_findings, 1):
+                sev = str(getattr(f, "severity", "info") or "info").lower()
+                title = _clean_ansi(str(getattr(f, "title", getattr(f, "name", "")) or ""))
+                classification = str(_effective_evidence_classification(f) or "inconclusive")
+                reason = _clean_ansi(
+                    str(getattr(f, "unconfirmed_reason", None) or unconfirmed_reason(f) or "")
+                ).replace("|", "\\|")
+                lines.append(
+                    f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | "
+                    f"{classification} | {reason} |"
+                )
+        else:
+            lines.append("_All reported findings are provable from raw evidence._")
         lines.append("")
 
     lines.append("## Technologies Detected")

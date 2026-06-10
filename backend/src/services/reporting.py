@@ -552,6 +552,10 @@ def findings_rows_for_jinja(
             row["xss_poc_detail"] = _build_xss_poc_detail_for_jinja(poc, row)
         else:
             row["xss_poc_detail"] = None
+        # VHL-PROVABLE-001: provability partition flags + evidence classification.
+        row["is_provable"] = bool(getattr(f, "is_provable", True))
+        row["unconfirmed_reason"] = getattr(f, "unconfirmed_reason", None)
+        row["evidence_classification"] = getattr(f, "evidence_classification", None)
         rows.append(row)
     return rows
 
@@ -1571,7 +1575,20 @@ class ReportGenerator:
                 "slots": {k: texts.get(k, "") for k in keys},
             }
         finding_rows = findings_rows_for_jinja(data, report_tier=tier_norm)
-        severity_counts_ctx = executive_severity_totals_from_finding_rows(data.findings)
+        # VHL-PROVABLE-001: in Valhalla the main report contains only findings provable
+        # from raw evidence; unconfirmed findings are rendered in a separate, clearly
+        # labelled section and excluded from the headline risk counts.
+        if tier_norm == "valhalla":
+            confirmed_rows = [r for r in finding_rows if r.get("is_provable", True)]
+            unconfirmed_rows = [r for r in finding_rows if not r.get("is_provable", True)]
+            confirmed_findingrows = [
+                f for f in data.findings if getattr(f, "is_provable", True)
+            ]
+        else:
+            confirmed_rows = finding_rows
+            unconfirmed_rows = []
+            confirmed_findingrows = list(data.findings)
+        severity_counts_ctx = executive_severity_totals_from_finding_rows(confirmed_findingrows)
         v2021_owasp = tier_norm == "valhalla"
         ctx: dict[str, Any] = {
             "embed_poc_screenshot_inline": embed_poc_screenshot_inline,
@@ -1583,13 +1600,16 @@ class ReportGenerator:
             "severity_counts": severity_counts_ctx,
             "scan": data.scan.model_dump(mode="json") if data.scan else None,
             "report": data.report.model_dump(mode="json") if data.report else None,
-            "findings_count": len(data.findings),
+            "findings_count": len(confirmed_rows),
+            "unconfirmed_findings_count": len(unconfirmed_rows),
+            "total_findings_count": len(finding_rows),
             "timeline_count": len(data.timeline),
             "phase_inputs_count": len(data.phase_inputs),
             "phase_outputs_count": len(data.phase_outputs),
-            "findings": finding_rows,
+            "findings": confirmed_rows,
+            "unconfirmed_findings": unconfirmed_rows,
             "owasp_compliance_rows": build_owasp_compliance_rows(
-                finding_rows,
+                confirmed_rows,
                 owasp_summary=data.owasp_summary if data.owasp_summary else None,
                 wstg_coverage=data.valhalla_context.wstg_coverage,
                 use_valhalla_owasp_2021_misconfig_labels=v2021_owasp,

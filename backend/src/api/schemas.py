@@ -850,6 +850,10 @@ class Finding(BaseModel):
     applicability_notes: str | None = None
     adversarial_score: float | None = None
     dedup_status: str | None = None
+    # VHL-PROVABLE-001 — provability partition: provable-from-raw findings go in the
+    # main report; unconfirmed ones are listed separately with the reason below.
+    is_provable: bool = True
+    unconfirmed_reason: str | None = None
     # Evidence gate fields (VHL-EVIDENCE-001)
     affected_asset: str | None = None
     affected_endpoint: str | None = None

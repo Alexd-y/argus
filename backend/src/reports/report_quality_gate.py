@@ -1535,8 +1535,9 @@ def _is_xss_finding(finding: Any) -> bool:
 
 
 def _normalize_one_finding(finding: Any) -> Any | None:
-    if str(_get_attr(finding, "evidence_type", "") or "").lower() == "threat_model_inference":
-        return None
+    # VHL-PROVABLE-001: threat-model inferences are no longer dropped here. They are
+    # preserved and later routed to the "Unconfirmed — requires manual verification"
+    # section (see ``src.reports.evidence_partition``) so no data is silently lost.
     quality = score_evidence_quality(finding)
     status = validation_status_for_quality(quality)
     confidence = str(_get_attr(finding, "confidence", "likely") or "likely").lower()
@@ -1622,7 +1623,6 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         "applicability_notes": notes,
         "evidence_quality": quality,
         "validation_status": status,
-        "evidence_classification": classify_evidence(finding),
         # New finding card fields
         "http_method": http_method,
         "auth_state": auth_state,
@@ -1640,7 +1640,10 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         "acceptance_criteria": acceptance_criteria,
         "retest_result": retest_result,
     }
-    return _copy_with(finding, updates)
+    normalized = _copy_with(finding, updates)
+    # Classify on the NORMALIZED finding so the gate reflects the updated confidence /
+    # validation_status / evidence_quality, not the pre-normalization values (VHL-PROVABLE-001).
+    return _copy_with(normalized, {"evidence_classification": classify_evidence(normalized)})
 
 
 def _richness_score_for_merge(finding: Any) -> int:

@@ -52,6 +52,7 @@ from src.recon.stage2_storage import STAGE2_ROOT_FILES, download_stage2_artifact
 from src.recon.stage3_storage import download_stage3_artifact, get_stage3_root_files
 from src.recon.stage4_storage import STAGE4_ROOT_FILES, download_stage4_artifact
 from src.recon.stage_object_download import StageObjectFetchError
+from src.reports.evidence_partition import partition_findings
 from src.reports.finding_dedup import deduplicate_findings
 from src.reports.finding_quality_filter import filter_valid_findings
 from src.reports.finding_severity_normalizer import normalize_findings_severity
@@ -276,6 +277,9 @@ class FindingRow(BaseModel):
     reproducible_steps: str | None = None
     applicability_notes: str | None = None
     adversarial_score: float | None = None
+    #: VHL-PROVABLE-001 — provability partition (set by ``evidence_partition``).
+    is_provable: bool = True
+    unconfirmed_reason: str | None = None
     created_at: Any = None
 
 
@@ -747,6 +751,10 @@ class ReportDataCollector:
         findings = filter_valid_findings(findings)
         findings = normalize_findings_for_report(findings)
         findings = normalize_findings_severity(findings)
+        # VHL-PROVABLE-001: tag each finding as provable-from-raw or unconfirmed. Nothing
+        # is dropped — the report routes provable findings to the main body and the rest
+        # to the "Unconfirmed — requires manual verification" section.
+        partition_findings(findings)
 
         s1 = StageArtifactsBundle()
         s2 = StageArtifactsBundle()
