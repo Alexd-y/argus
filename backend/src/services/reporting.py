@@ -58,6 +58,7 @@ from src.reports.data_collector import (
     executive_severity_totals_from_finding_rows,
     severity_histogram_from_finding_rows,
 )
+from src.reports.evidence_partition import partition_findings
 from src.reports.finding_metadata import (
     estimate_cvss_vector,
     format_evidence_cell,
@@ -1574,10 +1575,15 @@ class ReportGenerator:
                 "active": name == tier_norm,
                 "slots": {k: texts.get(k, "") for k in keys},
             }
+        # VHL-PROVABLE-001: recompute the partition from raw evidence so the split is
+        # correct even if findings were not pre-tagged by the collector. Idempotent and
+        # keeps every egress (HTML/PDF/JSON/CSV/MD) on the single source of truth.
+        if tier_norm == "valhalla":
+            partition_findings(data.findings)
         finding_rows = findings_rows_for_jinja(data, report_tier=tier_norm)
-        # VHL-PROVABLE-001: in Valhalla the main report contains only findings provable
-        # from raw evidence; unconfirmed findings are rendered in a separate, clearly
-        # labelled section and excluded from the headline risk counts.
+        # In Valhalla the main report contains only findings provable from raw evidence;
+        # unconfirmed findings are rendered in a separate, clearly labelled section and
+        # excluded from the headline risk counts.
         if tier_norm == "valhalla":
             confirmed_rows = [r for r in finding_rows if r.get("is_provable", True)]
             unconfirmed_rows = [r for r in finding_rows if not r.get("is_provable", True)]

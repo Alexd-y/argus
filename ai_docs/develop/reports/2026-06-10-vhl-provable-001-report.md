@@ -111,9 +111,23 @@ collect_async: load findings → dedup → filter_valid → normalize_findings_f
 
 ---
 
-## Дальнейшие шаги (follow-up, вне текущего scope)
+## Пост-ревью фиксы (по итогам code review)
 
-1. Обновить `ARGUS/Frontend` + `docs/api-contracts.md` под `unconfirmed_findings` / `is_provable`.
-2. Опционально: распространить scope-filter единообразно и на HTML (сейчас scope-filter только в JSON/MD) для полного паритета out-of-scope findings.
-3. Опционально: подгрузка таблицы `evidence` (MinIO object keys) в `ReportData.evidence` для расширенного provenance (сейчас провенанс обеспечен embedded PoC + `evidence_refs` + raw artifacts).
-4. Привести в порядок пред-существующие устаревшие тесты quality-gate и pre-existing ruff F841/F541 (отдельной задачей).
+Code review выявил 2 блокирующие проблемы и 4 should-fix — все закрыты в этом же изменении:
+
+1. **BLOCKING — PDF silent drop.** Брендированные PDF-шаблоны (`backend/templates/reports/valhalla/pdf_layout.html` + LaTeX `backend/templates/reports/_latex/valhalla/main.tex.j2`) теперь рендерят раздел «Unconfirmed Observations» (+ TOC-пункт), питаемый `unconfirmed_findings` / `unconfirmed_findings_count`. Неподтверждённое больше не пропадает в PDF.
+2. **BLOCKING — `POST /reports/generate` (ReportService).** `build_report_data_from_db` (`generators.py`) теперь вычисляет `evidence_classification` на построенном `Finding` (через `_tag_findings_provability` → `classify_evidence` + `partition_findings`), вместо дефолта схемы `candidate`. Раньше при tier=valhalla ВСЕ находки уходили в `unconfirmed`; теперь доказуемые корректно остаются в `findings`.
+3. **SHOULD-FIX — единый источник истины.** `prepare_template_context` (HTML) и `offline_minimal_jinja_context_from_report_data` (ReportService HTML/PDF) вызывают `partition_findings(data.findings)` (идемпотентный recompute), поэтому ни один выход не доверяет устаревшему/непроставленному тегу. Все 5 поверхностей (HTML/PDF/JSON/CSV/MD) используют один предикат.
+4. **SHOULD-FIX — API-контракт.** `docs/api-contracts.md` обновлён: `Finding.evidence_classification`/`is_provable`/`unconfirmed_reason`, ключ `unconfirmed_findings` (Valhalla JSON), CSV-колонки, семантика разделения для Valhalla.
+5. **SHOULD-FIX — headline-счётчики.** Exec-summary (`sections_01_02_title_executive.html.j2`) явно показывает «N provable + M unconfirmed (см. раздел…)»; offline-контекст выдаёт `unconfirmed_findings_count`/`total_findings_count`.
+6. **SHOULD-FIX — Markdown-экранирование.** Новый helper `_md_cell` экранирует `\`, `|` и схлопывает переводы строк для `title`/`classification`/`reason` в таблице unconfirmed.
+
+**Тесты пост-ревью:** +6 кейсов (`_tag_findings_provability`, offline-context split, HTML-render unconfirmed, branded-PDF render unconfirmed) — всего 18 PASS в `test_evidence_partition_vhl_provable.py`; broad reports suite 245 passed, 10 пред-существующих падений (без изменений), 0 новых lint.
+
+## Дальнейшие шаги (вне текущего scope)
+
+1. Обновить `ARGUS/Frontend` под `unconfirmed_findings` / `is_provable` (контракт уже задокументирован).
+2. Опционально: распространить scope-filter единообразно и на HTML (сейчас только в JSON/MD).
+3. Опционально: подгрузка таблицы `evidence` (MinIO object keys) в `ReportData.evidence` для расширенного provenance.
+4. Опционально: partition-aware executive-assembly (`assemble_valhalla_sections`) — top-findings/KEV сейчас ранжируют из непартиционированного `data.findings` (frozen snapshot-контракт ARG-031, отдельная задача).
+5. Привести в порядок пред-существующие устаревшие quality-gate тесты и pre-existing ruff F841/F541.

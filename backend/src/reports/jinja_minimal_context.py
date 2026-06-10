@@ -18,6 +18,7 @@ from src.reports.ai_text_generation import (
     REPORT_AI_SKIPPED_NO_LLM,
 )
 from src.reports.data_collector import executive_severity_totals_from_severity_strings
+from src.reports.evidence_partition import partition_findings
 from src.services.reporting import TIER_METADATA
 
 if TYPE_CHECKING:
@@ -103,6 +104,11 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
     scan_artifacts_min = _build_scan_artifacts_from_raw(data.raw_artifacts)
     active_web = build_active_web_scan_section_context(tier_norm, scan_artifacts_min, texts)
 
+    # VHL-PROVABLE-001: recompute the provability partition so the on-demand export path
+    # matches the canonical pipeline (provable findings in the main report, the rest in a
+    # separate "unconfirmed" list). Idempotent — safe even if findings were pre-tagged.
+    if tier_norm == "valhalla":
+        partition_findings(data.findings)
     finding_dicts = [
         gen._finding_to_dict(
             f,
@@ -111,11 +117,17 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         )
         for f in data.findings
     ]
+    unconfirmed_dicts: list[dict[str, Any]] = []
     if tier_norm == "valhalla":
         for row in finding_dicts:
             if row.get("owasp_category") == "A02":
                 row["owasp_display_code"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
                 row["owasp_top10_2021"] = gen.VALHALLA_OWASP_2021_SECURITY_MISCONFIGURATION_CODE
+        unconfirmed_dicts = [r for r in finding_dicts if not r.get("is_provable", True)]
+        finding_dicts = [r for r in finding_dicts if r.get("is_provable", True)]
+        aligned_counts = executive_severity_totals_from_severity_strings(
+            str(r.get("severity") or "") for r in finding_dicts
+        )
 
     valhalla_ctx: dict[str, Any] | None = None
     if tier_norm == "valhalla":
@@ -162,12 +174,15 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         "active_web_scan": active_web,
         "scan": {},
         "report": {},
-        "findings_count": len(data.findings),
+        "findings_count": len(finding_dicts),
+        "unconfirmed_findings_count": len(unconfirmed_dicts),
+        "total_findings_count": len(finding_dicts) + len(unconfirmed_dicts),
         "severity_counts": dict(aligned_counts),
         "timeline_count": len(data.timeline),
         "phase_inputs_count": 0,
         "phase_outputs_count": len(data.phase_outputs),
         "findings": finding_dicts,
+        "unconfirmed_findings": unconfirmed_dicts,
         "owasp_compliance_rows": gen.build_owasp_compliance_rows(
             finding_dicts,
             use_valhalla_owasp_2021_misconfig_labels=tier_norm == "valhalla",

@@ -31,7 +31,7 @@
     </div>
     {% set sev = severity_counts if severity_counts is defined else {} %}
     {% if sev %}
-    <p class="meta severity-counts-attestation"><small>Findings summary (per table data): Critical {{ sev.get("critical", 0) }}, High {{ sev.get("high", 0) }}, Medium {{ sev.get("medium", 0) }}, Low {{ sev.get("low", 0) }}, Info {{ sev.get("info", 0) }}; total {{ findings_count | default(0) }}.</small></p>
+    <p class="meta severity-counts-attestation"><small>Findings summary (per table data): Critical {{ sev.get("critical", 0) }}, High {{ sev.get("high", 0) }}, Medium {{ sev.get("medium", 0) }}, Low {{ sev.get("low", 0) }}, Info {{ sev.get("info", 0) }}; total {{ findings_count | default(0) }} provable finding(s){% if (unconfirmed_findings_count | default(0)) > 0 %}, plus {{ unconfirmed_findings_count }} unconfirmed observation(s) excluded from these counts (see “Unconfirmed Observations”){% endif %}.</small></p>
     {% endif %}
 
     <h3>Vulnerability Count by Severity Level</h3>

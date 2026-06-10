@@ -17,13 +17,22 @@ from src.reports.evidence_partition import (
     partition_findings,
     unconfirmed_reason,
 )
+from src.api.schemas import Finding
 from src.reports.generators import (
+    _build_branded_pdf_context,
+    _render_branded_pdf_html,
+    _resolve_branded_pdf_template_path,
+    _tag_findings_provability,
     build_report_data_from_scan_report,
     generate_csv,
     generate_json,
     generate_markdown,
 )
+from src.reports.jinja_minimal_context import (
+    offline_minimal_jinja_context_from_report_data,
+)
 from src.reports.report_quality_gate import normalize_findings_for_report
+from src.reports.template_env import render_tier_report_html
 from src.services.reporting import ReportGenerator, findings_rows_for_jinja
 
 
@@ -234,3 +243,98 @@ def test_generate_csv_exposes_provability_columns() -> None:
     ).decode("utf-8")
     assert "is_provable" in csv_text
     assert "unconfirmed_reason" in csv_text
+
+
+# --------------------------------------------------------------------------- #
+# Review follow-ups: ReportService path, offline context, HTML + PDF surfaces  #
+# --------------------------------------------------------------------------- #
+
+def _provable_finding() -> Finding:
+    return Finding(
+        severity="high",
+        title="Reflected XSS in q parameter",
+        description="Payload reflected unescaped in the response body.",
+        cwe="CWE-79",
+        cvss=7.2,
+        confidence="confirmed",
+        validation_status="validated",
+        evidence_quality="strong",
+        evidence_refs=["artifact-1", "artifact-2"],
+        proof_of_concept={
+            "raw_request": "GET /search?q=<script>alert(1)</script> HTTP/1.1",
+            "raw_response": "HTTP/1.1 200 OK\n\n<html><script>alert(1)</script></html>",
+            "url": "https://target.example/search",
+            "parameter": "q",
+            "payload": "<script>alert(1)</script>",
+            "observed_impact": "Injected script executed in the response context.",
+            "timestamp": "2026-01-01T00:00:00Z",
+        },
+        reproducible_steps="1. Send the request above. 2. Observe the reflected script.",
+    )
+
+
+def _inference_finding() -> Finding:
+    return Finding(
+        severity="high",
+        title="Potential privilege escalation via role model",
+        description="Threat-model derived hypothesis about a role escalation path.",
+        evidence_type="threat_model_inference",
+    )
+
+
+def test_tag_findings_provability_classifies_built_finding() -> None:
+    # Simulates the ReportService path: Finding built without evidence_classification
+    # (schema default "candidate") must be re-classified from its own signals.
+    prov = _provable_finding()
+    inf = _inference_finding()
+    assert prov.evidence_classification == "candidate"  # schema default, pre-tag
+
+    _tag_findings_provability([prov, inf])
+
+    assert prov.evidence_classification == "validated"
+    assert prov.is_provable is True
+    assert inf.is_provable is False
+    assert inf.unconfirmed_reason
+
+
+def test_offline_minimal_context_valhalla_splits() -> None:
+    findings = normalize_findings_for_report([_provable_row(), _inference_row()])
+    partition_findings(findings)
+    data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
+    report_data = build_report_data_from_scan_report(data, report_id="r1")
+
+    ctx = offline_minimal_jinja_context_from_report_data(report_data, "valhalla")
+
+    main_titles = {f["title"] for f in ctx["findings"]}
+    unconfirmed_titles = {f["title"] for f in ctx["unconfirmed_findings"]}
+    assert any("xss" in t.lower() for t in main_titles)
+    assert any("privilege escalation" in t.lower() for t in unconfirmed_titles)
+    assert ctx["unconfirmed_findings_count"] == len(ctx["unconfirmed_findings"]) >= 1
+    assert ctx["findings_count"] == len(ctx["findings"])
+    assert not (main_titles & unconfirmed_titles)
+
+
+def test_html_render_valhalla_includes_unconfirmed_section() -> None:
+    findings = normalize_findings_for_report([_provable_row(), _inference_row()])
+    data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
+    ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
+
+    html = render_tier_report_html("valhalla", ctx)
+    assert "Unconfirmed Observations" in html
+    assert "Reflected XSS in q parameter" in html
+    assert "Potential privilege escalation via role model" in html
+
+
+def test_branded_pdf_valhalla_renders_unconfirmed_section() -> None:
+    findings = normalize_findings_for_report([_provable_row(), _inference_row()])
+    data = ScanReportData(scan_id="s", tenant_id="t", findings=findings)
+    ctx = ReportGenerator().prepare_template_context("valhalla", data, {})
+    report_data = build_report_data_from_scan_report(data, report_id="r1")
+
+    template_path = _resolve_branded_pdf_template_path("valhalla")
+    assert template_path is not None, "branded Valhalla PDF layout must exist"
+    pdf_ctx = _build_branded_pdf_context(report_data, ctx, tier="valhalla")
+    html = _render_branded_pdf_html(template_path, pdf_ctx)
+
+    assert "Unconfirmed Observations" in html
+    assert "privilege escalation" in html.lower()

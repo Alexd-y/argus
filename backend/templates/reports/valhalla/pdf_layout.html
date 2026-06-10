@@ -54,6 +54,7 @@
       <li><a href="#sec-active-injection">Active Injection Coverage</a></li>
       <li><a href="#sec-top">Top Findings by Business Impact</a></li>
       <li><a href="#sec-kev">KEV-Listed Findings</a></li>
+      <li><a href="#sec-unconfirmed">Unconfirmed Observations</a></li>
       <li><a href="#sec-roadmap">Remediation Roadmap (P0–P3)</a></li>
       <li><a href="#sec-evidence">Evidence References</a></li>
       <li><a href="#sec-timeline">Pipeline Timeline</a></li>
@@ -294,6 +295,43 @@
       </table>
     {% else %}
       <p class="prose empty-state">No KEV-listed vulnerabilities detected.</p>
+    {% endif %}
+  </section>
+
+  {# ------------------- UNCONFIRMED OBSERVATIONS (VHL-PROVABLE-001) ------------------ #}
+  <section id="sec-unconfirmed" class="unconfirmed-findings">
+    <h2 class="section-heading">Unconfirmed Observations — Require Manual Verification</h2>
+    {% set unconfirmed = unconfirmed_findings if unconfirmed_findings is defined else [] %}
+    <p class="prose">
+      The following {{ unconfirmed_findings_count | default(unconfirmed | length) }}
+      observation{{ '' if (unconfirmed_findings_count | default(unconfirmed | length)) == 1 else 's' }}
+      could <strong>not</strong> be proven from the captured raw evidence and are
+      <strong>excluded from the headline risk counts and the validated findings</strong>.
+      Reproduce each one manually before treating it as a confirmed finding.
+    </p>
+    {% if unconfirmed and (unconfirmed | length) > 0 %}
+      <table class="business-table">
+        <thead>
+          <tr>
+            <th class="col-sev">Severity (claimed)</th>
+            <th>Classification</th>
+            <th>Title</th>
+            <th>Why unconfirmed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in unconfirmed %}
+            <tr>
+              <td class="col-sev"><span class="sev-tag sev-{{ (row.severity or 'info') | lower }}">{{ (row.severity or 'info') | upper }}</span></td>
+              <td>{{ (row.evidence_classification or 'inconclusive') | e }}</td>
+              <td>{{ (row.title or '—') | e }}</td>
+              <td>{{ (row.unconfirmed_reason or 'Not provable from captured raw evidence. Requires manual verification.') | e }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="prose empty-state">All reported findings are provable from raw evidence — no unconfirmed observations.</p>
     {% endif %}
   </section>
 

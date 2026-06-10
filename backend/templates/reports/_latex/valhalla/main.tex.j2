@@ -228,6 +228,39 @@ catalogued, actively-exploited CVE to a finding observed in this scan.\par
 \textit{No CISA KEV-listed exposures were detected in this scan.}
 {% endif %}
 
+\section{Unconfirmed Observations}
+{# VHL-PROVABLE-001 — findings that could NOT be proven from captured raw evidence are
+   never silently dropped: they are listed here with the reason, and excluded from the
+   severity rollup and the validated findings above. #}
+{% set _unconf = unconfirmed_findings if unconfirmed_findings is defined else [] %}
+{% if _unconf %}
+\noindent These {{ _unconf | length }} observation{{ 's' if _unconf | length != 1 else '' }}
+require manual verification before they can be treated as confirmed findings.\par
+\vspace{0.4em}
+\begingroup
+\renewcommand{\arraystretch}{1.15}
+\begin{longtable}{L{1.6cm} L{2.4cm} L{4.0cm} L{5.5cm}}
+\toprule
+\textbf{Severity} & \textbf{Classification} & \textbf{Title} & \textbf{Why unconfirmed} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\small\textit{continued on next page}} \\
+\endfoot
+\bottomrule
+\endlastfoot
+{% for row in _unconf %}
+{{ ((row.get('severity') if row is mapping else row.severity) | default('info')) | latex_escape }} &
+{{ ((row.get('evidence_classification') if row is mapping else row.evidence_classification) | default('inconclusive')) | latex_escape }} &
+{{ ((row.get('title') if row is mapping else row.title) | default('--')) | latex_truncate(120) | latex_escape }} &
+{{ ((row.get('unconfirmed_reason') if row is mapping else row.unconfirmed_reason) | default('Not provable from captured raw evidence.')) | latex_truncate(200) | latex_escape }} \\
+{% endfor %}
+\end{longtable}
+\endgroup
+{% else %}
+\textit{All reported findings are provable from raw evidence --- no unconfirmed observations.}
+{% endif %}
+
 {% set _adversarial = (ai_sections.get('adversarial_posture') if ai_sections else '') %}
 {% if _adversarial %}
 \section{Adversarial Posture}

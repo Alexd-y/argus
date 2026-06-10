@@ -301,6 +301,20 @@ def _is_valhalla_context(
     return False
 
 
+def _tag_findings_provability(findings: list[Finding]) -> list[Finding]:
+    """Recompute ``evidence_classification`` from each finding's own validation signals,
+    then tag the provability partition (VHL-PROVABLE-001).
+
+    Used by builders that construct ``Finding`` objects directly from ORM rows (which do
+    not persist ``evidence_classification``), so the predicate never trusts the schema
+    default. Idempotent and consistent with the canonical pipeline.
+    """
+    for f in findings:
+        f.evidence_classification = classify_evidence(f)
+    partition_findings(findings)
+    return findings
+
+
 def _strip_legacy_cvss_from_poc(poc: dict[str, Any] | None) -> dict[str, Any] | None:
     """Remove all CVSS keys from PoC dict to prevent cvss_conflict validation failures.
 
@@ -496,44 +510,50 @@ def build_report_data_from_db(
             "info": sev_totals["info"],
         }
     )
+    db_findings = [
+        Finding(
+            severity=f.severity,
+            title=f.title,
+            description=f.description or "",
+            cwe=f.cwe,
+            cvss=getattr(f, "cvss_score", None) or f.cvss,
+            cvss_score=getattr(f, "cvss_score", None) or f.cvss,
+            cvss_vector=getattr(f, "cvss_vector", None),
+            exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
+            exploit_summary=getattr(f, "exploit_summary", None),
+            owasp_category=parse_owasp_category(f.owasp_category),
+            proof_of_concept=f.proof_of_concept
+            if isinstance(f.proof_of_concept, dict)
+            else None,
+            confidence=normalize_confidence(
+                getattr(f, "confidence", None), default="likely"
+            ),
+            validation_status=_effective_validation_status(
+                f,
+                _effective_evidence_quality(f),
+            ),
+            evidence_quality=_effective_evidence_quality(f),
+            evidence_type=normalize_evidence_type(
+                getattr(f, "evidence_type", None)
+            ),
+            evidence_refs=normalize_evidence_refs(
+                getattr(f, "evidence_refs", None)
+            ),
+            reproducible_steps=getattr(f, "reproducible_steps", None),
+            applicability_notes=getattr(f, "applicability_notes", None),
+        )
+        for f in findings
+    ]
+    # VHL-PROVABLE-001: the ORM rows do not persist ``evidence_classification`` and the
+    # schema default ("candidate") would otherwise route every finding to "unconfirmed".
+    # Classify each built Finding from its own validation signals, then tag the partition,
+    # so the on-demand export path matches the canonical pipeline (single source of truth).
+    _tag_findings_provability(db_findings)
     return ReportData(
         report_id=report.id,
         target=report.target,
         summary=summary,
-        findings=[
-            Finding(
-                severity=f.severity,
-                title=f.title,
-                description=f.description or "",
-                cwe=f.cwe,
-                cvss=getattr(f, "cvss_score", None) or f.cvss,
-                cvss_score=getattr(f, "cvss_score", None) or f.cvss,
-                cvss_vector=getattr(f, "cvss_vector", None),
-                exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
-                exploit_summary=getattr(f, "exploit_summary", None),
-                owasp_category=parse_owasp_category(f.owasp_category),
-                proof_of_concept=f.proof_of_concept
-                if isinstance(f.proof_of_concept, dict)
-                else None,
-                confidence=normalize_confidence(
-                    getattr(f, "confidence", None), default="likely"
-                ),
-                validation_status=_effective_validation_status(
-                    f,
-                    _effective_evidence_quality(f),
-                ),
-                evidence_quality=_effective_evidence_quality(f),
-                evidence_type=normalize_evidence_type(
-                    getattr(f, "evidence_type", None)
-                ),
-                evidence_refs=normalize_evidence_refs(
-                    getattr(f, "evidence_refs", None)
-                ),
-                reproducible_steps=getattr(f, "reproducible_steps", None),
-                applicability_notes=getattr(f, "applicability_notes", None),
-            )
-            for f in findings
-        ],
+        findings=db_findings,
         technologies=report.technologies or [],
         created_at=report.created_at.isoformat() if report.created_at else None,
         scan_id=report.scan_id,
@@ -801,6 +821,12 @@ _VALIDATED_REQUIRED_EVIDENCE = {
 
 def _clean_ansi(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
+
+
+def _md_cell(text: str) -> str:
+    """Make text safe for a Markdown table cell: strip ANSI, escape ``|``, collapse newlines."""
+    cleaned = _clean_ansi(str(text or ""))
+    return cleaned.replace("\\", "\\\\").replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
 def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
@@ -2774,11 +2800,11 @@ def generate_markdown(
             lines.append("|---|--------------------|-------|----------------|-----------------|")
             for idx, f in enumerate(unconfirmed_findings, 1):
                 sev = str(getattr(f, "severity", "info") or "info").lower()
-                title = _clean_ansi(str(getattr(f, "title", getattr(f, "name", "")) or ""))
-                classification = str(_effective_evidence_classification(f) or "inconclusive")
-                reason = _clean_ansi(
-                    str(getattr(f, "unconfirmed_reason", None) or unconfirmed_reason(f) or "")
-                ).replace("|", "\\|")
+                title = _md_cell(getattr(f, "title", getattr(f, "name", "")))
+                classification = _md_cell(_effective_evidence_classification(f) or "inconclusive")
+                reason = _md_cell(
+                    getattr(f, "unconfirmed_reason", None) or unconfirmed_reason(f) or ""
+                )
                 lines.append(
                     f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | "
                     f"{classification} | {reason} |"

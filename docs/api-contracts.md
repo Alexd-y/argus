@@ -106,8 +106,21 @@ Base URL: `/api/v1` (или `NEXT_PUBLIC_API_URL`)
   description: string;
   cwe?: string;   // CWE-ID, напр. "CWE-79"
   cvss?: number; // 0.0–10.0
+  // VHL-PROVABLE-001 (опциональные, additive):
+  evidence_classification?: "validated" | "observed" | "candidate" | "inconclusive";
+  is_provable?: boolean;        // доказуемо ли из сырых данных
+  unconfirmed_reason?: string | null; // причина, если is_provable=false
 }
 ```
+
+**VHL-PROVABLE-001 — Valhalla provability partition.** Для tier `valhalla` отчёт собирается
+только из доказуемых сырых данных. В машинном экспорте (`format=json`) поле `findings`
+содержит **только доказуемые** находки (`is_provable=true`), а недоказуемые вынесены в
+отдельный массив `unconfirmed_findings: Finding[]` (с `is_provable=false` и `unconfirmed_reason`).
+В CSV добавлены колонки `is_provable`, `unconfirmed_reason`. В HTML/PDF недоказуемые показаны
+в разделе «Unconfirmed Observations» и исключены из заголовочных severity-счётчиков. Для
+tier `midgard`/`asgard` поведение не изменилось (`unconfirmed_findings` пустой, `findings`
+содержит всё). Frontend Valhalla-вью должен учитывать `unconfirmed_findings`.
 
 ### 1.3 Tools (Phase 7)
 
