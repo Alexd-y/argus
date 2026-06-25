@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.prompts.threat_modeling_prompts import get_threat_modeling_prompt
-from app.schemas.ai.common import PriorityLevel, ThreatModelingAiTask, build_tm_task_metadata
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.ai.common import PriorityLevel, ThreatModelingAiTask, build_tm_task_metadata
+from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
     MCPInvocationTrace,
     TestingRoadmapItem,

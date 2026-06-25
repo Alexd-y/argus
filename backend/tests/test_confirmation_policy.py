@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas.vulnerability_analysis.scenario_mapping import (
+from src.schemas.vulnerability_analysis.scenario_mapping import (
     FindingAssetLink,
     FindingScenarioLink,
     FindingToScenarioMap,
 )
-from app.schemas.vulnerability_analysis.schemas import FindingStatus
+from src.schemas.vulnerability_analysis.schemas import FindingStatus
 from src.recon.vulnerability_analysis.confirmation_policy import (
     evaluate_confirmation_policy,
     get_blocking_reasons_for_next_phase,

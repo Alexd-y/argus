@@ -167,7 +167,7 @@ class TestVulnDiscoveryWorker:
         assert r.scan_duration_seconds == 0.0
 
     def test_prompt_contains_target_name(self) -> None:
-        from src.knowledge_graph.graph.builder import CodePropertyGraph
+        from src.analysis.cpg import CodePropertyGraph
         from src.workers.vuln_discovery.worker import _prompt_vuln_discovery
 
         cpg = CodePropertyGraph(language="python", nodes=[], edges=[])

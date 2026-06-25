@@ -25,13 +25,13 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
-from app.schemas.ai.common import ReconAiTask, build_task_metadata
-from app.schemas.ai.schema_export import (
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.schema_export import (
     RECON_AI_TASKS,
     get_recon_ai_task_definitions,
     validate_recon_ai_payload,
 )
-from app.schemas.recon.stage3_readiness import (
+from src.schemas.recon.stage3_readiness import (
     CoverageScores,
     ROUTE_CLASSIFICATION_CSV_COLUMNS,
     Stage3ReadinessResult,

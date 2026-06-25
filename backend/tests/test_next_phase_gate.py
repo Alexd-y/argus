@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.vulnerability_analysis.next_phase_gate import (
     check_next_phase_gate_allowed,
     evaluate_next_phase_gate,
@@ -101,7 +101,7 @@ def test_evaluate_next_phase_gate_ready_when_all_conditions_met() -> None:
         },
         "finding_correlation": {"correlations": []},
     }
-    from app.schemas.threat_modeling.schemas import CriticalAsset, ThreatScenario, TrustBoundary
+    from src.schemas.threat_modeling.schemas import CriticalAsset, ThreatScenario, TrustBoundary
 
     bundle = VulnerabilityAnalysisInputBundle(
         engagement_id="e1",
@@ -135,7 +135,7 @@ def test_evaluate_next_phase_gate_ready_when_all_conditions_met() -> None:
 
 def test_generate_next_phase_gate_md() -> None:
     """generate_next_phase_gate_md produces valid markdown."""
-    from app.schemas.vulnerability_analysis.next_phase_gate import NextPhaseGateResult
+    from src.schemas.vulnerability_analysis.next_phase_gate import NextPhaseGateResult
 
     result = NextPhaseGateResult(
         run_id="r1",

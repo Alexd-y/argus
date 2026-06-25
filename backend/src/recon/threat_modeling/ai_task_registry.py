@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from app.prompts.threat_modeling_prompts import get_threat_modeling_prompt
-from app.schemas.ai.common import ThreatModelingAiTask, validate_with_model
-from app.schemas.threat_modeling.ai_tasks import (
+from src.schemas.ai.common import ThreatModelingAiTask, validate_with_model
+from src.schemas.threat_modeling.ai_tasks import (
     TM_TASK_INPUT_MODELS,
     TM_TASK_OUTPUT_MODELS,
 )

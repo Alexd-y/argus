@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from app.schemas.ai.common import PriorityLevel
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.ai.common import PriorityLevel
+from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
     ApplicationFlow,
     AttackerProfile,

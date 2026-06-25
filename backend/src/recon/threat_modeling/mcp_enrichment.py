@@ -21,7 +21,7 @@ from src.recon.mcp.policy import (
 )
 
 if TYPE_CHECKING:
-    from app.schemas.threat_modeling.schemas import MCPInvocationTrace, ThreatModelInputBundle
+    from src.schemas.threat_modeling.schemas import MCPInvocationTrace, ThreatModelInputBundle
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ def enrich_with_mcp(
     Returns:
         List of MCPInvocationTrace for mcp_trace.json.
     """
-    from app.schemas.threat_modeling.schemas import MCPInvocationTrace
+    from src.schemas.threat_modeling.schemas import MCPInvocationTrace
 
     traces: list[MCPInvocationTrace] = []
     allowed = {t.strip().lower() for t in mcp_tools if t}

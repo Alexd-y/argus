@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import build_dalfox_argv
 from src.recon.vulnerability_analysis.active_scan.ffuf_adapter import (
     build_ffuf_argv,

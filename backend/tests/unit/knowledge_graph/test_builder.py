@@ -1,6 +1,6 @@
 """Tests for Knowledge Graph — code property graph builder."""
 
-from src.knowledge_graph.graph.builder import (
+from src.analysis.cpg import (
     CodePropertyGraph,
     GraphNode,
     GraphEdge,

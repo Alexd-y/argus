@@ -1,4 +1,4 @@
-"""Unit tests for the role-specific agents in :mod:`src.orchestrator.agents`."""
+"""Unit tests for the role-specific agents in :mod:`src.llm_orchestrator.agents`."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from src.orchestrator.agents import (
+from src.llm_orchestrator.agents import (
     AgentConfigError,
     AgentContext,
     AgentParseError,
@@ -22,9 +22,9 @@ from src.orchestrator.agents import (
     ReportNarrative,
     VerifierAgent,
 )
-from src.orchestrator.llm_provider import EchoLLMProvider, ResponseFormat
-from src.orchestrator.prompt_registry import PromptRegistry
-from src.orchestrator.schemas.loader import ValidationPlanV1
+from src.llm_orchestrator.llm_provider import EchoLLMProvider, ResponseFormat
+from src.llm_orchestrator.prompt_registry import PromptRegistry
+from src.llm_orchestrator.schemas.loader import ValidationPlanV1
 from src.pipeline.contracts.finding_dto import FindingDTO
 from tests.unit.orchestrator_runtime.conftest import canned_finding
 

@@ -1,7 +1,7 @@
 """Tests for Stage 3 readiness schemas."""
 
 import pytest
-from app.schemas.recon.stage3_readiness import (
+from src.schemas.recon.stage3_readiness import (
     ROUTE_CLASSIFICATION_CSV_COLUMNS,
     CoverageScores,
     RouteClassificationRow,

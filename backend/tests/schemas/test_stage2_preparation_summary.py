@@ -2,9 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
-from app.schemas.ai.common import ReconAiTask, build_task_metadata
-from app.schemas.ai.schema_export import to_report_notes
-from app.schemas.ai.stage2_preparation_summary import (
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.schema_export import to_report_notes
+from src.schemas.ai.stage2_preparation_summary import (
     Stage2PreparationSummaryInput,
     Stage2PreparationSummaryOutput,
 )

@@ -22,7 +22,7 @@ from src.recon.reporting.headers_builder import (
     get_ssl_cert_entry,
 )
 
-from app.schemas.recon.stage1 import (
+from src.schemas.recon.stage1 import (
     ReconResults,
     SslCertEntry,
     TechProfileEntry,

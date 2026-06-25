@@ -18,7 +18,7 @@ import pytest
 
 from src.core.config import Settings, lab_destructive_execution_allowed
 from src.core import config as core_config
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.mcp.policy import evaluate_tool_approval_policy
 from src.recon.vulnerability_analysis.active_scan.commix_va_adapter import build_commix_va_argv
 from src.recon.vulnerability_analysis.active_scan.injection_findings_normalize import (

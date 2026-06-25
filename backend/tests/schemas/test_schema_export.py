@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from app.schemas.ai.common import ReconAiTask, ReportSectionId, build_task_metadata
-from app.schemas.ai.schema_export import (
+from src.schemas.ai.common import ReconAiTask, ReportSectionId, build_task_metadata
+from src.schemas.ai.schema_export import (
     RECON_AI_TASKS,
     export_recon_ai_schemas,
     get_recon_ai_task_definitions,

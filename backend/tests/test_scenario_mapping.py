@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.threat_modeling.schemas import (
     CriticalAsset,
     ThreatScenario,
     TrustBoundary,
 )
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-from app.schemas.vulnerability_analysis.scenario_mapping import FindingToScenarioMap
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.scenario_mapping import FindingToScenarioMap
 from src.recon.vulnerability_analysis.scenario_mapping import (
     generate_all_scenario_mapping_artifacts,
     generate_finding_asset_map_csv,

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 from src.orchestration.handlers import run_vuln_analysis
 from src.orchestration.phases import VulnAnalysisOutput

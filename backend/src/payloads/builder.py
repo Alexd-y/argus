@@ -1,7 +1,7 @@
 """Payload bundle builder for ARGUS validators (Backlog/dev1_md §6, §7).
 
 The :class:`PayloadBuilder` is the **only** path between an LLM-emitted
-:class:`~src.orchestrator.schemas.loader.ValidationPlanV1` and a concrete
+:class:`~src.llm_orchestrator.schemas.loader.ValidationPlanV1` and a concrete
 list of payload strings handed to a sandboxed validator. It enforces:
 
 * The targeted ``registry_family`` exists and is signed

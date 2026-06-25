@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.schemas.ai.common import PriorityLevel
-from app.schemas.threat_modeling.schemas import ThreatModelInputBundle
-from app.schemas.threat_modeling.stage2_artifacts import (
+from src.schemas.ai.common import PriorityLevel
+from src.schemas.threat_modeling.schemas import ThreatModelInputBundle
+from src.schemas.threat_modeling.stage2_artifacts import (
     AiTmPriorityHypotheses,
     PriorityHypothesis,
     Stage3ApplicationFlow,

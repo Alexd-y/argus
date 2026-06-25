@@ -5,15 +5,15 @@ from __future__ import annotations
 import pytest
 
 from app.prompts.vulnerability_analysis_prompts import VA_PROMPT_GETTERS, get_vulnerability_analysis_prompt
-from app.schemas.ai.common import VulnerabilityAnalysisAiTask, build_va_task_metadata
-from app.schemas.threat_modeling.schemas import EntryPoint
-from app.schemas.vulnerability_analysis.ai_tasks import (
+from src.schemas.ai.common import VulnerabilityAnalysisAiTask, build_va_task_metadata
+from src.schemas.threat_modeling.schemas import EntryPoint
+from src.schemas.vulnerability_analysis.ai_tasks import (
     ActiveScanPlanningOutput,
     NucleiAnalysisOutput,
     SqliAnalysisOutput,
     XssAnalysisOutput,
 )
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.vulnerability_analysis.ai_task_registry import (
     VA_ACTIVE_SCAN_AI_TASKS,
     VA_AI_TASKS,

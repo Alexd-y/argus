@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from app.schemas.threat_modeling.schemas import ThreatModelInputBundle
+from src.schemas.threat_modeling.schemas import ThreatModelInputBundle
 from src.recon.threat_modeling.input_loader import (
     load_threat_model_input_bundle,
     load_threat_model_input_bundle_from_artifacts,

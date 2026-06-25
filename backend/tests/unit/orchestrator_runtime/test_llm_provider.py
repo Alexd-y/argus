@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.orchestrator.llm_provider` (ARG-008)."""
+"""Unit tests for :mod:`src.llm_orchestrator.llm_provider` (ARG-008)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.orchestrator.llm_provider import (
+from src.llm_orchestrator.llm_provider import (
     EchoLLMProvider,
     LLMProvider,
     LLMProviderUnavailableError,

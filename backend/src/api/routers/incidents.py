@@ -35,7 +35,7 @@ async def enrich_alert(req: EnrichRequest) -> EnrichResponse:
 
     kg = None
     if req.knowledge_graph_nodes:
-        from src.knowledge_graph.graph.builder import CodePropertyGraph, GraphNode, NodeType
+        from src.analysis.cpg import CodePropertyGraph, GraphNode, NodeType
         kg = CodePropertyGraph(nodes=[
             GraphNode(id=n.get("id", ""), node_type=NodeType(n.get("node_type", "sensitive_sink")),
                      name=n.get("name", ""), file_path=n.get("file_path", ""))

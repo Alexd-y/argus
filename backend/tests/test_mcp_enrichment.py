@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.schemas.threat_modeling.schemas import EntryPoint, ThreatModelInputBundle
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.threat_modeling.schemas import EntryPoint, ThreatModelInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.mcp.audit import MCP_AUDIT_LOG_FILENAME
 from src.recon.mcp.policy import (
     THREAT_MODELING_POLICY_ID,
@@ -225,7 +225,7 @@ class TestEnrichVaBundleWithMCP:
         assert traces == []
 
     def test_fetch_from_entry_points(self, tmp_path: Path) -> None:
-        from app.schemas.threat_modeling.schemas import EntryPoint
+        from src.schemas.threat_modeling.schemas import EntryPoint
 
         bundle = VulnerabilityAnalysisInputBundle(
             engagement_id="e1",

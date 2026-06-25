@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from src.knowledge_graph.graph.builder import CodePropertyGraph, NodeType
+from src.analysis.cpg import CodePropertyGraph, NodeType
 
 logger = logging.getLogger(__name__)
 

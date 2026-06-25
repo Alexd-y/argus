@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-from app.schemas.ai.common import ReconAiTask, build_task_metadata
-from app.schemas.ai.content_similarity_interpretation import (
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.content_similarity_interpretation import (
     ContentSimilarityInterpretationInput,
     ContentSimilarityInterpretationOutput,
 )

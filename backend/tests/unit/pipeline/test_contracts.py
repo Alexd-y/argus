@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from src.orchestrator.schemas.loader import (
+from src.llm_orchestrator.schemas.loader import (
     PayloadStrategyV1,
     RiskRating,
     ValidationPlanV1,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.schemas.recon.stage1 import TechProfileEntry
+from src.schemas.recon.stage1 import TechProfileEntry
 from src.recon.reporting.tech_builder import build_tech_profile, build_tech_profile_json
 
 

@@ -21,13 +21,13 @@ from uuid import uuid4
 import pytest
 
 from src.oast.correlator import InteractionKind, OASTInteraction
-from src.orchestrator.agents import AgentContext, ReportNarrative
-from src.orchestrator.cost_tracker import CostTracker
-from src.orchestrator.llm_provider import EchoLLMProvider
-from src.orchestrator.orchestrator import Orchestrator
-from src.orchestrator.prompt_registry import PromptRegistry
-from src.orchestrator.retry_loop import RetryConfig
-from src.orchestrator.schemas.loader import ValidationPlanV1
+from src.llm_orchestrator.agents import AgentContext, ReportNarrative
+from src.llm_orchestrator.cost_tracker import CostTracker
+from src.llm_orchestrator.llm_provider import EchoLLMProvider
+from src.llm_orchestrator.orchestrator import Orchestrator
+from src.llm_orchestrator.prompt_registry import PromptRegistry
+from src.llm_orchestrator.retry_loop import RetryConfig
+from src.llm_orchestrator.schemas.loader import ValidationPlanV1
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink

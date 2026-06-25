@@ -7,12 +7,12 @@ from app.prompts.threat_modeling_prompts import (
     PROMPT_VERSION,
     get_threat_modeling_prompt,
 )
-from app.schemas.ai.common import (
+from src.schemas.ai.common import (
     StatementType,
     ThreatModelingAiTask,
     build_tm_task_metadata,
 )
-from app.schemas.threat_modeling.ai_tasks import (
+from src.schemas.threat_modeling.ai_tasks import (
     CriticalAssetOutput,
     CriticalAssetsInput,
     ReportSummaryOutput,
@@ -21,7 +21,7 @@ from app.schemas.threat_modeling.ai_tasks import (
     TrustBoundariesOutput,
     TrustBoundaryOutput,
 )
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.threat_modeling.schemas import (
     CriticalAsset,
     ThreatModelInputBundle,
     TrustBoundary,

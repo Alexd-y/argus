@@ -17,7 +17,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app.schemas.recon.stage1 import AnomaliesStructured
+from src.schemas.recon.stage1 import AnomaliesStructured
 from src.core.llm_config import get_llm_client, has_any_llm_key
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.recon.stage1 import (
+from src.schemas.recon.stage1 import (
     AnomaliesStructured,
     AnomalyEntry,
     HypothesisEntry,

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from src.orchestrator.prompt_registry import (
+from src.llm_orchestrator.prompt_registry import (
     AgentRole,
     PromptRegistry,
     PromptRegistryError,

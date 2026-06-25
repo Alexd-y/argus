@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.orchestrator.prompt_registry` (ARG-008)."""
+"""Unit tests for :mod:`src.llm_orchestrator.prompt_registry` (ARG-008)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-from src.orchestrator.prompt_registry import (
+from src.llm_orchestrator.prompt_registry import (
     AgentRole,
     PromptDefinition,
     PromptNotFoundError,

@@ -12,15 +12,15 @@ from datetime import datetime
 from io import StringIO
 from typing import Any
 
-from app.schemas.ai.common import PriorityLevel
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.ai.common import PriorityLevel
+from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
     AttackerProfile,
     MCPInvocationTrace,
     ThreatModelArtifact,
     ThreatModelInputBundle,
 )
-from app.schemas.threat_modeling.stage2_artifacts import ThreatModelUnified
+from src.schemas.threat_modeling.stage2_artifacts import ThreatModelUnified
 from src.recon.threat_modeling.stage2_parsers import (
     parse_application_flows_to_stage3,
     parse_critical_assets_to_stage3,

@@ -3,7 +3,7 @@
 Pure unit tests under this directory MUST NOT depend on a real DEBUG=true /
 DATABASE_URL / JWT_SECRET environment, nor on a live FastAPI application.  They
 exercise contracts and pure-Python modules (``src.pipeline.contracts``,
-``src.orchestrator.schemas``, etc.) that have zero runtime side effects.
+``src.llm_orchestrator.schemas``, etc.) that have zero runtime side effects.
 
 Two protections are layered here:
 

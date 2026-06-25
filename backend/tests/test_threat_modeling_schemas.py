@@ -8,8 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
-from app.schemas.ai.common import PriorityLevel
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.ai.common import PriorityLevel
+from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
     ApplicationFlow,
     AttackerProfile,
@@ -24,7 +24,7 @@ from app.schemas.threat_modeling.schemas import (
     ThreatScenario,
     TrustBoundary,
 )
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.threat_modeling.schemas import (
     TestingRoadmapItem as TestingRoadmapItemSchema,
 )
 from pydantic import ValidationError

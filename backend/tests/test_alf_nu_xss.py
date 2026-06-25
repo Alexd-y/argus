@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from app.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 from src.recon.vulnerability_analysis.active_scan.planner import (
     build_va_active_scan_plan,

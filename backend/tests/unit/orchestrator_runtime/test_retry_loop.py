@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.orchestrator.retry_loop` (ARG-008)."""
+"""Unit tests for :mod:`src.llm_orchestrator.retry_loop` (ARG-008)."""
 
 from __future__ import annotations
 
@@ -9,18 +9,18 @@ from unittest.mock import patch
 
 import pytest
 
-from src.orchestrator.agents import (
+from src.llm_orchestrator.agents import (
     AgentContext,
     FixerAgent,
     PlannerAgent,
 )
-from src.orchestrator.cost_tracker import CostTracker
-from src.orchestrator.llm_provider import (
+from src.llm_orchestrator.cost_tracker import CostTracker
+from src.llm_orchestrator.llm_provider import (
     EchoLLMProvider,
     LLMProviderError,
 )
-from src.orchestrator.prompt_registry import PromptRegistry
-from src.orchestrator.retry_loop import (
+from src.llm_orchestrator.prompt_registry import PromptRegistry
+from src.llm_orchestrator.retry_loop import (
     AttemptErrorKind,
     AttemptLog,
     RetryAbortReason,

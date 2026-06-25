@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-from app.schemas.ai.common import ReconAiTask, build_task_metadata
-from app.schemas.ai.headers_tls_summary import HeadersTlsSummaryInput, HeadersTlsSummaryOutput
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.headers_tls_summary import HeadersTlsSummaryInput, HeadersTlsSummaryOutput
 from pydantic import ValidationError
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"

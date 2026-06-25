@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.orchestrator.cost_tracker` (ARG-008)."""
+"""Unit tests for :mod:`src.llm_orchestrator.cost_tracker` (ARG-008)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from src.orchestrator.cost_tracker import CostRecord, CostSummary, CostTracker
-from src.orchestrator.prompt_registry import AgentRole
+from src.llm_orchestrator.cost_tracker import CostRecord, CostSummary, CostTracker
+from src.llm_orchestrator.prompt_registry import AgentRole
 
 
 def _record(

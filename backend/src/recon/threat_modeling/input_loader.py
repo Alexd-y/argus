@@ -13,7 +13,7 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from app.schemas.threat_modeling.schemas import (
+from src.schemas.threat_modeling.schemas import (
     CriticalAsset,
     EntryPoint,
     ThreatModelInputBundle,

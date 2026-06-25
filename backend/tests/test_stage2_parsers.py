@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from app.schemas.threat_modeling.schemas import CriticalAsset, ThreatModelInputBundle
+from src.schemas.threat_modeling.schemas import CriticalAsset, ThreatModelInputBundle
 from src.recon.threat_modeling.artifacts import (
     generate_application_flows_json,
     generate_priority_hypotheses_json,

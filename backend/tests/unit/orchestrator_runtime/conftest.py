@@ -26,10 +26,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-from src.orchestrator.agents import AgentContext
-from src.orchestrator.cost_tracker import CostTracker
-from src.orchestrator.llm_provider import EchoLLMProvider
-from src.orchestrator.prompt_registry import PromptRegistry
+from src.llm_orchestrator.agents import AgentContext
+from src.llm_orchestrator.cost_tracker import CostTracker
+from src.llm_orchestrator.llm_provider import EchoLLMProvider
+from src.llm_orchestrator.prompt_registry import PromptRegistry
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.policy.audit import AuditLogger, InMemoryAuditSink

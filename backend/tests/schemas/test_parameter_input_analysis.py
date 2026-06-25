@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
-from app.schemas.ai.common import ReconAiTask, build_task_metadata
-from app.schemas.ai.parameter_input_analysis import (
+from src.schemas.ai.common import ReconAiTask, build_task_metadata
+from src.schemas.ai.parameter_input_analysis import (
     ParameterInputAnalysisInput,
     ParameterInputAnalysisOutput,
 )

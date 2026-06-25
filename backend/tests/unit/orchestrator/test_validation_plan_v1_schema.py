@@ -9,14 +9,14 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from src.orchestrator.schemas import (
+from src.llm_orchestrator.schemas import (
     SCHEMA_ID,
     ValidationPlanError,
     load_validation_plan_v1_schema,
     validate_validation_plan,
 )
-from src.orchestrator.schemas import loader as loader_module
-from src.orchestrator.schemas.loader import (
+from src.llm_orchestrator.schemas import loader as loader_module
+from src.llm_orchestrator.schemas.loader import (
     PayloadStrategyV1,
     RiskRating,
     ValidationPlanV1,

@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.knowledge_graph.graph.builder import CodePropertyGraph, NodeType
+from src.analysis.cpg import CodePropertyGraph, NodeType
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,7 @@ async def run_threat_modeling(
 
 def build_initial_cpg_from_files(files: dict[str, str]) -> CodePropertyGraph:
     """Build an aggregate code property graph from a set of file paths → content."""
-    from src.knowledge_graph.graph.builder import build_cpg
+    from src.analysis.cpg import build_cpg
 
     full_cpg = CodePropertyGraph()
     for file_path, content in files.items():

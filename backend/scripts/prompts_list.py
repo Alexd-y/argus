@@ -1,6 +1,6 @@
 """CLI: print a human-readable summary of the loaded ARGUS prompt catalog.
 
-Loads via :class:`src.orchestrator.prompt_registry.PromptRegistry` (so signature
+Loads via :class:`src.llm_orchestrator.prompt_registry.PromptRegistry` (so signature
 verification is exercised exactly as the application does at startup) and
 prints one row per prompt plus a per-role breakdown. Outputs JSON when
 ``--json`` is given so the script is CI-friendly.
@@ -23,7 +23,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(_BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(_BACKEND_ROOT))
 
-from src.orchestrator.prompt_registry import (  # noqa: E402
+from src.llm_orchestrator.prompt_registry import (  # noqa: E402
     PromptRegistry,
     PromptRegistryError,
 )

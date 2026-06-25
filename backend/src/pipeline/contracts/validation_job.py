@@ -1,7 +1,7 @@
 """ValidationJob — typed unit dispatched into the verifier loop.
 
 A ValidationJob is created by the AI Orchestrator's planner after the LLM emits a
-:class:`ValidationPlanV1` (see ``src.orchestrator.schemas``). It carries the full
+:class:`ValidationPlanV1` (see ``src.llm_orchestrator.schemas``). It carries the full
 plan, the canary token used to correlate OAST callbacks, and the explicit list of
 evidence kinds the verifier MUST collect to confirm the finding.
 
@@ -25,7 +25,7 @@ from pydantic import (
     model_validator,
 )
 
-from src.orchestrator.schemas.loader import ValidationPlanV1
+from src.llm_orchestrator.schemas.loader import ValidationPlanV1
 from src.pipeline.contracts.finding_dto import EvidenceKind
 from src.pipeline.contracts.phase_io import ScanPhase
 

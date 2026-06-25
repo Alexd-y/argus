@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`src.orchestrator.orchestrator` (ARG-008)."""
+"""Unit tests for :mod:`src.llm_orchestrator.orchestrator` (ARG-008)."""
 
 from __future__ import annotations
 
@@ -8,19 +8,19 @@ from unittest.mock import patch
 
 import pytest
 
-from src.orchestrator.agents import AgentContext, CriticVerdict, ReportNarrative
-from src.orchestrator.cost_tracker import CostTracker
-from src.orchestrator.llm_provider import EchoLLMProvider
-from src.orchestrator.orchestrator import (
+from src.llm_orchestrator.agents import AgentContext, CriticVerdict, ReportNarrative
+from src.llm_orchestrator.cost_tracker import CostTracker
+from src.llm_orchestrator.llm_provider import EchoLLMProvider
+from src.llm_orchestrator.orchestrator import (
     Orchestrator,
     OrchestratorBudgetExceeded,
     OrchestratorParseFailure,
     OrchestratorPlanRejected,
     OrchestratorProviderFailure,
 )
-from src.orchestrator.prompt_registry import PromptRegistry
-from src.orchestrator.retry_loop import RetryConfig
-from src.orchestrator.schemas.loader import ValidationPlanV1
+from src.llm_orchestrator.prompt_registry import PromptRegistry
+from src.llm_orchestrator.retry_loop import RetryConfig
+from src.llm_orchestrator.schemas.loader import ValidationPlanV1
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.policy.audit import AuditEventType, AuditLogger
 

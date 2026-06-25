@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.recon.parsers.http_probe_parser import parse_http_probe
 
-from app.schemas.recon.stage1 import TechProfileEntry
+from src.schemas.recon.stage1 import TechProfileEntry
 
 logger = logging.getLogger(__name__)
 
