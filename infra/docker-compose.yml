@@ -487,12 +487,19 @@ services:
     build:
       context: ../Frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
+        NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
+        NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}
     image: argus-admin-frontend
     container_name: argus-admin-frontend
     restart: always
     environment:
       PORT: "6100"
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
+      NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
+      NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
     ports:
       - "${ARGUS_ADMIN_PORT:-6100}:6100"
