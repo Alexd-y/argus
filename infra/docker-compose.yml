@@ -166,6 +166,10 @@ services:
     image: argus-backend
     container_name: argus-backend
     restart: unless-stopped
+    # Opt out of Docker userns-remap so the host docker.sock (root:docker / gid from
+    # DOCKER_GID) maps 1:1 into the container; otherwise the socket shows as nobody
+    # (65534) inside and `docker exec` into the sandbox fails with permission denied.
+    userns_mode: "host"
     env_file: .env
     deploy:
       resources:
@@ -247,6 +251,7 @@ services:
     image: argus-worker-scans
     container_name: argus-worker-scans
     restart: unless-stopped
+    userns_mode: "host"   # 1:1 docker.sock ownership for sandbox `docker exec`
     command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 3
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
@@ -315,6 +320,7 @@ services:
       dockerfile: worker/Dockerfile
     image: argus-worker-general
     restart: unless-stopped
+    userns_mode: "host"   # 1:1 docker.sock ownership for sandbox `docker exec`
     command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
@@ -378,6 +384,7 @@ services:
     image: argus-worker-reports
     container_name: argus-worker-reports
     restart: unless-stopped
+    userns_mode: "host"   # 1:1 docker.sock ownership for sandbox `docker exec`
     command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
