@@ -433,6 +433,10 @@ services:
     image: argus-sandbox
     container_name: argus-sandbox
     restart: unless-stopped
+    # Long-lived idle container: workers run tools inside it via `docker exec`.
+    # The image inherits Kali's default `bash` CMD which exits immediately without a
+    # TTY, so the container would crash-loop — keep it alive explicitly.
+    command: ["sleep", "infinity"]
     volumes:
       - ../plugins/exploit_scripts:/opt/exploit_scripts:ro
       - sandbox_tmp:/tmp/argus-sandbox
@@ -468,6 +472,9 @@ services:
     image: argus-kali-runner
     container_name: argus-kali-runner
     restart: unless-stopped
+    # Keep the standing container alive (EphemeralWorkerPool spawns its own per-scan
+    # containers from this image; the long-lived one must not exit on Kali's bash CMD).
+    command: ["sleep", "infinity"]
     volumes:
       - sandbox_tmp:/tmp/argus-sandbox
     networks:
