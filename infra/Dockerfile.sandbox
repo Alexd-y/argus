@@ -56,6 +56,23 @@ RUN DALFOX_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/hahwul/dalf
 # xsstrike (Python tool — not in Kali apt)
 RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
+# ARGUS invokes the ProjectDiscovery HTTP prober as `httpx` and the TLS auditor as
+# `testssl.sh` (see backend/config/tools/{httpx,testssl}.yaml). Kali ships them under
+# different names (`httpx-toolkit`; `testssl` / /usr/share/testssl.sh/testssl.sh), so
+# symlink them to the names ARGUS expects — otherwise recon HTTP fingerprinting and the
+# SSL/TLS findings phase silently no-op (tool "not found").
+RUN set -e; \
+    if ! command -v httpx >/dev/null 2>&1; then \
+      t=$(command -v httpx-toolkit 2>/dev/null || true); \
+      [ -n "$t" ] && ln -sf "$t" /usr/local/bin/httpx || true; \
+    fi; \
+    if ! command -v testssl.sh >/dev/null 2>&1; then \
+      t=$(command -v testssl 2>/dev/null || true); \
+      [ -z "$t" ] && [ -x /usr/share/testssl.sh/testssl.sh ] && t=/usr/share/testssl.sh/testssl.sh || true; \
+      [ -n "$t" ] && ln -sf "$t" /usr/local/bin/testssl.sh || true; \
+    fi; \
+    echo "tool-alias httpx -> $(command -v httpx || echo MISSING); testssl.sh -> $(command -v testssl.sh || echo MISSING)"
+
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
 RUN apt-get update \
