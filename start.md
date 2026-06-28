@@ -101,6 +101,24 @@ npm run dev
 
 Открыть: **http://127.0.0.1:5000** (порт зашит в `npm run dev`).
 
+> **⚠️ Публичный хост (AWS EC2 и т.п.).** `npm run dev` биндится только на localhost,
+> а Next 16 по умолчанию **блокирует cross-origin запросы к `/_next/*`** в dev-режиме.
+> Если открыть UI по публичному IP/домену (например `http://<ec2-ip>:5000`), Origin
+> не входит в `allowedDevOrigins` → CSS/JS/шрифты блокируются и страница рендерится
+> **без стилей**. Для публичного развёртывания используйте **production-сборку**
+> (нет dev-гейта, статика отдаётся для любого origin):
+>
+> ```bash
+> npm run build
+> npm start            # публичный UI на 0.0.0.0:5000
+> npm run start:admin  # админка на 0.0.0.0:6100
+> ```
+>
+> Либо контейнер: `infra/docker-compose.yml` → сервис `frontend` (standalone, порт 5000).
+> Если всё же нужен `next dev` за публичным хостом — пропишите точный origin в
+> `Frontend/.env.local`: `NEXT_ALLOWED_DEV_ORIGINS=http://<ec2-ip>:5000`
+> (приватные/LAN IP интерфейсов подхватываются автоматически в `next.config.ts`).
+
 ---
 
 ## 5. Остановка

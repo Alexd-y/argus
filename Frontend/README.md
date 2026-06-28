@@ -43,17 +43,49 @@ A modern, cyberpunk-themed web application for security vulnerability scanning a
 # Install dependencies
 npm install
 
-# Run development server
+# Run development server (localhost only)
 npm run dev
 
 # Build for production
 npm run build
 
-# Start production server
+# Start production server (binds 0.0.0.0:5000 — public scan UI)
 npm start
+# Admin console on :6100
+npm run start:admin
 ```
 
 Open [http://localhost:5000](http://localhost:5000) to view the application.
+
+### Deploying on a public host (AWS EC2, etc.)
+
+Next 16 **blocks cross-origin requests to `/_next/*` in `next dev`** by default.
+If you run `next dev` and open the app through a public IP/domain
+(e.g. `http://<ec2-ip>:5000`), the browser's `Origin` is not in
+`allowedDevOrigins`, so CSS/JS/font chunks are blocked and the page renders
+**unstyled**.
+
+For any public deployment use the **production build**, which has no
+dev-origin gate and serves static assets for any origin:
+
+```bash
+npm run build
+npm start            # public scan UI on 0.0.0.0:5000
+npm run start:admin  # admin console on 0.0.0.0:6100
+```
+
+Or run the container (`infra/docker-compose.yml` → `frontend` service, already
+standalone on port 5000).
+
+If you must run `next dev` behind a public host, allow-list that exact origin:
+
+```bash
+# Frontend/.env.local — comma-separated, full origin(s)
+NEXT_ALLOWED_DEV_ORIGINS=http://<ec2-ip>:5000
+```
+
+(Local/LAN/private interface IPs are auto-detected by `next.config.ts`; only the
+NAT'd public IP/domain needs to be set explicitly.)
 
 ## Project Structure
 

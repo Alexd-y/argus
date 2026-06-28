@@ -1,3 +1,4 @@
+import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +37,40 @@ function expandAllowedDevOrigins(raw: string): string[] {
   return [...seen];
 }
 
+/** App ports served by `next dev` (public scan UI :5000, admin console :6100). */
+const APP_PORTS = ["5000", "6100"] as const;
+
+/**
+ * Non-internal IPv4 addresses of this host, expanded to bare host + host:port
+ * for every app port. Next 16 blocks cross-origin `/_next/*` in dev unless the
+ * Origin is allow-listed; on a self-hosted box (e.g. EC2 private IP / LAN /
+ * container bridge) this lets the dev server load its own assets without a
+ * hardcoded address. The browser-facing public IP/domain still has no local
+ * interface entry — set NEXT_ALLOWED_DEV_ORIGINS for it, or (recommended for a
+ * public deployment) run the production build (`npm start`) which has no
+ * dev-origin gate.
+ */
+function localInterfaceDevOrigins(): string[] {
+  const out: string[] = [];
+  let ifaces: ReturnType<typeof networkInterfaces> = {};
+  try {
+    ifaces = networkInterfaces();
+  } catch {
+    return out;
+  }
+  for (const addrs of Object.values(ifaces)) {
+    for (const addr of addrs ?? []) {
+      if (addr.family !== "IPv4" || addr.internal || !addr.address) continue;
+      out.push(addr.address);
+      for (const port of APP_PORTS) {
+        out.push(`${addr.address}:${port}`);
+        out.push(`http://${addr.address}:${port}`);
+      }
+    }
+  }
+  return out;
+}
+
 const backendUrl =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
@@ -55,6 +90,7 @@ const nextConfig: NextConfig = {
     "http://127.0.0.1:6100",
     "localhost:6100",
     "127.0.0.1:6100",
+    ...localInterfaceDevOrigins(),
     ...expandAllowedDevOrigins(process.env.NEXT_ALLOWED_DEV_ORIGINS ?? ""),
   ],
   async rewrites() {
