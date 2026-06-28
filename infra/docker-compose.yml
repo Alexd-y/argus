@@ -20,6 +20,7 @@ services:
   postgres:
     image: pgvector/pgvector:pg15
     container_name: argus-postgres
+    restart: unless-stopped
     env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-argus}
@@ -41,6 +42,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: argus-redis
+    restart: unless-stopped
     env_file: .env
     # WARNING: If REDIS_PASSWORD is empty, Redis runs without authentication.
     # For production, always set REDIS_PASSWORD in .env
@@ -77,6 +79,7 @@ services:
   minio:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: argus-minio
+    restart: unless-stopped
     env_file: .env
     # Console on fixed port so host mapping 9001:9001 (override/dev) works
     command: server /data --console-address ":9001"
@@ -131,6 +134,7 @@ services:
         GPU_MODE: ${WRB_GPU_MODE:-cpu}
     image: argus-whiterabbitneo
     container_name: argus-whiterabbitneo
+    restart: unless-stopped
     env_file: .env
     environment:
       VLLM_API_KEY: ${WRB_API_KEY:-argus-wrb-key}
@@ -161,6 +165,7 @@ services:
       dockerfile: ../infra/backend/Dockerfile
     image: argus-backend
     container_name: argus-backend
+    restart: unless-stopped
     env_file: .env
     deploy:
       resources:
@@ -236,6 +241,7 @@ services:
       dockerfile: worker/Dockerfile
     image: argus-worker-scans
     container_name: argus-worker-scans
+    restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 3
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
@@ -301,6 +307,7 @@ services:
       context: .
       dockerfile: worker/Dockerfile
     image: argus-worker-general
+    restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
@@ -361,6 +368,7 @@ services:
       dockerfile: worker/Dockerfile
     image: argus-worker-reports
     container_name: argus-worker-reports
+    restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
     user: "1000:${DOCKER_GID:-999}"
     env_file: .env
@@ -424,6 +432,7 @@ services:
         INSTALL_MSF: ${INSTALL_MSF:-false}
     image: argus-sandbox
     container_name: argus-sandbox
+    restart: unless-stopped
     volumes:
       - ../plugins/exploit_scripts:/opt/exploit_scripts:ro
       - sandbox_tmp:/tmp/argus-sandbox
@@ -458,6 +467,7 @@ services:
         SANDBOX_PROFILE: binary
     image: argus-kali-runner
     container_name: argus-kali-runner
+    restart: unless-stopped
     volumes:
       - sandbox_tmp:/tmp/argus-sandbox
     networks:
@@ -561,6 +571,7 @@ services:
   adminer:
     image: adminer:latest
     container_name: argus-adminer
+    restart: unless-stopped
     environment:
       ADMINER_DEFAULT_SERVER: postgres
       ADMINER_DESIGN: dracula
@@ -579,6 +590,7 @@ services:
   nginx:
     image: nginx:1.27-alpine
     container_name: argus-nginx
+    restart: unless-stopped
     env_file: .env
     # Bind-mounted script may lose +x (Windows clone, git filemode); exec via sh avoids "permission denied".
     entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
