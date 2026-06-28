@@ -209,7 +209,9 @@ services:
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       VERCEL_FRONTEND_URL: ${VERCEL_FRONTEND_URL:-}
-      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      # `-` (not `:-`): unset → default WRB; explicit empty WHITERABBITNEO_URL= disables
+      # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       # SECURITY: docker.sock is required for VA active-scan sandbox exec.
@@ -281,7 +283,9 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
-      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      # `-` (not `:-`): unset → default WRB; explicit empty WHITERABBITNEO_URL= disables
+      # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -347,7 +351,9 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
-      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      # `-` (not `:-`): unset → default WRB; explicit empty WHITERABBITNEO_URL= disables
+      # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -408,7 +414,9 @@ services:
       KIMI_API_KEY: ${KIMI_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
       SHODAN_API_KEY: ${SHODAN_API_KEY:-}
-      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-http://whiterabbitneo:8000/v1}
+      # `-` (not `:-`): unset → default WRB; explicit empty WHITERABBITNEO_URL= disables
+      # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
