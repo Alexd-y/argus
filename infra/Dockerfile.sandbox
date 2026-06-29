@@ -145,9 +145,18 @@ RUN apt-get update \
     clang llvm \
     && rm -rf /var/lib/apt/lists/*
 
-# Playwright + Chromium — browser automation for XSS/auth verification
-RUN pip3 install --no-cache-dir --break-system-packages playwright \
-    && python3 -m playwright install --with-deps chromium
+# Playwright + Chromium — browser automation for XSS/auth verification.
+# Kali ships the `playwright` Python package but no Node.js runtime; the driver
+# shells out to `node`, so without it `playwright install` fails with
+# "FileNotFoundError: '/usr/bin/node'". Install nodejs first, and keep the Chromium
+# browser download non-fatal so the image still builds in constrained/offline
+# environments (Playwright XSS/auth verification is an optional enhancement).
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir --break-system-packages playwright \
+    && (python3 -m playwright install --with-deps chromium \
+        || echo "playwright chromium install skipped (non-fatal)")
 
 # Python requirements from ARGUS backend (for sandbox task execution)
 COPY backend/requirements.txt /tmp/requirements.txt
