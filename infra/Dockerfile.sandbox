@@ -49,11 +49,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Python-only tools not packaged in Kali apt:
-#   whatwaf      — WAF/IDS detection & bypass (planner waf_detection)
-#   corscanner   — CORS misconfiguration scanner, installs the `cors` binary
+#   corscanner   — CORS misconfiguration scanner, exposes the `cors` binary (planner cors_testing)
 #   bloodhound   — provides `bloodhound-python` for AD collection (exploitation phase)
 RUN pip3 install --no-cache-dir --break-system-packages \
-    whatwaf corscanner bloodhound
+    corscanner bloodhound
+
+# whatwaf — WAF/IDS detection & bypass (planner deep-mode waf_detection). It is NOT published
+# to PyPI, and its upstream setup.py prompts interactively (raw_input) when executed as root,
+# which deadlocks non-interactive image builds. So we clone the source, install only its runtime
+# dependencies, and expose a thin `whatwaf` launcher on PATH (the binary name the planner expects).
+RUN git clone --depth 1 https://github.com/Ekultek/WhatWaf.git /opt/whatwaf \
+    && pip3 install --no-cache-dir --break-system-packages -r /opt/whatwaf/requirements.txt \
+    && printf '#!/bin/sh\n# whatwaf caches into ~/.whatwaf, but the sandbox rootfs (incl. /home/argus) is read-only\n# at runtime — only /tmp and /workspace are writable. Anchor HOME in /tmp so caching never fails.\nexport HOME=/tmp/whatwaf-home\nmkdir -p "$HOME/.whatwaf" 2>/dev/null || true\nexec python3 /opt/whatwaf/whatwaf.py "$@"\n' > /usr/local/bin/whatwaf \
+    && chmod +x /usr/local/bin/whatwaf
 
 # dalfox (Go binary — not in Kali apt, download pre-built release)
 RUN DALFOX_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/hahwul/dalfox/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
@@ -166,6 +174,8 @@ RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
     echo "which wfuzz && echo 'wfuzz: OK' || echo 'wfuzz: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which whatweb && echo 'whatweb: OK' || echo 'whatweb: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which wafw00f && echo 'wafw00f: OK' || echo 'wafw00f: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which whatwaf && echo 'whatwaf: OK' || echo 'whatwaf: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which cors && echo 'corscanner: OK' || echo 'corscanner: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which arjun && echo 'arjun: OK' || echo 'arjun: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which theHarvester || which theharvester && echo 'theharvester: OK' || echo 'theharvester: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "python3 -c 'import playwright; print(\"Playwright: OK\")' 2>/dev/null || echo 'Playwright: MISSING'" >> /usr/local/bin/argus-tool-check && \
