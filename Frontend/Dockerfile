@@ -7,6 +7,15 @@ ARG APP_PORT=6100
 FROM node:${NODE_VERSION}-bookworm AS builder
 WORKDIR /app
 
+# Re-declare the global (pre-FROM) ARGs inside this stage. Docker scopes
+# pre-FROM ARGs out of build stages, so without these the ENV lines below
+# would expand to empty strings — baking a hostless rewrite destination and
+# an unset NEXT_PUBLIC_ADMIN_AUTH_MODE into the bundle (admin → 500 via the
+# instrumentation guard, /api/v1/* → 404). Defaults mirror the global ARGs.
+ARG NEXT_PUBLIC_BACKEND_URL=http://backend:8000
+ARG NEXT_PUBLIC_MCP_ENABLED=false
+ARG NEXT_PUBLIC_ADMIN_AUTH_MODE=session
+
 ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL} \
     NEXT_PUBLIC_MCP_ENABLED=${NEXT_PUBLIC_MCP_ENABLED} \
     NEXT_PUBLIC_ADMIN_AUTH_MODE=${NEXT_PUBLIC_ADMIN_AUTH_MODE}

@@ -71,8 +71,12 @@ function localInterfaceDevOrigins(): string[] {
   return out;
 }
 
+// Use `||` (not `??`) so an empty string from a misconfigured build arg never
+// produces a hostless rewrite destination (`/api/v1/:path*` → self → 404).
 const backendUrl =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_BACKEND_URL?.trim() ||
+  process.env.BACKEND_URL?.trim() ||
+  "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
