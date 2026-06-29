@@ -97,6 +97,18 @@ RUN set -e; \
     fi; \
     echo "tool-alias httpx -> $(command -v httpx || echo MISSING); testssl.sh -> $(command -v testssl.sh || echo MISSING); theharvester -> $(command -v theharvester || echo MISSING)"
 
+# argus-tool-check — diagnostic script available in EVERY profile (standard/full/binary).
+# Previously this lived only in the `binary` stage, so `docker exec argus-sandbox
+# argus-tool-check` failed with "executable file not found" whenever SANDBOX_PROFILE=standard.
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    "echo '=== ARGUS Sandbox tool check (web/recon) ==='" \
+    'for t in nmap masscan subfinder amass dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx sqlmap nikto wpscan dirsearch commix whatweb wafw00f whatwaf cors arjun theharvester sslscan testssl.sh hydra medusa crackmapexec; do' \
+    '  if command -v "$t" >/dev/null 2>&1; then echo "$t: OK"; else echo "$t: MISSING"; fi' \
+    'done' \
+    > /usr/local/bin/argus-tool-check \
+    && chmod +x /usr/local/bin/argus-tool-check
+
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
 RUN apt-get update \
@@ -163,33 +175,16 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt \
     ; rm -f /tmp/requirements.txt
 
-# Verify all tools are available
-RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
-    echo "echo '=== ARGUS Sandbox Binary Profile ==='" >> /usr/local/bin/argus-tool-check && \
-    echo "which afl-fuzz && echo 'AFL++: OK' || echo 'AFL++: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "python3 -c 'import angr; print(\"angr: OK\")' 2>/dev/null || echo 'angr: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "python3 -c 'import z3; print(\"z3: OK\")' 2>/dev/null || echo 'z3: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which r2 && echo 'radare2: OK' || echo 'radare2: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which binwalk && echo 'binwalk: OK' || echo 'binwalk: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which clang && echo 'libFuzzer: OK' || echo 'libFuzzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which jazzer_standalone && echo 'Jazzer: OK' || echo 'Jazzer: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which nmap && echo 'nmap: OK' || echo 'nmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which sqlmap && echo 'sqlmap: OK' || echo 'sqlmap: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which dalfox && echo 'dalfox: OK' || echo 'dalfox: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which xsstrike && echo 'xsstrike: OK' || echo 'xsstrike: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which httpx && echo 'httpx: OK' || echo 'httpx: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which commix && echo 'commix: OK' || echo 'commix: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which feroxbuster && echo 'feroxbuster: OK' || echo 'feroxbuster: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which wfuzz && echo 'wfuzz: OK' || echo 'wfuzz: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which whatweb && echo 'whatweb: OK' || echo 'whatweb: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which wafw00f && echo 'wafw00f: OK' || echo 'wafw00f: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which whatwaf && echo 'whatwaf: OK' || echo 'whatwaf: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which cors && echo 'corscanner: OK' || echo 'corscanner: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which arjun && echo 'arjun: OK' || echo 'arjun: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which theHarvester || which theharvester && echo 'theharvester: OK' || echo 'theharvester: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "python3 -c 'import playwright; print(\"Playwright: OK\")' 2>/dev/null || echo 'Playwright: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    echo "which chromium-browser || which chromium || echo 'Chromium: MISSING'" >> /usr/local/bin/argus-tool-check && \
-    chmod +x /usr/local/bin/argus-tool-check
+# Append binary-profile extras to the argus-tool-check created in the standard stage.
+RUN printf '%s\n' \
+    "echo '=== binary profile extras (fuzzing/symbolic/reverse) ==='" \
+    'for t in afl-fuzz r2 binwalk clang jazzer jazzer_standalone; do' \
+    '  if command -v "$t" >/dev/null 2>&1; then echo "$t: OK"; else echo "$t: MISSING"; fi' \
+    'done' \
+    'python3 -c "import angr; print(\"angr: OK\")" 2>/dev/null || echo "angr: MISSING"' \
+    'python3 -c "import z3; print(\"z3: OK\")" 2>/dev/null || echo "z3: MISSING"' \
+    'python3 -c "import playwright; print(\"playwright: OK\")" 2>/dev/null || echo "playwright: MISSING"' \
+    >> /usr/local/bin/argus-tool-check
 
 # Final image selector — picks the profile specified by SANDBOX_PROFILE arg
 FROM ${SANDBOX_PROFILE} AS final
@@ -198,7 +193,7 @@ FROM ${SANDBOX_PROFILE} AS final
 RUN mkdir -p /workspace/artifacts /tmp/argus-sandbox && chown -R argus:argus /workspace /tmp/argus-sandbox
 
 # Security hardening
-RUN echo "argus ALL=(ALL) NOPASSWD: /usr/bin/argus-tool-check" > /etc/sudoers.d/argus
+RUN echo "argus ALL=(ALL) NOPASSWD: /usr/local/bin/argus-tool-check" > /etc/sudoers.d/argus
 
 WORKDIR /workspace
 USER argus
