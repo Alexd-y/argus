@@ -563,6 +563,13 @@ services:
         APP_PORT: "5000"
     image: argus-frontend
     container_name: argus-frontend
+    # Profile-gated: the public UI is normally served on :5000 by the host (systemd
+    # Next.js standalone), so a plain `docker compose up` must NOT start this container
+    # — it would collide on host port 5000 (restart: always made it retry forever).
+    # Start the containerized frontend explicitly only when the host port is free:
+    #   docker compose --profile frontend up -d frontend
+    profiles:
+      - frontend
     restart: always
     environment:
       PORT: "5000"
