@@ -1950,7 +1950,27 @@ async def run_vuln_analysis(
                         )
 
         if agent_findings_map:
-            llm_output.exploitation_queues = agent_findings_map
+            # Build typed ExploitationQueue objects (one per domain) so the field
+            # matches its declared ``dict[str, ExploitationQueue]`` type. Assigning
+            # raw ``list[dict]`` here triggered a Pydantic serialization warning
+            # (PydanticSerializationUnexpectedValue) on every VulnAnalysisOutput dump.
+            from src.orchestration.exploitation_queue import ExploitationQueue
+
+            typed_queues: dict[str, ExploitationQueue] = {}
+            for _domain_key, _domain_findings in agent_findings_map.items():
+                try:
+                    typed_queues[_domain_key] = ExploitationQueue.from_vuln_analysis_output(
+                        target=target or "unknown",
+                        findings=_domain_findings,
+                        scan_id=scan_id or "",
+                    )
+                except Exception as _queue_exc:
+                    logger.debug(
+                        "exploitation_queue_build_failed",
+                        extra={"domain": _domain_key, "error": str(_queue_exc)},
+                    )
+            if typed_queues:
+                llm_output.exploitation_queues = typed_queues
     except Exception as va_exc:
         logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
 

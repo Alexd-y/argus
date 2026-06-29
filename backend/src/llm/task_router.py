@@ -36,6 +36,7 @@ class LLMTier(Enum):
 class LLMTask(Enum):
     EXECUTIVE_SUMMARY = "executive_summary"
     THREAT_MODELING = "threat_modeling"
+    VULN_ANALYSIS = "vuln_analysis"
     EXPLOIT_GENERATION = "exploit_generation"
     VALIDATION_ONESHOT = "validation_oneshot"
     REMEDIATION_PLAN = "remediation_plan"
@@ -51,6 +52,7 @@ class LLMTask(Enum):
 _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.ORCHESTRATION: "planner",
     LLMTask.THREAT_MODELING: "planner",
+    LLMTask.VULN_ANALYSIS: "planner",
     LLMTask.VALIDATION_ONESHOT: "planner",
     LLMTask.DEDUP_ANALYSIS: "planner",
     LLMTask.ZERO_DAY_ANALYSIS: "planner",
@@ -144,6 +146,16 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_model="anthropic/claude-3.5-sonnet",
         max_tokens=2000,
         temperature=0.4,
+    ),
+    LLMTask.VULN_ANALYSIS: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-reasoner",
+        fallback_env_key="OPENROUTER_API_KEY",
+        fallback_base_url="https://openrouter.ai/api",
+        fallback_model="anthropic/claude-3.5-sonnet",
+        max_tokens=2000,
+        temperature=0.3,
     ),
     LLMTask.EXPLOIT_GENERATION: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
@@ -252,6 +264,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
 TASK_TIERS: dict[LLMTask, dict[str, Any]] = {
     LLMTask.EXECUTIVE_SUMMARY: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
     LLMTask.THREAT_MODELING: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.VULN_ANALYSIS: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
     LLMTask.EXPLOIT_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
     LLMTask.VALIDATION_ONESHOT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
     LLMTask.REMEDIATION_PLAN: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},

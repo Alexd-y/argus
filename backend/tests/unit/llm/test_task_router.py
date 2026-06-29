@@ -25,6 +25,7 @@ VALID_ROLES = {"planner", "code", "osint", "report"}
 EXPECTED_ROLE_MAP: dict[LLMTask, str] = {
     LLMTask.ORCHESTRATION: "planner",
     LLMTask.THREAT_MODELING: "planner",
+    LLMTask.VULN_ANALYSIS: "planner",
     LLMTask.VALIDATION_ONESHOT: "planner",
     LLMTask.DEDUP_ANALYSIS: "planner",
     LLMTask.ZERO_DAY_ANALYSIS: "planner",
@@ -61,10 +62,11 @@ class TestLLMTaskEnum:
         assert LLMTask.ORCHESTRATION.value == "orchestration"
         assert LLMTask.POC_GENERATION.value == "poc_generation"
         assert LLMTask.COST_SUMMARY.value == "cost_summary"
+        assert LLMTask.VULN_ANALYSIS.value == "vuln_analysis"
 
-    def test_task_count_is_12(self):
+    def test_task_count_is_13(self):
         tasks = list(LLMTask)
-        assert len(tasks) == 12
+        assert len(tasks) == 13
 
 
 class TestTaskToRoleMapping:

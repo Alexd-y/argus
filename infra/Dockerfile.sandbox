@@ -34,14 +34,26 @@ RUN groupadd -g 1000 argus && useradd -m -u 1000 -g 1000 -s /bin/bash argus
 
 # ---- Standard profile: web/network/cloud/browser tools ----
 FROM base AS standard
+# Full web/VA tool coverage so the active-scan planner never logs tool_not_found:
+# fingerprinting (whatweb), fuzzing (ffuf/wfuzz/feroxbuster/gobuster/dirsearch),
+# injection (sqlmap/commix), WAF detection (wafw00f), parameter discovery (arjun),
+# AD/SMB (crackmapexec/impacket/enum4linux-ng), OSINT (theharvester).
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    nmap masscan subfinder amass dnsrecon gobuster ffuf nuclei httpx-toolkit \
-    sqlmap nikto wpscan dirsearch \
+    nmap masscan subfinder amass dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx-toolkit \
+    sqlmap nikto wpscan dirsearch commix \
+    whatweb wafw00f arjun theharvester enum4linux-ng \
     hydra medusa crackmapexec impacket-scripts smbclient \
     sslscan testssl.sh \
     jq whois \
     && rm -rf /var/lib/apt/lists/*
+
+# Python-only tools not packaged in Kali apt:
+#   whatwaf      — WAF/IDS detection & bypass (planner waf_detection)
+#   corscanner   — CORS misconfiguration scanner, installs the `cors` binary
+#   bloodhound   — provides `bloodhound-python` for AD collection (exploitation phase)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    whatwaf corscanner bloodhound
 
 # dalfox (Go binary — not in Kali apt, download pre-built release)
 RUN DALFOX_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/hahwul/dalfox/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
@@ -71,7 +83,11 @@ RUN set -e; \
       [ -z "$t" ] && [ -x /usr/share/testssl.sh/testssl.sh ] && t=/usr/share/testssl.sh/testssl.sh || true; \
       [ -n "$t" ] && ln -sf "$t" /usr/local/bin/testssl.sh || true; \
     fi; \
-    echo "tool-alias httpx -> $(command -v httpx || echo MISSING); testssl.sh -> $(command -v testssl.sh || echo MISSING)"
+    if ! command -v theharvester >/dev/null 2>&1; then \
+      t=$(command -v theHarvester 2>/dev/null || true); \
+      [ -n "$t" ] && ln -sf "$t" /usr/local/bin/theharvester || true; \
+    fi; \
+    echo "tool-alias httpx -> $(command -v httpx || echo MISSING); testssl.sh -> $(command -v testssl.sh || echo MISSING); theharvester -> $(command -v theharvester || echo MISSING)"
 
 # ---- Full profile: standard + metasploit ----
 FROM standard AS full
@@ -145,6 +161,13 @@ RUN echo "#!/bin/sh" > /usr/local/bin/argus-tool-check && \
     echo "which dalfox && echo 'dalfox: OK' || echo 'dalfox: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which xsstrike && echo 'xsstrike: OK' || echo 'xsstrike: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which httpx && echo 'httpx: OK' || echo 'httpx: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which commix && echo 'commix: OK' || echo 'commix: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which feroxbuster && echo 'feroxbuster: OK' || echo 'feroxbuster: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which wfuzz && echo 'wfuzz: OK' || echo 'wfuzz: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which whatweb && echo 'whatweb: OK' || echo 'whatweb: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which wafw00f && echo 'wafw00f: OK' || echo 'wafw00f: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which arjun && echo 'arjun: OK' || echo 'arjun: MISSING'" >> /usr/local/bin/argus-tool-check && \
+    echo "which theHarvester || which theharvester && echo 'theharvester: OK' || echo 'theharvester: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "python3 -c 'import playwright; print(\"Playwright: OK\")' 2>/dev/null || echo 'Playwright: MISSING'" >> /usr/local/bin/argus-tool-check && \
     echo "which chromium-browser || which chromium || echo 'Chromium: MISSING'" >> /usr/local/bin/argus-tool-check && \
     chmod +x /usr/local/bin/argus-tool-check

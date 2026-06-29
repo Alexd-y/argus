@@ -22,10 +22,12 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import logging
+import os
 import warnings
 
 import httpx
 
+from src.llm.adapters import _get_key
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.task_router import LLMTask
 from src.llm.task_router import call_llm_for_task as _task_router_call
@@ -55,6 +57,37 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset({
     LLMTask.COST_SUMMARY,
     LLMTask.PERPLEXITY_OSINT,
 })
+
+# Tasks that PREFER a cloud model: exploit/PoC payload generation requires strict,
+# valid-JSON output. The local WRB-7B frequently emits malformed payload JSON
+# (`wrb_payload_generation_failed`); cloud models honour the "return ONLY JSON"
+# contract far more reliably. WRB stays the engine for every analysis task.
+# Behaviour is controlled by ARGUS_EXPLOIT_LLM: ``auto`` (cloud when a key exists,
+# else WRB), ``cloud`` (force cloud, error if no key), ``wrb`` (legacy WRB-only).
+_CLOUD_PREFERRED_TASKS: frozenset[LLMTask] = frozenset({
+    LLMTask.EXPLOIT_GENERATION,
+    LLMTask.POC_GENERATION,
+})
+
+_CLOUD_KEY_ENVS: tuple[str, ...] = (
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "KIMI_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "GOOGLE_API_KEY",
+)
+
+
+def _exploit_llm_mode() -> str:
+    """Resolve ARGUS_EXPLOIT_LLM routing mode for exploit/payload tasks."""
+    val = (os.environ.get("ARGUS_EXPLOIT_LLM") or "auto").strip().lower()
+    return val if val in ("auto", "cloud", "wrb") else "auto"
+
+
+def _any_cloud_key_configured() -> bool:
+    """True when at least one cloud provider API key is present in the environment."""
+    return any(_get_key(k) for k in _CLOUD_KEY_ENVS)
 
 
 def _count_tokens_tiktoken(text: str) -> int:
@@ -232,6 +265,35 @@ async def call_llm_unified(
             system_prompt, user_prompt, task,
             scan_id=scan_id, phase=phase,
         )
+
+    # Exploit / PoC payload generation — prefer a cloud model for valid-JSON output.
+    if task in _CLOUD_PREFERRED_TASKS:
+        mode = _exploit_llm_mode()
+        if mode != "wrb" and _any_cloud_key_configured():
+            try:
+                return await _call_via_task_router(
+                    system_prompt, user_prompt, task,
+                    scan_id=scan_id, phase=phase,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "exploit_cloud_llm_failed",
+                    extra={
+                        "event": "exploit_cloud_llm_failed",
+                        "task": task.value,
+                        "phase": phase,
+                        "error": str(exc),
+                    },
+                )
+                if mode == "cloud":
+                    raise
+                # mode == "auto": fall through to WhiteRabbitNeo below.
+        elif mode == "cloud":
+            raise RuntimeError(
+                f"ARGUS_EXPLOIT_LLM=cloud requires a cloud provider API key for task "
+                f"{task.value}, but none is configured. Set one of "
+                f"{', '.join(_CLOUD_KEY_ENVS)} or use ARGUS_EXPLOIT_LLM=auto."
+            )
 
     # WhiteRabbitNeo configured: use it first for ALL non-OSINT tasks
     if wrb.is_configured:
