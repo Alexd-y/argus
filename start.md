@@ -7,6 +7,14 @@
 - **Docker Desktop** (включён WSL2 backend — так надёжнее для `docker.sock` и образов).
 - **Node.js** (для UI), если хотите открыть веб-клиент с хоста.
 
+> ⚠️ **ARGUS требует rootful Docker Engine.** Worker'ы монтируют `/var/run/docker.sock`
+> и запускают тулзы через `docker exec argus-sandbox …`. Rootless Docker и **Podman**
+> (rootless / `podman system service`) **не поддерживаются**: из-за user-namespace
+> remap сокет внутри контейнера принадлежит `nobody` (65534), `docker exec` падает с
+> `permission denied`, и весь пентест заканчивается ошибками `tool_not_found` /
+> `va_active_scan_docker_exec_failed`. На Linux/EC2 проверьте `docker info | grep -i rootless`
+> (должно быть пусто) и при необходимости поставьте Docker Engine, а не Podman.
+
 ---
 
 ## 1. Окружение Compose

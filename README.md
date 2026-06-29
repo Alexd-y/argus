@@ -23,6 +23,14 @@ Automated penetration testing platform combining AI-driven analysis with traditi
 
 ## Quick Start
 
+> **Requires a rootful Docker Engine.** Workers mount `/var/run/docker.sock` and run
+> tools via `docker exec argus-sandbox …`. Rootless Docker and Podman (rootless or
+> `podman system service`) are **not supported** — user-namespace remapping makes the
+> mounted socket appear as `nobody` inside the container, so `docker exec` fails with
+> permission denied and scans end with `tool_not_found` /
+> `va_active_scan_docker_exec_failed`. Verify with `docker info | grep -i rootless`
+> (must be empty); install Docker Engine instead of Podman on Linux/EC2.
+
 ```bash
 # Clone and configure
 cp infra/.env.example infra/.env
