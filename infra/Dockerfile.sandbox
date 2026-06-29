@@ -48,11 +48,16 @@ RUN apt-get update \
     jq whois \
     && rm -rf /var/lib/apt/lists/*
 
-# Python-only tools not packaged in Kali apt:
-#   corscanner   — CORS misconfiguration scanner, exposes the `cors` binary (planner cors_testing)
-#   bloodhound   — provides `bloodhound-python` for AD collection (exploitation phase)
+# bloodhound — provides `bloodhound-python` for AD collection (exploitation phase).
+RUN pip3 install --no-cache-dir --break-system-packages bloodhound
+
+# corscanner — CORS misconfiguration scanner; the planner (cors_testing deep mode) invokes it
+# as the `cors` binary. The PyPI `corscanner` package does NOT register the `cors` console_script,
+# so install from upstream Git where setup.py declares `cors = CORScanner.cors_scan:main`, then
+# fail the build if the entry point is somehow missing.
 RUN pip3 install --no-cache-dir --break-system-packages \
-    corscanner bloodhound
+    "git+https://github.com/chenjj/CORScanner.git"
+RUN command -v cors >/dev/null 2>&1 || { echo "ERROR: cors binary not on PATH after CORScanner install"; exit 1; }
 
 # whatwaf — WAF/IDS detection & bypass (planner deep-mode waf_detection). It is NOT published
 # to PyPI, and its upstream setup.py prompts interactively (raw_input) when executed as root,
