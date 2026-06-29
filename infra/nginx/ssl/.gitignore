@@ -1,0 +1,6 @@
+# TLS material for the nginx HTTPS admin console.
+# Private keys and certificates are environment-specific and MUST NOT be
+# committed. This directory is kept in git (mount target) but its contents
+# are ignored.
+*
+!.gitignore

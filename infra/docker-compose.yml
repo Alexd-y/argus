@@ -639,6 +639,9 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      # TLS material for the HTTPS admin console (self-signed or CA). Generated
+      # on the host into infra/nginx/ssl; never committed (see ssl/.gitignore).
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     networks:
       - frontend
       - backend

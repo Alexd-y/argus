@@ -16,6 +16,14 @@ upstream argus_backend {
     keepalive 32;
 }
 
+# Admin console (Next.js standalone). Reached only over the TLS server block
+# below: the admin session cookie is Secure, so the browser persists it solely
+# on an HTTPS origin.
+upstream argus_admin_frontend {
+    server admin-frontend:6100;
+    keepalive 32;
+}
+
 limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/s;
 
@@ -172,56 +180,54 @@ ${ARGUS_PROXY_API_KEY_HEADER}
     }
 }
 
-# ── TLS Configuration (uncomment for production) ─────────────────────
-# Setup checklist:
-#   1. Obtain TLS certs (Let's Encrypt, Cloudflare Origin, or internal CA)
-#   2. Mount certs into the container via docker-compose volumes:
-#        - ./nginx/ssl/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-#        - ./nginx/ssl/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
-#   3. Set ARGUS_SERVER_NAME in .env (e.g. argus.example.com)
-#   4. Uncomment the server block below
-#   5. Optionally add port-80 redirect: return 301 https://$host$request_uri;
+# ── TLS termination for the Admin console (HTTPS) ────────────────────
+# Terminates TLS and reverse-proxies the whole Next.js admin app
+# (admin-frontend:6100): pages, server actions, static assets, and the
+# built-in /api/v1/* → backend rewrite. This block is the supported entry
+# point for the admin console on a public host: the backend mints the
+# session cookie with Secure+HttpOnly+SameSite=Strict, which browsers only
+# persist on an HTTPS origin — plain HTTP on :6100 silently drops it and the
+# console falls back to "Access denied".
 #
-# server {
-#     listen 443 ssl http2;
-#     server_name ${ARGUS_SERVER_NAME};
-#
-#     ssl_certificate     /etc/nginx/ssl/fullchain.pem;
-#     ssl_certificate_key /etc/nginx/ssl/privkey.pem;
-#     ssl_protocols       TLSv1.2 TLSv1.3;
-#     ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
-#     ssl_prefer_server_ciphers off;
-#     ssl_session_cache   shared:SSL:10m;
-#     ssl_session_timeout 10m;
-#     ssl_session_tickets off;
-#
-#     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-#
-#     # Same locations as port-80 block above (CORS via $cors_allow_origin map)
-#     location /api/ {
-#         limit_req zone=api burst=50 nodelay;
-#
-#         add_header Access-Control-Allow-Origin  $cors_allow_origin always;
-#         add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
-#         add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
-#         add_header Access-Control-Max-Age       "7200" always;
-#
-#         if ($request_method = OPTIONS) {
-#             return 204;
-#         }
-#
-#         proxy_pass http://argus_backend;
-#         proxy_set_header Host              $host;
-#         proxy_set_header X-Real-IP         $remote_addr;
-#         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-#         proxy_set_header X-Forwarded-Proto $scheme;
-#     }
-#
-#     location /health {
-#         proxy_pass http://argus_backend/api/v1/health;
-#     }
-#
-#     location / {
-#         return 404;
-#     }
-# }
+# Cert material is mounted read-only from infra/nginx/ssl (see compose).
+# Generate a self-signed pair before the first start (nginx -t fails fast in
+# the entrypoint if the files are missing):
+#   openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+#     -keyout infra/nginx/ssl/privkey.pem -out infra/nginx/ssl/fullchain.pem \
+#     -subj "/CN=argus-admin" -addext "subjectAltName=IP:<public-ip>"
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name _;
+
+    client_max_body_size 50m;
+
+    ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options        "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy        "strict-origin-when-cross-origin" always;
+
+    access_log /var/log/nginx/argus_tls_access.log;
+    error_log  /var/log/nginx/argus_tls_error.log warn;
+
+    location / {
+        proxy_pass         http://argus_admin_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 10s;
+    }
+}
