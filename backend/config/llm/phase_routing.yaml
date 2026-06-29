@@ -1,0 +1,64 @@
+# Phase-aware LLM routing (ARGUS in-process router).
+#
+# Activation: set ARGUS_PHASE_ROUTING_ENABLED=true. When disabled (default),
+# facade.call_llm_unified keeps the legacy behaviour (WhiteRabbitNeo-first for
+# analysis tasks, cloud for report/OSINT, cloud-preferred for exploit/payload).
+#
+# Per phase:
+#   primary_alias    label from the alias registry (model_aliases.py) — telemetry/intent
+#   mode             where the primary call runs: "cloud" | "wrb"
+#   fallback         on primary failure: "cloud" | "wrb" | "none"
+#   reviewer_alias   optional second-pass reviewer/judge (see B4); "argus-judge"
+#                    maps to the adversarial critic, not a provider
+#   evidence_contract  digest contract fed to the model (see evidence_contracts.py)
+#   degrade          strategy hint applied under budget/latency pressure
+#
+# Rationale (offload WhiteRabbitNeo from the hot path): recon/threat/vuln/report
+# run on cloud reasoners; exploitation/post-exploitation stay local-first on WRB
+# (offsec bias) with cloud fallback.
+version: 2026-06-argus-routing-v1
+
+phases:
+  recon:
+    primary_alias: argus-planner-fast
+    mode: cloud
+    fallback: wrb
+    evidence_contract: recon_digest_v1
+    degrade: use_primary_only
+
+  threat_modeling:
+    primary_alias: argus-planner-deep
+    mode: cloud
+    fallback: wrb
+    reviewer_alias: argus-devsecops-local
+    evidence_contract: threat_model_input_v1
+    degrade: drop_review_first
+
+  vuln_analysis:
+    primary_alias: argus-planner-deep
+    mode: cloud
+    fallback: wrb
+    reviewer_alias: argus-judge
+    evidence_contract: vuln_evidence_pack_v2
+    degrade: fast_without_review
+
+  exploitation:
+    primary_alias: argus-devsecops-local
+    mode: wrb
+    fallback: cloud
+    evidence_contract: exploit_candidate_pack_v1
+    degrade: local_only
+
+  post_exploitation:
+    primary_alias: argus-devsecops-local
+    mode: wrb
+    fallback: cloud
+    evidence_contract: post_exploit_impact_pack_v1
+    degrade: skip_review
+
+  reporting:
+    primary_alias: argus-report
+    mode: cloud
+    fallback: wrb
+    evidence_contract: report_section_input_v1
+    degrade: concise_mode

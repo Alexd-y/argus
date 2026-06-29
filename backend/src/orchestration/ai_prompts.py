@@ -328,6 +328,46 @@ async def ai_vuln_analysis(
         return VulnAnalysisOutput(findings=[])
 
 
+def _normalize_exploit_candidates(
+    exploits: list[Any], findings: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Backfill finding_id/target on LLM exploit candidates so PoC verification can link
+    and probe them. The model frequently omits these; we map them from the input findings
+    (by explicit finding_id match, else positionally) and from common target aliases.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for f in findings:
+        fid = str(f.get("finding_id") or f.get("id") or "")
+        if fid:
+            by_id.setdefault(fid, f)
+
+    normalized: list[dict[str, Any]] = []
+    for idx, raw in enumerate(exploits):
+        if not isinstance(raw, dict):
+            continue
+        exp = dict(raw)
+        fid = str(exp.get("finding_id") or "")
+        source = by_id.get(fid)
+        if source is None and idx < len(findings) and isinstance(findings[idx], dict):
+            source = findings[idx]
+        if not fid and source is not None:
+            fid = str(source.get("finding_id") or source.get("id") or "")
+            if fid:
+                exp["finding_id"] = fid
+        if not exp.get("target"):
+            exp["target"] = str(
+                exp.get("target")
+                or exp.get("url")
+                or exp.get("poc_url")
+                or (source.get("url") if source else "")
+                or (source.get("affected_url") if source else "")
+                or (source.get("location") if source else "")
+                or ""
+            )
+        normalized.append(exp)
+    return normalized
+
+
 async def ai_exploitation(
     inp: ExploitationInput, *, use_react: bool = False, scan_id: str | None = None
 ) -> ExploitationOutput:
@@ -348,12 +388,26 @@ async def ai_exploitation(
                 data = _parse_llm_json(_react_result.answer)
                 if data and isinstance(data.get("exploits"), list):
                     return ExploitationOutput(
-                        exploits=data.get("exploits", []),
+                        exploits=_normalize_exploit_candidates(
+                            data.get("exploits", []), inp.findings
+                        ),
                         evidence=data.get("evidence", []),
                     )
             except Exception:
                 pass
-        system, user = _get_phase_prompt(EXPLOITATION, findings=inp.findings)
+        # Feed a compact evidence pack instead of raw findings when phase routing
+        # is enabled (reduces prompt noise / hallucination pressure).
+        _prompt_findings = inp.findings
+        try:
+            from src.llm.phase_routing import is_enabled as _routing_enabled
+
+            if _routing_enabled():
+                from src.llm.evidence_contracts import build_exploit_candidate_pack
+
+                _prompt_findings = build_exploit_candidate_pack(inp.findings)["candidates"]
+        except Exception:
+            _prompt_findings = inp.findings
+        system, user = _get_phase_prompt(EXPLOITATION, findings=_prompt_findings)
         data = _require_json(
             await _call_llm_with_json_retry(EXPLOITATION, user, system, scan_id=scan_id),
             EXPLOITATION,
@@ -361,7 +415,7 @@ async def ai_exploitation(
         if not isinstance(data.get("exploits"), list):
             raise RuntimeError(f"LLM returned invalid response for {EXPLOITATION}")
         return ExploitationOutput(
-            exploits=data.get("exploits", []),
+            exploits=_normalize_exploit_candidates(data.get("exploits", []), inp.findings),
             evidence=data.get("evidence", []),
         )
     except Exception:

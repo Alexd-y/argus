@@ -1,6 +1,41 @@
 # ARGUS LLM Gateway
 
-## 1. Architecture Overview
+> Implementation status (2026-06): the standalone gateway service described below is
+> built (`src/llm_gateway/`) but **disabled by default** (Helm `llmGateway.enabled: false`,
+> not in docker-compose). In production the scan pipeline routes **in-process** through
+> `src/llm/facade.py`, which calls WhiteRabbitNeo (`whiterabbitneo_adapter.py`) and cloud
+> providers (`task_router.py`) directly — it does **not** currently make an HTTP hop to the
+> gateway. The diagram below is the target topology; see "In-process phase-aware routing"
+> for what runs today.
+
+## 0. In-process phase-aware routing (current default path)
+
+`facade.call_llm_unified(phase=..., task=...)` resolves a per-phase execution plan from
+[`backend/config/llm/phase_routing.yaml`](../backend/config/llm/phase_routing.yaml) via
+`src/llm/phase_routing.py`:
+
+- Activation: `ARGUS_PHASE_ROUTING_ENABLED=true` (default `false` -> legacy WRB-first
+  routing, fully backward compatible).
+- Per phase the YAML defines `primary_alias`, `mode` (`cloud`|`wrb`), `fallback`
+  (`cloud`|`wrb`|`none`), optional `reviewer_alias`, `evidence_contract`, and `degrade`.
+  Alias labels are validated against the in-code registry (`model_aliases.py`).
+- Execution reuses the existing cloud `task_router` and the WRB adapter (and their API-key
+  plumbing); the router only decides ordering. On primary failure it walks the configured
+  fallback.
+- Telemetry: chosen alias, `fallback_used`, and `latency_ms` are attached to the per-scan
+  `ScanCostTracker` records and emitted as the `llm_phase_routing` structured log event.
+- Evidence packs: when enabled, compact digests from `src/llm/evidence_contracts.py`
+  (e.g. `exploit_candidate_pack_v1`, `vuln_evidence_pack_v2`) replace raw tool dumps in the
+  prompt for the relevant phases.
+- Reviewer/judge: a config-gated, idempotent second pass (reusing the adversarial critic)
+  runs for phases whose route declares a `reviewer_alias` (currently `vuln_analysis`).
+
+Default routing offloads WhiteRabbitNeo from the hot path: `recon`/`threat_modeling`/
+`vuln_analysis`/`reporting` run on cloud reasoners, while `exploitation`/`post_exploitation`
+stay local-first on WRB with cloud fallback. Headers `X-Argus-Model-Alias`/`X-Argus-Policy`
+referenced in older drafts are **not** implemented; the in-process resolver replaces them.
+
+## 1. Architecture Overview (target: standalone gateway service)
 
 The LLM Gateway is a standalone FastAPI service that provides an OpenAI-compatible API for
 multi-model orchestration. It sits between ARGUS application code and LLM backends,

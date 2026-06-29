@@ -23,11 +23,13 @@ import asyncio
 import concurrent.futures
 import logging
 import os
+import time
 import warnings
 
 import httpx
 
 from src.llm.adapters import _get_key
+from src.llm.phase_routing import PhaseRoute, get_phase_route
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.task_router import LLMTask
 from src.llm.task_router import call_llm_for_task as _task_router_call
@@ -206,6 +208,110 @@ async def _call_via_task_router(
     return response.text
 
 
+def _annotate_last_cost_record(
+    scan_id: str | None, alias: str, fallback_used: bool, latency_ms: int
+) -> None:
+    """Best-effort: attach routing telemetry to the most recent cost record."""
+    if not scan_id:
+        return
+    try:
+        from src.llm.cost_tracker import get_tracker
+
+        tracker = get_tracker(scan_id)
+        if tracker.calls:
+            rec = tracker.calls[-1]
+            rec.alias = alias
+            rec.fallback_used = fallback_used
+            rec.latency_ms = latency_ms
+    except Exception:  # pragma: no cover — telemetry must never break the call path
+        pass
+
+
+async def _execute_phase_route(
+    route: PhaseRoute,
+    system_prompt: str,
+    user_prompt: str,
+    task: LLMTask,
+    *,
+    scan_id: str | None,
+    phase: str,
+) -> str:
+    """Execute a phase-routed LLM call: primary (cloud|wrb) with optional fallback.
+
+    Reuses the existing cloud task_router and WRB adapter (and their key plumbing);
+    this only decides ordering per ``phase_routing.yaml``. Telemetry (chosen alias,
+    fallback usage, latency) is recorded on the per-scan cost tracker.
+    """
+    wrb = _get_wrb_adapter()
+    started = time.monotonic()
+    chosen_alias = route.primary_alias or route.mode
+    fallback_used = False
+
+    async def _run_cloud() -> str:
+        return await _call_via_task_router(
+            system_prompt, user_prompt, task, scan_id=scan_id, phase=phase
+        )
+
+    async def _run_wrb() -> str:
+        async with _get_wrb_semaphore():
+            return await _call_via_whiterabbitneo(
+                system_prompt, user_prompt, task=task, scan_id=scan_id, phase=phase
+            )
+
+    def _primary_available() -> bool:
+        return _any_cloud_key_configured() if route.mode == "cloud" else wrb.is_configured
+
+    try:
+        if not _primary_available():
+            raise RuntimeError(f"phase route primary '{route.mode}' unavailable")
+        text = await (_run_cloud() if route.mode == "cloud" else _run_wrb())
+    except Exception as exc:
+        if route.fallback == "none":
+            _annotate_last_cost_record(
+                scan_id, chosen_alias, False, int((time.monotonic() - started) * 1000)
+            )
+            raise
+        logger.warning(
+            "phase_route_primary_failed",
+            extra={
+                "event": "phase_route_primary_failed",
+                "phase": phase,
+                "primary_alias": route.primary_alias,
+                "mode": route.mode,
+                "fallback": route.fallback,
+                "error": str(exc),
+            },
+        )
+        fallback_used = True
+        if route.fallback == "cloud":
+            if not _any_cloud_key_configured():
+                raise
+            text = await _run_cloud()
+            chosen_alias = f"{route.primary_alias}->cloud_fallback"
+        else:  # wrb
+            if not wrb.is_configured:
+                raise
+            text = await _run_wrb()
+            chosen_alias = f"{route.primary_alias}->wrb_fallback"
+
+    latency_ms = int((time.monotonic() - started) * 1000)
+    _annotate_last_cost_record(scan_id, chosen_alias, fallback_used, latency_ms)
+    logger.info(
+        "llm_phase_routing",
+        extra={
+            "event": "llm_phase_routing",
+            "phase": phase,
+            "primary_alias": route.primary_alias,
+            "mode": route.mode,
+            "chosen_alias": chosen_alias,
+            "fallback_used": fallback_used,
+            "latency_ms": latency_ms,
+            "evidence_contract": route.evidence_contract,
+        },
+    )
+    return text
+
+
 async def call_llm_unified(
     system_prompt: str,
     user_prompt: str,
@@ -263,6 +369,16 @@ async def call_llm_unified(
     if task == LLMTask.PERPLEXITY_OSINT:
         return await _call_via_task_router(
             system_prompt, user_prompt, task,
+            scan_id=scan_id, phase=phase,
+        )
+
+    # Phase-aware routing (opt-in via ARGUS_PHASE_ROUTING_ENABLED). When a route
+    # exists for this phase, it fully governs primary/fallback ordering and
+    # supersedes the legacy WRB-first / cloud-preferred blocks below.
+    _route = get_phase_route(phase)
+    if _route is not None:
+        return await _execute_phase_route(
+            _route, system_prompt, user_prompt, task,
             scan_id=scan_id, phase=phase,
         )
 

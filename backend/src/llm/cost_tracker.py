@@ -73,6 +73,10 @@ class LLMCallRecord:
     completion_tokens: int
     cost_usd: float
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Phase-aware routing telemetry (optional; populated when routing is active).
+    alias: str = ""
+    fallback_used: bool = False
+    latency_ms: int = 0
 
 
 class ScanCostTracker:
@@ -92,6 +96,10 @@ class ScanCostTracker:
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
+        *,
+        alias: str = "",
+        fallback_used: bool = False,
+        latency_ms: int = 0,
     ) -> float:
         """Record an LLM call and return its cost. Raises ScanBudgetExceededError if budget blown."""
         cost = calc_cost(model, prompt_tokens, completion_tokens)
@@ -103,6 +111,9 @@ class ScanCostTracker:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 cost_usd=cost,
+                alias=alias,
+                fallback_used=fallback_used,
+                latency_ms=latency_ms,
             )
         )
         # ARG-041 — emit token counters (defensive: never break the call path).

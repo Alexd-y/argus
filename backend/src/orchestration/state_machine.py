@@ -1003,11 +1003,16 @@ async def run_scan_state_machine(
 
                     try:
                         from src.orchestration.exploitation_queue import ExploitationQueue as _EQ, ExploitHypothesis as _EH
-                        exploitation_queue = _EQ.from_vuln_analysis_output(vuln_out)
+                        exploitation_queue = _EQ.from_vuln_analysis_output(
+                            target=target or "",
+                            findings=findings,
+                            scan_id=scan_id or "",
+                        )
                         # Merge CWE-agent hypotheses into the queue
                         for _hyp_dict in (vuln_out.hypotheses or []):
                             try:
                                 _hyp = _EH(
+                                    finding_id=str(_hyp_dict.get("finding_id") or _hyp_dict.get("id") or ""),
                                     vuln_type=_hyp_dict.get("vuln_type", "unknown"),
                                     location=_hyp_dict.get("location", "unknown"),
                                     method=_hyp_dict.get("method", "GET"),

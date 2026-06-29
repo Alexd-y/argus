@@ -2122,7 +2122,79 @@ async def run_vuln_analysis(
         except Exception as _fo_exc:
             logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
 
+    # Re-assign stable finding ids after ALL late appends (aiml/fuzzing/binary/
+    # sub-agent/fanout). The first pass at line ~1830 runs before these appends,
+    # so without this, late findings reach exploitation/verification without a
+    # finding_id and get dropped ("Exploit candidate missing finding_id").
+    # Idempotent: recomputation yields identical ids for already-tagged findings.
+    assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
+
+    # Optional reviewer/judge pass (config-gated via phase routing). Advisory only:
+    # annotates output metadata, never mutates/drops findings (idempotent).
+    await _maybe_run_phase_reviewer(
+        "vuln_analysis", llm_output, scan_id=scan_id
+    )
+
     return llm_output
+
+
+async def _maybe_run_phase_reviewer(
+    phase: str,
+    output: "VulnAnalysisOutput",
+    *,
+    scan_id: str | None,
+) -> None:
+    """Run an idempotent reviewer/judge pass when the phase route defines one.
+
+    Reuses the existing adversarial critic. Gated by ARGUS_PHASE_ROUTING_ENABLED and
+    a ``reviewer_alias`` in phase_routing.yaml for *phase*. Advisory: stores a compact
+    summary under ``output.active_injection_coverage['phase_review']`` and never raises.
+    """
+    try:
+        from src.llm.phase_routing import get_phase_route
+
+        route = get_phase_route(phase)
+        if route is None or not route.reviewer_alias:
+            return
+        findings = list(output.findings or [])
+        if not findings:
+            return
+
+        from src.llm.facade import call_llm_unified
+        from src.llm.task_router import LLMTask
+        from src.orchestration.adversarial_critic import run_adversarial_critic
+
+        async def _executor(system_prompt: str, user_prompt: str) -> dict[str, str]:
+            text = await call_llm_unified(
+                system_prompt,
+                user_prompt,
+                task=LLMTask.VALIDATION_ONESHOT,
+                scan_id=scan_id,
+                phase=f"{phase}_review",
+            )
+            return {"content": text or ""}
+
+        result = await run_adversarial_critic(findings, llm_executor=_executor)
+        if not isinstance(output.active_injection_coverage, dict):
+            return
+        output.active_injection_coverage["phase_review"] = {
+            "reviewer_alias": route.reviewer_alias,
+            "findings_reviewed": getattr(result, "findings_reviewed", 0),
+            "critiques": len(getattr(result, "critiques", []) or []),
+            "blind_spots": (getattr(result, "blind_spots", []) or [])[:10],
+            "overall_assessment": str(getattr(result, "overall_assessment", ""))[:500],
+        }
+        logger.info(
+            "phase_reviewer_completed",
+            extra={
+                "event": "phase_reviewer_completed",
+                "phase": phase,
+                "reviewer_alias": route.reviewer_alias,
+                "findings_reviewed": getattr(result, "findings_reviewed", 0),
+            },
+        )
+    except Exception as _rev_exc:  # never break the phase
+        logger.debug("phase_reviewer_failed", extra={"phase": phase, "error": str(_rev_exc)})
 
 
 async def run_exploit_attempt(

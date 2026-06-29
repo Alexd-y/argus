@@ -607,8 +607,10 @@ EXPLOITATION_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
+                "required": ["finding_id", "target"],
                 "properties": {
                     "finding_id": {"type": "string"},
+                    "target": {"type": "string"},
                     "status": {"type": "string"},
                     "title": {"type": "string"},
                     "technique": {"type": "string"},
