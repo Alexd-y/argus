@@ -6,7 +6,7 @@ cwe_ids: [134]
 owasp_top10:
   - 'A06:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: fmt_read_stack
@@ -16,20 +16,20 @@ payloads:
   - id: fmt_n_write
     template: "%100d%7$n"
     confidence: suspected
-    notes: %n write probe; overwrites memory at stack offset 7 with byte count 100.
+    notes: "%n write probe; overwrites memory at stack offset 7 with byte count 100."
   - id: fmt_string_read
     template: "%s%s%s%s%s%s%s%s"
     confidence: suspected
-    notes: %s read probe; dereferences stack pointers to read referenced strings.
+    notes: "%s read probe; dereferences stack pointers to read referenced strings."
   - id: fmt_positional_read
     template: "%1$p %2$p %3$p %4$p %5$p %6$p"
     confidence: suspected
     notes: Positional argument pointer leak; exposes specific stack frame values.
 mutations:
-  - name: width_increment
-    description: Scale %d width up to 65000+ to trigger short-write wraparound.
-  - name: offset_scan
-    description: Sweep $n positional index 1-50 to locate writable stack targets.
+  - name: length_pad
+    description: Scale the format-specifier width field to trigger short-write wraparound.
+  - name: whitespace_alt
+    description: Insert alternate whitespace between specifiers to bypass naive input filters.
 encodings:
   - name: identity
     stages: []

@@ -15,9 +15,9 @@ payloads:
     confidence: suspected
     notes: Null byte appended to CSRF token; tests length-check or C-string truncation bypass.
   - id: token_custom_header
-    template: ""
+    template: "argus-csrf-header-token-marker"
     confidence: suspected
-    notes: CSRF token in custom header X-CSRF-Token; tests whether server checks body vs header.
+    notes: Marker sent in a custom X-CSRF-Token header; tests whether server checks body vs header.
   - id: referer_bypass
     template: "https://{oast_host}/{canary}"
     confidence: suspected
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: SameSite=Lax cookie probe via top-level GET navigation; tests CSRF under lax policy.
 mutations:
-  - name: token_reuse
-    description: Replay previously captured CSRF tokens to test session-scoped token reuse.
-  - name: header_rotation
-    description: Swap custom CSRF header names X-CSRF-Token, X-CSRFToken, X-XSRF-Token.
+  - name: case_flip
+    description: Flip case of the CSRF token/header names to probe case-sensitive validation.
+  - name: whitespace_alt
+    description: Insert alternate whitespace around the token value to bypass naive parsers.
 encodings:
   - name: identity
     stages: []

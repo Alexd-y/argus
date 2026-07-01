@@ -6,7 +6,7 @@ cwe_ids: [190]
 owasp_top10:
   - 'A06:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: int_overflow_32
@@ -26,10 +26,10 @@ payloads:
     confidence: suspected
     notes: INT32_MIN boundary; tests abs() overflow and negation edge conditions.
 mutations:
-  - name: width_escalation
-    description: Escalate to INT64_MAX+1 (9223372036854775808) for 64-bit boundary tests.
-  - name: type_context_swap
-    description: Wrap integer in JSON, XML, or multipart to test context-dependent parsing.
+  - name: length_pad
+    description: Pad the numeric string toward 64-bit boundary widths for wraparound tests.
+  - name: whitespace_alt
+    description: Insert alternate whitespace around the integer to test lenient numeric parsers.
 encodings:
   - name: identity
     stages: []

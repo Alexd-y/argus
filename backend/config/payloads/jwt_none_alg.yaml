@@ -7,7 +7,7 @@ owasp_top10:
   - 'A01:2021'
   - 'A07:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: alg_none
@@ -27,14 +27,14 @@ payloads:
     confidence: suspected
     notes: jku header injection; points key server at OAST-controlled JWKS endpoint.
 mutations:
-  - name: alg_rotator
-    description: Cycle through none, None, NONE, nOnE casing variants for bypass.
-  - name: kid_traversal
-    description: Escalate kid path from ../../ to ../../../../../etc/passwd variants.
+  - name: case_flip
+    description: Cycle none/None/NONE/nOnE casing variants of the alg value for bypass.
+  - name: whitespace_alt
+    description: Insert alternate whitespace inside the JWT header JSON to test lenient parsers.
 encodings:
   - name: identity
     stages: []
     description: Raw JWT header JSON; orchestrator rebuilds token signature.
-  - name: base64_url
-    stages: [base64_url]
-    description: URL-safe base64-encoded JWT header segment.
+  - name: base64_only
+    stages: [base64]
+    description: Base64-encoded JWT header segment.

@@ -13,7 +13,7 @@ payloads:
   - id: origin_null
     template: "null"
     confidence: suspected
-    notes: Origin: null header probe; sandboxed iframes and data: URIs send null origin.
+    notes: "Origin: null header probe; sandboxed iframes and data: URIs send null origin."
   - id: origin_attacker
     template: "https://{oast_host}"
     confidence: suspected
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: Suffix-matching Origin; bypasses ACAO-Credentials restrictions via suffix injection.
 mutations:
-  - name: mixed_scheme
-    description: Swap Origin between http:// and https:// to test scheme-level allowlists.
-  - name: trailing_slash
-    description: Append trailing dot to Origin domain to test RFC-allowlist matching flaws.
+  - name: case_flip
+    description: Flip case of the Origin scheme/host to probe case-sensitive allowlist matching.
+  - name: whitespace_alt
+    description: Insert alternate whitespace around the Origin value to bypass naive parsers.
 encodings:
   - name: identity
     stages: []

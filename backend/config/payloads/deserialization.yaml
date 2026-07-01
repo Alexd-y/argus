@@ -7,7 +7,7 @@ cwe_ids: [502]
 owasp_top10:
   - 'A08:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: true
 payloads:
   - id: jackson_marker
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: .NET TypeNameHandling deserialization type-swap probe for file disclosure.
 mutations:
-  - name: encoding_wrappers
-    description: Wrap gadget markers in base64 or hex to bypass signature filters.
-  - name: gadget_swap
-    description: Rotate through CommonsCollections / Spring / Groovy gadget signatures.
+  - name: whitespace_alt
+    description: Insert alternate whitespace inside gadget markers to bypass signature filters.
+  - name: comment_injection
+    description: Inject comment sequences into the serialized body to break naive denylist scans.
 encodings:
   - name: identity
     stages: []

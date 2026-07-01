@@ -6,7 +6,7 @@ description: >-
 cwe_ids: [120]
 owasp_top10:
   - 'A06:2021'
-risk_level: critical
+risk_level: high
 requires_approval: true
 oast_required: false
 payloads:
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: Off-by-one null byte probe; tests null-termination boundary conditions.
 mutations:
-  - name: fmt_positional
-    description: Swap positional argument index to target different stack offsets.
-  - name: length_escalation
-    description: Progressively increase input length 1K, 4K, 8K, 16K, 128K boundary steps.
+  - name: length_pad
+    description: Progressively pad input length (1K/4K/8K/16K/128K) to probe stack buffer boundaries.
+  - name: whitespace_alt
+    description: Alternate whitespace/separators to reach native handlers behind lenient parsers.
 encodings:
   - name: identity
     stages: []

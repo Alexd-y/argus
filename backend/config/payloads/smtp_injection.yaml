@@ -26,10 +26,10 @@ payloads:
     confidence: suspected
     notes: Header folding injection via tab (%09); continuation lines bypass naive filters.
 mutations:
-  - name: crlf_encoding
-    description: Rotate through %0d%0a, %0a, \r\n literal variants for CR/LF bypass.
-  - name: header_rotation
-    description: Swap injected headers across Bcc, Cc, Reply-To, Return-Path targets.
+  - name: comment_injection
+    description: Inject comment/continuation sequences to break naive header-injection filters.
+  - name: whitespace_alt
+    description: Rotate whitespace/tab folding around CRLF sequences to bypass CR/LF sanitizers.
 encodings:
   - name: identity
     stages: []

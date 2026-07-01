@@ -6,7 +6,7 @@ cwe_ids: [697]
 owasp_top10:
   - 'A06:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: zero_e_hash_collision
@@ -26,10 +26,10 @@ payloads:
     confidence: suspected
     notes: 64-bit overflow integer via json_decode; bypasses JWT iat/exp numeric checks.
 mutations:
-  - name: magic_hash_rotator
-    description: Cycle through known 0e-numeric strings (0e462097, 0e830400, etc.).
-  - name: type_array_flip
-    description: Convert query string to array notation param[] to test type-juggle arrays.
+  - name: case_flip
+    description: Flip case of magic-hash / literal markers to probe case-sensitive comparisons.
+  - name: whitespace_alt
+    description: Insert alternate whitespace around the value to test loose type coercion parsers.
 encodings:
   - name: identity
     stages: []

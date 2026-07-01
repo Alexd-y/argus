@@ -9,17 +9,17 @@ requires_approval: false
 oast_required: false
 payloads:
   - id: missing_token
-    template: ""
+    template: "argus-csrf-missing-token-marker"
     confidence: suspected
-    notes: Request without anti-CSRF token header.
+    notes: Curriculum marker standing in for a request that omits the anti-CSRF token header.
   - id: wrong_token
     template: "argus-csrf-curriculum-invalid-token"
     confidence: suspected
     notes: Request with intentionally invalid CSRF token.
   - id: blank_token
-    template: ""
+    template: "argus-csrf-blank-token-marker"
     confidence: suspected
-    notes: Request with empty CSRF token value.
+    notes: Curriculum marker standing in for a request that sends an empty CSRF token value.
 mutations: []
 encodings:
   - name: identity

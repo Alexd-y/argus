@@ -7,7 +7,7 @@ cwe_ids: [643]
 owasp_top10:
   - 'A03:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: auth_bypass_or
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: Blind XPath count probe; enumerates node cardinality without data dump.
 mutations:
-  - name: axis_swap
-    description: Rotate through //user, //password, ancestor::*, //* XPath axis probes.
-  - name: function_rotator
-    description: Try string-length(), substring(), name() function calls for blind extraction.
+  - name: case_flip
+    description: Flip case of XPath node/function names to probe case-sensitive evaluators.
+  - name: whitespace_alt
+    description: Insert alternate whitespace inside the predicate to bypass naive input filters.
 encodings:
   - name: identity
     stages: []

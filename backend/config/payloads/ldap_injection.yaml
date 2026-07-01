@@ -6,7 +6,7 @@ cwe_ids: [90]
 owasp_top10:
   - 'A03:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: false
 payloads:
   - id: ldap_filter_tautology
@@ -26,10 +26,10 @@ payloads:
     confidence: suspected
     notes: Attribute enumeration probe; wildcard tests multiple common LDAP attribute names.
 mutations:
-  - name: attribute_rotator
-    description: Cycle through CN, SN, mail, telephoneNumber, userPassword LDAP attributes.
-  - name: operator_swap
-    description: Swap between | (OR) and & (AND) filter combinator operators.
+  - name: case_flip
+    description: Flip case of LDAP attribute names to probe case-insensitive filter handling.
+  - name: whitespace_alt
+    description: Insert alternate whitespace inside the filter to bypass naive input sanitizers.
 encodings:
   - name: identity
     stages: []

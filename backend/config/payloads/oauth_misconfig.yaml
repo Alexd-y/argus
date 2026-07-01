@@ -7,7 +7,7 @@ owasp_top10:
   - 'A01:2021'
   - 'A07:2021'
 risk_level: high
-requires_approval: false
+requires_approval: true
 oast_required: true
 payloads:
   - id: redirect_uri_bypass
@@ -15,9 +15,9 @@ payloads:
     confidence: suspected
     notes: Attacker redirect_uri; tests strict vs lax redirect validation in OAuth flow.
   - id: state_omission
-    template: ""
+    template: "argus-oauth-empty-state-marker"
     confidence: suspected
-    notes: Empty state parameter; tests CSRF protections that fall back to state absence.
+    notes: Marker standing in for an empty state parameter; tests CSRF fallback on state absence.
   - id: pkce_downgrade
     template: "code_challenge=plain&code_challenge_method=plain"
     confidence: suspected
@@ -27,10 +27,10 @@ payloads:
     confidence: suspected
     notes: Scope upgrade probe; tests whether the AS ignores incremental scope requests.
 mutations:
-  - name: openid_redirect
-    description: Add openid redirect_path to test OpenID Connect redirect validation gaps.
-  - name: fragment_injection
-    description: Append #fragment to redirect_uri to test URI parser mismatch.
+  - name: case_flip
+    description: Flip case of redirect_uri host/scheme to probe case-sensitive redirect validation.
+  - name: whitespace_alt
+    description: Insert alternate whitespace in parameter values to test lenient URI parsers.
 encodings:
   - name: identity
     stages: []

