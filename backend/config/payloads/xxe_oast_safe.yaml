@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_XXE_OAST_SAFE_TEXT"
     confidence: suspected
     notes: Literal text only.
-mutations: []
+  - id: inert_doctype_marker
+    template: "ARGUS_XXE_OAST_SAFE_DOCTYPE_MARKER"
+    confidence: suspected
+    notes: Inert DOCTYPE-position marker; no entity declaration.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

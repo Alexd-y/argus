@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_SSTI_SAFE_PLAIN_B"
     confidence: suspected
     notes: Companion static marker.
-mutations: []
+  - id: plain_c
+    template: "ARGUS_SSTI_SAFE_PLAIN_C"
+    confidence: suspected
+    notes: Third static marker without template delimiters.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

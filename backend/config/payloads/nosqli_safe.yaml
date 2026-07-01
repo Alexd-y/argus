@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_NOSQL_SAFE_MARKER_B"
     confidence: suspected
     notes: Companion marker for correlation.
-mutations: []
+  - id: marker_c
+    template: "ARGUS_NOSQL_SAFE_MARKER_C"
+    confidence: suspected
+    notes: Third marker for operator-detection triangulation.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

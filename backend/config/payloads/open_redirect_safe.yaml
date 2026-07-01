@@ -16,7 +16,13 @@ payloads:
     template: "#argus-open-redirect-safe-anchor"
     confidence: suspected
     notes: Document fragment only.
-mutations: []
+  - id: relative_query
+    template: "/argus-open-redirect-safe/next?to=/local-only"
+    confidence: suspected
+    notes: Same-origin relative path with a local-only query parameter.
+mutations:
+  - name: case_flip
+    description: Case-flip the path marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

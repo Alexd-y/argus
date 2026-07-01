@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_PROTO_POLLUTION_SAFE_KEY_B"
     confidence: suspected
     notes: Companion key name.
-mutations: []
+  - id: key_c
+    template: "ARGUS_PROTO_POLLUTION_SAFE_KEY_C"
+    confidence: suspected
+    notes: Third benign object key for merge-surface drills.
+mutations:
+  - name: case_flip
+    description: Case-flip the key name to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_CRLF_SAFE_LINE_FEED_WORD"
     confidence: suspected
     notes: Verbalized token — no raw CR/LF bytes in template.
-mutations: []
+  - id: crlf_pair_word
+    template: "ARGUS_CRLF_SAFE_CRLF_PAIR_WORD"
+    confidence: suspected
+    notes: Verbalized CRLF-pair token — no raw control bytes in template.
+mutations:
+  - name: case_flip
+    description: Case-flip the verbalized token for case-insensitive detection drills.
 encodings:
   - name: identity
     stages: []

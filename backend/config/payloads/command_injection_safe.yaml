@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_CMDI_SAFE_CANARY_B"
     confidence: suspected
     notes: Companion sentinel.
-mutations: []
+  - id: canary_c
+    template: "ARGUS_CMDI_SAFE_CANARY_C"
+    confidence: suspected
+    notes: Third sentinel for triangulating allowlist coverage.
+mutations:
+  - name: case_flip
+    description: Case-flip the sentinel to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

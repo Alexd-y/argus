@@ -16,7 +16,13 @@ payloads:
     template: "argus-traversal-safe-segment-b"
     confidence: suspected
     notes: Companion segment for comparisons.
-mutations: []
+  - id: safe_segment_c
+    template: "argus-traversal-safe-segment-c"
+    confidence: suspected
+    notes: Third single path segment; no dot-dot sequences.
+mutations:
+  - name: case_flip
+    description: Case-flip the segment to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

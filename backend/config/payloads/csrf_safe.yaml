@@ -20,7 +20,9 @@ payloads:
     template: "argus-csrf-blank-token-marker"
     confidence: suspected
     notes: Curriculum marker standing in for a request that sends an empty CSRF token value.
-mutations: []
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

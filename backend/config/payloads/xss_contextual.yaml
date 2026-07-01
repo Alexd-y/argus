@@ -16,7 +16,13 @@ payloads:
     template: "&lt;argus-xss-safe&gt;"
     confidence: suspected
     notes: Entity-encoded brackets only.
-mutations: []
+  - id: attr_context_marker
+    template: "argus-xss-safe-attr-context"
+    confidence: suspected
+    notes: Inert attribute-context marker for encoding-pipeline drills.
+mutations:
+  - name: case_flip
+    description: Case-flip the context marker for case-insensitive parser drills.
 encodings:
   - name: identity
     stages: []

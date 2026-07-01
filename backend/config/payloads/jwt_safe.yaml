@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_JWT_SAFE_HEADER_LABEL"
     confidence: suspected
     notes: Text label for curriculum.
-mutations: []
+  - id: claim_label
+    template: "ARGUS_JWT_SAFE_CLAIM_LABEL"
+    confidence: suspected
+    notes: Claim-position text label for structure drills.
+mutations:
+  - name: case_flip
+    description: Case-flip the label to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

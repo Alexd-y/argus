@@ -34,15 +34,20 @@ _CATALOG_DIR: Final[Path] = _BACKEND_ROOT / "config" / "payloads"
 
 EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
     {
+        # Core active-injection families
         "sqli",
         "xss",
+        "xss_stored",
+        "xss_dom",
         "ssrf",
         "rce",
         "lfi_rfi",
         "crlf",
         "open_redirect",
         "oauth",
+        "oauth_misconfig",
         "jwt",
+        "jwt_none_alg",
         "graphql",
         "proto_smuggle",
         "http_smuggling",
@@ -51,18 +56,62 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "path_traversal",
         "nosqli",
         "ldapi",
+        "ldap_injection",
         "xxe",
         "ssti",
         "auth_bypass",
         "idor",
         "mass_assignment",
         "race_condition",
+        "cors_misconfig",
+        "csrf_token_bypass",
+        "deserialization",
+        "format_string",
+        "integer_overflow",
+        "buffer_overflow",
+        "smtp_injection",
+        "type_juggling",
+        "xpath_injection",
+        # Non-destructive "*_safe" curriculum variants
+        "command_injection_safe",
+        "crlf_safe",
+        "csrf_safe",
+        "graphql_safe",
+        "jwt_safe",
+        "ldapi_safe",
+        "mass_assignment_safe",
+        "nosqli_safe",
+        "open_redirect_safe",
+        "prototype_pollution_safe",
+        "sqli_safe",
+        "ssrf_oast_safe",
+        "ssti_safe",
+        "traversal_safe",
+        "xpathi_safe",
+        "xss_contextual",
+        "xxe_oast_safe",
     }
 )
 
 
+# Every family whose risk_level is HIGH or DESTRUCTIVE must set
+# requires_approval=True (enforced by PayloadFamily and re-checked here).
 APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"rce", "proto_smuggle", "http_smuggling", "race_condition"}
+    {
+        "rce",
+        "proto_smuggle",
+        "http_smuggling",
+        "race_condition",
+        "buffer_overflow",
+        "deserialization",
+        "format_string",
+        "integer_overflow",
+        "jwt_none_alg",
+        "ldap_injection",
+        "oauth_misconfig",
+        "type_juggling",
+        "xpath_injection",
+    }
 )
 
 

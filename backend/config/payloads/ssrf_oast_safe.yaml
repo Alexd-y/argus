@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_SSRF_OAST_SAFE_MARKER"
     confidence: suspected
     notes: Plain marker without URL semantics.
-mutations: []
+  - id: synthetic_url_b
+    template: "https://argus-oast-safe.invalid/ssrf-curriculum-b"
+    confidence: suspected
+    notes: Second synthetic non-routable URL (invalid TLD); lab OAST only.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

@@ -16,7 +16,13 @@ payloads:
     template: "argusMassAssignSafeFieldB"
     confidence: suspected
     notes: Companion identifier.
-mutations: []
+  - id: field_c
+    template: "argusMassAssignSafeFieldC"
+    confidence: suspected
+    notes: Third benign identifier for binding-surface drills.
+mutations:
+  - name: case_flip
+    description: Case-flip the identifier to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

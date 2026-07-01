@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_XPATH_SAFE_TOKEN_B"
     confidence: suspected
     notes: Companion token for pairing checks.
-mutations: []
+  - id: token_c
+    template: "ARGUS_XPATH_SAFE_TOKEN_C"
+    confidence: suspected
+    notes: Third literal token for grammar triangulation.
+mutations:
+  - name: case_flip
+    description: Case-flip the token to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

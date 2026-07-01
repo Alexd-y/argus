@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_LDAP_SAFE_LITERAL_B"
     confidence: suspected
     notes: Companion literal for pairing checks.
-mutations: []
+  - id: literal_c
+    template: "ARGUS_LDAP_SAFE_LITERAL_C"
+    confidence: suspected
+    notes: Third literal for filter-grammar triangulation.
+mutations:
+  - name: case_flip
+    description: Case-flip the literal to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []

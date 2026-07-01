@@ -16,7 +16,13 @@ payloads:
     template: "__argusGraphqlSafeCurriculum__"
     confidence: suspected
     notes: Underscore-delimited marker for parser drills (non-empty after strip).
-mutations: []
+  - id: nested_name_marker
+    template: "argusGraphqlSafeNestedCurriculum"
+    confidence: suspected
+    notes: Third GraphQL name token for parser-depth drills.
+mutations:
+  - name: case_flip
+    description: Case-flip the GraphQL name token for case-insensitive parser drills.
 encodings:
   - name: identity
     stages: []

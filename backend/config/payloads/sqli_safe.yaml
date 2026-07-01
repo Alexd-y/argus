@@ -16,7 +16,13 @@ payloads:
     template: "ARGUS_SQLI_SAFE_CANARY_B"
     confidence: suspected
     notes: Second sentinel for differential-free comparison.
-mutations: []
+  - id: canary_c
+    template: "ARGUS_SQLI_SAFE_CANARY_C"
+    confidence: suspected
+    notes: Third sentinel for reflection triangulation.
+mutations:
+  - name: case_flip
+    description: Case-flip the sentinel to exercise case-insensitive detection rules.
 encodings:
   - name: identity
     stages: []
