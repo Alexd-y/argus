@@ -541,6 +541,14 @@ _LOGIN_RE = re.compile(r"\b(login|signin|sign-in|auth|authentication)\b", re.I)
 _RATE_LIMIT_WORKING_RE = re.compile(
     r"\b(429|too many requests|retry-after|rate.limit.*enforced|rate.limit.*active|rate.limit.*work|throttl.*work|block.*after|limit.*trigger)\b", re.I
 )
+# Negated mentions ("no HTTP 429", "did not return 429", "absence of throttling") must NOT
+# count as working rate limiting — otherwise a "missing rate limit" finding is misread as a
+# positive observation just because it names the 429 status it never received.
+_RATE_LIMIT_NEGATION_RE = re.compile(
+    r"\b(no|not|without|didn't|never|absence|absent|missing|lack(?:s|ing)?|fail(?:ed|s)?"
+    r"|did\s+not)\b[^.]{0,40}\b(429|too\s+many\s+requests|rate[-\s]?limit|throttl)",
+    re.I,
+)
 
 
 @dataclass
@@ -631,9 +639,37 @@ def _is_rate_limit_finding(finding: Any) -> bool:
     return bool(_RATE_LIMIT_RE.search(blob) and _LOGIN_RE.search(blob))
 
 
+def _rate_limit_response_codes(finding: Any) -> list[int]:
+    """Collect HTTP status codes recorded in the finding's PoC (authoritative signal)."""
+    poc = _poc_dict(finding)
+    codes: list[int] = []
+    for key in ("response_statuses", "response_codes", "status_codes"):
+        raw = poc.get(key)
+        if isinstance(raw, list):
+            for x in raw:
+                with contextlib.suppress(ValueError, TypeError):
+                    codes.append(int(x))
+    single = poc.get("response_status") or poc.get("status_code")
+    if single is not None:
+        with contextlib.suppress(ValueError, TypeError):
+            codes.append(int(single))
+    return codes
+
+
 def _is_rate_limit_working(finding: Any) -> bool:
-    """Check if the finding indicates rate limiting is actually working (429 responses)."""
+    """True only when rate limiting is actually demonstrated.
+
+    Recorded response codes are authoritative: if the PoC captured status codes, rate
+    limiting is "working" iff a 429 is among them. Absent recorded codes we fall back to
+    an affirmative text signal, but a *negated* mention ("no HTTP 429 observed") never
+    counts as working.
+    """
+    codes = _rate_limit_response_codes(finding)
+    if codes:
+        return 429 in codes
     blob = _text_blob(finding)
+    if _RATE_LIMIT_NEGATION_RE.search(blob):
+        return False
     return bool(_RATE_LIMIT_WORKING_RE.search(blob))
 
 
@@ -976,8 +1012,9 @@ def _evidence_quality_resolved(finding: Any) -> str:
 def evaluate_injection_finding_rules(finding: Any) -> list[str]:
     """
     Heuristic quality rules for SQLi/XSS/SSRF/XXE/RCE-style findings.
-    Returns a list of machine-friendly violation tokens for tests and logging.
-    NO restrictions on validation — all findings validated via payloads/commands/exploits.
+    Returns a list of machine-friendly violation tokens for tests and logging: a
+    "confirmed/validated" assertion must be backed by strong evidence and the family's
+    out-of-band proof (browser/OAST for XSS, OAST for SSRF/XXE, command output for RCE).
     """
     from src.recon.vulnerability_analysis.active_scan.injection_findings_normalize import (
         has_sqli_timing_repeated_samples,
@@ -1014,6 +1051,8 @@ def evaluate_injection_finding_rules(finding: Any) -> list[str]:
         out.append(f"injection_qg:rce_no_command_output_or_oast:{title}")
     if family == "xss" and high_assertion and not has_xss_browser_or_oast_signal(finding):
         out.append(f"injection_qg:xss_confirmed_missing_browser_or_oast:{title}")
+    if family in {"ssrf", "xxe"} and high_assertion and not has_oast_callback_signal(finding):
+        out.append(f"injection_qg:{family}_confirmed_missing_oast:{title}")
     return out
 
 
@@ -1541,8 +1580,6 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     quality = score_evidence_quality(finding)
     status = validation_status_for_quality(quality)
     confidence = str(_get_attr(finding, "confidence", "likely") or "likely").lower()
-    if confidence == "confirmed" and quality in {"none", "weak"}:
-        confidence = "likely"
     severity = str(_get_attr(finding, "severity", "") or "").lower()
     poc = dict(_poc_dict(finding))
     refs = list(_get_attr(finding, "evidence_refs", []) or [])
@@ -1556,17 +1593,69 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     cvss_vector = _canonical_cvss_vector(finding, poc)
     header_only = _is_header_only_advisory_finding(finding)
 
-    # NO CVSS cap for header-only findings — preserve original score/vector as-is
+    # Header-only / passive advisory findings are capped into the advisory band: a missing
+    # response header is not, by itself, a High/Critical exploit (VAL-001).
+    if header_only:
+        if cvss is None:
+            cvss = HEADER_ONLY_DEFAULT_CVSS_SCORE
+            if not cvss_vector:
+                cvss_vector = HEADER_ONLY_DEFAULT_CVSS_VECTOR
+        elif cvss > HEADER_ONLY_MAX_CVSS_SCORE:
+            cvss = HEADER_ONLY_MAX_CVSS_SCORE
+        if not cvss_vector and cvss is not None:
+            cvss_vector = HEADER_ONLY_DEFAULT_CVSS_VECTOR
+
     exploit_demonstrated, exploit_summary = _normalize_exploit_fields(finding, header_only)
 
-    # NO downgrades — all findings validated via payloads/commands/exploits from WRB
-    # NO injection evidence gate — confidence preserved as-is
-    # NO rate limit cap — CVSS/status preserved as-is
-    # NO XSS severity cap — severity/confidence/status preserved as-is
+    # Provability gates (VHL-PROVABLE-001 compatible): DOWNGRADE confidence / severity /
+    # CVSS so an unproven finding cannot masquerade as confirmed. Nothing is dropped here —
+    # ``partition_findings`` later routes anything not provable-from-raw to the
+    # "Unconfirmed — requires manual verification" section and out of the headline counts.
+    if quality in ("none", "weak") and confidence == "confirmed":
+        confidence = "likely" if quality == "weak" else "possible"
+    if quality == "weak" and status != "validated" and _is_rate_limit_finding(finding):
+        confidence = "possible"
 
-    # NO XSS browser proof requirement — validated via payloads/commands
-    # NO high/critical severity downgrade — severity preserved as-is
-    # NO CVSS cap — CVSS preserved as-is
+    if _is_rate_limit_finding(finding):
+        cvss = 3.7 if cvss is None or cvss > 3.7 else cvss
+        status = "unverified" if quality in ("weak", "none") else status
+        if not refs:
+            refs = ["rapid login-path requests without HTTP 429"]
+        notes = (
+            "Evidence is limited to a rate-limit signal. Full authentication flow behavior, "
+            "per-account lockout, CAPTCHA, and throttling were not validated."
+        )
+        poc.setdefault("evidence_quality", quality)
+        poc.setdefault("validation_status", status)
+
+    if _is_xss_finding(finding) and not _has_meaningful_exploit_evidence(finding):
+        if severity in {"high", "critical"}:
+            severity = "medium"
+        confidence = "possible" if quality in ("none", "weak") else confidence
+        status = "unverified" if quality in ("none", "weak", "moderate") else status
+        if cvss is not None and float(cvss) > 6.9:
+            cvss = 6.9
+        if notes == "" and quality == "weak":
+            notes = "XSS-style finding lacks reflected/DOM/HTTP response or browser validation in evidence."
+
+    if map_injection_family(finding) == "xss" and confidence == "confirmed":
+        if not has_xss_browser_or_oast_signal(finding):
+            confidence = "likely"
+
+    # High/Critical with no PoC and not a header advisory cannot stand as confirmed.
+    # Preserve the finding but downgrade it so the partition routes it to Unconfirmed
+    # (previously ``quality == "none"`` was dropped here — VHL-PROVABLE-001 keeps it).
+    if severity in {"high", "critical"} and not _has_poc(finding) and not header_only:
+        if quality == "none":
+            severity = "low"
+            status = "unverified"
+            confidence = "possible"
+            cvss = _apply_cvss_cap_for_severity_band(cvss, severity)
+        elif quality in {"weak", "moderate"}:
+            severity = "medium" if quality == "moderate" else "low"
+            status = "unverified" if quality == "weak" else "partially_validated"
+            confidence = "likely"
+            cvss = _apply_cvss_cap_for_severity_band(cvss, severity)
 
     # Extract new finding card fields from PoC
     http_method = str(poc.get("http_method") or poc.get("method") or "").strip().upper() or None
@@ -1755,7 +1844,12 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
 
 
 def normalize_findings_for_report(findings: Iterable[Any]) -> list[Any]:
-    """Normalize evidence status, CVSS surface, confidence, rate-limit duplicates. NO severity downgrades."""
+    """Normalize evidence status, CVSS surface, confidence, and rate-limit duplicates.
+
+    Applies the provability downgrade gates (header-only cap, rate-limit/XSS caps,
+    high-critical-without-PoC downgrade) but never drops a finding: the Valhalla
+    partition (VHL-PROVABLE-001) routes anything unproven to the Unconfirmed section.
+    """
     from src.reports.finding_dedup import merge_http_security_header_gaps, merge_reflected_xss_findings
 
     base = merge_http_security_header_gaps(list(findings))
@@ -1775,10 +1869,49 @@ _HEADER_TABLE_GAP_NOTE = (
 
 
 def apply_security_header_table_gap_to_findings(findings: Iterable[Any], vc: Any | None) -> list[Any]:
-    """Header-gap findings — no downgrades, severity/CVSS preserved as-is."""
+    """When header-gap findings exist but no header rows were parsed, mark advisory + explicit note.
+
+    A "missing security header" claim that cannot be backed by a parsed header table is only
+    an advisory coverage gap — it is capped to the advisory band (severity=low, CVSS=3.7,
+    confidence=advisory) with a note explaining the missing raw artifact.
+    """
     items = list(findings)
-    # NO downgrades — header findings preserved with original severity/CVSS
-    return items
+    if vc is None or not items:
+        return items
+    sec_analysis = _get_attr(vc, "security_headers_analysis")
+    sec_rows = _get_attr(sec_analysis, "rows", []) if sec_analysis is not None else []
+    sec_table = _get_attr(vc, "security_headers_table_rows", [])
+    if not isinstance(sec_table, list):
+        sec_table = []
+    if sec_rows or sec_table:
+        return items
+    if not any(is_header_only_advisory_finding(f) for f in items):
+        return items
+
+    out: list[Any] = []
+    for f in items:
+        if not is_header_only_advisory_finding(f):
+            out.append(f)
+            continue
+        existing = str(_get_attr(f, "applicability_notes", "") or "").strip()
+        merged_notes = (
+            f"{existing} {_HEADER_TABLE_GAP_NOTE}".strip() if existing else _HEADER_TABLE_GAP_NOTE
+        )
+        sev = str(_get_attr(f, "severity", "") or "").lower()
+        updates: dict[str, Any] = {
+            "confidence": "advisory",
+            "applicability_notes": merged_notes,
+        }
+        if sev in {"high", "critical", "medium"}:
+            updates["severity"] = "low"
+            updates["cvss"] = 3.7
+            updates["cvss_score"] = 3.7
+        poc = dict(_poc_dict(f))
+        if updates.get("cvss") is not None:
+            poc["cvss_score"] = updates["cvss"]
+        updates["proof_of_concept"] = poc or None
+        out.append(_copy_with(f, updates))
+    return out
 
 
 def _wstg_pct(vc: Any) -> float:

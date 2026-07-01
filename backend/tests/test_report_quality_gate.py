@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.api.schemas import Finding, ReportSummary
 from src.findings.cvss import parse_cvss_vector
 from src.reports.data_collector import FindingRow, ReportRowSlice, ScanReportData, ScanRowData
+from src.reports.evidence_partition import partition_findings
 from src.reports.finding_metadata import estimate_cvss_vector
 from src.reports.generators import ReportData
 from src.reports.report_data_validation import validate_report_data
@@ -435,8 +436,11 @@ def test_forbidden_phrases_are_replaced_with_limitation_language() -> None:
     assert warnings
 
 
-def test_high_or_critical_without_evidence_is_blocked() -> None:
-    findings = normalize_findings_for_report(
+def test_high_or_critical_without_evidence_is_preserved_but_unconfirmed() -> None:
+    """VHL-PROVABLE-001: an unsupported critical is no longer silently dropped — it is
+    downgraded (cannot stand as a confirmed critical) and routed to the Unconfirmed
+    partition, out of the headline risk counts."""
+    [finding] = normalize_findings_for_report(
         [
             FindingRow(
                 id="f-high",
@@ -451,7 +455,17 @@ def test_high_or_critical_without_evidence_is_blocked() -> None:
         ]
     )
 
-    assert findings == []
+    # Gate: no longer a confirmed critical.
+    assert finding.severity != "critical"
+    assert finding.confidence != "confirmed"
+    assert finding.validation_status == "unverified"
+
+    # Partition: excluded from the provable/main body, kept as unconfirmed.
+    confirmed, unconfirmed = partition_findings([finding])
+    assert confirmed == []
+    assert len(unconfirmed) == 1
+    assert unconfirmed[0].is_provable is False
+    assert unconfirmed[0].unconfirmed_reason
 
 
 def test_remediation_does_not_assume_stack_when_stack_unknown() -> None:

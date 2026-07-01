@@ -277,19 +277,34 @@ def _norm_tool_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", (name or "").lower())
 
 
+def _lookup_alias(key: str, table: dict[str, Any]) -> Any | None:
+    """Match a normalized tool key against a normalized alias table.
+
+    Exact match wins first; otherwise the longest alias is tried so that short aliases
+    (e.g. ``nmap``) never shadow longer, more specific ones (e.g. ``asnmap``).
+    """
+    if not key:
+        return None
+    normalized = {_norm_tool_name(alias): val for alias, val in table.items()}
+    if key in normalized:
+        return normalized[key]
+    for na in sorted(normalized, key=len, reverse=True):
+        if na and (na in key or key in na):
+            return normalized[na]
+    return None
+
+
 def _capability_for_tool(tool: str) -> tuple[CapabilityId, str]:
-    key = _norm_tool_name(tool)
-    for alias, (cid, label) in _CAP_ALIASES.items():
-        if alias in key or key in alias:
-            return cid, label
+    match = _lookup_alias(_norm_tool_name(tool), _CAP_ALIASES)
+    if match is not None:
+        return match
     return "other", "Tool execution (general)"
 
 
 def _display_tool_name(tool: str) -> str:
-    key = _norm_tool_name(tool)
-    for alias, label in _TOOL_DISPLAY_NAMES.items():
-        if alias in key or key in alias:
-            return label
+    match = _lookup_alias(_norm_tool_name(tool), _TOOL_DISPLAY_NAMES)
+    if match is not None:
+        return match
     cleaned = re.sub(r"(?i)(?:^|_)(?:scan|tool|va|web_surface|stdout|stderr).*$", "", tool or "")
     cleaned = re.sub(r"[_-]{2,}", "_", cleaned).strip("_- ")
     return sanitize_customer_tool_text(cleaned or tool, max_len=80)

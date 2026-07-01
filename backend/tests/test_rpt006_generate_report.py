@@ -22,7 +22,7 @@ class TestRpt006FormatNormalization:
 
     def test_explicit_empty_uses_default(self) -> None:
         out = normalize_generation_formats([], None)
-        assert set(out) == {"html", "json", "csv", "pdf"}
+        assert set(out) == {"html", "json", "csv", "pdf", "md"}
 
     def test_requested_list(self) -> None:
         assert normalize_generation_formats(None, ["json"]) == ["json"]
@@ -179,17 +179,19 @@ async def test_run_generate_report_pipeline_valhalla_csv_uploads_valhalla_sectio
         upload_calls.append((rid, fmt, len(data)))
         return f"ten-v/scan-v/reports/valhalla/{rid}.{fmt}"
 
-    exec_results = [
-        ExecScalar(report),
-        MagicMock(),  # processing
-        ExecScalar(None),  # tenant pdf_archival_format
-        ExecScalar(None),  # upsert csv
-        ExecScalar(None),  # upsert valhalla_sections csv
-        MagicMock(),  # ready
-    ]
+    # The Valhalla+CSV path upserts several companion objects (valhalla_sections,
+    # technologies, outdated_components, tool_health, export_validation) plus status
+    # updates, so the number of session.execute() calls is not fixed. Return the report
+    # on the first call and a no-op ExecScalar(None) for every subsequent query/update
+    # (upsert selects treat None as "insert"; status updates ignore the result).
+    call_count = {"n": 0}
+
+    def _exec(*_a: object, **_k: object) -> ExecScalar:
+        call_count["n"] += 1
+        return ExecScalar(report) if call_count["n"] == 1 else ExecScalar(None)
 
     session = MagicMock()
-    session.execute = AsyncMock(side_effect=exec_results)
+    session.execute = AsyncMock(side_effect=_exec)
     session.commit = AsyncMock()
 
     out = await run_generate_report_pipeline(

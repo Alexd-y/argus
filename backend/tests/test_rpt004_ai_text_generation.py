@@ -248,6 +248,73 @@ class TestRpt004NoLlmPlaceholders:
         assert mapped["remediation_step"] == REPORT_AI_SKIPPED_NO_LLM
 
 
+# Verbatim fragment observed leaking into a real remediation_step section
+# (svalbard.ca Valhalla export): prompt scaffolding + embedded context JSON.
+_LEAKED_REMEDIATION_PROMPT = (
+    "- Finding reference: finding_id, title, CWE, CVSS score (and cvss_vector when available)\n"
+    "- EFFORT ESTIMATE: tag each fix as [Quick Fix] (< 1 hour) or [Complex Refactor]\n"
+    "- VERIFICATION COMMAND: include a curl command to verify the fix is applied\n"
+    "GROUNDING RULES:\n"
+    "Avoid one-line boilerplate such as 'validate input'.\n"
+    '"cwe_ids_found":["CWE-307"],"finding_count":10,"executive_severity_totals":{"high":1}'
+)
+
+
+class TestPromptLeakageDetection:
+    def test_real_leaked_remediation_prompt_is_detected(self) -> None:
+        from src.reports.report_text_sanitizer import contains_raw_prompt_leakage
+
+        assert contains_raw_prompt_leakage(_LEAKED_REMEDIATION_PROMPT) is True
+
+    def test_legitimate_remediation_prose_not_flagged(self) -> None:
+        from src.reports.report_text_sanitizer import contains_raw_prompt_leakage
+
+        prose = (
+            "Apply per-account and per-IP throttling on the login endpoint, return "
+            "HTTP 429 after a defined threshold, and verify with repeated login POST "
+            "requests captured as raw request/response evidence."
+        )
+        assert contains_raw_prompt_leakage(prose) is False
+
+
+class TestRpt004PromptLeakageReplaced:
+    """A leaked prompt/context-JSON must never reach the report or the cache."""
+
+    def test_leaked_prompt_replaced_with_grounded_text(self) -> None:
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
+        llm = MagicMock(return_value=_LEAKED_REMEDIATION_PROMPT)
+
+        out = run_ai_text_generation(
+            "tenant-a",
+            "scan-b",
+            "valhalla",
+            "remediation_step",
+            {
+                "executive_severity_totals": {
+                    "critical": 0,
+                    "high": 1,
+                    "medium": 2,
+                    "low": 1,
+                    "info": 6,
+                },
+                "finding_count": 10,
+            },
+            redis_client=mock_redis,
+            llm_callable=llm,
+            cache_ttl_seconds=60,
+        )
+
+        assert out["status"] == "ok"
+        assert "EFFORT ESTIMATE" not in out["text"]
+        assert "GROUNDING RULES" not in out["text"]
+        assert "cwe_ids_found" not in out["text"]
+        assert "Structured results:" in out["text"]
+        # Only the safe grounded text may be cached.
+        cached_body = mock_redis.set.call_args.args[1]
+        assert "EFFORT ESTIMATE" not in cached_body
+
+
 class TestRpt004CeleryRegistration:
     def test_task_registered_and_routed(self) -> None:
         import src.tasks  # noqa: F401 — registers Celery tasks on the app

@@ -91,9 +91,21 @@ PLACEHOLDER_ENDPOINT: Final[str] = "{ENDPOINT}"
 
 
 # ---------------------------------------------------------------------------
-# Flag-preserving sanitizer — ALL flags pass through; operators know their targets.
-# The denylist is intentionally empty. No flags are stripped from replay commands.
-_DENY_FLAGS: Final[frozenset[str]] = frozenset()
+# Destructive-flag denylist (matched case-insensitively, exact token only).
+# A published reproducer in a customer report MUST never carry a one-shot
+# destructive flag: the reader should reproduce the *finding*, not wipe a host.
+# Substrings are never matched (e.g. ``--no-confirm-required`` survives).
+_DENY_FLAGS: Final[frozenset[str]] = frozenset(
+    {
+        "--rm",
+        "-rf",
+        "--force",
+        "--no-confirm",
+        "--skip-checks",
+        "--insecure",
+        "--ignore-cert",
+    }
+)
 
 
 # ---------------------------------------------------------------------------

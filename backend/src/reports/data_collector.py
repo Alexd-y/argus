@@ -229,6 +229,25 @@ def executive_severity_totals_from_finding_rows(findings: list[FindingRow]) -> d
     return executive_severity_totals_from_severity_strings(f.severity for f in findings)
 
 
+def headline_findings(findings: list[Any], tier: str | None) -> list[Any]:
+    """Findings that drive the headline severity counts (single source of truth).
+
+    Valhalla reports only headline findings that are provable from raw evidence;
+    unconfirmed findings are rendered in a separate section and excluded from the
+    headline risk counts. Other tiers count every in-scope finding.
+    """
+    if str(tier or "").strip().lower() == "valhalla":
+        return [f for f in findings if getattr(f, "is_provable", True)]
+    return list(findings)
+
+
+def headline_severity_totals(findings: list[Any], tier: str | None) -> dict[str, int]:
+    """Canonical executive/headline severity totals shared by AI prose, tables, and charts."""
+    return executive_severity_totals_from_severity_strings(
+        getattr(f, "severity", None) for f in headline_findings(findings, tier)
+    )
+
+
 def build_owasp_summary_from_counts(counts: dict[str, int]) -> dict[str, OwaspCategorySummaryEntry]:
     """Aggregate OWASP rows for templates from finding counts + OWASP category info (OWASP-002)."""
     out: dict[str, OwaspCategorySummaryEntry] = {}

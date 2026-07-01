@@ -56,6 +56,7 @@ from src.reports.data_collector import (
     ScanReportData,
     TimelineRow,
     executive_severity_totals_from_finding_rows,
+    headline_findings,
     severity_histogram_from_finding_rows,
 )
 from src.reports.evidence_partition import partition_findings
@@ -71,6 +72,7 @@ from src.reports.generators import (
     ReportData,
     build_owasp_compliance_rows,
     build_report_data_from_scan_report,
+    safe_phase_summary_text,
 )
 from src.reports.report_quality_gate import (
     build_report_quality_gate,
@@ -605,9 +607,8 @@ def recon_summary_for_jinja(data: ScanReportData) -> dict[str, Any]:
     )
     timeline_preview: list[dict[str, Any]] = []
     for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:24]:
-        snippet = ""
-        if t.entry is not None:
-            snippet = str(t.entry)[:240]
+        # Leak-safe preview only — never the raw entry body (internal IPs / secrets).
+        snippet = safe_phase_summary_text(t.entry) if t.entry is not None else ""
         timeline_preview.append(
             {"phase": t.phase, "order_index": t.order_index, "snippet": snippet}
         )
@@ -1208,11 +1209,15 @@ class ReportGenerator:
     @staticmethod
     def build_ai_input_payload(data: ScanReportData, *, tier: str | None = None) -> dict[str, Any]:
         """Compact, log-safe context for RPT-004 / VHL-003 prompts (no artifact bodies)."""
-        severity_counts = severity_histogram_from_finding_rows(data.findings)
-        executive_severity_totals = executive_severity_totals_from_finding_rows(data.findings)
         tier_norm = normalize_report_tier(
             tier if tier is not None else ((data.report.tier if data.report else "") or "midgard")
         )
+        # Single source of truth: headline counts that match the rendered table/charts
+        # (Valhalla = provable-only). Prevents executive prose claiming a different total
+        # than the findings table (the high=1 vs high=4 mismatch seen in real reports).
+        headline_rows = headline_findings(data.findings, tier_norm)
+        severity_counts = severity_histogram_from_finding_rows(headline_rows)
+        executive_severity_totals = executive_severity_totals_from_finding_rows(headline_rows)
         default_target = _default_scan_target_for_ai(data)
         findings_short: list[dict[str, Any]] = []
         for f in data.findings[:80]:
@@ -1557,6 +1562,9 @@ class ReportGenerator:
         for warning in ai_quality_warnings:
             if warning not in quality_gate.warnings:
                 quality_gate.warnings.append(warning)
+        # cost_summary is internal LLM billing/telemetry (tokens, USD cost, provider
+        # breakdown, tenant_id) — never ship it in a customer-facing deliverable.
+        texts.pop("cost_summary", None)
         extra_merged: dict[str, Any] = dict(extra) if extra else {}
         embed_key = "embed_poc_screenshot_inline"
         embed_override = extra_merged.pop(embed_key, None)
@@ -1587,13 +1595,11 @@ class ReportGenerator:
         if tier_norm == "valhalla":
             confirmed_rows = [r for r in finding_rows if r.get("is_provable", True)]
             unconfirmed_rows = [r for r in finding_rows if not r.get("is_provable", True)]
-            confirmed_findingrows = [
-                f for f in data.findings if getattr(f, "is_provable", True)
-            ]
+            confirmed_findingrows = headline_findings(data.findings, tier_norm)
         else:
             confirmed_rows = finding_rows
             unconfirmed_rows = []
-            confirmed_findingrows = list(data.findings)
+            confirmed_findingrows = headline_findings(data.findings, tier_norm)
         severity_counts_ctx = executive_severity_totals_from_finding_rows(confirmed_findingrows)
         v2021_owasp = tier_norm == "valhalla"
         ctx: dict[str, Any] = {
@@ -1741,6 +1747,7 @@ class ReportGenerator:
             quality_gate,
             enforce_quality_gate=bool(data.report and data.report.tier == "valhalla"),
         )
+        ai_section_texts.pop("cost_summary", None)
         exec_key = (
             REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA
             if ai_section_texts.get(REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA)

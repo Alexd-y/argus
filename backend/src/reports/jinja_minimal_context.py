@@ -66,9 +66,8 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
 
     timeline_preview: list[dict[str, Any]] = []
     for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_TIMELINE_PREVIEW_LIMIT]:
-        snippet = ""
-        if t.entry is not None:
-            snippet = str(t.entry)[:_TIMELINE_SNIPPET_CHARS]
+        # Leak-safe preview only — never the raw entry body (internal IPs / secrets).
+        snippet = gen.safe_phase_summary_text(t.entry) if t.entry is not None else ""
         timeline_preview.append(
             {"phase": t.phase, "order_index": t.order_index, "snippet": snippet}
         )
@@ -191,7 +190,9 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
         "recon_summary": recon_summary,
         "exploitation": exploitation,
-        "ai_sections": dict(texts),
+        "ai_sections": {
+            k: v for k, v in texts.items() if k not in gen.INTERNAL_ONLY_AI_SECTIONS
+        },
         "jinja": jinja_tiers,
         "tier_stubs": TIER_METADATA,
     }

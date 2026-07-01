@@ -6149,9 +6149,10 @@ def _parse_full_headers_context(
             )
     ctx.endpoint_headers = endpoint_headers[:128]
     ctx.total_endpoints_scanned = len(endpoint_headers)
+    # X-XSS-Protection is deprecated (browsers ignore it) — never recommend adding it.
     sec_headers = frozenset({
         "strict-transport-security", "content-security-policy", "x-content-type-options",
-        "x-frame-options", "x-xss-protection", "referrer-policy",
+        "x-frame-options", "referrer-policy",
         "permissions-policy", "cache-control", "pragma",
     })
     all_resp_keys: set[str] = set()

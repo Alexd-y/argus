@@ -73,17 +73,31 @@ _HTML_TAG_LEAKAGE = [
     (re.compile(r'</p>\s*', re.I), ''),
 ]
 
-# Patterns that indicate the LLM regurgitated the prompt instead of answering
+# Patterns that indicate the LLM regurgitated the prompt instead of answering.
+# NOTE: keep markers specific to prompt scaffolding so legitimate prose is not stripped.
+# The EFFORT ESTIMATE / IMPLEMENTATION CONTROL / VERIFICATION COMMAND / GROUNDING RULES /
+# "Finding reference: finding_id" / "Avoid one-line boilerplate" markers and the embedded
+# context-JSON keys below were observed leaking verbatim into a real remediation_step section.
 _PROMPT_LEAKAGE_PATTERNS = [
     r"ROLE:\s*You are an?\s",
     r"FOCUS:\s*(?:assess|describe|explain|outline|list|map|propose)\s",
     r"\bCONSTRAINTS:\s",
     r"\bGROUNDING:\s",
+    r"\bGROUNDING RULES:\s",
     r"\bSTRICT RULES FOR ALL REPORT SECTIONS:\s",
     r"\bLANGUAGE:\s*Write in English",
     r"\bSECTION_ID:\s*\w+",
     r"\bALREADY WRITTEN SECTIONS\b",
     r"\bContext JSON:\s*\n?\{",
+    r"\bEFFORT ESTIMATE:\s",
+    r"\bIMPLEMENTATION CONTROL:\s",
+    r"\bVERIFICATION COMMAND:\s",
+    r"\bFinding reference:\s*finding_id\b",
+    r"\bAvoid one-line boilerplate\b",
+    r'"cwe_ids_found"\s*:',
+    r'"executive_severity_totals"\s*:',
+    r'"finding_count"\s*:\s*\d',
+    r'"validation_status"\s*:\s*"',
     r"^(?:1\.|2\.|3\.|4\.|5\.)\s+Do any findings\b",
     r"\bDo\s+NOT\s+repeat\s+the\s+findings\s+list\b",
     r"\bDo NOT repeat content from the Executive Summary\b",

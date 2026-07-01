@@ -829,6 +829,10 @@ FindingEvidenceTypeLiteral = Literal[
 class Finding(BaseModel):
     """Finding in report per api-contracts."""
 
+    # Stable identifier carried through to every export format so MD/JSON/CSV/HTML
+    # rows can be cross-referenced and joined (evidence.csv ↔ findings.csv) and so the
+    # cross-format validator does not emit ``finding_without_id``.
+    finding_id: str | None = None
     severity: str
     title: str
     description: str

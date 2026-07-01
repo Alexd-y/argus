@@ -30,6 +30,8 @@ from src.reports.data_collector import (
     TimelineRow,
     build_owasp_summary_from_counts,
     executive_severity_totals_from_severity_strings,
+    headline_findings,
+    headline_severity_totals,
 )
 from src.reports.finding_metadata import (
     normalize_confidence,
@@ -148,6 +150,27 @@ _VALHALLA_REPORT_SECTION_ORDER: tuple[str, ...] = (
     "conclusion_text",
     "hibp_pwned_password_summary",
     "appendices",
+)
+
+
+# Human-readable titles for AI section keys when rendered as prose (MD/HTML).
+_AI_SECTION_TITLES: dict[str, str] = {
+    "executive_summary": "Executive Summary",
+    "executive_summary_valhalla": "Executive Summary",
+    "vulnerability_description": "Vulnerability Analysis",
+    "attack_scenarios": "Attack Scenarios",
+    "exploit_chains": "Exploit Chains",
+    "remediation_step": "Remediation Steps",
+    "remediation_stages": "Remediation Roadmap",
+    "business_risk": "Business Risk",
+    "compliance_check": "Compliance Mapping",
+    "prioritization_roadmap": "Prioritization Roadmap",
+    "hardening_recommendations": "Hardening Recommendations",
+    "zero_day_potential": "Novel Vulnerability Indication",
+}
+# AI section keys that are structured data, not prose — never rendered in the prose block.
+_AI_SECTION_NON_PROSE: frozenset[str] = frozenset(
+    {"cost_summary", "executive_summary_counts", "title_meta"}
 )
 
 
@@ -333,6 +356,7 @@ def _finding_row_to_schema(row: FindingRow) -> Finding:
     quality = _effective_evidence_quality(row)
     cv = row.cvss_score if row.cvss_score is not None else row.cvss
     return Finding(
+        finding_id=str(getattr(row, "id", "") or "") or None,
         severity=row.severity,
         title=row.title,
         description=row.description or "",
@@ -512,6 +536,7 @@ def build_report_data_from_db(
     )
     db_findings = [
         Finding(
+            finding_id=str(getattr(f, "id", "") or "") or None,
             severity=f.severity,
             title=f.title,
             description=f.description or "",
@@ -597,6 +622,7 @@ def build_report_data_from_scan_findings(
         summary=summary,
         findings=[
             Finding(
+                finding_id=str(getattr(f, "id", "") or "") or None,
                 severity=f.severity,
                 title=f.title,
                 description=f.description or "",
@@ -924,7 +950,6 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
         raw_req = _safe_attr(f, "raw_request") or ""
         raw_resp = _safe_attr(f, "raw_response") or ""
         endpoint = _safe_attr(f, "affected_endpoint") or ""
-        param = _safe_attr(f, "affected_parameter") or ""
         payload = getattr(f, "proof_of_concept", {}) or {}
         if isinstance(payload, dict):
             payload = payload.get("payload", "")
@@ -1003,7 +1028,6 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
     downgraded = 0
     for f in findings:
         title = str(_safe_attr(f, "title") or "").lower()
-        desc = str(_safe_attr(f, "description") or "").lower()
         data = getattr(f, "data", None) or {}
         if not isinstance(data, dict):
             data = {}
@@ -1102,8 +1126,19 @@ def _payload_reflected_in_context(reflection: str, poc: dict) -> bool:
     return payload[:20].lower() in reflection.lower()
 
 
-def _verify_cross_format(findings: list[Finding], report_id: str, target: str,
-                         scan_id: str | None = None) -> tuple[bool, list[str]]:
+def _verify_cross_format(
+    findings: list[Finding],
+    report_id: str,
+    target: str,
+    scan_id: str | None = None,
+    *,
+    expected_severity_totals: dict[str, int] | None = None,
+    expected_finding_count: int | None = None,
+    tier: str | None = None,
+) -> tuple[bool, list[str]]:
+    """Assert export integrity. When ``expected_*`` are supplied (from the rendered
+    Jinja context) the headline numbers are cross-checked against the canonical
+    headline set so MD/JSON/CSV/HTML cannot silently disagree."""
     issues: list[str] = []
     if not report_id:
         issues.append("missing_report_id")
@@ -1113,23 +1148,35 @@ def _verify_cross_format(findings: list[Finding], report_id: str, target: str,
         issues.append("zero_findings")
     unique_ids: set[str] = set()
     for f in findings:
-        fid = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+        fid = finding_id_of(f)
         if not fid:
             issues.append("finding_without_id")
         elif fid in unique_ids:
             issues.append(f"duplicate_finding_id: {fid}")
         else:
             unique_ids.add(fid)
-    sev_counts: dict[str, int] = {}
-    status_counts: dict[str, int] = {}
-    for f in findings:
-        sev = str(_safe_attr(f, "severity") or "info").lower()
-        sev_counts[sev] = sev_counts.get(sev, 0) + 1
-        ec = str(getattr(f, "evidence_classification", "candidate") or "candidate").upper()
-        status_counts[ec] = status_counts.get(ec, 0) + 1
     empty_title = sum(1 for f in findings if not str(_safe_attr(f, "title") or "").strip())
     if empty_title:
         issues.append(f"empty_titles: {empty_title}")
+
+    # Cross-format number agreement: the headline severity totals and finding count
+    # computed here must equal what the renderers (Jinja context) used.
+    if expected_severity_totals is not None:
+        computed_totals = headline_severity_totals(findings, tier)
+        normalized_expected = {
+            k: int(expected_severity_totals.get(k, 0))
+            for k in ("critical", "high", "medium", "low", "info")
+        }
+        if computed_totals != normalized_expected:
+            issues.append(
+                f"severity_totals_mismatch: rendered={normalized_expected} computed={computed_totals}"
+            )
+    if expected_finding_count is not None:
+        computed_count = len(headline_findings(findings, tier))
+        if int(expected_finding_count) != computed_count:
+            issues.append(
+                f"finding_count_mismatch: rendered={int(expected_finding_count)} computed={computed_count}"
+            )
     return len(issues) == 0, issues
 
 
@@ -1146,7 +1193,7 @@ def _finding_to_dict(
     poc = getattr(f, "proof_of_concept", None) or {}
     if not isinstance(poc, dict):
         poc = {}
-    finding_id = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+    finding_id = finding_id_of(f)
     d: dict[str, Any] = {
         "finding_id": finding_id,
         "title": f.title,
@@ -1218,6 +1265,17 @@ _SEVERITY_RANK: dict[str, int] = {
 }
 
 
+def finding_id_of(f: Any) -> str:
+    """Single source of truth for a finding's stable id across all export formats.
+
+    Accepts schema/ORM objects (``.id`` / ``.finding_id``) and plain dicts. Returns an
+    empty string only when no id is present anywhere.
+    """
+    if isinstance(f, dict):
+        return str(f.get("id") or f.get("finding_id") or "")
+    return str(getattr(f, "id", None) or getattr(f, "finding_id", None) or "")
+
+
 def _findings_sorted(findings: list[Finding]) -> list[Finding]:
     """Deterministic findings order: severity, title, CWE, CVSS."""
 
@@ -1254,6 +1312,78 @@ def _canonical_json_nested(obj: Any) -> Any:
     if isinstance(obj, list):
         return [_canonical_json_nested(x) for x in obj]
     return obj
+
+
+_PHASE_SCALAR_WHITELIST: frozenset[str] = frozenset(
+    {"summary", "status", "skipped", "phase", "error", "result", "outcome"}
+)
+
+
+def _safe_phase_projection(raw: Any) -> dict[str, Any]:
+    """Whitelisted, compact projection of a phase output / timeline entry.
+
+    Customer exports must not carry raw phase bodies: those leak internal data
+    (tool internals, payloads, attacker hypotheses, internal IP probes) and bloat
+    the JSON to multiple MB. We keep only audit-level signal — phase, duration,
+    status, a short summary — and replace nested structures with item counts.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for key in ("phase", "duration_seconds", "status"):
+        val = raw.get(key)
+        if isinstance(val, (str, int, float, bool)):
+            out[key] = val[:500] if isinstance(val, str) else val
+    inner = raw.get("output")
+    if isinstance(inner, dict):
+        # Whitelist only audit-level scalars; arbitrary string fields are dropped because
+        # they can carry internal addresses, tool internals, or secrets. List/dict bodies
+        # are reduced to item counts.
+        proj: dict[str, Any] = {}
+        for k, v in inner.items():
+            if k in _PHASE_SCALAR_WHITELIST and isinstance(v, (str, int, float, bool)):
+                proj[k] = v[:500] if isinstance(v, str) else v
+            elif isinstance(v, list):
+                proj[f"{k}_count"] = len(v)
+        if proj:
+            out["output_summary"] = proj
+    return out
+
+
+def safe_phase_summary_text(entry: Any) -> str:
+    """Short, leak-safe one-line preview of a phase/timeline entry.
+
+    Used for ``timeline_preview`` snippets in the Jinja context. Never emits raw
+    entry bodies (which carry internal addresses, tool internals, or secrets) — only
+    the whitelisted summary plus item counts.
+    """
+    proj = _safe_phase_projection(entry)
+    out = proj.get("output_summary") if isinstance(proj.get("output_summary"), dict) else {}
+    bits: list[str] = []
+    summary = out.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        bits.append(summary[:160])
+    for k, v in out.items():
+        if k.endswith("_count"):
+            bits.append(f"{k[:-6]}={v}")
+    return "; ".join(bits) if bits else "completed"
+
+
+# AI section keys that carry internal operational data and must never appear in a
+# customer-facing deliverable. ``cost_summary`` is LLM billing/telemetry (token counts,
+# USD cost, provider breakdown, tenant_id) — internal only.
+INTERNAL_ONLY_AI_SECTIONS: frozenset[str] = frozenset({"cost_summary"})
+
+
+def _ai_sections_for_export(ai_sections: Any) -> Any:
+    """Normalize AI sections for any export format: drop internal-only sections."""
+    if not isinstance(ai_sections, dict):
+        return ai_sections
+    return {
+        key: val
+        for key, val in ai_sections.items()
+        if key not in INTERNAL_ONLY_AI_SECTIONS
+    }
 
 
 def _jinja_ai_sections_and_scan_artifacts(
@@ -1393,13 +1523,16 @@ def build_valhalla_report_payload(
                 k: str(v or "")
                 for k, v in sorted(ai.items())
                 if k
-                not in {
-                    _VHL_AI_EXPLOIT_CHAINS,
-                    _VHL_AI_REMEDIATION_STAGES,
-                    _VHL_AI_ZERO_DAY,
-                    _VHL_AI_ROADMAP,
-                    _VHL_AI_HARDENING,
-                }
+                not in (
+                    {
+                        _VHL_AI_EXPLOIT_CHAINS,
+                        _VHL_AI_REMEDIATION_STAGES,
+                        _VHL_AI_ZERO_DAY,
+                        _VHL_AI_ROADMAP,
+                        _VHL_AI_HARDENING,
+                    }
+                    | INTERNAL_ONLY_AI_SECTIONS
+                )
             },
         }
     )
@@ -1574,20 +1707,6 @@ def generate_json(
     data: ReportData, *, jinja_context: dict[str, Any] | None = None
 ) -> bytes:
     """Generate JSON / JSOC report — full schema with brand, metadata, export_integrity, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation."""
-    ai_list = (
-        data.ai_insights
-        if isinstance(data.ai_insights, list)
-        else [data.ai_insights]
-        if data.ai_insights
-        else []
-    )
-    rem_list = (
-        data.remediation
-        if isinstance(data.remediation, list)
-        else [data.remediation]
-        if data.remediation
-        else []
-    )
     tech_sorted = sorted(str(t) for t in (data.technologies or []))
     findings_ordered = _findings_sorted(data.findings)
     timeline_rows = sorted(
@@ -1595,10 +1714,6 @@ def generate_json(
         key=lambda t: (t.order_index, t.phase or "", t.created_at or ""),
     )
     phase_rows = sorted(data.phase_outputs, key=lambda p: (p.phase or "",))
-    evidence_rows = sorted(
-        data.evidence,
-        key=lambda e: (e.finding_id, e.object_key, e.description or ""),
-    )
     screenshot_rows = sorted(
         data.screenshots,
         key=lambda s: (s.object_key, s.url_or_email or ""),
@@ -1614,23 +1729,16 @@ def generate_json(
         {
             "phase": t.phase,
             "order_index": t.order_index,
-            "entry": _canonical_json_nested(t.entry),
+            "entry": _safe_phase_projection(t.entry),
             "created_at": t.created_at,
         }
         for t in timeline_rows
     ]
-    phase_outputs = [
-        {"phase": p.phase, "output_data": _canonical_json_nested(p.output_data)}
-        for p in phase_rows
-    ]
-    evidence = [
-        {
-            "finding_id": e.finding_id,
-            "object_key": e.object_key,
-            "description": e.description,
-        }
-        for e in evidence_rows
-    ]
+    phase_outputs = []
+    for p in phase_rows:
+        proj = _safe_phase_projection(p.output_data)
+        proj.setdefault("phase", p.phase)
+        phase_outputs.append(proj)
     screenshots = [
         {"object_key": s.object_key, "url_or_email": s.url_or_email}
         for s in screenshot_rows
@@ -1657,7 +1765,7 @@ def generate_json(
     # build evidence inventory
     evidence_inventory: list[dict[str, Any]] = []
     for f in findings_ordered:
-        fid = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+        fid = finding_id_of(f)
         refs = getattr(f, "evidence_refs", []) or []
         for ref in refs:
             evidence_inventory.append({
@@ -1778,7 +1886,7 @@ def generate_json(
         "remediation_matrix": [
             {
                 "report_id": data.report_id,
-                "finding_id": str(getattr(f, "id", getattr(f, "finding_id", "")) or ""),
+                "finding_id": finding_id_of(f),
                 "status": str(getattr(f, "evidence_classification",
                                      getattr(f, "validation_status", "unverified")) or "unverified").upper(),
                 "affected_layer": _safe_attr(f, "affected_layer") or "NOT_ASSESSED",
@@ -1828,13 +1936,13 @@ def generate_json(
         "truthfulness_metrics": build_truthfulness_metrics(
             findings=[_finding_to_dict(f) for f in findings_ordered],
             ai_sections=ai_sections or {},
-            coverage_pct=float(jinja_context.get("wstg_coverage", {}).get("coverage_percentage", 0) or 0)
+            coverage_pct=float((jinja_context.get("wstg_coverage") or {}).get("coverage_percentage", 0) or 0)
             if isinstance(jinja_context, dict) else 0.0,
         ),
         "timeline": timeline,
         "phase_outputs": phase_outputs,
         "screenshots": screenshots,
-        "ai_sections": _canonical_json_nested(ai_sections),
+        "ai_sections": _canonical_json_nested(_ai_sections_for_export(ai_sections)),
         "active_web_scan": _canonical_json_nested(active_web_scan),
         "raw_artifacts": data.raw_artifacts,
         "export_integrity": _build_export_integrity(
@@ -1907,6 +2015,95 @@ def _build_export_integrity(
     }
 
 
+# sections.csv keys whose presence/content is driven by a list-typed valhalla_context
+# attribute (reliable truthiness via length, no raw-body leak — only the row count).
+_CSV_SECTION_VC_LIST_ATTR: dict[str, str] = {
+    "outdated_components": "outdated_components",
+    "emails": "leaked_email_rows",
+    "ssl_tls_table_rows": "ssl_tls_table_rows",
+    "security_headers_table_rows": "security_headers_table_rows",
+    "evidence_inventory": "evidence_inventory",
+    "tool_health_summary": "tool_health_summary",
+}
+# sections.csv keys whose content comes from a generated AI text section.
+_CSV_SECTION_AI_KEY: dict[str, str] = {
+    "exploit_chains_text": "exploit_chains",
+    "remediation_stages_text": "remediation_stages",
+    "zero_day_text": "zero_day_potential",
+    "conclusion_text": "executive_summary_valhalla",
+}
+
+
+def _vc_attr(jinja_context: dict[str, Any] | None, attr: str) -> Any:
+    """Read a valhalla_context attribute whether it is a model or a dict."""
+    vc = (jinja_context or {}).get("valhalla_context")
+    if vc is None:
+        return None
+    if isinstance(vc, dict):
+        return vc.get(attr)
+    return getattr(vc, attr, None)
+
+
+def _resolve_csv_section(
+    sec_key: str,
+    jinja_context: dict[str, Any] | None,
+    ai_sections: Any,
+    data: ReportData,
+    findings: list[Finding],
+) -> tuple[str, str]:
+    """Resolve (status, content) for a sections.csv row from AI text or structured context.
+
+    Structural sections are reported PRESENT with a compact descriptor (counts) instead of
+    the old "section not yet generated" placeholder or a raw model dump.
+    """
+    not_assessed = json.dumps({"status": "NOT_ASSESSED", "reason": "no data captured"})
+
+    # 1) Direct AI text section (same key) or aliased AI key.
+    ai_key = _CSV_SECTION_AI_KEY.get(sec_key, sec_key)
+    if isinstance(ai_sections, dict):
+        text = str(ai_sections.get(ai_key, "") or "")
+        if text.strip():
+            return "PRESENT", text[:4000]
+
+    # 2) List-typed structural attribute → present with row count.
+    if sec_key in _CSV_SECTION_VC_LIST_ATTR:
+        rows = _vc_attr(jinja_context, _CSV_SECTION_VC_LIST_ATTR[sec_key])
+        if isinstance(rows, list) and rows:
+            return "PRESENT", json.dumps({"status": "PRESENT", "row_count": len(rows)})
+        return "NOT_ASSESSED", not_assessed
+
+    # 3) Computed sections from the canonical finding/severity data.
+    if sec_key == "title_meta":
+        return "PRESENT", json.dumps(
+            {"target": data.target or "", "report_id": data.report_id or ""}
+        )
+    if sec_key == "executive_summary_counts":
+        counts = (jinja_context or {}).get("severity_counts") or {}
+        return "PRESENT", json.dumps({"status": "PRESENT", "severity_counts": counts})
+    if sec_key == "owasp_compliance":
+        rows = (jinja_context or {}).get("owasp_compliance_rows") or []
+        if rows:
+            return "PRESENT", json.dumps({"status": "PRESENT", "row_count": len(rows)})
+        return "NOT_ASSESSED", not_assessed
+    if sec_key == "findings":
+        return "PRESENT", json.dumps({"status": "PRESENT", "finding_count": len(findings)})
+    if sec_key == "critical_vulns":
+        n = sum(
+            1 for f in findings
+            if str(getattr(f, "severity", "") or "").lower() in ("critical", "high")
+        )
+        return ("PRESENT" if n else "NOT_ASSESSED"), json.dumps(
+            {"status": "PRESENT" if n else "NOT_ASSESSED", "critical_high_count": n}
+        )
+    if sec_key == "hibp_pwned_password_summary":
+        hibp = getattr(data, "hibp_pwned_password_summary", None)
+        if isinstance(hibp, dict) and hibp:
+            return "PRESENT", json.dumps(hibp, sort_keys=True)
+        return "NOT_ASSESSED", not_assessed
+
+    return "NOT_ASSESSED", not_assessed
+
+
 def generate_csv(
     data: ReportData, *, jinja_context: dict[str, Any] | None = None
 ) -> bytes:
@@ -1915,6 +2112,12 @@ def generate_csv(
     writer = csv.writer(buf, lineterminator="\n")
     from src.reports.valhalla_report_context import get_brand
     brand = get_brand()
+
+    # Single, severity-aligned finding set for every CSV sub-table: scope-filtered and
+    # severity-normalized by evidence so the CSV cannot disagree with MD/JSON/HTML
+    # (e.g. high+OBSERVED+is_provable=true contradictions).
+    csv_findings = _apply_scope_filter(_findings_sorted(data.findings), data.target or "")
+    csv_findings = enforce_severity_by_evidence(csv_findings)
 
     # ── findings.csv ──────────────────────────────────────────────
     writer.writerow(["# report_id", data.report_id or ""])
@@ -1936,11 +2139,11 @@ def generate_csv(
         "acceptance_criteria", "retest_status",
         "is_provable", "unconfirmed_reason",
     ])
-    for f in _findings_sorted(data.findings):
+    for f in csv_findings:
         poc = getattr(f, "proof_of_concept", {}) or {}
         if not isinstance(poc, dict):
             poc = {}
-        finding_id = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+        finding_id = finding_id_of(f)
         ec = getattr(f, "evidence_classification", None)
         vs = getattr(f, "validation_status", "unverified")
         status = str(ec or vs or "candidate").upper()
@@ -1989,8 +2192,8 @@ def generate_csv(
         "report_id", "finding_id", "evidence_id", "evidence_type",
         "source_tool", "artifact_ref", "timestamp", "parser_status", "status", "summary",
     ])
-    for f in _findings_sorted(data.findings):
-        finding_id = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+    for f in csv_findings:
+        finding_id = finding_id_of(f)
         refs = getattr(f, "evidence_refs", []) or []
         if not refs:
             writer.writerow([
@@ -2018,15 +2221,16 @@ def generate_csv(
         "report_id", "section", "status", "content_markdown_or_json",
         "evidence_ids", "parser_status", "updated_at",
     ])
-    ai_sections, _ = _jinja_ai_sections_and_scan_artifacts(jinja_context)
+    ai_sections_raw, _ = _jinja_ai_sections_and_scan_artifacts(jinja_context)
+    ai_sections = _ai_sections_for_export(ai_sections_raw)
     _valhalla_sections = _VALHALLA_REPORT_SECTION_ORDER
     for sec_key in _valhalla_sections:
-        sec_text = str(ai_sections.get(sec_key, "") if isinstance(ai_sections, dict) else "")
-        sec_status = "PRESENT" if sec_text.strip() else "NOT_ASSESSED"
+        sec_status, sec_content = _resolve_csv_section(
+            sec_key, jinja_context, ai_sections, data, csv_findings
+        )
         writer.writerow([
             data.report_id or "", sec_key, sec_status,
-            sec_text[:4000] if sec_text else json.dumps({"status": "NOT_ASSESSED", "reason": "section not yet generated"}),
-            "[]", "generated", data.created_at or "",
+            sec_content, "[]", "generated", data.created_at or "",
         ])
     if isinstance(ai_sections, dict):
         for extra_key in sorted(set(ai_sections.keys()) - set(_valhalla_sections)):
@@ -2047,8 +2251,8 @@ def generate_csv(
         "exact_fix", "priority", "rollback_risk",
         "verification_step", "acceptance_criteria", "retest_status",
     ])
-    for f in _findings_sorted(data.findings):
-        finding_id = str(getattr(f, "id", getattr(f, "finding_id", "")) or "")
+    for f in csv_findings:
+        finding_id = finding_id_of(f)
         sev = _safe_attr(f, "severity", "info")
         prio = "CRITICAL" if sev == "critical" else "HIGH" if sev == "high" else "MEDIUM" if sev == "medium" else "LOW"
         writer.writerow([
@@ -2084,7 +2288,11 @@ def generate_technologies_csv(
     ])
     technologies = getattr(data, "technologies", []) or []
     if not technologies:
-        writer.writerow(["NOT_ASSESSED", "", "", "", "", "", "", ""])
+        writer.writerow([
+            "NOT_ASSESSED", "", "", "", "",
+            "no technology fingerprint captured (scanner failed or not run)",
+            "fingerprinting_not_run_or_failed", "",
+        ])
     else:
         for tech in sorted(technologies, key=lambda t: str(t).lower()):
             tech_str = str(tech)
@@ -2114,7 +2322,11 @@ def generate_outdated_components_csv(
     ])
     technologies = getattr(data, "technologies", []) or []
     if not technologies:
-        writer.writerow(["NOT_ASSESSED", "", "", "", "", "", "", "", "", "", ""])
+        writer.writerow([
+            "NOT_ASSESSED", "", "", "", "", "NOT_ASSESSED",
+            "NOT_ASSESSED", "", "INFO", "fingerprinting_not_run_or_failed",
+            "No components detected; run SCA (Trivy / Grype / OSV Scanner) after a successful fingerprint",
+        ])
     else:
         for tech in sorted(technologies, key=lambda t: str(t).lower()):
             tech_str = str(tech)
@@ -2178,8 +2390,24 @@ def generate_export_validation_report(
     brand = get_brand()
     findings_count = len(data.findings) if data.findings else 0
     issues: list[str] = []
+    tier = _tier_from_jinja(jinja_context)
+    ctx_severity_totals: dict[str, int] | None = None
+    ctx_finding_count: int | None = None
+    if isinstance(jinja_context, dict):
+        raw_totals = jinja_context.get("severity_counts")
+        if isinstance(raw_totals, dict):
+            ctx_severity_totals = {k: int(v) for k, v in raw_totals.items() if isinstance(v, (int, float))}
+        raw_count = jinja_context.get("findings_count")
+        if isinstance(raw_count, (int, float)):
+            ctx_finding_count = int(raw_count)
     ok, fmt_issues = _verify_cross_format(
-        data.findings, data.report_id or "", data.target or "", data.scan_id
+        data.findings,
+        data.report_id or "",
+        data.target or "",
+        data.scan_id,
+        expected_severity_totals=ctx_severity_totals,
+        expected_finding_count=ctx_finding_count,
+        tier=tier,
     )
     issues.extend(fmt_issues)
     report = {
@@ -2198,7 +2426,7 @@ def generate_export_validation_report(
         "section_status": {
             "executive_summary": "PRESENT" if (data.executive_summary or "").strip() else "NOT_ASSESSED",
             "findings": "PRESENT" if findings_count > 0 else "NOT_ASSESSED",
-            "remediation": "PRESENT" if (data.remediation or data.remediations) else "NOT_ASSESSED",
+            "remediation": "PRESENT" if data.remediation else "NOT_ASSESSED",
             "technologies": "PRESENT" if (getattr(data, "technologies", None) or []) else "NOT_ASSESSED",
             "timeline": "PRESENT" if (getattr(data, "timeline", None) or []) else "NOT_ASSESSED",
         },
@@ -2722,7 +2950,7 @@ def generate_markdown(
         lines.append(f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | `{endpoint}` | {status} |")
 
     lines.append("")
-    lines.append(f"**Severity Breakdown:** " + ", ".join(f"{severity_emoji.get(k, k.upper())}: {v}" for k, v in sorted(counts.items())))
+    lines.append("**Severity Breakdown:** " + ", ".join(f"{severity_emoji.get(k, k.upper())}: {v}" for k, v in sorted(counts.items())))
     lines.append("")
 
     lines.append("### Finding Details")
@@ -2823,26 +3051,36 @@ def generate_markdown(
         lines.append("_No technologies detected._")
     lines.append("")
 
+    from src.reports.report_text_sanitizer import sanitize_ai_report_text
+
     ai_sections, _ = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     if ai_sections:
-        lines.append("## AI-Generated Sections")
-        lines.append("")
+        rendered: list[tuple[str, str]] = []
         if isinstance(ai_sections, list):
             for ai_sec in ai_sections:
                 if isinstance(ai_sec, dict):
                     ai_title = str(ai_sec.get("section", ai_sec.get("heading", "")) or "")
                     ai_body = str(ai_sec.get("content", ai_sec.get("text", "")) or "")
-                    if ai_title:
-                        lines.append(f"### {ai_title}")
-                        lines.append("")
-                    if ai_body:
-                        lines.append(ai_body)
-                        lines.append("")
+                    body = sanitize_ai_report_text(_clean_ansi(ai_body))
+                    if body.strip():
+                        rendered.append((ai_title or "Analysis", body))
         elif isinstance(ai_sections, dict):
             for k, v in ai_sections.items():
-                lines.append(f"### {k}")
+                # Structured/service sections are not prose — keep them out of the narrative.
+                if k in _AI_SECTION_NON_PROSE or k.endswith("_counts"):
+                    continue
+                body = sanitize_ai_report_text(_clean_ansi(str(v)))
+                if not body.strip():
+                    continue
+                title = _AI_SECTION_TITLES.get(k, k.replace("_", " ").title())
+                rendered.append((title, body))
+        if rendered:
+            lines.append("## Analysis")
+            lines.append("")
+            for title, body in rendered:
+                lines.append(f"### {title}")
                 lines.append("")
-                lines.append(_clean_ansi(str(v)))
+                lines.append(body)
                 lines.append("")
 
     lines.append("## Timeline")
@@ -2851,10 +3089,25 @@ def generate_markdown(
         data.timeline, key=lambda e: (e.order_index, e.phase or "", e.created_at or "")
     )
     for tl in timeline_sorted:
-        phase = tl.phase or ""
         ts = tl.created_at or ""
-        entry = _clean_ansi(str(tl.entry) if not isinstance(tl.entry, dict) else json.dumps(tl.entry))
-        lines.append(f"- **[{phase}]** {ts}: {entry}")
+        if isinstance(tl.entry, dict):
+            proj = _safe_phase_projection(tl.entry)
+            phase = tl.phase or str(proj.get("phase") or "")
+            dur = proj.get("duration_seconds")
+            out_sum = proj.get("output_summary") if isinstance(proj.get("output_summary"), dict) else {}
+            bits: list[str] = []
+            summ = out_sum.get("summary")
+            if isinstance(summ, str) and summ.strip():
+                bits.append(_clean_ansi(summ)[:200])
+            for k, v in out_sum.items():
+                if k.endswith("_count"):
+                    bits.append(f"{k[:-6]}={v}")
+            detail = "; ".join(bits) if bits else "completed"
+            dur_str = f" ({dur:.0f}s)" if isinstance(dur, (int, float)) else ""
+            lines.append(f"- **[{phase}]** {ts}{dur_str}: {detail}")
+        else:
+            phase = tl.phase or ""
+            lines.append(f"- **[{phase}]** {ts}: {_clean_ansi(str(tl.entry))[:200]}")
     lines.append("")
 
     lines.append("---")

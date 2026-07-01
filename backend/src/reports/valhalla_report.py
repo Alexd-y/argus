@@ -59,6 +59,11 @@ from src.reports.report_quality_gate import (
     ReportQualityGate,
     build_report_quality_gate,
 )
+from src.reports.report_text_sanitizer import (
+    contains_ai_stub_output,
+    contains_raw_prompt_leakage,
+    sanitize_ai_report_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1549,6 +1554,21 @@ async def generate_valhalla_sections(
             continue
 
         if not text:
+            generated[section_key] = _build_structured_fallback(section_key, context)
+            continue
+
+        # Guard against prompt-scaffolding / context-JSON regurgitation and stub output
+        # before the text reaches the renderer (this path bypasses run_ai_text_generation).
+        if contains_raw_prompt_leakage(text) or contains_ai_stub_output(text):
+            logger.warning(
+                "valhalla_ai_leakage_or_stub_detected",
+                extra={"section_key": section_key},
+            )
+            generated[section_key] = _build_structured_fallback(section_key, context)
+            continue
+
+        text = sanitize_ai_report_text(text)
+        if not text.strip():
             generated[section_key] = _build_structured_fallback(section_key, context)
             continue
 

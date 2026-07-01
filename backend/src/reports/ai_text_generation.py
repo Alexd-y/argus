@@ -406,12 +406,15 @@ def run_ai_text_generation(
         if settings.ai_text_executive_fact_check_replace:
             generated = grounded_executive_summary_fallback_text(input_payload)
 
-    has_leakage = contains_raw_prompt_leakage(generated)
-    if has_leakage:
+    if contains_raw_prompt_leakage(generated):
+        # The model echoed the prompt scaffolding (and sometimes the raw context JSON)
+        # instead of answering. Never surface that to a customer or cache it — replace
+        # with deterministic, evidence-grounded text.
         logger.warning(
             "ai_text_prompt_leakage_detected",
             extra={"section_key": section_key, "tier": tier},
         )
+        generated = grounded_executive_summary_fallback_text(input_payload)
     if contains_ai_stub_output(generated):
         logger.warning(
             "ai_text_stub_detected_pre_sanitize",

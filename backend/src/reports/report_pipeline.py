@@ -403,8 +403,11 @@ async def run_generate_report_pipeline(
         expected_keys = set(fmt_list)
         if tier_str == "valhalla" and "csv" in expected_keys:
             expected_keys.add(VALHALLA_SECTIONS_CSV_FORMAT)
-        if set(generated.keys()) != expected_keys:
-            missing = expected_keys - set(generated.keys())
+        # Every requested format must be produced; the Valhalla CSV path additionally emits
+        # companion artifacts (technologies / outdated / tool-health CSVs, export-validation
+        # report) which are legitimate extras — require a superset, not strict equality.
+        missing = expected_keys - set(generated.keys())
+        if missing:
             raise RuntimeError(f"Missing outputs: {sorted(missing)}")
 
         await session.execute(
