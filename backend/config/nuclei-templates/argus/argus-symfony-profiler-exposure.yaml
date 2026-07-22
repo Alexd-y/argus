@@ -1,0 +1,59 @@
+id: argus-symfony-profiler-exposure
+
+info:
+  name: Symfony Web Profiler Exposure
+  author: argus
+  severity: high
+  description: >-
+    Detects a publicly reachable Symfony Web Profiler / debug toolbar. When the
+    profiler is exposed outside a dev environment it leaks request, session,
+    routing and configuration internals to anonymous users. Only a passive GET
+    to the profiler entry point is issued.
+  reference:
+    - https://symfony.com/doc/current/profiler.html
+  tags: argus,symfony,exposure,misconfig,debug
+  metadata:
+    source_url: https://github.com/Az0x7/vulnerability-Checklist
+    source_commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+    adapted_at: "2026-07-22"
+    cwe: CWE-200
+    wstg: WSTG-CONF-05
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/empty/search/results?limit=10"
+      - "{{BaseURL}}/_profiler/"
+
+    stop-at-first-match: true
+    matchers-condition: and
+    matchers:
+      # Signal 1 — the profiler page title / branding.
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "Symfony Web Debug Toolbar"
+        condition: or
+
+      # Signal 2 — profiler-specific DOM / token markers (structural corroboration).
+      - type: word
+        part: body
+        words:
+          - "sf-profiler"
+          - "X-Debug-Token"
+          - "class=\"sf-toolbar\""
+        condition: or
+
+      # Negative — a login/redirect interstitial is not an exposed profiler.
+      - type: word
+        part: body
+        words:
+          - "Please sign in"
+          - "Location: /login"
+        condition: or
+        negative: true
+
+      - type: status
+        status:
+          - 200

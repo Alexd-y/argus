@@ -1,0 +1,86 @@
+schema_version: 1
+playbook_id: authorization.method-variant
+version: 1
+title: Authorization - HTTP method variant bypass
+description: >-
+  Verb-tampering authorization bypass: an endpoint enforces authorization on
+  the canonical verb but honours an alternate method (POST + X-HTTP-Method-
+  Override) that skips the check. The baseline is a privileged principal reading
+  the protected resource; the mutated request is an unprivileged principal using
+  the method variant. A finding requires the variant request to return the
+  privileged sensitive fields rather than a 401/403/404/405.
+category: authorization
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (HTTP method / verb
+    tampering class) to the ARGUS declarative playbook schema.
+cwe:
+  - 650
+  - 285
+wstg:
+  - WSTG-ATHZ-01
+owasp_api:
+  - API5:2023
+tags:
+  - authorization
+  - method-override
+  - verb-tampering
+applies_when:
+  methods:
+    - GET
+  path_globs:
+    - /api/*/admin/*
+  requires_openapi: false
+  input_kinds:
+    - header
+required_capabilities:
+  - http_client
+required_principals:
+  - admin
+  - attacker
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: admin
+  - kind: principal_available
+    value: attacker
+steps:
+  - id: admin_baseline
+    action: http_request
+    principal: admin
+    save_as: admin_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/admin/users/5
+      headers: {}
+  - id: attacker_variant
+    action: http_request
+    principal: attacker
+    save_as: attacker_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/admin/users/5
+      headers:
+        X-HTTP-Method-Override: GET
+assertions:
+  - type: authz
+    params:
+      sensitive_fields:
+        - email
+        - role
+      denied_statuses:
+        - 401
+        - 403
+        - 404
+        - 405
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

@@ -1,0 +1,60 @@
+id: argus-django-debug-exposure
+
+info:
+  name: Django DEBUG=True Error Page Exposure
+  author: argus
+  severity: medium
+  description: >-
+    Detects a Django application running with DEBUG enabled. With DEBUG=True the
+    framework renders a detailed traceback and settings page (including the
+    resolved URLconf) to any visitor. Only a benign GET to a deliberately
+    non-existent path is issued; no application state is modified.
+  reference:
+    - https://docs.djangoproject.com/en/stable/ref/settings/#debug
+  tags: argus,django,exposure,misconfig,debug
+  metadata:
+    source_url: https://github.com/Az0x7/vulnerability-Checklist
+    source_commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+    adapted_at: "2026-07-22"
+    cwe: CWE-215
+    wstg: WSTG-CONF-08
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/argus-django-debug-probe-404"
+
+    stop-at-first-match: false
+    matchers-condition: and
+    matchers:
+      # Signal 1 — the DEBUG banner unique to Django's technical 404/500 page.
+      - type: word
+        part: body
+        words:
+          - "You're seeing this error because you have"
+          - "DEBUG"
+        condition: and
+
+      # Signal 2 — Django-specific traceback structure (not a generic 404).
+      - type: word
+        part: body
+        words:
+          - "Request Method:"
+          - "Django Version:"
+        condition: and
+
+      # Negative — reject a foreign framework error page masquerading as a match.
+      - type: word
+        part: body
+        words:
+          - "Apache Tomcat"
+          - "Whitelabel Error Page"
+        condition: or
+        negative: true
+
+      # Status is an additional constraint only, never sufficient on its own.
+      - type: status
+        status:
+          - 404
+          - 500
+          - 200

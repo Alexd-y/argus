@@ -1,0 +1,81 @@
+schema_version: 1
+playbook_id: auth.direct-protected-route
+version: 1
+title: Auth - direct access to protected route without authentication
+description: >-
+  Missing authentication enforcement: a protected route returns data even when
+  requested without any credentials. The baseline is an authenticated request
+  that legitimately succeeds; the mutated request is the same route hit by an
+  anonymous principal (empty session). A finding requires the anonymous request
+  to succeed with substantive, data-bearing JSON - a bare 2xx on a public
+  endpoint is not proof.
+category: authentication
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (broken/missing
+    authentication class) to the ARGUS declarative playbook schema; read-only.
+cwe:
+  - 306
+  - 287
+wstg:
+  - WSTG-ATHN-01
+owasp_api:
+  - API2:2023
+tags:
+  - authentication
+  - missing-auth
+  - broken-auth
+applies_when:
+  methods:
+    - GET
+  path_globs:
+    - /api/*/account
+    - /api/*/profile
+  requires_openapi: false
+  input_kinds:
+    - header
+required_capabilities:
+  - http_client
+required_principals:
+  - user
+  - anon
+risk_level: low
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: user
+  - kind: principal_available
+    value: anon
+steps:
+  - id: authed_baseline
+    action: http_request
+    principal: user
+    save_as: authed_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/account
+      headers: {}
+  - id: direct_probe
+    action: http_request
+    principal: anon
+    save_as: anon_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/account
+      headers: {}
+assertions:
+  - type: authn
+    params:
+      denied_statuses:
+        - 401
+        - 403
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

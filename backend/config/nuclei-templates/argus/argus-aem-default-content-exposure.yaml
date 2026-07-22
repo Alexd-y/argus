@@ -1,0 +1,57 @@
+id: argus-aem-default-content-exposure
+
+info:
+  name: Adobe AEM Default Content / Login Exposure
+  author: argus
+  severity: medium
+  description: >-
+    Detects an Adobe Experience Manager (AEM) instance that still exposes the
+    default Granite login surface or shipped sample content, indicating an
+    out-of-the-box, unhardened deployment. Only passive GET requests are issued;
+    no authentication or state change is attempted.
+  reference:
+    - https://experienceleague.adobe.com/docs/experience-manager-65/deploying/configuring/security-checklist.html
+  tags: argus,aem,adobe,exposure,misconfig
+  metadata:
+    source_url: https://github.com/Az0x7/vulnerability-Checklist
+    source_commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+    adapted_at: "2026-07-22"
+    cwe: CWE-1188
+    wstg: WSTG-CONF-05
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/libs/granite/core/content/login.html"
+
+    stop-at-first-match: false
+    matchers-condition: and
+    matchers:
+      # Signal 1 — AEM/Granite branding on the default login page.
+      - type: word
+        part: body
+        words:
+          - "Adobe Experience Manager"
+          - "Granite"
+        condition: or
+
+      # Signal 2 — Granite login clientlib / form markers (structural corroboration).
+      - type: word
+        part: body
+        words:
+          - "granite/core/components/login"
+          - "id=\"username\""
+        condition: and
+
+      # Negative — a custom-branded/hardened login is not the default surface.
+      - type: word
+        part: body
+        words:
+          - "404 Not Found"
+          - "AccessDeniedException"
+        condition: or
+        negative: true
+
+      - type: status
+        status:
+          - 200

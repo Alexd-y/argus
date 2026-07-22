@@ -1,0 +1,86 @@
+schema_version: 1
+playbook_id: session.logout-invalidation
+version: 1
+title: Session - cookie still valid after logout
+description: >-
+  Insufficient session expiration: a session token remains usable after the
+  user logs out, so a stolen cookie survives the sign-out that was supposed to
+  revoke it. The baseline is a valid session reading a protected resource; the
+  scenario then logs out and replays the same session against the resource
+  (mutated). A finding requires the post-logout request to still return the
+  authenticated data instead of a 401/403.
+category: session_management
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (session invalidation /
+    logout class) to the ARGUS declarative playbook schema.
+cwe:
+  - 613
+  - 384
+wstg:
+  - WSTG-SESS-06
+owasp_api:
+  - API2:2023
+tags:
+  - session-management
+  - logout
+  - session-fixation
+applies_when:
+  methods:
+    - GET
+  path_globs:
+    - /api/*/me
+    - /api/*/session
+  requires_openapi: false
+  input_kinds:
+    - cookie
+required_capabilities:
+  - http_client
+required_principals:
+  - user
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: user
+steps:
+  - id: pre_logout_baseline
+    action: http_request
+    principal: user
+    save_as: pre_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/me
+      headers: {}
+  - id: do_logout
+    action: http_request
+    principal: user
+    save_as: logout_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/logout
+      headers: {}
+  - id: post_logout_probe
+    action: http_request
+    principal: user
+    save_as: post_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/me
+      headers: {}
+assertions:
+  - type: authn
+    params:
+      denied_statuses:
+        - 401
+        - 403
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

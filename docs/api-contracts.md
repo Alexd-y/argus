@@ -244,6 +244,171 @@ Transport: HTTP (queries/mutations), WebSocket (subscriptions)
 
 ---
 
+## 4a. Web Security Workbench — Projects (WB-P1b)
+
+Версионированные, tenant-scoped (RLS) endpoints фундамента Workbench. Все
+запросы используют `X-Tenant-ID` (или default tenant) как контекст; сессия
+получает `set_session_tenant`, дополнительно каждый запрос фильтрует
+`tenant_id`. Планы/статусы: см. `ai_docs/develop/plans/2026-07-22-argus-web-workbench.md`.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects` | `WorkbenchProjectCreate` | 201 `WorkbenchProjectDTO` | 409 name conflict, 422 validation |
+| GET | `/api/v1/wb/projects` | — (`?status&offset&limit`) | 200 `WorkbenchProjectListResponse` | — |
+| GET | `/api/v1/wb/projects/{project_id}` | — | 200 `WorkbenchProjectDTO` | 404 not found |
+| PATCH | `/api/v1/wb/projects/{project_id}` | `WorkbenchProjectUpdate` | 200 `WorkbenchProjectDTO` | 404, 409 version/name conflict |
+| POST | `/api/v1/wb/projects/{project_id}/eap` | `EapAttachRequest` | 201 `WorkbenchEapView` | 404, 422 `eap rejected: <reason>` |
+
+**Схемы (Pydantic `extra="forbid"`):**
+
+- `WorkbenchProjectCreate` = `{ name, description?, scope_rules[≥1], secrets_ref? }`,
+  где `scope_rules[]` — `src.policy.scope.ScopeRule` `{ kind: url|domain|host|ip|cidr,
+  pattern, deny?, ports?[{low,high}], note? }`. Секреты не принимаются — только `secrets_ref`.
+- `WorkbenchProjectUpdate` = `{ expected_version, name?, description?, status?, scope_rules?, secrets_ref? }`
+  (optimistic locking: `expected_version` обязателен).
+- `WorkbenchProjectDTO` = `{ id, tenant_id, name, description?, status, scope_rules[], secrets_ref?,
+  version, eap?: WorkbenchEapView, created_at, updated_at }`.
+- `WorkbenchEapView` = `{ engagement_id, status: verified|invalid|expired, signer_key_id?, expires? }`.
+- `EapAttachRequest` = `{ signed_profile: <signed EngagementAuthorizationProfile JSON> }`.
+  Верификация fail-closed: неподписанный/битый/просроченный профиль → 422; ключи
+  берутся из `WB_EAP_KEYS_DIR` (пустая директория → любой EAP отклоняется).
+
+**Инварианты:** scope default-deny (нужно ≥1 allow-правило); RLS изолирует tenants;
+EAP только `verified` персистится; ошибки не раскрывают stack trace/внутренности.
+
+## 4b. Web Security Workbench — Proxy (WB-P2a-2, CA issuance WB-P2b-1)
+
+Прокси-листенеры и история трафика (tenant-scoped, RLS). CA issuance/rotation
+(WB-P2b-1) запечатывает приватный ключ CA внешним KEK и возвращает только public
+cert. Live-capture через mitm-демон — WB-P2b-2.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects/{project_id}/proxy/listeners` | `ProxyListenerCreate` | 201 `ProxyListenerDTO` | 404 project, 409 name conflict |
+| GET | `/api/v1/wb/projects/{project_id}/proxy/listeners` | — | 200 `ProxyListenerDTO[]` | — |
+| GET | `/api/v1/wb/proxy/listeners/{listener_id}` | — | 200 `ProxyListenerDTO` | 404 |
+| PATCH | `/api/v1/wb/proxy/listeners/{listener_id}` | `ProxyListenerUpdate` | 200 `ProxyListenerDTO` | 404, 409 version/name |
+| POST | `/api/v1/wb/proxy/listeners/{listener_id}/ca` | `CaIssueRequest` | 200 `ProxyListenerDTO` | 404, 409 version, 503 no sealing key |
+| GET | `/api/v1/wb/projects/{project_id}/proxy/history` | — (`?host&offset&limit`) | 200 `TrafficListResponse` | — |
+| GET | `/api/v1/wb/proxy/messages/{message_id}` | — | 200 `TrafficMessageDTO` | 404 |
+
+**Схемы (`extra="forbid"`):**
+
+- `ProxyListenerCreate` = `{ name, host?, port?, intercept_enabled?, intercept_rules?: InterceptRuleSet }`.
+- `ProxyListenerUpdate` = `{ expected_version, name?, host?, port?, status?, intercept_enabled?, intercept_rules? }` (optimistic lock).
+- `CaIssueRequest` = `{ expected_version, common_name? }` (optimistic lock; issue или rotate).
+- `InterceptRuleSet` = `{ rules[]: { action: intercept|pass|drop, methods?, host_suffix?, path_prefix?, content_type_contains? }, default_action }`.
+- `ProxyListenerDTO` = `{ id, tenant_id, project_id, name, host, port, status: active|disabled|killed,
+  intercept_enabled, intercept_rules?, ca?: { fingerprint_sha256, certificate_pem }, version, created_at, updated_at }` — **только public CA cert**.
+- `TrafficMessageDTO` = `{ id, project_id, listener_id?, source, method, scheme, host, port, path, query?,
+  http_version, status_code?, forward_outcome: forward|blocked, block_reason?, in_scope,
+  request_body?: BodyRef, response_body?: BodyRef, tags[], created_at }`.
+- `BodyRef` = `{ id, direction, storage_backend: inline|s3|none, sha256, size_bytes, content_type?, truncated }` — **никогда не сами байты тела**.
+
+**Инварианты:** RLS изоляция всех proxy-таблиц; forward только через `ForwardGate`(scope)+`PreflightChecker`(P2b);
+тело капается (`plan_body`: inline/spill/truncated) — no unbounded in-memory, тело не логируется;
+CA private key — только `export_private_key_pem`, запечатывается Fernet-KEK
+(`WB_CA_SEALING_KEY`) перед хранением в `ca_sealed_key` (никогда plaintext/в логах),
+`ca_secrets_ref` фиксирует KEK; fail-closed 503 если KEK не сконфигурирован.
+
+---
+
+## 4c. Web Security Workbench — Tools (Decoder + Comparer, WB-P3a)
+
+Stateless утилиты (без БД/scope), требуют auth (tenant). Бинарные данные —
+стандартный base64 (byte-safe транспорт). Keyed decoder-операции fail-closed (400):
+секреты никогда не пересекают API.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/tools/decoder` | `DecoderRequest` | 200 `DecoderResponse` | 400 bad base64 / decode failed |
+| POST | `/api/v1/wb/tools/comparer` | `ComparerRequest` | 200 `ComparerResponse` | 400 bad base64 / compare failed |
+| POST | `/api/v1/wb/tools/message-format` | `MessageFormatRequest` | 200 `MessageFormatResponse` | 400 bad base64 |
+
+**Схемы (`extra="forbid"`):**
+
+- `DecoderRequest` = `{ input_base64, steps[]: { operation, options: {str:str} } }` (steps ≤32, options ≤8).
+  Операции: `url_(en|de)code`, `base64[url]_(en|de)code`, `hex_(en|de)code`, `html_(en|de)code`,
+  `gzip_(compress|decompress)`, `jwt_decode` (header+payload, БЕЗ verify), `hash` (md5/sha1/sha256/384/512),
+  `hmac` (только через `secret_ref` — inline `key`/`secret` отклоняются; без resolver → 400).
+- `DecoderResponse` = `{ output_base64, output_utf8?: str|null, operations_applied }`.
+- `ComparerRequest` = `{ left_base64, right_base64, kind: byte|word|line|json|dom }`.
+- `ComparerResponse` = `{ kind, identical, inserted, deleted, replaced, segments[]: { op: equal|insert|delete|replace, a, b } }`.
+- `MessageFormatRequest` = `{ raw_base64, message_kind: request|response }`.
+- `MessageFormatResponse` = `{ valid, error?, start_line?, headers[]: { name, value }, pretty?: str|null, hex_dump, body_size }`
+  — pretty/hex — read-only проекции; исходные raw-байты не мутируются (byte-exact override).
+
+**Инварианты:** чистые/детерминированные; no side effects; gzip-inflate ограничен (16 MiB, anti-bomb);
+JSON-diff order-insensitive; DOM-diff игнорирует порядок атрибутов/пробелы; keyed-hash только `secret_ref`;
+message-format сохраняет байт-в-байт (pretty/hex — производные, не для транспорта).
+
+---
+
+## 4d. Web Security Workbench — Organizer (WB-P3c)
+
+Коллекции и сохранённые запросы/заметки (tenant-scoped, RLS, optimistic lock).
+Сырые байты — base64 (byte-safe), возвращаются только в single-item GET.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects/{project_id}/organizer/collections` | `OrganizerCollectionCreate` | 201 `OrganizerCollectionDTO` | 404 project, 409 name |
+| GET | `/api/v1/wb/projects/{project_id}/organizer/collections` | — | 200 `OrganizerCollectionDTO[]` | — |
+| GET | `/api/v1/wb/organizer/collections/{collection_id}` | — | 200 `OrganizerCollectionDTO` | 404 |
+| PATCH | `/api/v1/wb/organizer/collections/{collection_id}` | `OrganizerCollectionUpdate` | 200 `OrganizerCollectionDTO` | 404, 409 version/name |
+| DELETE | `/api/v1/wb/organizer/collections/{collection_id}` | — | 204 | 404 |
+| POST | `/api/v1/wb/organizer/collections/{collection_id}/items` | `OrganizerItemCreate` | 201 `OrganizerItemDTO` | 404 collection, 400 bad base64 |
+| GET | `/api/v1/wb/projects/{project_id}/organizer/items` | — (`?collection_id&host&tag&q&offset&limit`) | 200 `OrganizerItemListResponse` | — |
+| GET | `/api/v1/wb/organizer/items/{item_id}` | — | 200 `OrganizerItemDTO` (с raw) | 404 |
+| PATCH | `/api/v1/wb/organizer/items/{item_id}` | `OrganizerItemUpdate` | 200 `OrganizerItemDTO` | 404, 409 version |
+| DELETE | `/api/v1/wb/organizer/items/{item_id}` | — | 204 | 404 |
+
+**Схемы (`extra="forbid"`):**
+
+- `OrganizerCollectionCreate` = `{ name, description? }`; `OrganizerCollectionUpdate` = `{ expected_version, name?, description? }`.
+- `OrganizerCollectionDTO` = `{ id, tenant_id, project_id, name, description?, version, created_at, updated_at }`.
+- `OrganizerItemCreate` = `{ title, method?, host?, url?, notes?, tags[]≤32, raw_request_base64?, raw_response_base64?, source_message_id? }` (raw ≤~1 MiB).
+- `OrganizerItemUpdate` = `{ expected_version, title?, notes?, tags? }`.
+- `OrganizerItemDTO` = `{ id, tenant_id, project_id, collection_id, title, method?, host?, url?, notes?, tags[],
+  has_raw_request, has_raw_response, raw_request_base64?, raw_response_base64?, source_message_id?, version, created_at, updated_at }`
+  — `raw_*_base64` заполняются ТОЛЬКО в single-item GET (в list — `null`).
+- `OrganizerItemListResponse` = `{ items[], total, offset, limit }`.
+
+**Инварианты:** RLS изоляция collections/items; сырые байты хранятся byte-exact и не логируются;
+поиск по `collection_id`/`host`/`tag`(JSONB containment)/`q`(title ilike); tags дедуплицируются/тримятся.
+
+---
+
+## 4e. Web Security Workbench — Repeater (WB-P3b-2)
+
+Сохранённые редактируемые запросы (tabs) + scope-gated replay с историей.
+Сырые байты — base64, byte-exact; возвращаются только в single-item GET.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects/{project_id}/repeater/tabs` | `RepeaterTabCreate` | 201 `RepeaterTabDTO` | 404 project, 400 base64 |
+| GET | `/api/v1/wb/projects/{project_id}/repeater/tabs` | — | 200 `RepeaterTabDTO[]` | — |
+| GET | `/api/v1/wb/repeater/tabs/{tab_id}` | — | 200 `RepeaterTabDTO` | 404 |
+| PATCH | `/api/v1/wb/repeater/tabs/{tab_id}` | `RepeaterTabUpdate` | 200 `RepeaterTabDTO` | 404, 409 version, 400 base64 |
+| DELETE | `/api/v1/wb/repeater/tabs/{tab_id}` | — | 204 | 404 |
+| POST | `/api/v1/wb/repeater/tabs/{tab_id}/replay` | `RepeaterReplayRequest` | 200 `RepeaterExchangeDTO` | 404, 409 not-active, 400 malformed, 502 upstream |
+| GET | `/api/v1/wb/repeater/tabs/{tab_id}/exchanges` | — (`?offset&limit`) | 200 `RepeaterExchangeListResponse` | — |
+| GET | `/api/v1/wb/repeater/exchanges/{exchange_id}` | — | 200 `RepeaterExchangeDTO` (с raw) | 404 |
+
+**Схемы (`extra="forbid"`):**
+
+- `RepeaterTabCreate` = `{ name, raw_request_base64 }`; `RepeaterTabUpdate` = `{ expected_version, name?, raw_request_base64? }`.
+- `RepeaterTabDTO` = `{ id, tenant_id, project_id, name, scheme?, host?, port?, raw_request_base64, version, created_at, updated_at }`.
+- `RepeaterReplayRequest` = `{ raw_request_base64? }` (нет → реплеится сохранённый запрос tab; есть → byte-exact override).
+- `RepeaterExchangeDTO` = `{ id, tenant_id, project_id, tab_id, forward_outcome, block_reason?, status_code?, response_size,
+  truncated, duration_ms?, raw_request_base64?, raw_response_base64?, created_at }` — `raw_*_base64` только в single-item GET.
+- `RepeaterExchangeListResponse` = `{ items[], total, offset, limit }`.
+
+**Инварианты:** replay ТОЛЬКО через `RepeaterService` (scope → optional preflight; при block `HttpSender` не вызывается);
+kill-switch — replay запрещён если project.status ≠ `active` (409); каждый replay (forward/blocked) записан в history;
+raw byte-exact, не логируется; response bounded (5 MiB, `truncated`); TLS-verify off (scope-gated authorized pentest, live-send infra-gated).
+
+---
+
 ## 5. Связанные документы
 
 - [README.md](./README.md) — индекс документации
@@ -251,3 +416,4 @@ Transport: HTTP (queries/mutations), WebSocket (subscriptions)
 - [env-vars.md](./env-vars.md) — переменные окружения
 - [auth-flow.md](./auth-flow.md) — поток аутентификации
 - [sse-polling.md](./sse-polling.md) — SSE vs Polling
+- [../ai_docs/develop/plans/2026-07-22-argus-web-workbench.md](../ai_docs/develop/plans/2026-07-22-argus-web-workbench.md) — Web Workbench план + capability matrix

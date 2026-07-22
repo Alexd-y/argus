@@ -1,0 +1,93 @@
+schema_version: 1
+playbook_id: idor.cross-user-read
+version: 2
+title: IDOR - cross-user record read
+description: >-
+  Broken object-level authorization (BOLA/IDOR): an authenticated attacker
+  requests another user's resource by object id and receives the victim's
+  private record. The oracle compares the victim's own (owner) response with
+  the attacker's response and only confirms when the attacker actually
+  obtained the victim's sensitive fields - a bare HTTP 200 is not proof. Two
+  isolated principal sessions (owner, attacker) are used so a leak can be
+  attributed to a real cross-user read.
+category: authorization
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (IDOR / BOLA class) to
+    the ARGUS declarative playbook schema; read-only, non-destructive.
+cwe:
+  - 639
+  - 284
+wstg:
+  - WSTG-ATHZ-04
+owasp_api:
+  - API1:2023
+tags:
+  - idor
+  - bola
+  - authorization
+applies_when:
+  methods:
+    - GET
+  path_globs:
+    - /api/*/users/*
+    - /api/*/accounts/*
+  requires_openapi: false
+  input_kinds:
+    - path_param
+required_capabilities:
+  - http_client
+required_principals:
+  - owner
+  - attacker
+risk_level: low
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: owner
+  - kind: principal_available
+    value: attacker
+steps:
+  - id: owner_baseline
+    action: http_request
+    principal: owner
+    save_as: owner_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/users/2001
+      headers: {}
+  - id: attacker_probe
+    action: http_request
+    principal: attacker
+    save_as: attacker_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/users/2001
+      headers: {}
+  - id: extract_attacker_status
+    action: extract
+    save_as: attacker_status
+    params:
+      from_step: attacker_resp
+      source: status_code
+assertions:
+  - type: authz
+    params:
+      sensitive_fields:
+        - email
+        - account_number
+        - phone
+      denied_statuses:
+        - 401
+        - 403
+        - 404
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

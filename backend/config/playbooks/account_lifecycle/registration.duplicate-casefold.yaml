@@ -1,0 +1,82 @@
+schema_version: 1
+playbook_id: registration.duplicate-casefold
+version: 1
+title: Registration - duplicate account via email case-fold bypass
+description: >-
+  Account-uniqueness bypass: the registration endpoint treats an email that
+  differs only in letter case (Admin@example.test vs admin@example.test) as a
+  new identity, allowing a duplicate/pre-emptive account. The baseline is the
+  original registration; the mutated request registers the case-fold variant.
+  The business-logic oracle asserts the second attempt must report a
+  duplicate rejection - anything else (a fresh "created" status) is a finding.
+category: account_lifecycle
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (account registration /
+    duplicate identity class) to the ARGUS declarative playbook schema.
+cwe:
+  - 20
+  - 693
+wstg:
+  - WSTG-IDNT-04
+owasp_api:
+  - API6:2023
+tags:
+  - account-lifecycle
+  - registration
+  - case-fold
+applies_when:
+  methods:
+    - POST
+  path_globs:
+    - /api/*/register
+    - /api/*/signup
+  requires_openapi: false
+  input_kinds:
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - anon
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: anon
+steps:
+  - id: register_original
+    action: http_request
+    principal: anon
+    save_as: orig_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/register
+      headers:
+        Content-Type: application/json
+      body: '{"email":"admin@example.test","password":"P4ssw0rd-not-real"}'
+  - id: register_casefold
+    action: http_request
+    principal: anon
+    save_as: dup_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/register
+      headers:
+        Content-Type: application/json
+      body: '{"email":"ADMIN@example.test","password":"P4ssw0rd-not-real"}'
+assertions:
+  - type: business_logic
+    params:
+      field: registration_status
+      relation: equals_expected
+      expected: duplicate_rejected
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

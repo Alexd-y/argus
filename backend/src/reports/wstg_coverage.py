@@ -1,12 +1,25 @@
-"""WSTG v4.2 test coverage mapper — maps ARGUS tools to OWASP testing methodology.
+"""Single versioned WSTG test-coverage registry (P7-WSTG-007, fix G-4).
 
-Also includes NIST SP 800-115 test limitations builder for Valhalla reports.
+This is the **one** source of truth for WSTG test-case coverage in ARGUS. The
+former ``wstg_coverage_v2`` module (a competing, unused registry) was removed;
+its ``build_wstg_coverage_v2`` entry point now lives here and delegates to
+:func:`build_wstg_coverage` so there is no second registry to drift.
+
+The registry targets a single, explicit standard version — :data:`WSTG_VERSION`
+(OWASP WSTG v4.2). That version is surfaced in every coverage result so a report
+can never present coverage against an ambiguous methodology revision.
+
+Also includes the NIST SP 800-115 test-limitations builder for Valhalla reports.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+# Explicit OWASP WSTG methodology version this registry maps against. Surfaced
+# in every coverage result (fix G-4: no version-ambiguous coverage output).
+WSTG_VERSION: str = "4.2"
 
 
 @dataclass
@@ -33,6 +46,9 @@ class WstgCoverageResult:
     auth_testing_enabled: bool = False
     not_covered_reasons: dict[str, str] = field(default_factory=dict)
     missing_artifacts: list[dict] = field(default_factory=list)
+    # fix G-4 — explicit methodology version + additive scenario coverage.
+    wstg_version: str = WSTG_VERSION
+    scenario_coverage: dict[str, Any] | None = None
 
 
 class WstgCoverageV2Result:
@@ -48,6 +64,7 @@ class WstgCoverageV2Result:
         by_category: dict[str, Any],
         tests: list[dict[str, Any]],
         missing_artifacts: list[dict],
+        wstg_version: str = WSTG_VERSION,
     ):
         self.total_tests = total_tests
         self.covered = covered
@@ -57,6 +74,7 @@ class WstgCoverageV2Result:
         self.by_category = by_category
         self.tests = tests
         self.missing_artifacts = missing_artifacts
+        self.wstg_version = wstg_version
 
 
 _WSTG_TESTS: list[WstgTestCase] = [
@@ -310,12 +328,6 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
     "xsstrike": [
         "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-CLNT-01",
     ],
-    "commix": [
-        "WSTG-INPV-11", "WSTG-INPV-12", "WSTG-INPV-10",
-    ],
-    "tplmap": [
-        "WSTG-INPV-18",
-    ],
     "argus_recon": [
         "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04",
         "WSTG-INFO-05", "WSTG-INFO-06", "WSTG-INFO-08",
@@ -352,12 +364,6 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
     ],
     "naabu": [
         "WSTG-INFO-04", "WSTG-CONF-01",
-    ],
-    "nuclei": [
-        "WSTG-INFO-08", "WSTG-CONF-02", "WSTG-CONF-07",
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
-        "WSTG-INPV-18", "WSTG-INPV-19", "WSTG-CRYP-01",
-        "WSTG-ERRH-01", "WSTG-ERRH-02",
     ],
 }
 
@@ -474,8 +480,16 @@ def _extract_wstg_ids_from_findings(findings: list[dict[str, Any]]) -> set[str]:
 def build_wstg_coverage(
     tools_executed: list[str],
     findings: list[dict[str, Any]] | None = None,
+    *,
+    scenario_coverage: dict[str, Any] | None = None,
 ) -> WstgCoverageResult:
-    """Calculate WSTG coverage based on executed tools and findings."""
+    """Calculate WSTG coverage based on executed tools and findings.
+
+    ``scenario_coverage`` is an optional, additive block built by
+    :mod:`src.reports.scenario_coverage` from executed playbook scenarios. When
+    provided it is attached verbatim to the result (fix G-4: single coverage
+    output, executed-scenario coverage layered on top of tool coverage).
+    """
     normalized_tools = {_normalize_tool_name(t) for t in tools_executed if t}
     finding_wstg_ids = _extract_wstg_ids_from_findings(findings or [])
 
@@ -538,6 +552,8 @@ def build_wstg_coverage(
         coverage_percentage=coverage_pct,
         by_category=by_category,
         tests=tests_output,
+        wstg_version=WSTG_VERSION,
+        scenario_coverage=scenario_coverage,
     )
 
 
@@ -698,7 +714,12 @@ def build_wstg_coverage_v2(
     findings: list[dict[str, Any]] | None = None,
     evidence_inventory: list[dict[str, Any]] | None = None,
 ) -> WstgCoverageV2Result:
-    """V2 WSTG coverage with missing artifact tracking."""
+    """WSTG coverage with missing-artifact tracking.
+
+    Kept as a thin alias over :func:`build_wstg_coverage` (fix G-4: one
+    registry). It adds a ``missing_artifacts`` view for ``not_covered`` tests
+    that also lack a matching evidence artifact.
+    """
     result = build_wstg_coverage(tools_executed, findings)
     
     evidence_set = set()
@@ -726,4 +747,5 @@ def build_wstg_coverage_v2(
         by_category=result.by_category,
         tests=result.tests,
         missing_artifacts=missing_artifacts,
+        wstg_version=result.wstg_version,
     )

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from src.core.config import settings
 from src.db.models import Base
 import src.db.models_recon  # noqa: F401 — register recon models in Base.metadata
+import src.db.models_web_workbench  # noqa: F401 — register web workbench models in Base.metadata
 
 config = context.config
 if config.config_file_name is not None:

@@ -70,6 +70,12 @@ if TYPE_CHECKING:
     # ``approval_service`` module on this import path.
     from src.pipeline.contracts.tool_job import TargetSpec, ToolJob
     from src.policy.approval_service import ApprovalService
+    from src.policy.engagement_authorization import (
+        ActionClass,
+        EngagementAuthorizationDecision,
+        EngagementAuthorizationProfile,
+        EngagementAuthorizationService,
+    )
     from src.policy.policy_engine import (
         PolicyContext,
         PolicyDecision,
@@ -160,6 +166,13 @@ class PreflightDecision(BaseModel):
     policy_decision: PolicyDecision | None = None
     approval_required: StrictBool = False
     approval_verified: StrictBool = False
+    # Populated when the approval was satisfied *pre-authorized* by an
+    # Engagement Authorization Profile (EAP). These leave an audit trail of who
+    # pre-authorized the action; they are ``None`` when approval was satisfied
+    # by cryptographic operator signatures or when no approval was required
+    # (SI-1 / SI-7: additive, back-compat).
+    eap_approval_id: UUID | None = None
+    eap_engagement_id: StrictStr | None = Field(default=None, max_length=128)
     decided_at: datetime = Field(default_factory=_utcnow)
 
 
@@ -233,6 +246,7 @@ class PreflightChecker:
         policy_engine: PolicyEngine,
         approval_service: ApprovalService,
         audit_logger: AuditLogger,
+        eap_service: EngagementAuthorizationService | None = None,
     ) -> None:
         # By the time a caller has constructed real ``ScopeEngine`` /
         # ``PolicyEngine`` / ``ApprovalService`` instances, the modules
@@ -244,6 +258,12 @@ class PreflightChecker:
         self._policy_engine = policy_engine
         self._approval_service = approval_service
         self._audit_logger = audit_logger
+        # Optional collaborator: an Engagement Authorization Profile service
+        # used as an *audited source of auto-approval*. It never weakens the
+        # scope / ownership / policy guardrails above — it only satisfies the
+        # approval guardrail pre-authorized when the action class + target are
+        # pre-agreed (SI-1). Without it, preflight behaves exactly as before.
+        self._eap_service = eap_service
 
     def check(
         self,
@@ -254,6 +274,8 @@ class PreflightChecker:
         approval_request: ApprovalRequest | None = None,
         approval_signatures: Sequence[ApprovalSignature] | None = None,
         revoked_signature_ids: Iterable[str] | None = None,
+        engagement_profile: EngagementAuthorizationProfile | None = None,
+        action_class: ActionClass | None = None,
     ) -> PreflightDecision:
         """Run all four guardrails and return the composed decision.
 
@@ -261,6 +283,14 @@ class PreflightChecker:
         when the policy engine flags ``requires_approval``; the caller
         SHOULD always pass them when available so a single call is
         sufficient.
+
+        When an :class:`EngagementAuthorizationService` collaborator is wired
+        and both ``engagement_profile`` and ``action_class`` are supplied, an
+        approval requirement MAY be satisfied *pre-authorized* by the EAP (with
+        an audit trail) — but only after scope / ownership / policy have
+        passed, and only when the action class + target are pre-agreed. If the
+        EAP does not pre-authorize, the check falls back to cryptographic
+        approval verification exactly as before (SI-1 / SI-7).
         """
         scope_decision = self._scope_engine.check(target_spec, port=port)
         if not scope_decision.allowed:
@@ -297,25 +327,38 @@ class PreflightChecker:
 
         approval_required = policy_decision.requires_approval
         approval_verified = False
+        eap_approval_id: UUID | None = None
+        eap_engagement_id: str | None = None
         if approval_required:
-            try:
-                self._verify_approval(
-                    target_spec=target_spec,
-                    policy_context=policy_context,
-                    approval_request=approval_request,
-                    approval_signatures=approval_signatures,
-                    revoked_signature_ids=revoked_signature_ids,
-                )
+            eap_decision = self._try_eap_preauthorization(
+                target_spec=target_spec,
+                policy_context=policy_context,
+                engagement_profile=engagement_profile,
+                action_class=action_class,
+            )
+            if eap_decision is not None:
                 approval_verified = True
-            except ApprovalError as exc:
-                return self._finalise_denial(
-                    tenant_id=policy_context.tenant_id,
-                    scan_id=policy_context.scan_id,
-                    summary=exc.summary,
-                    scope_decision=scope_decision,
-                    policy_decision=policy_decision,
-                    approval_required=True,
-                )
+                eap_approval_id = eap_decision.approval_id
+                eap_engagement_id = eap_decision.engagement_id
+            else:
+                try:
+                    self._verify_approval(
+                        target_spec=target_spec,
+                        policy_context=policy_context,
+                        approval_request=approval_request,
+                        approval_signatures=approval_signatures,
+                        revoked_signature_ids=revoked_signature_ids,
+                    )
+                    approval_verified = True
+                except ApprovalError as exc:
+                    return self._finalise_denial(
+                        tenant_id=policy_context.tenant_id,
+                        scan_id=policy_context.scan_id,
+                        summary=exc.summary,
+                        scope_decision=scope_decision,
+                        policy_decision=policy_decision,
+                        approval_required=True,
+                    )
 
         decision = PreflightDecision(
             tenant_id=policy_context.tenant_id,
@@ -326,6 +369,8 @@ class PreflightChecker:
             policy_decision=policy_decision,
             approval_required=approval_required,
             approval_verified=approval_verified,
+            eap_approval_id=eap_approval_id,
+            eap_engagement_id=eap_engagement_id,
         )
         self._emit(decision, event_type=AuditEventType.PREFLIGHT_PASS)
         return decision
@@ -339,6 +384,8 @@ class PreflightChecker:
         approval_request: ApprovalRequest | None = None,
         approval_signatures: Sequence[ApprovalSignature] | None = None,
         revoked_signature_ids: Iterable[str] | None = None,
+        engagement_profile: EngagementAuthorizationProfile | None = None,
+        action_class: ActionClass | None = None,
     ) -> PreflightDecision:
         """Like :meth:`check`, but raise :class:`PreflightDeniedError` on deny."""
         decision = self.check(
@@ -348,6 +395,8 @@ class PreflightChecker:
             approval_request=approval_request,
             approval_signatures=approval_signatures,
             revoked_signature_ids=revoked_signature_ids,
+            engagement_profile=engagement_profile,
+            action_class=action_class,
         )
         if not decision.allowed:
             assert decision.failure_summary is not None
@@ -516,6 +565,32 @@ class PreflightChecker:
             expected_target=target_spec.value,
             expected_action=action,
         )
+
+    def _try_eap_preauthorization(
+        self,
+        *,
+        target_spec: TargetSpec,
+        policy_context: PolicyContext,
+        engagement_profile: EngagementAuthorizationProfile | None,
+        action_class: ActionClass | None,
+    ) -> EngagementAuthorizationDecision | None:
+        """Return an EAP decision iff the action is pre-authorized, else ``None``.
+
+        The EAP is consulted only AFTER scope / ownership / policy have passed
+        (so an out-of-scope target is already denied — SI-2). A ``None`` return
+        means the caller must fall back to cryptographic approval verification;
+        the approval requirement is never dropped (SI-1).
+        """
+        if self._eap_service is None or engagement_profile is None or action_class is None:
+            return None
+        decision = self._eap_service.authorize(
+            engagement_profile,
+            action_class,
+            target_spec,
+            tenant_id=policy_context.tenant_id,
+            scan_id=policy_context.scan_id,
+        )
+        return decision if decision.authorized else None
 
     def _finalise_denial(
         self,

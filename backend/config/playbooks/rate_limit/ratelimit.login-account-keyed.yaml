@@ -1,0 +1,99 @@
+schema_version: 1
+playbook_id: ratelimit.login-account-keyed
+version: 1
+title: Rate limit - missing account-keyed login throttling
+description: >-
+  Missing per-account brute-force protection: repeated failed logins against a
+  single account are not throttled (no 429 / Retry-After), enabling credential
+  stuffing even when a global/IP limit exists. The scenario issues a burst of
+  login attempts against the same account; the rate-limit oracle confirms only
+  with volume evidence (>= threshold requests, none throttled) and treats an
+  observed 429 / Retry-After on the final attempt as proof throttling is
+  enforced.
+category: rate_limit
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (rate limiting / brute
+    force class) to the ARGUS declarative playbook schema.
+cwe:
+  - 307
+  - 799
+wstg:
+  - WSTG-ATHN-03
+owasp_api:
+  - API4:2023
+tags:
+  - rate-limit
+  - brute-force
+  - login
+applies_when:
+  methods:
+    - POST
+  path_globs:
+    - /api/*/login
+    - /api/*/auth/login
+  requires_openapi: false
+  input_kinds:
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - attacker
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: attacker
+steps:
+  - id: login_1
+    action: http_request
+    principal: attacker
+    save_as: login_1_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/login
+      headers:
+        Content-Type: application/json
+      body: '{"username":"victim","password":"guess-1-not-real"}'
+  - id: login_2
+    action: http_request
+    principal: attacker
+    save_as: login_2_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/login
+      headers:
+        Content-Type: application/json
+      body: '{"username":"victim","password":"guess-2-not-real"}'
+  - id: login_3
+    action: http_request
+    principal: attacker
+    save_as: login_3_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/login
+      headers:
+        Content-Type: application/json
+      body: '{"username":"victim","password":"guess-3-not-real"}'
+assertions:
+  - type: rate_limit
+    params:
+      threshold: 5
+      throttle_status: 429
+      observed_statuses:
+        - 401
+        - 401
+        - 401
+        - 401
+        - 401
+        - 401
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

@@ -1,0 +1,635 @@
+# ARGUS — Classified external checklist (P6-CHECKLIST-006)
+#
+# The external repository https://github.com/Az0x7/vulnerability-Checklist is
+# used strictly as a source of IDEAS. Nothing here is a verbatim copy: every
+# `normalized_check` is ARGUS's own re-formulation of the underlying testing
+# intent, tagged with provenance. This file is DATA only — it MUST NOT be fed
+# into an LLM prompt as instructions (SI-6). Payload ideas are classified /
+# referenced here, never executed outside the signed PayloadRegistry (SI-5).
+#
+# Category legend:
+#   A  Already implemented in ARGUS (signed payload family executed by the VA pipeline).
+#   B  Skill/payload exists but the executable link is missing (integration gap).
+#   C  Add as a declarative playbook (target_artifact = playbook_id).
+#   D  Add as an atomic payload family (target_artifact = proposed family_id, must not
+#      collide with an existing config/payloads family).
+#   E  Implement as a Nuclei template (target_artifact = argus-* template id).
+#   F  Obsolete / duplicate — not ported (reason recorded; references existing artifact).
+
+schema_version: 1
+
+source:
+  url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+  adapted_at: "2026-07-22"
+  note: >-
+    Commit SHA pinned from the repository default branch on the adaptation date.
+    Content is normalized (ideas, not text); large raw payload lists are not carried over.
+
+categories:
+  A: Already implemented in ARGUS (signed payload family executed by the VA pipeline).
+  B: Skill or payload exists but the executable link is missing.
+  C: Add as a declarative playbook.
+  D: Add as an atomic payload family.
+  E: Implement as a Nuclei template (argus-*).
+  F: Obsolete or duplicate — not ported.
+
+entries:
+  # ---------------------------------------------------------------------------
+  # Authentication
+  # ---------------------------------------------------------------------------
+  - id: authn.direct-protected-route
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Request a route that requires an authenticated session while presenting no
+      credentials and confirm the server enforces access control instead of
+      serving the protected representation.
+    target_artifact: auth.direct-protected-route
+
+  - id: authn.username-enumeration
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Compare login, registration and reset responses for a known-existing versus
+      a random account and flag observable differences in message text, status
+      code or timing that disclose whether an account exists.
+    target_artifact: auth.username-enumeration
+
+  - id: authn.logout-session-invalidation
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      After an explicit logout, replay a previously captured session token and
+      verify the server rejects it, proving server-side session invalidation
+      rather than client-only cookie clearing.
+    target_artifact: session.logout-invalidation
+
+  # ---------------------------------------------------------------------------
+  # Registration
+  # ---------------------------------------------------------------------------
+  - id: registration.duplicate-casefold
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Register an account, then re-register the same identity with case or
+      unicode-fold variations and confirm the server treats them as one identity
+      instead of provisioning a colliding duplicate.
+    target_artifact: registration.duplicate-casefold
+
+  - id: registration.verification-token-lifecycle
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Exercise the email-verification token: confirm it is single-use, expires,
+      is bound to the issuing account, and cannot be reused to activate a
+      different or already-verified account.
+    target_artifact: registration.verification-token-lifecycle
+
+  # ---------------------------------------------------------------------------
+  # Password reset
+  # ---------------------------------------------------------------------------
+  - id: reset.token-reuse-after-password-change
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      After completing a password reset, replay the consumed reset token and
+      verify it is rejected, proving the token is invalidated once the password
+      has changed.
+    target_artifact: reset.token-reuse-after-password-change
+
+  - id: reset.token-single-use
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Issue one reset token and attempt to consume it twice; the second
+      consumption must fail so that a single issuance cannot set the password
+      more than once.
+    target_artifact: reset.token-single-use
+
+  - id: reset.host-header-binding
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Submit a reset request with an attacker-controlled Host or forwarded-host
+      header and confirm the reset link in the delivered message is not built
+      from that untrusted header, preventing token exfiltration.
+    target_artifact: reset.host-header-binding
+
+  # ---------------------------------------------------------------------------
+  # MFA / OTP
+  # ---------------------------------------------------------------------------
+  - id: mfa.direct-step-skip
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      After passing the first authentication factor, request the
+      post-MFA protected resource directly and confirm the server still requires
+      the second factor rather than treating the interim state as fully
+      authenticated.
+    target_artifact: mfa.direct-step-skip
+
+  - id: mfa.code-reuse
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Reuse an already-accepted one-time code on a second authentication attempt
+      and confirm it is rejected, proving codes are consumed on first use.
+    target_artifact: mfa.code-reuse
+
+  - id: mfa.otp-cross-account
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Submit an OTP issued for one account against a different account's
+      verification step and confirm the server binds each code to its issuing
+      principal.
+    target_artifact: mfa.otp-cross-account
+
+  # ---------------------------------------------------------------------------
+  # Authorization (IDOR / BOLA / BFLA / mass assignment)
+  # ---------------------------------------------------------------------------
+  - id: authz.idor-sequential-object
+    category: A
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Probe object identifiers with adjacent, boundary and sentinel values to
+      detect missing per-object ownership checks. Atomic seeds already ship as a
+      signed family; the cross-principal execution wiring is added separately.
+    target_artifact: idor
+
+  - id: authz.cross-user-read
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Using an attacker principal, request an object owned by a victim principal
+      and confirm the server refuses to disclose it, proving object-level read
+      authorization.
+    target_artifact: idor.cross-user-read
+
+  - id: authz.cross-user-write
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Using an attacker principal, attempt to modify an object owned by a victim
+      principal and confirm the mutation is denied, proving object-level write
+      authorization.
+    target_artifact: idor.cross-user-write
+
+  - id: authz.cross-tenant
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Override tenant scoping via a path segment, header or claim and confirm the
+      server keeps data isolated to the caller's tenant.
+    target_artifact: idor.cross-tenant-read
+
+  - id: authz.method-variant
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Replay a denied request using alternate HTTP methods (including override
+      headers) and confirm access control is enforced consistently across
+      methods rather than only on the canonical verb.
+    target_artifact: authorization.method-variant
+
+  - id: authz.content-type-variant
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Re-send a denied request with an alternate body content type (form, JSON,
+      multipart) and confirm authorization does not depend on the parser path.
+    target_artifact: authorization.content-type-variant
+
+  - id: authz.param-location-variant
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Move an authorization-relevant parameter between query, body and header
+      positions and confirm the server does not trust a client-supplied identity
+      from a weaker location.
+    target_artifact: authorization.param-location-variant
+
+  - id: authz.bfla-privileged-action
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Invoke an administrative or elevated-role function with a low-privilege
+      principal and confirm function-level authorization blocks it.
+    target_artifact: authorization.bfla-privileged-action
+
+  - id: authz.mass-assignment-param
+    category: A
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Inject non-editable attributes into an object-update request to detect
+      over-permissive binding. Atomic seeds already ship as a signed family.
+    target_artifact: mass_assignment
+
+  - id: authz.mass-assignment-role-injection
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Add a role or privilege attribute to a profile-update request as a
+      low-privilege principal and confirm the server ignores the injected field,
+      proving mass-assignment protection on authorization-relevant attributes.
+    target_artifact: mass-assignment.role-injection
+
+  # ---------------------------------------------------------------------------
+  # Business logic
+  # ---------------------------------------------------------------------------
+  - id: buslogic.negative-quantity
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Submit a negative or zero quantity in a cart or order operation and confirm
+      server-side validation rejects it instead of crediting the account.
+    target_artifact: business-logic.negative-quantity
+
+  - id: buslogic.price-manipulation
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Tamper with a client-supplied price or total during checkout and confirm
+      the server recomputes the authoritative amount rather than trusting the
+      submitted value.
+    target_artifact: business-logic.price-manipulation
+
+  - id: buslogic.coupon-reuse
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Apply a single-use coupon or credit repeatedly across requests and confirm
+      the server enforces the usage limit atomically.
+    target_artifact: business-logic.coupon-reuse
+
+  - id: buslogic.single-use-idempotency
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Replay an operation that must execute once (payment capture, redemption)
+      and confirm idempotency keys or single-use guards prevent duplicate side
+      effects.
+    target_artifact: business-logic.single-use-idempotency
+
+  - id: buslogic.race-single-use-token
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Fire concurrent requests against a single-use resource to detect a
+      time-of-check/time-of-use race that lets the guard be bypassed under
+      parallelism.
+    target_artifact: race.single-use-token
+
+  # ---------------------------------------------------------------------------
+  # Rate limiting
+  # ---------------------------------------------------------------------------
+  - id: ratelimit.login-account-keyed
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Drive repeated login failures for one account and confirm throttling or
+      lockout is keyed to the account/session/IP rather than being absent.
+    target_artifact: rate-limit.login-account-keyed
+
+  - id: ratelimit.reset-request
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Repeatedly trigger password-reset issuance for one identity and confirm the
+      endpoint is rate limited to prevent mail flooding and token grinding.
+    target_artifact: rate-limit.reset-request
+
+  - id: ratelimit.otp-verify
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Submit many OTP guesses within one verification window and confirm attempt
+      limits make brute forcing the code space infeasible.
+    target_artifact: rate-limit.otp-verify
+
+  - id: ratelimit.otp-resend
+    category: C
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Repeatedly request OTP resends and confirm the resend action is throttled
+      independently of the verification attempt counter.
+    target_artifact: rate-limit.otp-resend
+
+  # ---------------------------------------------------------------------------
+  # File upload
+  # ---------------------------------------------------------------------------
+  - id: upload.type-and-content-bypass
+    category: D
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Probe upload validation with mismatched extension, MIME and magic bytes,
+      SVG/script content, archive members and traversal file names to detect
+      insufficient server-side content validation. Delivered as a safe,
+      non-executing seed family.
+    target_artifact: file_upload_bypass_safe
+
+  - id: upload.exif-and-path-traversal
+    category: D
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Include traversal sequences in the supplied file name and metadata-bearing
+      images to test whether storage path or retained EXIF leaks data or escapes
+      the upload directory. Covered by the same safe upload seed family.
+    target_artifact: file_upload_bypass_safe
+
+  # ---------------------------------------------------------------------------
+  # Session / cookie
+  # ---------------------------------------------------------------------------
+  - id: session.fixation
+    category: B
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Verify the session identifier is rotated on privilege change (login) so a
+      pre-authentication identifier cannot be fixated and reused. Signal exists
+      via header/cookie inspection but lacks a dedicated executable scenario.
+    target_artifact: session.logout-invalidation
+
+  - id: session.cookie-flags
+    category: B
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Inspect Set-Cookie for HttpOnly, Secure and SameSite on session cookies.
+      Passive detection is available through the response-analysis parsers but is
+      not yet promoted to a first-class finding scenario.
+    target_artifact: wapiti_cookie_flag_signal
+
+  - id: session.jwt-lifecycle
+    category: B
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Check JWT expiry enforcement, algorithm confusion and post-logout
+      revocation. Atomic JWT tampering seeds exist as signed families, but the
+      end-to-end lifecycle scenario is not yet wired.
+    target_artifact: jwt
+
+  # ---------------------------------------------------------------------------
+  # CSRF
+  # ---------------------------------------------------------------------------
+  - id: csrf.state-changing-token
+    category: B
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Confirm state-changing requests require an unpredictable, per-session
+      anti-CSRF token bound to the user. Token-presence and bypass seeds exist as
+      signed families; a full cross-origin PoC scenario is the missing link.
+    target_artifact: csrf_safe
+
+  # ---------------------------------------------------------------------------
+  # Technology exposure (Nuclei argus-*)
+  # ---------------------------------------------------------------------------
+  - id: expose.django-debug
+    category: E
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Detect a Django deployment serving the verbose DEBUG traceback/settings
+      page to unauthenticated clients via a benign GET to a non-existent path.
+    target_artifact: argus-django-debug-exposure
+
+  - id: expose.symfony-profiler
+    category: E
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Detect an exposed Symfony web profiler / debug toolbar reachable without
+      authentication, which leaks request, session and configuration internals.
+    target_artifact: argus-symfony-profiler-exposure
+
+  - id: expose.aem-default-content
+    category: E
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Detect an Adobe Experience Manager instance exposing default sample content
+      or the unhardened login surface, indicating an out-of-the-box deployment.
+    target_artifact: argus-aem-default-content-exposure
+
+  - id: expose.jira-unauth-dashboard
+    category: E
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Detect an Atlassian Jira system dashboard reachable without authentication,
+      exposing project and user information to anonymous visitors.
+    target_artifact: argus-jira-unauth-dashboard
+
+  # ---------------------------------------------------------------------------
+  # Obsolete / duplicate — not ported (F)
+  # ---------------------------------------------------------------------------
+  - id: dup.sqli-bulk-payloads
+    category: F
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Bulk raw SQL-injection string lists are intentionally not copied; ARGUS
+      already covers this class through the signed sqli and sqli_safe payload
+      families with provenance and gating.
+    target_artifact: sqli
+
+  - id: dup.rxss-bulk-payloads
+    category: F
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Bulk reflected-XSS string lists are intentionally not copied; ARGUS covers
+      this class through the signed xss and xss_contextual payload families.
+    target_artifact: xss
+
+  - id: dup.403-bypass-wordlist
+    category: F
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      The large raw 403-bypass permutation wordlist is not carried verbatim; its
+      technique is normalized into a compact safe forbidden-bypass seed family.
+    target_artifact: forbidden_bypass_safe
+
+  - id: dup.admin-panel-wordlist
+    category: F
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Admin-panel discovery wordlists are not ported; content discovery is
+      already handled by the ffuf and gobuster tool adapters in ARGUS.
+    target_artifact: ffuf
+
+  - id: dup.framework-raw-exploit-dumps
+    category: F
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Raw framework exploit dumps for Django and Symfony are not ported verbatim;
+      the safe exposure-detection portion is reimplemented as argus-* Nuclei
+      templates, and active exploitation stays behind PayloadRegistry gating.
+    target_artifact: argus-symfony-profiler-exposure
+
+  # ---------------------------------------------------------------------------
+  # 403 / access-control bypass primitive & JSON/content-type confusion (D)
+  # ---------------------------------------------------------------------------
+  - id: bypass.forbidden-403
+    category: D
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Re-request a 403/401 resource with path-normalization tricks and
+      forwarded-for / rewrite headers to detect edge-vs-origin authorization
+      gaps. Delivered as a compact safe seed family.
+    target_artifact: forbidden_bypass_safe
+
+  - id: attack.host-header-injection
+    category: D
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Supply crafted Host and forwarded-host headers to detect link poisoning and
+      cache/routing confusion, feeding the reset host-binding scenario. Delivered
+      as a safe seed family.
+    target_artifact: host_header_injection_safe
+
+  - id: attack.json-type-confusion
+    category: D
+    source:
+      url: https://github.com/Az0x7/vulnerability-Checklist
+      commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+      adapted_at: "2026-07-22"
+    normalized_check: >-
+      Send structurally divergent JSON (type coercion, duplicate keys, nested
+      objects where scalars are expected) to detect lax deserialization and
+      content-type parsing quirks. Delivered as a safe seed family.
+    target_artifact: json_type_confusion_safe

@@ -2216,41 +2216,74 @@ async def run_exploit_attempt(
     if not findings:
         return ExploitationOutput(exploits=[], evidence=[])
 
-    _browser_context: dict[str, Any] = {}
+    # G-1 fix: establish an authenticated session via Playwright, persist it in a
+    # SessionStore (isolated per principal), and propagate the owner session's
+    # cookies/headers into execute_exploitation so tools run authenticated.
+    _auth_context: dict[str, Any] | None = None
     if auth_config:
         try:
-            from src.orchestration.auth_config import TargetConfig as _TC, AuthConfig as _AC
-            from src.sandbox.playwright_adapter import PlaywrightAdapter, BrowserAction
-            tc = _TC.from_json(auth_config) if isinstance(auth_config, dict) else None
-            if tc and tc.authentication:
+            from src.auth.session_store import SessionStore
+            from src.orchestration.auth_config import PrincipalRole, TargetConfig
+            from src.sandbox.playwright_adapter import PlaywrightAdapter, export_auth_context
+
+            tc = TargetConfig.from_json(auth_config) if isinstance(auth_config, dict) else None
+            principals = tc.resolved_principals() if tc else []
+            owner = next(
+                (p for p in principals if p.role == PrincipalRole.OWNER),
+                principals[0] if principals else None,
+            )
+            if owner is not None and owner.login is not None:
+                login = owner.resolve_placeholders().login
                 pa = PlaywrightAdapter()
                 await pa._start_session()
                 login_steps = [
-                    {"instruction": step.instruction, "selector": step.selector or "", "value": step.value or ""}
-                    for step in (tc.authentication.login_flow or [])
+                    {
+                        "instruction": step.instruction,
+                        "selector": step.selector or "",
+                        "value": step.value or "",
+                    }
+                    for step in (login.login_flow or [])
                 ]
+                success_condition = (
+                    {"type": login.success_condition.type, "value": login.success_condition.value}
+                    if login.success_condition
+                    else None
+                )
                 login_resp = await pa.login_flow(
-                    url=tc.authentication.login_url or target,
+                    url=login.login_url or target,
                     steps=login_steps,
-                    success_condition={"type": tc.authentication.success_condition.type, "value": tc.authentication.success_condition.value} if tc.authentication.success_condition else None,
+                    success_condition=success_condition,
                 )
                 if login_resp.success:
-                    _browser_context = {
-                        "cookies": login_resp.cookies,
-                        "authenticated": True,
-                        "page_url": login_resp.url,
-                        "page_title": login_resp.title,
-                    }
-                    logger.info("Playwright login successful for %s", target)
+                    store = SessionStore()
+                    session = store.create_session(
+                        principal_id=owner.principal_id,
+                        role=owner.role,
+                        tenant_id=owner.tenant_id or (tenant_id or None),
+                    )
+                    ctx = export_auth_context(login_resp)
+                    session.set_cookies_from_playwright(ctx.get("cookies") or [])
+                    if ctx.get("storage_state"):
+                        session.storage_state = ctx["storage_state"]
+                    # Execution-layer export: cookies/headers for tool argv (never logged).
+                    _auth_context = session.as_exploitation_auth()
+                    logger.info(
+                        "playwright_login_ok",
+                        extra={"scan_id": scan_id, "principal_id": owner.principal_id},
+                    )
                 else:
-                    logger.debug("Playwright login failed: %s", login_resp.error)
+                    logger.debug("playwright_login_failed", extra={"scan_id": scan_id})
         except Exception as pa_exc:
-            logger.debug("Playwright auth failed (non-fatal): %s", pa_exc)
+            logger.debug(
+                "playwright_auth_failed_non_fatal",
+                extra={"scan_id": scan_id, "error": str(pa_exc)},
+            )
 
     try:
         exploits, evidence = await execute_exploitation(
             findings,
             target=target, tenant_id=tenant_id, scan_id=scan_id,
+            auth_context=_auth_context,
         )
         if exploits:
             return ExploitationOutput(exploits=exploits, evidence=evidence)
@@ -2586,7 +2619,7 @@ async def run_reporting(
                                     token=str(scan_options.get("repo_token", "")),
                                     base_url=str(scan_options.get("repo_base_url", "")),
                                     scan_id=scan_id or "",
-                                    tenant_id=tenant_id or "",
+                                    tenant_id=str(scan_options.get("tenant_id", "")),
                                 )
                                 if _pr_result.pr_url:
                                     _pr_urls.append({"finding_id": _pc.finding_id, "pr_url": _pr_result.pr_url})

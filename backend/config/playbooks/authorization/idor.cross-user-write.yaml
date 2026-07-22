@@ -1,0 +1,103 @@
+schema_version: 1
+playbook_id: idor.cross-user-write
+version: 1
+title: IDOR - cross-user record write
+description: >-
+  Broken object-level authorization on a write path: an authenticated attacker
+  modifies another user's resource by object id. The baseline is the victim's
+  own record (owner read); the mutated request is the attacker's write, whose
+  response echoes the victim's object. A finding requires the attacker's write
+  to succeed and return the victim's sensitive fields rather than a 401/403/404.
+  Approval-gated (account mutation) - it writes to another user's data and must
+  be pre-authorized by an Engagement Authorization Profile.
+category: authorization
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (IDOR write / BOLA
+    class) to the ARGUS declarative playbook schema.
+cwe:
+  - 639
+  - 284
+wstg:
+  - WSTG-ATHZ-04
+owasp_api:
+  - API1:2023
+tags:
+  - idor
+  - bola
+  - authorization
+  - write
+applies_when:
+  methods:
+    - GET
+    - PUT
+  path_globs:
+    - /api/*/users/*/profile
+    - /api/*/accounts/*/profile
+  requires_openapi: false
+  input_kinds:
+    - path_param
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - owner
+  - attacker
+risk_level: high
+requires_approval: true
+preconditions:
+  - kind: principal_available
+    value: owner
+  - kind: principal_available
+    value: attacker
+steps:
+  - id: owner_baseline
+    action: http_request
+    principal: owner
+    save_as: owner_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/users/2001/profile
+      headers: {}
+  - id: attacker_write
+    action: http_request
+    principal: attacker
+    save_as: attacker_resp
+    params:
+      method: PUT
+      url: https://target.internal/api/v1/users/2001/profile
+      headers:
+        Content-Type: application/json
+      body: '{"display_name":"pwned-by-attacker"}'
+  - id: register_profile_cleanup
+    action: register_cleanup
+    params:
+      cleanup_step_id: restore_owner_profile
+assertions:
+  - type: authz
+    params:
+      sensitive_fields:
+        - email
+      denied_statuses:
+        - 401
+        - 403
+        - 404
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup:
+  - id: restore_owner_profile
+    action: http_request
+    principal: owner
+    params:
+      method: PUT
+      url: https://target.internal/api/v1/users/2001/profile
+      headers:
+        Content-Type: application/json
+      body: '{"display_name":"Victim"}'
+timeout_seconds: 180
+max_concurrency: 1

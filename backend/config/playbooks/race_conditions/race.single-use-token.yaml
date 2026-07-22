@@ -1,0 +1,110 @@
+schema_version: 1
+playbook_id: race.single-use-token
+version: 1
+title: Race condition - single-use token redeemed more than once
+description: >-
+  TOCTOU / race condition on a single-use token (coupon, invite, gift code):
+  concurrent redemptions of the same token are applied more than once because
+  the check and the decrement are not atomic. The baseline reads the server-side
+  redemption counter before the burst; the scenario fires concurrent redemptions
+  and re-reads the counter (mutated). The race oracle confirms only when the
+  server-side state advanced by more than the idempotency invariant allows -
+  a pile of 2xx responses alone is never proof. Approval-gated (race class) -
+  it must be pre-authorized by an Engagement Authorization Profile.
+category: race_conditions
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (race condition /
+    single-use token class) to the ARGUS declarative playbook schema.
+cwe:
+  - 362
+  - 367
+wstg:
+  - WSTG-BUSL-09
+owasp_api:
+  - API6:2023
+tags:
+  - race-condition
+  - toctou
+  - single-use-token
+applies_when:
+  methods:
+    - POST
+  path_globs:
+    - /api/*/redeem
+    - /api/*/coupons/redeem
+  requires_openapi: false
+  input_kinds:
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - attacker
+risk_level: high
+requires_approval: true
+preconditions:
+  - kind: principal_available
+    value: attacker
+steps:
+  - id: state_before
+    action: http_request
+    principal: attacker
+    save_as: before_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/redeem/state
+      headers: {}
+  - id: redeem_a
+    action: http_request
+    principal: attacker
+    save_as: redeem_a_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/redeem
+      headers:
+        Content-Type: application/json
+      body: '{"token":"single-use-coupon-test"}'
+  - id: redeem_b
+    action: http_request
+    principal: attacker
+    save_as: redeem_b_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/redeem
+      headers:
+        Content-Type: application/json
+      body: '{"token":"single-use-coupon-test"}'
+  - id: state_after
+    action: http_request
+    principal: attacker
+    save_as: after_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/redeem/state
+      headers: {}
+  - id: register_redeem_cleanup
+    action: register_cleanup
+    params:
+      cleanup_step_id: reset_coupon
+assertions:
+  - type: race
+    params:
+      state_field: redemptions
+      expected_max_success: 1
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup:
+  - id: reset_coupon
+    action: http_request
+    principal: attacker
+    params:
+      method: DELETE
+      url: https://target.internal/api/v1/test-fixtures/coupon
+      headers: {}
+timeout_seconds: 180
+max_concurrency: 4

@@ -16,6 +16,7 @@ from src.pipeline.contracts.finding_dto import (
     FindingStatus,
     RemediationDTO,
     ReproducerSpecDTO,
+    ScenarioContextDTO,
     SSVCDecision,
 )
 from src.pipeline.contracts.phase_io import (
@@ -47,6 +48,7 @@ __all__ = [
     "RiskLevel",
     "SSVCDecision",
     "ScanPhase",
+    "ScenarioContextDTO",
     "TargetSpec",
     "ToolJob",
     "ValidationJob",

@@ -1,0 +1,3 @@
+# Clean target: the argus-* exposure templates did not match, so nuclei emitted
+# no JSONL result line. This file intentionally contains no result records, and
+# the parser must therefore produce zero findings from it.

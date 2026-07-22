@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timezone
 from enum import IntEnum, StrEnum
-from typing import Self
+from typing import Any, Self
 from uuid import UUID
 
 from pydantic import (
@@ -138,6 +138,42 @@ class ReproducerSpecDTO(BaseModel):
     canary_token: StrictStr | None = Field(default=None, min_length=8, max_length=128)
 
 
+class ScenarioContextDTO(BaseModel):
+    """Executable-playbook / scenario context attached to a finding (P7-WSTG-007).
+
+    Bridges a confirmed VA scenario (``src.playbooks`` executor + oracle result)
+    to the :class:`FindingDTO`. Every field is Optional so existing producers
+    that never ran a scenario stay valid (SI-7, back-compat).
+
+    SECURITY (SI-3): ``baseline_*`` / ``mutated_*`` request/response payloads are
+    already-redacted representations. The confirmation→finding bridge redacts
+    them (cookies / Authorization / token / password / otp) via the single
+    redaction implementation in :mod:`src.playbooks.evidence` *before* building
+    this DTO — there is no unredacted persistence path. ``redactions_applied``
+    records how many secret values were masked for auditability.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    scenario_id: StrictStr | None = Field(default=None, max_length=128)
+    scenario_version: StrictStr | None = Field(default=None, max_length=32)
+    playbook_run_id: StrictStr | None = Field(default=None, max_length=64)
+    source_principal: StrictStr | None = Field(default=None, max_length=64)
+    target_principal: StrictStr | None = Field(default=None, max_length=64)
+    role: StrictStr | None = Field(default=None, max_length=64)
+    baseline_request: StrictStr | None = Field(default=None, max_length=131_072)
+    baseline_response: StrictStr | None = Field(default=None, max_length=1_048_576)
+    mutated_request: StrictStr | None = Field(default=None, max_length=131_072)
+    mutated_response: StrictStr | None = Field(default=None, max_length=1_048_576)
+    response_diff: dict[str, Any] | None = Field(default=None)
+    state_check: StrictStr | None = Field(default=None, max_length=4000)
+    oracle_result: StrictStr | None = Field(default=None, max_length=4000)
+    cleanup_status: StrictStr | None = Field(default=None, max_length=64)
+    provenance: StrictStr | None = Field(default=None, max_length=1024)
+    approval_id: StrictStr | None = Field(default=None, max_length=64)
+    redactions_applied: StrictInt = Field(default=0, ge=0, le=100_000)
+
+
 def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
@@ -224,6 +260,11 @@ class FindingDTO(BaseModel):
         max_length=512,
         description="File:line location from white-box source analysis.",
     )
+    # P7-WSTG-007 (G-3) — optional executable-scenario provenance. Populated by
+    # the confirmation→finding bridge (:mod:`src.reports.finding_bridge`) when a
+    # finding is backed by a confirmed playbook scenario. Optional/default None
+    # so all Cycle 1-3 producers stay valid (SI-7, back-compat).
+    scenario_context: ScenarioContextDTO | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate(self) -> Self:

@@ -1,0 +1,81 @@
+schema_version: 1
+playbook_id: mfa.direct-step-skip
+version: 1
+title: MFA - second-factor step skip via direct resource access
+description: >-
+  Multi-factor step-up bypass: a session that has only completed the first
+  factor (password) can reach a resource that must require a completed MFA
+  challenge. The baseline is a fully MFA-completed principal reading the
+  protected resource; the mutated request is an MFA-pending principal hitting
+  the same resource directly. A finding requires the pending principal to
+  receive the protected data instead of a 401/403 step-up challenge.
+category: authentication
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (MFA / 2FA bypass class)
+    to the ARGUS declarative playbook schema; read-only.
+cwe:
+  - 287
+  - 306
+wstg:
+  - WSTG-ATHN-10
+owasp_api:
+  - API2:2023
+tags:
+  - authentication
+  - mfa
+  - 2fa-bypass
+applies_when:
+  methods:
+    - GET
+  path_globs:
+    - /api/*/vault
+    - /api/*/vault/*
+  requires_openapi: false
+  input_kinds:
+    - header
+required_capabilities:
+  - http_client
+required_principals:
+  - mfa_complete
+  - mfa_pending
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: mfa_complete
+  - kind: principal_available
+    value: mfa_pending
+steps:
+  - id: full_auth_baseline
+    action: http_request
+    principal: mfa_complete
+    save_as: full_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/vault
+      headers: {}
+  - id: skip_mfa_probe
+    action: http_request
+    principal: mfa_pending
+    save_as: pending_resp
+    params:
+      method: GET
+      url: https://target.internal/api/v1/vault
+      headers: {}
+assertions:
+  - type: authn
+    params:
+      denied_statuses:
+        - 401
+        - 403
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

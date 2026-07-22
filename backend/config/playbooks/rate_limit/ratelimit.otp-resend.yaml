@@ -1,0 +1,98 @@
+schema_version: 1
+playbook_id: ratelimit.otp-resend
+version: 1
+title: Rate limit - unthrottled OTP / verification code resend
+description: >-
+  Missing throttling on OTP resend: the one-time-code resend endpoint accepts an
+  unbounded burst without a 429 / Retry-After, enabling SMS/email flooding and
+  code-guessing amplification. The scenario issues a burst of resend requests;
+  the rate-limit oracle confirms only with volume evidence (>= threshold
+  requests, none throttled) and treats an observed 429 / Retry-After on the
+  final request as proof throttling is enforced.
+category: rate_limit
+provenance:
+  source_url: https://github.com/Az0x7/vulnerability-Checklist
+  commit: HEAD
+  adapted_at: 2026-07-22
+  note: >-
+    Idea adapted from the Az0x7 vulnerability checklist (OTP / resend rate
+    limiting class) to the ARGUS declarative playbook schema.
+cwe:
+  - 307
+  - 770
+wstg:
+  - WSTG-ATHN-03
+owasp_api:
+  - API4:2023
+tags:
+  - rate-limit
+  - otp
+  - resend
+applies_when:
+  methods:
+    - POST
+  path_globs:
+    - /api/*/otp/resend
+    - /api/*/verification/resend
+  requires_openapi: false
+  input_kinds:
+    - body_json
+required_capabilities:
+  - http_client
+required_principals:
+  - user
+risk_level: medium
+requires_approval: false
+preconditions:
+  - kind: principal_available
+    value: user
+steps:
+  - id: resend_1
+    action: http_request
+    principal: user
+    save_as: resend_1_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/otp/resend
+      headers:
+        Content-Type: application/json
+      body: '{"channel":"sms"}'
+  - id: resend_2
+    action: http_request
+    principal: user
+    save_as: resend_2_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/otp/resend
+      headers:
+        Content-Type: application/json
+      body: '{"channel":"sms"}'
+  - id: resend_3
+    action: http_request
+    principal: user
+    save_as: resend_3_resp
+    params:
+      method: POST
+      url: https://target.internal/api/v1/otp/resend
+      headers:
+        Content-Type: application/json
+      body: '{"channel":"sms"}'
+assertions:
+  - type: rate_limit
+    params:
+      threshold: 5
+      throttle_status: 429
+      observed_statuses:
+        - 200
+        - 200
+        - 200
+        - 200
+        - 200
+        - 200
+required_evidence:
+  - baseline_response
+  - mutated_response
+  - normalized_diff
+cleanup: []
+timeout_seconds: 120
+max_concurrency: 1

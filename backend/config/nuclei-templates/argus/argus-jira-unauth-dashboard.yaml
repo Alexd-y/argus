@@ -1,0 +1,58 @@
+id: argus-jira-unauth-dashboard
+
+info:
+  name: Atlassian Jira Unauthenticated System Dashboard
+  author: argus
+  severity: medium
+  description: >-
+    Detects an Atlassian Jira instance whose system dashboard is reachable
+    without authentication, exposing project, filter and user information to
+    anonymous visitors. Only a passive GET to the dashboard is issued; the
+    template does not attempt to authenticate or mutate state.
+  reference:
+    - https://confluence.atlassian.com/adminjiraserver/configuring-global-permissions-938847142.html
+  tags: argus,jira,atlassian,exposure,misconfig
+  metadata:
+    source_url: https://github.com/Az0x7/vulnerability-Checklist
+    source_commit: 8e2b1ebe4446d5262e7877f70fc1404f99375434
+    adapted_at: "2026-07-22"
+    cwe: CWE-284
+    wstg: WSTG-ATHZ-01
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/secure/Dashboard.jspa"
+
+    stop-at-first-match: false
+    matchers-condition: and
+    matchers:
+      # Signal 1 — Jira product branding present in the served dashboard.
+      - type: word
+        part: body
+        words:
+          - "Atlassian Jira"
+          - "jira.webresources"
+        condition: or
+
+      # Signal 2 — the anonymous system dashboard actually rendered (not a stub).
+      - type: word
+        part: body
+        words:
+          - "System Dashboard"
+          - "gadget"
+        condition: and
+
+      # Negative — a redirect to the login action means the dashboard is gated.
+      - type: word
+        part: body
+        words:
+          - "com.atlassian.jira.web.action.user.Login"
+          - "os_authType"
+          - "login.jsp"
+        condition: or
+        negative: true
+
+      - type: status
+        status:
+          - 200

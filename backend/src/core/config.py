@@ -26,6 +26,7 @@ class Settings(BaseSettings):
         if v.startswith("postgresql://") and "+asyncpg" not in v:
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
     jwt_secret: str = ""
     jwt_expiry: str = "15m"
     jwt_algorithm: str = "HS256"
@@ -119,11 +120,15 @@ class Settings(BaseSettings):
     )
     message_queue_scan_events_topic: str = Field(
         default="scan.events",
-        validation_alias=AliasChoices("MESSAGE_QUEUE_SCAN_EVENTS_TOPIC", "message_queue_scan_events_topic"),
+        validation_alias=AliasChoices(
+            "MESSAGE_QUEUE_SCAN_EVENTS_TOPIC", "message_queue_scan_events_topic"
+        ),
     )
     message_queue_finding_alerts_topic: str = Field(
         default="finding.alerts",
-        validation_alias=AliasChoices("MESSAGE_QUEUE_FINDING_ALERTS_TOPIC", "message_queue_finding_alerts_topic"),
+        validation_alias=AliasChoices(
+            "MESSAGE_QUEUE_FINDING_ALERTS_TOPIC", "message_queue_finding_alerts_topic"
+        ),
     )
     message_queue_report_topic: str = Field(
         default="report.generated",
@@ -267,6 +272,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v.strip().lower() in ("true", "1", "yes", "on")
         return bool(v)
+
     # Dev-only: POST /sandbox/python. Not a security boundary. Env: ARGUS_SANDBOX_PYTHON_ENABLED (true/1).
     argus_sandbox_python_enabled: bool = Field(
         default=False,
@@ -304,9 +310,7 @@ class Settings(BaseSettings):
     admin_session_ttl_seconds: int = Field(
         default=43200,
         ge=60,
-        validation_alias=AliasChoices(
-            "ADMIN_SESSION_TTL_SECONDS", "admin_session_ttl_seconds"
-        ),
+        validation_alias=AliasChoices("ADMIN_SESSION_TTL_SECONDS", "admin_session_ttl_seconds"),
     )
     # Per-IP login-rate-limit knobs (token-bucket; 10 req/min by default).
     admin_login_rate_limit_per_minute: int = Field(
@@ -327,9 +331,7 @@ class Settings(BaseSettings):
     # access entirely.
     admin_session_pepper: str = Field(
         default="",
-        validation_alias=AliasChoices(
-            "ADMIN_SESSION_PEPPER", "admin_session_pepper"
-        ),
+        validation_alias=AliasChoices("ADMIN_SESSION_PEPPER", "admin_session_pepper"),
     )
     # NOTE — ``ADMIN_SESSION_LEGACY_RAW_WRITE`` /
     # ``ADMIN_SESSION_LEGACY_RAW_FALLBACK`` (the 030 → 031 grace-window
@@ -343,9 +345,7 @@ class Settings(BaseSettings):
     # written to disk by the bootstrap path.
     admin_bootstrap_subject: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "ADMIN_BOOTSTRAP_SUBJECT", "admin_bootstrap_subject"
-        ),
+        validation_alias=AliasChoices("ADMIN_BOOTSTRAP_SUBJECT", "admin_bootstrap_subject"),
     )
     admin_bootstrap_password_hash: str | None = Field(
         default=None,
@@ -355,15 +355,11 @@ class Settings(BaseSettings):
     )
     admin_bootstrap_role: Literal["operator", "admin", "super-admin"] = Field(
         default="super-admin",
-        validation_alias=AliasChoices(
-            "ADMIN_BOOTSTRAP_ROLE", "admin_bootstrap_role"
-        ),
+        validation_alias=AliasChoices("ADMIN_BOOTSTRAP_ROLE", "admin_bootstrap_role"),
     )
     admin_bootstrap_tenant_id: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "ADMIN_BOOTSTRAP_TENANT_ID", "admin_bootstrap_tenant_id"
-        ),
+        validation_alias=AliasChoices("ADMIN_BOOTSTRAP_TENANT_ID", "admin_bootstrap_tenant_id"),
     )
 
     # ISS-T20-003 Phase 2 (C7-T01) — MFA / TOTP for admin auth.
@@ -396,9 +392,7 @@ class Settings(BaseSettings):
     # form (``super_admin`` → ``super-admin``).
     admin_mfa_enforce_roles: list[str] = Field(
         default_factory=lambda: ["super-admin"],
-        validation_alias=AliasChoices(
-            "ADMIN_MFA_ENFORCE_ROLES", "admin_mfa_enforce_roles"
-        ),
+        validation_alias=AliasChoices("ADMIN_MFA_ENFORCE_ROLES", "admin_mfa_enforce_roles"),
     )
 
     @field_validator("admin_mfa_keyring", mode="after")
@@ -681,7 +675,9 @@ class Settings(BaseSettings):
     )
     exploitability_validation_enabled: bool = Field(
         default=True,
-        validation_alias=AliasChoices("EXPLOITABILITY_VALIDATION_ENABLED", "exploitability_validation_enabled"),
+        validation_alias=AliasChoices(
+            "EXPLOITABILITY_VALIDATION_ENABLED", "exploitability_validation_enabled"
+        ),
     )
     poc_generation_enabled: bool = Field(
         default=True,
@@ -1078,13 +1074,28 @@ class Settings(BaseSettings):
     )
     mcp_config_signatures_path: str = Field(
         default="backend/config/mcp/SIGNATURES",
-        validation_alias=AliasChoices(
-            "MCP_CONFIG_SIGNATURES_PATH", "mcp_config_signatures_path"
-        ),
+        validation_alias=AliasChoices("MCP_CONFIG_SIGNATURES_PATH", "mcp_config_signatures_path"),
     )
     mcp_config_keys_dir: str = Field(
         default="backend/config/mcp/_keys",
         validation_alias=AliasChoices("MCP_CONFIG_KEYS_DIR", "mcp_config_keys_dir"),
+    )
+
+    # Web Workbench: directory of Ed25519 *public* keys that endorse signed
+    # Engagement Authorization Profiles (EAP). Fail-closed: if the directory is
+    # missing or empty, no EAP verifies and every attach is rejected as invalid.
+    wb_eap_keys_dir: str = Field(
+        default="backend/config/engagement/_keys",
+        validation_alias=AliasChoices("WB_EAP_KEYS_DIR", "wb_eap_keys_dir"),
+    )
+
+    # Web Workbench: urlsafe-base64 Fernet key (KEK) used to seal proxy MITM CA
+    # private keys at rest. MUST come from env / secret manager — never a literal
+    # in code or server.yaml. Fail-closed: unset ⇒ CA issuance is unavailable
+    # (503) and no CA private key is ever persisted in plaintext.
+    wb_ca_sealing_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("WB_CA_SEALING_KEY", "wb_ca_sealing_key"),
     )
 
     # ARG-035 — MCP webhook notifications + per-LLM-client rate limiter.
@@ -1093,9 +1104,7 @@ class Settings(BaseSettings):
     # individual adapters live behind their own per-tenant flag in server.yaml.
     mcp_notifications_enabled: bool = Field(
         default=False,
-        validation_alias=AliasChoices(
-            "MCP_NOTIFICATIONS_ENABLED", "mcp_notifications_enabled"
-        ),
+        validation_alias=AliasChoices("MCP_NOTIFICATIONS_ENABLED", "mcp_notifications_enabled"),
     )
     slack_webhook_url: str | None = Field(
         default=None,
@@ -1136,9 +1145,7 @@ class Settings(BaseSettings):
     )
     jira_finding_field_id: str | None = Field(
         default=None,
-        validation_alias=AliasChoices(
-            "JIRA_FINDING_FIELD_ID", "jira_finding_field_id"
-        ),
+        validation_alias=AliasChoices("JIRA_FINDING_FIELD_ID", "jira_finding_field_id"),
     )
 
     @field_validator(
@@ -1207,10 +1214,7 @@ class Settings(BaseSettings):
             )
             raise SystemExit(1)
 
-        if (
-            self.admin_auth_mode in ("session", "both")
-            and not self.admin_session_pepper.strip()
-        ):
+        if self.admin_auth_mode in ("session", "both") and not self.admin_session_pepper.strip():
             logger.critical(
                 "admin_session_pepper_missing_in_production",
                 extra={
@@ -1237,9 +1241,7 @@ class Settings(BaseSettings):
     def destructive_tools(self) -> frozenset[str]:
         """Parse DESTRUCTIVE_TOOL_NAMES into a deduplicated frozenset of canonical names."""
         return frozenset(
-            t.strip().lower()
-            for t in self.destructive_tool_names.split(",")
-            if t.strip()
+            t.strip().lower() for t in self.destructive_tool_names.split(",") if t.strip()
         )
 
     @property
@@ -1309,11 +1311,7 @@ def lab_destructive_execution_allowed(settings: Settings) -> bool:
         return False
     if not (settings.argus_lab_signed_approval_id or "").strip():
         return False
-    if not [
-        p.strip()
-        for p in (settings.argus_lab_allowed_targets or "").split(",")
-        if p.strip()
-    ]:
+    if not [p.strip() for p in (settings.argus_lab_allowed_targets or "").split(",") if p.strip()]:
         return False
     if settings.argus_kill_switch_required:
         return False
@@ -1358,7 +1356,10 @@ def _sync_llm_api_keys_to_environ() -> None:
         ("SHODAN_ENRICHMENT_ENABLED", str(settings.shodan_enrichment_enabled).lower()),
         ("PERPLEXITY_INTEL_ENABLED", str(settings.perplexity_intel_enabled).lower()),
         ("ADVERSARIAL_SCORE_ENABLED", str(settings.adversarial_score_enabled).lower()),
-        ("EXPLOITABILITY_VALIDATION_ENABLED", str(settings.exploitability_validation_enabled).lower()),
+        (
+            "EXPLOITABILITY_VALIDATION_ENABLED",
+            str(settings.exploitability_validation_enabled).lower(),
+        ),
         ("POC_GENERATION_ENABLED", str(settings.poc_generation_enabled).lower()),
         ("SCAN_MODE", settings.scan_mode),
         ("LLM_DEDUP_ENABLED", str(settings.llm_dedup_enabled).lower()),

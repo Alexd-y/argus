@@ -9,7 +9,7 @@ ARGUS's multi-tenant architecture and existing scope/policy infrastructure.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Annotated, Any
 
 import yaml
 from pydantic import (
@@ -17,11 +17,19 @@ from pydantic import (
     ConfigDict,
     Field,
     StrictBool,
-    StrictFloat,
     StrictInt,
     StrictStr,
-    model_validator,
+    StringConstraints,
 )
+
+# A ``SecretRef`` is an opaque, non-secret *identifier* (handle) for a secret.
+# It is safe to keep in configs/plans/logs/prompts because it never carries the
+# secret value itself — resolution to the real value happens only on the
+# execution layer via ``SessionStore.resolve_secret`` (SI-3 split-plane).
+SecretRef = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=256, pattern=r"^[A-Za-z0-9_.:\-/]+$"),
+]
 
 
 class LoginType(StrEnum):
@@ -173,6 +181,151 @@ class AuthConfig(BaseModel):
     )
 
 
+def _generate_totp(secret: str | None) -> str | None:
+    """Generate a current TOTP code, or ``None`` when unavailable.
+
+    ``pyotp`` is an optional dependency, so it is imported lazily here (the only
+    sanctioned inline-import exception): a top-level import would break config
+    loading on installs without 2FA support.
+    """
+    if secret is None:
+        return None
+    try:
+        import pyotp  # noqa: PLC0415 — optional dependency, imported lazily on purpose
+    except ImportError:
+        return None
+    return pyotp.TOTP(secret).now()
+
+
+def _replace_placeholders(text: str, mapping: dict[str, str]) -> str:
+    for placeholder, value in mapping.items():
+        text = text.replace(placeholder, value)
+    return text
+
+
+def _placeholder_map(creds: AuthCredentials) -> dict[str, str]:
+    """Build the ``$placeholder -> value`` map for a credentials block."""
+    totp_code = _generate_totp(creds.totp_secret)
+    mapping: dict[str, str] = {
+        "$username": creds.username,
+        "$password": creds.password,
+        "$totp": totp_code or "$totp",
+    }
+    if creds.email_login is not None:
+        email_totp = _generate_totp(creds.email_login.totp_secret)
+        mapping["$email_address"] = creds.email_login.address
+        mapping["$email_password"] = creds.email_login.password
+        mapping["$email_totp"] = email_totp or "$email_totp"
+    return mapping
+
+
+def _resolve_auth_config(auth: AuthConfig, creds: AuthCredentials) -> AuthConfig:
+    """Return a copy of ``auth`` with login-flow placeholders resolved."""
+    mapping = _placeholder_map(creds)
+    resolved_steps = [
+        LoginFlowStep(
+            instruction=_replace_placeholders(step.instruction, mapping),
+            selector=_replace_placeholders(step.selector, mapping) if step.selector else None,
+            value=_replace_placeholders(step.value, mapping) if step.value else None,
+        )
+        for step in auth.login_flow
+    ]
+    return auth.model_copy(update={"login_flow": resolved_steps})
+
+
+class PrincipalRole(StrEnum):
+    """Roles a principal (identity) can hold during a multi-principal scan.
+
+    Aliases used across the docs/config:
+
+    * ``owner`` — the primary authenticated user (a.k.a. ``user_a``). The legacy
+      single ``authentication`` block maps to this role.
+    * ``attacker`` — a second, lower-trust authenticated user (a.k.a. ``user_b``)
+      used for authorization / IDOR / cross-tenant testing.
+    * ``anonymous`` — an unauthenticated principal (no credentials).
+    """
+
+    ANONYMOUS = "anonymous"
+    OWNER = "owner"
+    ATTACKER = "attacker"
+    TENANT_A_USER = "tenant_a_user"
+    TENANT_B_USER = "tenant_b_user"
+    MODERATOR = "moderator"
+    ADMIN = "admin"
+
+
+class PrincipalConfig(BaseModel):
+    """A single authenticated (or anonymous) identity used during a scan.
+
+    Multi-principal scans (G-2) declare several principals so that
+    authorization, IDOR, and cross-tenant issues can be probed with distinct,
+    **isolated** sessions. Secrets may be provided two ways:
+
+    * **inline** — via :attr:`credentials` / :attr:`login` (back-compat path,
+      identical to the legacy single-``authentication`` model), or
+    * **split-plane** — via ``*_ref`` handles (:attr:`secret_ref`,
+      :attr:`bearer_token_ref`, :attr:`api_key_ref`) which carry only opaque
+      identifiers. The real values are resolved on the execution layer by
+      ``SessionStore.resolve_secret`` and never appear in configs, prompts,
+      logs, or evidence (SI-3).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: StrictStr = Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+        description="Stable identifier for this principal (e.g. owner, attacker, anon).",
+    )
+    role: PrincipalRole = Field(
+        description="Role this principal holds during the scan.",
+    )
+    tenant_id: StrictStr | None = Field(
+        default=None,
+        max_length=128,
+        description="Tenant this principal belongs to (multi-tenant isolation testing).",
+    )
+    credentials: AuthCredentials | None = Field(
+        default=None,
+        description="Inline credentials (back-compat path). Omit when using *_ref handles.",
+    )
+    login: AuthConfig | None = Field(
+        default=None,
+        description="Per-principal login flow (login_url/login_flow/success_condition).",
+    )
+    secret_ref: SecretRef | None = Field(
+        default=None,
+        description="Opaque handle resolved to a password/secret on the execution layer.",
+    )
+    bearer_token_ref: SecretRef | None = Field(
+        default=None,
+        description="Opaque handle resolved to a Bearer token on the execution layer.",
+    )
+    api_key_ref: SecretRef | None = Field(
+        default=None,
+        description="Opaque handle resolved to an API key on the execution layer.",
+    )
+
+    def resolve_placeholders(self) -> "PrincipalConfig":
+        """Return a copy with login-flow placeholders resolved from credentials.
+
+        Mirrors :meth:`TargetConfig.resolve_placeholders` but scoped to this
+        principal. If there is no :attr:`login` block, the principal is returned
+        unchanged. Credentials are taken from :attr:`login` first, then from
+        :attr:`credentials`.
+        """
+        if self.login is None:
+            return self
+
+        creds = self.login.credentials or self.credentials
+        if creds is None:
+            return self
+
+        resolved_login = _resolve_auth_config(self.login, creds)
+        return self.model_copy(update={"login": resolved_login})
+
+
 class ScopeRuleConfig(BaseModel):
     """A single focus or avoid rule for the scan scope."""
 
@@ -273,7 +426,12 @@ class TargetConfig(BaseModel):
     )
     authentication: AuthConfig | None = Field(
         default=None,
-        description="Authentication configuration for the target application.",
+        description="Legacy single-principal auth config (maps to the 'owner' principal).",
+    )
+    principals: list[PrincipalConfig] | None = Field(
+        default=None,
+        max_length=16,
+        description="Multi-principal identities (owner/attacker/...). Overrides 'authentication'.",
     )
     rules: RulesOfEngagement = Field(
         default_factory=RulesOfEngagement,
@@ -299,55 +457,40 @@ class TargetConfig(BaseModel):
         """
         if self.authentication is None:
             return self
+        resolved_auth = _resolve_auth_config(self.authentication, self.authentication.credentials)
+        return self.model_copy(update={"authentication": resolved_auth})
 
-        creds = self.authentication.credentials
-        totp_code = self._generate_totp(creds.totp_secret)
+    def resolved_principals(self) -> list[PrincipalConfig]:
+        """Return the effective list of principals for this scan.
 
-        placeholder_map: dict[str, str] = {
-            "$username": creds.username,
-            "$password": creds.password,
-            "$totp": totp_code or "$totp",
-        }
-        if creds.email_login is not None:
-            email_totp = self._generate_totp(creds.email_login.totp_secret)
-            placeholder_map["$email_address"] = creds.email_login.address
-            placeholder_map["$email_password"] = creds.email_login.password
-            placeholder_map["$email_totp"] = email_totp or "$email_totp"
+        Resolution order (SI-7 back-compat):
 
-        resolved_steps = [
-            LoginFlowStep(
-                instruction=self._replace_placeholders(step.instruction, placeholder_map),
-                selector=self._replace_placeholders(step.selector, placeholder_map) if step.selector else None,
-                value=self._replace_placeholders(step.value, placeholder_map) if step.value else None,
-            )
-            for step in self.authentication.login_flow
-        ]
-
-        data = self.model_dump()
-        if data.get("authentication") and data["authentication"].get("login_flow"):
-            for i, step in enumerate(resolved_steps):
-                data["authentication"]["login_flow"][i]["instruction"] = step.instruction
-                data["authentication"]["login_flow"][i]["selector"] = step.selector
-                data["authentication"]["login_flow"][i]["value"] = step.value
-
-        return TargetConfig.model_validate(data)
+        1. If :attr:`principals` is set, it is returned as-is (multi-principal).
+        2. Otherwise, if the legacy single :attr:`authentication` block is set,
+           it is adapted into a single ``owner`` principal so downstream code has
+           one uniform representation.
+        3. Otherwise an empty list (anonymous / no auth).
+        """
+        if self.principals:
+            return list(self.principals)
+        if self.authentication is not None:
+            return [
+                PrincipalConfig(
+                    principal_id="owner",
+                    role=PrincipalRole.OWNER,
+                    credentials=self.authentication.credentials,
+                    login=self.authentication,
+                )
+            ]
+        return []
 
     @staticmethod
     def _replace_placeholders(text: str, mapping: dict[str, str]) -> str:
-        for placeholder, value in mapping.items():
-            text = text.replace(placeholder, value)
-        return text
+        return _replace_placeholders(text, mapping)
 
     @staticmethod
     def _generate_totp(secret: str | None) -> str | None:
-        if secret is None:
-            return None
-        try:
-            import pyotp
-
-            return pyotp.TOTP(secret).now()
-        except ImportError:
-            return None
+        return _generate_totp(secret)
 
     @classmethod
     def from_yaml(cls, content: str) -> "TargetConfig":
@@ -393,8 +536,11 @@ __all__ = [
     "EmailLoginConfig",
     "LoginFlowStep",
     "LoginType",
+    "PrincipalConfig",
+    "PrincipalRole",
     "RulesOfEngagement",
     "ScopeRuleConfig",
+    "SecretRef",
     "SuccessCondition",
     "SuccessConditionType",
     "TargetConfig",

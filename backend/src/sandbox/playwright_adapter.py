@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -63,6 +62,10 @@ class BrowserResponse(BaseModel):
     screenshot_path: str | None = None
     screenshot_base64: str | None = None
     cookies: list[dict[str, Any]] = Field(default_factory=list)
+    storage_state: dict[str, Any] | None = Field(
+        default=None,
+        description="Playwright storageState (cookies + localStorage) for session reuse (G-7).",
+    )
     js_result: Any = None
     error: str | None = None
     elapsed_ms: float = 0
@@ -146,7 +149,12 @@ class PlaywrightAdapter:
                 logger.debug("Playwright available: %s", getattr(result, "stdout", "ok"))
             else:
                 proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", self._container, "npx", "playwright", "--version",
+                    "docker",
+                    "exec",
+                    self._container,
+                    "npx",
+                    "playwright",
+                    "--version",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -178,36 +186,55 @@ class PlaywrightAdapter:
 
     async def click(self, selector: str, **kwargs) -> BrowserResponse:
         """Click an element by CSS selector."""
-        return await self.execute(BrowserRequest(action=BrowserAction.CLICK, selector=selector, **kwargs))
+        return await self.execute(
+            BrowserRequest(action=BrowserAction.CLICK, selector=selector, **kwargs)
+        )
 
     async def type_text(self, selector: str, text: str, **kwargs) -> BrowserResponse:
         """Type text into an element by CSS selector."""
-        return await self.execute(BrowserRequest(action=BrowserAction.TYPE, selector=selector, text=text, **kwargs))
+        return await self.execute(
+            BrowserRequest(action=BrowserAction.TYPE, selector=selector, text=text, **kwargs)
+        )
 
     async def screenshot(self, path: str | None = None, **kwargs) -> BrowserResponse:
         """Take a screenshot of the current page."""
         shot_path = path or str(Path(self._screenshots_dir) / f"screenshot_{int(time.time())}.png")
-        return await self.execute(BrowserRequest(action=BrowserAction.SCREENSHOT, screenshot_path=shot_path, **kwargs))
+        return await self.execute(
+            BrowserRequest(action=BrowserAction.SCREENSHOT, screenshot_path=shot_path, **kwargs)
+        )
 
     async def execute_js(self, js_code: str, **kwargs) -> BrowserResponse:
         """Execute JavaScript in the browser context."""
-        return await self.execute(BrowserRequest(action=BrowserAction.EXECUTE_JS, js_code=js_code, **kwargs))
+        return await self.execute(
+            BrowserRequest(action=BrowserAction.EXECUTE_JS, js_code=js_code, **kwargs)
+        )
 
     async def login_flow(
         self,
         url: str,
         steps: list[dict[str, str]],
         success_condition: dict[str, str] | None = None,
+        *,
+        storage_state: dict[str, Any] | None = None,
     ) -> BrowserResponse:
         """Execute a declarative login flow (from AuthConfig).
 
         Combines navigate, type, and click actions into a single script
         execution for efficiency.
+
+        When ``storage_state`` is provided the browser context is initialised
+        from a previously exported Playwright ``storageState`` (G-7 reusable
+        session). The resulting ``storageState`` is always exported in the
+        response so callers can persist it in a
+        :class:`~src.auth.session_store.PrincipalSession`.
         """
+        # storageState is embedded as a JSON literal inside the generated script
+        # file (never passed via shell), keeping the argv-only invariant (SI-4).
+        context_opts = f"{{ storageState: {json.dumps(storage_state)} }}" if storage_state else ""
         script_lines = [
             "const { chromium } = require('playwright');",
-            f"const browser = await chromium.launch({{ headless: true }});",
-            "const context = await browser.newContext();",
+            "const browser = await chromium.launch({ headless: true });",
+            f"const context = await browser.newContext({context_opts});",
             "const page = await context.newPage();",
             f"await page.goto({json.dumps(url)}, {{ waitUntil: 'networkidle', timeout: 30000 }});",
         ]
@@ -218,7 +245,9 @@ class PlaywrightAdapter:
                 selector = step.get("selector", "")
                 value = step.get("value", "")
                 if selector and value:
-                    script_lines.append(f"await page.fill({json.dumps(selector)}, {json.dumps(value)});")
+                    script_lines.append(
+                        f"await page.fill({json.dumps(selector)}, {json.dumps(value)});"
+                    )
             elif "click" in instruction or "press" in instruction:
                 selector = step.get("selector", "")
                 if selector:
@@ -235,19 +264,24 @@ class PlaywrightAdapter:
             elif cond_type == "status_code":
                 script_lines.append(f"// status_code check: {cond_value}")
 
-        script_lines.extend([
-            "const url = page.url();",
-            "const title = await page.title();",
-            "const cookies = await context.cookies();",
-            "console.log(JSON.stringify({ url, title, cookies }));",
-            "await browser.close();",
-        ])
+        script_lines.extend(
+            [
+                "const url = page.url();",
+                "const title = await page.title();",
+                "const cookies = await context.cookies();",
+                "const storageState = await context.storageState();",
+                "console.log(JSON.stringify({ url, title, cookies, storage_state: storageState }));",
+                "await browser.close();",
+            ]
+        )
 
         script = "\n".join(script_lines)
         script_path = Path(tempfile.mktemp(suffix=".mjs", prefix="argus_login_"))
         try:
             script_path.write_text(script, encoding="utf-8")
-            return await self._run_in_sandbox(script_path, BrowserRequest(action="login_flow", url=url))
+            return await self._run_in_sandbox(
+                script_path, BrowserRequest(action="login_flow", url=url)
+            )
         finally:
             if script_path.exists():
                 script_path.unlink()
@@ -263,31 +297,45 @@ class PlaywrightAdapter:
         ]
 
         if request.action == BrowserAction.NAVIGATE and request.url:
-            lines.append(f"  await page.goto({json.dumps(request.url)}, {{ waitUntil: 'networkidle', timeout: {request.timeout_ms} }});")
+            lines.append(
+                f"  await page.goto({json.dumps(request.url)}, {{ waitUntil: 'networkidle', timeout: {request.timeout_ms} }});"
+            )
             lines.append("  const url = page.url();")
             lines.append("  const title = await page.title();")
             lines.append("  const body = await page.textContent('body').catch(() => '');")
-            lines.append("  console.log(JSON.stringify({ success: true, url, title, body_text: body }));")
+            lines.append(
+                "  console.log(JSON.stringify({ success: true, url, title, body_text: body }));"
+            )
 
         elif request.action == BrowserAction.CLICK and request.selector:
-            lines.append(f"  await page.click({json.dumps(request.selector)}, {{ timeout: {request.timeout_ms} }});")
+            lines.append(
+                f"  await page.click({json.dumps(request.selector)}, {{ timeout: {request.timeout_ms} }});"
+            )
             lines.append("  console.log(JSON.stringify({ success: true }));")
 
         elif request.action == BrowserAction.TYPE and request.selector and request.text:
-            lines.append(f"  await page.fill({json.dumps(request.selector)}, {json.dumps(request.text)});")
+            lines.append(
+                f"  await page.fill({json.dumps(request.selector)}, {json.dumps(request.text)});"
+            )
             lines.append("  console.log(JSON.stringify({ success: true }));")
 
         elif request.action == BrowserAction.SCREENSHOT:
             if request.screenshot_path:
-                lines.append(f"  await page.screenshot({{ path: {json.dumps(request.screenshot_path)}, type: 'png' }});")
+                lines.append(
+                    f"  await page.screenshot({{ path: {json.dumps(request.screenshot_path)}, type: 'png' }});"
+                )
                 lines.append("  const _buf = await page.screenshot({ type: 'png' });")
             else:
                 lines.append("  const _buf = await page.screenshot({ type: 'png' });")
             lines.append("  const _b64 = _buf.toString('base64');")
             if request.screenshot_path:
-                lines.append(f"  console.log(JSON.stringify({{ success: true, screenshot_path: {json.dumps(request.screenshot_path)}, screenshot_base64: _b64 }}));")
+                lines.append(
+                    f"  console.log(JSON.stringify({{ success: true, screenshot_path: {json.dumps(request.screenshot_path)}, screenshot_base64: _b64 }}));"
+                )
             else:
-                lines.append("  console.log(JSON.stringify({ success: true, screenshot_base64: _b64 }));")
+                lines.append(
+                    "  console.log(JSON.stringify({ success: true, screenshot_base64: _b64 }));"
+                )
 
         elif request.action == BrowserAction.EXECUTE_JS and request.js_code:
             safe_js = request.js_code.replace("`", "\\`")
@@ -298,19 +346,29 @@ class PlaywrightAdapter:
             lines.append("  const intercepted = [];")
             lines.append("  await page.route('**/*', async (route) => {")
             lines.append("    const req = route.request();")
-            lines.append("    intercepted.push({ url: req.url(), method: req.method(), resourceType: req.resourceType() });")
+            lines.append(
+                "    intercepted.push({ url: req.url(), method: req.method(), resourceType: req.resourceType() });"
+            )
             lines.append("    await route.continue();")
             lines.append("  });")
-            lines.append(f"  await page.goto({json.dumps(request.url or 'about:blank')}, {{ waitUntil: 'networkidle', timeout: {request.timeout_ms} }});")
-            lines.append("  console.log(JSON.stringify({ success: true, intercepted, url: page.url() }));")
+            lines.append(
+                f"  await page.goto({json.dumps(request.url or 'about:blank')}, {{ waitUntil: 'networkidle', timeout: {request.timeout_ms} }});"
+            )
+            lines.append(
+                "  console.log(JSON.stringify({ success: true, intercepted, url: page.url() }));"
+            )
 
         else:
-            lines.append("  console.log(JSON.stringify({ success: false, error: 'Unknown action' }));")
+            lines.append(
+                "  console.log(JSON.stringify({ success: false, error: 'Unknown action' }));"
+            )
 
-        lines.extend([
-            "  await browser.close();",
-            "})();",
-        ])
+        lines.extend(
+            [
+                "  await browser.close();",
+                "})();",
+            ]
+        )
         return "\n".join(lines)
 
     async def _run_in_sandbox(self, script_path: Path, request: BrowserRequest) -> BrowserResponse:
@@ -327,7 +385,11 @@ class PlaywrightAdapter:
                 stdout = result.stdout if hasattr(result, "stdout") else str(result)
             else:
                 proc = await asyncio.create_subprocess_exec(
-                    "docker", "exec", self._container, "node", str(script_path),
+                    "docker",
+                    "exec",
+                    self._container,
+                    "node",
+                    str(script_path),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -349,6 +411,7 @@ class PlaywrightAdapter:
                 screenshot_path=data.get("screenshot_path"),
                 screenshot_base64=data.get("screenshot_base64"),
                 cookies=data.get("cookies", []),
+                storage_state=data.get("storage_state"),
                 js_result=data.get("js_result"),
                 elapsed_ms=elapsed,
             )
@@ -360,6 +423,23 @@ class PlaywrightAdapter:
             return BrowserResponse(success=False, error=str(exc), elapsed_ms=elapsed)
 
 
+def export_auth_context(response: BrowserResponse) -> dict[str, Any]:
+    """Map a ``login_flow`` :class:`BrowserResponse` to a SessionStore-friendly dict.
+
+    The returned dict is consumed by the exploitation wiring to hydrate a
+    :class:`~src.auth.session_store.PrincipalSession` (cookies + reusable
+    ``storageState``). Kept dependency-free (plain dict) so this module does not
+    import the auth layer.
+    """
+    return {
+        "authenticated": bool(response.success),
+        "cookies": response.cookies,
+        "storage_state": response.storage_state,
+        "page_url": response.url,
+        "page_title": response.title,
+    }
+
+
 __all__ = [
     "BrowserAction",
     "BrowserRequest",
@@ -367,6 +447,7 @@ __all__ = [
     "MCP_BROWSER_TOOLS",
     "PlaywrightAdapter",
     "PlaywrightSession",
+    "export_auth_context",
     "register_browser_tools",
 ]
 
@@ -416,31 +497,58 @@ async def register_browser_tools(adapter: PlaywrightAdapter | None = None) -> di
         handler_name = tool_info["handler"]
 
         if handler_name == "navigate":
+
             async def _navigate(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.navigate(kwargs.get("url", ""))
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _navigate}
+
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _navigate,
+            }
         elif handler_name == "click":
+
             async def _click(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.click(kwargs.get("selector", ""))
+
             tool_registry[tool_name] = {"description": tool_info["description"], "handler": _click}
         elif handler_name == "type_text":
+
             async def _type_text(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.type_text(kwargs.get("selector", ""), kwargs.get("text", ""))
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _type_text}
+
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _type_text,
+            }
         elif handler_name == "screenshot":
+
             async def _screenshot(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.screenshot(kwargs.get("selector"))
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _screenshot}
+
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _screenshot,
+            }
         elif handler_name == "execute_js":
+
             async def _execute_js(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.execute_js(kwargs.get("script", ""))
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _execute_js}
+
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _execute_js,
+            }
         elif handler_name == "login_flow":
+
             async def _login_flow(**kwargs: Any) -> dict[str, Any]:
                 return await _adapter.login_flow(
                     kwargs.get("login_url", ""),
                     steps=kwargs.get("steps", []),
                 )
-            tool_registry[tool_name] = {"description": tool_info["description"], "handler": _login_flow}
+
+            tool_registry[tool_name] = {
+                "description": tool_info["description"],
+                "handler": _login_flow,
+            }
 
     return tool_registry

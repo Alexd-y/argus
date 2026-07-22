@@ -49,6 +49,7 @@ from src.auth.admin_dependencies import log_mfa_enforcement_state
 from src.api.routers.llm_health import router as llm_health_router
 from src.api.routers.recon import recon_router
 from src.api.routers.sandbox_validation import router as sandbox_validation_router
+from src.api.routers.web_workbench import web_workbench_router
 from src.api.routers.patches import router as patches_router
 from src.api.routers.analysis import router as analysis_router
 from src.api.routers.binary_triage import router as binary_router
@@ -171,6 +172,7 @@ app.include_router(admin_webhook_dlq.router)
 app.include_router(cache.router, prefix="/api/v1")
 app.include_router(internal_va.router, prefix="/api/v1")
 app.include_router(recon_router, prefix="/api/v1")
+app.include_router(web_workbench_router, prefix="/api/v1")
 app.include_router(intelligence.router, prefix="/api/v1")
 app.include_router(skills_public.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")
