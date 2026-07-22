@@ -72,3 +72,6 @@ Frontend/cycle*_b*_eslint.txt
 infra/helm/argus/cycle*_b*_helm_lint.txt
 
 training_data/repos_cache/
+
+# Codex/agent working artifacts (ephemeral review dumps)
+.codex-work/
