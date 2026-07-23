@@ -1,0 +1,102 @@
+{{- if .Values.webProxy.enabled }}
+{{- include "argus.cosignAssertProd" . -}}
+# Web Security Workbench intercepting proxy (WB-P2b).
+#
+# Disabled by default (webProxy.enabled=false). The live MITM daemon
+# (WB-P2b-2, mitmproxy addon at src.web_workbench.proxy.service) is infra-gated
+# and is only exercised in E2E on a running stack. This manifest is the ready
+# scaffold: enabling the value and pushing the backend image is all that remains
+# to run it. The CA private key is sealed with the secrets.webProxy KEK and is
+# never persisted in plaintext; all forwarded traffic passes the shared
+# ForwardGate (scope + preflight + EAP).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-web-proxy
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web-proxy
+spec:
+  replicas: {{ .Values.webProxy.replicaCount }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: web-proxy
+  template:
+    metadata:
+      labels:
+        {{- include "argus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: web-proxy
+    spec:
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- include "argus.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: web-proxy
+          image: {{ include "argus.imageRef" (dict "image" .Values.image.backend "root" $) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: proxy
+              containerPort: {{ .Values.webProxy.service.proxyPort }}
+              protocol: TCP
+          command: ["python3", "-m", "src.web_workbench.proxy.service"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "argus.fullname" . }}-config
+          env:
+            - name: WB_PROXY_LISTEN_PORT
+              value: {{ .Values.webProxy.service.proxyPort | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database.existingSecretName }}
+                  key: {{ .Values.secrets.database.existingSecretKey }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.redis.existingSecretName }}
+                  key: {{ .Values.secrets.redis.existingSecretKey }}
+            - name: WB_CA_SEALING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.webProxy.caSealingSecretName }}
+                  key: {{ .Values.secrets.webProxy.caSealingSecretKey }}
+                  optional: true
+          livenessProbe:
+            tcpSocket:
+              port: proxy
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.webProxy.resources | nindent 12 }}
+          volumeMounts:
+            {{- include "argus.standardVolumeMounts" . | nindent 12 }}
+      volumes:
+        {{- include "argus.standardVolumes" . | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

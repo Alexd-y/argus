@@ -71,6 +71,11 @@ spec:
       protocol: TCP
       name: http
     - port: {{ .Values.service.mcp.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: mcp-server
 ---
 {{- if .Values.llmGateway.enabled }}
@@ -111,4 +116,24 @@ spec:
   selector:
     {{- include "argus.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: whiterabbitneo
+{{- end }}
+---
+{{- if .Values.webProxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "argus.fullname" . }}-web-proxy
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web-proxy
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.webProxy.service.proxyPort }}
+      targetPort: proxy
+      protocol: TCP
+      name: proxy
+  selector:
+    {{- include "argus.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: web-proxy
 {{- end }}

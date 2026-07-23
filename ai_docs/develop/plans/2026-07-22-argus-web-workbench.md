@@ -732,8 +732,15 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
     `plan_body`→`BodyObjectStore`→`ProxyRepository.persist_message`.
   - `backend/pyproject.toml` — добавить `mitmproxy` (pinned) в опциональную группу `web-proxy`
     (НЕ импортировать `service.py` из `main.py` — демон живёт только в контейнере `argus-web-proxy`).
-  - `infra/docker-compose.yml` (+сервис `argus-web-proxy`, pinned image, healthcheck),
-    `infra/docker-compose.e2e.yml` (+juice-shop).
+  - `infra/docker-compose.yml` — **✅ сервис `web-proxy` добавлен (эта сессия)**: profile-gated (`--profile web-proxy`,
+    НЕ стартует при обычном `up`, НЕ импортируется `main.py`), из backend-образа, `command: python3 -m
+    src.web_workbench.proxy.service`, env `WB_CA_SEALING_KEY`/`WB_PROXY_LISTEN_PORT`, `docker compose config` ✅.
+    Осталось: `infra/docker-compose.e2e.yml` (+juice-shop).
+  - `infra/helm/argus` — **✅ scaffold добавлен (эта сессия)**: `templates/web-proxy-deployment.yaml` +
+    Service (gated `webProxy.enabled=false`), `values.yaml` (`webProxy`, `secrets.webProxy.caSealingSecretName`),
+    digest-pinned backend-image, TCP-пробы; `helm lint` ✅, рендер при `--set webProxy.enabled=true` ✅
+    (по умолчанию отсутствует). Побочно исправлен pre-existing сломанный `mcp` Service (чарт не линтовался).
+    Осталось только выставить `webProxy.enabled=true` на AWS.
 - **Инварианты:** каждый forwarded request → `ForwardGate`(scope)+`PreflightChecker`(ownership/policy/
   approval); kill switch (`status=killed` → drop); DNS-rebinding защита; CA приватный ключ только через
   `load_ca`(unseal in-process), НИКОГДА в логах/в API.
@@ -792,11 +799,18 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
 - **DoD ✅:** 4 стратегии + processors + grep-match/extract + dedup unit-tested (**40 тестов**);
   `ruff`/`black`/`mypy` ✅; весь `tests/unit/web_workbench` — **172 passed**.
 
-#### WB-P4b — Intruder execution (persist + worker + evidence, infra-gated) — pending
-- **Files:** модели `WbIntruderAttack`,`WbIntruderRequest`/result + миграция `050`; `web_workbench/intruder/service.py`
-  (gate каждого запроса через scope+preflight+EAP-budget); отдельный Celery worker pool (`argus.intruder.highvol`) с
-  quotas+kill switch; API `/wb/projects/{id}/intruder/*` (create/start/pause/resume/cancel/results); мост результатов →
-  evidence → `FindingDTO` через `finding_bridge`.
+#### WB-P4b — Intruder execution (persist + worker + evidence, infra-gated) — pending (offline-заготовка ✅)
+- **✅ Offline-заготовка (эта сессия):** модели `WbIntruderAttack` (attack_type, byte-exact `raw_request_template`,
+  `payload_config`=ссылки в реестр, positions/checkpoint, version=optimistic-lock, status=kill-switch),
+  `WbIntruderRequest` (metadata-only: request_index/payload_label/payload_index, forward_outcome/block_reason,
+  status/length/time/sha256, flagged) в `models_web_workbench.py`; миграция **`051_wb_intruder_sessions.py`**
+  (RLS ENABLE+FORCE, SQLite-compat через `_json_type`, uq-констрейнты); unit-тесты
+  `tests/unit/web_workbench/test_intruder_sessions_models.py` (8) + offline chain-тест
+  `tests/integration/migrations/test_051_wb_intruder_sessions.py` (6, head=051 single). `ruff`/`black`/`mypy`/smoke ✅.
+- **⏳ Осталось (infra-gated):** `web_workbench/intruder/service.py` (gate каждого запроса через scope+preflight+
+  EAP-budget); отдельный Celery worker pool (`argus.intruder.highvol`) с quotas+kill switch; API
+  `/wb/projects/{id}/intruder/*` (create/start/pause/resume/cancel/results); мост результатов → evidence →
+  `FindingDTO` через `finding_bridge`; repository RLS + optimistic-lock.
 - **Инварианты:** payload sets ТОЛЬКО через `PayloadBuilder` (materialize из реестра); high-volume/race/single-packet
   → risk-класс + EAP; request budget из EAP; каждый запрос проходит `ForwardGate`; kill-switch по project status.
 - **DoD:** persistence RLS integration; pause/resume/checkpoint/cancel; live high-volume E2E — **infra-gated**.
@@ -842,11 +856,15 @@ fail-closed) + 20 unit-тестов. Детали — §10.
 Тонкий offline-адаптер поверх `playbooks.oracles.AuthzOracle` (переиспользование), классификация IDOR/BFLA/UNAUTH,
 SI-3 (finding без raw-тел). Детали — §10.
 
-#### WB-P6b — SessionStore persist + live owner/attacker replay + DOM instrumentation + FindingDTO (infra-gated) — pending
-- **Files:** `SessionPrincipal`,`SessionMacro` модели + миграция `051`; `web_workbench/sessions/*` (split-plane
-  secrets через `secrets_ref`, macro-replay для логина); live owner/attacker/anon replay-раннер (использует P6a
-  `analyze_authorization` над реально снятыми парами) + мост `AuthorizationFinding`→`FindingDTO` (category AUTH/IDOR);
-  расширение `playwright_adapter.py` (reusable context для atomic actions, DOM source/sink, postMessage, CSP).
+#### WB-P6b — SessionStore persist + live owner/attacker replay + DOM instrumentation + FindingDTO (infra-gated) — pending (offline-заготовка ✅)
+- **✅ Offline-заготовка (эта сессия):** модели `WbSessionMacro` (steps/match_rules JSON с `secret_ref`-плейсхолдерами,
+  БЕЗ raw-секретов), `WbSessionPrincipal` (role owner/attacker/anonymous, `secrets_ref` split-plane SI-3,
+  optional `macro_id`→SET NULL) в `models_web_workbench.py`; миграция **`051_wb_intruder_sessions.py`** (RLS ENABLE+FORCE,
+  SQLite-compat); unit-тесты (split-plane secrets: нет колонок password/token/secret) + chain-тест — общие с WB-P4b.
+- **⏳ Осталось (infra-gated):** `web_workbench/sessions/*` (split-plane secrets через `secrets_ref`, macro-replay для
+  логина); live owner/attacker/anon replay-раннер (использует P6a `analyze_authorization` над реально снятыми парами) +
+  мост `AuthorizationFinding`→`FindingDTO` (category AUTH/IDOR); расширение `playwright_adapter.py` (reusable context для
+  atomic actions, DOM source/sink, postMessage, CSP).
 - **Инварианты:** split-plane secrets (SI-3), redaction через `auth/redaction.py`+`playbooks/evidence`; replay ТОЛЬКО
   через ForwardGate+preflight+EAP; P6a-анализатор — вход (уже offline-верифицирован).
 - **DoD:** owner-vs-attacker diff E2E; secret-leakage security test; BAC/IDOR классификация → FindingDTO — **infra-gated**.

@@ -445,6 +445,11 @@ secrets:
   webhooks:
     slackSecretName: argus-webhooks
     slackSecretKey: slack_signing_secret
+  # Web Security Workbench proxy CA sealing key (KEK that seals per-listener CA
+  # private keys). Referenced, never inlined. Only consumed when webProxy.enabled.
+  webProxy:
+    caSealingSecretName: argus-web-proxy
+    caSealingSecretKey: ca_sealing_key
 
 # ── application configuration (non-secret) ───────────────────────────────────
 config:
@@ -577,6 +582,27 @@ llmGateway:
       memory: 2Gi
   service:
     port: 8000
+
+# ── Web Security Workbench intercepting proxy (WB-P2b) ──────────────────────
+# Disabled by default: the live MITM daemon (WB-P2b-2, mitmproxy addon) is
+# infra-gated. When enabled, runs from the backend image as a dedicated
+# listener workload; the CA private key is sealed with secrets.webProxy KEK
+# and never persisted in plaintext. All forwarded traffic passes the shared
+# ForwardGate (scope + preflight + EAP) — the proxy is not an open relay.
+webProxy:
+  enabled: false
+  replicaCount: 1
+  # Runs from the digest-pinned backend image (image.backend) — no separate image.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  service:
+    # MITM listen port the target's HTTP(S) client is pointed at.
+    proxyPort: 8080
 
 # ── WhiteRabbitNeo — primary pentest AI (local, GPU recommended) ────────────
 whiteRabbitNeo:

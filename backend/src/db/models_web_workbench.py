@@ -547,7 +547,195 @@ class WbScannerIssueLink(Base):
     )
 
 
+class WbIntruderAttack(Base):
+    """An Intruder attack definition + run against an in-scope target (WB-P4b).
+
+    ``attack_type`` mirrors the classic position/payload strategies
+    (``sniper`` | ``battering_ram`` | ``pitchfork`` | ``cluster_bomb``).
+    ``raw_request_template`` is the byte-exact base request with position markers;
+    ``positions`` records the marker offsets. ``payload_config`` holds ONLY
+    references into the signed :class:`~src.payloads` registry (set ids +
+    processing rules) — never raw payload material, so unapproved payloads cannot
+    be injected. ``status`` is a lifecycle value where ``cancelled`` is the kill
+    switch (no further requests are forwarded). Concurrent edits use optimistic
+    ``version``.
+    """
+
+    __tablename__ = "wb_intruder_attacks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("wb_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: ``sniper`` | ``battering_ram`` | ``pitchfork`` | ``cluster_bomb``.
+    attack_type: Mapped[str] = mapped_column(String(16), nullable=False, default="sniper")
+    #: ``queued`` | ``running`` | ``paused`` | ``completed`` | ``cancelled`` | ``failed``.
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    #: Byte-exact base request with position markers (source of truth for replay).
+    raw_request_template: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    #: List of ``{"start": int, "end": int}`` payload-position offsets.
+    positions: Mapped[list[dict[str, int]] | None] = mapped_column(JSONB, nullable=True)
+    #: References into the signed payload registry (set ids + processing) — NOT raw payloads.
+    payload_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Run options (concurrency cap, throttle, risk class); no raw secrets.
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Resumable progress state (pause/resume/checkpoint).
+    checkpoint: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    requests_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    requests_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    findings_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_by_subject_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "name", name="uq_wb_intruder_attack_name"),
+        Index("ix_wb_intruder_attack_project", "tenant_id", "project_id", "status"),
+    )
+
+
+class WbIntruderRequest(Base):
+    """One request result recorded during an Intruder attack (WB-P4b).
+
+    High-volume, so this row stays metadata-only: response bodies are NOT stored
+    inline here (bounded body handling / object store is applied by the service).
+    ``payload_label`` / ``payload_index`` identify which registry payload was
+    used (reconstructable from the signed set — the raw payload value is not
+    duplicated). Every attempt is recorded (audit invariant); on a
+    forward-gate block the sender was never invoked
+    (``forward_outcome='blocked'``, ``block_reason`` set, response columns NULL).
+    """
+
+    __tablename__ = "wb_intruder_requests"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("wb_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    attack_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("wb_intruder_attacks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    #: 0-based ordinal of this request within the attack.
+    request_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: Payload set/label + index used (reference, not the raw payload value).
+    payload_label: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    payload_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ``forward`` | ``blocked`` (mandatory forward-gate verdict).
+    forward_outcome: Mapped[str] = mapped_column(String(16), nullable=False, default="forward")
+    block_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    response_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Operator/analyzer marked this result as interesting.
+    flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "attack_id", "request_index", name="uq_wb_intruder_request_index"
+        ),
+        Index("ix_wb_intruder_request_attack", "tenant_id", "attack_id"),
+        Index("ix_wb_intruder_request_flagged", "tenant_id", "attack_id", "flagged"),
+    )
+
+
+class WbSessionMacro(Base):
+    """A login / session-setup macro for authenticated testing (WB-P6b).
+
+    ``steps`` is an ordered list of request specs replayed to establish a session
+    (e.g. login flow). It holds NO raw secrets: any credential/token is a
+    ``secret_ref`` placeholder resolved from the secret plane at replay time
+    (split-plane secrets, SI-3). ``match_rules`` describes how a logged-in
+    response is recognised. Concurrent edits use optimistic ``version``.
+    """
+
+    __tablename__ = "wb_session_macros"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("wb_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Ordered replay steps (request specs with ``secret_ref`` placeholders).
+    steps: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Rules to detect an authenticated session (status/header/body markers).
+    match_rules: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "name", name="uq_wb_session_macro_name"),
+        Index("ix_wb_session_macro_project", "tenant_id", "project_id"),
+    )
+
+
+class WbSessionPrincipal(Base):
+    """An identity used for authorization testing (WB-P6b) — tenant-scoped.
+
+    Represents an owner / attacker / anonymous principal in owner-vs-attacker
+    replay diffing. Credentials/tokens are NEVER stored here — only
+    ``secrets_ref`` into the secret plane (split-plane, SI-3). ``role`` is
+    ``owner`` | ``attacker`` | ``anonymous``. An optional ``macro_id`` links the
+    login macro used to (re)establish this principal's session.
+    """
+
+    __tablename__ = "wb_session_principals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("wb_projects.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: ``owner`` | ``attacker`` | ``anonymous``.
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="owner")
+    #: Reference (not the value) into the secret plane for this principal's creds.
+    secrets_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    macro_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("wb_session_macros.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "name", name="uq_wb_session_principal_name"),
+        Index("ix_wb_session_principal_project", "tenant_id", "project_id", "role"),
+    )
+
+
 __all__ = [
+    "WbIntruderAttack",
+    "WbIntruderRequest",
     "WbMessageRevision",
     "WbOrganizerCollection",
     "WbOrganizerItem",
@@ -557,6 +745,8 @@ __all__ = [
     "WbScannerIssueLink",
     "WbScannerTask",
     "WbScopeRule",
+    "WbSessionMacro",
+    "WbSessionPrincipal",
     "WbTrafficBodyArtifact",
     "WbTrafficMessage",
     "WebWorkbenchEapRecord",
