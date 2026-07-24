@@ -62,7 +62,7 @@ async def override_finding_cvss(
     tenant_id: str = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(_get_session),
 ) -> CVSSOverrideResponse:
-    set_session_tenant(session, tenant_id)
+    await set_session_tenant(session, tenant_id)
 
     if not _CVSS_VECTOR_RE.match(override.cvss_vector):
         raise HTTPException(

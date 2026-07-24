@@ -102,7 +102,7 @@ async def list_bounty_programs(
     session: AsyncSession = Depends(_get_session),
 ) -> list[BountyProgramResponse]:
     """List saved bounty programs for the tenant."""
-    set_session_tenant(session, tenant_id)
+    await set_session_tenant(session, tenant_id)
 
     try:
         from src.db.models import BountyProgram
@@ -136,7 +136,7 @@ async def create_bounty_program(
     session: AsyncSession = Depends(_get_session),
 ) -> BountyProgramResponse:
     """Create a new bounty program."""
-    set_session_tenant(session, tenant_id)
+    await set_session_tenant(session, tenant_id)
 
     try:
         from src.db.models import BountyProgram
@@ -180,7 +180,7 @@ async def launch_bounty_scan(
     session: AsyncSession = Depends(_get_session),
 ) -> BountyLaunchResponse:
     """Launch a scan from a specific phase of the bounty test plan."""
-    set_session_tenant(session, tenant_id)
+    await set_session_tenant(session, tenant_id)
 
     try:
         from src.db.models import BountyProgram
