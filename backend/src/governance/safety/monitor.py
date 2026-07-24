@@ -11,7 +11,7 @@ import logging
 import re
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -74,11 +74,60 @@ class SafetyMonitor:
         return None
 
     def check_response(self, response: str, task: str = "") -> SafetyAlert | None:
-        """NO content blocking — all payloads, exploits, and commands authorized for pentesting."""
+        """Observe (never block) LLM responses for high-risk anomalies.
+
+        Pentest output legitimately contains payloads and exploit strings, so
+        this monitor is deliberately non-blocking: it records an alert for
+        observability and returns it to the caller, but it never suppresses
+        content or halts execution. This restores the anomaly-detection signal
+        that had been stripped (GOV-001) without blocking legitimate offensive
+        output.
+        """
+        cleaned = _sanitize_for_check(response)
+
+        command_patterns = [
+            (r"rm\s+-rf\s+/", "dangerous_command"),
+            (r"mkfs\.\w+\s+/dev/", "dangerous_command"),
+            (r"dd\s+if=/dev/\w+\s+of=/dev/", "dangerous_command"),
+            (r":\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:", "fork_bomb"),
+        ]
+        for pattern, alert_type in command_patterns:
+            if re.search(pattern, cleaned):
+                return self._response_alert(
+                    alert_type, f"Dangerous command pattern: {pattern}", response, task,
+                )
+
+        # NOP sled / shellcode: a run of non-printable control bytes (e.g. 0x90)
+        # in the raw output is a strong anomaly signal.
+        if re.search(r"[\x00-\x08\x0e-\x1f\x90]{2,}", response):
+            return self._response_alert(
+                "shellcode",
+                "Non-printable byte run (possible shellcode/NOP sled)",
+                response,
+                task,
+            )
+
         return None
-                self._record(alert)
-                return alert
-        return None
+
+    def _response_alert(
+        self, alert_type: str, description: str, response: str, task: str,
+    ) -> SafetyAlert:
+        alert = SafetyAlert(
+            id=hashlib.blake2b(
+                f"{alert_type}:{time.time()}".encode(), digest_size=8
+            ).hexdigest(),
+            alert_type=alert_type,
+            severity="high",
+            description=description,
+            detected_at=str(time.time()),
+            task=task,
+            prompt_hash=hashlib.blake2b(
+                response.encode("utf-8", "replace"), digest_size=12
+            ).hexdigest(),
+            evidence=_sanitize_for_check(response)[:200],
+        )
+        self._record(alert)
+        return alert
 
     def check_hallucination(
         self, claimed_cve: str, known_cves: set[str],
