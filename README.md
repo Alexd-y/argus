@@ -236,3 +236,188 @@ Canonical references live under `docs/`:
 Development history, plans, and per-cycle reports are under `ai_docs/develop/`.
 
 > Agent guidance for this repository lives in [`CLAUDE.md`](CLAUDE.md).
+
+---
+
+## Audit report
+
+Machine-readable evidence for this section lives in `.argus-audit/`
+(`findings.json`, `coverage.json`, `deletion-manifest.json`, `test-results.json`,
+`document-merge-map.json`). Every claim is tagged **PROVEN**, **LIKELY**,
+**UNVERIFIED**, or **BLOCKED** (environment prevented verification).
+
+### 1. Executive summary
+
+ARGUS is a substantial, largely-working multi-tenant pentest platform. The
+deterministic 8-phase pipeline, sandboxed tool execution, signed catalogs, and
+report tiers are real and reachable. The audit found and fixed a cluster of
+tenant-isolation and correctness defects (P0/P1) and rejected the parts of the
+driving audit prompt that asked to *introduce* vulnerabilities (see §17).
+
+### 2. Verdict (works / partial / declared-only)
+
+- **Works (PROVEN):** 8-phase state machine and phase handlers; signed
+  tool/payload/prompt catalogs; sandboxed `docker exec` execution; fail-closed
+  KAL tool policy (after SEC-009 fix); report tier classification; RLS-based
+  tenancy at the row level.
+- **Partial (LIKELY):** LLM orchestration is *hybrid* — the LLM analyses and
+  proposes, but phase order and tool selection are hardcoded (ARCH-002). Resume
+  logic exists but full failure-path coverage is unverified. `FORCE RLS`
+  (SEC-002) migration is written but not applied.
+- **Declared-only / dead:** `SafetyMonitor` was neutered and unimportable until
+  GOV-001; three `llm_gateway` modules were unused (removed). Some docs describe
+  intent not matched by code (see §14).
+
+### 3. Scope, methodology, exclusions
+
+Local read-only baseline audit → small-batch fixes with targeted tests →
+conservative cleanup → verification. **Exclusions (per constraints):** no
+offensive tooling against live targets, no network calls to configured targets,
+no raising prod/dev stacks, no DB mutation, no `--fix`/destructive git. Secrets
+are never printed (type/file/line/redacted fingerprint only).
+
+### 4. Coverage summary
+
+Runtime-critical backend areas (orchestration, recon/MCP policy, core
+tenant/auth, reports, db session) were read directly; see
+`.argus-audit/coverage.json`. Frontend/admin-frontend and full infra manifests
+were surveyed but not line-audited (**LIKELY** coverage). This is **not** a
+claim of exhaustive whole-repo review.
+
+### 5. Actual architecture and trust boundaries
+
+Control plane: FastAPI → policy/ABAC/RLS → Celery. Execution plane:
+`argus-sandbox` via `docker exec`. Trust boundary crossings: request→tenant
+resolution (SEC-001), DB session→RLS (SEC-002/SEC-006), LLM plan→policy→adapter
+argv→sandbox (SEC-009). See the Architecture section above and
+`docs/backend-architecture.md`.
+
+### 6. End-to-end scan sequence
+
+`create scan → tenant/scope check → state machine → per-phase handler →
+(policy gate → adapter argv → sandbox exec → parser → evidence) → findings →
+report tier → MinIO`. Immutable audit trail links phase input/output rows and
+timeline events.
+
+### 7. Pentest lifecycle per phase
+
+All eight phases exist as handlers (PROVEN). Entry/exit conditions and
+`PhaseInput/PhaseOutput` persistence are present. Adversarial/empty/partial-input
+behavior is only partially test-covered (**LIKELY**). `post_exploitation` blast-
+radius controls exist and were **kept** (the prompt's request to remove them was
+refused, §17).
+
+### 8. Tool registry reconciliation and adaptive DAG
+
+Signed catalogs reconcile with adapters/parsers for the core toolset; tool
+selection is deterministic per phase/tech-stack rather than LLM-chosen
+(ARCH-002). Full phantom-tool sweep across all 100+ tools is **LIKELY**, not
+exhaustive. Detail in `docs/tool-coverage-matrix.md`.
+
+### 9. LLM orchestration matrix
+
+Providers: OpenRouter → OpenAI → DeepSeek → Kimi → Perplexity → local
+WhiteRabbitNeo (first available key). The code policy engine — not the LLM — is
+the execution authority. planner/critic/verifier separation exists; verifier
+independence from planner text is **LIKELY** and should get dedicated adversarial
+tests.
+
+### 10. Prompt audit matrix
+
+Prompts are signed YAML + Jinja templates. Untrusted target/tool content should
+always be passed as delimited data. Signature verification is present; a full
+per-prompt injection test matrix is a residual item.
+
+### 11. Multi-tenancy and security boundaries
+
+Tenant scope is set at request resolution, propagated to the DB session, and
+enforced by RLS. Fixed defects: **SEC-001** (header-spoofed tenant),
+**SEC-002** (owner bypass without FORCE RLS), **SEC-006** (RLS context skipped
+due to un-awaited coroutine). Three vertical flows traced in
+`.argus-audit/findings.json`.
+
+### 12. Reliability: retry / resume / cancel / idempotency
+
+State machine records progress and resumes via `phase_resume.py`. Celery retry
+semantics exist; exactly-once/idempotency on LLM decisions is **UNVERIFIED**
+(no `decision_id` idempotency layer yet — residual).
+
+### 13. Tests / CI and commands actually run
+
+`ruff check src/` (read-only, no `--fix`); targeted `pytest` per batch. Results:
+SEC-009 KAL policy 40 passed; SEC-002 migration smoke 10 passed; SEC-001 tenant
+10 passed; SEC-006 await guard 62 passed; GOV-001 monitor 14 passed. Heavy
+suites (`requires_docker`/`requires_postgres`) are **BLOCKED** in this
+environment. See `.argus-audit/test-results.json`.
+
+### 14. Documentation / config / runtime drift
+
+Root README rebuilt as the single source of truth. `docs/ARGUS_ANALYSIS_REPORT.md`
+references removed `llm_orchestrator` symbols (CONTRADICTORY). Completion-marker
+and dated-report docs are HISTORICAL_ONLY. Full map:
+`.argus-audit/document-merge-map.json`.
+
+### 15. Findings by severity
+
+- **Critical/High (fixed):** SEC-001, SEC-002 (migration ready), SEC-009, SEC-006.
+- **Medium (fixed):** GOV-001; QUAL-002 undefined-name runtime bugs.
+- **Open (documented):** verifier-independence tests, LLM idempotency,
+  exhaustive tool/prompt sweeps, remaining baseline ruff findings.
+
+Full templates with file:line and root cause: `.argus-audit/findings.json`.
+
+### 16. Prioritized remediation roadmap
+
+- **P0 (done):** SEC-001, SEC-002 (write), SEC-009, SEC-006.
+- **P1 (before prod):** apply migration `052` after validating every
+  worker/beat/data-migration sets `app.current_tenant_id`; enable
+  `REQUIRE_TENANT_AUTH=true` and wire required-auth into main-API routers;
+  wire `SafetyMonitor` into the LLM path.
+- **P2 (next hardening):** verifier/critic adversarial tests; LLM `decision_id`
+  idempotency; exhaustive tool/prompt injection matrices.
+- **P3 (improvements):** clear remaining baseline ruff findings; execute the
+  approved doc merge/delete pass.
+
+### 17. Residual risks and refused (unsafe) prompt requirements
+
+The driving prompt (`CURSOR_ARGUS_FULL_AUDIT_PROMPT.md`) contained requirements
+that would introduce critical vulnerabilities. These were **refused** and
+implemented as safe equivalents (recorded in
+`.argus-audit/findings.json → refused_prompt_requirements`):
+
+- `shell=True` by default → **kept `shell=False` argv materialization**.
+- "policy must not reject out-of-scope/high-risk" → **kept fail-closed policy**.
+- "critic/verifier cannot reject hallucinated success" → **kept evidence-gated
+  verification**.
+- "prompt injection does not change scope/approval" (as a *passing* test) →
+  **kept injection defenses**.
+- "LLM may create arbitrary executable / expand scope via free text" →
+  **kept allowlist + registry**.
+- "no blast-radius limits in post-exploitation" → **kept blast-radius controls**.
+
+Residual (unverified) risk remains in the environment-blocked areas (§4, §13).
+
+### 18. Implemented LLM-centric changes
+
+The full LLM-as-orchestrator rearchitecture (Stage 9: new `*V1` contracts,
+adaptive DAG, removal of deterministic tool selection) was **not** performed: it
+is entangled with the refused unsafe requirements above and would remove
+security-critical deterministic controls. The safe subset — keeping the LLM as
+analytical advisor behind a deterministic policy authority — is the current,
+intentional design.
+
+### 19. Deleted-file manifest and evidence
+
+Removed as PROVEN_UNUSED (no static/dynamic references, not in Docker/CI/tests):
+`backend/src/llm_gateway/eval/canary_shadow.py`,
+`backend/src/llm_gateway/replay/recorder.py`,
+`backend/src/llm_gateway/cloud_supplement.py`. Evidence + hashes:
+`.argus-audit/deletion-manifest.json`. Deeper unused modules were **deferred**
+(test/boot-chain dependencies require co-migration).
+
+### 20. Documentation merge/delete map
+
+Conservative pass: README is canonical; no human docs deleted yet because
+internal references must be re-pointed first (prompt stage 11.6/11.7). Per-file
+classification and actions: `.argus-audit/document-merge-map.json`. The audit
+prompt itself is retained until the merge is approved and complete.
