@@ -8,7 +8,7 @@ import logging
 import subprocess
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.api.routers import (
     admin,
@@ -63,6 +63,7 @@ from src.api.routers.research import router as research_router
 from src.api.routers.cvss import router as cvss_router
 from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
+from src.core.auth import get_required_auth
 from src.core.config import settings
 from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
@@ -150,6 +151,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+# SEC-001 — tenant-data planes reject unauthenticated callers. Health, metrics,
+# login and admin-session routers are excluded: they are either public probes or
+# carry their own admin-session/MFA scheme.
+tenant_auth = [Depends(get_required_auth)]
+
 app.include_router(health.router, prefix="/api/v1")
 app.include_router(health.router)
 app.include_router(metrics.router)
@@ -160,19 +166,19 @@ app.include_router(admin_auth.router, prefix="/api/v1")
 app.include_router(admin_password.router, prefix="/api/v1")
 app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
-app.include_router(scans.router, prefix="/api/v1")
-app.include_router(findings.router, prefix="/api/v1")
-app.include_router(bounty.router, prefix="/api/v1")
-app.include_router(cvss_router, prefix="/api/v1")
-app.include_router(reports.router, prefix="/api/v1")
-app.include_router(sandbox.router, prefix="/api/v1")
-app.include_router(tools.router, prefix="/api/v1")
+app.include_router(scans.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(findings.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(bounty.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(cvss_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(reports.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(sandbox.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(tools.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(admin_webhook_dlq.router)
 app.include_router(cache.router, prefix="/api/v1")
 app.include_router(internal_va.router, prefix="/api/v1")
-app.include_router(recon_router, prefix="/api/v1")
-app.include_router(web_workbench_router, prefix="/api/v1")
+app.include_router(recon_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(web_workbench_router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(intelligence.router, prefix="/api/v1")
 app.include_router(skills_public.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")
