@@ -68,6 +68,8 @@ def mock_finding(mock_scan: MagicMock) -> MagicMock:
     f.evidence_refs = []
     f.reproducible_steps = None
     f.applicability_notes = None
+    f.cvss_vector = None
+    f.exploit_summary = None
     f.scan_id = mock_scan.id
     f.tenant_id = mock_scan.tenant_id
     return f

@@ -23,8 +23,11 @@ from __future__ import annotations
 
 import os
 import shutil
+from pathlib import Path
 
 import pytest
+
+_PACKAGE_DIR = Path(__file__).resolve().parent
 
 
 def _kubectl_available() -> bool:
@@ -62,8 +65,17 @@ def pytest_collection_modifyitems(
     config: pytest.Config,  # noqa: ARG001 — pytest hook signature
     items: list[pytest.Item],
 ) -> None:
-    """Tag every item in this package with ``requires_kind`` and skip when missing."""
+    """Tag every item in this package with ``requires_kind`` and skip when missing.
+
+    pytest hands this hook the *whole* session's item list, not just the items
+    collected under this conftest, so the path filter is load-bearing: without it
+    a full-suite run skips every test in the repository whenever KIND_CLUSTER_NAME
+    is unset.
+    """
     for item in items:
+        item_path = getattr(item, "path", None)
+        if item_path is None or not Path(item_path).resolve().is_relative_to(_PACKAGE_DIR):
+            continue
         item.add_marker(pytest.mark.requires_kind)
         if not KIND_AVAILABLE:
             item.add_marker(skip_if_no_kind)
