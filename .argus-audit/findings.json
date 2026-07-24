@@ -15,78 +15,526 @@
     "REASON: these deliberately introduce Critical vulnerabilities (RCE, tenant-isolation break, injection) into currently-secure code and violate the project's own security rules. Secure LLM-centric equivalent will be implemented instead if IMPLEMENTATION stage proceeds."
   ],
   "findings": [
-    {"id": "ARCH-001", "title": "Phase order source-of-truth = 8 phases", "severity": "Info", "confidence": "High", "status": "PROVEN", "component": "orchestration", "evidence": "backend/src/orchestration/phases.py:59-68 PHASE_ORDER; iterated state_machine.py:678", "detail": "source_analysis->recon->quick_fuzz->threat_modeling->vuln_analysis->exploitation->post_exploitation->reporting. Docs claiming 6 phases are drift.", "remediation_priority": "P3"},
-
-    {"id": "ARCH-002", "title": "Orchestration is a hardcoded static phase sequence; LLM does NOT drive phase transitions or adaptive DAG", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "orchestration", "phase": "all", "llm_task": "orchestration", "evidence": "state_machine.py:678 fixed loop over PHASE_ORDER; tool selection hardcoded in exploitation_executor.py:59-227 (_VULN_TOOL_MAP) and argv templates 442-792; recon tool selection hardcoded in handlers.py:949-996. LLM only interprets output to JSON / generates payloads.", "detail": "Architecture is deterministic-first, LLM-second. Answers audit goal #10: LLM is analytical brain, not the orchestrator. Architectural gap, NOT an exploitable vuln.", "remediation_priority": "P2"},
-
-    {"id": "ARCH-003", "title": "Three parallel orchestration packages; two are effectively unused", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "orchestration/orchestrator/llm_orchestrator", "evidence": "Active: orchestration/ (tasks/__init__.py:13-15 -> state_machine.py:542). orchestrator/ = 100% shim `from src.llm_orchestrator import *`, zero production reverse-imports. llm_orchestrator/ Orchestrator+agents+retry_loop referenced only by tests; only schemas/loader reached at API boot via pipeline/contracts/validation_job.py:28.", "detail": "Planner/Critic/Verifier stack exists but is NOT wired into the scan path. Candidate for cleanup (see deletion-manifest.json).", "remediation_priority": "P2"},
-
-    {"id": "QUAL-001", "title": "run_scan_state_machine is ~1000-line god function with pervasive silent exception swallowing + ~40 inline imports", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "orchestration", "evidence": "state_machine.py:542-1560; dozens of try/except Exception: pass|logger.debug wrapping evidence_chain, cost_tracker, tenant_isolation, microvm, ephemeral_worker, re_verification, self_pentest, binary_analysis.", "detail": "Broad suppression can silently disable security-relevant subsystems (budget/tenant isolation/evidence chain) turning them into phantom features. Violates repo no-inline-imports rule.", "remediation_priority": "P2"},
-
-    {"id": "QUAL-002", "title": "Real bugs surfaced by ruff: 2 invalid-syntax + 5 undefined-name (some runtime-reachable)", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "multiple", "evidence": "ruff check src/ (no --fix): src/governance/safety/monitor.py:79,126 invalid-syntax (module cannot import); src/orchestration/state_machine.py:921 F821 'settings' undefined (NameError if binary_analysis branch runs) and :707 F821 'Any' (local annotation, latent); src/reports/valhalla_report.py:1706 F821 'screens'; src/workers/binary/dynamic/lab.py:49,130 F821 'Path'. Totals: 178 lint errors (129 F401 unused-import, 28 F841 unused-var).", "detail": "state_machine.py:921 NameError is swallowed by the try/except of QUAL-001 -> binary analysis silently no-ops (concrete proof QUAL-001 masks real failures). No `from src.core.config import settings` nor `from typing import Any` at state_machine.py top.", "remediation_priority": "P1", "resolution": {"status": "PARTIALLY_FIXED", "stage": "IMPLEMENTATION", "batch": "E", "at": "2026-07-24", "change": "Undefined-name bugs fixed: state_machine.py now imports `from typing import Any` and `from src.core.config import settings` (binary_analysis branch no longer NameErrors); valhalla_report.py:1706 typo `screens`->`screenshots` (list-screenshot path no longer NameErrors); lab.py now imports `from pathlib import Path` (dynamic-analysis sample check works). Remaining: monitor.py invalid-syntax tracked under GOV-001 (batch F).", "verified": "ruff --select F821 src/ = 0 undefined-name errors remaining (only monitor.py invalid-syntax left); AST + runtime import OK for all three modules."}},
-
-    {"id": "GOV-001", "title": "SafetyMonitor is neutered AND syntactically broken (dead safety control)", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "governance/safety/monitor.py", "evidence": "monitor.py:76-81 check_response returns None with docstring 'NO content blocking — all payloads, exploits, and commands authorized for pentesting'; orphaned self._record(alert)/return alert (lines 79-80) cause invalid-syntax; referenced only by tests/unit/safety/test_monitor.py.", "detail": "Evidence that safety/response monitoring was intentionally stripped and left broken; the module cannot be imported. Aligns with (and is a warning against) the security-weakening direction embedded in the audit prompt. Recommend restoring a working, non-blocking-but-observing monitor or removing the dead file+test with justification.", "remediation_priority": "P2", "resolution": {"status": "FIXED_NOT_WIRED", "stage": "IMPLEMENTATION", "batch": "F", "at": "2026-07-24", "change": "Removed the orphaned lines that caused invalid-syntax and restored check_response as a deliberately NON-BLOCKING observing monitor: it records anomaly alerts (rm -rf /, mkfs, dd to device, fork bomb, non-printable shellcode/NOP-sled byte runs) via _record()/_response_alert() and returns them for observability, but never suppresses content or halts execution (legitimate offensive payloads still flow). Removed unused dataclasses.field import.", "verified": "pytest tests/unit/safety/test_monitor.py = 14 passed; ruff clean on monitor.py; ruff --select F821 + invalid-syntax across src/ = 0.", "residual": "Module is not yet wired into the live LLM call path (only monitor.py + its test reference it). Wiring into the LLM gateway for real-time observability is deferred to avoid risk in the LLM layer; tracked as residual."}},
-
-    {"id": "SEC-001", "title": "Cross-tenant access via unauthenticated X-Tenant-ID header", "severity": "Critical", "confidence": "High", "status": "PROVEN", "component": "core/tenant + api routers", "tenant_boundary": true, "cwe": "CWE-287/CWE-639", "owasp": "A01:2021", "affected_files": ["backend/src/core/tenant.py:12-21", "backend/src/api/routers/scans.py:314-358", "backend/main.py:163-167"], "evidence": "get_current_tenant_id returns X-Tenant-ID header (or default) with NO JWT/credential binding; scans/findings/reports routers mounted without auth middleware. set_session_tenant then scopes DB to attacker-chosen tenant.", "detail": "Any client can set X-Tenant-ID:<victim> and perform full CRUD on another tenant's scans/findings/reports/exports; WS same. Systemic multi-tenant isolation break.", "remediation_priority": "P0", "resolution": {"status": "FIXED_NONBREAKING", "stage": "IMPLEMENTATION", "batch": "C", "at": "2026-07-24", "change": "Rewrote src/core/tenant.py get_current_tenant_id to depend on get_optional_auth (JWT/API key). Authenticated -> principal tenant is authoritative; conflicting X-Tenant-ID rejected 403 (cross-tenant pivot blocked). Added settings.require_tenant_auth (config.py) + REQUIRE_TENANT_AUTH in infra/.env.example: when true, unauthenticated main-API requests -> 401. Default False preserves backward compatibility; non-default unauthenticated tenant selection is logged (structured warning) as residual risk. No change to the ~40 dependent endpoints (Depends(get_current_tenant_id) signature preserved; now async).", "residual_risk": "With REQUIRE_TENANT_AUTH=false (default) an unauthenticated client can still select a non-default tenant (legacy). Full closure requires enabling REQUIRE_TENANT_AUTH=true in prod AND wiring get_required_auth on the routers (follow-up). Authenticated-mismatch rejection is always on.", "verified": "tests/unit/core/test_tenant_context.py = 10 new tests pass (identity binding, 403 mismatch, 401 enforcement, permissive legacy); import-cycle check clean; ruff clean; existing X-Tenant-ID scan tests unaffected."}},
-
-    {"id": "SEC-002", "title": "Core RLS not enforced for app DB owner (no FORCE ROW LEVEL SECURITY)", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "postgres RLS", "tenant_boundary": true, "cwe": "CWE-276", "owasp": "A04:2021", "affected_files": ["backend/alembic/versions/002_rls_and_audit_immutable.py:32-41", "backend/alembic/versions/026_scan_schedules.py:187-190", "infra/postgres/init.sql:23-30"], "evidence": "core tables ENABLE (not FORCE) RLS; app connects as table owner argus with ALL PRIVILEGES; owner bypasses RLS. Newer tables (045,026) do FORCE.", "detail": "Isolation on scans/findings/reports relies only on app-layer WHERE tenant_id. Combined with SEC-001 = defense-in-depth fully absent.", "remediation_priority": "P0", "resolution": {"status": "MIGRATION_WRITTEN_NOT_APPLIED", "stage": "IMPLEMENTATION", "batch": "B", "at": "2026-07-24", "change": "Added backend/alembic/versions/052_force_rls_core_tables.py (down_revision=051). Idempotent, guarded DO-block FORCEs ROW LEVEL SECURITY on 57 evidence-listed tenant-scoped tables that had ENABLE-only RLS (002/003/005/006/007/008/017/019/020/021/033/034/035/036/037). Guard: only forces tables that exist, already have RLS enabled, and have >=1 policy (avoids deny-all). SQLite = no-op (smoke round-trip clean). Downgrade NO-FORCEs the same set.", "not_applied_reason": "Per audit constraint 'write, do not apply'. FORCE subjects the owner role (argus) to RLS: every worker/beat/data-migration write MUST set app.current_tenant_id first. Requires staging validation that no system path writes without tenant context before prod apply.", "verified": "tests/integration/migrations/test_alembic_smoke.py + test_051_wb_intruder_sessions.py = 10 passed, 4 skipped (requires_postgres); single head=052; ruff clean. Updated test_051_is_single_head head assertion 051->052."}},
-
-    {"id": "SEC-003", "title": "DEBUG mode login bypass mints valid JWT for any failed login", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "api/routers/auth.py", "cwe": "CWE-287", "evidence": "backend/src/api/routers/auth.py:61-72 — when settings.debug, failed login returns valid JWT for dev-user.", "detail": "Auth bypass if DEBUG=true reaches staging; no network restriction.", "remediation_priority": "P1"},
-
-    {"id": "SEC-004", "title": "Shared API key / MCP token can scope to any tenant via header", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "core/auth.py, mcp/auth.py", "tenant_boundary": true, "cwe": "CWE-639", "evidence": "auth.py:68-71 API key -> default tenant; mcp/auth.py:121-124,181-183 X-Tenant-ID overrides. Keys not bound to a tenant.", "remediation_priority": "P1"},
-
-    {"id": "SEC-005", "title": "WebSocket/SSE tenant auth is spoofable header/query", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "api/routers/ws.py", "tenant_boundary": true, "evidence": "ws.py:269-271,307-308 — x-tenant-id header or ?tenant_id= query, no JWT.", "detail": "Real-time scan events/chat readable for any known scan_id.", "remediation_priority": "P1"},
-
-    {"id": "SEC-006", "title": "Missing await on set_session_tenant -> RLS context never set", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "api/routers/bounty.py, cvss.py", "tenant_boundary": true, "cwe": "CWE-670", "evidence": "bounty.py:105,139,183 and cvss.py:65 call set_session_tenant(session, tenant_id) without await (coroutine never executed).", "detail": "Real bug: coroutine discarded; tenant scoping silently skipped on those paths.", "remediation_priority": "P1", "resolution": {"status": "FIXED", "stage": "IMPLEMENTATION", "batch": "D", "at": "2026-07-24", "change": "Added await to set_session_tenant(session, tenant_id) at bounty.py:105/139/183 and cvss.py:65. Added AST-based regression guard tests/unit/core/test_set_session_tenant_awaited.py that asserts every set_session_tenant call in api/routers is awaited (fails on any dropped await).", "verified": "pytest tests/unit/core/test_set_session_tenant_awaited.py = 62 passed; AST+import OK; ruff clean on edited lines."}},
-
-    {"id": "SEC-007", "title": "Admin report enqueue passes wrong args to generate_report_task", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "api/routers/admin_reports.py", "evidence": "admin_reports.py:356,511 generate_report_task.delay(str(report.id)); task signature is (report_id, tenant_id, ...) at tasks/__init__.py:203-209.", "detail": "API/task contract drift: broken report generation or wrong-tenant positional binding.", "remediation_priority": "P1"},
-
-    {"id": "SEC-008", "title": "docker.sock mounted RW into workers (sandbox-escape surface)", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "infra + sandbox_tool_runner", "cwe": "CWE-250", "owasp": "A05:2021", "evidence": "infra/docker-compose.yml:217-223,294 /var/run/docker.sock:rw; sandbox_tool_runner.py:114-119 docker exec.", "detail": "Worker/sandbox compromise -> host Docker API -> container escape. Architectural; no gVisor/rootless mitigation. Should be :ro or brokered sandbox API.", "remediation_priority": "P1"},
-
-    {"id": "SEC-009", "title": "KAL tool allowlist bypass: policy normalizes basename but executor runs full argv[0] path; injection check disabled", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "policy + kal_executor", "cwe": "CWE-77/CWE-78", "evidence": "backend/src/recon/mcp/policy.py:645-657 normalize_kal_binary(argv[0]) basename-only + kal_argv_has_injection_risk always returns False; kal_executor.py:44-100 keeps full path in run_parts; /tools/kal/run (tools.py:227-250) passes full req.argv.", "detail": "argv[0]=/tmp/evil passes name-based allowlist yet executes arbitrary path. Note: this is exactly the class of hole the prompt asked me to widen; I am flagging it to FIX, not widen.", "remediation_priority": "P0", "resolution": {"status": "FIXED", "stage": "IMPLEMENTATION", "batch": "A", "at": "2026-07-24", "change": "Restored fail-closed evaluate_kal_mcp_policy in backend/src/recon/mcp/policy.py: narrowed KAL_CATEGORY_ALLOWED_BINARIES to recon-runtime tools; re-enabled _KAL_ARGV_INJECTION_PATTERN + kal_argv_has_injection_risk; added explicit argv[0] path-separator rejection (binary_path_not_allowed) so /tmp/evil cannot bypass basename allowlist; restored openssl/amass/theharvester/findomain/assetfinder/subfinder subcommand+source caps; password-audit double opt-in. Verified: tests/test_kal_mcp_policy.py + tests/test_recon_recon002.py = 40 passed; ruff clean."}},
-
-    {"id": "SEC-010", "title": "/sandbox/python executes code on API host when enabled (regex blocklist only)", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "api/routers/sandbox.py", "cwe": "CWE-94", "evidence": "api/routers/sandbox.py docstring:3-6; regex blocklist is not a security boundary.", "detail": "RCE on API host if flag enabled. Must be disabled in prod / removed.", "remediation_priority": "P1"},
-
-    {"id": "SEC-011", "title": "Additional args -> shlex.split flag injection into tool argv", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "tools/executor.py + api/routers/tools.py", "cwe": "CWE-88", "evidence": "executor.py:332-375, tools.py:320-360 append user-controlled extra flags to nmap/nuclei/sqlmap/ffuf/hydra; only tool NAME is allowlisted, not flags.", "detail": "Argument injection (e.g. nmap -oN, sqlmap --os-shell) possible via additional_args. Mitigated by argv (no shell), but flags themselves are dangerous.", "remediation_priority": "P1"},
-
-    {"id": "SEC-012", "title": "download_by_key / report download lack tenant-prefix enforcement (IDOR depth gap)", "severity": "Medium", "confidence": "Medium", "status": "LIKELY", "component": "storage/s3.py + reports.py", "tenant_boundary": true, "cwe": "CWE-639", "evidence": "s3.py:652-667 download_by_key no prefix check; reports.py:341 download by stored object_key; PoC screenshot path DOES check (s3.py:406-428).", "remediation_priority": "P2"},
-
-    {"id": "SEC-013", "title": "ABAC engine defined but not enforced anywhere", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "auth/abac.py", "evidence": "ABACEngine.evaluate referenced only within abac.py; no router imports.", "detail": "Documented RBAC/ABAC model is dead code; contributes to SEC-001.", "remediation_priority": "P2"},
-
-    {"id": "SEC-014", "title": "Tool result cache key not tenant-scoped (cross-tenant cache bleed)", "severity": "Medium", "confidence": "Medium", "status": "LIKELY", "component": "cache/tool_cache.py", "evidence": "tool_cache.py:3-8 key argus:sandbox:exec:+hash(command); tenant not in key unless scan_id passed.", "remediation_priority": "P2"},
-
-    {"id": "SEC-015", "title": "Auto-provision Tenant row for arbitrary UUID on scan create", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "api/routers/scans.py", "evidence": "scans.py:329-331 creates Tenant(id=tenant_id) if missing.", "detail": "Enables tenant enumeration/resource consumption without auth gate.", "remediation_priority": "P2"},
-
-    {"id": "SEC-016", "title": "Customer CSV exports lack formula-injection sanitization (admin path does)", "severity": "Low", "confidence": "High", "status": "PROVEN", "component": "reports/generators.py", "cwe": "CWE-1236", "evidence": "generators.py:1669+ plain csv.writer; admin.py:83-92 has _sanitize_csv_text_cell.", "remediation_priority": "P2"},
-
-    {"id": "SEC-017", "title": "Legacy X-Admin-Key bypasses MFA/TOTP gate", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "auth/admin_dependencies.py", "evidence": "admin_dependencies.py:58-63,458-462 documented static-key bypass when admin_auth_mode=both.", "remediation_priority": "P2"},
-
-    {"id": "TOOL-001", "title": "Signed tool catalog (162 tools) + K8s SandboxRunner path disconnected from scan orchestration (phantom coverage)", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "sandbox/runner + config/tools", "tool": "catalog", "evidence": "sandbox/runner.py:107-123 SandboxRunner.dispatch_jobs referenced only in sandbox/runner.py + tests, not in orchestration/handlers.py; MCP tool.run.trigger (mcp/services/tool_service.py:131-205) never spawns sandbox, returns synthetic QUEUED without Celery enqueue.", "detail": "162 catalog tools imply broad coverage but scan flow uses a separate docker-exec VA/recon path with far fewer tools. ~39 catalog tools have no parser dispatch (heartbeat only).", "remediation_priority": "P2"},
-
-    {"id": "TOOL-002", "title": "Catalog image (argus-kali-*) != runtime image (argus-sandbox); required recon binaries missing", "severity": "High", "confidence": "High", "status": "PROVEN", "component": "config/tools + infra/Dockerfile.sandbox + recon planners", "tool": "katana,gau,waybackurls,assetfinder,findomain,naabu", "evidence": "all catalog YAML image: argus-kali-web/recon; docker-compose.yml:543-550 builds argus-sandbox; infra/Dockerfile.sandbox lacks katana/gau/waybackurls/assetfinder/findomain; recon_url_history.py & recon_subdomain_passive.py:133-135 plan those tools.", "detail": "check_tool_available/which fails -> silent skip of recon steps -> incomplete recon presented as complete. 'not found' vs 'not run' conflation.", "remediation_priority": "P1"},
-
-    {"id": "TOOL-003", "title": "API /tools/* routes blocked by narrow ALLOWED_TOOLS (orphan routes)", "severity": "Low", "confidence": "High", "status": "PROVEN", "component": "api/routers/tools.py + tools/guardrails/command_parser.py", "evidence": "command_parser.py ALLOWED_TOOLS excludes ffuf/subfinder/httpx/amass/hydra; tools.py:326-392 routes for those call execute_command -> rejected.", "detail": "Dead/broken API routes: not exploitable, but contract drift + false surface.", "remediation_priority": "P3"},
-
-    {"id": "LLM-001", "title": "Main scan LLM calls do not attach LLMPolicy; policy engine (llm_gateway/PolicyEnforcer) bypassed on hot path", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "llm/facade + orchestration/ai_prompts", "llm_task": "all", "evidence": "call_llm_unified in ai_prompts.py passes no policy=; LLMPolicy model exists (llm/policy.py) but only used by unused gateway_client.py; llm_gateway PolicyEnforcer only on separate HTTP service.", "detail": "Mitigated in practice because execution is hardcoded allowlist+argv (LLM cannot pick arbitrary tool). But no_cloud_for_source_code and budget policy are NOT enforced on the scan path.", "remediation_priority": "P2"},
-
-    {"id": "LLM-002", "title": "WRB exploitability judgment from tool stdout is not independent verification (fragile parse)", "severity": "Medium", "confidence": "Medium", "status": "LIKELY", "component": "orchestration/exploitation_executor.py", "llm_task": "validation", "evidence": "exploitation_executor.py:826-873 _assess_exploitability_wrb feeds up to 1500 chars stdout to LLM, bare json.loads(resp) at :866 without fence handling; heuristic fallback.", "detail": "Machine PoC verification exists separately (exploit_verify.py HTTP probes) which is the real gate; LLM assessment is advisory but can inflate confidence.", "remediation_priority": "P2"},
-
-    {"id": "LLM-003", "title": "Cloud fallback can send tool stdout/source/findings to external providers; no_cloud_for_source_code not enforced on scan path", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "llm/facade.py + phase_routing", "llm_task": "all", "evidence": "facade.py:433-445 cloud fallback for _CLOUD_FALLBACK_TASKS; phase_routing.yaml mode:cloud; policy_enforcer no_cloud_llm_for_source_code exists but main path bypasses gateway; perplexity OSINT always external (facade.py:368-373).", "detail": "Data-exfiltration-to-provider risk depends on deployment config. Redaction only applied on gateway response path.", "remediation_priority": "P2"},
-
-    {"id": "PROMPT-001", "title": "Signed prompt catalog is NOT used by the live scan pipeline (unsigned inline/Jinja used instead)", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "config/prompts + orchestration/prompt_registry", "evidence": "Ed25519 verify fail-closed in llm_orchestrator/prompt_registry.py:326-346 but PromptRegistry.load() called only by tests/scripts/CLI; scan handlers use unsigned orchestration/prompt_registry.py + prompts/*.j2 (autoescape=False, prompt_loader.py:69-74).", "detail": "Signing effort protects only the unused orchestrator stack. Integrity guarantee does not cover runtime prompts.", "remediation_priority": "P2"},
-
-    {"id": "PROMPT-002", "title": "system_base prompt instructs model to fill empty evidence / generate commands, contradicting anti-invention prompts", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "orchestration/prompts", "evidence": "prompts/.../system_base.j2:1 'If any field is empty/missing, generate tool commands and payloads to fill it. Never leave evidence fields empty' vs recon_user.j2:12 / threat_modeling_user.j2:18 'no inventions'.", "detail": "Hallucination pressure on recon/VA when tool output sparse.", "remediation_priority": "P2"},
-
-    {"id": "PROMPT-003", "title": "Prompt-injection defense wrapping only on 8-phase prompts; absent on report AI, active-scan planner, VA inline, signed agents", "severity": "Medium", "confidence": "High", "status": "PROVEN", "component": "orchestration/prompt_injection_defense", "evidence": "instruction_hierarchy + <untrusted_input> wired only in _get_phase_prompt (ai_prompts.py:66-77); report AI (ai_text_generation), active_scan_planner, vulnerability_analysis_prompts.py have only _sanitize_for_prompt truncation.", "detail": "Untrusted tool output/target content reaching those prompts is not delimited/labeled as data.", "remediation_priority": "P2"},
-
-    {"id": "STRENGTH-001", "title": "Tool execution uses argv lists with shell=False + tool-name allowlist", "severity": "Info", "confidence": "High", "status": "PROVEN", "component": "sandbox/adapters + tools/executor", "evidence": "recon/adapters/base.py:52; exploit_verify.py:3; executor.py:142-154; sandbox_tool_runner.py:134-139.", "detail": "Confirmed strong control. Any move to shell=True would be a critical regression.", "remediation_priority": "none"},
-
-    {"id": "STRENGTH-002", "title": "Admin sessions: HMAC at-rest, CSPRNG ids, timing-safe compare, log redaction, MFA/TOTP gate", "severity": "Info", "confidence": "High", "status": "PROVEN", "component": "auth/admin_sessions + admin_dependencies", "evidence": "admin_sessions.py:109-157,415-417; admin_dependencies.py:448-498.", "remediation_priority": "none"},
-
-    {"id": "STRENGTH-003", "title": "MinIO path-traversal prevention + PoC presign tenant-prefix check; MCP cross-tenant rejection; scope default-deny; Ed25519 EAP fail-closed", "severity": "Info", "confidence": "High", "status": "PROVEN", "component": "storage/s3 + mcp/tenancy + policy/scope + engagement_authorization", "evidence": "s3.py:42-89,406-428; mcp/tenancy.py:28-102; policy/scope.py:12-13; engagement_authorization.py:23-27.", "remediation_priority": "none"},
-
-    {"id": "TEST-001", "title": "Pre-existing test drift: test_scans_extensions.py patches non-existent scans.scan_phase_task", "severity": "Low", "confidence": "High", "status": "PROVEN", "component": "tests/test_scans_extensions.py", "evidence": "3 tests (test_list_scans_returns_items_shape, test_post_smart_scan_returns_201_and_shape, test_post_skill_scan_returns_201_and_shape) call mock.patch('src.api.routers.scans.scan_phase_task') but grep of scans.py shows 0 occurrences of scan_phase_task -> AttributeError at patch time. Confirmed pre-existing: git status shows scans.py unmodified by IMPLEMENTATION batches; tenant.py change does not touch scans symbols.", "detail": "Test-vs-code drift (symbol renamed/removed without updating the test). Not a regression from SEC-001/002/009 work. Fix by patching the actual task symbol or the enqueue call the router now uses.", "remediation_priority": "P3"},
-
-    {"id": "STRENGTH-004", "title": "Report output hardening: HTML Jinja autoescape=True, LaTeX escaping mandatory, admin CSV formula sanitization, audit logs immutable trigger", "severity": "Info", "confidence": "High", "status": "PROVEN", "component": "reports + alembic", "evidence": "reports/template_env.py:70-72; pdf_backend.py:214-227; admin.py:83-92; 002_rls_and_audit_immutable.py:44-58.", "remediation_priority": "none"}
+    {
+      "id": "ARCH-001",
+      "title": "Phase order source-of-truth = 8 phases",
+      "severity": "Info",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration",
+      "evidence": "backend/src/orchestration/phases.py:59-68 PHASE_ORDER; iterated state_machine.py:678",
+      "detail": "source_analysis->recon->quick_fuzz->threat_modeling->vuln_analysis->exploitation->post_exploitation->reporting. Docs claiming 6 phases are drift.",
+      "remediation_priority": "P3"
+    },
+    {
+      "id": "ARCH-002",
+      "title": "Orchestration is a hardcoded static phase sequence; LLM does NOT drive phase transitions or adaptive DAG",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration",
+      "phase": "all",
+      "llm_task": "orchestration",
+      "evidence": "state_machine.py:678 fixed loop over PHASE_ORDER; tool selection hardcoded in exploitation_executor.py:59-227 (_VULN_TOOL_MAP) and argv templates 442-792; recon tool selection hardcoded in handlers.py:949-996. LLM only interprets output to JSON / generates payloads.",
+      "detail": "Architecture is deterministic-first, LLM-second. Answers audit goal #10: LLM is analytical brain, not the orchestrator. Architectural gap, NOT an exploitable vuln.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "ARCH-003",
+      "title": "Three parallel orchestration packages; two are effectively unused",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration/orchestrator/llm_orchestrator",
+      "evidence": "Active: orchestration/ (tasks/__init__.py:13-15 -> state_machine.py:542). orchestrator/ = 100% shim `from src.llm_orchestrator import *`, zero production reverse-imports. llm_orchestrator/ Orchestrator+agents+retry_loop referenced only by tests; only schemas/loader reached at API boot via pipeline/contracts/validation_job.py:28.",
+      "detail": "Planner/Critic/Verifier stack exists but is NOT wired into the scan path. Candidate for cleanup (see deletion-manifest.json).",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "QUAL-001",
+      "title": "run_scan_state_machine is ~1000-line god function with pervasive silent exception swallowing + ~40 inline imports",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration",
+      "evidence": "state_machine.py:542-1560; dozens of try/except Exception: pass|logger.debug wrapping evidence_chain, cost_tracker, tenant_isolation, microvm, ephemeral_worker, re_verification, self_pentest, binary_analysis.",
+      "detail": "Broad suppression can silently disable security-relevant subsystems (budget/tenant isolation/evidence chain) turning them into phantom features. Violates repo no-inline-imports rule.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "QUAL-002",
+      "title": "Real bugs surfaced by ruff: 2 invalid-syntax + 5 undefined-name (some runtime-reachable)",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "multiple",
+      "evidence": "ruff check src/ (no --fix): src/governance/safety/monitor.py:79,126 invalid-syntax (module cannot import); src/orchestration/state_machine.py:921 F821 'settings' undefined (NameError if binary_analysis branch runs) and :707 F821 'Any' (local annotation, latent); src/reports/valhalla_report.py:1706 F821 'screens'; src/workers/binary/dynamic/lab.py:49,130 F821 'Path'. Totals: 178 lint errors (129 F401 unused-import, 28 F841 unused-var).",
+      "detail": "state_machine.py:921 NameError is swallowed by the try/except of QUAL-001 -> binary analysis silently no-ops (concrete proof QUAL-001 masks real failures). No `from src.core.config import settings` nor `from typing import Any` at state_machine.py top.",
+      "remediation_priority": "P1",
+      "resolution": {
+        "status": "PARTIALLY_FIXED",
+        "stage": "IMPLEMENTATION",
+        "batch": "E",
+        "at": "2026-07-24",
+        "change": "Undefined-name bugs fixed: state_machine.py now imports `from typing import Any` and `from src.core.config import settings` (binary_analysis branch no longer NameErrors); valhalla_report.py:1706 typo `screens`->`screenshots` (list-screenshot path no longer NameErrors); lab.py now imports `from pathlib import Path` (dynamic-analysis sample check works). Remaining: monitor.py invalid-syntax tracked under GOV-001 (batch F).",
+        "verified": "ruff --select F821 src/ = 0 undefined-name errors remaining (only monitor.py invalid-syntax left); AST + runtime import OK for all three modules."
+      }
+    },
+    {
+      "id": "GOV-001",
+      "title": "SafetyMonitor is neutered AND syntactically broken (dead safety control)",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "governance/safety/monitor.py",
+      "evidence": "monitor.py:76-81 check_response returns None with docstring 'NO content blocking — all payloads, exploits, and commands authorized for pentesting'; orphaned self._record(alert)/return alert (lines 79-80) cause invalid-syntax; referenced only by tests/unit/safety/test_monitor.py.",
+      "detail": "Evidence that safety/response monitoring was intentionally stripped and left broken; the module cannot be imported. Aligns with (and is a warning against) the security-weakening direction embedded in the audit prompt. Recommend restoring a working, non-blocking-but-observing monitor or removing the dead file+test with justification.",
+      "remediation_priority": "P2",
+      "resolution": {
+        "status": "FIXED_NOT_WIRED",
+        "stage": "IMPLEMENTATION",
+        "batch": "F",
+        "at": "2026-07-24",
+        "change": "Removed the orphaned lines that caused invalid-syntax and restored check_response as a deliberately NON-BLOCKING observing monitor: it records anomaly alerts (rm -rf /, mkfs, dd to device, fork bomb, non-printable shellcode/NOP-sled byte runs) via _record()/_response_alert() and returns them for observability, but never suppresses content or halts execution (legitimate offensive payloads still flow). Removed unused dataclasses.field import.",
+        "verified": "pytest tests/unit/safety/test_monitor.py = 14 passed; ruff clean on monitor.py; ruff --select F821 + invalid-syntax across src/ = 0.",
+        "residual": "Module is not yet wired into the live LLM call path (only monitor.py + its test reference it). Wiring into the LLM gateway for real-time observability is deferred to avoid risk in the LLM layer; tracked as residual."
+      }
+    },
+    {
+      "id": "SEC-001",
+      "title": "Cross-tenant access via unauthenticated X-Tenant-ID header",
+      "severity": "Critical",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "core/tenant + api routers",
+      "tenant_boundary": true,
+      "cwe": "CWE-287/CWE-639",
+      "owasp": "A01:2021",
+      "affected_files": [
+        "backend/src/core/tenant.py:12-21",
+        "backend/src/api/routers/scans.py:314-358",
+        "backend/main.py:163-167"
+      ],
+      "evidence": "get_current_tenant_id returns X-Tenant-ID header (or default) with NO JWT/credential binding; scans/findings/reports routers mounted without auth middleware. set_session_tenant then scopes DB to attacker-chosen tenant.",
+      "detail": "Any client can set X-Tenant-ID:<victim> and perform full CRUD on another tenant's scans/findings/reports/exports; WS same. Systemic multi-tenant isolation break.",
+      "remediation_priority": "P0",
+      "resolution": {
+        "status": "FIXED_ENFORCED",
+        "stage": "IMPLEMENTATION",
+        "batch": "C+G",
+        "at": "2026-07-24",
+        "change": "Rewrote src/core/tenant.py get_current_tenant_id to depend on get_optional_auth (JWT/API key). Authenticated -> principal tenant is authoritative; conflicting X-Tenant-ID rejected 403 (cross-tenant pivot blocked). Added settings.require_tenant_auth (config.py) + REQUIRE_TENANT_AUTH in infra/.env.example: when true, unauthenticated main-API requests -> 401. Default False preserves backward compatibility; non-default unauthenticated tenant selection is logged (structured warning) as residual risk. No change to the ~40 dependent endpoints (Depends(get_current_tenant_id) signature preserved; now async).",
+        "residual_risk": "With REQUIRE_TENANT_AUTH=false (default) an unauthenticated client can still select a non-default tenant (legacy). Full closure requires enabling REQUIRE_TENANT_AUTH=true in prod AND wiring get_required_auth on the routers (follow-up). Authenticated-mismatch rejection is always on.",
+        "verified": "pytest tests/api/test_audit6_{tools,sandbox,recon}_auth.py -m requires_docker = 10 passed (these asserted 401 and were failing before this change); tests/unit/core/test_api_key_auth.py = 9 passed; tests/unit/core/test_tenant_context.py = 10 passed; ruff clean on changed files.",
+        "enforcement": "Batch G: wired Depends(get_required_auth) at include_router level in backend/main.py for the tenant-data planes (scans, findings, bounty, cvss, reports, sandbox, tools, recon, web_workbench). Unauthenticated calls now get 401 before any handler or DB access. Health/metrics/login stay public; admin routers keep their own session+MFA scheme. REQUIRE_TENANT_AUTH flipped to true in infra/.env.example and defaulted to true in infra/docker-compose.yml + docker-compose.e2e.yml. The Python default in core/config.py stays False so the offline test suite (which mocks only get_required_auth, not get_optional_auth) keeps its legacy tenant-resolution behaviour.",
+        "supporting_change": "core/auth.py now accepts a provisioned API key sent as 'Authorization: Bearer <key>' (previously X-API-Key only), which is the transport the e2e harness, nginx gateway and docs already assumed. API-key comparison moved to hmac.compare_digest (constant time).",
+        "residual": "SEC-004/SEC-005 still open: API keys resolve to default_tenant_id rather than a bound tenant, and ws.py is not in the enforced set (WebSocket handshake auth needs its own design)."
+      }
+    },
+    {
+      "id": "SEC-002",
+      "title": "Core RLS not enforced for app DB owner (no FORCE ROW LEVEL SECURITY)",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "postgres RLS",
+      "tenant_boundary": true,
+      "cwe": "CWE-276",
+      "owasp": "A04:2021",
+      "affected_files": [
+        "backend/alembic/versions/002_rls_and_audit_immutable.py:32-41",
+        "backend/alembic/versions/026_scan_schedules.py:187-190",
+        "infra/postgres/init.sql:23-30"
+      ],
+      "evidence": "core tables ENABLE (not FORCE) RLS; app connects as table owner argus with ALL PRIVILEGES; owner bypasses RLS. Newer tables (045,026) do FORCE.",
+      "detail": "Isolation on scans/findings/reports relies only on app-layer WHERE tenant_id. Combined with SEC-001 = defense-in-depth fully absent.",
+      "remediation_priority": "P0",
+      "resolution": {
+        "status": "MIGRATION_WRITTEN_NOT_APPLIED_BLOCKED",
+        "stage": "IMPLEMENTATION",
+        "batch": "B",
+        "at": "2026-07-24",
+        "change": "Added backend/alembic/versions/052_force_rls_core_tables.py (down_revision=051). Idempotent, guarded DO-block FORCEs ROW LEVEL SECURITY on 57 evidence-listed tenant-scoped tables that had ENABLE-only RLS (002/003/005/006/007/008/017/019/020/021/033/034/035/036/037). Guard: only forces tables that exist, already have RLS enabled, and have >=1 policy (avoids deny-all). SQLite = no-op (smoke round-trip clean). Downgrade NO-FORCEs the same set.",
+        "not_applied_reason": "Per audit constraint 'write, do not apply'. FORCE subjects the owner role (argus) to RLS: every worker/beat/data-migration write MUST set app.current_tenant_id first. Requires staging validation that no system path writes without tenant context before prod apply.",
+        "verified": "tests/integration/migrations/test_alembic_smoke.py + test_051_wb_intruder_sessions.py = 10 passed, 4 skipped (requires_postgres); single head=052; ruff clean. Updated test_051_is_single_head head assertion 051->052.",
+        "apply_checklist": "docs/rls-force-052-checklist.md",
+        "blocker_found": "P0 precondition discovered while writing the checklist: the 002 policy is USING (tenant_id = current_setting('app.current_tenant_id', true)::text), which is NULL when the GUC is unset, so FORCE makes every row invisible. src/api/routers/auth.py logs in via select(User).where(User.email == ...) on a session that never calls set_session_tenant, and 'users' is in the FORCE list - applying 052 as-is would silently break ALL logins. Same applies to src/auth/admin_users.py (startup bootstrap) and src/auth/admin_dependencies.py. Evidence scan found 13 modules that open a session with no set_session_tenant call."
+      }
+    },
+    {
+      "id": "SEC-003",
+      "title": "DEBUG mode login bypass mints valid JWT for any failed login",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/auth.py",
+      "cwe": "CWE-287",
+      "evidence": "backend/src/api/routers/auth.py:61-72 — when settings.debug, failed login returns valid JWT for dev-user.",
+      "detail": "Auth bypass if DEBUG=true reaches staging; no network restriction.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-004",
+      "title": "Shared API key / MCP token can scope to any tenant via header",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "core/auth.py, mcp/auth.py",
+      "tenant_boundary": true,
+      "cwe": "CWE-639",
+      "evidence": "auth.py:68-71 API key -> default tenant; mcp/auth.py:121-124,181-183 X-Tenant-ID overrides. Keys not bound to a tenant.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-005",
+      "title": "WebSocket/SSE tenant auth is spoofable header/query",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/ws.py",
+      "tenant_boundary": true,
+      "evidence": "ws.py:269-271,307-308 — x-tenant-id header or ?tenant_id= query, no JWT.",
+      "detail": "Real-time scan events/chat readable for any known scan_id.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-006",
+      "title": "Missing await on set_session_tenant -> RLS context never set",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/bounty.py, cvss.py",
+      "tenant_boundary": true,
+      "cwe": "CWE-670",
+      "evidence": "bounty.py:105,139,183 and cvss.py:65 call set_session_tenant(session, tenant_id) without await (coroutine never executed).",
+      "detail": "Real bug: coroutine discarded; tenant scoping silently skipped on those paths.",
+      "remediation_priority": "P1",
+      "resolution": {
+        "status": "FIXED",
+        "stage": "IMPLEMENTATION",
+        "batch": "D",
+        "at": "2026-07-24",
+        "change": "Added await to set_session_tenant(session, tenant_id) at bounty.py:105/139/183 and cvss.py:65. Added AST-based regression guard tests/unit/core/test_set_session_tenant_awaited.py that asserts every set_session_tenant call in api/routers is awaited (fails on any dropped await).",
+        "verified": "pytest tests/unit/core/test_set_session_tenant_awaited.py = 62 passed; AST+import OK; ruff clean on edited lines."
+      }
+    },
+    {
+      "id": "SEC-007",
+      "title": "Admin report enqueue passes wrong args to generate_report_task",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/admin_reports.py",
+      "evidence": "admin_reports.py:356,511 generate_report_task.delay(str(report.id)); task signature is (report_id, tenant_id, ...) at tasks/__init__.py:203-209.",
+      "detail": "API/task contract drift: broken report generation or wrong-tenant positional binding.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-008",
+      "title": "docker.sock mounted RW into workers (sandbox-escape surface)",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "infra + sandbox_tool_runner",
+      "cwe": "CWE-250",
+      "owasp": "A05:2021",
+      "evidence": "infra/docker-compose.yml:217-223,294 /var/run/docker.sock:rw; sandbox_tool_runner.py:114-119 docker exec.",
+      "detail": "Worker/sandbox compromise -> host Docker API -> container escape. Architectural; no gVisor/rootless mitigation. Should be :ro or brokered sandbox API.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-009",
+      "title": "KAL tool allowlist bypass: policy normalizes basename but executor runs full argv[0] path; injection check disabled",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "policy + kal_executor",
+      "cwe": "CWE-77/CWE-78",
+      "evidence": "backend/src/recon/mcp/policy.py:645-657 normalize_kal_binary(argv[0]) basename-only + kal_argv_has_injection_risk always returns False; kal_executor.py:44-100 keeps full path in run_parts; /tools/kal/run (tools.py:227-250) passes full req.argv.",
+      "detail": "argv[0]=/tmp/evil passes name-based allowlist yet executes arbitrary path. Note: this is exactly the class of hole the prompt asked me to widen; I am flagging it to FIX, not widen.",
+      "remediation_priority": "P0",
+      "resolution": {
+        "status": "FIXED",
+        "stage": "IMPLEMENTATION",
+        "batch": "A",
+        "at": "2026-07-24",
+        "change": "Restored fail-closed evaluate_kal_mcp_policy in backend/src/recon/mcp/policy.py: narrowed KAL_CATEGORY_ALLOWED_BINARIES to recon-runtime tools; re-enabled _KAL_ARGV_INJECTION_PATTERN + kal_argv_has_injection_risk; added explicit argv[0] path-separator rejection (binary_path_not_allowed) so /tmp/evil cannot bypass basename allowlist; restored openssl/amass/theharvester/findomain/assetfinder/subfinder subcommand+source caps; password-audit double opt-in. Verified: tests/test_kal_mcp_policy.py + tests/test_recon_recon002.py = 40 passed; ruff clean."
+      }
+    },
+    {
+      "id": "SEC-010",
+      "title": "/sandbox/python executes code on API host when enabled (regex blocklist only)",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/sandbox.py",
+      "cwe": "CWE-94",
+      "evidence": "api/routers/sandbox.py docstring:3-6; regex blocklist is not a security boundary.",
+      "detail": "RCE on API host if flag enabled. Must be disabled in prod / removed.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-011",
+      "title": "Additional args -> shlex.split flag injection into tool argv",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "tools/executor.py + api/routers/tools.py",
+      "cwe": "CWE-88",
+      "evidence": "executor.py:332-375, tools.py:320-360 append user-controlled extra flags to nmap/nuclei/sqlmap/ffuf/hydra; only tool NAME is allowlisted, not flags.",
+      "detail": "Argument injection (e.g. nmap -oN, sqlmap --os-shell) possible via additional_args. Mitigated by argv (no shell), but flags themselves are dangerous.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "SEC-012",
+      "title": "download_by_key / report download lack tenant-prefix enforcement (IDOR depth gap)",
+      "severity": "Medium",
+      "confidence": "Medium",
+      "status": "LIKELY",
+      "component": "storage/s3.py + reports.py",
+      "tenant_boundary": true,
+      "cwe": "CWE-639",
+      "evidence": "s3.py:652-667 download_by_key no prefix check; reports.py:341 download by stored object_key; PoC screenshot path DOES check (s3.py:406-428).",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "SEC-013",
+      "title": "ABAC engine defined but not enforced anywhere",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "auth/abac.py",
+      "evidence": "ABACEngine.evaluate referenced only within abac.py; no router imports.",
+      "detail": "Documented RBAC/ABAC model is dead code; contributes to SEC-001.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "SEC-014",
+      "title": "Tool result cache key not tenant-scoped (cross-tenant cache bleed)",
+      "severity": "Medium",
+      "confidence": "Medium",
+      "status": "LIKELY",
+      "component": "cache/tool_cache.py",
+      "evidence": "tool_cache.py:3-8 key argus:sandbox:exec:+hash(command); tenant not in key unless scan_id passed.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "SEC-015",
+      "title": "Auto-provision Tenant row for arbitrary UUID on scan create",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/scans.py",
+      "evidence": "scans.py:329-331 creates Tenant(id=tenant_id) if missing.",
+      "detail": "Enables tenant enumeration/resource consumption without auth gate.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "SEC-016",
+      "title": "Customer CSV exports lack formula-injection sanitization (admin path does)",
+      "severity": "Low",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "reports/generators.py",
+      "cwe": "CWE-1236",
+      "evidence": "generators.py:1669+ plain csv.writer; admin.py:83-92 has _sanitize_csv_text_cell.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "SEC-017",
+      "title": "Legacy X-Admin-Key bypasses MFA/TOTP gate",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "auth/admin_dependencies.py",
+      "evidence": "admin_dependencies.py:58-63,458-462 documented static-key bypass when admin_auth_mode=both.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "TOOL-001",
+      "title": "Signed tool catalog (162 tools) + K8s SandboxRunner path disconnected from scan orchestration (phantom coverage)",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "sandbox/runner + config/tools",
+      "tool": "catalog",
+      "evidence": "sandbox/runner.py:107-123 SandboxRunner.dispatch_jobs referenced only in sandbox/runner.py + tests, not in orchestration/handlers.py; MCP tool.run.trigger (mcp/services/tool_service.py:131-205) never spawns sandbox, returns synthetic QUEUED without Celery enqueue.",
+      "detail": "162 catalog tools imply broad coverage but scan flow uses a separate docker-exec VA/recon path with far fewer tools. ~39 catalog tools have no parser dispatch (heartbeat only).",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "TOOL-002",
+      "title": "Catalog image (argus-kali-*) != runtime image (argus-sandbox); required recon binaries missing",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "config/tools + infra/Dockerfile.sandbox + recon planners",
+      "tool": "katana,gau,waybackurls,assetfinder,findomain,naabu",
+      "evidence": "all catalog YAML image: argus-kali-web/recon; docker-compose.yml:543-550 builds argus-sandbox; infra/Dockerfile.sandbox lacks katana/gau/waybackurls/assetfinder/findomain; recon_url_history.py & recon_subdomain_passive.py:133-135 plan those tools.",
+      "detail": "check_tool_available/which fails -> silent skip of recon steps -> incomplete recon presented as complete. 'not found' vs 'not run' conflation.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "TOOL-003",
+      "title": "API /tools/* routes blocked by narrow ALLOWED_TOOLS (orphan routes)",
+      "severity": "Low",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "api/routers/tools.py + tools/guardrails/command_parser.py",
+      "evidence": "command_parser.py ALLOWED_TOOLS excludes ffuf/subfinder/httpx/amass/hydra; tools.py:326-392 routes for those call execute_command -> rejected.",
+      "detail": "Dead/broken API routes: not exploitable, but contract drift + false surface.",
+      "remediation_priority": "P3"
+    },
+    {
+      "id": "LLM-001",
+      "title": "Main scan LLM calls do not attach LLMPolicy; policy engine (llm_gateway/PolicyEnforcer) bypassed on hot path",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "llm/facade + orchestration/ai_prompts",
+      "llm_task": "all",
+      "evidence": "call_llm_unified in ai_prompts.py passes no policy=; LLMPolicy model exists (llm/policy.py) but only used by unused gateway_client.py; llm_gateway PolicyEnforcer only on separate HTTP service.",
+      "detail": "Mitigated in practice because execution is hardcoded allowlist+argv (LLM cannot pick arbitrary tool). But no_cloud_for_source_code and budget policy are NOT enforced on the scan path.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "LLM-002",
+      "title": "WRB exploitability judgment from tool stdout is not independent verification (fragile parse)",
+      "severity": "Medium",
+      "confidence": "Medium",
+      "status": "LIKELY",
+      "component": "orchestration/exploitation_executor.py",
+      "llm_task": "validation",
+      "evidence": "exploitation_executor.py:826-873 _assess_exploitability_wrb feeds up to 1500 chars stdout to LLM, bare json.loads(resp) at :866 without fence handling; heuristic fallback.",
+      "detail": "Machine PoC verification exists separately (exploit_verify.py HTTP probes) which is the real gate; LLM assessment is advisory but can inflate confidence.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "LLM-003",
+      "title": "Cloud fallback can send tool stdout/source/findings to external providers; no_cloud_for_source_code not enforced on scan path",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "llm/facade.py + phase_routing",
+      "llm_task": "all",
+      "evidence": "facade.py:433-445 cloud fallback for _CLOUD_FALLBACK_TASKS; phase_routing.yaml mode:cloud; policy_enforcer no_cloud_llm_for_source_code exists but main path bypasses gateway; perplexity OSINT always external (facade.py:368-373).",
+      "detail": "Data-exfiltration-to-provider risk depends on deployment config. Redaction only applied on gateway response path.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "PROMPT-001",
+      "title": "Signed prompt catalog is NOT used by the live scan pipeline (unsigned inline/Jinja used instead)",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "config/prompts + orchestration/prompt_registry",
+      "evidence": "Ed25519 verify fail-closed in llm_orchestrator/prompt_registry.py:326-346 but PromptRegistry.load() called only by tests/scripts/CLI; scan handlers use unsigned orchestration/prompt_registry.py + prompts/*.j2 (autoescape=False, prompt_loader.py:69-74).",
+      "detail": "Signing effort protects only the unused orchestrator stack. Integrity guarantee does not cover runtime prompts.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "PROMPT-002",
+      "title": "system_base prompt instructs model to fill empty evidence / generate commands, contradicting anti-invention prompts",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration/prompts",
+      "evidence": "prompts/.../system_base.j2:1 'If any field is empty/missing, generate tool commands and payloads to fill it. Never leave evidence fields empty' vs recon_user.j2:12 / threat_modeling_user.j2:18 'no inventions'.",
+      "detail": "Hallucination pressure on recon/VA when tool output sparse.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "PROMPT-003",
+      "title": "Prompt-injection defense wrapping only on 8-phase prompts; absent on report AI, active-scan planner, VA inline, signed agents",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "orchestration/prompt_injection_defense",
+      "evidence": "instruction_hierarchy + <untrusted_input> wired only in _get_phase_prompt (ai_prompts.py:66-77); report AI (ai_text_generation), active_scan_planner, vulnerability_analysis_prompts.py have only _sanitize_for_prompt truncation.",
+      "detail": "Untrusted tool output/target content reaching those prompts is not delimited/labeled as data.",
+      "remediation_priority": "P2"
+    },
+    {
+      "id": "STRENGTH-001",
+      "title": "Tool execution uses argv lists with shell=False + tool-name allowlist",
+      "severity": "Info",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "sandbox/adapters + tools/executor",
+      "evidence": "recon/adapters/base.py:52; exploit_verify.py:3; executor.py:142-154; sandbox_tool_runner.py:134-139.",
+      "detail": "Confirmed strong control. Any move to shell=True would be a critical regression.",
+      "remediation_priority": "none"
+    },
+    {
+      "id": "STRENGTH-002",
+      "title": "Admin sessions: HMAC at-rest, CSPRNG ids, timing-safe compare, log redaction, MFA/TOTP gate",
+      "severity": "Info",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "auth/admin_sessions + admin_dependencies",
+      "evidence": "admin_sessions.py:109-157,415-417; admin_dependencies.py:448-498.",
+      "remediation_priority": "none"
+    },
+    {
+      "id": "STRENGTH-003",
+      "title": "MinIO path-traversal prevention + PoC presign tenant-prefix check; MCP cross-tenant rejection; scope default-deny; Ed25519 EAP fail-closed",
+      "severity": "Info",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "storage/s3 + mcp/tenancy + policy/scope + engagement_authorization",
+      "evidence": "s3.py:42-89,406-428; mcp/tenancy.py:28-102; policy/scope.py:12-13; engagement_authorization.py:23-27.",
+      "remediation_priority": "none"
+    },
+    {
+      "id": "TEST-001",
+      "title": "Pre-existing test drift: test_scans_extensions.py patches non-existent scans.scan_phase_task",
+      "severity": "Low",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "tests/test_scans_extensions.py",
+      "evidence": "3 tests (test_list_scans_returns_items_shape, test_post_smart_scan_returns_201_and_shape, test_post_skill_scan_returns_201_and_shape) call mock.patch('src.api.routers.scans.scan_phase_task') but grep of scans.py shows 0 occurrences of scan_phase_task -> AttributeError at patch time. Confirmed pre-existing: git status shows scans.py unmodified by IMPLEMENTATION batches; tenant.py change does not touch scans symbols.",
+      "detail": "Test-vs-code drift (symbol renamed/removed without updating the test). Not a regression from SEC-001/002/009 work. Fix by patching the actual task symbol or the enqueue call the router now uses.",
+      "remediation_priority": "P3"
+    },
+    {
+      "id": "TEST-002",
+      "title": "k8s conftest skipped the ENTIRE test suite: pytest_collection_modifyitems tagged every session item, not just its own package",
+      "severity": "High",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "tests/integration/k8s/conftest.py",
+      "evidence": "pytest_collection_modifyitems iterated the full session item list and called item.add_marker(skip_if_no_kind) unconditionally when KIND_CLUSTER_NAME was unset. pytest passes EVERY collected item to this hook regardless of which conftest defines it, so the intent stated in the docstring ('every item in this package') was not what the code did. Observed: `python -m pytest -q` from backend/ reported '16263 skipped, 3500 deselected, 0 passed in 125.96s'. Running the same tests scoped (`pytest tests/unit`) reported '8892 passed, 31 failed' — the k8s conftest is not loaded in that invocation.",
+      "detail": "The documented default developer/CI invocation (`cd backend && python -m pytest tests/`, per CLAUDE.md) silently executed ZERO tests on any machine without a kind cluster, while still exiting cleanly enough to look like a healthy run. Every green 'tests pass' signal from that invocation was vacuous. This masked the 31 real unit failures and 5 collection errors below.",
+      "remediation_priority": "P0",
+      "resolution": {
+        "status": "FIXED",
+        "stage": "IMPLEMENTATION",
+        "batch": "G",
+        "at": "2026-07-24",
+        "change": "Added a path filter so the hook only marks items whose resolved path is under tests/integration/k8s/, and documented why the filter is load-bearing.",
+        "verified": "Full-suite run after the fix executes the suite instead of skipping it (see test-results.json)."
+      }
+    },
+    {
+      "id": "TEST-003",
+      "title": "Five stale test modules abort whole-suite collection (ImportError / AttributeError on removed symbols)",
+      "severity": "Medium",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "tests (multiple)",
+      "evidence": "Collection errors without --continue-on-collection-errors abort the run ('Interrupted: 5 errors during collection'): tests/test_argus006_argus_client.py; tests/test_threat_modeling_api.py; tests/test_threat_modeling_dependency_check.py (cannot import BLOCKED_INCOMPLETE_RECON from src.recon.threat_modeling.dependency_check); tests/test_vulnerability_analysis_dependency_check.py (cannot import BLOCKED_MISSING_STAGE1); tests/unit/mcp/services/test_mcp_tool_services.py (ToolCategory has no attribute RECON_PASSIVE).",
+      "detail": "Same test-vs-code drift class as TEST-001: symbols were renamed/removed in src/ without updating the tests. Because collection abort is fatal by default, these five files alone prevent the documented `pytest tests/` invocation from running anything at all — compounding TEST-002.",
+      "remediation_priority": "P1"
+    },
+    {
+      "id": "STRENGTH-004",
+      "title": "Report output hardening: HTML Jinja autoescape=True, LaTeX escaping mandatory, admin CSV formula sanitization, audit logs immutable trigger",
+      "severity": "Info",
+      "confidence": "High",
+      "status": "PROVEN",
+      "component": "reports + alembic",
+      "evidence": "reports/template_env.py:70-72; pdf_backend.py:214-227; admin.py:83-92; 002_rls_and_audit_immutable.py:44-58.",
+      "remediation_priority": "none"
+    }
   ]
 }

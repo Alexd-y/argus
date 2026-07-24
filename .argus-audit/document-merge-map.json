@@ -56,6 +56,25 @@
     "LICENSE*, legal/compliance notices",
     "ai_docs/develop/plans/2026-07-22-argus-web-workbench.md (pre-existing uncommitted change owned by user)"
   ],
-  "deletions_executed": [],
-  "reason_no_deletions": "Conservative pass: link/reference re-pointing to README anchors across code comments/configs/UI/CI has not been performed yet, and the prompt (stage 11.6/11.7) requires updating all internal references BEFORE deleting superseded docs. Actual deletion deferred pending explicit user approval to avoid breaking references."
+  "deletions_executed": [
+    {"path": "IMPLEMENTATION_COMPLETE.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "PLANNING_COMPLETE.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "EXECUTION_SUMMARY.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "start.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "docs/COMPLETION_SUMMARY.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "docs/TM-010-COMPLETION.md", "action": "REMOVED", "inbound_refs_repointed": 0},
+    {"path": "docs/STAGE2_QUICK_REF.md", "action": "REMOVED", "inbound_refs_repointed": 2, "repointed_to": "docs/recon-stage2-flow.md", "in": ["docs/README.md"]},
+    {"path": "docs/STAGE3_QUICK_REF.md", "action": "REMOVED", "inbound_refs_repointed": 2, "repointed_to": "docs/recon-stage3-flow.md", "in": ["docs/INDEX.md"]},
+    {"path": "docs/STAGE4_QUICK_REF.md", "action": "REMOVED", "inbound_refs_repointed": 1, "repointed_to": "docs/recon-stage4-flow.md", "in": ["docs/INDEX.md"]},
+    {"path": "docs/INDEX_RUNNING_REF.md", "action": "REMOVED", "inbound_refs_repointed": 0, "note": "10-line stub duplicating docs/RUNNING.md"}
+  ],
+  "deletion_evidence": {
+    "method": "git rm (all 10 were tracked; content recoverable from git history)",
+    "reference_sweep": "Repo-wide grep for each filename before deletion. Only inbound links were in docs/README.md and docs/INDEX.md; both re-pointed to the canonical flow docs first. Historical changelog rows in docs/INDEX.md that merely name the files in past-tense entries were left intact as factual record (plain text, not links).",
+    "supersession_check": "Canonical flow docs are strict supersets of the deleted quick-refs (stage2 576 vs 222 lines, stage3 675 vs 266, stage4 1189 vs 579; heading-level diff confirmed the quick-ref sections — API endpoints, artifacts, config, troubleshooting, examples — are all present in the canonical doc).",
+    "not_deleted": "All REVIEW / MOVE_TO_AI_DOCS / KEEP_UNTIL_LAST candidates were left untouched — they need human review or a move rather than a delete."
+  },
+  "new_documents": [
+    {"path": "docs/rls-force-052-checklist.md", "class": "CURRENT_SOURCE", "note": "SEC-002 operational gate for migration 052; linked from README security section and documentation map."}
+  ]
 }
