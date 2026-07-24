@@ -15,8 +15,7 @@
 | [architecture-decisions.md](./architecture-decisions.md) | ADR — ключевые архитектурные решения |
 | [env-vars.md](./env-vars.md) | Переменные окружения |
 | [recon-stage1-flow.md](./recon-stage1-flow.md) | Upgraded Recon Stage 1 flow: MCP policy, AI bundles, traceability, Stage2 handoff |
-| [recon-stage2-flow.md](./recon-stage2-flow.md) | **Stage 2 Threat Modeling**: dependency check → bundle load → MCP → 9 AI tasks → 12 artifacts |
-| [STAGE2_QUICK_REF.md](./STAGE2_QUICK_REF.md) | **Quick Start**: 30 сек, curl, CLI, 12 артефактов, API endpoints |
+| [recon-stage2-flow.md](./recon-stage2-flow.md) | **Stage 2 Threat Modeling**: dependency check → bundle load → MCP → 9 AI tasks → 12 artifacts, quick start (curl, CLI, API endpoints) |
 
 ---
 
@@ -30,7 +29,7 @@
 - 🚨 Зависимость от Stage 1 (4 блокирующих состояния)
 - 🌐 MCP/AI integration points (REST API, CLI, MCP)
 - 💡 Примеры использования (Python, cURL, CLI)
-- ⚡ [Быстрая справка](./STAGE2_QUICK_REF.md) для старта за 30 сек
+- ⚡ [Быстрая справка](./recon-stage2-flow.md) для старта за 30 сек
 
 ---
 

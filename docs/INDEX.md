@@ -35,8 +35,7 @@
 || **Prompt Registry** | AI prompt templates, JSON schemas, retry logic | `docs/prompt-registry.md` |
 || **Recon Stage 1 Flow** | MCP allowlist/fail-closed policy, AI task contracts, traceability, Stage2 handoff | `docs/recon-stage1-flow.md` |
 || **Recon Stage 2 Flow** | Stage 2 Threat Modeling: dependency check → bundle load → MCP → 9 AI tasks → 12 artifacts | `docs/recon-stage2-flow.md` |
-|| **Recon Stage 3 Flow** | Stage 3 Vulnerability Analysis: Stage 1+2 dependency check → bundle merge → MCP → 15 AI tasks → 17 artifacts | `docs/recon-stage3-flow.md` |
-|| **Stage 3 Quick Reference** | Quick start: API endpoints, CLI, artifacts, blocking statuses | `docs/STAGE3_QUICK_REF.md` |
+|| **Recon Stage 3 Flow** | Stage 3 Vulnerability Analysis: Stage 1+2 dependency check → bundle merge → MCP → 15 AI tasks → 17 artifacts, quick start (API endpoints, CLI, blocking statuses) | `docs/recon-stage3-flow.md` |
 || **Provider Adapters** | LLM setup (OpenAI, DeepSeek, etc.), intel sources | `docs/provider-adapters.md` |
 || **Security Model** | RLS, auth, no-injection guarantees, path traversal prevention | `docs/security-model.md` |
 
@@ -97,8 +96,8 @@
 - **Start Here**: See [RUNNING.md](./RUNNING.md) for complete startup guide (Docker, local dev, troubleshooting)
 - **Deploy**: See [deployment.md](./deployment.md) for infrastructure configuration
 - **API**: See [frontend-api-contract.md](./frontend-api-contract.md) for endpoint reference
-- **Stage 3 Quick Start**: See [STAGE3_QUICK_REF.md](./STAGE3_QUICK_REF.md) for vulnerability analysis
-- **Stage 4 Quick Start**: See [STAGE4_QUICK_REF.md](./STAGE4_QUICK_REF.md) for exploitation
+- **Stage 3 Quick Start**: See [recon-stage3-flow.md](./recon-stage3-flow.md) for vulnerability analysis
+- **Stage 4 Quick Start**: See [recon-stage4-flow.md](./recon-stage4-flow.md) for exploitation
 
 ---
 

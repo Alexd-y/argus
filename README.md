@@ -161,15 +161,24 @@ Run everything (override the default marker filter) with `pytest -m ""`.
 Multi-tenancy is enforced at two layers: every row carries `tenant_id`, and
 PostgreSQL Row-Level Security isolates tenants at the database level.
 
-- **Auth:** JWT bearer tokens or `X-API-Key`. Admin API uses a separate session
-  system with TOTP MFA (`pyotp`). ABAC policy is defined in `backend/src/auth/abac.py`.
+- **Auth:** JWT bearer tokens, or a provisioned `ARGUS_API_KEYS` value sent as
+  either `X-API-Key: <key>` or `Authorization: Bearer <key>`. Admin API uses a
+  separate session system with TOTP MFA (`pyotp`). ABAC policy is defined in
+  `backend/src/auth/abac.py`.
+- **Authenticated data planes (SEC-001):** the scans, findings, reports, bounty,
+  CVSS, sandbox, tools, recon, and web-workbench routers reject unauthenticated
+  callers. Health, metrics, and login routes stay public; admin routes keep their
+  own session/MFA scheme.
 - **Tenant binding (SEC-001):** the request tenant is derived from the
-  authenticated principal; a conflicting `X-Tenant-ID` header is rejected. Set
-  `REQUIRE_TENANT_AUTH=true` in production to reject unauthenticated main-API
-  requests instead of falling back to the default tenant.
-- **RLS FORCE (SEC-002):** core tenant tables enforce `FORCE ROW LEVEL SECURITY`
-  so the app owner role cannot bypass isolation (migration `052`). Applying it
-  requires that every worker/beat/data-migration path sets `app.current_tenant_id`.
+  authenticated principal; a conflicting `X-Tenant-ID` header is rejected.
+  `REQUIRE_TENANT_AUTH=true` (the default in `infra/.env.example` and the compose
+  stack) also rejects unauthenticated tenant resolution instead of falling back
+  to the default tenant.
+- **RLS FORCE (SEC-002):** migration `052` adds `FORCE ROW LEVEL SECURITY` to core
+  tenant tables so the app owner role cannot bypass isolation. It is **written but
+  not applied** — it requires every worker/beat/data-migration path to set
+  `app.current_tenant_id` first. See
+  [`docs/rls-force-052-checklist.md`](docs/rls-force-052-checklist.md).
 - **Tool execution:** commands run as argv lists with `shell=False` behind a
   fail-closed allowlist (see `backend/src/recon/mcp/policy.py`). `argv[0]` must be
   a bare binary name; shell metacharacters are rejected.
@@ -228,7 +237,7 @@ Canonical references live under `docs/`:
 | Tools | [`docs/tool-catalog.md`](docs/tool-catalog.md), [`docs/tool-coverage-matrix.md`](docs/tool-coverage-matrix.md) |
 | LLM / prompts | [`docs/llm-gateway.md`](docs/llm-gateway.md), [`docs/prompt-registry.md`](docs/prompt-registry.md), [`docs/payload-registry.md`](docs/payload-registry.md) |
 | Reporting | [`docs/reporting.md`](docs/reporting.md), [`docs/report-service.md`](docs/report-service.md) |
-| Security | [`docs/security.md`](docs/security.md), [`docs/security-model.md`](docs/security-model.md), [`docs/auth-flow.md`](docs/auth-flow.md) |
+| Security | [`docs/security.md`](docs/security.md), [`docs/security-model.md`](docs/security-model.md), [`docs/auth-flow.md`](docs/auth-flow.md), [`docs/rls-force-052-checklist.md`](docs/rls-force-052-checklist.md) |
 | Observability | [`docs/observability.md`](docs/observability.md) |
 | Env vars | [`docs/env-vars.md`](docs/env-vars.md) |
 | MCP server | [`docs/mcp-server.md`](docs/mcp-server.md) |
