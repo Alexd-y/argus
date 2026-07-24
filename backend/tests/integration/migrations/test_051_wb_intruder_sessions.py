@@ -64,9 +64,13 @@ def test_051_defines_upgrade_and_downgrade() -> None:
 
 
 def test_051_is_single_head() -> None:
+    # 052 (SEC-002 FORCE RLS) now sits on top of 051; assert the chain still has a
+    # single head and that 051 -> 052 is the tip edge.
     script = ScriptDirectory.from_config(_alembic_config())
     heads = script.get_heads()
-    assert heads == ["051"], f"expected 051 as single head, got {heads}"
+    assert heads == ["052"], f"expected 052 as single head, got {heads}"
+    module_052 = _load_revision_module("052")
+    assert module_052.down_revision == "051"
 
 
 def test_051_targets_expected_tables() -> None:
