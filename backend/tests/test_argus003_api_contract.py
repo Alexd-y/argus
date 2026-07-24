@@ -37,6 +37,17 @@ REQUIRED_OPENAPI_PATHS = [
     "/api/v1/wb/repeater/tabs/{tab_id}/replay",
     "/api/v1/wb/repeater/tabs/{tab_id}/exchanges",
     "/api/v1/wb/repeater/exchanges/{exchange_id}",
+    "/api/v1/wb/projects/{project_id}/intruder/attacks",
+    "/api/v1/wb/intruder/attacks/{attack_id}",
+    "/api/v1/wb/intruder/attacks/{attack_id}/start",
+    "/api/v1/wb/intruder/attacks/{attack_id}/pause",
+    "/api/v1/wb/intruder/attacks/{attack_id}/resume",
+    "/api/v1/wb/intruder/attacks/{attack_id}/cancel",
+    "/api/v1/wb/intruder/attacks/{attack_id}/requests",
+    "/api/v1/wb/projects/{project_id}/sessions/macros",
+    "/api/v1/wb/sessions/macros/{macro_id}",
+    "/api/v1/wb/projects/{project_id}/sessions/principals",
+    "/api/v1/wb/sessions/principals/{principal_id}",
 ]
 
 

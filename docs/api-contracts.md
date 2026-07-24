@@ -407,6 +407,72 @@ message-format сохраняет байт-в-байт (pretty/hex — прои�
 kill-switch — replay запрещён если project.status ≠ `active` (409); каждый replay (forward/blocked) записан в history;
 raw byte-exact, не логируется; response bounded (5 MiB, `truncated`); TLS-verify off (scope-gated authorized pentest, live-send infra-gated).
 
+## 4f. Web Security Workbench — Intruder (WB-P4b)
+
+Автоматизированные атаки (Sniper/Battering-ram/Pitchfork/Cluster-bomb). API только
+*диспетчеризует* исполнение в изолированный Celery-пул `argus.intruder.highvol`; сам
+send-loop проходит через `ForwardGate` (scope). Payload'ы — только ссылки в подписанный
+`PayloadRegistry` (SI-5). Результаты — metadata-only (без raw payload/тел).
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects/{project_id}/intruder/attacks` | `IntruderAttackCreate` | 201 `IntruderAttackDTO` | 404 project, 409 name, 400 base64 |
+| GET | `/api/v1/wb/projects/{project_id}/intruder/attacks` | — | 200 `IntruderAttackDTO[]` | — |
+| GET | `/api/v1/wb/intruder/attacks/{attack_id}` | — | 200 `IntruderAttackDTO` | 404 |
+| POST | `/api/v1/wb/intruder/attacks/{attack_id}/start` | `IntruderControlRequest` | 200 `IntruderAttackDTO` | 404, 409 not-active/version |
+| POST | `/api/v1/wb/intruder/attacks/{attack_id}/pause` | `IntruderControlRequest` | 200 `IntruderAttackDTO` | 404, 409 version |
+| POST | `/api/v1/wb/intruder/attacks/{attack_id}/resume` | `IntruderControlRequest` | 200 `IntruderAttackDTO` | 404, 409 not-active/version |
+| POST | `/api/v1/wb/intruder/attacks/{attack_id}/cancel` | `IntruderControlRequest` | 200 `IntruderAttackDTO` | 404, 409 version |
+| GET | `/api/v1/wb/intruder/attacks/{attack_id}/requests` | — (`?flagged&offset&limit`) | 200 `IntruderRequestListResponse` | — |
+
+**Схемы (`extra="forbid"`):**
+
+- `IntruderAttackCreate` = `{ name, attack_type, raw_request_template_base64, positions?[], payload_config?, config? }`;
+  `attack_type` ∈ `sniper|battering_ram|pitchfork|cluster_bomb`; `payload_config` = `{ sets: [{ family_id, encoding_pipeline?,
+  parameters?, max_payloads?, approval_id?, correlation_key? }] }` (ссылки в реестр, не raw).
+- `IntruderControlRequest` = `{ expected_version }` (optimistic lock).
+- `IntruderAttackDTO` = `{ id, tenant_id, project_id, name, attack_type, status, raw_request_template_base64, positions?,
+  payload_config?, config?, checkpoint?, requests_total, requests_completed, findings_total, error_reason?, version,
+  created_at, updated_at }`.
+- `IntruderRequestDTO` = `{ id, tenant_id, project_id, attack_id, request_index, payload_label?, payload_index?,
+  forward_outcome, block_reason?, status_code?, response_length?, response_time_ms?, response_sha256?, flagged, error_reason?,
+  created_at }`; `IntruderRequestListResponse` = `{ items[], total, offset, limit }`.
+
+**Инварианты:** каждый запрос проходит `ForwardGate` (scope) в `IntruderService`; kill-switch — start/resume запрещены при
+project.status ≠ `active` (409), `cancel` пишет терминальный статус, который воркер видит и дропает; payload'ы только через
+`PayloadBuilder`/registry; result-строки без raw payload (только `payload_label` = ссылка). Live high-volume send — infra-gated.
+
+## 4g. Web Security Workbench — Sessions (WB-P6b)
+
+Session macros (login-replay) + principals (owner/attacker/anonymous) для авторизационного
+тестирования. Split-plane secrets (SI-3): raw-креды не принимаются и не возвращаются — только
+`secret_ref` в шагах макроса и `secrets_ref`-хэндл у principal.
+
+| Method | Path | Body | Success | Ошибки |
+|--------|------|------|---------|--------|
+| POST | `/api/v1/wb/projects/{project_id}/sessions/macros` | `SessionMacroCreate` | 201 `SessionMacroDTO` | 404 project, 409 name |
+| GET | `/api/v1/wb/projects/{project_id}/sessions/macros` | — | 200 `SessionMacroDTO[]` | — |
+| GET | `/api/v1/wb/sessions/macros/{macro_id}` | — | 200 `SessionMacroDTO` | 404 |
+| PATCH | `/api/v1/wb/sessions/macros/{macro_id}` | `SessionMacroUpdate` | 200 `SessionMacroDTO` | 404, 409 version/name |
+| DELETE | `/api/v1/wb/sessions/macros/{macro_id}` | — | 204 | 404 |
+| POST | `/api/v1/wb/projects/{project_id}/sessions/principals` | `SessionPrincipalCreate` | 201 `SessionPrincipalDTO` | 404 project/macro, 409 name, 422 role |
+| GET | `/api/v1/wb/projects/{project_id}/sessions/principals` | — | 200 `SessionPrincipalDTO[]` | — |
+| GET | `/api/v1/wb/sessions/principals/{principal_id}` | — | 200 `SessionPrincipalDTO` | 404 |
+| PATCH | `/api/v1/wb/sessions/principals/{principal_id}` | `SessionPrincipalUpdate` | 200 `SessionPrincipalDTO` | 404, 409 version/name, 422 role |
+| DELETE | `/api/v1/wb/sessions/principals/{principal_id}` | — | 204 | 404 |
+
+**Схемы (`extra="forbid"`):**
+
+- `SessionMacroCreate` = `{ name, steps?[], match_rules?, config? }`; `SessionMacroUpdate` = `{ expected_version, name?, steps?, match_rules?, config? }`.
+- `SessionMacroDTO` = `{ id, tenant_id, project_id, name, steps?, match_rules?, config?, version, created_at, updated_at }`.
+- `SessionPrincipalCreate` = `{ name, role, secrets_ref?, macro_id?, config? }`; `role` ∈ `owner|attacker|anonymous`;
+  `SessionPrincipalUpdate` = `{ expected_version, name?, role?, secrets_ref?, macro_id?, config? }`.
+- `SessionPrincipalDTO` = `{ id, tenant_id, project_id, name, role, secrets_ref?, macro_id?, config?, version, created_at, updated_at }`.
+
+**Инварианты:** split-plane secrets (SI-3) — ни один endpoint не принимает/не возвращает raw-креды (только `secret_ref`/`secrets_ref`);
+optimistic lock (409); live owner/attacker replay через `ForwardGate`+preflight+EAP на воркер-плоскости — infra-gated (этот роутер
+хранит только определения).
+
 ---
 
 ## 5. Связанные документы

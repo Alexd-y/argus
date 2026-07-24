@@ -604,6 +604,24 @@ webProxy:
     # MITM listen port the target's HTTP(S) client is pointed at.
     proxyPort: 8080
 
+# ── Web Workbench Intruder — dedicated high-volume attack worker pool (WB-P4b) ─
+# Disabled by default. When enabled, a dedicated celery deployment drains ONLY
+# the ``argus.intruder.highvol`` queue so a high-volume attack can never starve
+# the scan / report / tool queues. Runs from the digest-pinned celery image.
+# Every request still passes the shared ForwardGate (scope) inside
+# IntruderService; payloads are materialised from the signed PayloadRegistry.
+webIntruder:
+  enabled: false
+  replicaCount: 1
+  concurrency: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
 # ── WhiteRabbitNeo — primary pentest AI (local, GPU recommended) ────────────
 whiteRabbitNeo:
   enabled: true

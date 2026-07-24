@@ -500,8 +500,17 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
     severity→CVSS, category/confidence carry, remediation-контекст, explicit id, fail-closed, batch, analyze→dtos
     e2e); alembic `heads`=050 single; alembic smoke ✅ (4 passed, 4 postgres-skipped); весь `tests/unit/web_workbench`
     — **205 passed**.
-- ⏳ WB-P2b-2, P4b, **P5b-2** (scanner-orchestrator/crawler/Nuclei-extend/OAST-bridge/repository-RLS/API — infra-gated),
-  P6b..P11 — pending (§11 backlog).
+- ✅ WB-P2b-2 / P4b / P6b — **код+unit сделаны offline** (прошлая сессия): proxy `service.py` (mitmproxy addon +
+  pure `ProxyFlowProcessor`), intruder `repository.py`+`service.py`+`finding_bridge.py`, sessions
+  `cookies/repository/macro_runner/replay_runner/finding_bridge.py`.
+- ✅ WB-P4b / P6b — **API-слой + Celery-пул + RLS-тесты сделаны offline** (эта сессия): контракты
+  `contracts/{intruder,sessions}.py`, роутеры `api/routers/web_workbench/{intruder,sessions}.py` (18 endpoints,
+  зарегистрированы), intruder Celery-таск + очередь `argus.intruder.highvol` + `worker-intruder` в compose,
+  контракты в `docs/api-contracts.md §4f/§4g`, OpenAPI-контракт-тест +11 путей, RLS integration-тесты
+  (`requires_postgres`). **501 passed** в `tests/unit/web_workbench`, OpenAPI-контракт 11/11, ruff/black/mypy ✅.
+  Осталось только infra-gated: live-E2E (high-volume send, owner/attacker replay), Helm dedicated intruder-pool.
+- ⏳ **P5b-2** (scanner-orchestrator/crawler/Nuclei-extend/OAST-bridge/repository-RLS/API — infra-gated),
+  P7b..P11 — pending (§11 backlog).
 
 ### WB-P6a — Authorization analyzer (owner/attacker/anon diff → BAC/IDOR, pure) — ✅ DONE (эта сессия)
 - **Files:** `src/web_workbench/checks/{__init__,authorization_analyzer.py}`:
@@ -724,12 +733,18 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
 
 #### WB-P2b-1 — ✅ DONE (см. §10). CA lifecycle (sealing + issue/rotate + API)
 
-#### WB-P2b-2 — live MITM daemon + Docker + E2E (требует live-инфры)
+#### WB-P2b-2 — live MITM daemon + Docker + E2E (код+unit ✅ offline, осталось live-E2E)
+- **✅ Код+unit (эта сессия):** `backend/src/web_workbench/proxy/service.py` — чистое ядро `ProxyFlowProcessor`
+  (gate scope → `PreflightChecker` через `preflight_hook` → `InterceptRuleSet` → capture-план) отделено от
+  mitmproxy-обвязки (`WorkbenchProxyAddon`); mitmproxy — опциональный guarded import (ядро+тесты работают без
+  установленного mitmproxy); `RepositoryTrafficSink` персистит capture (inline-import `set_session_tenant`
+  оправдан — избегает построения engine на import-time и ломки offline-тестируемости ядра); `main()` entrypoint
+  через env. Unit `tests/unit/web_workbench/proxy/test_proxy_service.py` (in/out-of-scope, preflight-deny,
+  capture-input, intercept-action, sink-integration через `_FakeSink`). `ruff`/`black`/`mypy` ✅.
 - **Files:**
-  - `backend/src/web_workbench/proxy/service.py` — mitmproxy addon: per-flow `ForwardGate`(scope)+
-    полный `PreflightChecker` через `preflight_hook`, `InterceptRuleSet`, `CertificateAuthority.issue_leaf`
-    (CA грузится через `load_ca(sealer, cert_pem, sealed_key)` из `ca_lifecycle`), стрим тела через
-    `plan_body`→`BodyObjectStore`→`ProxyRepository.persist_message`.
+  - `backend/src/web_workbench/proxy/service.py` — ✅ **реализован** (см. выше): mitmproxy addon поверх
+    `ProxyFlowProcessor`, per-flow `ForwardGate`(scope)+`PreflightChecker` через `preflight_hook`,
+    `InterceptRuleSet`, capture через `TrafficSink`/`RepositoryTrafficSink`.
   - `backend/pyproject.toml` — добавить `mitmproxy` (pinned) в опциональную группу `web-proxy`
     (НЕ импортировать `service.py` из `main.py` — демон живёт только в контейнере `argus-web-proxy`).
   - `infra/docker-compose.yml` — **✅ сервис `web-proxy` добавлен (эта сессия)**: profile-gated (`--profile web-proxy`,
@@ -807,13 +822,45 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
   (RLS ENABLE+FORCE, SQLite-compat через `_json_type`, uq-констрейнты); unit-тесты
   `tests/unit/web_workbench/test_intruder_sessions_models.py` (8) + offline chain-тест
   `tests/integration/migrations/test_051_wb_intruder_sessions.py` (6, head=051 single). `ruff`/`black`/`mypy`/smoke ✅.
-- **⏳ Осталось (infra-gated):** `web_workbench/intruder/service.py` (gate каждого запроса через scope+preflight+
-  EAP-budget); отдельный Celery worker pool (`argus.intruder.highvol`) с quotas+kill switch; API
-  `/wb/projects/{id}/intruder/*` (create/start/pause/resume/cancel/results); мост результатов → evidence →
-  `FindingDTO` через `finding_bridge`; repository RLS + optimistic-lock.
+- **✅ Код+unit (эта сессия):** `web_workbench/intruder/repository.py` (RLS + optimistic-lock: create/get/list
+  attacks, set_status, save_progress-checkpoint, record_request append, list_flagged/count_recorded, DTOs);
+  `web_workbench/intruder/service.py` (`IntruderService.run_attack`: scope-gate + optional `preflight_hook`
+  каждого запроса, budget cap из config, payload через входящие `PayloadSet`, send через `HttpSender`,
+  grep/status flag, checkpoint-resume `next_index`, `AttackControl` pause/resume/cancel через `control_hook`,
+  send-failure не аварит run); `web_workbench/intruder/finding_bridge.py` (flagged request → `SUSPECTED`
+  `FindingDTO`, summary без raw payload — только label). Unit
+  `tests/unit/web_workbench/intruder/{test_intruder_service,test_intruder_finding_bridge}.py`
+  (in/out-of-scope, over-budget, grep/status-flag, resume, cancel/pause, malformed, label-only, send-fail).
+  `ruff`/`black`/`mypy` ✅.
+- **✅ API + worker-pool + RLS-тесты (эта сессия):** `contracts/intruder.py` (strict DTO, raw template base64,
+  `payload_config`=ссылки в реестр); роутер `api/routers/web_workbench/intruder.py` (8 endpoints:
+  create/list/get/start/pause/resume/cancel/results) — start/resume диспетчеризуют Celery-таск и требуют
+  project.status=`active` (kill-switch), cancel пишет терминальный статус, optimistic-lock на переходах;
+  Celery-таск `intruder/tasks.py` (`argus.wb.intruder.run` → изолированная очередь `argus.intruder.highvol`,
+  материализация payload'ов из подписанного реестра, DB-backed control-hook для pause/cancel через отдельный
+  поток); выделенный `worker-intruder` в `infra/docker-compose.yml` (concurrency 2); контракт в
+  `docs/api-contracts.md §4f`; OpenAPI-контракт-тест расширен (7 путей). Offline-тесты: pure-хелперы таска
+  (`control_from_status`, `materialize_payload_sets`) + router-мапперы; RLS integration
+  `tests/integration/web_workbench/test_intruder_rls.py` (cross-tenant `count(*)`, optimistic-lock) — verify на
+  live Postgres. `ruff`/`black`/`mypy` ✅.
+- **✅ Helm dedicated intruder-pool (эта сессия):** `templates/celery-worker-intruder-deployment.yaml` —
+  выделенный celery-деплой, дренирует ТОЛЬКО `argus.intruder.highvol` (`-A src.celery_app worker -Q
+  argus.intruder.highvol --prefetch-multiplier=1`), gated `webIntruder.enabled=false` (default off), digest-pinned
+  celery-образ + cosign-verify init, podAntiAffinity, liveness/readiness через `celery inspect ping`. Values-блок
+  `webIntruder` (replicaCount/concurrency/resources). Верифицировано offline: `helm lint` ✅, `helm template`
+  рендерит корректно при `enabled=true` и пусто при default. (Обнаружено: основной celery-деплой чарта ссылается на
+  несуществующий `src.celery.app:celery_app` без `-Q` — новый intruder-деплой использует корректный путь; фикс
+  основного деплоя вынесен как отдельная задача, чтобы не трогать несвязанное поведение.)
+- **✅ Live-E2E scaffold (эта сессия):** `tests/integration/e2e/test_e2e_web_workbench.py` (`requires_docker_e2e`,
+  7 кейсов) — полный жизненный цикл Intruder против juice-shop: project(scope=host)→create sniper attack
+  (payload=`sqli_safe` по ссылке)→start→poll до терминала→results (≥1 forwarded через ForwardGate, rows
+  metadata-only без raw-тел)→kill-switch (pause project ⇒ start 409). Готов к запуску на AWS-стеке.
+- **⏳ Осталось (infra-gated):** прогон live high-volume E2E на docker-стеке/juice-shop (движок+sender
+  offline-протестированы через MockTransport; E2E-файл готов).
 - **Инварианты:** payload sets ТОЛЬКО через `PayloadBuilder` (materialize из реестра); high-volume/race/single-packet
   → risk-класс + EAP; request budget из EAP; каждый запрос проходит `ForwardGate`; kill-switch по project status.
-- **DoD:** persistence RLS integration; pause/resume/checkpoint/cancel; live high-volume E2E — **infra-gated**.
+- **DoD:** persistence RLS integration; pause/resume/checkpoint/cancel; live high-volume E2E — **E2E-файл готов,
+  прогон infra-gated**.
 
 #### WB-P4 (исходные требования, покрываются P4a+P4b)
 - **DoD:** 4 стратегии + processors (encode/hash/prefix/regex) unit-tested; grep-match/extract; dedup;
@@ -861,10 +908,26 @@ SI-3 (finding без raw-тел). Детали — §10.
   БЕЗ raw-секретов), `WbSessionPrincipal` (role owner/attacker/anonymous, `secrets_ref` split-plane SI-3,
   optional `macro_id`→SET NULL) в `models_web_workbench.py`; миграция **`051_wb_intruder_sessions.py`** (RLS ENABLE+FORCE,
   SQLite-compat); unit-тесты (split-plane secrets: нет колонок password/token/secret) + chain-тест — общие с WB-P4b.
-- **⏳ Осталось (infra-gated):** `web_workbench/sessions/*` (split-plane secrets через `secrets_ref`, macro-replay для
-  логина); live owner/attacker/anon replay-раннер (использует P6a `analyze_authorization` над реально снятыми парами) +
-  мост `AuthorizationFinding`→`FindingDTO` (category AUTH/IDOR); расширение `playwright_adapter.py` (reusable context для
-  atomic actions, DOM source/sink, postMessage, CSP).
+- **✅ Код+unit (эта сессия):** `web_workbench/sessions/cookies.py` (pure: parse Set-Cookie / merge / inject
+  Cookie-header byte-exact); `web_workbench/sessions/repository.py` (RLS + optimistic-lock CRUD macros+principals,
+  role-валидация, split-plane `secrets_ref` — без raw-секретов); `web_workbench/sessions/macro_runner.py`
+  (`MacroRunner.establish`: replay login-steps через `ForwardGate`+`HttpSender`, `SecretResolver` подставляет
+  секреты из secret-plane, cookie carry-over, match-rules → success); `web_workbench/sessions/replay_runner.py`
+  (`AuthorizationReplayRunner.run`: owner+attackers replay одного target через gate, снимает пары, кормит P6a
+  `analyze_authorization` → IDOR/BFLA/UNAUTH_ACCESS); `web_workbench/sessions/finding_bridge.py`
+  (`AuthorizationFinding`→`CONFIRMED` `FindingDTO`, category AUTH/IDOR, summary без raw/секретов). Unit
+  `tests/unit/web_workbench/sessions/{test_cookies,test_macro_runner,test_replay_runner,test_sessions_finding_bridge}.py`
+  (secret-subst, gate-block, match-rules, cookie carry-over, IDOR-detect, anon→UNAUTH, denied→no-finding,
+  owner-out-of-scope short-circuit, split-plane redaction). `ruff`/`black`/`mypy` ✅.
+- **✅ API + RLS-тесты (эта сессия):** `contracts/sessions.py` (strict DTO macros+principals, split-plane
+  `secret_ref`/`secrets_ref`, БЕЗ raw-кредов); роутер `api/routers/web_workbench/sessions.py` (10 endpoints:
+  macros CRUD + principals CRUD, optimistic-lock, role-валидация→422); контракт в `docs/api-contracts.md §4g`;
+  OpenAPI-контракт-тест расширен (4 пути). Offline-тесты: router-мапперы (split-plane проекция); RLS integration
+  `tests/integration/web_workbench/test_sessions_rls.py` (cross-tenant `count(*)`, optimistic-lock, SI-3 «нет
+  raw-secret колонок» через `information_schema`) — verify на live Postgres. `ruff`/`black`/`mypy` ✅.
+- **⏳ Осталось (infra-gated):** live owner/attacker replay-endpoint (macro-runner+replay-runner offline-готовы,
+  нужен ForwardGate+sender+SecretResolver на воркер-плоскости); расширение `playwright_adapter.py` (reusable
+  context для atomic actions, DOM source/sink, postMessage, CSP); live owner-vs-attacker E2E + secret-leakage тест.
 - **Инварианты:** split-plane secrets (SI-3), redaction через `auth/redaction.py`+`playbooks/evidence`; replay ТОЛЬКО
   через ForwardGate+preflight+EAP; P6a-анализатор — вход (уже offline-верифицирован).
 - **DoD:** owner-vs-attacker diff E2E; secret-leakage security test; BAC/IDOR классификация → FindingDTO — **infra-gated**.

@@ -40,6 +40,9 @@ app = Celery(
         "src.scheduling.scan_trigger",
         # Scan queue poller — safety-net for picking up queued scans.
         "src.celery.tasks.scan_queue_poll",
+        # WB-P4b — Web Workbench Intruder execution (high-volume send loop) on
+        # its own dedicated queue so it cannot starve scan / report queues.
+        "src.web_workbench.intruder.tasks",
     ],
 )
 
@@ -88,6 +91,9 @@ app.conf.update(
         "argus.scheduling.run_scheduled_scan": {"queue": "argus.scans"},
         # Scan queue poller — safety-net for queued scans.
         "argus.scan_queue.poll": {"queue": "argus.scans"},
+        # WB-P4b — Intruder high-volume attack runner on an isolated queue so a
+        # large attack cannot starve scan / report / tool queues.
+        "argus.wb.intruder.run": {"queue": "argus.intruder.highvol"},
     },
     task_default_queue="argus.default",
 )
@@ -202,7 +208,9 @@ def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None
 
 
 @task_prerun.connect
-def _argus_task_prerun(sender: Any = None, task: Any = None, **_kwargs: Any) -> None:  # noqa: ARG001
+def _argus_task_prerun(
+    sender: Any = None, task: Any = None, **_kwargs: Any
+) -> None:  # noqa: ARG001
     target = task or sender
     if target is None:
         return

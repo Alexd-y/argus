@@ -434,6 +434,53 @@ services:
       minio:
         condition: service_healthy
 
+  # WB-P4b — Web Workbench Intruder high-volume attack runner.
+  #
+  # Dedicated pool draining ONLY `argus.intruder.highvol` so a large attack can
+  # never starve the scan / report / tool queues. Every request still passes the
+  # shared ForwardGate (scope) inside IntruderService; payloads are materialised
+  # from the signed PayloadRegistry. Reuses the worker image (build backend +
+  # worker first).
+  worker-intruder:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: argus-worker-general
+    container_name: argus-worker-intruder
+    restart: unless-stopped
+    command: celery -A src.celery_app worker -l INFO -Q argus.intruder.highvol --concurrency 2
+    user: "1000:${DOCKER_GID:-999}"
+    env_file: .env
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-argus}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-argus}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-argus}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}
+      MINIO_BUCKET: ${MINIO_BUCKET:-argus}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      WB_EAP_KEYS_DIR: ${WB_EAP_KEYS_DIR:-/app/config/keys}
+    networks:
+      - backend
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
   # Web Security Workbench intercepting proxy (WB-P2b).
   #
   # Profile-gated: a plain `docker compose up` must NOT start this — the live
@@ -446,10 +493,14 @@ services:
   # persisted in plaintext; all forwarded traffic passes the shared ForwardGate
   # (scope + preflight + EAP) — this is not an open relay.
   web-proxy:
+    # Dedicated image = argus-backend + mitmproxy (kept out of the shared images).
+    # Build backend first, then this profile (COMPOSE_BAKE=false to use the local image).
     build:
-      context: ../backend
-      dockerfile: ../infra/backend/Dockerfile
-    image: argus-backend
+      context: web-proxy
+      dockerfile: Dockerfile
+      args:
+        BACKEND_IMAGE: argus-backend:latest
+    image: argus-web-proxy
     container_name: argus-web-proxy
     profiles:
       - web-proxy
