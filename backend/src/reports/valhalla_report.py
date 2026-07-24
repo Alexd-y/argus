@@ -1703,7 +1703,7 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
             elif isinstance(screenshots, str) and screenshots.startswith("/"):
                 parts.append(f'<p><strong>Screenshot:</strong> <code>{screenshots}</code></p>')
             elif isinstance(screenshots, list):
-                for idx, sc in enumerate(screens[:5]):
+                for idx, sc in enumerate(screenshots[:5]):
                     if isinstance(sc, dict):
                         sc_data = sc.get("data") or sc.get("base64") or sc.get("url", "")
                         sc_alt = sc.get("alt", f"Screenshot {idx+1}")

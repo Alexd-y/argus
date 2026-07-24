@@ -6,11 +6,13 @@ import logging
 import time
 import uuid
 from contextlib import suppress
+from typing import Any
 
 from sqlalchemy import String, cast, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.schemas import DEFAULT_GENERATE_ALL_FORMATS, ReportSummary
+from src.core.config import settings
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.finding_metadata import (
     clip_optional_text,
