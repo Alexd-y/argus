@@ -42,6 +42,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ENVIRONMENT", "environment"),
     )
     default_tenant_id: str = "00000000-0000-0000-0000-000000000001"
+    # SEC-001: when True, main-API tenant resolution requires an authenticated
+    # principal (JWT/API key); unauthenticated requests are rejected instead of
+    # trusting a client-supplied X-Tenant-ID header. Default False preserves
+    # backward compatibility; set REQUIRE_TENANT_AUTH=true in production.
+    require_tenant_auth: bool = False
 
     # LLM Providers (Phase 6) — at least one required for AI orchestration
     openai_api_key: str | None = None
