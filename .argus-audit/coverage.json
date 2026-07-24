@@ -1,0 +1,30 @@
+{
+  "schema_version": "1",
+  "stage": "BASELINE_AUDIT",
+  "generated_at": "2026-07-24T08:19:00+03:00",
+  "totals": {"tracked_files": 3384, "backend": 2334, "backend_src": 1058, "Frontend": 306, "training_data": 196, "ai_docs": 152, "infra": 84, "docs": 81, "admin-frontend": 26, "mcp-server": 8},
+  "method": "Direct read of orchestration source-of-truth files + 5 parallel read-only exploration passes (LLM orchestration, tool reconciliation, appsec/tenancy, legacy duplication, prompts) + ruff lint.",
+  "components": [
+    {"name": "orchestration (state_machine/phases/handlers/ai_prompts/exploitation_executor)", "files_found": 110, "coverage": "high", "status": "reviewed"},
+    {"name": "orchestrator + llm_orchestrator (legacy analysis)", "files_found": 20, "coverage": "high", "status": "reviewed"},
+    {"name": "llm / llm_gateway (routing, providers, policy)", "files_found": 28, "coverage": "high", "status": "reviewed"},
+    {"name": "sandbox (adapters/parsers/runner) + tools executor + config/tools", "files_found": 396, "coverage": "medium-high (reconciliation of ~30 core tools)", "status": "reviewed"},
+    {"name": "auth / policy / RLS / multi-tenancy (3 vertical flows)", "files_found": 27, "coverage": "high", "status": "reviewed"},
+    {"name": "api routers (tenant surface, ws, tools, reports, scans, admin)", "files_found": 67, "coverage": "medium-high", "status": "reviewed"},
+    {"name": "prompts (config/prompts signing + orchestration/prompts jinja + inline)", "files_found": 268, "coverage": "medium (representative per phase + agents)", "status": "reviewed"},
+    {"name": "reports / evidence / findings", "files_found": 84, "coverage": "medium (hardening + tenant paths)", "status": "partial"},
+    {"name": "recon incl. vulnerability_analysis/active_scan (per-phase failure/resume detail)", "files_found": 229, "coverage": "medium (tool + planner paths); per-phase happy/failure/resume matrices partial", "status": "partial"},
+    {"name": "mcp + mcp-server", "files_found": 60, "coverage": "medium (tenancy + tool_service)", "status": "partial"},
+    {"name": "infra (compose/docker/helm/k8s)", "files_found": 84, "coverage": "medium (docker.sock, image reconciliation, gateway helm)", "status": "partial"},
+    {"name": "Frontend + admin-frontend", "files_found": 332, "coverage": "low (backend contract references only)", "status": "not_reviewed"},
+    {"name": "training_data / ai_docs / docs (doc classification for stage 11)", "files_found": 429, "coverage": "low (inventory only)", "status": "not_reviewed"}
+  ],
+  "critical_unreviewed": [
+    "Per-phase failure/resume/cancel/idempotency matrices for each of 8 phases (partial evidence gathered)",
+    "Frontend/admin API contract vs backend Pydantic/TS drift",
+    "Full documentation classification (CURRENT_SOURCE/STALE/...) for README consolidation",
+    "reports tier classifier determinism (Asgard/Midgard/Valhalla) provable-only enforcement"
+  ],
+  "exclusions": [".git", ".venv", "node_modules", "cache", "coverage", "compiled artifacts", "training_data treated as data"],
+  "honesty_note": "NOT claiming 'entire codebase reviewed'. Runtime-critical orchestration/LLM/tools/security/tenancy areas have high coverage with file:line evidence. Frontend, full docs classification, and per-phase resilience matrices remain partial/pending."
+}

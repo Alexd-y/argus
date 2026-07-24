@@ -1,0 +1,36 @@
+{
+  "schema_version": "1",
+  "stage": "BASELINE_AUDIT",
+  "generated_at": "2026-07-24T08:19:00+03:00",
+  "note": "CANDIDATES ONLY. No deletion performed during baseline. Each candidate needs DeletionEvidence + before/after regression checks before SAFE_CLEANUP. Verdicts from read-only reverse-import/dynamic-load analysis.",
+  "candidates": [
+    {"path": "backend/src/orchestrator/", "type": "package (10 files)", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "100% backward-compat shim `from src.llm_orchestrator import *`; zero production reverse-imports across repo (only self + docstrings/docs).", "successor": "backend/src/llm_orchestrator/", "blocking_checks": ["grep `src.orchestrator` full repo incl. tests/scripts/infra", "import collection after removal"]},
+    {"path": "backend/src/agents/", "type": "package (va_orchestrator.py, memory_compressor.py, __init__.py)", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "Zero production imports in backend/src outside agents/; referenced only by tests.", "successor": "none (functionality superseded by orchestration handlers/vuln_agents)", "blocking_checks": ["confirm tests would be removed/migrated", "no dynamic import"]},
+    {"path": "backend/src/llm/gateway_client.py", "type": "module", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "Zero imports in backend/src; only tests + docs. get_gateway_client() never called in prod.", "successor": "llm/facade.py + task_router.py", "blocking_checks": ["grep gateway_client", "verify llm/policy.py only used by it"]},
+    {"path": "backend/src/llm/policy.py", "type": "module", "verdict": "LIKELY_UNUSED", "reason": "Imported only by unused gateway_client.py.", "successor": "n/a", "blocking_checks": ["confirm after gateway_client removal"]},
+    {"path": "backend/src/llm_gateway/eval/canary_shadow.py", "type": "module", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "Zero imports.", "blocking_checks": ["grep canary_shadow"]},
+    {"path": "backend/src/llm_gateway/replay/recorder.py", "type": "module", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "Zero imports.", "blocking_checks": ["grep recorder"]},
+    {"path": "backend/src/llm_gateway/cloud_supplement.py", "type": "module", "verdict": "PROVEN_UNUSED_CANDIDATE", "reason": "Zero imports outside self + docs.", "blocking_checks": ["grep cloud_supplement"]},
+    {"path": "backend/src/llm_gateway/cost_router.py", "type": "module", "verdict": "LIKELY_UNUSED", "reason": "Only test_routing.py; not wired in router.py.", "blocking_checks": ["confirm router.py does not import"]},
+    {"path": "backend/src/llm_orchestrator/ (Orchestrator runtime stack: orchestrator.py, agents.py, retry_loop.py, cost_tracker.py, llm_provider.py, prompt_registry.py)", "type": "partial package", "verdict": "LIKELY_UNUSED", "reason": "ARG-008 AI Orchestrator built+tested but not wired to scan dispatch; zero backend/src consumers.", "successor": "orchestration/ (active pipeline)", "blocking_checks": ["RETAIN schemas/loader.py + schemas/*.json (reached via pipeline/contracts/validation_job.py at API boot) until validation_job decoupled", "decide: wire signed Planner/Critic/Verifier into scan path (IMPLEMENTATION) OR remove"]},
+    {"path": "backend/src/pipeline/contracts/validation_job.py + exploit_job.py", "type": "modules", "verdict": "LIKELY_UNUSED", "reason": "Classes never instantiated in backend/src; only tests. validation_job pulls llm_orchestrator.schemas.loader at boot.", "blocking_checks": ["trace pipeline/contracts/__init__ exports", "API boot import chain"]}
+  ],
+  "executed_deletions": [
+    {"path": "backend/src/llm_gateway/eval/canary_shadow.py", "deleted_at": "2026-07-24", "stage": "SAFE_CLEANUP", "scope": "src_only_keep_wired", "evidence": {"prod_consumers": 0, "test_consumers": 0, "reexports": 0, "checks": ["grep canary_shadow in backend/src = self only", "grep in backend/tests = none", "grep in llm_gateway/**/__init__.py = none"]}, "post_checks": "import src.llm_gateway(.eval) OK; pytest --collect-only 36 tests OK; ruff no NEW errors"},
+    {"path": "backend/src/llm_gateway/replay/recorder.py", "deleted_at": "2026-07-24", "stage": "SAFE_CLEANUP", "scope": "src_only_keep_wired", "evidence": {"prod_consumers": 0, "test_consumers": 0, "reexports": 0, "checks": ["grep replay.recorder in backend/src = none", "grep in backend/tests = none", "grep in llm_gateway/**/__init__.py = none"]}, "post_checks": "import src.llm_gateway(.replay) OK; collect OK"},
+    {"path": "backend/src/llm_gateway/cloud_supplement.py", "deleted_at": "2026-07-24", "stage": "SAFE_CLEANUP", "scope": "src_only_keep_wired", "evidence": {"prod_consumers": 0, "test_consumers": 0, "reexports": 0, "checks": ["grep cloud_supplement in backend/src = self only", "grep in backend/tests = none", "grep in llm_gateway/**/__init__.py = none"]}, "post_checks": "import src.llm_gateway OK; collect OK"}
+  ],
+  "deferred_per_user_scope": [
+    {"paths": ["backend/src/orchestrator/", "backend/src/agents/", "backend/src/llm/gateway_client.py", "backend/src/llm/policy.py", "backend/src/llm_gateway/cost_router.py", "backend/src/llm_orchestrator/ (runtime stack)", "backend/src/pipeline/contracts/{validation_job,exploit_job}.py"], "reason": "User chose src_only_keep_wired: these have test-suite (and/or boot-chain) dependencies; deleting sources requires co-removing/migrating ~7 test files, expanding blast radius. Deferred to a separate, explicit cleanup step."}
+  ],
+  "protected_do_not_delete_without_separate_proof": [
+    "backend/alembic/versions/* (migrations/schema history)",
+    "backend/config/tools|payloads|prompts/*.yaml + SIGNATURES (signed catalogs)",
+    "backend/src/orchestration/prompts/**/*.j2 (runtime prompts)",
+    "backend/src/pipeline/contracts/{finding_dto,tool_job,phase_io,_placeholders}.py (100+ consumers)",
+    "backend/src/llm/{facade,task_router,cost_tracker,phase_routing,adapters,router,whiterabbitneo_adapter,...} (scan hot path)",
+    "backend/src/llm_gateway/{app,router,health,provider_clients,policy_enforcer,usage_ledger,redaction}.py (Helm-deployed sidecar)",
+    "backend/src/playbooks/* (web_workbench + reports dependency)",
+    "LICENSE*, legal, CI/security policies, deployment manifests, test fixtures"
+  ]
+}

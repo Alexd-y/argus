@@ -1,0 +1,28 @@
+{
+  "schema_version": "1",
+  "stage": "BASELINE_AUDIT",
+  "generated_at": "2026-07-24T08:19:00+03:00",
+  "environment": {"python": "3.12.10", "venv": "backend/.venv", "os": "win32", "ruff": "present"},
+  "checks": [
+    {
+      "name": "ruff lint (read-only, no --fix)",
+      "command": "backend/.venv/Scripts/ruff.exe check src/ --statistics --exit-zero",
+      "cwd": "backend",
+      "result": "178 errors",
+      "breakdown": {"F401_unused_import": 129, "F841_unused_variable": 28, "F541_fstring_no_placeholder": 10, "F821_undefined_name": 5, "invalid_syntax": 2, "E741_ambiguous_name": 2, "F811_redefined": 2},
+      "notable": [
+        "src/governance/safety/monitor.py:79,126 invalid-syntax (module unimportable)",
+        "src/orchestration/state_machine.py:921 F821 settings (runtime NameError, swallowed)",
+        "src/orchestration/state_machine.py:707 F821 Any (latent local annotation)",
+        "src/reports/valhalla_report.py:1706 F821 screens",
+        "src/workers/binary/dynamic/lab.py:49,130 F821 Path"
+      ],
+      "status": "PROVEN"
+    }
+  ],
+  "blocked": [
+    {"name": "full pytest suite", "reason": "Not run during baseline: heavy suite + many markers require Docker/Postgres/Redis/MinIO which must not be started per constraints. Targeted tests to be run per-batch during IMPLEMENTATION.", "status": "BLOCKED"},
+    {"name": "pytest --collect-only", "reason": "Deferred; monitor.py invalid-syntax will error collection for its test module. Will run targeted collection before/after any change.", "status": "BLOCKED"}
+  ],
+  "notes": "No tests executed that require live services. Lint run is read-only and did not modify files."
+}
