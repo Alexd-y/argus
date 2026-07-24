@@ -1,12 +1,13 @@
-"""Stage-specific MCP policy for Recon Stage 1 — unrestricted pentest operations.
+"""Stage-specific MCP policy for Recon — fail-closed tool allowlist.
 
-All tools, operations, payloads, and destructive actions are authorized.
-WRB (WhiteRabbitNeo V3) orchestrates all commands, payloads, and exploitation.
+The LLM (WhiteRabbitNeo) proposes commands/payloads, but this deterministic
+policy is the authority: only allowlisted binaries per operation category run,
+argv[0] must be a bare binary name (no path), shell metacharacters are rejected,
+and password-audit tools require explicit double opt-in. (SEC-009 restoration.)
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
@@ -610,39 +611,37 @@ KAL_CATEGORY_ALLOWED_BINARIES: dict[str, frozenset[str]] = {
     "js_analysis": frozenset({"linkfinder", "unfurl"}),
     "asn_mapping": frozenset({"asnmap"}),
     "web_screenshots": frozenset({"gowitness"}),
-    "injection_testing": frozenset({"dalfox", "xsstrike", "sqlmap", "commix", "sstimap", "nosqli", "graphql-cop", "pp-finder"}),
-    "cloud_security": frozenset({"prowler", "scoutsuite", "cloudsploit", "trivy"}),
-    "container_security": frozenset({"trivy", "grype", "dockle", "kube-bench", "syft"}),
-    "exploitation": frozenset({"metasploit", "sqlmap", "nuclei", "hydra", "commix", "dalfox", "xsstrike", "ffuf"}),
-    "post_exploitation": frozenset({"bloodhound", "enum4linux", "rpcclient", "crackmapexec", "impacket-secretsdump", "kerbrute"}),
-    "lateral_movement": frozenset({"crackmapexec", "impacket-secretsdump", "bloodhound", "psexec", "wmiexec"}),
-    "privilege_escalation": frozenset({"linpeas", "winpeas", "bloodhound", "mimikatz", "privilege_escalation_checker"}),
-    "credential_harvesting": frozenset({"mimikatz", "secretsdump", "hashcat", "john", "bloodhound"}),
-    "data_exfiltration": frozenset({"curl", "wget", "nc", "socat", "python3"}),
-    "persistence": frozenset({"crontab", "systemctl", "schtasks", "powershell", "bash"}),
-    "evasion": frozenset({"proxychains", "tor", "ssh", "openssl"}),
 }
 
-KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers", "enc", "dgst", "req", "x509", "rsa", "genrsa", "genpkey"})
+KAL_OPENSSL_ALLOWED_SUBCOMMANDS = frozenset({"s_client", "s_time", "version", "ciphers"})
 
-KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum", "intel", "db", "track"})
+# KAL-005 — amass: only vetted passive subcommand (fail-closed)
+KAL_AMASS_ALLOWED_SUBCOMMANDS = frozenset({"enum"})
 
+# RECON-002 — theHarvester ``-b`` sources allowed in dns_enumeration (passive subdomain recon)
 THEHARVESTER_RECON_B_SOURCES_CAP: frozenset[str] = frozenset({
-    "anubis", "bufferoverun", "crtsh", "hackertarget", "omnisint", "otx",
-    "pentesttools", "projectdiscovery", "rapiddns", "sublist3r", "threatminer",
-    "urlscan", "bing", "google", "duckduckgo", "baidu", "yahoo", "yandex",
-    "shodan", "censys", "hunter", "fullhunt", "virustotal", "securitytrails",
-    "certspotter", "threatcrowd", "alienvault", "binaryedge", "fofa", "github",
-    "intelx", "leakix", "netcraft", "pastebin", "pulsedive", "spyse", "twitter",
-    "zoomeye", "dnsdb", "dogpile", "qwant", "linkedin", "vhost", "exalead",
-    "sitedossier", "torsearch", "waybackmachine", "wigle", "all",
+    "anubis",
+    "bufferoverun",
+    "crtsh",
+    "hackertarget",
+    "omnisint",
+    "otx",
+    "pentesttools",
+    "projectdiscovery",
+    "rapiddns",
+    "sublist3r",
+    "threatminer",
+    "urlscan",
 })
 
-# NO injection pattern blocking — shell metacharacters are required for pentest payloads
-_KAL_ARGV_INJECTION_PATTERN = re.compile(r"")
+# SEC-009 — reject shell metacharacters in any argv segment (defense in depth; no shell is used).
+_KAL_ARGV_INJECTION_PATTERN = re.compile(
+    r"[`$]|\$\(|;\s*|\|\s*|&&\s*|\n|\r|<\(|>\("
+)
 
 
 def normalize_kal_binary(argv0: str) -> str:
+    """First argv segment basename, lowercase; testssl.sh kept distinct."""
     raw = str(argv0 or "").strip()
     if not raw:
         return ""
@@ -653,7 +652,11 @@ def normalize_kal_binary(argv0: str) -> str:
 
 
 def kal_argv_has_injection_risk(argv: list[str]) -> bool:
-    """Always False — shell metacharacters are required for pentest payloads."""
+    """True if any argument looks like shell metacharacters (list execution; no shell)."""
+    for a in argv:
+        s = str(a)
+        if _KAL_ARGV_INJECTION_PATTERN.search(s):
+            return True
     return False
 
 
@@ -664,14 +667,188 @@ def evaluate_kal_mcp_policy(
     password_audit_opt_in: bool,
     server_password_audit_enabled: bool,
 ) -> McpPolicyDecision:
-    """ALL categories, tools, and argv allowed — unrestricted pentest authorization."""
+    """Fail-closed: category must map to tool; hydra/medusa only for password_audit + double opt-in.
+
+    SEC-009: restores allowlist enforcement removed by an "unrestricted" commit.
+    ``argv[0]`` must be a bare binary name on the category allowlist (path
+    separators are rejected so ``/tmp/evil`` cannot masquerade as an allowed
+    tool while the executor runs the full path).
+    """
     cat = str(category or "").strip().lower().replace("-", "_")
+    if cat not in KAL_OPERATION_CATEGORIES:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="unknown_category",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
     if not argv or not isinstance(argv, list):
-        return McpPolicyDecision(allowed=False, reason="empty_argv", policy_id=KAL_MCP_POLICY_ID)
+        return McpPolicyDecision(
+            allowed=False,
+            reason="empty_argv",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+    if kal_argv_has_injection_risk(argv):
+        return McpPolicyDecision(
+            allowed=False,
+            reason="argv_injection_pattern",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+
+    # SEC-009: reject an argv[0] that carries a path — the executor runs the raw
+    # argv, so a bare basename check alone would let /tmp/evil bypass the allowlist.
+    raw_argv0 = str(argv[0] or "")
+    if "/" in raw_argv0 or "\\" in raw_argv0:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="binary_path_not_allowed",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
 
     binary = normalize_kal_binary(argv[0])
     if not binary:
-        return McpPolicyDecision(allowed=False, reason="missing_binary", policy_id=KAL_MCP_POLICY_ID)
+        return McpPolicyDecision(
+            allowed=False,
+            reason="missing_binary",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
 
-    # Allow any tool in any category
-    return McpPolicyDecision(allowed=True, reason="allowed", policy_id=KAL_MCP_POLICY_ID)
+    allowed_for_cat = KAL_CATEGORY_ALLOWED_BINARIES.get(cat, frozenset())
+    if binary not in allowed_for_cat:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="tool_not_allowed_for_category",
+            policy_id=KAL_MCP_POLICY_ID,
+        )
+
+    if binary in ("hydra", "medusa"):
+        if cat != "password_audit":
+            return McpPolicyDecision(
+                allowed=False,
+                reason="password_tools_only_in_password_audit_category",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if not password_audit_opt_in or not server_password_audit_enabled:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="password_audit_opt_in_required",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "openssl":
+        if len(argv) < 2:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="openssl_missing_subcommand",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        sub = str(argv[1]).strip().lower()
+        if sub not in KAL_OPENSSL_ALLOWED_SUBCOMMANDS:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="openssl_subcommand_not_allowed",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "amass":
+        if len(argv) < 2:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="amass_missing_subcommand",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        sub_amass = str(argv[1]).strip().lower()
+        if sub_amass not in KAL_AMASS_ALLOWED_SUBCOMMANDS:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="amass_subcommand_not_allowed",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "theharvester":
+        if "-d" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_domain_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        d_idx = argv.index("-d")
+        if d_idx + 1 >= len(argv) or not str(argv[d_idx + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_domain_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if "-b" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_sources_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        b_idx = argv.index("-b")
+        if b_idx + 1 >= len(argv):
+            return McpPolicyDecision(
+                allowed=False,
+                reason="theharvester_missing_sources_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        raw_b = str(argv[b_idx + 1])
+        for seg in raw_b.split(","):
+            s = seg.strip().lower()
+            if not s:
+                continue
+            if s not in THEHARVESTER_RECON_B_SOURCES_CAP:
+                return McpPolicyDecision(
+                    allowed=False,
+                    reason="theharvester_source_not_allowed",
+                    policy_id=KAL_MCP_POLICY_ID,
+                )
+
+    if binary == "findomain":
+        if "-t" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="findomain_missing_target_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        t_idx = argv.index("-t")
+        if t_idx + 1 >= len(argv) or not str(argv[t_idx + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="findomain_missing_target_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "assetfinder":
+        if "--subs-only" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="assetfinder_subs_only_required",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        if len(argv) < 3:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="assetfinder_missing_domain",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    if binary == "subfinder":
+        if "-d" not in argv:
+            return McpPolicyDecision(
+                allowed=False,
+                reason="subfinder_missing_domain_flag",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+        di = argv.index("-d")
+        if di + 1 >= len(argv) or not str(argv[di + 1]).strip():
+            return McpPolicyDecision(
+                allowed=False,
+                reason="subfinder_missing_domain_value",
+                policy_id=KAL_MCP_POLICY_ID,
+            )
+
+    return McpPolicyDecision(
+        allowed=True,
+        reason="allowed",
+        policy_id=KAL_MCP_POLICY_ID,
+    )
