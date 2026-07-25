@@ -57,14 +57,27 @@ Under `FORCE` this query returns no rows for every user, so **all logins fail**
 with "invalid credentials" and no error is logged.
 
 The tenant is not known before authentication, so this cannot be fixed by simply
-setting the GUC. Pick one before applying `052`:
+setting the GUC. Options considered:
 
-- [ ] Exempt `users` from the FORCE set and keep tenant scoping in the query, **or**
-- [ ] Add a policy allowing lookup by email/id without a tenant context, **or**
+- [ ] Exempt `users` from the FORCE set and keep tenant scoping in the query, or
+- [x] **Add a policy allowing lookup without a tenant context** — chosen, or
 - [ ] Move authentication to a dedicated role marked `BYPASSRLS`.
 
-Same question applies to `src/auth/admin_users.py` (`bootstrap_admin_user_if_configured`,
-runs at app startup) and `src/auth/admin_dependencies.py`.
+**Resolved by migration `053_users_auth_bootstrap_policy.py`.** It adds a
+permissive **SELECT-only** policy `users_auth_bootstrap` on `users`, satisfied
+only when `app.current_tenant_id` is unset (`IS NULL`). PostgreSQL OR-combines
+permissive policies, so:
+
+- pre-auth login (no GUC) can read `users` → login works under `FORCE`;
+- tenant-scoped sessions (GUC set) still match only `tenant_isolation` → per-tenant
+  isolation preserved;
+- INSERT / UPDATE / DELETE are untouched (only the `FOR ALL` `tenant_isolation`
+  governs writes) → writes remain strictly tenant-bound.
+
+`src/auth/admin_users.py` (`bootstrap_admin_user_if_configured`) and
+`src/auth/admin_dependencies.py` operate on `admin_users` / `admin_sessions`,
+**not** `users`, and neither table is in the `052` FORCE set — so the admin path
+is unaffected by `052` and needs no bootstrap policy.
 
 ### 3.2 Modules that open a session and never set a tenant
 
@@ -76,9 +89,9 @@ forced table, or (b) intentionally cross-tenant and therefore needing an explici
 
 | Module | Triage |
 |--------|--------|
-| `src/api/routers/auth.py` | P0 — see 3.1, touches `users` |
-| `src/auth/admin_users.py` | P0 — startup bootstrap, touches `users` |
-| `src/auth/admin_dependencies.py` | P0 — admin session resolution |
+| `src/api/routers/auth.py` | RESOLVED — login read covered by `053` bootstrap policy (§3.1) |
+| `src/auth/admin_users.py` | N/A — writes `admin_users`, not in `052` FORCE set |
+| `src/auth/admin_dependencies.py` | N/A — reads `admin_users`/`admin_sessions`, not forced |
 | `src/api/routers/admin_emergency.py` | Cross-tenant admin — needs `BYPASSRLS` decision |
 | `src/api/routers/admin_schedules.py` | Cross-tenant admin — needs `BYPASSRLS` decision |
 | `src/api/routers/admin_webhook_dlq.py` | Cross-tenant admin — needs `BYPASSRLS` decision |
@@ -176,7 +189,7 @@ returning empty results, or workers begin failing `WITH CHECK`.
 
 ## 7. Sign-off
 
-- [ ] 3.1 resolved (login path has a decided, implemented strategy)
+- [x] 3.1 resolved (login path has a decided, implemented strategy — migration `053`)
 - [ ] 3.2 table fully triaged
 - [ ] 3.3 worker/beat/migration paths confirmed
 - [ ] Section 4 staging validation passed
