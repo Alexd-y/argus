@@ -56,5 +56,19 @@
       {"file": "backend/tests/unit/api/test_scan_findings_export.py", "change": "mock_finding fixture now sets cvss_vector / exploit_summary (both str|None on the model); stale fixture drift surfaced once the suite started running."}
     ]
   },
-  "notes": "Baseline lint run was read-only. Batch G executed the offline suite for the first time after fixing the global-skip defect (TEST-002)."
+  "batch_H": {
+    "stage": "HARDENING",
+    "at": "2026-07-25",
+    "scope": "SEC-002 login unblock (migration 053 + RLS test), fail-closed sandbox/policy regression tests, prompt-injection boundary hardening (F-H11)",
+    "targeted": [
+      {"command": "ruff check src/orchestration/prompt_injection_defense.py alembic/versions/053_users_auth_bootstrap_policy.py tests/unit/security tests/integration/migrations/test_053_force_rls_login.py", "result": "All checks passed"},
+      {"command": "pytest tests/unit/security", "result": "45 passed", "note": "32 fail-closed execution tests (allowlist + shell=False) + 13 prompt-injection defense tests (un-spoofable boundary + provenance). Offline (unit/ prefix), run in the default dev suite."},
+      {"command": "pytest tests/integration/migrations/test_alembic_smoke.py", "result": "4 passed, 4 skipped", "note": "Full migration chain incl. 053 round-trips on SQLite (053 is a no-op off Postgres); Postgres round-trip layer skips without DATABASE_URL."},
+      {"command": "pytest tests/integration/migrations/test_053_force_rls_login.py", "result": "4 skipped", "note": "requires_postgres — asserts FORCE RLS + bootstrap policy present, login lookup works with no tenant GUC, tenant-scoped isolation, and writes still fail WITH CHECK. Skips cleanly offline; runs in CI/staging with a live DATABASE_URL."},
+      {"command": "pytest tests/test_shannon_wiring.py::TestPromptInjectionDefenseWiring -o addopts=", "result": "3 passed", "note": "Backward-compat: existing defense wiring tests still green after the boundary/provenance change."}
+    ],
+    "postgres_execution_note": "The new requires_postgres RLS test could not be executed locally (Docker daemon down, no local Postgres listener on 5432/55432). It mirrors the established tests/integration/web_workbench/*_rls.py harness and is gated to run in CI/staging.",
+    "alembic_head": "053 (single head, no branch)"
+  },
+  "notes": "Baseline lint run was read-only. Batch G executed the offline suite for the first time after fixing the global-skip defect (TEST-002). Batch H unblocked SEC-002 login, added fail-closed + prompt-injection regression suites."
 }
