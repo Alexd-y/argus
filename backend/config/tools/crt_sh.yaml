@@ -20,7 +20,7 @@ command_template:
   - "sh"
   - "-c"
   - "curl -sS --fail-with-body --max-time 60 'https://crt.sh/?q=%25.{domain}&output=json' -o {out_dir}/crtsh.json"
-parse_strategy: custom
+parse_strategy: json_object
 evidence_artifacts:
   - "/out/crtsh.json"
 cwe_hints: []

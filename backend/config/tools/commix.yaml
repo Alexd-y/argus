@@ -22,7 +22,7 @@ command_template:
   - "--batch"
   - "--level"
   - "1"
-parse_strategy: discovery_text
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/commix_output.txt"
 cwe_hints:

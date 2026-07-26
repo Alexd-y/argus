@@ -35,12 +35,16 @@ is only permitted for API-key authenticated service accounts.
 
 ## Docker Socket Mount
 
-The backend and worker containers mount `/var/run/docker.sock:ro` to orchestrate
-the argus-sandbox container for security tool execution.
+The `backend`, `worker-scans`, and `worker-general` services mount
+`/var/run/docker.sock:ro` (3 mount points) to orchestrate the argus-sandbox container for
+security tool execution. The `sandbox` service itself does **not** receive the socket.
 
 ### Risk
-Read-only mount reduces but does not eliminate host escape risk.
-A compromised container with socket access can enumerate and control other containers.
+The `:ro` flag applies to the socket *file*, not to the Docker API reachable through it:
+`docker exec`, container creation, and image operations all still work over a read-only
+mounted socket. Socket access therefore remains equivalent to host-level privilege — a
+compromised container can enumerate, control, or create other containers. Treat `:ro` as
+defence-in-depth (it blocks tampering with the socket inode), never as a capability limit.
 
 ### Mitigations (production)
 - Use rootless Docker or Podman

@@ -693,6 +693,7 @@ components:
       - pdf
       - json
       - csv
+      - md
       - sarif
       - junit
       title: ReportFormat

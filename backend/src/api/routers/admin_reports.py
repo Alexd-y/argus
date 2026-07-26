@@ -353,7 +353,11 @@ async def admin_generate_report(
     try:
         from src.tasks import generate_report_task
 
-        generate_report_task.delay(str(report.id))
+        generate_report_task.delay(
+            str(report.id),
+            str(report.tenant_id),
+            str(report.scan_id) if report.scan_id else None,
+        )
         logger.info(
             "admin.report_generate.task_queued",
             extra={
@@ -508,7 +512,11 @@ async def admin_regenerate_report(
     try:
         from src.tasks import generate_report_task
 
-        generate_report_task.delay(str(new_report.id))
+        generate_report_task.delay(
+            str(new_report.id),
+            str(new_report.tenant_id),
+            str(new_report.scan_id) if new_report.scan_id else None,
+        )
     except Exception:
         logger.warning(
             "admin.report_regenerate.task_enqueue_failed",

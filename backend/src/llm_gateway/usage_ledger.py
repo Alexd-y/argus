@@ -75,10 +75,11 @@ async def _persist_to_db(
 ) -> None:
     """Persist invocation record to gateway_invocations table (fire-and-forget)."""
     try:
-        from src.db.session import async_session_factory
+        from src.db.session import async_session_factory, set_session_tenant
         from src.db.models import GatewayInvocation
 
         async with async_session_factory() as session:
+            await set_session_tenant(session, tenant_id)
             invocation = GatewayInvocation(
                 id=str(uuid.uuid4()),
                 tenant_id=tenant_id,

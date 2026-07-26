@@ -7,8 +7,9 @@ The MCP server enforces strict tenant isolation:
 * Caller-supplied ``tenant_id`` arguments (e.g. ``approvals.list(tenant_id=...)``)
   are validated against the authenticated tenant; a mismatch raises
   :class:`TenantMismatchError` instead of silently downgrading the scope.
-* The legacy ``X-Tenant-ID`` header is honoured but only as a *narrowing*
-  hint — when present it must equal the authenticated tenant.
+* The ``X-Tenant-ID`` header can only *confirm* the tenant a credential is
+  bound to — :func:`src.mcp.auth.authenticate` rejects a disagreeing value, so
+  ``auth.tenant_id`` is always credential-derived by the time it reaches here.
 
 This module is dependency-free (no FastAPI / no DB) so it stays usable from
 both transports.

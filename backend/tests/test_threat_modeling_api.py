@@ -1,6 +1,6 @@
 """API contract tests for TM-008 (Threat Modeling API/CLI).
 
-TestClient: POST trigger 400 when Stage 1 not ready, 201/200 when recon exists.
+TestClient: POST trigger maps pipeline errors to 400, 201/200 when recon exists.
 GET input-bundle, ai-traces, mcp-traces structure. GET artifacts download 404 for unknown type.
 Uses mocks for dependency_check, pipeline, artifact_service.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from src.recon.threat_modeling.dependency_check import BLOCKED_MISSING_RECON
+from src.recon.threat_modeling.dependency_check import MISSING_RECON_NOTICE
 from src.recon.threat_modeling.pipeline import ThreatModelPipelineError
 from starlette.testclient import TestClient
 
@@ -92,10 +92,10 @@ def client_with_db(app, mock_db_session):
 class TestTriggerEndpoint:
     """POST /recon/engagements/{id}/threat-modeling/trigger."""
 
-    def test_trigger_returns_400_when_stage1_not_ready(
+    def test_trigger_returns_400_when_pipeline_raises_error(
         self, client_with_db: TestClient
     ) -> None:
-        """POST trigger returns 400 with blocked_missing_recon when Stage 1 not ready."""
+        """POST trigger maps ThreatModelPipelineError to 400 with its reason in detail."""
         engagement_id = "eng-001"
         url = f"{API_BASE}/{engagement_id}/threat-modeling/trigger"
 
@@ -117,7 +117,7 @@ class TestTriggerEndpoint:
                 "src.api.routers.recon.threat_modeling.execute_threat_modeling_run",
                 new_callable=AsyncMock,
                 side_effect=ThreatModelPipelineError(
-                    "Stage 1 not ready", blocking_reason=BLOCKED_MISSING_RECON
+                    "Stage 1 not ready", blocking_reason=MISSING_RECON_NOTICE
                 ),
             ),
         ):
@@ -126,7 +126,7 @@ class TestTriggerEndpoint:
         assert response.status_code == 400
         data = response.json()
         assert "detail" in data
-        assert BLOCKED_MISSING_RECON in data["detail"]
+        assert MISSING_RECON_NOTICE in data["detail"]
 
     def test_trigger_returns_201_when_recon_dir_exists(
         self, client_with_db: TestClient, tmp_path: Path

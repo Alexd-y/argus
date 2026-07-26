@@ -5,7 +5,9 @@ Cloud providers (DeepSeek, OpenAI, Perplexity) serve only as supplements
 for report formatting and OSINT enrichment.
 
 Routing logic:
-  - Pentest tasks (ORCHESTRATION, THREAT_MODELING, …) → WhiteRabbitNeo ONLY
+  - Pentest tasks (ORCHESTRATION, THREAT_MODELING, …) → WhiteRabbitNeo ONLY.
+    If WRB is unavailable OR not configured, these tasks fail closed (RuntimeError);
+    cloud fallback is never permitted (local-only confidentiality invariant).
   - Report tasks (REPORT_SECTION, EXECUTIVE_SUMMARY, COST_SUMMARY) → WRB first, cloud fallback
   - OSINT tasks (PERPLEXITY_OSINT) → Perplexity directly (WRB has no internet)
   - No task specified → legacy generic router
@@ -27,6 +29,8 @@ import time
 import warnings
 
 import httpx
+
+from src.governance.safety.monitor import get_safety_monitor
 
 from src.llm.adapters import _get_key
 from src.llm.phase_routing import PhaseRoute, get_phase_route
@@ -312,6 +316,55 @@ async def _execute_phase_route(
     return text
 
 
+def _safety_monitor_enabled() -> bool:
+    val = (os.environ.get("SAFETY_MONITOR_ENABLED") or "true").strip().lower()
+    return val in {"true", "1", "yes", "on"}
+
+
+def _safety_check_prompt(prompt: str, task: str) -> None:
+    if not _safety_monitor_enabled():
+        return
+    try:
+        monitor = get_safety_monitor()
+        alert = monitor.check_prompt(prompt, task=task)
+        if alert is not None:
+            logger.warning(
+                "SafetyMonitor alert (prompt)",
+                extra={
+                    "event": "llm_safety_monitor_prompt_alert",
+                    "alert_id": alert.id,
+                    "alert_type": alert.alert_type,
+                    "severity": alert.severity,
+                    "task": task,
+                    "description": alert.description,
+                },
+            )
+    except Exception:
+        logger.warning("SafetyMonitor error during prompt check", exc_info=True)
+
+
+def _safety_check_response(response: str, task: str) -> None:
+    if not _safety_monitor_enabled():
+        return
+    try:
+        monitor = get_safety_monitor()
+        alert = monitor.check_response(response, task=task)
+        if alert is not None:
+            logger.warning(
+                "SafetyMonitor alert (response)",
+                extra={
+                    "event": "llm_safety_monitor_response_alert",
+                    "alert_id": alert.id,
+                    "alert_type": alert.alert_type,
+                    "severity": alert.severity,
+                    "task": task,
+                    "description": alert.description,
+                },
+            )
+    except Exception:
+        logger.warning("SafetyMonitor error during response check", exc_info=True)
+
+
 async def call_llm_unified(
     system_prompt: str,
     user_prompt: str,
@@ -324,7 +377,9 @@ async def call_llm_unified(
     """Primary async entry point for every LLM call in ARGUS.
 
     Routing (WRB-001):
-      - Pentest tasks → WhiteRabbitNeo ONLY (local, $0, no cloud fallback)
+      - Pentest tasks → WhiteRabbitNeo ONLY (local, $0). Fails closed with a
+        RuntimeError when WRB is unavailable or not configured — cloud fallback
+        is never permitted for analysis tasks.
       - Report tasks → WhiteRabbitNeo first, cloud fallback if unavailable
       - OSINT tasks → Perplexity directly (WRB has no internet access)
       - No task → legacy generic router
@@ -334,6 +389,8 @@ async def call_llm_unified(
 
     Returns the model's text response.
     """
+    _safety_check_prompt(user_prompt, task.value if task else "none")
+
     wrb = _get_wrb_adapter()
 
     if task is None:
@@ -363,34 +420,41 @@ async def call_llm_unified(
                 input_tokens,
                 output_tokens,
             )
+        _safety_check_response(result, task.value if task else "none")
         return result
 
     # OSINT tasks — Perplexity directly (internet access required)
     if task == LLMTask.PERPLEXITY_OSINT:
-        return await _call_via_task_router(
+        result = await _call_via_task_router(
             system_prompt, user_prompt, task,
             scan_id=scan_id, phase=phase,
         )
+        _safety_check_response(result, task.value)
+        return result
 
     # Phase-aware routing (opt-in via ARGUS_PHASE_ROUTING_ENABLED). When a route
     # exists for this phase, it fully governs primary/fallback ordering and
     # supersedes the legacy WRB-first / cloud-preferred blocks below.
     _route = get_phase_route(phase)
     if _route is not None:
-        return await _execute_phase_route(
+        result = await _execute_phase_route(
             _route, system_prompt, user_prompt, task,
             scan_id=scan_id, phase=phase,
         )
+        _safety_check_response(result, task.value)
+        return result
 
     # Exploit / PoC payload generation — prefer a cloud model for valid-JSON output.
     if task in _CLOUD_PREFERRED_TASKS:
         mode = _exploit_llm_mode()
         if mode != "wrb" and _any_cloud_key_configured():
             try:
-                return await _call_via_task_router(
+                result = await _call_via_task_router(
                     system_prompt, user_prompt, task,
                     scan_id=scan_id, phase=phase,
                 )
+                _safety_check_response(result, task.value)
+                return result
             except Exception as exc:
                 logger.warning(
                     "exploit_cloud_llm_failed",
@@ -416,10 +480,12 @@ async def call_llm_unified(
         semaphore = _get_wrb_semaphore()
         async with semaphore:
             try:
-                return await _call_via_whiterabbitneo(
+                result = await _call_via_whiterabbitneo(
                     system_prompt, user_prompt,
                     task=task, scan_id=scan_id, phase=phase,
                 )
+                _safety_check_response(result, task.value)
+                return result
             except Exception as exc:
                 logger.warning(
                     "whiterabbitneo_call_failed",
@@ -439,10 +505,12 @@ async def call_llm_unified(
                             "task": task.value,
                         },
                     )
-                    return await _call_via_task_router(
+                    result = await _call_via_task_router(
                         system_prompt, user_prompt, task,
                         scan_id=scan_id, phase=phase,
                     )
+                    _safety_check_response(result, task.value)
+                    return result
                 net_hint = ""
                 if isinstance(exc, httpx.TimeoutException):
                     net_hint = (
@@ -458,17 +526,41 @@ async def call_llm_unified(
                     "Ensure WRB container is running and responsive."
                 ) from exc
 
-    # WRB not configured: legacy behaviour — use cloud task_router
-    logger.info(
-        "whiterabbitneo_not_configured_using_cloud_fallback",
+    # WRB not configured. Report-supplement tasks may still use cloud providers
+    # (formatting only — no sensitive pentest data). Analysis tasks MUST fail
+    # closed: silently shipping target details, discovered findings, or
+    # exploitation reasoning to a cloud provider would violate the local-only
+    # confidentiality invariant (WRB-001) that pentest analysis never leaves the
+    # box. Exploit/PoC tasks reach this point only when no cloud path applied
+    # earlier (no key, or ARGUS_EXPLOIT_LLM=wrb), so they fail closed too.
+    if task in _CLOUD_FALLBACK_TASKS:
+        logger.info(
+            "whiterabbitneo_not_configured_using_cloud_fallback",
+            extra={
+                "event": "whiterabbitneo_not_configured",
+                "task": task.value,
+            },
+        )
+        result = await _call_via_task_router(
+            system_prompt, user_prompt, task,
+            scan_id=scan_id, phase=phase,
+        )
+        _safety_check_response(result, task.value)
+        return result
+
+    logger.error(
+        "whiterabbitneo_not_configured_fail_closed",
         extra={
-            "event": "whiterabbitneo_not_configured",
+            "event": "whiterabbitneo_not_configured_fail_closed",
             "task": task.value,
+            "phase": phase,
         },
     )
-    return await _call_via_task_router(
-        system_prompt, user_prompt, task,
-        scan_id=scan_id, phase=phase,
+    raise RuntimeError(
+        f"WhiteRabbitNeo is not configured, but pentest analysis task "
+        f"{task.value} requires it. Cloud fallback is not permitted for "
+        f"analysis tasks — pentest analysis must stay local (WRB-001). "
+        f"Set WHITERABBITNEO_URL so the local model is reachable."
     )
 
 

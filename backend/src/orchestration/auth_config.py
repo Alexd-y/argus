@@ -146,7 +146,7 @@ class AuthConfig(BaseModel):
           credentials:
             username: "test@example.com"
             password: "s3cret"
-            totp_secret: "JBSWY3DPEHPK3PXP"
+            totp_secret: "<your TOTP secret>"  # Note: "JBSWY3DPEHPK3PXP" is an RFC 6238 test vector, not a real secret
           login_flow:
             - instruction: "Type $username into the email field"
             - instruction: "Type $password into the password field"

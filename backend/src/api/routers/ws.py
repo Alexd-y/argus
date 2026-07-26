@@ -13,6 +13,10 @@ Architecture:
   ScanEventBus (publish) → Redis pub/sub → PubSubBridge → WebSocket connections
   ScanEventBus (publish) → in-memory subscribers → WebSocket connections
 
+Both endpoints enforce the SEC-001 tenant model at handshake time via
+``_resolve_ws_tenant``: the tenant comes from the authenticated principal, never
+from a client-supplied ``X-Tenant-ID``/``tenant_id`` value alone.
+
 No external dependencies beyond ``websockets`` (optional, for client testing).
 Server-side uses FastAPI's built-in ``WebSocket`` support (Starlette).
 """
@@ -26,11 +30,11 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi.security import HTTPAuthorizationCredentials
 
-from src.core.config import settings
-from src.core.tenant import get_current_tenant_id
+from src.core.auth import AuthContext, get_optional_auth
 from src.db.session import async_session_factory, set_session_tenant
-from src.orchestration.scan_events import ScanEvent, ScanEventBus
+from src.orchestration.scan_events import ChatMessage, ScanEvent, ScanEventBus
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,11 @@ _WS_PING_INTERVAL_SEC = 15
 _WS_POLL_INTERVAL_SEC = 1.5
 _WS_MAX_WAIT_SEC = 30 * 60
 _WS_MAX_MESSAGES_DEFAULT = 10000
+
+# Application-specific handshake denial codes (RFC 6455 §7.4.2 private range),
+# mirroring the 401/403 the HTTP endpoints return.
+_WS_CLOSE_UNAUTHORIZED = 4401
+_WS_CLOSE_FORBIDDEN = 4403
 
 
 class _ConnectionManager:
@@ -83,6 +92,82 @@ class _ConnectionManager:
 
 
 _manager = _ConnectionManager()
+
+
+def _ws_credentials(ws: WebSocket) -> tuple[str | None, str | None]:
+    """Extract ``(bearer_token, api_key)`` from the handshake.
+
+    Browsers cannot attach custom headers to a WebSocket handshake, so the
+    credential is also accepted via the ``token``/``api_key`` query parameters.
+    """
+    bearer: str | None = None
+    authorization = ws.headers.get("authorization") or ""
+    if authorization.lower().startswith("bearer "):
+        bearer = authorization[len("bearer ") :].strip() or None
+    if bearer is None:
+        bearer = ws.query_params.get("token") or None
+
+    api_key = ws.headers.get("x-api-key") or ws.query_params.get("api_key") or None
+    return bearer, api_key
+
+
+async def _reject_handshake(ws: WebSocket, code: int, reason: str) -> None:
+    """Deny the handshake without accepting it."""
+    try:
+        await ws.close(code=code, reason=reason)
+    except Exception:
+        logger.debug("ws_reject_failed", extra={"close_reason": reason})
+
+
+async def _resolve_ws_tenant(
+    ws: WebSocket, scan_id: str
+) -> tuple[str, AuthContext | None] | None:
+    """Resolve the tenant for a WebSocket handshake, bound to the authenticated identity.
+
+    SEC-001 parity for the WebSocket transport: ``get_current_tenant_id`` is a
+    header-based FastAPI dependency and cannot be applied to a WebSocket route, so
+    the same decision table is reproduced here — the principal's tenant wins, a
+    disagreeing ``X-Tenant-ID`` is a cross-tenant pivot attempt, and an
+    unauthenticated handshake is always refused.
+
+    Returns ``(tenant_id, auth)``, or ``None`` when the handshake was denied — the
+    close frame has already been sent and the caller must return immediately.
+    """
+    bearer, api_key = _ws_credentials(ws)
+    credentials = (
+        HTTPAuthorizationCredentials(scheme="Bearer", credentials=bearer)
+        if bearer
+        else None
+    )
+    auth = await get_optional_auth(credentials=credentials, api_key=api_key)
+
+    raw_tenant = ws.headers.get("x-tenant-id") or ws.query_params.get("tenant_id")
+    requested_tenant = (
+        raw_tenant.strip() if raw_tenant and raw_tenant.strip() else None
+    )
+
+    if auth is not None:
+        if requested_tenant is not None and requested_tenant != auth.tenant_id:
+            logger.warning(
+                "Rejected WebSocket tenant that does not match authenticated tenant",
+                extra={
+                    "event_type": "tenant_mismatch",
+                    "scan_id": scan_id,
+                    "auth_tenant": auth.tenant_id,
+                    "requested_tenant": requested_tenant,
+                    "is_api_key": auth.is_api_key,
+                },
+            )
+            await _reject_handshake(ws, _WS_CLOSE_FORBIDDEN, "Tenant mismatch")
+            return None
+        return auth.tenant_id, auth
+
+    logger.warning(
+        "Rejected unauthenticated WebSocket handshake",
+        extra={"event_type": "ws_authentication_required", "scan_id": scan_id},
+    )
+    await _reject_handshake(ws, _WS_CLOSE_UNAUTHORIZED, "Authentication required")
+    return None
 
 
 def _filter_ws_output_data(event: str, data: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -262,13 +347,16 @@ async def _scan_event_stream(
 async def ws_scan_events(ws: WebSocket, scan_id: str) -> None:
     """WebSocket endpoint for real-time scan event streaming.
 
-    Authenticates tenant via ``X-Tenant-ID`` header (or query param
-    ``tenant_id`` for WebSocket clients that cannot set headers).
+    The tenant is derived from the authenticated principal (see
+    :func:`_resolve_ws_tenant`); the handshake is denied before ``accept()`` when
+    credentials are missing or the requested tenant disagrees with them.
     Sends the same event payloads as the SSE endpoint, as JSON frames.
     """
-    tenant_id = ws.headers.get("x-tenant-id") or ws.query_params.get(
-        "tenant_id", settings.default_tenant_id
-    )
+    resolved = await _resolve_ws_tenant(ws, scan_id)
+    if resolved is None:
+        return
+    tenant_id, _auth = resolved
+
     try:
         await ws.accept()
     except Exception:
@@ -301,12 +389,16 @@ async def ws_scan_chat(ws: WebSocket, scan_id: str) -> None:
     Message format:
       Incoming:  ``{"user_id": "...", "message": "..."}``
       Outgoing:  ``{"type": "chat", "user_id": "...", "message": "...", "timestamp": "..."}``
-    """
-    from src.orchestration.scan_events import ChatMessage
 
-    tenant_id = ws.headers.get("x-tenant-id") or ws.query_params.get(
-        "tenant_id", settings.default_tenant_id
-    )
+    Authentication follows :func:`_resolve_ws_tenant`. When the client is
+    authenticated the publishing identity is taken from the principal, so a
+    client-supplied ``user_id`` cannot be used to impersonate another operator.
+    """
+    resolved = await _resolve_ws_tenant(ws, scan_id)
+    if resolved is None:
+        return
+    tenant_id, auth = resolved
+
     try:
         await ws.accept()
     except Exception:
@@ -343,7 +435,7 @@ async def ws_scan_chat(ws: WebSocket, scan_id: str) -> None:
                     break
                 continue
 
-            user_id = data.get("user_id", "anonymous")
+            user_id = auth.user_id if auth is not None else data.get("user_id", "anonymous")
             message = data.get("message", "").strip()
             if not message:
                 continue

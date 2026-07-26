@@ -1,8 +1,9 @@
 """SEC-001 regression tests for tenant resolution (src.core.tenant).
 
-Tenant identity must come from the authenticated principal, and a mismatching
-X-Tenant-ID header must be rejected. Unauthenticated behaviour is governed by
-``require_tenant_auth``.
+Tenant identity must come from the authenticated principal, a mismatching
+X-Tenant-ID header must be rejected, and an anonymous caller must never reach a
+tenant at all — there is no flag that re-enables the old header/default-tenant
+fallback, so these tests double as a guard against re-introducing one.
 """
 
 import pytest
@@ -17,71 +18,50 @@ _TENANT_A = "11111111-1111-1111-1111-111111111111"
 _TENANT_B = "22222222-2222-2222-2222-222222222222"
 
 
-@pytest.fixture(autouse=True)
-def _permissive(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Default posture: enforcement off (backward compatible). Individual tests
-    # opt into enforcement explicitly.
-    monkeypatch.setattr(settings, "require_tenant_auth", False)
+class TestAuthenticated:
+    async def test_without_header_uses_identity(self) -> None:
+        auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
+        assert await get_current_tenant_id(auth=auth, x_tenant_id=None) == _TENANT_A
+
+    async def test_matching_header_is_accepted(self) -> None:
+        auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
+        assert (
+            await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_A) == _TENANT_A
+        )
+
+    async def test_mismatching_header_is_rejected(self) -> None:
+        auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
+        with pytest.raises(HTTPException) as exc:
+            await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_B)
+        assert exc.value.status_code == 403
+
+    async def test_blank_header_is_ignored(self) -> None:
+        auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
+        assert await get_current_tenant_id(auth=auth, x_tenant_id="   ") == _TENANT_A
+
+    async def test_default_tenant_header_still_needs_to_match(self) -> None:
+        """The default tenant id is not a magic value that bypasses the check."""
+        auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
+        with pytest.raises(HTTPException) as exc:
+            await get_current_tenant_id(auth=auth, x_tenant_id=_DEFAULT)
+        assert exc.value.status_code == 403
 
 
-async def test_authenticated_without_header_uses_identity() -> None:
-    auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-    assert await get_current_tenant_id(auth=auth, x_tenant_id=None) == _TENANT_A
+class TestUnauthenticated:
+    """No credential means no tenant — unconditionally."""
 
+    @pytest.mark.parametrize(
+        "header",
+        [None, "   ", _DEFAULT, _TENANT_B],
+        ids=["absent", "blank", "default_tenant", "foreign_tenant"],
+    )
+    async def test_always_401(self, header: str | None) -> None:
+        with pytest.raises(HTTPException) as exc:
+            await get_current_tenant_id(auth=None, x_tenant_id=header)
+        assert exc.value.status_code == 401
+        assert exc.value.headers is not None
+        assert exc.value.headers.get("WWW-Authenticate") == "Bearer"
 
-async def test_authenticated_matching_header_is_accepted() -> None:
-    auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-    assert await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_A) == _TENANT_A
-
-
-async def test_authenticated_mismatching_header_is_rejected() -> None:
-    auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-    with pytest.raises(HTTPException) as exc:
-        await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_B)
-    assert exc.value.status_code == 403
-
-
-async def test_authenticated_ignores_blank_header() -> None:
-    auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-    assert await get_current_tenant_id(auth=auth, x_tenant_id="   ") == _TENANT_A
-
-
-async def test_unauthenticated_no_header_returns_default() -> None:
-    assert await get_current_tenant_id(auth=None, x_tenant_id=None) == _DEFAULT
-
-
-async def test_unauthenticated_default_header_returns_default() -> None:
-    assert await get_current_tenant_id(auth=None, x_tenant_id=_DEFAULT) == _DEFAULT
-
-
-async def test_unauthenticated_foreign_header_permissive_legacy() -> None:
-    # Enforcement off: legacy behaviour preserved (non-breaking) but logged.
-    assert await get_current_tenant_id(auth=None, x_tenant_id=_TENANT_B) == _TENANT_B
-
-
-async def test_unauthenticated_foreign_header_enforced_401(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "require_tenant_auth", True)
-    with pytest.raises(HTTPException) as exc:
-        await get_current_tenant_id(auth=None, x_tenant_id=_TENANT_B)
-    assert exc.value.status_code == 401
-
-
-async def test_unauthenticated_enforced_requires_auth(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "require_tenant_auth", True)
-    with pytest.raises(HTTPException) as exc:
-        await get_current_tenant_id(auth=None, x_tenant_id=None)
-    assert exc.value.status_code == 401
-
-
-async def test_authenticated_mismatch_rejected_even_when_enforced(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "require_tenant_auth", True)
-    auth = AuthContext(user_id="u", tenant_id=_TENANT_A)
-    with pytest.raises(HTTPException) as exc:
-        await get_current_tenant_id(auth=auth, x_tenant_id=_TENANT_B)
-    assert exc.value.status_code == 403
+    async def test_no_opt_out_flag_exists(self) -> None:
+        """``require_tenant_auth`` was removed; an insecure config is unrepresentable."""
+        assert not hasattr(settings, "require_tenant_auth")

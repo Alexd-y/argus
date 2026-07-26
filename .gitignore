@@ -75,3 +75,37 @@ training_data/repos_cache/
 
 # Codex/agent working artifacts (ephemeral review dumps)
 .codex-work/
+
+.argus_validate_logs
+.argus-audit
+.claude
+.cursor
+.opencode
+.vscode
+ai_docs
+Backlog
+docs
+
+
+AGENTS.md
+ARGUS_AUTHORIZED_WAF_VALIDATION_PROMPT.md
+argus_implementation_prompt_v5.md
+argus_implementation_prompt_v5.md
+argus_v5_followup_cursor_prompt.md
+argus_v5_followup_cursor_prompt.md
+argus_v5_followup_2_cursor_prompt.md
+CHANGELOG.md
+CLAUDE.md
+codex.md
+COMPLETION-SUMMARY.md
+CURSOR_ARGUS_FULL_AUDIT_PROMPT_2.md
+CURSOR_ARGUS_FULL_AUDIT_PROMPT.md
+opencode.json
+README-REPORT.md
+REPORT_ENHANCEMENT_PLAN.md
+requirements-test.txt
+Web_interface.md
+z_analyze.md
+Анализ_архитектуры_ARGUS.md
+Развитие.md
+Развитие2.md

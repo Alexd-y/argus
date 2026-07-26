@@ -8,12 +8,17 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 ARGUS_ROOT = BACKEND_DIR.parent
 MCP_SERVER_DIR = ARGUS_ROOT / "mcp-server"
 if str(MCP_SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(MCP_SERVER_DIR))
+
+# argus_mcp depends on fastmcp, an optional MCP-server dependency not installed
+# in the default backend test environment. Skip cleanly when it is absent.
+pytest.importorskip("fastmcp")
 
 from argus_mcp import ArgusClient  # noqa: E402
 
@@ -106,8 +111,16 @@ class TestArgusClient:
         assert client._client.get.call_args[0][0] == "/api/v1/scans/scan-001"
         assert client._client.get.call_args[1]["headers"] == {"Content-Type": "application/json"}
 
-    def test_request_exception_returns_error_dict(self) -> None:
-        """On httpx.RequestError, create_scan returns error dict with error key."""
+    def test_request_exception_returns_opaque_error_dict(self) -> None:
+        """On ``httpx.RequestError`` the client returns an OPAQUE error dict.
+
+        Security invariant (``_safe_request_error``): the raw transport
+        exception must never reach the caller — it is logged server-side with a
+        correlation id and replaced by an opaque ``Internal error (ref: <id>)``
+        string. This guards against leaking backend host/port/stack detail to an
+        MCP consumer. The test therefore asserts BOTH that the error is reported
+        *and* that the underlying cause does not leak.
+        """
         req = httpx.Request("POST", "http://127.0.0.1:8000/api/v1/scans")
 
         with patch.object(ArgusClient, "__init__", _stub_init):
@@ -121,5 +134,8 @@ class TestArgusClient:
             result = client.create_scan("https://example.com")
 
         assert "error" in result
-        assert "Connection" in result["error"] or "refused" in result["error"]
-        assert result.get("status") == "error"
+        # Opaque contract: fixed prefix + correlation ref, nothing else.
+        assert result["error"].startswith("Internal error (ref: ")
+        # No transport internals leak through to the caller.
+        assert "Connection refused" not in result["error"]
+        assert "127.0.0.1" not in result["error"]

@@ -22,7 +22,7 @@ command_template:
   - "{domain}"
   - ">"
   - "{out_dir}/host.txt"
-parse_strategy: dns_zone_text
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/host.txt"
 cwe_hints: []

@@ -21,7 +21,7 @@ threat-modelling, and assessing exploitability.
 | Database | PostgreSQL + pgvector, Row-Level Security (per-tenant) |
 | Cache / broker | Redis (cache + Celery broker + redbeat schedule) |
 | Object storage | MinIO (S3-compatible; scan artifacts + reports) |
-| LLM routing | OpenRouter → OpenAI → DeepSeek → Kimi → Perplexity → local WhiteRabbitNeo (first available key) |
+| LLM routing | WhiteRabbitNeo (primary, local vLLM) for pentest analysis; cloud fallback (DeepSeek / OpenAI / Perplexity) for reporting and OSINT |
 | Tool execution | `argus-sandbox` (Kali-based) container via `docker exec` |
 | Reports | Jinja2 + WeasyPrint (LaTeX backend opt-in); SARIF/JUnit export tenant-gated |
 | Admin UI | Next.js 16 / React 19 / TypeScript |
@@ -47,7 +47,10 @@ resumes after interruption via `backend/src/orchestration/phase_resume.py`.
 | `worker-scans` | `argus.scans` | 3 |
 | `worker-general` | `argus.tools`, `argus.recon`, `argus.exploitation`, `argus.default` | 2 |
 | `worker-reports` | `argus.reports` | 1 |
+| `worker-intruder` | `argus.intruder.highvol` | 2 |
 
+Queues `argus.intel` and `argus.notifications` are consumed by the beat process for
+scheduled housekeeping. The complete routing table defines 9 queues total.
 The Celery app is `backend/src/celery_app.py`. Scheduled tasks (daily EPSS/KEV
 refresh, DLQ sweep) use celery-redbeat, hydrated from DB on beat startup.
 
@@ -325,9 +328,9 @@ exhaustive. Detail in `docs/tool-coverage-matrix.md`.
 
 ### 9. LLM orchestration matrix
 
-Providers: OpenRouter → OpenAI → DeepSeek → Kimi → Perplexity → local
-WhiteRabbitNeo (first available key). The code policy engine — not the LLM — is
-the execution authority. planner/critic/verifier separation exists; verifier
+Providers: WhiteRabbitNeo (local vLLM) — PRIMARY for pentest analysis; cloud
+fallback (DeepSeek / OpenAI / Perplexity) used ONLY for reporting and OSINT.
+The code policy engine — not the LLM — is the execution authority. planner/critic/verifier separation exists; verifier
 independence from planner text is **LIKELY** and should get dedicated adversarial
 tests.
 
@@ -430,3 +433,17 @@ Conservative pass: README is canonical; no human docs deleted yet because
 internal references must be re-pointed first (prompt stage 11.6/11.7). Per-file
 classification and actions: `.argus-audit/document-merge-map.json`. The audit
 prompt itself is retained until the merge is approved and complete.
+
+---
+
+## Audit Summary (2026-07)
+
+- **8 phases verified** end-to-end: source_analysis → recon → quick_fuzz → threat_modeling → vuln_analysis → exploitation → post_exploitation → reporting
+- **162 tools** in signed YAML catalogs, 113+ with parsers
+- **51 migrations** (Alembic)
+- **47 API routers**
+- **10 CI workflows**
+- **No shell=True** in production code paths
+- **WRB-first routing**: local WhiteRabbitNeo is primary AI for pentest analysis; cloud models for reporting only
+- **3-tier reports**: Midgard (CISO) / Asgard (security team) / Valhalla (full technical)
+- **4 Celery workers** across 10+ queues

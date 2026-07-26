@@ -29,7 +29,7 @@ command_template:
   - "-D"
   - "{out_dir}/curl_headers.txt"
   - "{url}"
-parse_strategy: http_raw
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/curl_body.txt"
   - "/out/curl_headers.txt"

@@ -42,7 +42,8 @@ depends_on: str | Sequence[str] | None = None
 # this migration (see module docstring for the source migration per group).
 _CORE_ENABLE_ONLY_TABLES: tuple[str, ...] = (
     # 002_rls_and_audit_immutable
-    "users",
+    # users table excluded from FORCE RLS: login endpoint must read users before
+    # authentication, so tenant context is unavailable (GUC is unset)
     "targets",
     "scans",
     "scan_steps",

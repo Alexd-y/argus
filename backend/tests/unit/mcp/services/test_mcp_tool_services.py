@@ -17,9 +17,11 @@ pytest.importorskip("src.mcp.services.tool_service", reason="MCP tool_service re
 
 from src.mcp.exceptions import (
     ApprovalRequiredError,
+    MCPError,
     ResourceNotFoundError,
     UpstreamServiceError,
     ValidationError,
+    is_known_error_code,
 )
 from src.mcp.schemas.tool_run import (
     ToolRiskLevel,
@@ -33,7 +35,13 @@ from src.mcp.services.tool_service import (
     reset_registry_for_tests,
     trigger_tool_run,
 )
-from src.sandbox.adapter_base import ToolCategory, ToolDescriptor, RiskLevel
+from src.sandbox.adapter_base import (
+    NetworkPolicyRef,
+    ParseStrategy,
+    RiskLevel,
+    ToolCategory,
+    ToolDescriptor,
+)
 from src.orchestration.state_machine import ScanPhase as ToolPhase
 
 
@@ -44,7 +52,7 @@ from src.orchestration.state_machine import ScanPhase as ToolPhase
 
 def _make_descriptor(
     tool_id: str,
-    category: ToolCategory = ToolCategory.RECON_PASSIVE,
+    category: ToolCategory = ToolCategory.RECON,
     phase: ToolPhase = ToolPhase.RECON,
     risk_level: RiskLevel = RiskLevel.LOW,
     requires_approval: bool = False,
@@ -56,6 +64,14 @@ def _make_descriptor(
         phase=phase,
         risk_level=risk_level,
         requires_approval=requires_approval,
+        network_policy=NetworkPolicyRef(name="recon"),
+        seccomp_profile="default.json",
+        default_timeout_s=60,
+        cpu_limit="500m",
+        memory_limit="256Mi",
+        image="argus/sandbox:test",
+        command_template=["echo", "test"],
+        parse_strategy=ParseStrategy.TEXT_LINES,
         description=f"Tool {tool_id} — for testing",
         cwe_hints=cwe_hints,
     )
@@ -98,10 +114,10 @@ class TestListCatalog:
     """Catalog listing with filters and pagination."""
 
     _DESCRIPTORS = [
-        _make_descriptor("nmap", category=ToolCategory.RECON_PASSIVE, risk_level=RiskLevel.LOW),
+        _make_descriptor("nmap", category=ToolCategory.RECON, risk_level=RiskLevel.LOW),
         _make_descriptor("nuclei", category=ToolCategory.WEB_VA, risk_level=RiskLevel.MEDIUM),
         _make_descriptor("sqlmap", category=ToolCategory.WEB_VA, risk_level=RiskLevel.HIGH, requires_approval=True),
-        _make_descriptor("ffuf", category=ToolCategory.WEB_CRAWLER, risk_level=RiskLevel.LOW),
+        _make_descriptor("ffuf", category=ToolCategory.RECON, risk_level=RiskLevel.LOW),
     ]
 
     def setup_method(self) -> None:
@@ -167,7 +183,7 @@ class TestTriggerToolRun:
     )
     _DESTRUCTIVE_TOOL = _make_descriptor(
         "hydra", risk_level=RiskLevel.DESTRUCTIVE,
-        category=ToolCategory.CREDENTIALS,
+        category=ToolCategory.AUTH,
     )
 
     def setup_method(self) -> None:
@@ -275,7 +291,7 @@ class TestGetToolRunStatus:
         from src.mcp.schemas.tool_run import ToolRunStatusResult
 
         expected = ToolRunStatusResult(
-            tool_run_id="run-abc",
+            tool_run_id="run-abc1",
             tool_id="nmap",
             status=ToolRunStatus.COMPLETED,
             finding_count=3,
@@ -285,10 +301,10 @@ class TestGetToolRunStatus:
             return expected
 
         result = get_tool_run_status(
-            tenant_id="t1", tool_run_id="run-abc", lookup=lookup
+            tenant_id="t1", tool_run_id="run-abc1", lookup=lookup
         )
         assert result is expected
-        assert result.tool_run_id == "run-abc"
+        assert result.tool_run_id == "run-abc1"
         assert result.status == ToolRunStatus.COMPLETED
         assert result.finding_count == 3
 
@@ -323,8 +339,6 @@ class TestMCPExceptionTaxonomy:
         assert "Missing scan ABC" in str(err)
 
     def test_is_known_error_code(self) -> None:
-        from src.mcp.exceptions import is_known_error_code
-
         assert is_known_error_code("mcp_auth_forbidden") is True
         assert is_known_error_code("mcp_made_up_error") is False
 

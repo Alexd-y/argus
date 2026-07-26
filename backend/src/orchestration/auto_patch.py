@@ -9,10 +9,30 @@ and verifies that patches fix the vulnerability without regressions.
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _syntax_check_argv(source_path: str, target_path: str) -> list[str] | None:
+    """Build the argv for a syntax-only check of *target_path*.
+
+    ``target_path`` is passed as its own argv element rather than interpolated into
+    an inline ``python -c`` program: *source_path* comes from finding data, and a
+    quote inside it would otherwise terminate the generated source literal and let
+    the remainder execute as code. Returns ``None`` for extensions with no checker.
+    """
+    ext = os.path.splitext(source_path)[1]
+    if ext == ".py":
+        return [sys.executable or "python", "-m", "py_compile", target_path]
+    if ext in (".js", ".ts"):
+        return ["node", "--check", target_path]
+    return None
 
 
 @dataclass
@@ -169,10 +189,6 @@ async def verify_patch_in_sandbox(
         extra={"finding_id": candidate.finding_id, "file_path": candidate.file_path},
     )
 
-    import os
-    import tempfile
-    import subprocess
-
     if not candidate.file_path or not candidate.patch_diff:
         return PatchVerificationResult(
             patch_id=candidate.finding_id,
@@ -206,13 +222,14 @@ async def verify_patch_in_sandbox(
                 pass
 
             if syntax_ok:
-                ext = os.path.splitext(candidate.file_path)[1]
-                checker = "python" if ext in (".py",) else "node" if ext in (".js", ".ts") else None
-                if checker:
+                syntax_argv = _syntax_check_argv(candidate.file_path, target_path)
+                if syntax_argv is not None:
                     try:
                         syntax_result = subprocess.run(
-                            [checker, "-c", f"compile(open(r'{target_path}').read(), '{candidate.file_path}', 'exec')" if checker == "python" else f"--check {target_path}"],
-                            capture_output=True, text=True, timeout=10,
+                            syntax_argv,
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
                         )
                         syntax_ok = syntax_result.returncode == 0
                     except Exception:
@@ -287,7 +304,7 @@ async def create_patch_pr(
         result.error = f"Branch creation failed (may already exist): {exc}"
         logger.warning("auto_patch_branch_failed", extra={"scan_id": scan_id, "branch": branch_name, "error": str(exc)})
         try:
-            branch_sha = await connector.create_branch(
+            await connector.create_branch(
                 owner, name, branch=f"{branch_name}-2", from_branch=default_branch
             )
             branch_name = f"{branch_name}-2"

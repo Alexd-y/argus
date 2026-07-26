@@ -39,13 +39,38 @@ def _decode_jwt(token: str) -> dict | None:
         return None
 
 
-def _configured_api_keys() -> list[str]:
-    """Allowlisted service API keys — settings first, ``ARGUS_API_KEYS`` fallback."""
-    keys = [k.strip() for k in settings.api_keys if k and k.strip()]
-    if keys:
-        return keys
-    raw = os.environ.get("ARGUS_API_KEYS") or ""
-    return [k.strip() for k in raw.split(",") if k.strip()]
+def _configured_api_keys() -> dict[str, str]:
+    """Allowlisted service API keys → {key: tenant_id} mapping.
+
+    Format: ``ARGUS_API_KEYS=key1,key2:tenant_uuid,key3``
+
+    * Plain key → bound to ``default_tenant_id`` (backward compat).
+    * ``key:tenant_uuid`` → bound to that tenant.
+    * ``X-Tenant-ID`` header is rejected when it disagrees with the bound
+      tenant (enforced by :func:`src.core.tenant.get_current_tenant_id`).
+
+    Checks ``settings.api_keys`` first, then ``ARGUS_API_KEYS`` env fallback.
+    """
+    raw_entries: set[str] = set()
+    for k in settings.api_keys:
+        if k and k.strip():
+            raw_entries.add(k.strip())
+    if not raw_entries:
+        raw = os.environ.get("ARGUS_API_KEYS") or ""
+        raw_entries = {k.strip() for k in raw.split(",") if k.strip()}
+
+    result: dict[str, str] = {}
+    for entry in raw_entries:
+        parts = entry.rsplit(":", 1)
+        if len(parts) == 2 and parts[1].strip():
+            key = parts[0].strip()
+            tenant_id = parts[1].strip()
+        else:
+            key = entry.strip()
+            tenant_id = settings.default_tenant_id
+        if key:
+            result[key] = tenant_id
+    return result
 
 
 def _match_api_key(candidate: str) -> AuthContext | None:
@@ -54,11 +79,11 @@ def _match_api_key(candidate: str) -> AuthContext | None:
         return None
     probe = candidate.encode("utf-8")
 
-    for known in _configured_api_keys():
-        if hmac.compare_digest(probe, known.encode("utf-8")):
+    for known_key, tenant_id in _configured_api_keys().items():
+        if hmac.compare_digest(probe, known_key.encode("utf-8")):
             return AuthContext(
                 user_id="api-key",
-                tenant_id=settings.default_tenant_id,
+                tenant_id=tenant_id,
                 is_api_key=True,
             )
 

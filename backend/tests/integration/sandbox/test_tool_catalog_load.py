@@ -2458,16 +2458,18 @@ def test_arg019_phase_placement_matches_grouping_constants(
 def test_arg019_total_tool_count_closes_catalog(
     loaded_registry: ToolRegistry,
 ) -> None:
-    """ARG-019 closes the long-term Backlog §4 catalog at exactly 157 tools
-    (137 from ARG-001..ARG-018 + 20 ARG-019 entries).
+    """ARG-019 closes the long-term Backlog §4 catalog at exactly 162 tools
+    (137 from ARG-001..ARG-018 + 20 ARG-019 entries + 5 recon/CMDi primitives
+    — curl, dig, host, whois, commix — added post-ARG-019 in the LLM-gateway
+    expansion; wired via ``valhalla_tool_health`` and the exploitation executor).
 
     A silent shrink (someone deletes a YAML) or accidental duplicate
     (two YAMLs for the same tool_id) would slip past the per-batch
     inventories above; this hard equality keeps the catalog locked at
     its long-term target.
     """
-    assert len(loaded_registry) == 157, (
-        f"catalog drift: expected exactly 157 tools, got {len(loaded_registry)}"
+    assert len(loaded_registry) == 162, (
+        f"catalog drift: expected exactly 162 tools, got {len(loaded_registry)}"
     )
     arg019_total = len(NETWORK_PROTOCOL_TOOLS | BINARY_TOOLS | BROWSER_TOOLS)
     assert arg019_total == 20, (

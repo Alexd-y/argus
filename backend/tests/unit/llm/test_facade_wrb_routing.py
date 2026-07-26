@@ -150,6 +150,58 @@ class TestCallLlmUnifiedWrbRouting:
         finally:
             wrb._base_url = orig_url
 
+    @pytest.mark.asyncio
+    async def test_pentest_task_fails_closed_when_wrb_not_configured(self):
+        """WRB not configured → pentest analysis must fail closed, never cloud.
+
+        NEW-ROUTING-01: previously an unconfigured WRB silently routed every
+        task to a cloud provider, leaking pentest analysis off-box. Analysis
+        tasks must now raise instead of falling back.
+        """
+        from src.llm.facade import call_llm_unified
+        from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
+
+        wrb = get_whiterabbitneo_adapter()
+        orig_url = wrb._base_url
+        try:
+            wrb._base_url = ""  # not configured
+
+            with patch(
+                "src.llm.facade._call_via_task_router", new_callable=AsyncMock
+            ) as mock_cloud:
+                with pytest.raises(RuntimeError, match="not configured"):
+                    await call_llm_unified(
+                        "system", "user", task=LLMTask.ORCHESTRATION
+                    )
+
+            mock_cloud.assert_not_called()
+        finally:
+            wrb._base_url = orig_url
+
+    @pytest.mark.asyncio
+    async def test_report_task_uses_cloud_when_wrb_not_configured(self):
+        """WRB not configured → report supplements may still use cloud."""
+        from src.llm.facade import call_llm_unified
+        from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
+
+        wrb = get_whiterabbitneo_adapter()
+        orig_url = wrb._base_url
+        try:
+            wrb._base_url = ""  # not configured
+
+            with patch(
+                "src.llm.facade._call_via_task_router", new_callable=AsyncMock
+            ) as mock_cloud:
+                mock_cloud.return_value = "cloud report"
+                result = await call_llm_unified(
+                    "system", "user", task=LLMTask.REPORT_SECTION
+                )
+
+            assert result == "cloud report"
+            mock_cloud.assert_called_once()
+        finally:
+            wrb._base_url = orig_url
+
 
 class TestTokenCounting:
     def test_tiktoken_encoding(self):

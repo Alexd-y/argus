@@ -124,6 +124,14 @@ _OFFLINE_FILE_NAMES: Final[frozenset[str]] = frozenset(
         "test_report_quality_gate.py",
         # RPT-006 — mocked AsyncSession / MinIO upload / Redis client; Celery app import only for route registry.
         "test_rpt006_generate_report.py",
+        # AUDIT — doc-to-code consistency guard. Pure introspection of the phase
+        # tables (``src.orchestration.phases``), the LLM cloud-routing frozensets
+        # (``src.llm.facade``), and the Celery route table (``src.celery_app.conf``)
+        # against the canonical Markdown docs. No FastAPI request, DB session, or
+        # live broker — the ``celery_app`` import only reads ``conf.task_routes``.
+        # MUST run in dev's default ``pytest -q`` so architectural drift fails the
+        # local feedback loop, not just CI.
+        "test_docs_code_consistency.py",
     }
 )
 
@@ -320,7 +328,12 @@ def app():
 
 @pytest.fixture(autouse=True)
 def override_auth(request, app):
-    """Override auth dependency so tests run without real credentials.
+    """Override auth dependencies so tests run without real credentials.
+
+    Both ``get_required_auth`` and ``get_optional_auth`` are stubbed with the same
+    principal. The optional one matters because ``get_current_tenant_id`` resolves
+    the tenant through it (SEC-001) and now rejects anonymous callers outright —
+    without the stub every tenant-scoped router test would get a 401.
 
     Tests marked with ``@pytest.mark.no_auth_override`` are excluded — they
     verify real authentication behaviour.
@@ -329,7 +342,7 @@ def override_auth(request, app):
         yield
         return
 
-    from src.core.auth import AuthContext, get_required_auth
+    from src.core.auth import AuthContext, get_optional_auth, get_required_auth
 
     async def _mock_auth():
         return AuthContext(
@@ -339,8 +352,10 @@ def override_auth(request, app):
         )
 
     app.dependency_overrides[get_required_auth] = _mock_auth
+    app.dependency_overrides[get_optional_auth] = _mock_auth
     yield
     app.dependency_overrides.pop(get_required_auth, None)
+    app.dependency_overrides.pop(get_optional_auth, None)
 
 
 @pytest.fixture

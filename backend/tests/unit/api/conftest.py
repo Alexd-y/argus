@@ -16,12 +16,17 @@ from collections.abc import Iterator
 
 import pytest
 
-from src.core.auth import AuthContext, get_required_auth
+from src.core.auth import AuthContext, get_optional_auth, get_required_auth
 
 
 @pytest.fixture(autouse=True)
 def override_auth(request: pytest.FixtureRequest, app) -> Iterator[None]:
-    """Inject a stub authenticated principal for router tests in this package."""
+    """Inject a stub authenticated principal for router tests in this package.
+
+    ``get_optional_auth`` is stubbed alongside the required one because
+    ``get_current_tenant_id`` resolves the tenant through it and rejects
+    anonymous callers (SEC-001).
+    """
     if "no_auth_override" in {m.name for m in request.node.iter_markers()}:
         yield
         return
@@ -34,5 +39,7 @@ def override_auth(request: pytest.FixtureRequest, app) -> Iterator[None]:
         )
 
     app.dependency_overrides[get_required_auth] = _mock_auth
+    app.dependency_overrides[get_optional_auth] = _mock_auth
     yield
     app.dependency_overrides.pop(get_required_auth, None)
+    app.dependency_overrides.pop(get_optional_auth, None)

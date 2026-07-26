@@ -19,7 +19,7 @@ command_template:
   - "sslscan"
   - "--xml={out_dir}/sslscan.xml"
   - "{host}:{port}"
-parse_strategy: xml_generic
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/sslscan.xml"
 cwe_hints:

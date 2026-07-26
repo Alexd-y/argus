@@ -58,7 +58,7 @@ async def login(req: LoginRequest) -> dict:
                 extra={"event": "argus.auth.password_verification_error"},
             )
 
-    if settings.debug:
+    if settings.debug and settings.dev_login_bypass_enabled:
         logger.warning(
             "dev_login_bypass",
             extra={"event": "argus.auth.dev_login_bypass"},

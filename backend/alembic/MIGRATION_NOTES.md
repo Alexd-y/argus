@@ -10,7 +10,7 @@ was squashed into the work of migration `019` (`019_reports_table.py`).
 - Migration `017` has `down_revision = "016"`
 - Migration `019` has `revises: 017` — explicitly bridging the gap
 - Chain verification (`python scripts/verify_alembic_chain.py`) passes successfully
-- All 37 migrations (001→037) form a continuous chain
+- All 52 migrations (001→052) form a continuous chain
 
 This is standard Alembic practice: when a migration is squashed or abandoned during
 development, subsequent migrations reference the pre-gap revision directly. The gap

@@ -6,11 +6,11 @@ never from a client-supplied ``X-Tenant-ID`` header alone. Behaviour:
 * Authenticated request — the principal's ``tenant_id`` is authoritative. An
   ``X-Tenant-ID`` header that disagrees with it is a cross-tenant pivot attempt
   and is rejected with ``403``. A matching (or absent) header is accepted.
-* Unauthenticated request — rejected with ``401`` when ``require_tenant_auth`` is
-  enabled (recommended for production). When disabled (default, for backward
-  compatibility) the legacy header/default-tenant behaviour is preserved, and a
-  security warning is logged whenever a non-default tenant is selected without
-  credentials so the residual risk is observable.
+* Unauthenticated request — rejected with ``401``. There is no header/default-tenant
+  fallback and no opt-out: a configuration that lets an anonymous caller pick a
+  tenant is not representable, so the RLS boundary cannot be collapsed by
+  forgetting a flag. ``settings.default_tenant_id`` remains only for background
+  work that has no request principal at all.
 """
 
 import logging
@@ -19,7 +19,6 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, status
 
 from src.core.auth import AuthContext, get_optional_auth
-from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,22 +49,8 @@ async def get_current_tenant_id(
             )
         return auth.tenant_id
 
-    if settings.require_tenant_auth:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if header_tenant is not None and header_tenant != settings.default_tenant_id:
-        logger.warning(
-            "Unauthenticated request selected a non-default tenant via header; "
-            "set REQUIRE_TENANT_AUTH=true to enforce authentication (SEC-001)",
-            extra={
-                "event_type": "unauthenticated_tenant_header",
-                "requested_tenant": header_tenant,
-            },
-        )
-        return header_tenant
-
-    return settings.default_tenant_id
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )

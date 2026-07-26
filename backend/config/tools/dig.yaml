@@ -26,7 +26,7 @@ command_template:
   - "ANY"
   - ">"
   - "{out_dir}/dig.txt"
-parse_strategy: dns_zone_text
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/dig.txt"
 cwe_hints: []

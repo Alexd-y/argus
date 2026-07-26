@@ -33,7 +33,7 @@ docker compose -f infra/docker-compose.yml up
 | backend | build: `infra/backend/Dockerfile` | 8000 (internal) | FastAPI application |
 | worker | build: `infra/worker/Dockerfile` | — | Celery worker for scan tasks |
 | sandbox | build: `sandbox/Dockerfile` | — | Kali-based container for pentest tool execution |
-| nginx | nginx:alpine | 8080 (HTTP), 8443 (HTTPS) | Reverse proxy, rate limiting, security headers |
+| nginx | nginx:1.27-alpine | 8080 (HTTP), 8443 (HTTPS) | Reverse proxy, rate limiting, security headers |
 | mcp | MCP server container | 8765 | ARGUS MCP server (HTTP transport) |
 | cloudflared | argus-cloudflared | — | Cloudflare tunnel (profile: tunnel) |
 
@@ -247,7 +247,7 @@ MINIO_REPORTS_BUCKET=argus-reports
 
 Фаза VA и задачи Celery (`scan_phase_task` и др.) вызывают инструменты через **`docker exec`** в контейнер песочницы (**имя по умолчанию: `argus-sandbox`**, задаётся `settings.sandbox_container_name`). Песочница должна быть в **том же compose-проекте**, что и worker/backend, чтобы DNS/имя контейнера совпадали.
 
-- **Worker и backend** должны иметь доступ к **Docker API хоста**: в `infra/docker-compose.yml` смонтирован сокет **`/var/run/docker.sock:/var/run/docker.sock:ro`**. Без сокета `docker exec` из контейнера worker не выполняется — активные сканеры не стартуют, артефактов dalfox/xsstrike не будет.
+- **Worker и backend** должны иметь доступ к **Docker API хоста**: в `infra/docker-compose.yml` смонтирован сокет **`/var/run/docker.sock:/var/run/docker.sock:ro`** (3 mount points: `backend`, `worker-scans`, `worker-general`; сервису `sandbox` сокет не выдаётся). Флаг `:ro` защищает только файл сокета — сам Docker API остаётся полнофункциональным, поэтому доступ к сокету по-прежнему равнозначен привилегиям на хосте (см. [`security.md`](security.md)). Без сокета `docker exec` из контейнера worker не выполняется — активные сканеры не стартуют, артефактов dalfox/xsstrike не будет.
 - Переменная **`DOCKER_HOST`** на Linux обычно **не нужна** (используется дефолтный unix-socket). На **Windows + Docker Desktop** compose часто запускают из WSL или с Linux-VM; путь сокета в override должен соответствовать среде, где выполняется `docker compose` (см. документацию Docker Desktop для bind-mount сокета).
 - Убедитесь, что **`SANDBOX_ENABLED=true`** и для **worker**, и для **backend** (одинаковое значение в `environment` / `.env`).
 - После изменений в **`sandbox/Dockerfile`** пересоберите образ песочницы (`docker compose build sandbox` или полный rebuild стека с `--profile tools`), иначе в контейнере останутся старые бинарники (dalfox / xsstrike / ffuf и др.).

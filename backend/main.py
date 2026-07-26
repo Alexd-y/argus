@@ -120,6 +120,22 @@ async def lifespan(_app: FastAPI):
             extra={"event": "kb_warm_skipped", "error_type": type(e).__name__},
         )
     try:
+        if not settings.skip_prompt_verification:
+            _verify_prompt_catalog()
+        else:
+            logger.warning(
+                "prompt_catalog_verification_skipped",
+                extra={"event": "prompt_catalog.skipped", "reason": "skip_prompt_verification is True"},
+            )
+    except SystemExit:
+        raise
+    except Exception as e:
+        logger.critical(
+            "prompt_catalog_verification_unexpected_error",
+            extra={"event": "prompt_catalog.unexpected_error", "error_type": type(e).__name__},
+        )
+        raise SystemExit(1) from e
+    try:
         yield
     finally:
         try:
@@ -138,6 +154,97 @@ app = FastAPI(
     openapi_url="/api/v1/openapi.json",
     lifespan=lifespan,
 )
+
+
+# ---------------------------------------------------------------------------
+# F-M04 — Ed25519 prompt catalog startup verification (fail-closed)
+# ---------------------------------------------------------------------------
+
+
+def _verify_prompt_catalog() -> int:
+    """Verify every signed YAML prompt against SIGNATURES at startup.
+
+    Returns the number of verified YAML files on success.
+    Raises ``SystemExit(1)`` on any signature mismatch, missing key, or
+    missing SIGNATURES file. Verification is skipped when
+    ``settings.skip_prompt_verification`` is True.
+    """
+    from pathlib import Path
+
+    from src.sandbox.signing import KeyManager, KeyNotFoundError, SignatureError, SignaturesFile
+
+    prompts_dir = Path("backend/config/prompts")
+    keys_dir = prompts_dir / "_keys"
+    signatures_path = prompts_dir / "SIGNATURES"
+
+    logger.info("prompt_catalog_verification_starting")
+
+    if not prompts_dir.is_dir():
+        logger.critical(
+            "prompt_catalog_verification_failed",
+            extra={"event": "prompt_catalog.dir_missing", "path": str(prompts_dir)},
+        )
+        raise SystemExit(1)
+
+    if not signatures_path.is_file():
+        logger.critical(
+            "prompt_catalog_verification_failed",
+            extra={"event": "prompt_catalog.signatures_missing", "path": str(signatures_path)},
+        )
+        raise SystemExit(1)
+
+    keys = KeyManager(keys_dir)
+    try:
+        keys.load()
+    except SignatureError as exc:
+        logger.critical(
+            "prompt_catalog_verification_failed",
+            extra={"event": "prompt_catalog.keys_load_error", "reason": str(exc), "keys_dir": str(keys_dir)},
+        )
+        raise SystemExit(1) from exc
+
+    try:
+        signatures = SignaturesFile.from_file(signatures_path)
+    except SignatureError as exc:
+        logger.critical(
+            "prompt_catalog_verification_failed",
+            extra={"event": "prompt_catalog.signatures_parse_error", "reason": str(exc)},
+        )
+        raise SystemExit(1) from exc
+
+    yaml_paths = sorted(p for p in prompts_dir.glob("*.yaml") if p.is_file())
+
+    for yaml_path in yaml_paths:
+        rel = yaml_path.relative_to(prompts_dir).as_posix()
+        try:
+            yaml_bytes = yaml_path.read_bytes()
+        except OSError as exc:
+            logger.critical(
+                "prompt_catalog_verification_failed",
+                extra={"event": "prompt_catalog.read_error", "reason": str(exc), "yaml": rel},
+            )
+            raise SystemExit(1) from exc
+        try:
+            signatures.verify_one(
+                relative_path=rel,
+                yaml_bytes=yaml_bytes,
+                public_key_resolver=keys.get,
+            )
+        except (SignatureError, KeyNotFoundError) as exc:
+            logger.critical(
+                "prompt_catalog_verification_failed",
+                extra={"event": "prompt_catalog.signature_mismatch", "reason": str(exc), "yaml": rel},
+            )
+            raise SystemExit(1) from exc
+
+    logger.info(
+        "prompt_catalog_verification_ok",
+        extra={"event": "prompt_catalog.verified", "verified_count": len(yaml_paths)},
+    )
+    return len(yaml_paths)
+
+
+# ---------------------------------------------------------------------------
 
 register_exception_handlers(app)
 

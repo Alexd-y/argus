@@ -78,6 +78,27 @@ RUN DALFOX_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/hahwul/dalf
     chmod +x /usr/local/bin/dalfox && \
     rm -f /tmp/dalfox.tar.gz
 
+# Go toolchain — required to compile recon tools not packaged in Kali apt repos
+# (katana, gau, waybackurls, assetfinder, naabu).
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then GO_ARCH="amd64"; elif [ "$ARCH" = "aarch64" ]; then GO_ARCH="arm64"; else GO_ARCH="amd64"; fi && \
+    curl -sL --retry 5 "https://go.dev/dl/go1.23.4.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm -f /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}" GOBIN=/usr/local/bin
+
+# Recon tools compiled from Go source (not packaged in Kali apt).
+RUN go install -v github.com/projectdiscovery/katana/cmd/katana@latest && \
+    go install -v github.com/lc/gau/v2/cmd/gau@latest && \
+    go install -v github.com/tomnomnom/waybackurls@latest && \
+    go install -v github.com/tomnomnom/assetfinder@latest && \
+    go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+
+# findomain — subdomain enumeration (pre-built Rust binary, not in Kali apt).
+RUN FINDOMAIN_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/Findomain/Findomain/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
+    curl -sL --retry 5 "https://github.com/Findomain/Findomain/releases/download/${FINDOMAIN_VERSION}/findomain-linux" -o /usr/local/bin/findomain && \
+    chmod +x /usr/local/bin/findomain
+
 # xsstrike (Python tool — not in Kali apt)
 RUN pip3 install --no-cache-dir --break-system-packages xsstrike
 
@@ -108,7 +129,7 @@ RUN set -e; \
 RUN printf '%s\n' \
     '#!/bin/sh' \
     "echo '=== ARGUS Sandbox tool check (web/recon) ==='" \
-    'for t in nmap masscan subfinder amass dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx sqlmap nikto wpscan dirsearch commix whatweb wafw00f whatwaf cors arjun theharvester sslscan testssl.sh hydra medusa crackmapexec; do' \
+     'for t in nmap masscan subfinder amass katana gau waybackurls assetfinder findomain naabu dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx sqlmap nikto wpscan dirsearch commix whatweb wafw00f whatwaf cors arjun theharvester sslscan testssl.sh hydra medusa crackmapexec; do' \
     '  if command -v "$t" >/dev/null 2>&1; then echo "$t: OK"; else echo "$t: MISSING"; fi' \
     'done' \
     > /usr/local/bin/argus-tool-check \

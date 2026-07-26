@@ -20,7 +20,7 @@ command_template:
   - "sh"
   - "-c"
   - "whois {domain} > {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30 https://rdap.org/domain/{domain} -o {out_dir}/rdap.json"
-parse_strategy: custom
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/whois.txt"
   - "/out/rdap.json"

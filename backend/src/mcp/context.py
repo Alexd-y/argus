@@ -28,7 +28,6 @@ from mcp.server.fastmcp import Context
 
 from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger
 from src.mcp.auth import MCPAuthContext, authenticate
-from src.mcp.exceptions import AuthenticationError
 
 _logger = logging.getLogger(__name__)
 
@@ -170,6 +169,8 @@ def build_call_context(ctx: MCPContext | None) -> MCPCallContext:
 
     Raises:
         AuthenticationError: when authentication is required but absent.
+        TenantMismatchError: when ``X-Tenant-ID`` disagrees with the tenant the
+            presented credential is bound to.
     """
     headers = _extract_headers(ctx)
     transport = _detect_transport(ctx)
@@ -177,10 +178,7 @@ def build_call_context(ctx: MCPContext | None) -> MCPCallContext:
     if _AUTH_OVERRIDE is not None:
         auth_ctx = _AUTH_OVERRIDE
     else:
-        try:
-            auth_ctx = authenticate(headers=headers, transport=transport)
-        except AuthenticationError:
-            raise
+        auth_ctx = authenticate(headers=headers, transport=transport)
 
     request_id = getattr(ctx, "request_id", None) if ctx is not None else None
     return MCPCallContext(

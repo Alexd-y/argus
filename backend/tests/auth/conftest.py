@@ -57,11 +57,11 @@ os.environ.setdefault(
 )
 os.environ.setdefault("ARGUS_TEST_MODE", "1")
 # Alembic 030 (ISS-T20-003 hardening) — server-side at-rest pepper. Stable
-# value so per-test backfill expectations stay deterministic.
-os.environ.setdefault(
-    "ADMIN_SESSION_PEPPER",
-    "test-pepper-iss-t20-003-not-for-prod-32chars-min",
-)
+# value so per-test backfill expectations stay deterministic. Also pinned onto
+# the live ``settings`` object by ``_pin_admin_session_pepper`` below, because
+# this assignment is too late whenever another subtree imported ``src.*`` first.
+_TEST_SESSION_PEPPER = "test-pepper-iss-t20-003-not-for-prod-32chars-min"
+os.environ.setdefault("ADMIN_SESSION_PEPPER", _TEST_SESSION_PEPPER)
 # C7-T01 — never set ADMIN_MFA_KEYRING at import time. The Pydantic
 # validator runs at Settings construction and would refuse a bad value
 # before any test could intervene; tests that exercise MFA crypto pull
@@ -242,6 +242,24 @@ def _reset_login_rate_limiter() -> Iterator[None]:
 def override_auth() -> Iterator[None]:
     """Neutralise the parent ``override_auth`` fixture for this subtree."""
     yield
+
+
+@pytest.fixture(autouse=True)
+def _pin_admin_session_pepper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make this suite order-independent with respect to the at-rest pepper.
+
+    The module-level ``ADMIN_SESSION_PEPPER`` default only reaches ``Settings``
+    when this conftest is imported before any ``src.core.config`` import. Run
+    after a subtree whose conftest already imported ``src.*`` (e.g.
+    ``tests/unit/mcp``), the singleton is built without a pepper and every
+    session test fails with a misleading "ADMIN_SESSION_PEPPER is unset" —
+    the value was not missing, it simply arrived too late.
+
+    Tests that deliberately exercise the empty-pepper path override this with
+    their own ``monkeypatch`` inside the test body, which wins.
+    """
+    if not (settings.admin_session_pepper or "").strip():
+        monkeypatch.setattr(settings, "admin_session_pepper", _TEST_SESSION_PEPPER)
 
 
 @pytest.fixture

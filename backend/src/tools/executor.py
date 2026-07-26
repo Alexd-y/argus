@@ -47,10 +47,11 @@ async def _persist_tool_run(
     """Best-effort ToolRun persistence — fire-and-forget from sync executor."""
     try:
         from src.db.models import ToolRun
-        from src.db.session import async_session_factory
+        from src.db.session import async_session_factory, set_session_tenant
 
         truncated = output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else ""
         async with async_session_factory() as session:
+            await set_session_tenant(session, tenant_id)
             run = ToolRun(
                 tenant_id=tenant_id,
                 scan_id=scan_id,

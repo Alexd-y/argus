@@ -84,11 +84,13 @@ from src.sandbox.parsers.checkov_parser import parse_checkov_json
 from src.sandbox.parsers.chrome_csp_probe_parser import parse_chrome_csp_probe
 from src.sandbox.parsers.cloudsploit_parser import parse_cloudsploit_json
 from src.sandbox.parsers.crackmapexec_parser import parse_crackmapexec
+from src.sandbox.parsers.crt_sh_parser import parse_crt_sh
 from src.sandbox.parsers.dalfox_parser import parse_dalfox_json
 from src.sandbox.parsers.detect_secrets_parser import parse_detect_secrets_json
+from src.sandbox.parsers.dig_parser import parse_dig
 from src.sandbox.parsers.dnsrecon_parser import parse_dnsrecon
-from src.sandbox.parsers.discovery_text_parser import parse_discovery_text_lines
 from src.sandbox.parsers.dnsx_parser import parse_dnsx
+from src.sandbox.parsers.discovery_text_parser import parse_discovery_text_lines
 from src.sandbox.parsers.dockle_parser import parse_dockle_json
 from src.sandbox.parsers.enum4linux_ng_parser import parse_enum4linux_ng
 from src.sandbox.parsers.evil_winrm_parser import parse_evil_winrm
@@ -102,6 +104,7 @@ from src.sandbox.parsers.grype_parser import parse_grype_json
 from src.sandbox.parsers.hash_analyzer_parser import parse_hash_analyzer_json
 from src.sandbox.parsers.hashcat_parser import parse_hashcat
 from src.sandbox.parsers.hashid_parser import parse_hashid_json
+from src.sandbox.parsers.host_parser import parse_host
 from src.sandbox.parsers.httpx_parser import parse_httpx_jsonl
 from src.sandbox.parsers.hydra_parser import parse_hydra
 from src.sandbox.parsers.impacket_secretsdump_parser import (
@@ -149,9 +152,12 @@ from src.sandbox.parsers.smbmap_parser import parse_smbmap
 from src.sandbox.parsers.snmpwalk_parser import parse_snmpwalk
 from src.sandbox.parsers.sqlmap_parser import parse_sqlmap_output
 from src.sandbox.parsers.sqli_probe_text_parser import parse_sqli_probe_text
+from src.sandbox.parsers.sslscan_parser import parse_sslscan
+from src.sandbox.parsers.sslyze_parser import parse_sslyze
 from src.sandbox.parsers.subfinder_parser import parse_subfinder
 from src.sandbox.parsers.syft_parser import parse_syft_json
 from src.sandbox.parsers.terrascan_parser import parse_terrascan_json
+from src.sandbox.parsers.testssl_parser import parse_testssl
 from src.sandbox.parsers.tfsec_parser import parse_tfsec_json
 from src.sandbox.parsers.trivy_parser import parse_trivy_json
 from src.sandbox.parsers.trufflehog_parser import parse_trufflehog_jsonl
@@ -159,6 +165,7 @@ from src.sandbox.parsers.unicornscan_parser import parse_unicornscan
 from src.sandbox.parsers.wappalyzer_cli_parser import parse_wappalyzer_cli_json
 from src.sandbox.parsers.webanalyze_parser import parse_webanalyze
 from src.sandbox.parsers.whatweb_parser import parse_whatweb
+from src.sandbox.parsers.whois_parser import parse_whois
 from src.sandbox.parsers.wpscan_parser import (
     parse_droopescan_json,
     parse_wpscan_json,
@@ -784,6 +791,15 @@ _DEFAULT_TOOL_PARSERS: dict[str, ToolParser] = {
     "mongodb_probe": parse_mongodb_probe,
     "redis_cli_probe": parse_redis_cli_probe,
     "unicornscan": parse_unicornscan,
+    # ARG-048 — DNS / WHOIS / TLS parsers (heartbeat → mapped).
+    "dig": parse_dig,
+    "whois": parse_whois,
+    "whois_rdap": parse_whois,
+    "host": parse_host,
+    "crt_sh": parse_crt_sh,
+    "testssl": parse_testssl,
+    "sslscan": parse_sslscan,
+    "sslyze": parse_sslyze,
 }
 
 

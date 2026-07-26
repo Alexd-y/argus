@@ -122,6 +122,26 @@ RUN ARCH=$(dpkg --print-architecture) && \
     install -m 755 "/tmp/dalfox-extract/dalfox-${DALFOX_ASSET}" /usr/local/bin/dalfox && \
     rm -rf /tmp/dalfox.tgz /tmp/dalfox-extract
 
+# Go toolchain + recon tools not in Kali apt (katana, gau, waybackurls, assetfinder, naabu)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then GO_ARCH="amd64"; \
+    elif [ "$ARCH" = "arm64" ]; then GO_ARCH="arm64"; \
+    else GO_ARCH="amd64"; fi && \
+    curl -fsSL "https://go.dev/dl/go1.23.4.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm -f /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}" GOBIN=/usr/local/bin
+
+RUN go install -v github.com/projectdiscovery/katana/cmd/katana@latest && \
+    go install -v github.com/lc/gau/v2/cmd/gau@latest && \
+    go install -v github.com/tomnomnom/waybackurls@latest && \
+    go install -v github.com/tomnomnom/assetfinder@latest && \
+    go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+
+RUN FINDOMAIN_VERSION=$(curl -fsSL --retry 5 https://api.github.com/repos/Findomain/Findomain/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
+    curl -fsSL --retry 5 "https://github.com/Findomain/Findomain/releases/download/${FINDOMAIN_VERSION}/findomain-linux" -o /usr/local/bin/findomain && \
+    chmod +x /usr/local/bin/findomain
+
 # XSStrike — VA pipeline; /opt/xsstrike matches backend xsstrike_adapter sandbox paths
 RUN git clone --depth 1 https://github.com/s0md3v/XSStrike.git /opt/xsstrike \
     && pip3 install --no-cache-dir --break-system-packages \

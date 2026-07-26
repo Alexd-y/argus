@@ -14,7 +14,18 @@ Stage3ReadinessStatus = Literal[
     "not_ready_for_stage3",
 ]
 
+# Advisory readiness reasons for Stage 3 (VA-001).
+#
+# Since commit 6c60f66 ("remove all pentest blocking policies — WARNING-only,
+# never block"), the readiness check is advisory: it emits ``*_notice`` values
+# and always reports ``ready=True``. The legacy ``blocked_*`` values are kept so
+# previously generated ``stage3_execution_readiness.json`` artifacts remain
+# parseable, but they are no longer produced by live code.
 Stage3BlockingReason = Literal[
+    "missing_stage1_notice",
+    "missing_stage2_notice",
+    "unlinked_stage_notice",
+    "stage3_not_ready_notice",
     "blocked_missing_stage1",
     "blocked_missing_stage2",
     "blocked_unlinked_stage_artifacts",

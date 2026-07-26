@@ -20,7 +20,7 @@ import sys
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from starlette import status
 
@@ -390,17 +390,16 @@ async def sandbox_kill_process(pid: int) -> JSONResponse:
 
 @router.post("/python", response_model=None)
 async def sandbox_python(body: SandboxPythonRequest):
-    """Run short Python snippet when feature flag is on; blocks common escape patterns."""
+    """Run short Python snippet when feature flag is on; blocks common escape patterns.
+
+    WARNING: This is an RCE vector — it executes arbitrary code on the API host
+    interpreter. The ``ARGUS_SANDBOX_PYTHON_ENABLED`` flag is an explicit opt-in
+    for local development only. Never enable this in production or expose it to
+    untrusted callers. The regex blocklist is a convenience guardrail, not a
+    security boundary.
+    """
     if not settings.argus_sandbox_python_enabled:
-        return JSONResponse(
-            status_code=status.HTTP_403_FORBIDDEN,
-            content={
-                "success": False,
-                "feature": "sandbox_python",
-                "code": "sandbox_python_disabled",
-                "detail": "Sandbox Python execution is disabled. Set ARGUS_SANDBOX_PYTHON_ENABLED=true to enable.",
-            },
-        )
+        raise HTTPException(status_code=403, detail="Sandbox Python execution is disabled. Set ARGUS_SANDBOX_PYTHON_ENABLED=true to enable in local/dev only.")
     if _python_code_blocked(body.code):
         msg, trunc = _truncate("Code blocked by sandbox policy")
         return SandboxExecuteResponse(

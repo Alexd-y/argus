@@ -21,7 +21,7 @@ command_template:
   - "{domain}"
   - ">"
   - "{out_dir}/whois.txt"
-parse_strategy: whois_text
+parse_strategy: text_lines
 evidence_artifacts:
   - "/out/whois.txt"
 cwe_hints: []

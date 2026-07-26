@@ -508,7 +508,11 @@ arbitrary shell reject), E2E (local target only), Perf/resilience.
   зарегистрированы), intruder Celery-таск + очередь `argus.intruder.highvol` + `worker-intruder` в compose,
   контракты в `docs/api-contracts.md §4f/§4g`, OpenAPI-контракт-тест +11 путей, RLS integration-тесты
   (`requires_postgres`). **501 passed** в `tests/unit/web_workbench`, OpenAPI-контракт 11/11, ruff/black/mypy ✅.
-  Осталось только infra-gated: live-E2E (high-volume send, owner/attacker replay), Helm dedicated intruder-pool.
+- ✅ WB-P4b — **Helm dedicated intruder-pool + Live-E2E scaffold** (эта сессия): выделенный gated celery-деплой
+  `templates/celery-worker-intruder-deployment.yaml` (`-Q argus.intruder.highvol`, digest-pin + cosign, verified via
+  `helm lint`/`helm template`), E2E `tests/integration/e2e/test_e2e_web_workbench.py` (7 кейсов Intruder+Sessions,
+  `requires_docker_e2e`, ready на AWS). Осталось infra-gated: прогон E2E на docker-стеке/juice-shop; owner/attacker
+  replay-**endpoint** (WB-P6b-3) не реализован (движки offline-готовы, нет HTTP-триггера).
 - ⏳ **P5b-2** (scanner-orchestrator/crawler/Nuclei-extend/OAST-bridge/repository-RLS/API — infra-gated),
   P7b..P11 — pending (§11 backlog).
 
@@ -925,9 +929,13 @@ SI-3 (finding без raw-тел). Детали — §10.
   OpenAPI-контракт-тест расширен (4 пути). Offline-тесты: router-мапперы (split-plane проекция); RLS integration
   `tests/integration/web_workbench/test_sessions_rls.py` (cross-tenant `count(*)`, optimistic-lock, SI-3 «нет
   raw-secret колонок» через `information_schema`) — verify на live Postgres. `ruff`/`black`/`mypy` ✅.
-- **⏳ Осталось (infra-gated):** live owner/attacker replay-endpoint (macro-runner+replay-runner offline-готовы,
-  нужен ForwardGate+sender+SecretResolver на воркер-плоскости); расширение `playwright_adapter.py` (reusable
-  context для atomic actions, DOM source/sink, postMessage, CSP); live owner-vs-attacker E2E + secret-leakage тест.
+- **✅ Live-E2E scaffold (эта сессия):** в `tests/integration/e2e/test_e2e_web_workbench.py` — persistence + split-plane
+  инвариант на живом API: create login-macro (пароль ТОЛЬКО через `{{secret_ref:…}}`), create owner/attacker/anonymous
+  principals (`secrets_ref`-handle), API НЕ эхоит raw-кредов (SI-3), optimistic-lock на update macro (409). Готов на AWS.
+- **⏳ Осталось (infra-gated):** live owner/attacker replay-**endpoint** отсутствует — движки (macro-runner+replay-runner)
+  offline-готовы через MockTransport, но нет HTTP-триггера прогона; нужен endpoint+Celery-таск с ForwardGate+sender+
+  SecretResolver на воркер-плоскости (WB-P6b-3), затем сквозной owner-vs-attacker E2E; расширение `playwright_adapter.py`
+  (reusable context для atomic actions, DOM source/sink, postMessage, CSP); secret-leakage тест.
 - **Инварианты:** split-plane secrets (SI-3), redaction через `auth/redaction.py`+`playbooks/evidence`; replay ТОЛЬКО
   через ForwardGate+preflight+EAP; P6a-анализатор — вход (уже offline-верифицирован).
 - **DoD:** owner-vs-attacker diff E2E; secret-leakage security test; BAC/IDOR классификация → FindingDTO — **infra-gated**.

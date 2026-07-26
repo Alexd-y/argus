@@ -41,12 +41,10 @@ class Settings(BaseSettings):
         default="development",
         validation_alias=AliasChoices("ENVIRONMENT", "environment"),
     )
+    # Fallback tenant for background/system work that has no request principal.
+    # It is NOT a fallback for unauthenticated requests: tenant resolution
+    # always demands an authenticated principal (SEC-001, src/core/tenant.py).
     default_tenant_id: str = "00000000-0000-0000-0000-000000000001"
-    # SEC-001: when True, main-API tenant resolution requires an authenticated
-    # principal (JWT/API key); unauthenticated requests are rejected instead of
-    # trusting a client-supplied X-Tenant-ID header. Default False preserves
-    # backward compatibility; set REQUIRE_TENANT_AUTH=true in production.
-    require_tenant_auth: bool = False
 
     # LLM Providers (Phase 6) — at least one required for AI orchestration
     openai_api_key: str | None = None
@@ -705,6 +703,25 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MEMORY_COMPRESSION_ENABLED", "memory_compression_enabled"),
     )
 
+    # Governance / Safety — observing-only monitor (F-M01). Default True.
+    # When enabled, call_llm_unified() runs SafetyMonitor pre-/post-check on every LLM call.
+    # SafetyMonitor never blocks: alerts are logged at WARNING level only.
+    safety_monitor_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SAFETY_MONITOR_ENABLED", "safety_monitor_enabled"),
+    )
+
+    @field_validator("safety_monitor_enabled", mode="before")
+    @classmethod
+    def coerce_safety_monitor_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
     @field_validator(
         "recon_rate_limit",
         "recon_passive_subdomain_timeout_sec",
@@ -990,6 +1007,17 @@ class Settings(BaseSettings):
             return s in {"true", "1", "yes", "on"}
         return bool(v)
 
+    @field_validator("skip_prompt_verification", mode="before")
+    @classmethod
+    def coerce_skip_prompt_verification(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
     # KAL-002 — MCP password-audit tools (hydra/medusa): server-side gate in addition to request opt-in.
     # Env: KAL_ALLOW_PASSWORD_AUDIT=true
     kal_allow_password_audit: bool = False
@@ -1008,6 +1036,13 @@ class Settings(BaseSettings):
 
     # VDF-008 — optional gospider/parsero after robots/sitemap fetch. Env: VA_ROBOTS_EXTENDED_PIPELINE
     va_robots_extended_pipeline: bool = False
+
+    # F-M04 — skip Ed25519 prompt catalog verification at startup. Dev-only escape hatch;
+    # production MUST keep the default (verify). Env: SKIP_PROMPT_VERIFICATION
+    skip_prompt_verification: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("SKIP_PROMPT_VERIFICATION", "skip_prompt_verification"),
+    )
 
     # KAL-006 — Pwned Passwords k-anonymity API during reporting only; requires explicit opt-in.
     # Never log plaintext passwords. Env: HIBP_PASSWORD_CHECK_OPT_IN

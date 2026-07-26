@@ -216,13 +216,11 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      # SECURITY: docker.sock is required for VA active-scan sandbox exec.
-      # Must be rw — `docker exec` opens a write connection to the daemon socket; a
-      # read-only mount yields "permission denied" even when the container's group
-      # matches the socket owner. In production prefer a dedicated sandbox REST API
-      # (see docs/security.md). Risk: container compromise → host control; mitigate with
-      # network isolation and least-privilege on the host.
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # SECURITY: docker.sock read-only is sufficient for docker exec.
+      # exec_create + exec_start are read-only daemon operations.
+      # Code in sandbox_tool_runner.py only uses docker exec.
+      # K8s deployment should use k8s_adapter.py instead (no socket mount).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -293,7 +291,7 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -361,7 +359,7 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -423,8 +421,6 @@ services:
       # WRB so all LLM tasks (incl. analysis) use the cloud task router (no local model).
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:rw
     networks:
       - backend
       - data

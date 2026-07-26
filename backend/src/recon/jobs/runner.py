@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from src.celery_app import app
 from src.db.models_recon import ScanJob
-from src.db.session import create_task_engine_and_session
+from src.db.session import create_task_engine_and_session, set_session_tenant
 from src.recon.adapters import registry
 from src.recon.normalization.pipeline import normalize_tool_output, save_findings
 from src.recon.scope.enforcement import get_scope_validator
@@ -29,6 +29,8 @@ async def _run_job(job_id: str) -> dict[str, Any]:
             job = result.scalar_one_or_none()
             if not job:
                 return {"error": f"Job {job_id} not found"}
+
+            await set_session_tenant(db, job.tenant_id)
 
             await update_job_status(db, job_id, "running")
             await db.commit()
