@@ -8,7 +8,7 @@
   "cycle": "6",
   "generated_by": "B6-T05 worker (frozen snapshot — DO NOT regenerate without explicit baseline-bump PR)",
   "generated_at": "2026-04-22T00:00:00Z",
-  "skip_count": 157,
+  "skip_count": 162,
   "tool_count_at_freeze": 157,
   "covered_count_at_freeze": 0,
   "coverage_sources": [
@@ -102,6 +102,11 @@
       "approved_in": "B6-T05"
     },
     {
+      "tool_id": "commix",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "P0-T1"
+    },
+    {
       "tool_id": "cookie_probe",
       "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
       "approved_in": "B6-T05"
@@ -122,6 +127,11 @@
       "approved_in": "B6-T05"
     },
     {
+      "tool_id": "curl",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "P0-T1"
+    },
+    {
       "tool_id": "dalfox",
       "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-active-tcp' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
       "approved_in": "B6-T05"
@@ -130,6 +140,11 @@
       "tool_id": "detect_secrets",
       "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
       "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "dig",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "P0-T1"
     },
     {
       "tool_id": "dirsearch",
@@ -290,6 +305,11 @@
       "tool_id": "hashid",
       "reason": "egress restricted at runtime via NetworkPolicyTemplate 'offline-no-egress' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
       "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "host",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "P0-T1"
     },
     {
       "tool_id": "httpx",
@@ -775,6 +795,11 @@
       "tool_id": "whatweb",
       "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
       "approved_in": "B6-T05"
+    },
+    {
+      "tool_id": "whois",
+      "reason": "egress restricted at runtime via NetworkPolicyTemplate 'recon-passive' (src/sandbox/network_policies.py); static infra YAML coverage planned for follow-up cycle",
+      "approved_in": "P0-T1"
     },
     {
       "tool_id": "whois_rdap",

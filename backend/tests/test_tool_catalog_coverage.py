@@ -244,16 +244,21 @@ _APPROVAL_RISK_FLOOR: Final[RiskLevel] = RiskLevel.MEDIUM
 #   ARG-022 (Cycle 3 batch 2):  53 mapped → 104 heartbeat
 #   ARG-029 (Cycle 3 batch 3):  68 mapped →  89 heartbeat
 #   ARG-032 (Cycle 4 batch 4):  98 mapped →  59 heartbeat
-#   T05 (Cycle 6 batch 1):     118 mapped →  39 heartbeat   <- pinned here
+#   T05 (Cycle 6 batch 1):     118 mapped →  39 heartbeat
+#   P0-T1 (autonomous-orch):   130 mapped →  32 heartbeat   <- pinned here
 #
 # A drop in `MAPPED_PARSER_COUNT` (or a rise that does not have a
 # matching drop in `HEARTBEAT_PARSER_COUNT`) is a regression and the
 # ratchet test below will fail loudly.  Bumping these numbers requires
 # an explicit edit, which forces the reviewer to diff against the
 # previous batch and cross-check the worker report.
+#
+# P0-T1 note: 12 parsers registered since the T05 pin (commix, curl,
+# kube_hunter batches + backfill) moved the split from 118/39 to the
+# runtime-observed 130/32.  Total descriptors stay at 162, binary_blob 0.
 # ---------------------------------------------------------------------------
-MAPPED_PARSER_COUNT: Final[int] = 118
-HEARTBEAT_PARSER_COUNT: Final[int] = 39
+MAPPED_PARSER_COUNT: Final[int] = 130
+HEARTBEAT_PARSER_COUNT: Final[int] = 32
 
 
 # ---------------------------------------------------------------------------

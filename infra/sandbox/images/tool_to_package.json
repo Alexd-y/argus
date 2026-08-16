@@ -2,23 +2,18 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/argus-active-pentest/argus/blob/main/infra/sandbox/images/tool_to_package.json",
   "$comment": "ARG-048 (Cycle 5) seeded the canonical map from sandbox image profile to the tool_ids the image provisions (i.e. installs and exposes on PATH). ARG-049 (Cycle 5 capstone) added contract C16 (image-coverage-completeness) which fails CI when ANY tool_id from backend/config/tools/*.yaml is missing from at least one profile here. As of ARG-049 close every one of the 157 descriptors maps to >=1 of the 6 sandbox images. The YAML descriptor side of the relationship (the image: field) is verified separately by contract C9 (image-label-allowed). Profiles list the tool_ids ASCII-sorted so the file is byte-stable across Git diffs. ARG-058 (Cycle 6) closed the network-tool YAML migration. ARGUS Shannon Integration: argus-kali-binary now has a Dockerfile with AFL++, angr, Z3, Jazzer, radare2, binwalk, libFuzzer for fuzzing and symbolic execution.",
-  "schema_version": "1.3.0",
-  "generated_by": "ARG-048 + ARG-049 + ARG-058 + Shannon Integration (fuzzing/symbolic execution sandbox profile)",
+  "schema_version": "1.4.0",
+  "generated_by": "ARG-048 + ARG-049 + ARG-058 + Shannon Integration (fuzzing/symbolic execution sandbox profile) + P0-T1 (added commix/curl/dig/host/whois to their image profiles; dropped afl_plus_plus/angr/jazzer/libfuzzer_clang/z3_solver from the binary tool_id list — they are image-installed libraries, not standalone catalog descriptors)",
   "profiles": {
     "argus-kali-binary": {
-      "purpose": "Binary / mobile / firmware analysis + fuzzing (AFL++, libFuzzer) + symbolic execution (angr, Z3) + JVM fuzzing (Jazzer) + reverse engineering (radare2, binwalk). Shannon Integration §4.11 + §Sprint4 items 14-15.",
+      "purpose": "Binary / mobile / firmware analysis + reverse engineering (radare2, binwalk, apktool, jadx, mobsf). The image Dockerfile additionally installs fuzzing / symbolic-execution binaries (AFL++, libFuzzer, angr, Z3, Jazzer) used as libraries by these tools; those have no standalone tool descriptor so they are intentionally absent from the tool_id list below (C16 requires a YAML descriptor + matching entry to be added in the same PR). Shannon Integration §4.11 + §Sprint4 items 14-15.",
       "dockerfile_present": true,
       "tools": [
-        "afl_plus_plus",
-        "angr",
         "apktool",
         "binwalk",
-        "jazzer",
         "jadx",
-        "libfuzzer_clang",
         "mobsf_api",
-        "radare2_info",
-        "z3_solver"
+        "radare2_info"
       ]
     },
     "argus-kali-browser": {
@@ -96,12 +91,14 @@
         "censys",
         "chaos",
         "crt_sh",
+        "dig",
         "dnsrecon",
         "dnsx",
         "enum4linux_ng",
         "fierce",
         "findomain",
         "github_search",
+        "host",
         "masscan",
         "naabu",
         "nmap_tcp_full",
@@ -119,6 +116,7 @@
         "theharvester",
         "unicornscan",
         "urlscan",
+        "whois",
         "whois_rdap"
       ]
     },
@@ -131,6 +129,8 @@
         "arjun",
         "clairvoyance",
         "cmsmap",
+        "commix",
+        "curl",
         "dalfox",
         "dirsearch",
         "droopescan",

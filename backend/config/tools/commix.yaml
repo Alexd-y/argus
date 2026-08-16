@@ -28,3 +28,6 @@ evidence_artifacts:
 cwe_hints:
   - 77
   - 78
+owasp_wstg:
+  - "WSTG-INPV-12"
+description: "commix (COMMand Injection eXploiter) — automated OS command-injection detection/exploitation. Runs --batch --level 1 against {url}, probing GET/POST params, headers and cookies for classic, eval-, time- and file-based command injection. APPROVAL REQUIRED: active exploitation attempt (CWE-77/78). Parsing via TEXT_LINES -> parsers.dispatch.unmapped_tool. Upstream: commixproject/commix. Backlog/dev1_md §4.9. P0-T1."

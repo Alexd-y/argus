@@ -91,11 +91,12 @@ _TARGET_IMAGE_LABEL: Final[str] = "argus-kali-network:latest"
 # reference it explicitly without copy-pasting the string.
 _SOURCE_IMAGE_LABEL: Final[str] = "argus-kali-web:latest"
 
-# tool_to_package.json schema version pin (worker bumped 1.1.0 → 1.2.0
-# alongside the migration; the bump signals to JSON consumers that the
-# ``$comment`` / ``generated_by`` / per-profile ``purpose`` semantics
-# changed).
-_EXPECTED_SCHEMA_VERSION: Final[str] = "1.2.0"
+# tool_to_package.json schema version pin. History: 1.1.0 → 1.2.0
+# (ARG-058 migration) → 1.3.0 (Shannon binary profile) → 1.4.0 (P0-T1
+# tool-descriptor integration). The bump signals to JSON consumers that
+# the ``$comment`` / ``generated_by`` / per-profile ``purpose`` /
+# ``tools`` semantics changed.
+_EXPECTED_SCHEMA_VERSION: Final[str] = "1.4.0"
 
 # YAML top-level keys that every migrated descriptor must STILL carry —
 # proves the worker only touched the ``image`` field. Derived from the
@@ -397,14 +398,19 @@ def test_arg058_argus_kali_web_no_longer_contains_migrated_tools(
 def test_arg058_schema_version_bumped(
     tool_to_package_json: dict[str, object],
 ) -> None:
-    """``schema_version`` was bumped 1.1.0 → 1.2.0 by the migration worker.
+    """``schema_version`` tracks manifest shape/semantics changes.
+
+    History: 1.1.0 → 1.2.0 (ARG-058 dual-listed migration) → 1.3.0
+    (Shannon Integration binary profile) → 1.4.0 (P0-T1: added
+    commix/curl/dig/host/whois; pruned non-descriptor fuzzing entries
+    from the binary profile tool_id list).
 
     The bump is the operator-visible signal that the JSON shape
     semantics changed (the ``$comment``, ``generated_by``, and
-    per-profile ``purpose`` strings all reference ARG-058 closure now).
-    A missing bump means the manifest was edited without updating the
-    version pointer — a downstream consumer reading the file by version
-    would silently apply stale semantics.
+    per-profile ``purpose`` strings all changed). A missing bump means
+    the manifest was edited without updating the version pointer — a
+    downstream consumer reading the file by version would silently apply
+    stale semantics.
     """
     actual = tool_to_package_json.get("schema_version")
     assert actual == _EXPECTED_SCHEMA_VERSION, (

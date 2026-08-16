@@ -36,7 +36,7 @@ from src.sandbox.templating import (
 
 # Hard-coded so a silent removal of any tool YAML breaks CI immediately.
 EXPECTED_TOOL_IDS: Final[tuple[str, ...]] = (
-    # §4.1 Passive recon / OSINT (17)
+    # §4.1 Passive recon / OSINT (20, +dig/host/whois P0-T1)
     "amass_passive",
     "subfinder",
     "assetfinder",
@@ -48,8 +48,11 @@ EXPECTED_TOOL_IDS: Final[tuple[str, ...]] = (
     "censys",
     "securitytrails",
     "whois_rdap",
+    "whois",
     "dnsx",
     "dnsrecon",
+    "dig",
+    "host",
     "fierce",
     "github_search",
     "urlscan",
@@ -74,8 +77,9 @@ EXPECTED_TOOL_IDS: Final[tuple[str, ...]] = (
     "ssl_enum_ciphers",
     "tlsx",
     "mkcert_verify",
-    # §4.4 HTTP fingerprinting / tech stack / screenshots (9, ARG-011)
+    # §4.4 HTTP fingerprinting / tech stack / screenshots (10, ARG-011 + P0-T1)
     "httpx",
+    "curl",
     "whatweb",
     "wappalyzer_cli",
     "webanalyze",
@@ -128,6 +132,8 @@ EXPECTED_TOOL_IDS: Final[tuple[str, ...]] = (
     "jsql",
     "tplmap",
     "nosqlmap",
+    # §4.9b Command injection (1, P0-T1)
+    "commix",
     # §4.10 Cross-site scripting (5, ARG-016)
     "dalfox",
     "xsstrike",
@@ -236,15 +242,16 @@ def catalog_dir() -> Path:
 
 def test_expected_count_matches_current_scope() -> None:
     """Current scope ships
-    17 + 12 + 6 + 9 + 10 + 8 + 8 + 7 + 6 + 5 + 6 + 11 + 5
-    + 7 + 12 + 8 + 10 + 5 + 5 = 157 YAMLs
+    20 + 12 + 6 + 10 + 10 + 8 + 8 + 7 + 6 + 1 + 5 + 6 + 11 + 5
+    + 7 + 12 + 8 + 10 + 5 + 5 = 162 YAMLs
     (ARG-003 + ARG-011..ARG-017 + cycle-2 reviewer restorations
     ``cloud_metadata_check`` (Backlog §4.11) and ``gobuster_auth``
     (Backlog §4.12) + ARG-018 §4.14 / §4.15 / §4.16 + ARG-019 §4.17 /
-    §4.18 / §4.19).
+    §4.18 / §4.19 + P0-T1 additions ``dig`` / ``host`` / ``whois``
+    (§4.1), ``curl`` (§4.4), ``commix`` (§4.9b command injection)).
     """
-    assert len(EXPECTED_TOOL_IDS) == 157
-    assert len(set(EXPECTED_TOOL_IDS)) == 157  # no duplicates in the inventory
+    assert len(EXPECTED_TOOL_IDS) == 162
+    assert len(set(EXPECTED_TOOL_IDS)) == 162  # no duplicates in the inventory
 
 
 def test_every_expected_yaml_exists(catalog_dir: Path) -> None:
