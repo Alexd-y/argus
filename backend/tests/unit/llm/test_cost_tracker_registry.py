@@ -22,6 +22,7 @@ from src.llm.cost_tracker import (
     get_tracker,
     pop_tracker,
 )
+from src.llm.task_router import LLMTask
 
 
 class TestCostTrackerGet:
@@ -108,6 +109,12 @@ class TestCostTrackerRecord:
 class TestCostTrackerFacadeIntegration:
     """``call_llm_unified`` must invoke ``_record_llm_cost`` only when ``scan_id`` is given."""
 
+    @pytest.fixture(autouse=True)
+    def legacy_facade_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from src.core.config import settings
+
+        monkeypatch.setattr(settings, "argus_unified_llm_gateway", False)
+
     @pytest.mark.asyncio
     async def test_records_cost_when_scan_id_provided(self) -> None:
         mock_response = MagicMock()
@@ -130,7 +137,7 @@ class TestCostTrackerFacadeIntegration:
                 await call_llm_unified(
                     "sys",
                     "usr",
-                    task=MagicMock(value="test"),
+                    task=LLMTask.REPORT_SECTION,
                     scan_id="scan-cost-test",
                     phase="recon",
                 )
@@ -154,5 +161,5 @@ class TestCostTrackerFacadeIntegration:
         ):
             from src.llm.facade import call_llm_unified
 
-            await call_llm_unified("sys", "usr", task=MagicMock(value="test"))
+            await call_llm_unified("sys", "usr", task=LLMTask.REPORT_SECTION)
             mock_record.assert_not_called()

@@ -7,4 +7,6 @@ def is_frontend_contract_path(path: str) -> bool:
         return path == "/api/v1/scans" or path.startswith("/api/v1/scans/")
     if path.startswith("/api/v1/reports"):
         return path == "/api/v1/reports" or path.startswith("/api/v1/reports/")
+    if path.startswith("/api/v1/quick"):
+        return path == "/api/v1/quick" or path.startswith("/api/v1/quick/")
     return False

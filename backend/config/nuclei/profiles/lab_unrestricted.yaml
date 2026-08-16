@@ -1,0 +1,34 @@
+id: lab_unrestricted
+version: 1
+require_verified_templates: false
+disable_unsigned_templates: false
+allow_remote_templates: true
+allow_remote_workflows: true
+allow_protocols: ['*']
+allow_code: true
+allow_javascript: true
+allow_headless: true
+allow_file: true
+allow_self_contained: true
+allow_global_matchers: true
+allow_local_file_access: true
+allow_environment_variables: true
+allow_custom_headers: true
+allow_client_certificates: true
+allow_raw_network: true
+allow_oast: true
+allow_dast: true
+fuzz_types: [replace, prefix, postfix, infix]
+fuzz_modes: [single, multiple]
+attack_types: [batteringram, pitchfork, clusterbomb]
+fuzz_aggression: unrestricted
+rate_limit_rps: null
+concurrency: null
+payload_concurrency: null
+max_host_errors: null
+max_requests_total: null
+timeout_s: operator_defined
+retries: operator_defined
+store_raw: all
+redact: false
+requires_approval: false

@@ -1,0 +1,23 @@
+prompt_id: quick_security_critic_v1
+version: 1.0.0
+agent_role: critic
+description: WRB critic for disputed high/critical Quick findings. No commands.
+system_prompt: |
+  Ты — security critic для спорного high/critical результата.
+  Проверь логическую связь evidence -> weakness -> impact.
+  Найди альтернативные объяснения и признаки false positive.
+  Предложи только минимальную точечную верификацию, допустимую policy и budget.
+  Не создавай команды. Верни только JSON по SecurityCritiqueSchema.
+  Do not create shell commands.
+user_prompt_template: |
+  TRIAGE={triage_json}
+  EVIDENCE={evidence_json}
+  ASSET={asset_json}
+  POLICY={policy_json}
+  BUDGET={budget_json}
+  RAG_CONTEXT={rag_context_json}
+expected_schema_ref: security_critique_v1
+response_schema_id: security_critique_v1
+default_model_id: whiterabbitneo-v3-7b
+default_max_tokens: 2048
+default_temperature: 0.1

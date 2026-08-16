@@ -8,12 +8,25 @@ from sqlalchemy import String, cast, select, update
 
 from src.celery_app import app
 from src.core.config import settings
-from src.db.models import Report
+from src.db.models import Report, Scan
 from src.db.session import create_task_engine_and_session, set_session_tenant
 from src.orchestration.state_machine import (
     ExploitationApprovalRequiredError,
+    LabLeaseRequiredError,
     run_scan_state_machine,
 )
+from src.policy.scan_queue import notify_scan_finished
+from src.quick.cancellation import (
+    ScanCancelledError,
+    is_scan_cancelled,
+    register_celery_task_id,
+    unregister_celery_task_id,
+)
+from src.quick.scheduler import (
+    deadline_from_options,
+    seconds_until_deadline,
+)
+from src.quick.workflow import is_quick_execution
 from src.recon.vulnerability_analysis.active_scan.mcp_runner import (
     run_va_active_scan_sync,
 )
@@ -22,8 +35,41 @@ from src.tools.guardrails import validate_target_for_tool
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_RETRY_TYPES = (ConnectionError, TimeoutError, OSError, asyncio.TimeoutError)
+_DEFAULT_SCAN_TIMEOUT_SEC = 86400.0
+_REPORT_GRACE_SEC = 30.0
 
-@app.task(bind=True, name="argus.scan_phase")
+
+def _scan_wait_timeout_seconds(options: dict) -> float:
+    deadline = deadline_from_options(options)
+    if deadline is None:
+        return _DEFAULT_SCAN_TIMEOUT_SEC
+    remaining = seconds_until_deadline(deadline)
+    return max(_REPORT_GRACE_SEC, remaining + _REPORT_GRACE_SEC)
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    return isinstance(exc, _TRANSIENT_RETRY_TYPES)
+
+
+def _quick_retry_allowed(options: dict, scan_id: str) -> bool:
+    if is_scan_cancelled(scan_id):
+        return False
+    if not is_quick_execution(options):
+        return False
+    deadline = deadline_from_options(options)
+    if deadline is None:
+        return True
+    return seconds_until_deadline(deadline) > 0
+
+
+@app.task(
+    bind=True,
+    name="argus.scan_phase",
+    acks_late=True,
+    reject_on_worker_lost=True,
+    max_retries=1,
+)
 def scan_phase_task(
     _self,
     scan_id: str,
@@ -34,24 +80,44 @@ def scan_phase_task(
     """
     Execute full scan pipeline in background.
     Runs state machine: recon -> threat_modeling -> vuln_analysis -> exploitation -> post_exploitation -> reporting.
+    Quick mode skips exploitation/post_exploitation and honors cancel + deadline.
     """
+    celery_id = str(getattr(getattr(_self, "request", None), "id", "") or "")
+    if celery_id:
+        register_celery_task_id(scan_id, celery_id)
 
     async def _run():
         engine, session_factory = create_task_engine_and_session()
         try:
             async with session_factory() as session:
                 await set_session_tenant(session, tenant_id)
+                status_row = await session.execute(
+                    select(Scan.status).where(cast(Scan.id, String) == scan_id)
+                )
+                current_status = str(status_row.scalar_one_or_none() or "").lower()
+                if current_status == "cancelled":
+                    await notify_scan_finished(tenant_id)
+                    return {"status": "cancelled", "scan_id": scan_id}
+                if current_status == "completed":
+                    return {"status": "completed", "scan_id": scan_id}
+                wait_timeout = _scan_wait_timeout_seconds(options if isinstance(options, dict) else {})
                 try:
                     await asyncio.wait_for(
                         run_scan_state_machine(
                             session, scan_id, tenant_id, target_url, options
                         ),
-                        timeout=86400,
+                        timeout=wait_timeout,
                     )
                     return {"status": "completed", "scan_id": scan_id}
-                except asyncio.TimeoutError:
-                    from src.db.models import Scan
-
+                except ScanCancelledError:
+                    await notify_scan_finished(tenant_id)
+                    return {"status": "cancelled", "scan_id": scan_id}
+                except TimeoutError:
+                    if is_quick_execution(options):
+                        logger.warning(
+                            "quick_scan_deadline_timeout",
+                            extra={"event": "quick_scan_deadline_timeout", "scan_id": scan_id},
+                        )
                     async with session_factory() as err_session:
                         await set_session_tenant(err_session, tenant_id)
                         await err_session.execute(
@@ -64,15 +130,35 @@ def scan_phase_task(
                         "Scan timed out after 24h",
                         extra={"scan_id": scan_id},
                     )
-                    from src.policy.scan_queue import notify_scan_finished
-
                     await notify_scan_finished(tenant_id)
                     return {"status": "timeout", "scan_id": scan_id}
                 except ExploitationApprovalRequiredError:
                     return {"status": "awaiting_approval", "scan_id": scan_id}
-                except Exception:
-                    from src.db.models import Scan
-
+                except LabLeaseRequiredError as lease_exc:
+                    logger.error(
+                        "lab_lease_required",
+                        extra={
+                            "event": "lab_lease_required",
+                            "scan_id": scan_id,
+                            "reason": str(lease_exc),
+                        },
+                    )
+                    await notify_scan_finished(tenant_id)
+                    return {"status": "failed", "scan_id": scan_id, "error": "lab_lease_required"}
+                except Exception as exc:
+                    if _is_transient_error(exc) and _quick_retry_allowed(
+                        options if isinstance(options, dict) else {},
+                        scan_id,
+                    ):
+                        logger.warning(
+                            "scan_phase_transient_retry",
+                            extra={
+                                "event": "scan_phase_transient_retry",
+                                "scan_id": scan_id,
+                                "exception_type": type(exc).__name__,
+                            },
+                        )
+                        raise _self.retry(exc=exc, countdown=10) from exc
                     async with session_factory() as err_session:
                         await set_session_tenant(err_session, tenant_id)
                         await err_session.execute(
@@ -82,14 +168,16 @@ def scan_phase_task(
                         )
                         await err_session.commit()
 
-                    from src.policy.scan_queue import notify_scan_finished
-
                     await notify_scan_finished(tenant_id)
                     raise
         finally:
             await engine.dispose()
 
-    return asyncio.run(_run())
+    try:
+        return asyncio.run(_run())
+    finally:
+        if celery_id:
+            unregister_celery_task_id(scan_id, celery_id)
 
 
 def _sync_run_generate_report(
@@ -318,6 +406,10 @@ def tool_run_task(
     command: str,
     target: str | None = None,
     use_sandbox: bool | None = None,
+    scan_options: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
+    scan_id: str | None = None,
+    engagement_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute security tool command in background.
@@ -335,7 +427,16 @@ def tool_run_task(
             }
 
     use_sb = use_sandbox if use_sandbox is not None else settings.sandbox_enabled
-    result = execute_command(command, use_cache=False, use_sandbox=use_sb)
+    result = execute_command(
+        command,
+        use_cache=False,
+        use_sandbox=use_sb,
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        scan_options=scan_options,
+        engagement_id=engagement_id,
+        target=target,
+    )
     result["tool"] = tool_name
     return result
 
@@ -377,4 +478,4 @@ def va_active_scan_tool_task(
 
 
 # VA-003: named VA tool tasks (registers Celery task names on import)
-from . import tools as _va_named_tool_tasks  # noqa: E402, F401
+from . import tools as _va_named_tool_tasks  # noqa: F401

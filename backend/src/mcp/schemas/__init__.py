@@ -10,10 +10,10 @@ unintended code path.
 from src.mcp.schemas.approval import (
     ApprovalDecideInput,
     ApprovalDecideResult,
+    ApprovalDecisionAction,
     ApprovalListInput,
     ApprovalListResult,
     ApprovalSummary,
-    ApprovalDecisionAction,
 )
 from src.mcp.schemas.common import PaginationInput, ToolResultStatus
 from src.mcp.schemas.finding import (
@@ -44,10 +44,15 @@ from src.mcp.schemas.report import (
     ReportTier,
 )
 from src.mcp.schemas.scan import (
+    QuickMcpOptions,
     ScanCancelInput,
     ScanCancelResult,
+    ScanCoverageInput,
+    ScanCoverageResult,
     ScanCreateInput,
     ScanCreateResult,
+    ScanPlanInput,
+    ScanPlanResult,
     ScanProfile,
     ScanScopeInput,
     ScanStatus,
@@ -86,6 +91,7 @@ __all__ = [
     "PolicyEvaluateResult",
     "PolicyEvaluationOutcome",
     "PolicyRiskLevel",
+    "QuickMcpOptions",
     "ReportDownloadInput",
     "ReportDownloadResult",
     "ReportFormat",
@@ -94,8 +100,12 @@ __all__ = [
     "ReportTier",
     "ScanCancelInput",
     "ScanCancelResult",
+    "ScanCoverageInput",
+    "ScanCoverageResult",
     "ScanCreateInput",
     "ScanCreateResult",
+    "ScanPlanInput",
+    "ScanPlanResult",
     "ScanProfile",
     "ScanScopeInput",
     "ScanStatus",

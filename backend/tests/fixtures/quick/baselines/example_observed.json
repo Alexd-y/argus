@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "run_id": "example-observed",
+  "targets": [
+    {
+      "target": "http://quick-http.lab",
+      "observed_finding_ids": ["cve-2024-1234"],
+      "planned_coverage_pairs": 2,
+      "recorded_coverage_pairs": 2,
+      "deadline_met": true,
+      "out_of_scope_requests": 0,
+      "cross_tenant_data_exposure": 0,
+      "untracked_tool_executions": 0,
+      "report_without_coverage": 0
+    },
+    {
+      "target": "http://evil.example",
+      "observed_finding_ids": [],
+      "planned_coverage_pairs": 0,
+      "recorded_coverage_pairs": 0,
+      "deadline_met": true,
+      "out_of_scope_requests": 0,
+      "cross_tenant_data_exposure": 0,
+      "untracked_tool_executions": 0,
+      "report_without_coverage": 0
+    }
+  ]
+}

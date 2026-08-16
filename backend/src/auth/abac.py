@@ -11,9 +11,10 @@ import hashlib
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +118,12 @@ _ROLE_PERMISSIONS: dict[Role, dict[ResourceType, set[AccessAction]]] = {
         ResourceType.SANDBOX: {AccessAction.READ, AccessAction.EXECUTE, AccessAction.ADMIN},
         ResourceType.POLICY: {AccessAction.READ, AccessAction.WRITE, AccessAction.ADMIN},
         ResourceType.AUDIT: {AccessAction.READ, AccessAction.EXPORT, AccessAction.ADMIN},
-        ResourceType.USER: {AccessAction.READ, AccessAction.WRITE, AccessAction.DELETE},
+        ResourceType.USER: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.DELETE,
+            AccessAction.ADMIN,
+        },
         ResourceType.TENANT: {AccessAction.READ, AccessAction.WRITE, AccessAction.ADMIN},
     },
     Role.COMPLIANCE_OFFICER: {
@@ -197,13 +203,15 @@ class ABACEngine:
             )
 
         # Device posture check (for sensitive actions)
-        if request.action in (AccessAction.ADMIN, AccessAction.DELETE):
-            if not request.device_trusted:
-                return AccessDecision(
-                    allowed=False,
-                    reason="device_not_trusted",
-                    requires_mfa=True,
-                )
+        if (
+            request.action in (AccessAction.ADMIN, AccessAction.DELETE)
+            and not request.device_trusted
+        ):
+            return AccessDecision(
+                allowed=False,
+                reason="device_not_trusted",
+                requires_mfa=True,
+            )
 
         watermark = generate_session_watermark(request)
         return AccessDecision(
@@ -246,9 +254,7 @@ def check_device_posture(
     known_device_ids: set[str] | None = None,
 ) -> bool:
     """Basic device posture check."""
-    if not user_agent or not ip_address:
-        return False
-    return True
+    return bool(user_agent and ip_address)
 
 
 MFA_VERIFICATION_TIMEOUT = 300

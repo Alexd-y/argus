@@ -23,19 +23,33 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 import logging
 import os
 import time
+import uuid
 import warnings
 
 import httpx
 
+from src.core.config import settings
+from src.execution_mode.metrics import increment_llm_fallback
+from src.execution_mode.runtime_context import resolve_execution_mode_with_fallback
 from src.governance.safety.monitor import get_safety_monitor
 
 from src.llm.adapters import _get_key
 from src.llm.phase_routing import PhaseRoute, get_phase_route
 from src.llm.router import call_llm as _router_call_llm
+from src.llm.gateway import get_unified_llm_gateway
+from src.llm.schemas import (
+    ContentClass,
+    ExecutionMode,
+    LlmRequest,
+    LlmResponseEnvelope,
+    LlmResponseStatus,
+)
 from src.llm.task_router import LLMTask
+from src.llm.task_router import _TASK_TO_ROLE
 from src.llm.task_router import call_llm_for_task as _task_router_call
 from src.llm.task_router import check_tier_escalation
 
@@ -83,6 +97,335 @@ _CLOUD_KEY_ENVS: tuple[str, ...] = (
     "PERPLEXITY_API_KEY",
     "GOOGLE_API_KEY",
 )
+
+_ROLE_TO_PREFERRED_ALIAS: dict[str, str] = {
+    "planner": "security_reasoner",
+    "code": "code_utility",
+    "report": "report_writer",
+    "osint": "report_writer",
+}
+
+# Task-level overrides — distinct aliases must resolve different provider chains.
+_TASK_TO_PREFERRED_ALIAS: dict[LLMTask, str] = {
+    LLMTask.ORCHESTRATION: "facade_orchestrator",
+    LLMTask.THREAT_MODELING: "security_reasoner",
+    LLMTask.VULN_ANALYSIS: "security_reasoner",
+    LLMTask.VALIDATION_ONESHOT: "security_reasoner",
+    LLMTask.DEDUP_ANALYSIS: "fast_triage",
+    LLMTask.ZERO_DAY_ANALYSIS: "security_reasoner",
+    LLMTask.POC_GENERATION: "code_utility",
+    LLMTask.EXPLOIT_GENERATION: "wrb_critic",
+    LLMTask.REPORT_SECTION: "report_writer",
+    LLMTask.EXECUTIVE_SUMMARY: "report_writer",
+    LLMTask.REMEDIATION_PLAN: "report_writer",
+    LLMTask.COST_SUMMARY: "report_writer",
+    LLMTask.QUICK_PLANNER: "quick_planner",
+    LLMTask.QUICK_FINGERPRINT: "quick_triage",
+    LLMTask.QUICK_TRIAGE: "quick_triage",
+    LLMTask.QUICK_CRITIC: "quick_critic",
+    LLMTask.QUICK_REPORTER: "quick_reporter",
+}
+
+# Pack §13 prompt ids attached when a response schema is requested.
+_SCHEMA_BOUND_PROMPT_IDS: dict[LLMTask, str] = {
+    LLMTask.ORCHESTRATION: "scan_planner_v2",
+    LLMTask.VALIDATION_ONESHOT: "wrb_security_critic_v3",
+    LLMTask.QUICK_PLANNER: "quick_planner_v1",
+    LLMTask.QUICK_FINGERPRINT: "quick_fingerprint_classifier_v1",
+    LLMTask.QUICK_TRIAGE: "quick_finding_triage_v1",
+    LLMTask.QUICK_CRITIC: "quick_security_critic_v1",
+    LLMTask.QUICK_REPORTER: "quick_reporter_v1",
+}
+
+_QUICK_TASKS: frozenset[LLMTask] = frozenset(
+    {
+        LLMTask.QUICK_PLANNER,
+        LLMTask.QUICK_FINGERPRINT,
+        LLMTask.QUICK_TRIAGE,
+        LLMTask.QUICK_CRITIC,
+        LLMTask.QUICK_REPORTER,
+    }
+)
+_QUICK_QWYTHOS_TASKS: frozenset[LLMTask] = frozenset(
+    {LLMTask.QUICK_PLANNER, LLMTask.QUICK_REPORTER}
+)
+_QUICK_SMALL_TASKS: frozenset[LLMTask] = frozenset(
+    {LLMTask.QUICK_FINGERPRINT, LLMTask.QUICK_TRIAGE}
+)
+_QUICK_DEFAULT_TIMEOUT_SEC = 30.0
+
+
+def _should_use_unified_gateway(
+    task: LLMTask | None,
+    response_schema_id: str | None,
+    use_unified: bool,
+) -> bool:
+    if not settings.argus_unified_llm_gateway:
+        return False
+    if task is None or not isinstance(task, LLMTask):
+        return False
+    if task == LLMTask.PERPLEXITY_OSINT:
+        return False
+    if task in _QUICK_TASKS:
+        # Quick has its own Qwythos/WRB/small routing. Skipping the unified
+        # gateway avoids prepending SYSTEM_BASE_V3 (which asks for shell/payloads).
+        return False
+    if use_unified or response_schema_id:
+        return True
+    return True
+
+
+def _task_to_preferred_alias(task: LLMTask) -> str:
+    override = _TASK_TO_PREFERRED_ALIAS.get(task)
+    if override:
+        return override
+    role = _TASK_TO_ROLE.get(task, "planner")
+    return _ROLE_TO_PREFERRED_ALIAS.get(role, "security_reasoner")
+
+
+def _resolve_prompt_id(
+    task: LLMTask,
+    response_schema_id: str | None,
+    prompt_id: str | None = None,
+) -> str:
+    explicit = (prompt_id or "").strip()
+    if explicit:
+        return explicit
+    if response_schema_id:
+        return _SCHEMA_BOUND_PROMPT_IDS.get(task, "")
+    return ""
+
+
+def _to_llm_execution_mode(mode: object) -> ExecutionMode:
+    if isinstance(mode, ExecutionMode):
+        return mode
+    raw = str(getattr(mode, "value", mode)).strip().lower()
+    try:
+        return ExecutionMode(raw)
+    except ValueError:
+        return ExecutionMode.PRODUCTION
+
+
+def _resolve_execution_mode(
+    execution_mode: ExecutionMode | str | None,
+    scan_options: dict | None = None,
+    *,
+    phase: str = "unknown",
+    task: LLMTask | None = None,
+    warn_if_missing: bool = False,
+) -> ExecutionMode:
+    domain_mode, missing = resolve_execution_mode_with_fallback(
+        execution_mode,
+        scan_options,
+    )
+    if not missing:
+        return _to_llm_execution_mode(domain_mode)
+    if execution_mode is not None and execution_mode != "":
+        raw = getattr(execution_mode, "value", execution_mode)
+        normalized = str(raw).strip().lower()
+        logger.warning(
+            "unified_gateway_unknown_execution_mode",
+            extra={
+                "event": "unified_gateway_unknown_execution_mode",
+                "execution_mode": normalized,
+            },
+        )
+        return ExecutionMode.PRODUCTION
+    if warn_if_missing:
+        logger.warning(
+            "llm_execution_mode_missing",
+            extra={
+                "event": "llm_execution_mode_missing",
+                "phase": phase,
+                "task": task.value if task is not None else "none",
+                "default": ExecutionMode.PRODUCTION.value,
+            },
+        )
+    return ExecutionMode.PRODUCTION
+
+
+def _resolve_content_class(
+    content_class: ContentClass | str | None,
+    execution_mode: ExecutionMode,
+) -> ContentClass:
+    if content_class is not None and content_class != "":
+        if isinstance(content_class, ContentClass):
+            return content_class
+        raw = getattr(content_class, "value", content_class)
+        try:
+            return ContentClass(str(raw).strip().lower())
+        except ValueError:
+            logger.warning(
+                "unified_gateway_unknown_content_class",
+                extra={
+                    "event": "unified_gateway_unknown_content_class",
+                    "content_class": str(raw),
+                },
+            )
+    if execution_mode == ExecutionMode.LAB_UNRESTRICTED:
+        return ContentClass.LAB_ARTIFACT
+    return ContentClass.INTERNAL
+
+
+def _coerce_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _resolve_lab_cloud_allowed(
+    execution_mode: ExecutionMode,
+    scan_options: dict | None,
+) -> bool:
+    if execution_mode != ExecutionMode.LAB_UNRESTRICTED:
+        return False
+    if scan_options and "lab_cloud_allowed" in scan_options:
+        return _coerce_bool(scan_options.get("lab_cloud_allowed"))
+    return bool(settings.lab_cloud_allowed)
+
+
+def _build_gateway_request(
+    system_prompt: str,
+    user_prompt: str,
+    task: LLMTask,
+    *,
+    scan_id: str | None,
+    phase: str,
+    response_schema_id: str | None,
+    tenant_id: str | None,
+    engagement_id: str | None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
+) -> LlmRequest:
+    resolved_tenant = tenant_id or settings.default_tenant_id
+    resolved_engagement = engagement_id or scan_id or "unknown"
+    resolved_mode = _resolve_execution_mode(
+        execution_mode,
+        scan_options,
+        phase=phase,
+        task=task,
+        warn_if_missing=True,
+    )
+    resolved_alias = (preferred_alias or "").strip() or _task_to_preferred_alias(task)
+    return LlmRequest(
+        request_id=f"facade_{uuid.uuid4().hex[:16]}",
+        tenant_id=resolved_tenant,
+        engagement_id=resolved_engagement,
+        scan_id=scan_id,
+        phase=phase,
+        task_type=task.value,
+        execution_mode=resolved_mode,
+        content_class=_resolve_content_class(content_class, resolved_mode),
+        preferred_alias=resolved_alias,
+        user_prompt=user_prompt,
+        system_prompt=system_prompt or None,
+        response_schema_id=response_schema_id,
+        prompt_id=_resolve_prompt_id(task, response_schema_id, prompt_id),
+        lab_cloud_allowed=_resolve_lab_cloud_allowed(resolved_mode, scan_options),
+    )
+
+
+def _envelope_to_text(
+    envelope: LlmResponseEnvelope,
+    response_schema_id: str | None,
+) -> str:
+    if envelope.status == LlmResponseStatus.SCHEMA_ERROR:
+        raise RuntimeError(
+            f"LLM response schema validation failed "
+            f"(schema_id={envelope.schema_id or response_schema_id}): "
+            f"{envelope.result.get('raw_text', envelope.result)}"
+        )
+    if envelope.status == LlmResponseStatus.PROVIDER_ERROR:
+        error_code = envelope.result.get("error_code", "provider_error")
+        raise RuntimeError(f"Unified LLM gateway provider error: {error_code}")
+    if envelope.status != LlmResponseStatus.OK:
+        raise RuntimeError(
+            f"Unified LLM gateway returned non-ok status: {envelope.status}"
+        )
+
+    result = envelope.result
+    if response_schema_id:
+        return json.dumps(result, ensure_ascii=False)
+    if isinstance(result.get("text"), str):
+        return result["text"]
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _call_via_unified_gateway(
+    system_prompt: str,
+    user_prompt: str,
+    task: LLMTask,
+    *,
+    scan_id: str | None = None,
+    phase: str = "unknown",
+    response_schema_id: str | None = None,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
+) -> str:
+    gateway = get_unified_llm_gateway()
+    request = _build_gateway_request(
+        system_prompt,
+        user_prompt,
+        task,
+        scan_id=scan_id,
+        phase=phase,
+        response_schema_id=response_schema_id,
+        tenant_id=tenant_id,
+        engagement_id=engagement_id,
+        execution_mode=execution_mode,
+        preferred_alias=preferred_alias,
+        content_class=content_class,
+        scan_options=scan_options,
+        prompt_id=prompt_id,
+    )
+    envelope = await gateway.generate(request)
+
+    if envelope.status == LlmResponseStatus.PROVIDER_ERROR and task in _CLOUD_FALLBACK_TASKS:
+        logger.info(
+            "unified_gateway_provider_error_cloud_fallback",
+            extra={
+                "event": "unified_gateway_provider_error_cloud_fallback",
+                "task": task.value,
+                "phase": phase,
+                "error_code": envelope.result.get("error_code", "provider_error"),
+            },
+        )
+        return await _call_via_task_router(
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
+        )
+
+    if scan_id and envelope.usage:
+        model_label = envelope.model or envelope.alias or "unified_gateway"
+        _record_llm_cost(
+            scan_id,
+            phase,
+            task.value,
+            model_label,
+            envelope.usage.input_tokens,
+            envelope.usage.output_tokens,
+        )
+        _annotate_last_cost_record(
+            scan_id,
+            envelope.alias or envelope.provider,
+            bool(envelope.fallback_attempts),
+            envelope.usage.latency_ms,
+        )
+
+    return _envelope_to_text(envelope, response_schema_id)
 
 
 def _exploit_llm_mode() -> str:
@@ -151,6 +494,164 @@ def _get_wrb_adapter():
     """Lazy-load WhiteRabbitNeo adapter — avoids circular imports at module level."""
     from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
     return get_whiterabbitneo_adapter()
+
+
+def _cloud_llm_allowed(scan_options: dict | None) -> bool:
+    if not scan_options:
+        return False
+    if scan_options.get("cloud_llm_allowed") is True:
+        return True
+    quick = scan_options.get("quick")
+    return isinstance(quick, dict) and quick.get("cloud_llm_allowed") is True
+
+
+def _qwythos_base_url() -> str:
+    return (os.environ.get("QWYTHOS_URL") or "").strip().rstrip("/")
+
+
+def _small_model_endpoint() -> tuple[str, str] | None:
+    gemma = (os.environ.get("GEMMA_LOCAL_URL") or "").strip().rstrip("/")
+    if gemma:
+        return gemma, "gemma-2-2b-it"
+    qwen = (os.environ.get("QWEN_LOCAL_URL") or "").strip().rstrip("/")
+    if qwen:
+        return qwen, "qwen3-4b-instruct"
+    return None
+
+
+async def _call_via_local_openai(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    base_url: str,
+    model: str,
+    task: LLMTask | None = None,
+    scan_id: str | None = None,
+    phase: str = "unknown",
+    timeout_sec: float = _QUICK_DEFAULT_TIMEOUT_SEC,
+) -> str:
+    """OpenAI-compatible local call (Qwythos / Gemma / Qwen). No cloud keys."""
+    if not base_url:
+        raise RuntimeError("local_openai_url_missing")
+    messages: list[dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": user_prompt})
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    }
+    url = f"{base_url}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    timeout = httpx.Timeout(connect=10.0, read=timeout_sec, write=30.0, pool=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise ValueError("Empty response from local OpenAI-compatible model")
+    content = choices[0].get("message", {}).get("content", "")
+    text = (content or "").strip()
+    if scan_id:
+        usage = data.get("usage") or {}
+        _record_llm_cost(
+            scan_id,
+            phase,
+            task.value if task else "unknown",
+            model,
+            int(usage.get("prompt_tokens") or 0),
+            int(usage.get("completion_tokens") or 0),
+        )
+    return text
+
+
+async def _execute_quick_route(
+    system_prompt: str,
+    user_prompt: str,
+    task: LLMTask,
+    *,
+    scan_id: str | None,
+    phase: str,
+    scan_options: dict | None,
+) -> str:
+    """Quick-mode routing: Qwythos planner/reporter, WRB critic, small fingerprint/triage.
+
+    Cloud is used only for the reporter when ``cloud_llm_allowed`` is true.
+    Failures raise so ``llm_routes`` can apply deterministic fallbacks.
+    """
+    cloud_ok = _cloud_llm_allowed(scan_options)
+
+    if task in _QUICK_QWYTHOS_TASKS:
+        qwythos_url = _qwythos_base_url()
+        if qwythos_url:
+            try:
+                return await _call_via_local_openai(
+                    system_prompt,
+                    user_prompt,
+                    base_url=qwythos_url,
+                    model="qwythos-9b-claude-mythos-5-1m",
+                    task=task,
+                    scan_id=scan_id,
+                    phase=phase,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "quick_qwythos_failed",
+                    extra={
+                        "event": "quick_qwythos_failed",
+                        "task": task.value,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                if task == LLMTask.QUICK_REPORTER and cloud_ok and _any_cloud_key_configured():
+                    return await _call_via_task_router(
+                        system_prompt, user_prompt, task, scan_id=scan_id, phase=phase
+                    )
+                raise RuntimeError(f"qwythos_unavailable:{task.value}") from exc
+        if task == LLMTask.QUICK_REPORTER and cloud_ok and _any_cloud_key_configured():
+            return await _call_via_task_router(
+                system_prompt, user_prompt, task, scan_id=scan_id, phase=phase
+            )
+        raise RuntimeError(f"qwythos_unavailable:{task.value}")
+
+    if task == LLMTask.QUICK_CRITIC:
+        wrb = _get_wrb_adapter()
+        if wrb.is_configured:
+            try:
+                async with _get_wrb_semaphore():
+                    return await _call_via_whiterabbitneo(
+                        system_prompt, user_prompt, task=task, scan_id=scan_id, phase=phase
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "quick_wrb_critic_failed",
+                    extra={"event": "quick_wrb_critic_failed", "error_type": type(exc).__name__},
+                )
+                raise RuntimeError("wrb_unavailable:quick_critic") from exc
+        raise RuntimeError("wrb_unavailable:quick_critic")
+
+    if task in _QUICK_SMALL_TASKS:
+        endpoint = _small_model_endpoint()
+        if endpoint is None:
+            raise RuntimeError(f"small_model_unavailable:{task.value}")
+        base_url, model = endpoint
+        try:
+            return await _call_via_local_openai(
+                system_prompt,
+                user_prompt,
+                base_url=base_url,
+                model=model,
+                task=task,
+                scan_id=scan_id,
+                phase=phase,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"small_model_unavailable:{task.value}") from exc
+
+    raise RuntimeError(f"unsupported_quick_task:{task.value}")
 
 
 async def _call_via_whiterabbitneo(
@@ -262,13 +763,59 @@ async def _execute_phase_route(
                 system_prompt, user_prompt, task=task, scan_id=scan_id, phase=phase
             )
 
+    async def _run_qwythos() -> str:
+        url = _qwythos_base_url()
+        if not url:
+            raise RuntimeError("qwythos_unavailable")
+        return await _call_via_local_openai(
+            system_prompt,
+            user_prompt,
+            base_url=url,
+            model="qwythos-9b-claude-mythos-5-1m",
+            task=task,
+            scan_id=scan_id,
+            phase=phase,
+        )
+
+    async def _run_small() -> str:
+        endpoint = _small_model_endpoint()
+        if endpoint is None:
+            raise RuntimeError("small_model_unavailable")
+        base_url, model = endpoint
+        return await _call_via_local_openai(
+            system_prompt,
+            user_prompt,
+            base_url=base_url,
+            model=model,
+            task=task,
+            scan_id=scan_id,
+            phase=phase,
+        )
+
     def _primary_available() -> bool:
-        return _any_cloud_key_configured() if route.mode == "cloud" else wrb.is_configured
+        if route.mode == "cloud":
+            return _any_cloud_key_configured()
+        if route.mode == "wrb":
+            return wrb.is_configured
+        if route.mode == "qwythos":
+            return bool(_qwythos_base_url())
+        if route.mode == "small":
+            return _small_model_endpoint() is not None
+        return wrb.is_configured
+
+    async def _run_mode(mode: str) -> str:
+        if mode == "cloud":
+            return await _run_cloud()
+        if mode == "qwythos":
+            return await _run_qwythos()
+        if mode == "small":
+            return await _run_small()
+        return await _run_wrb()
 
     try:
         if not _primary_available():
             raise RuntimeError(f"phase route primary '{route.mode}' unavailable")
-        text = await (_run_cloud() if route.mode == "cloud" else _run_wrb())
+        text = await _run_mode(route.mode)
     except Exception as exc:
         if route.fallback == "none":
             _annotate_last_cost_record(
@@ -287,11 +834,18 @@ async def _execute_phase_route(
             },
         )
         fallback_used = True
+        increment_llm_fallback()
         if route.fallback == "cloud":
             if not _any_cloud_key_configured():
                 raise
             text = await _run_cloud()
             chosen_alias = f"{route.primary_alias}->cloud_fallback"
+        elif route.fallback == "qwythos":
+            text = await _run_qwythos()
+            chosen_alias = f"{route.primary_alias}->qwythos_fallback"
+        elif route.fallback == "small":
+            text = await _run_small()
+            chosen_alias = f"{route.primary_alias}->small_fallback"
         else:  # wrb
             if not wrb.is_configured:
                 raise
@@ -317,8 +871,7 @@ async def _execute_phase_route(
 
 
 def _safety_monitor_enabled() -> bool:
-    val = (os.environ.get("SAFETY_MONITOR_ENABLED") or "true").strip().lower()
-    return val in {"true", "1", "yes", "on"}
+    return settings.safety_monitor_enabled
 
 
 def _safety_check_prompt(prompt: str, task: str) -> None:
@@ -373,6 +926,15 @@ async def call_llm_unified(
     model: str | None = None,
     scan_id: str | None = None,
     phase: str = "unknown",
+    response_schema_id: str | None = None,
+    use_unified: bool = False,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
 ) -> str:
     """Primary async entry point for every LLM call in ARGUS.
 
@@ -384,12 +946,39 @@ async def call_llm_unified(
       - OSINT tasks → Perplexity directly (WRB has no internet access)
       - No task → legacy generic router
 
+    When ``settings.argus_unified_llm_gateway`` is True and *task* is set,
+    requests go through ``UnifiedLlmGateway`` (alias → real provider/model,
+    mode-aware prompts, sequential fallback). Flag False keeps the legacy path.
+
+    ``execution_mode`` is optional. When omitted, the facade tries scan options
+    then the request-scoped contextvar, then defaults to production and emits a
+    structured warning (not a hard fail) if the unified gateway is on.
+
     When *scan_id* is provided, token usage is recorded to the per-scan cost
     tracker (best-effort, never fails the main flow).
 
     Returns the model's text response.
     """
     _safety_check_prompt(user_prompt, task.value if task else "none")
+
+    if _should_use_unified_gateway(task, response_schema_id, use_unified):
+        result = await _call_via_unified_gateway(
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
+            response_schema_id=response_schema_id,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            execution_mode=execution_mode,
+            preferred_alias=preferred_alias,
+            content_class=content_class,
+            scan_options=scan_options,
+            prompt_id=prompt_id,
+        )
+        _safety_check_response(result, task.value)
+        return result
 
     wrb = _get_wrb_adapter()
 
@@ -428,6 +1017,22 @@ async def call_llm_unified(
         result = await _call_via_task_router(
             system_prompt, user_prompt, task,
             scan_id=scan_id, phase=phase,
+        )
+        _safety_check_response(result, task.value)
+        return result
+
+    # Quick execution mode: Qwythos planner/reporter, WRB critic, small fingerprint/triage.
+    # Explicit exception to WRB-only analysis routing (WRB-001). Must run before
+    # phase routing so cloud_llm_allowed and local fallbacks stay on this path.
+    # Production vuln_analysis is unchanged.
+    if task in _QUICK_TASKS:
+        result = await _execute_quick_route(
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
+            scan_options=scan_options,
         )
         _safety_check_response(result, task.value)
         return result
@@ -572,6 +1177,15 @@ def call_llm_sync(
     model: str | None = None,
     scan_id: str | None = None,
     phase: str = "unknown",
+    response_schema_id: str | None = None,
+    use_unified: bool = False,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
 ) -> str:
     """Sync wrapper for contexts that cannot use ``await``.
 
@@ -592,6 +1206,15 @@ def call_llm_sync(
             model=model,
             scan_id=scan_id,
             phase=phase,
+            response_schema_id=response_schema_id,
+            use_unified=use_unified,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            execution_mode=execution_mode,
+            preferred_alias=preferred_alias,
+            content_class=content_class,
+            scan_options=scan_options,
+            prompt_id=prompt_id,
         )
 
     def _run_bounded() -> str:
@@ -619,6 +1242,8 @@ async def call_llm_with_escalation(
     max_escalations: int = 1,
     scan_id: str | None = None,
     phase: str = "unknown",
+    execution_mode: ExecutionMode | str | None = None,
+    scan_options: dict | None = None,
 ) -> str:
     """Call LLM with automatic tier escalation on low confidence.
 
@@ -636,6 +1261,8 @@ async def call_llm_with_escalation(
     response_text = await call_llm_unified(
         system_prompt, user_prompt,
         task=task, scan_id=scan_id, phase=phase,
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
     if not response_text or max_escalations <= 0:
@@ -678,6 +1305,8 @@ async def call_llm_with_escalation(
         task=task,
         scan_id=scan_id,
         phase=f"{phase}_escalated",
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
     return escalated_response if escalated_response else response_text

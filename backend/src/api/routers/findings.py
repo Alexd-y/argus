@@ -19,6 +19,8 @@ from src.api.schemas import (
     FindingRemediationSection,
     FindingValidationApiResponse,
 )
+from src.auth.abac import AccessAction, ResourceType
+from src.auth.access_dependency import require_access
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
@@ -28,6 +30,11 @@ from src.exploit.generator import generate_poc
 from src.llm import call_llm, is_llm_available
 from src.llm.errors import LLMAllProvidersFailedError, LLMProviderUnavailableError
 from src.owasp_top10_2025 import parse_owasp_category
+from src.quick.provenance import (
+    FINGERPRINT_VERSION,
+    public_fingerprint,
+    redact_mapping_for_llm,
+)
 from src.skills import load_skill
 from src.validation.exploitability import validate_finding
 
@@ -87,7 +94,22 @@ def _refs_list(raw: Any) -> list[str]:
     return []
 
 
+def _public_mapping(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    redacted = redact_mapping_for_llm(raw)
+    return redacted if isinstance(redacted, dict) else None
+
+
 def _row_to_detail(f: FindingModel) -> FindingDetailResponse:
+    fingerprint_key = getattr(f, "fingerprint_key", None)
+    fingerprint_meta = (
+        public_fingerprint(fingerprint_key=str(fingerprint_key))
+        if fingerprint_key
+        else {}
+    )
+    provenance = _public_mapping(getattr(f, "provenance", None))
+    hypothesis = _public_mapping(getattr(f, "hypothesis", None))
     return FindingDetailResponse(
         id=f.id,
         scan_id=f.scan_id,
@@ -107,6 +129,11 @@ def _row_to_detail(f: FindingModel) -> FindingDetailResponse:
         adversarial_score=f.adversarial_score,
         dedup_status=f.dedup_status,
         created_at=f.created_at.isoformat() if f.created_at else None,
+        fingerprint_key=fingerprint_meta.get("fingerprint_key"),
+        fingerprint_version=fingerprint_meta.get("fingerprint_version") or FINGERPRINT_VERSION,
+        verdict=getattr(f, "verdict", None),
+        hypothesis=hypothesis,
+        provenance=provenance,
     )
 
 
@@ -160,6 +187,9 @@ def _finding_dict_for_pipeline(f: FindingModel, target_url: str) -> dict[str, An
 async def get_finding_detail(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.READ, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingDetailResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:
@@ -172,6 +202,9 @@ async def get_finding_detail(
 async def get_finding_poc(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.READ, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingPocBodyResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:
@@ -194,6 +227,9 @@ async def get_finding_poc(
 async def post_validate_finding(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.WRITE, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingValidationApiResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:
@@ -234,6 +270,9 @@ async def post_validate_finding(
 async def post_generate_poc(
     finding_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.WRITE, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingPocBodyResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:
@@ -282,6 +321,9 @@ async def mark_finding_false_positive(
     finding_id: str,
     req: FindingFalsePositiveRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.WRITE, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingFalsePositiveResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:
@@ -315,6 +357,9 @@ async def get_finding_remediation(
     finding_id: str,
     use_llm: bool = Query(False, description="When true, append a short LLM summary if configured"),
     tenant_id: str = Depends(get_current_tenant_id),
+    _access: object = Depends(
+        require_access(AccessAction.READ, ResourceType.FINDING, resource_id_param="finding_id")
+    ),
 ) -> FindingRemediationResponse:
     loaded = await _load_finding_for_tenant(finding_id, tenant_id)
     if not loaded:

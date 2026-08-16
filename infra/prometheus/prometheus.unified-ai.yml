@@ -1,0 +1,17 @@
+# Unified AI / RAG / LAB Prometheus scrape (master prompt §18).
+# Usage from repo root:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.observability.yml up -d
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: argus-unified-ai
+
+scrape_configs:
+  - job_name: argus-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: backend

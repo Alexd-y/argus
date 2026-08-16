@@ -27,12 +27,12 @@ class TestSourceAnalysisIntegration:
         sa_out = SourceAnalysisOutput(skipped=True, summary="test")
         assert sa_out.skipped is True
 
-    def test_source_analysis_skips_without_repo(self):
+    async def test_source_analysis_skips_without_repo(self):
         from src.orchestration.source_analysis.analyzer import SourceAnalyzer
         from src.orchestration.phases import SourceAnalysisInput
         sa_in = SourceAnalysisInput(target="https://example.com")
         analyzer = SourceAnalyzer(sa_in)
-        result = analyzer.analyze()
+        result = await analyzer.analyze()
         assert result.skipped is True
 
     def test_state_machine_imports_source_analysis(self):
@@ -451,13 +451,15 @@ class TestAutoPatchVerificationWiring:
         assert c.verified is False
         assert c.regression_test_passed is False
 
-    def test_verify_patch_in_sandbox_no_executor(self):
-        import asyncio
+    async def test_verify_patch_in_sandbox_no_executor(self):
         from src.orchestration.auto_patch import PatchCandidate, verify_patch_in_sandbox
         c = PatchCandidate(finding_id="f1", file_path="a.py", patch_diff="diff", description="d")
-        result = asyncio.get_event_loop().run_until_complete(verify_patch_in_sandbox(c))
-        assert result.vulnerability_fixed is True
-        assert result.no_regressions is True
+        result = await verify_patch_in_sandbox(c)
+        assert result.patch_id == "f1"
+        # Lightweight path (no sandbox executor): an unparseable diff yields an
+        # inconclusive verdict, not a positive one.
+        assert result.vulnerability_fixed is None
+        assert result.no_regressions is None
 
 
 class TestCodeAwarePromptsWiring:
@@ -1000,7 +1002,7 @@ class TestPipelineWiringIntegration:
         path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        critic_call_pos = content.find("build_critic_prompt")
+        critic_call_pos = content.find("run_adversarial_critic")
         await_reporting_pos = content.find("await ai_reporting")
         assert critic_call_pos > 0
         assert await_reporting_pos > 0
@@ -1026,7 +1028,8 @@ class TestNewWiringP1ToP12:
         path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        assert "fanout_agents" in content
+        assert "_fanout_domain" in content
+        assert "fanout_va_merged" in content
 
     def test_ephemeral_worker_in_state_machine(self):
         import os
@@ -1109,14 +1112,14 @@ class TestNewWiringP1ToP12:
         path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        assert "build_critic_prompt" in content
+        assert "run_adversarial_critic" in content
 
     def test_detection_engineering_wired(self):
         import os
         path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        assert "build_detection_prompt" in content
+        assert "run_detection_engineering" in content
 
     def test_auto_patch_wired(self):
         import os

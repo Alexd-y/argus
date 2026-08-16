@@ -190,6 +190,11 @@ _PER_TOOL_CANONICAL_FILENAME: Final[dict[str, str]] = {
     "nmap_udp": "nmap_udp.xml",
     "nmap_version": "nmap_v.xml",
     "nmap_vuln": "nmap_vuln.xml",
+    # RustScan (§4.2) hands its port sweep to ``nmap -sC -sV -oX
+    # /out/rustscan.xml`` (see config/tools/rustscan.yaml), so its XML is
+    # byte-identical to any other nmap ``-oX`` envelope and is parsed by
+    # this same module. Only the output filename differs.
+    "rustscan": "rustscan.xml",
 }
 _LEGACY_CANONICAL_FILENAME: Final[str] = "nmap.xml"
 

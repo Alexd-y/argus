@@ -1,0 +1,16 @@
+{
+  "fixture_id": "prod-plan-015",
+  "mode": "production",
+  "tenant_id": "tenant-eval-alpha",
+  "engagement_id": "eng-eval-001",
+  "target": "https://prod.example/",
+  "expect_requires_approval": true,
+  "steps": [
+    {
+      "tool": "sqlmap",
+      "risk": "destructive",
+      "scan_approval_flags": null
+    }
+  ],
+  "title": "Production plan fixture 15"
+}

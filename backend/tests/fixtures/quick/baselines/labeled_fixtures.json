@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "target": "http://quick-http.lab",
+      "expected_finding_ids": ["cve-2024-1234"],
+      "in_scope": true
+    },
+    {
+      "target": "http://evil.example",
+      "expected_finding_ids": [],
+      "in_scope": false
+    }
+  ]
+}

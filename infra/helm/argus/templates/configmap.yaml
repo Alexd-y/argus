@@ -32,3 +32,12 @@ data:
   WHITERABBITNEO_URL: "http://{{ include "argus.fullname" . }}-whiterabbitneo:8000/v1"
   LLM_REQUIRE_WHITERABBITNEO: "true"
   {{- end }}
+  {{- if .Values.localModels.qwythos.enabled }}
+  QWYTHOS_URL: "http://{{ include "argus.fullname" . }}-qwythos:{{ .Values.localModels.qwythos.port }}/v1"
+  {{- end }}
+  {{- if .Values.localModels.qwen.enabled }}
+  QWEN_LOCAL_URL: "http://{{ include "argus.fullname" . }}-qwen:{{ .Values.localModels.qwen.port }}/v1"
+  {{- end }}
+  {{- if .Values.localModels.gemma.enabled }}
+  GEMMA_LOCAL_URL: "http://{{ include "argus.fullname" . }}-gemma:{{ .Values.localModels.gemma.port }}/v1"
+  {{- end }}

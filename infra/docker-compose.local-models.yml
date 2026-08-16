@@ -1,0 +1,103 @@
+# Optional local LLM overlay (master prompt §4 / §15).
+# Usage from repo root:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.local-models.yml --profile qwythos up -d
+#
+# Profiles: qwythos | qwen | gemma
+# Images are operator-built OpenAI-compatible vLLM/llama.cpp servers.
+# This file does not pull Hugging Face weights when parsed.
+
+name: argus
+
+services:
+  qwythos:
+    profiles: ["qwythos"]
+    build:
+      context: ./local-models
+      dockerfile: Dockerfile
+      args:
+        GPU_MODE: ${LOCAL_MODEL_GPU_MODE:-cpu}
+        VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:v0.8.5}
+        MODEL_ID: ${QWYTHOS_HF_ID:-qwythos-9b-claude-mythos-5-1m}
+        MODEL_PATH: ${QWYTHOS_GGUF_PATH:-/models/qwythos.gguf}
+    image: ${QWYTHOS_IMAGE:-argus-qwythos:2026.08.16}
+    container_name: argus-qwythos
+    restart: unless-stopped
+    environment:
+      MODEL_ID: ${QWYTHOS_HF_ID:-qwythos-9b-claude-mythos-5-1m}
+      MODEL_PATH: ${QWYTHOS_GGUF_PATH:-/models/qwythos.gguf}
+      QWYTHOS_API_KEY: ${QWYTHOS_API_KEY:-}
+    ports:
+      - "8010:8000"
+    volumes:
+      - qwythos_models:/models
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/v1/models || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  qwen:
+    profiles: ["qwen"]
+    build:
+      context: ./local-models
+      dockerfile: Dockerfile
+      args:
+        GPU_MODE: ${LOCAL_MODEL_GPU_MODE:-cpu}
+        VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:v0.8.5}
+        MODEL_ID: ${QWEN_HF_ID:-Qwen/Qwen2.5-3B-Instruct}
+        MODEL_PATH: ${QWEN_GGUF_PATH:-/models/qwen.gguf}
+    image: ${QWEN_IMAGE:-argus-qwen:2026.08.16}
+    container_name: argus-qwen
+    restart: unless-stopped
+    environment:
+      MODEL_ID: ${QWEN_HF_ID:-Qwen/Qwen2.5-3B-Instruct}
+      MODEL_PATH: ${QWEN_GGUF_PATH:-/models/qwen.gguf}
+    ports:
+      - "8011:8000"
+    volumes:
+      - qwen_models:/models
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/v1/models || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+  gemma:
+    profiles: ["gemma"]
+    build:
+      context: ./local-models
+      dockerfile: Dockerfile
+      args:
+        GPU_MODE: ${LOCAL_MODEL_GPU_MODE:-cpu}
+        VLLM_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:v0.8.5}
+        MODEL_ID: ${GEMMA_HF_ID:-google/gemma-2-2b-it}
+        MODEL_PATH: ${GEMMA_GGUF_PATH:-/models/gemma.gguf}
+    image: ${GEMMA_IMAGE:-argus-gemma:2026.08.16}
+    container_name: argus-gemma
+    restart: unless-stopped
+    environment:
+      MODEL_ID: ${GEMMA_HF_ID:-google/gemma-2-2b-it}
+      MODEL_PATH: ${GEMMA_GGUF_PATH:-/models/gemma.gguf}
+    ports:
+      - "8012:8000"
+    volumes:
+      - gemma_models:/models
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/v1/models || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+
+volumes:
+  qwythos_models:
+  qwen_models:
+  gemma_models:

@@ -1,0 +1,24 @@
+# Pinned local-model and Nuclei supply-chain references (Phase 5).
+# Compose/Helm must use these tags — never :latest / :local as the default.
+
+image_tag: "2026.08.16"
+vllm_image: "vllm/vllm-openai:v0.8.5"
+grafana_image: "grafana/grafana:11.2.2"
+prometheus_image: "prom/prometheus:v2.54.1"
+
+models:
+  qwythos:
+    image: "argus-qwythos:2026.08.16"
+    served_model: "qwythos-9b-claude-mythos-5-1m"
+    hf_id: "qwythos-9b-claude-mythos-5-1m"
+    port: 8010
+  qwen:
+    image: "argus-qwen:2026.08.16"
+    served_model: "qwen3-4b-instruct"
+    hf_id: "Qwen/Qwen2.5-3B-Instruct"
+    port: 8011
+  gemma:
+    image: "argus-gemma:2026.08.16"
+    served_model: "gemma-2-2b-it"
+    hf_id: "google/gemma-2-2b-it"
+    port: 8012

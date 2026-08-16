@@ -1,0 +1,71 @@
+# Quick execution-mode budget profiles (execution_mode=quick).
+# Not SCAN_MODE=quick (scan depth) and not ARGUS_ACTIVE_INJECTION_MODE=quick.
+# Defaults only — deployment/tenant overrides are clamped in QUICK-002.
+# Do not hardcode these values in scoring or planner business logic.
+
+schema_version: 1
+
+profiles:
+  compact:
+    wall_clock_budget_seconds: 300
+    ai_budget_seconds: 30
+    reserve_for_validation_percent: 15
+    max_targets: 25
+    max_urls_per_host: 40
+    crawl_depth: 1
+    severity_floor: medium
+    enable_ai: true
+    enable_oast: true
+    enable_headless_on_signal: false
+    template_policy_id: quick-default
+    cloud_llm_allowed: false
+    request_budget: 4000
+    per_host_budget: 400
+    concurrency_budget: 4
+    work_split_weights:
+      discovery: 40
+      fingerprint: 25
+      verification: 20
+      report: 15
+  balanced:
+    wall_clock_budget_seconds: 900
+    ai_budget_seconds: 90
+    reserve_for_validation_percent: 20
+    max_targets: 100
+    max_urls_per_host: 100
+    crawl_depth: 2
+    severity_floor: medium
+    enable_ai: true
+    enable_oast: true
+    enable_headless_on_signal: true
+    template_policy_id: quick-default
+    cloud_llm_allowed: false
+    request_budget: 12000
+    per_host_budget: 800
+    concurrency_budget: 6
+    work_split_weights:
+      discovery: 40
+      fingerprint: 25
+      verification: 20
+      report: 15
+  extended:
+    wall_clock_budget_seconds: 1800
+    ai_budget_seconds: 180
+    reserve_for_validation_percent: 25
+    max_targets: 250
+    max_urls_per_host: 200
+    crawl_depth: 3
+    severity_floor: medium
+    enable_ai: true
+    enable_oast: true
+    enable_headless_on_signal: true
+    template_policy_id: quick-default
+    cloud_llm_allowed: false
+    request_budget: 24000
+    per_host_budget: 1600
+    concurrency_budget: 8
+    work_split_weights:
+      discovery: 40
+      fingerprint: 25
+      verification: 20
+      report: 15

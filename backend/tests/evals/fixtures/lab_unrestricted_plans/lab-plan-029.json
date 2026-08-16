@@ -1,0 +1,35 @@
+{
+  "fixture_id": "lab-plan-029",
+  "description": "SQLi exploitation",
+  "mode": "lab_unrestricted",
+  "tenant_id": "tenant-eval-alpha",
+  "engagement_id": "eng-eval-001",
+  "target": "https://app.lab.argus/",
+  "k8s_namespace": "argus-lab-42",
+  "vm_network_id": "labnet-42",
+  "lab_scope": {
+    "tenant_id": "tenant-eval-alpha",
+    "engagement_id": "eng-eval-001",
+    "cidrs": [
+      "10.90.0.0/16"
+    ],
+    "dns_suffixes": [
+      "lab.argus"
+    ],
+    "k8s_namespace": "argus-lab-42",
+    "vm_network_ids": [
+      "labnet-42"
+    ],
+    "expires_at": "2026-09-14T03:45:37.269036+00:00",
+    "created_by": "eval-user-1"
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "tool": "sqlmap",
+      "action": "run",
+      "requires_approval": false
+    }
+  ],
+  "title": "LAB unrestricted plan fixture 29"
+}

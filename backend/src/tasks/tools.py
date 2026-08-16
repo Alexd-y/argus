@@ -8,6 +8,7 @@ from typing import Any
 
 from src.celery_app import app
 from src.core.config import settings
+from src.orchestration.execution_mode_context import is_lab_lease_active_from_options
 from src.recon.mcp.policy import evaluate_va_active_scan_tool_policy
 from src.recon.raw_artifact_sink import (
     sink_raw_json,
@@ -41,6 +42,7 @@ from src.recon.vulnerability_analysis.xsstrike_adapter import (
     resolve_xsstrike_argv,
     validate_xsstrike_target_url,
 )
+from src.sandbox.execution_lease_gate import assert_execution_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,56 @@ SANDBOX_WORKDIR = "/home/argus"
 
 _MAX_ARGV_LEN = 512
 _MAX_ARG_STRLEN = 16384
+
+
+def _str_opt(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _nuclei_profile_and_mode(
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+) -> tuple[str | None, str | None]:
+    """Resolve nuclei profile + execution_mode from explicit args or scan options."""
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    ctx = opts.get("execution_mode_context")
+    ctx_mode = ctx.get("mode") if isinstance(ctx, dict) else None
+    resolved_mode = (
+        _str_opt(execution_mode)
+        or _str_opt(opts.get("execution_mode"))
+        or _str_opt(ctx_mode)
+    )
+    resolved_profile = _str_opt(profile) or _str_opt(opts.get("nuclei_profile"))
+    return resolved_profile, resolved_mode
+
+
+def run_nuclei_va_argv(
+    target: str,
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+) -> list[str]:
+    """Build nuclei VA argv, forwarding profile + execution_mode from scan options.
+
+    Thin adapter over :func:`build_nuclei_va_argv`. Compiler vs legacy is decided
+    inside the VA adapter (flag / explicit profile). Do not delete this signature.
+    """
+    resolved_profile, resolved_mode = _nuclei_profile_and_mode(
+        profile=profile,
+        execution_mode=execution_mode,
+        scan_options=scan_options,
+    )
+    return build_nuclei_va_argv(
+        target,
+        profile=resolved_profile,
+        mode=resolved_mode,
+    )
 
 
 def _sanitize_argv_list(argv: list[str]) -> list[str] | None:
@@ -70,14 +122,26 @@ def _validate_custom_argv_prefix(tool: str, argv: list[str]) -> bool:
     return True
 
 
-def _default_argv_for_tool(tool: str, target: str) -> list[str]:
+def _default_argv_for_tool(
+    tool: str,
+    target: str,
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+) -> list[str]:
     ff_wp = (settings.ffuf_va_wordlist_path or "").strip() or None
     if tool == "dalfox":
         return build_dalfox_argv(target)
     if tool == "ffuf":
         return build_ffuf_argv(target, wordlist_path=ff_wp)
     if tool == "nuclei":
-        return build_nuclei_va_argv(target)
+        return run_nuclei_va_argv(
+            target,
+            profile=profile,
+            execution_mode=execution_mode,
+            scan_options=scan_options,
+        )
     if tool == "whatweb":
         return build_whatweb_va_argv(target)
     if tool == "nikto":
@@ -100,10 +164,24 @@ def _default_argv_for_tool(tool: str, target: str) -> list[str]:
     return []
 
 
-def _resolve_argv(tool: str, target: str, args: list[str] | None) -> tuple[list[str], str]:
+def _resolve_argv(
+    tool: str,
+    target: str,
+    args: list[str] | None,
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+) -> tuple[list[str], str]:
     """Returns (argv, error_reason). error_reason empty on success."""
     if args is None:
-        argv = _default_argv_for_tool(tool, target)
+        argv = _default_argv_for_tool(
+            tool,
+            target,
+            profile=profile,
+            execution_mode=execution_mode,
+            scan_options=scan_options,
+        )
         return argv, "" if argv else "empty_argv"
     cleaned = _sanitize_argv_list(list(args))
     if cleaned is None:
@@ -111,6 +189,57 @@ def _resolve_argv(tool: str, target: str, args: list[str] | None) -> tuple[list[
     if not _validate_custom_argv_prefix(tool, cleaned):
         return [], "custom_argv_prefix_rejected"
     return cleaned, ""
+
+
+def _merged_scan_options(
+    scan_options: dict[str, Any] | None,
+    *,
+    tenant_id: str,
+    scan_id: str,
+) -> dict[str, Any]:
+    opts = dict(scan_options) if isinstance(scan_options, dict) else {}
+    if tenant_id and "tenant_id" not in opts:
+        opts["tenant_id"] = tenant_id
+    if scan_id and "scan_id" not in opts:
+        opts["scan_id"] = scan_id
+    return opts
+
+
+def _lease_denied_result(tool: str, exc: PermissionError) -> dict[str, Any]:
+    return {
+        "exit_code": -1,
+        "stdout": "",
+        "stderr": str(exc),
+        "duration_ms": 0,
+        "tool_id": tool,
+        "error_reason": str(exc),
+        "artifact_keys": {},
+    }
+
+
+def _gate_va_execution(
+    tool: str,
+    target: str,
+    *,
+    tenant_id: str,
+    scan_id: str,
+    scan_options: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return an error payload if the LAB lease gate denies; None if allowed."""
+    opts = _merged_scan_options(scan_options, tenant_id=tenant_id, scan_id=scan_id)
+    try:
+        assert_execution_allowed(tool, target, opts, tenant_id=tenant_id)
+    except PermissionError as exc:
+        logger.info(
+            "va_named_tool_lease_denied",
+            extra={
+                "event": "va_named_tool_lease_denied",
+                "tool": tool,
+                "reason": str(exc),
+            },
+        )
+        return _lease_denied_result(tool, exc)
+    return None
 
 
 def _celery_sink_va_run(
@@ -168,8 +297,18 @@ def _run_testssl_va_celery_with_sslscan_fallback(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Celery path: testssl.sh then sslscan if no usable stdout / error (KAL-004)."""
+    denied = _gate_va_execution(
+        "testssl",
+        target,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        scan_options=scan_options,
+    )
+    if denied is not None:
+        return denied
     run_slug = uuid.uuid4().hex[:16]
     pol_t = evaluate_va_active_scan_tool_policy(tool_name="testssl")
     if not pol_t.allowed:
@@ -299,14 +438,34 @@ def _run_va_tool_with_sink(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     run_slug = uuid.uuid4().hex[:16]
     at_base = slug_for_artifact_type_component(f"tool_{tool}_celery_{run_slug}")
 
-    if tool == "testssl":
-        return _run_testssl_va_celery_with_sslscan_fallback(tenant_id, scan_id, target, args)
+    denied = _gate_va_execution(
+        tool,
+        target,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        scan_options=scan_options,
+    )
+    if denied is not None:
+        return denied
 
-    if tool == "sqlmap" and not settings.sqlmap_va_enabled:
+    if tool == "testssl":
+        return _run_testssl_va_celery_with_sslscan_fallback(
+            tenant_id, scan_id, target, args, scan_options=scan_options
+        )
+
+    opts = _merged_scan_options(scan_options, tenant_id=tenant_id, scan_id=scan_id)
+    if (
+        tool == "sqlmap"
+        and not settings.sqlmap_va_enabled
+        and not is_lab_lease_active_from_options(opts, tenant_id=tenant_id)
+    ):
         return {
             "exit_code": -1,
             "stdout": "",
@@ -329,7 +488,14 @@ def _run_va_tool_with_sink(
             "artifact_keys": {},
         }
 
-    argv, argv_err = _resolve_argv(tool, target, args)
+    argv, argv_err = _resolve_argv(
+        tool,
+        target,
+        args,
+        profile=profile,
+        execution_mode=execution_mode,
+        scan_options=scan_options,
+    )
     if argv_err:
         return {
             "exit_code": -1,
@@ -388,13 +554,26 @@ def _run_va_tool_with_sink(
     return out
 
 
-def _wrap_task(tool: str, tenant_id: str, scan_id: str, target: str, args: list[str] | None) -> dict[str, Any]:
+def _wrap_task(
+    tool: str,
+    tenant_id: str,
+    scan_id: str,
+    target: str,
+    args: list[str] | None,
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return _run_va_tool_with_sink(
         tool=tool,
         tenant_id=tenant_id,
         scan_id=scan_id,
         target=target,
         args=args,
+        profile=profile,
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
 
@@ -405,8 +584,9 @@ def run_dalfox(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("dalfox", tenant_id, scan_id, target, args)
+    return _wrap_task("dalfox", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_xsstrike")
@@ -416,8 +596,9 @@ def run_xsstrike(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("xsstrike", tenant_id, scan_id, target, args)
+    return _wrap_task("xsstrike", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_ffuf")
@@ -427,8 +608,9 @@ def run_ffuf(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("ffuf", tenant_id, scan_id, target, args)
+    return _wrap_task("ffuf", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_sqlmap")
@@ -438,8 +620,9 @@ def run_sqlmap(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("sqlmap", tenant_id, scan_id, target, args)
+    return _wrap_task("sqlmap", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_nuclei")
@@ -449,8 +632,20 @@ def run_nuclei(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("nuclei", tenant_id, scan_id, target, args)
+    return _wrap_task(
+        "nuclei",
+        tenant_id,
+        scan_id,
+        target,
+        args,
+        profile=profile,
+        execution_mode=execution_mode,
+        scan_options=scan_options,
+    )
 
 
 @app.task(bind=True, name="argus.va.run_whatweb")
@@ -460,8 +655,9 @@ def run_whatweb(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("whatweb", tenant_id, scan_id, target, args)
+    return _wrap_task("whatweb", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_nikto")
@@ -471,8 +667,9 @@ def run_nikto(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("nikto", tenant_id, scan_id, target, args)
+    return _wrap_task("nikto", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 @app.task(bind=True, name="argus.va.run_testssl")
@@ -482,8 +679,9 @@ def run_testssl(
     scan_id: str,
     target: str,
     args: list[str] | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return _wrap_task("testssl", tenant_id, scan_id, target, args)
+    return _wrap_task("testssl", tenant_id, scan_id, target, args, scan_options=scan_options)
 
 
 VA_TOOL_TASK_BY_NAME: dict[str, Any] = {

@@ -1,0 +1,42 @@
+{
+  "fixture_id": "fd-003",
+  "expected_status": "regressed",
+  "finding_key": "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3",
+  "baseline_occurrences": [
+    {
+      "occurrence_key": "62d275e305bfca2a1bd6b85b5346f986c9cced0386d7eb21d16ed59c650d0173",
+      "finding_key": "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3",
+      "tenant_id": "tenant-eval-alpha",
+      "scan_id": "scan-baseline",
+      "scanner": "nuclei",
+      "detector_id": "cve-detector",
+      "detector_version": "1.0.0",
+      "evidence_refs": [],
+      "first_seen_at": "2026-08-15T03:45:37.294339+00:00",
+      "last_seen_at": "2026-08-15T03:45:37.294339+00:00"
+    }
+  ],
+  "current_occurrences": [
+    {
+      "occurrence_key": "c27043bc1cae5878dec0103f64beb3f61b58df81e3a1f9f38a16a2891712fee6",
+      "finding_key": "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3",
+      "tenant_id": "tenant-eval-alpha",
+      "scan_id": "scan-current",
+      "scanner": "nuclei",
+      "detector_id": "cve-detector",
+      "detector_version": "1.0.0",
+      "evidence_refs": [],
+      "first_seen_at": "2026-08-15T03:45:37.294339+00:00",
+      "last_seen_at": "2026-08-15T03:45:37.294339+00:00"
+    }
+  ],
+  "baseline_states": {
+    "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3": "resolved"
+  },
+  "current_states": {
+    "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3": "regressed"
+  },
+  "coverage_by_finding": {
+    "f46b537fb53cc8b3748c224810c5bea5db0c22fbec6a3550c514dfedea909ab3": "covered_with_finding"
+  }
+}

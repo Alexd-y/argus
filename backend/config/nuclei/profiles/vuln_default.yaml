@@ -1,0 +1,20 @@
+id: vuln_default
+version: 1
+allowed_protocols: [http, dns, ssl, whois]
+allowed_risk_levels: [passive, safe_active]
+require_verified_templates: true
+disable_unsigned_templates: true
+oast: disabled
+rate_limit_rps: 12
+concurrency: 10
+payload_concurrency: 5
+per_host_rate_limit: true
+timeout_s: 10
+retries: 1
+max_host_errors: 10
+max_requests_total: 5000
+max_response_read_bytes: 1048576
+max_response_evidence_bytes: 4096
+store_raw: findings_only
+redact: [authorization, cookie, set-cookie, api_key, token]
+requires_approval: false

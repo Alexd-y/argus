@@ -12,7 +12,7 @@ import threading
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from src.mcp.exceptions import (
     ApprovalRequiredError,
@@ -29,6 +29,8 @@ from src.mcp.schemas.tool_run import (
     ToolRunTriggerInput,
     ToolRunTriggerResult,
 )
+from src.core.unified_ai_metrics import record_lab_execution
+from src.orchestration.execution_mode_context import resolve_tool_policy_from_options
 from src.sandbox.adapter_base import ToolDescriptor
 from src.sandbox.tool_registry import RegistryLoadError, ToolRegistry
 
@@ -121,12 +123,29 @@ def list_catalog(
 _HIGH_RISK_LEVELS: Final[frozenset[str]] = frozenset({"high", "destructive"})
 
 
+def _resolve_trigger_scan_options(
+    payload: ToolRunTriggerInput,
+    scan_options: dict[str, Any] | None,
+    tenant_id: str,
+) -> dict[str, Any]:
+    opts: dict[str, Any] = {}
+    payload_opts = payload.scan_options
+    if isinstance(payload_opts, dict):
+        opts.update(payload_opts)
+    if isinstance(scan_options, dict):
+        opts.update(scan_options)
+    if tenant_id and "tenant_id" not in opts:
+        opts["tenant_id"] = tenant_id
+    return opts
+
+
 def trigger_tool_run(
     *,
     payload: ToolRunTriggerInput,
     actor: str,
     tenant_id: str,
     approval_factory: Callable[[ToolDescriptor, str], str] | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ToolRunTriggerResult:
     """Compute the policy decision for a tool-run trigger.
 
@@ -136,6 +155,9 @@ def trigger_tool_run(
     DESTRUCTIVE tools we record an approval request and return
     ``status=approval_pending``.
 
+    LAB + usable lease (``resolve_tool_policy_from_options``): high-risk
+    tools are queued without approval. Production is unchanged.
+
     Args:
         payload: Validated tool-run trigger input.
         actor: Authenticated user id (audit only).
@@ -144,6 +166,8 @@ def trigger_tool_run(
             :class:`ApprovalRequest` and returns its id. When ``None``
             (default) we synthesise an opaque pending id but DO NOT
             persist — production deployments override this.
+        scan_options: Optional scan options (execution_mode / lab_lease).
+            Overrides ``payload.scan_options`` when both are present.
     """
     registry = get_registry()
     descriptor = registry.get(payload.tool_id)
@@ -154,9 +178,21 @@ def trigger_tool_run(
 
     risk_level_value = descriptor.risk_level.value
     risk_level = ToolRiskLevel(risk_level_value)
-    requires_approval = (
+    catalog_requires_approval = (
         bool(descriptor.requires_approval) or risk_level_value in _HIGH_RISK_LEVELS
     )
+
+    opts = _resolve_trigger_scan_options(payload, scan_options, tenant_id)
+    decision = resolve_tool_policy_from_options(
+        descriptor.tool_id,
+        opts,
+        target=payload.target,
+        tenant_id=tenant_id,
+    )
+    lab_bypass = bool(decision.allowed and decision.lab_lease_active)
+    requires_approval = catalog_requires_approval and not lab_bypass
+    if lab_bypass:
+        record_lab_execution(tool=descriptor.tool_id, action="mcp_trigger")
 
     if requires_approval:
         if not payload.justification or len(payload.justification.strip()) < 10:
@@ -194,6 +230,7 @@ def trigger_tool_run(
             "risk_level": risk_level_value,
             "tenant_id": tenant_id,
             "tool_run_id": tool_run_id,
+            "lab_lease_active": lab_bypass,
         },
     )
     return ToolRunTriggerResult(

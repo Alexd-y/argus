@@ -124,6 +124,26 @@ export const adminApi = {
         "/health/dashboard"
       ),
   },
+  emergency: {
+    status: () =>
+      fetchAdmin<{
+        global_state: { active: boolean; reason?: string | null };
+        tenant_throttles: unknown[];
+        queried_at: string;
+      }>("/system/emergency/status"),
+    stopAll: (body: { reason: string; confirmation_phrase: string }) =>
+      fetchAdmin<{
+        status: "stopped";
+        cancelled_count: number;
+        skipped_terminal_count: number;
+        tenants_affected: number;
+        activated_at: string;
+        audit_id: string;
+      }>("/system/emergency/stop_all", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+  },
   llm: {
     aliases: {
       list: (params?: { tenant_id?: string }) => {

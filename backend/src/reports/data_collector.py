@@ -41,6 +41,8 @@ from src.db.models import Report as ReportModel
 from src.db.models import Scan as ScanModel
 from src.db.models import ScanTimeline as ScanTimelineModel
 from src.db.models import ToolRun as ToolRunModel
+from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
+from src.findings.repository import get_findings_repository
 from src.owasp.owasp_loader import get_owasp_category_info
 from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_IDS,
@@ -362,6 +364,8 @@ class ScanReportData(BaseModel):
     tool_runs: list[ToolRunRow] = Field(default_factory=list)
     #: HIBP Pwned Passwords aggregate (opt-in); same dict as AI payload and Valhalla appendix.
     hibp_pwned_password_summary: dict[str, Any] | None = None
+    #: CONT-009 — honest coverage statuses + occurrence key references for export/AI.
+    coverage_occurrence: dict[str, Any] = Field(default_factory=dict)
 
 
 def _scan_row_from_orm(row: ScanModel) -> ScanRowData:
@@ -768,6 +772,7 @@ class ReportDataCollector:
 
         findings = deduplicate_findings(findings)
         findings = filter_valid_findings(findings)
+        findings = retain_findings_despite_ai_classification(findings)
         findings = normalize_findings_for_report(findings)
         findings = normalize_findings_severity(findings)
         # VHL-PROVABLE-001: tag each finding as provable-from-raw or unconfirmed. Nothing
@@ -814,6 +819,25 @@ class ReportDataCollector:
             if str(row.tool_name or "").strip()
         ]
         scan_opts = scan_data.options if isinstance(scan_data.options, dict) else None
+        persisted_logical: dict[str, Any] = {}
+        persisted_occ: dict[str, Any] = {}
+        try:
+            findings_repo = get_findings_repository()
+            persisted_logical = await findings_repo.list_logical_findings_for_scan(
+                tenant_id=tid, scan_id=sid
+            )
+            occ_list = await findings_repo.list_occurrences_for_scan(
+                tenant_id=tid, scan_id=sid
+            )
+            persisted_occ = {item.occurrence_key: item for item in occ_list}
+        except (ValueError, TypeError, RuntimeError, OSError):
+            logger.warning(
+                "logical_findings_persist_load_failed",
+                extra={
+                    "event": "logical_findings_persist_load_failed",
+                    "scan_id": sid,
+                },
+            )
         valhalla_ctx = build_valhalla_report_context(
             tenant_id=tid,
             scan_id=sid,
@@ -832,6 +856,8 @@ class ReportDataCollector:
             harvester_enabled=bool(settings.harvester_enabled),
             tool_run_summaries=tool_run_status_tuples or None,
             scan_options=scan_opts,
+            persisted_logical_findings=persisted_logical or None,
+            persisted_occurrences=persisted_occ or None,
         )
 
         findings = apply_security_header_table_gap_to_findings(findings, valhalla_ctx)
@@ -873,6 +899,7 @@ class ReportDataCollector:
             robots_sitemap_analysis=valhalla_ctx.robots_sitemap_merged,
             tool_runs=tool_runs,
             hibp_pwned_password_summary=hibp_pwned_password_summary,
+            coverage_occurrence=valhalla_ctx.coverage_occurrence,
         )
         logger.info(
             "report_data_collector_done",

@@ -4,10 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    model_validator,
+)
 
 from src.mcp.schemas.common import PaginationInput
+from src.quick.create import reject_raw_command_fields
 
 
 class ToolRiskLevel(StrEnum):
@@ -96,6 +106,20 @@ class ToolRunTriggerInput(BaseModel):
         max_length=512,
         description="Required when the resolved tool has ``risk_level >= high``.",
     )
+    scan_options: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Existing scan options payload (execution_mode, lab_lease). "
+            "Must not contain argv/command strings."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_raw_commands(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            reject_raw_command_fields(data)
+        return data
 
 
 class ToolRunTriggerResult(BaseModel):

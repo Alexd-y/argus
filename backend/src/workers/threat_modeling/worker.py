@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.analysis.cpg import CodePropertyGraph, NodeType
+from src.llm.facade import call_llm_unified
+from src.llm.task_router import LLMTask
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,8 @@ async def run_threat_modeling(
     iac_info: dict[str, Any],
     *,
     commit_sha: str = "",
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ThreatModel:
     """Run repo-aware threat modeling via WhiteRabbitNeo.
 
@@ -127,13 +131,13 @@ async def run_threat_modeling(
         dependencies: Parsed dependency list [{name, version}, …].
         iac_info: Parsed IaC configs (DockerfileInfo, TerraformInfo, …).
         commit_sha: Current commit being analysed.
+        execution_mode: Optional ``production`` / ``lab_unrestricted`` for the
+            unified LLM gateway. When omitted, facade falls back to scan
+            options / contextvar / production.
 
     Returns:
         ThreatModel with STRIDE scenarios, CVE matches, and mitigations.
     """
-    from src.llm.facade import call_llm_unified
-    from src.llm.task_router import LLMTask
-
     prompt = _prompt_threat_model(cpg, dependencies, iac_info, repo_name)
 
     system_prompt = (
@@ -149,6 +153,8 @@ async def run_threat_modeling(
         prompt,
         task=LLMTask.THREAT_MODELING,
         phase="threat_modeling",
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
     try:

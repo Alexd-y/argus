@@ -88,6 +88,33 @@ class TestAuthLoginBlock9:
         assert body.get("dev_mode") is True
         assert body.get("access_token")
 
+    def test_dev_bypass_requires_flag_even_in_debug(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """F-H03 dual-gate: DEBUG alone must NOT open the dev-login bypass.
+
+        The bypass is gated behind BOTH ``settings.debug`` AND
+        ``settings.dev_login_bypass_enabled``. With ``debug=True`` but the
+        explicit opt-in flag off, an unknown user must still be rejected with
+        401 (no ``dev_mode`` token). Guards against a regression that drops the
+        second condition and re-opens an unauthenticated login in any image
+        that merely happens to run with DEBUG on.
+        """
+        secret = "test-secret-key-min-32-chars-long-for-hs256"
+        monkeypatch.setattr("src.core.config.settings.jwt_secret", secret)
+        monkeypatch.setattr("src.core.config.settings.debug", True)
+        monkeypatch.setattr("src.core.config.settings.dev_login_bypass_enabled", False)
+        _patch_login_db_no_user(monkeypatch)
+        from main import app
+
+        tc = TestClient(app)
+        r = tc.post(
+            "/api/v1/auth/login",
+            json={"mail": "dev@local", "password": "anything"},
+        )
+        assert r.status_code == 401
+        assert "dev_mode" not in r.json()
+
     def test_wrong_password_returns_401_when_debug_off(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

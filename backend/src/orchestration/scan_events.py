@@ -16,13 +16,22 @@ P1-8: WebSocket delivery layer — ScanEventBus now has:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime
+from typing import Any
+
+from src.quick.audit import (
+    QUICK_AUDIT_EVENT_TYPES,
+    REDACTION_PLACEHOLDER,
+    emit_quick_audit_event,
+    get_quick_audit_events,
+    redact_quick_audit_payload,
+    reset_quick_audit_events,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +45,7 @@ class ScanEvent:
     progress: int = 0
     message: str = ""
     data: dict[str, Any] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -45,7 +54,7 @@ class ChatMessage:
     tenant_id: str
     user_id: str
     message: str
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class ScanEventBus:
@@ -204,7 +213,13 @@ class ScanEventBus:
 
 
 __all__ = [
+    "QUICK_AUDIT_EVENT_TYPES",
+    "REDACTION_PLACEHOLDER",
     "ChatMessage",
     "ScanEvent",
     "ScanEventBus",
+    "emit_quick_audit_event",
+    "get_quick_audit_events",
+    "redact_quick_audit_payload",
+    "reset_quick_audit_events",
 ]

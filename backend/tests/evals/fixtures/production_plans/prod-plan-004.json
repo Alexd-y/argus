@@ -1,0 +1,15 @@
+{
+  "fixture_id": "prod-plan-004",
+  "mode": "production",
+  "tenant_id": "tenant-eval-alpha",
+  "engagement_id": "eng-eval-001",
+  "target": "https://prod.example/",
+  "expect_requires_approval": true,
+  "steps": [
+    {
+      "tool": "commix",
+      "risk": "destructive",
+      "scan_approval_flags": null
+    }
+  ]
+}

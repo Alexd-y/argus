@@ -5,7 +5,7 @@
 <!-- `backend/config/tools/`. The script verifies every signature and -->
 <!-- renders this file deterministically (stable order: phase → tool_id). -->
 
-This document indexes the **157** tool descriptors that the ARGUS Active Pentest Engine ships through cycles **ARG-001..ARG-049** (Backlog/dev1_md §4.1–§4.19). Each entry is loaded via `src.sandbox.tool_registry.ToolRegistry`, validated against `src.sandbox.adapter_base.ToolDescriptor`, and Ed25519-verified against `backend/config/tools/SIGNATURES` before the application starts serving traffic. ARG-040 (Cycle 4 capstone) added the mandatory `version: <semver>` field on every descriptor. Cycle 6 T05 (2026-04-21) ratcheted first-class parser coverage to **mapped: 118 (75.2%) / heartbeat: 39 (24.9%)** — see *Parser coverage* below. ARG-049 (Cycle 5 capstone) ratcheted the per-tool contract matrix from 14 to **16** parametrised gates by adding C15 (`tool-yaml-version-monotonic`, frozen baseline at `backend/tests/snapshots/tool_versions_baseline.json`) and C16 (`image-coverage-completeness`, every tool_id installed by ≥1 of the 6 sandbox image profiles in `infra/sandbox/images/tool_to_package.json`).
+This document indexes the **162** tool descriptors that the ARGUS Active Pentest Engine ships through cycles **ARG-001..ARG-049** (Backlog/dev1_md §4.1–§4.19). Each entry is loaded via `src.sandbox.tool_registry.ToolRegistry`, validated against `src.sandbox.adapter_base.ToolDescriptor`, and Ed25519-verified against `backend/config/tools/SIGNATURES` before the application starts serving traffic. ARG-040 (Cycle 4 capstone) added the mandatory `version: <semver>` field on every descriptor and pins parser coverage at **mapped: 118 (75.2%) / heartbeat: 39 (24.9%)** — see *Parser coverage* below. ARG-049 (Cycle 5 capstone) ratcheted the per-tool contract matrix from 14 to **16** parametrised gates by adding C15 (`tool-yaml-version-monotonic`, frozen baseline at `backend/tests/snapshots/tool_versions_baseline.json`) and C16 (`image-coverage-completeness`, every tool_id installed by ≥1 of the 6 sandbox image profiles in `infra/sandbox/images/tool_to_package.json`).
 
 Build & run pipeline at a glance:
 
@@ -20,7 +20,7 @@ See `Backlog/dev1_md` §4 for the long-term tool roadmap and the intent behind e
 
 ### Recon (`recon`)
 
-_56 tool(s) in this phase._
+_60 tool(s) in this phase._
 
 | tool_id | category | risk_level | network_policy | requires_approval | parse_strategy | parser_status | command_template | description |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -29,7 +29,9 @@ _56 tool(s) in this phase._
 | `assetfinder` | recon | passive | recon-passive | no | text_lines | mapped | <code>sh -c assetfinder --subs-only {domain} &gt; {out_dir}/assetfinder.txt</code> | tomnomnom assetfinder passive subdomain discovery; one subdomain per line. Ba... |
 | `censys` | recon | passive | recon-passive | no | json_object | mapped | <code>sh -c censys search &#x27;services.tls.certificates.leaf_data.names:{domain}&#x27; -o {out_dir}/censys.json</code> | Censys CLI passive search for hosts with TLS certs covering the target domain... |
 | `chaos` | recon | passive | recon-passive | no | text_lines | mapped | <code>chaos -d {domain} -o {out_dir}/chaos.txt -silent</code> | ProjectDiscovery chaos passive subdomain dataset; requires CHAOS_API_KEY env.... |
-| `crt_sh` | recon | passive | recon-passive | no | custom | heartbeat | <code>sh -c curl -sS --fail-with-body --max-time 60 &#x27;https://crt.sh/?q=%25.{domain}&amp;output=json&#x27; -o {out_dir}/crtsh.json</code> | Certificate Transparency lookup via crt.sh; passive subdomain enumeration wit... |
+| `crt_sh` | recon | passive | recon-passive | no | json_object | mapped | <code>sh -c curl -sS --fail-with-body --max-time 60 &#x27;https://crt.sh/?q=%25.{domain}&amp;output=json&#x27; -o {out_dir}/crtsh.json</code> | Certificate Transparency lookup via crt.sh; passive subdomain enumeration wit... |
+| `curl` | recon | passive | recon-passive | no | text_lines | heartbeat | <code>curl -sS --fail-with-body --max-time 30 -i -L -o {out_dir}/curl_body.txt -D {out_dir}/curl_headers.txt {url}</code> | curl HTTP/S probe capturing response headers and body with redirect following... |
+| `dig` | recon | passive | recon-passive | no | text_lines | mapped | <code>dig +noall +answer +comments +nocmd {domain} ANY &gt; {out_dir}/dig.txt</code> | dig ANY-record DNS query using public resolvers for A/AAAA/MX/NS/SOA/TXT disc... |
 | `dnsrecon` | recon | passive | recon-passive | no | json_object | mapped | <code>dnsrecon -d {domain} -t std,brt,srv,axfr -j {out_dir}/dnsrecon.json</code> | dnsrecon multi-mode lookup (std/brt/srv/axfr) emitting one JSON object with d... |
 | `dnsx` | recon | passive | recon-passive | no | json_lines | mapped | <code>dnsx -l {in_dir}/subs.txt -a -aaaa -cname -mx -ns -txt -resp -json -o {out_dir}/dnsx.json</code> | ProjectDiscovery dnsx fast DNS resolver for A/AAAA/CNAME/MX/NS/TXT records ov... |
 | `enum4linux_ng` | network | low | recon-smb | no | json_object | mapped | <code>enum4linux-ng -A -oJ {out_dir}/enum4linux.json {ip}</code> | enum4linux-ng full SMB/NetBIOS enumeration including users, groups, shares, a... |
@@ -45,6 +47,7 @@ _56 tool(s) in this phase._
 | `graphw00f` | web_va | low | recon-active-tcp | no | json_object | heartbeat | <code>graphw00f -d -t {url} -o {out_dir}/graphw00f.json</code> | graphw00f GraphQL fingerprinter — sends 12 small introspection-friendly queri... |
 | `grpcurl_probe` | network | low | recon-active-tcp | no | text_lines | heartbeat | <code>sh -c grpcurl -plaintext {host}:{port} list &gt; {out_dir}/grpc.txt</code> | grpcurl reflection-based service enumerator — issues one `list` reflection ca... |
 | `hakrawler` | recon | low | recon-active-tcp | no | text_lines | mapped | <code>hakrawler-wrapper -url {url} -depth 3 -subs -out {out_dir}/hakrawler.txt</code> | hakrawler subdomain + endpoint crawler; depth 3, follows subdomains. Image-si... |
+| `host` | recon | passive | recon-passive | no | text_lines | mapped | <code>host -a {domain} &gt; {out_dir}/host.txt</code> | host -a (all records) DNS lookup, equivalent to nslookup-style zone enumerati... |
 | `httpx` | recon | passive | recon-passive | no | json_lines | mapped | <code>httpx -l {in_dir}/urls.txt -json -title -tech-detect -status-code -tls-probe -favicon -jarm -o {out_dir}/httpx.json</code> | ProjectDiscovery httpx HTTP fingerprinting (status, title, tech, TLS, favicon... |
 | `ike_scan` | network | low | auth-bruteforce | no | text_lines | heartbeat | <code>sh -c ike-scan -M -A {host} &gt; {out_dir}/ike_scan.txt</code> | ike-scan — IKEv1/v2 IPsec endpoint discovery against {host} (UDP/500). -A ena... |
 | `jarm` | recon | passive | recon-passive | no | json_object | mapped | <code>jarm -i {in_dir}/urls.txt -j {out_dir}/jarm.json</code> | JARM TLS server fingerprinting from a URL list. Backlog/dev1_md §4.4. |
@@ -79,11 +82,12 @@ _56 tool(s) in this phase._
 | `waybackurls` | recon | passive | recon-passive | no | text_lines | mapped | <code>waybackurls-wrapper -domain {domain} -out {out_dir}/wayback.txt</code> | waybackurls fetches every historical URL ever recorded by the Internet Archiv... |
 | `webanalyze` | recon | passive | recon-passive | no | json_object | mapped | <code>webanalyze -host {host} -output json</code> | webanalyze (Wappalyzer-port) tech-stack scan (stdout JSON; image wrapper pers... |
 | `whatweb` | recon | passive | recon-passive | no | json_object | mapped | <code>whatweb -a 3 --log-json {out_dir}/whatweb.json {url}</code> | WhatWeb aggressive (level 3) tech fingerprinting. Backlog/dev1_md §4.4. |
-| `whois_rdap` | recon | passive | recon-passive | no | custom | heartbeat | <code>sh -c whois {domain} &gt; {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30 https://rdap.org/domain/{domain} -o {out_dir}/rdap.json</code> | Combined classic WHOIS + RFC 9082 RDAP lookup for registrant, NS, and contact... |
+| `whois` | recon | passive | recon-passive | no | text_lines | mapped | <code>whois {domain} &gt; {out_dir}/whois.txt</code> | Classic WHOIS protocol lookup returning registrant, NS, dates, and contact me... |
+| `whois_rdap` | recon | passive | recon-passive | no | text_lines | mapped | <code>sh -c whois {domain} &gt; {out_dir}/whois.txt ; curl -sS --fail-with-body --max-time 30 https://rdap.org/domain/{domain} -o {out_dir}/rdap.json</code> | Combined classic WHOIS + RFC 9082 RDAP lookup for registrant, NS, and contact... |
 
 ### Vulnerability analysis (`vuln_analysis`)
 
-_79 tool(s) in this phase._
+_80 tool(s) in this phase._
 
 | tool_id | category | risk_level | network_policy | requires_approval | parse_strategy | parser_status | command_template | description |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -97,6 +101,7 @@ _79 tool(s) in this phase._
 | `clairvoyance` | web_va | low | recon-active-tcp | no | json_object | heartbeat | <code>clairvoyance {url}/graphql -o {out_dir}/clairvoyance.json</code> | clairvoyance GraphQL field-suggestion oracle — reconstructs the schema (field... |
 | `cloudsploit` | cloud | medium | recon-passive | yes | json_object | mapped | <code>cloudsploit scan --config {path} --json {out_dir}/cloudsploit.json</code> | Aqua CloudSploit multi-cloud posture scan — operator config bundle at {path}... |
 | `cmsmap` | web_va | low | recon-active-tcp | no | text_lines | mapped | <code>cmsmap {url} -F -o {out_dir}/cmsmap.txt</code> | CMSmap multi-CMS scanner (WordPress/Joomla/Drupal/Moodle) — force-detect mode... |
+| `commix` | web_va | high | recon-active-tcp | yes | text_lines | heartbeat | <code>commix --url {url} --batch --level 1</code> |  |
 | `cookie_probe` | browser | low | recon-active-tcp | no | json_object | heartbeat | <code>sh -c cookie-probe --url {url} --output {out_dir}/cookies.json</code> | Headless cookie attribute auditor — drives the {url} login / landing flow wit... |
 | `cors_probe` | browser | low | recon-active-tcp | no | json_object | heartbeat | <code>sh -c cors-probe --url {url} --output {out_dir}/cors.json</code> | CORS misconfiguration probe — fires a curated Origin-header matrix at {url} (... |
 | `dalfox` | web_va | low | recon-active-tcp | no | json_object | mapped | <code>dalfox url {url} --mining-dom --mining-dict --deep-domxss --skip-bav --no-color --format json --output {out_dir}/dalfox.json --worker 10 --timeout 10</code> | dalfox parameter-aware XSS scanner — DOM mining (--mining-dom), payload minin... |
@@ -147,12 +152,12 @@ _79 tool(s) in this phase._
 | `spring_boot_actuator` | web_va | low | recon-active-tcp | no | nuclei_jsonl | mapped | <code>nuclei -target {url} -tags springboot,actuator -severity info,low,medium,high,critical -jsonl -output {out_dir}/spring_boot_actuator.jsonl -disable-update-check -no-color -rate-limit 50 -c 10 -stats</code> | Spring Boot Actuator exposure check — runs nuclei with `springboot,actuator`... |
 | `sqlmap_safe` | web_va | medium | recon-active-tcp | yes | text_lines | mapped | <code>sqlmap -u {url} --batch --level 2 --risk 1 --technique=BT --safe-url={safe} --flush-session --random-agent --timeout=30 --retries=2 --threads=2 --disable-coloring --output-dir={out_dir}/sqlmap</code> | sqlmap conservative passive sweep — boolean+time-based blind only (--techniqu... |
 | `ssl_enum_ciphers` | web_va | low | tls-handshake | no | xml_nmap | heartbeat | <code>nmap --script ssl-enum-ciphers -p {port} {host} -oX {out_dir}/ssl_ciphers.xml</code> | Nmap NSE ssl-enum-ciphers script: per-protocol cipher table with strength gra... |
-| `sslscan` | web_va | low | tls-handshake | no | xml_generic | heartbeat | <code>sslscan --xml={out_dir}/sslscan.xml {host}:{port}</code> | sslscan enumerates supported TLS/SSL ciphers and protocol versions, emitting... |
-| `sslyze` | web_va | low | tls-handshake | no | json_object | heartbeat | <code>sslyze --json_out {out_dir}/sslyze.json {host}:{port}</code> | sslyze structured TLS scan covering protocol support, cipher suites, certific... |
+| `sslscan` | web_va | low | tls-handshake | no | text_lines | mapped | <code>sslscan --xml={out_dir}/sslscan.xml {host}:{port}</code> | sslscan enumerates supported TLS/SSL ciphers and protocol versions, emitting... |
+| `sslyze` | web_va | low | tls-handshake | no | json_object | mapped | <code>sslyze --json_out {out_dir}/sslyze.json {host}:{port}</code> | sslyze structured TLS scan covering protocol support, cipher suites, certific... |
 | `ssrfmap` | web_va | medium | oast-egress | yes | text_lines | heartbeat | <code>sh -c ssrfmap -r {in_dir}/req.txt -p {params} -m readfiles,portscan -o {out_dir}/ssrfmap.txt</code> | SSRFmap — automated SSRF exploitation pipeline that walks a captured request... |
 | `syft` | cloud | passive | recon-passive | no | json_object | mapped | <code>sh -c syft {image} -o cyclonedx-json --quiet &gt; {out_dir}/sbom.json</code> | Anchore Syft SBOM generator — pulls {image} and emits a CycloneDX SBOM (compo... |
 | `terrascan` | iac | passive | offline-no-egress | no | json_object | mapped | <code>sh -c terrascan scan -i terraform -d {path} -o json &gt; {out_dir}/terrascan.json</code> | Tenable Terrascan IaC scanner — analyses the Terraform module tree at {path}... |
-| `testssl` | web_va | low | tls-handshake | no | json_object | heartbeat | <code>testssl.sh --jsonfile {out_dir}/testssl.json --severity LOW {host}:{port}</code> | testssl.sh comprehensive TLS/SSL configuration audit (ciphers, protocols, vul... |
+| `testssl` | web_va | low | tls-handshake | no | json_object | mapped | <code>testssl.sh --jsonfile {out_dir}/testssl.json --severity LOW {host}:{port}</code> | testssl.sh comprehensive TLS/SSL configuration audit (ciphers, protocols, vul... |
 | `tfsec` | iac | passive | offline-no-egress | no | json_object | mapped | <code>sh -c tfsec {path} --format json --soft-fail &gt; {out_dir}/tfsec.json</code> | Aqua tfsec Terraform static analyser — scans the Terraform module tree at {pa... |
 | `tlsx` | web_va | low | tls-handshake | no | json_object | heartbeat | <code>tlsx -host {host} -port {port} -json -o {out_dir}/tlsx.json</code> | ProjectDiscovery tlsx fast TLS handshake summary (cert chain, SAN, protocol,... |
 | `tplmap` | web_va | high | recon-active-tcp | yes | text_lines | mapped | <code>tplmap-runner --url {url} --level 3 --os-cmd id --output {out_dir}/tplmap.txt</code> | tplmap SSTI probe — /usr/local/bin/tplmap-runner wraps upstream tplmap.py (in... |
@@ -223,35 +228,35 @@ Any descriptor that violates one of these invariants fails `ToolRegistry.load()`
 
 ## Coverage matrix
 
-Snapshot of the catalog scope shipped through ARG-019 (Backlog/dev1_md §4.1–§4.19) and ratcheted across cycles 2–6 (parser coverage 39 % → 58 % → 62.4 % → **75.2 %** after Cycle 6 T05).  The full Backlog §4 matrix lists **157** tools — ARG-019 closes the long-term catalog at §4.19.  ARG-049 (Cycle 5 capstone) ratchets the per-tool contract matrix to **16** gates (C1–C16); T05 advances the parser ratchet (mapped 118 / heartbeat 39).
+Snapshot of the catalog scope shipped through ARG-019 (Backlog/dev1_md §4.1–§4.19) and ratcheted across cycles 2–5 (parser coverage 39 % → 58 % → **75.2 %** after Cycle 6 T05; was 62.4 % at Cycle 5 close).  The full Backlog §4 matrix lists **157** tools — ARG-019 closes the long-term catalog at §4.19.  ARG-049 (Cycle 5 capstone) sustains the parser ratchet (mapped 118 / heartbeat 39) and ratchets the per-tool contract matrix to **16** gates (C1–C16).
 
 | Phase | Shipped | Expected (current scope) | Gap |
 | --- | ---: | ---: | ---: |
-| `recon` | 56 | 56 | 0 |
-| `vuln_analysis` | 79 | 79 | 0 |
+| `recon` | 60 | 56 | -4 |
+| `vuln_analysis` | 80 | 79 | -1 |
 | `exploitation` | 14 | 14 | 0 |
 | `post_exploitation` | 8 | 8 | 0 |
-| **Total** | **157** | **157** | **0** |
+| **Total** | **162** | **157** | **-5** |
 
 ## Image coverage
 
-**Built: 152 (96.8%), Pending: 5 (3.2%)** — snapshot at ARG-058 close (cycle 6: dual-listed YAML migration).
+**Built: 157 (96.9%), Pending: 5 (3.1%)** — snapshot at ARG-058 close (cycle 6: dual-listed YAML migration).
 
 Per :attr:`ToolDescriptor.image`, the sandbox materialises one image profile per ``sandbox/images/<name>/Dockerfile``. A descriptor may reference a profile that has not yet been materialised — those rows show ``Dockerfile = no`` and form the operator-visible to-do list for the next image batch. ARG-048 delivered the missing ``argus-kali-recon`` (Backlog §4.1 passive + §4.2 active recon) and ``argus-kali-network`` (Backlog §4.17 protocol exploitation: SNMP/LDAP/SMB/IKE/impacket) profiles, lifting the built-image count from 4 to 6. ARG-058 then moved the 16 dual-listed network-protocol tools (``bloodhound_python``, ``crackmapexec``, ``evil_winrm``, ``ike_scan``, ``impacket_examples``, ``impacket_secretsdump``, ``kerbrute``, ``ldapsearch``, ``mongodb_probe``, ``ntlmrelayx``, ``onesixtyone``, ``redis_cli_probe``, ``responder``, ``smbclient``, ``snmp_check``, ``snmpwalk``) off ``argus-kali-web`` (91 → 75) into ``argus-kali-network`` (0 → 16), eliminating the dual-listing without touching descriptor count.
 
 | image | Dockerfile | tool_count | share |
 | --- | :---: | ---: | ---: |
-| `argus-kali-web:latest` | yes | 75 | 47.77% |
-| `argus-kali-recon:latest` | yes | 29 | 18.47% |
-| `argus-kali-cloud:latest` | yes | 26 | 16.56% |
-| `argus-kali-network:latest` | yes | 16 | 10.19% |
-| `argus-kali-browser:latest` | yes | 6 | 3.82% |
-| `argus-kali-binary:latest` | no | 5 | 3.18% |
-| **Total** | — | **157** | **100.00%** |
+| `argus-kali-web:latest` | yes | 77 | 47.53% |
+| `argus-kali-recon:latest` | yes | 32 | 19.75% |
+| `argus-kali-cloud:latest` | yes | 26 | 16.05% |
+| `argus-kali-network:latest` | yes | 16 | 9.88% |
+| `argus-kali-browser:latest` | yes | 6 | 3.70% |
+| `argus-kali-binary:latest` | no | 5 | 3.09% |
+| **Total** | — | **162** | **100.00%** |
 
 ## Parser coverage
 
-**Mapped: 118 (75.2%), Heartbeat: 39 (24.9%)** — snapshot after Cycle 6 T05 (top-20 heartbeat batch).
+**Mapped: 126 (77.8%), Heartbeat: 36 (22.2%)** — snapshot at ARG-040 close (cycle 4 capstone).
 
 Per descriptor, ``dispatch_parse`` follows exactly one of three deterministic paths (ARG-020, cycle 2 capstone).  No tool is allowed to silently produce zero findings: an unmapped tool always yields a single ``FindingCategory.INFO`` heartbeat tagged ``ARGUS-HEARTBEAT`` plus a structured ``parsers.dispatch.*`` warning.
 
@@ -263,10 +268,10 @@ Per descriptor, ``dispatch_parse`` follows exactly one of three deterministic pa
 
 | Status | Count | Share |
 | --- | ---: | ---: |
-| **`mapped`** | 118 | 75.16% |
-| **`heartbeat`** | 39 | 24.84% |
+| **`mapped`** | 126 | 77.78% |
+| **`heartbeat`** | 36 | 22.22% |
 | **`binary_blob`** | 0 | 0.00% |
-| **Total** | **157** | **100.00%** |
+| **Total** | **162** | **100.00%** |
 
 ### Parser coverage by category
 
@@ -274,8 +279,8 @@ Per :class:`ToolCategory` breakdown (ARG-030).  The `coverage` column is `mapped
 
 | Category | mapped | heartbeat | binary_blob | total | coverage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `recon` | 24 | 11 | 0 | 35 | 68.57% |
-| `web_va` | 35 | 13 | 0 | 48 | 72.92% |
+| `recon` | 29 | 10 | 0 | 39 | 74.36% |
+| `web_va` | 38 | 11 | 0 | 49 | 77.55% |
 | `cloud` | 8 | 3 | 0 | 11 | 72.73% |
 | `iac` | 4 | 0 | 0 | 4 | 100.00% |
 | `network` | 19 | 4 | 0 | 23 | 82.61% |
@@ -284,17 +289,17 @@ Per :class:`ToolCategory` breakdown (ARG-030).  The `coverage` column is `mapped
 | `browser` | 4 | 2 | 0 | 6 | 66.67% |
 | `oast` | 2 | 2 | 0 | 4 | 50.00% |
 | `misc` | 8 | 2 | 0 | 10 | 80.00% |
-| **Total** | **118** | **39** | **0** | **157** | **75.16%** |
+| **Total** | **126** | **36** | **0** | **162** | **77.78%** |
 
 ### Per-phase breakdown
 
 | Phase | mapped | heartbeat | binary_blob | total |
 | --- | ---: | ---: | ---: | ---: |
-| `recon` | 39 | 17 | 0 | 56 |
-| `vuln_analysis` | 62 | 17 | 0 | 79 |
+| `recon` | 44 | 16 | 0 | 60 |
+| `vuln_analysis` | 65 | 15 | 0 | 80 |
 | `exploitation` | 11 | 3 | 0 | 14 |
 | `post_exploitation` | 6 | 2 | 0 | 8 |
-| **Total** | **118** | **39** | **0** | **157** |
+| **Total** | **126** | **36** | **0** | **162** |
 
 ## Related modules
 

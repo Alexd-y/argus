@@ -60,6 +60,10 @@ TESTS_DIR: Final[Path] = Path(__file__).resolve().parent
 _OFFLINE_PATH_PREFIXES: Final[tuple[str, ...]] = (
     # Pure unit suite — by-design offline. Always green in dev.
     "unit/",
+    # QUICK-009 — mock-based Quick integration (no live redis/postgres).
+    "integration/quick/",
+    # QUICK-009 — in-memory scheduler fairness (1/10/100). 1000 is skipif-gated.
+    "perf/",
     # Sandbox parser/dispatch suite — uses signed YAML catalog + on-disk
     # fixtures. Spec: tests/integration/sandbox/* MUST stay offline.
     "integration/sandbox/",
@@ -277,6 +281,14 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "requires_docker_e2e: needs the full docker-compose.e2e.yml stack (ARG-047 capstone)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "perf: in-memory Quick scheduler fairness / stage timing (no Docker)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "perf_scale: opt-in 1000-target Quick scheduler fairness; set ARGUS_PERF_SCALE=1",
     )
     # B6-T04 marker — kind-cluster integration tests under tests/integration/k8s/.
     # The k8s subtree's own conftest auto-tags every item with this marker AND

@@ -11,13 +11,136 @@ Base URL: `/api/v1` (или `NEXT_PUBLIC_API_URL`)
 
 ### 1.1 Сканирование
 
+Старый `POST /scans` (`target` + `email` + `options`) **без изменений**. Новые поля — только optional / additive.
+
+`execution_mode` — immutable профиль исполнения (`production` \| `lab_unrestricted` \| `quick`).  
+`scan_mode` / `options.scanType` — **глубина** скана, не режим исполнения.  
+`ScanProfile.QUICK` в MCP = глубина, не Quick execution mode.
+
+Канонический coverage-путь: **`GET /scans/{id}/coverage`** (существующий; не дублировать).  
+Отчёт скана: существующий `GET /scans/{id}/report` (alias к reports pipeline), не второй генератор.
+
 | Endpoint | Method | Request Schema | Response Schema | Error Schema |
 |----------|--------|----------------|-----------------|--------------|
-| `POST /scans` | POST | `{ target: string, email: string, options: ScanOptions }` | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string, details?: object }` |
-| `GET /scans/:id` | GET | — | `{ id: string, status: string, progress: number, phase: string, target: string, created_at: string }` | `{ error: string, code?: string }` |
+| `POST /scans` | POST | `{ target: string, email: string, options: ScanOptions, execution_mode?: ExecutionMode, scan_mode?: ScanDepth, quick?: QuickCreateOptions }` | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string, details?: object }` |
+| `GET /scans/:id` | GET | — | `{ id: string, status: string, progress: number, phase: string, target: string, created_at: string, deadline_at?: string, quick_profile?: string, budget?: QuickBudgetView, stage?: string, execution_mode?: ExecutionMode }` | `{ error: string, code?: string }` |
+| `POST /scans/:id/cancel` | POST | — | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string }` |
+| `GET /scans/:id/plan` | GET | — | `QuickScanPlanView` (только `execution_mode=quick`) | 404 `{ error: string, code: "plan_not_applicable" }` для non-quick; 404 scan not found |
+| `GET /scans/:id/coverage` | GET | — | `{ scan_id: string, requirements: object[], results: CoverageResult[] }` — `results[].reason_code` additive | `{ error: string, code?: string }` |
+| `GET /scans/:id/findings` | GET | Query: `?severity&validated_only` | `Finding[]` | `{ error: string, code?: string }` |
+| `GET /scans/:id/report` | GET | Query: `?format&tier` | Binary/stream или 404 `report_not_found` (generate via existing reports API) | `{ error: string, code?: string }` |
 | `GET /scans/:id/events` | GET (SSE) | — | SSE stream: `{ event: string, phase?: string, progress?: number, message?: string, data?: object }` | — |
+| `GET /quick/profiles` | GET | — | `{ profiles: QuickProfileCatalogItem[] }` | `{ error: string, code?: string }` |
 
-**ScanOptions** (из ARGUS/Frontend page.tsx):
+**ExecutionMode:** `"production" | "lab_unrestricted" | "quick"`. Omit / null → `production` (backward compatible).
+
+**QuickCreateOptions** (игнорируется, если `execution_mode` не `quick`):
+
+```ts
+{
+  profile?: "compact" | "balanced" | "extended";  // default balanced
+  severity_floor?: "critical" | "high" | "medium" | "low" | "info";
+  enable_ai?: boolean;
+  enable_oast?: boolean;
+  enable_headless_on_signal?: boolean;
+  wall_clock_budget_seconds?: number;
+  ai_budget_seconds?: number;
+  authenticated_context_id?: string;  // secret-store ref only; never a credential
+  cloud_llm_allowed?: boolean;        // default false; clamped fail-closed
+}
+```
+
+**QuickBudgetView / GET detail (optional, только quick):**
+
+```ts
+{
+  wall_clock_budget_seconds: number;
+  discovery_budget_seconds?: number;
+  fingerprint_budget_seconds?: number;
+  verification_budget_seconds?: number;
+  ai_budget_seconds?: number;
+  report_budget_seconds?: number;
+  request_budget?: number;
+  per_host_budget?: number;
+  concurrency_budget?: number;
+  reserve_for_validation_percent?: number;
+}
+```
+
+**QuickScanPlanView** (`GET /scans/:id/plan`):
+
+```ts
+{
+  scan_id: string;
+  mode: "quick";
+  profile: "compact" | "balanced" | "extended";
+  plan_version: number;
+  deadline_at: string;  // ISO-8601 Z
+  budget: QuickBudgetView;
+  stages: string[];
+  tasks: object[];      // typed tool_id / capability_id; never argv/command
+  fallbacks: string[];
+  coverage_intent: Array<{ capability_id: string; reason_code: string; state?: string }>;
+  assumptions: string[];
+  prompt_version?: string;
+  model_route?: string;
+}
+```
+
+**CoverageResult** (существующий DTO, QUICK-007 расширяет `reason_code`):
+
+```ts
+{
+  requirement_id: string;
+  scan_id: string;
+  asset_id: string;
+  capability_id: string;
+  status: string;  // CoverageStatus enum
+  reason_code?: string | null;
+  // examples: executed | budget_partial | fingerprint_mismatch
+  //           | not_scheduled_by_quick_profile | deadline_reached | tool_error
+  template_ids?: string[];
+  evidence_ids?: string[];
+  finding_id?: string | null;
+  execution_evidence_id?: string | null;
+}
+```
+
+Отсутствие finding ≠ coverage.
+
+**QuickProfileCatalogItem** (`GET /quick/profiles`):
+
+```ts
+{
+  name: "compact" | "balanced" | "extended";
+  wall_clock_budget_seconds: number;
+  ai_budget_seconds: number;
+  reserve_for_validation_percent: number;
+  max_targets: number;
+  max_urls_per_host: number;
+  crawl_depth: number;
+  severity_floor: string;
+  enable_ai: boolean;
+  enable_oast: boolean;
+  enable_headless_on_signal: boolean;
+  request_budget: number;
+  per_host_budget: number;
+  concurrency_budget: number;
+}
+```
+
+**Error codes (400/404):**
+
+| code | HTTP | Когда |
+|------|------|--------|
+| `quick_mode_disabled` | 400 | `execution_mode=quick` при `ARGUS_QUICK_MODE_ENABLED=false` (нет тихого fallback в full scan) |
+| `conflicting_execution_mode` | 400 | `execution_mode=lab_unrestricted` + `quick` payload |
+| `unknown_quick_profile` | 400 | неизвестный `quick.profile` |
+| `plan_not_applicable` | 404 | `GET /scans/{id}/plan` для non-quick скана |
+
+При `execution_mode=quick` сервер форсирует `scan_mode="quick"` (глубина для VA planner). Quick **не** наследует `lab_unrestricted`.
+
+**ScanOptions** (из ARGUS/Frontend page.tsx; `scanType` не ломать):
 
 ```ts
 {
@@ -472,6 +595,45 @@ Session macros (login-replay) + principals (owner/attacker/anonymous) для а�
 **Инварианты:** split-plane secrets (SI-3) — ни один endpoint не принимает/не возвращает raw-креды (только `secret_ref`/`secrets_ref`);
 optimistic lock (409); live owner/attacker replay через `ForwardGate`+preflight+EAP на воркер-плоскости — infra-gated (этот роутер
 хранит только определения).
+
+---
+
+## 4.1 Unified AI / LAB / Nuclei / RAG (2026-08-15)
+
+Base: `/api/v1`. Tenant header `X-Tenant-Id` required on mutating engagement routes. LAB mutating execution requires a **usable** lab lease (`requires_approval` always `false` after lease).
+
+| Endpoint | Method | Request | Success |
+|----------|--------|---------|---------|
+| `/engagements/{id}/execution-mode` | GET/POST | `{ mode }` | `{ engagement_id, tenant_id, mode, first_execution_at }` |
+| `/engagements/{id}/lab-scope` | POST | cidrs/dns/k8s/vm | 201 LabScopeManifest |
+| `/engagements/{id}/lab-lease` | POST | `{ target, ... }` | 201 lease + allow-all policy; 403 outside boundary |
+| `/nuclei/profiles` | GET | — | `{ profiles[] }` |
+| `/nuclei/templates` | GET | — | `{ templates[] }` |
+| `/nuclei/templates/ingest` | POST | `{ content, template_id?, source, mode }` | 201 manifest |
+| `/nuclei/templates/generate` | POST | `{ intent, mode=lab_unrestricted }` | 201 generated artifact |
+| `/nuclei/templates/{id}/validate` | POST | query `mode` | `{ allowed, requires_approval, analysis }` |
+| `/nuclei/releases` | GET | — | `{ releases[], active_release_id }` |
+| `/nuclei/releases` | POST | `{ version, digest_sha256, provenance? }` | 201 release |
+| `/nuclei/releases/{id}/activate` | POST | — | active release |
+| `/nuclei/releases/{id}/rollback` | POST | — | rolled_back release |
+| `/api-surface/ingest` | POST | `{ asset_id, document, mode, base_url? }` | 201 ApiDocumentDTO |
+| `/assets/{id}/endpoints` | GET | — | `{ asset_id, endpoints[] }` |
+| `/assets/{id}/capabilities` | GET | — | `{ asset_id, capability_ids[] }` |
+| `/scans/{id}/coverage` | GET | — | `{ scan_id, results[] }` from coverage sink |
+| `/scans/{id}/occurrences` | GET | header `X-Tenant-Id` | `{ scan_id, occurrences[] }`; 400 `tenant_required`; `occurrence_key`/`finding_key` are sha256 (64 hex) |
+| `/scans/{id}/diff/{baseline_id}` | GET | — | `{ entries[] }` |
+| `/findings/{key}/assessments` | POST | `{ classification, observation?, scan_id? }` | finding (append-only) |
+| `/findings/{key}/retest` | POST | query `scan_id`, `outcome` | job + finding |
+| `/lab/scripts` | POST | `{ language, source, argv?, lease_id }` | 201; 403 without usable lease |
+| `/lab/scripts/{id}/execute` | POST | query `lease_id?` | 200 `{ status, return_code, stdout, stderr, runner, requires_approval: false }`; 403 `lab_lease_required`; 409 `lab_namespace_mismatch` |
+| `/lab/artifacts/{id}/execute` | POST | `{ lease_id, argv? }` | 200 real execution (nuclei YAML via compiler when ingested); 403 without lease |
+| `/lab/executions/{id}` | GET | — | execution row |
+| `/rag/traces` | POST | `{ scan_id, query, citations[] }` | 201 |
+| `/rag/traces/{scan_id}` | GET | — | citation trace |
+| `/oast/traces` | POST | `{ scan_id, protocol, token_id?, payload_hash? }` — `correlation_status` from client is ignored | 201 `{ scan_id, protocol, correlation_status, token_id, payload_hash }` where status is computed: `uncorrelated` (no/invalid token), `correlated` (issued token ingested), `unknown_token` |
+| `/oast/traces/{scan_id}` | GET | — | `{ scan_id, interactions[] }` |
+
+**Инварианты:** production сохраняет signature/approval gates; LAB после verified lease — `allowed_tools/actions/protocols/payloads=*`, `requires_approval=false`. AI не удаляет findings.
 
 ---
 

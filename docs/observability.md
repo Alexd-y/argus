@@ -1,6 +1,6 @@
 # ARGUS Observability Guide
 
-> Status: production · Owners: Backend Platform · Last updated: 2026-04-21
+> Status: production · Owners: Backend Platform · Last updated: 2026-08-16
 > Tracking ticket: **ARG-041 — Observability**
 
 This document is the contract between ARGUS and the operations world. It
@@ -82,8 +82,10 @@ A few consequential defaults:
 
 All metrics use the `argus_` prefix and Prometheus naming conventions
 (`_total` for counters, `_seconds` for histograms, base unit in name).
-The catalogue is exactly **9 families**; growing it requires updating
-`METRIC_CATALOGUE` and `tests/unit/core/test_observability.py`.
+The catalogue in `observability.py` is exactly **9 families**; growing it
+requires updating `METRIC_CATALOGUE` and `tests/unit/core/test_observability.py`.
+Quick execution-mode metrics are **not** a 10th family here — they live in
+`backend/src/core/unified_ai_metrics.py` (see §3.4).
 
 | Family                                  | Type      | Labels                                              | Notes                                                                  |
 | --------------------------------------- | --------- | --------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -158,6 +160,32 @@ Implementation: `backend/src/api/routers/metrics.py` calls
 interface or restrict via NetworkPolicy in production. There is no
 `tenant_hash` filter — `/metrics` is the operator's view, not a
 tenant-facing API.
+
+### 3.4 Quick execution-mode metrics
+
+Quick (`execution_mode=quick`) emits through `src.quick.metrics` →
+`src.core.unified_ai_metrics`. Domain code must not register a 10th family in
+`observability.py`. Emit paths are fail-open. Grafana: `infra/helm/argus/dashboards/quick-mode.json`.
+
+| Metric | Type | Labels | Notes |
+| ------ | ---- | ------ | ----- |
+| `argus_quick_scan_duration_seconds` | Histogram | — | Wall-clock duration |
+| `argus_quick_deadline_overrun_total` | Counter | — | Report window missed after deadline |
+| `argus_quick_budget_used_ratio` | Histogram | — | Wall-clock consumed (0..1+) |
+| `argus_quick_tasks_total` | Counter | `stage`, `status`, `tool` | Tool whitelist + `_other` |
+| `argus_quick_assets_discovered_total` | Counter | — | Discovery count |
+| `argus_quick_templates_selected_total` | Counter | — | Nuclei manifest size |
+| `argus_quick_findings_total` | Counter | `severity`, `verdict` | Triage verdict whitelist |
+| `argus_quick_validation_rate` | Histogram | — | Selective-verification ratio |
+| `argus_quick_false_positive_rate` | Histogram | — | FP-candidate ratio |
+| `argus_quick_coverage_ratio` | Histogram | — | Coverage accounting rate |
+| `argus_quick_plan_revisions_total` | Counter | — | Adaptive widening; mode stays quick |
+| `argus_quick_llm_calls_total` | Counter | `model`, `prompt`, `status` | Whitelist + `_other` |
+| `argus_quick_llm_latency_seconds` | Histogram | `model`, `prompt` | Per-call latency |
+| `argus_quick_rag_latency_seconds` | Histogram | — | Retrieval latency |
+| `argus_quick_tool_failures_total` | Counter | `tool`, `reason` | Includes `untracked` |
+
+Tests: `backend/tests/unit/quick/test_metrics_emission.py`.
 
 ---
 

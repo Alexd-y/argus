@@ -1,0 +1,9 @@
+{
+  "fixture_id": "et-011",
+  "classification": "insufficient",
+  "must_not_delete_finding": true,
+  "citations_required": true,
+  "evidence_ids": [
+    "artifact:11"
+  ]
+}

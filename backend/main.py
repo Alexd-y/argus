@@ -18,6 +18,7 @@ from src.api.routers import (
     auth,
     bounty,
     cache,
+    execution_mode,
     findings,
     health,
     intelligence,
@@ -27,11 +28,13 @@ from src.api.routers import (
     metrics,
     providers_health,
     queues_health,
+    quick,
     reports,
     sandbox,
     scans,
     skills_public,
     tools,
+    unified_ai_lab,
     ws,
 )
 import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
@@ -274,6 +277,15 @@ app.include_router(admin_password.router, prefix="/api/v1")
 app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(quick.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(execution_mode.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.nuclei_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.lab_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.findings_ext_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.coverage_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.api_surface_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.rag_trace_router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(unified_ai_lab.oast_trace_router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(findings.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(bounty.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(cvss_router, prefix="/api/v1", dependencies=tenant_auth)

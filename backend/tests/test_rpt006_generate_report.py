@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -46,6 +47,58 @@ class TestRpt006CeleryRegistration:
         assert routes.get("argus.generate_report", {}).get("queue") == "argus.reports"
         assert "argus.generate_all_reports" in celery_app.tasks
         assert routes.get("argus.generate_all_reports", {}).get("queue") == "argus.reports"
+
+
+class TestFH06GenerateReportTaskArgContract:
+    """F-H06: lock the positional-argument contract of ``argus.generate_report``.
+
+    The HTTP routers enqueue the task with *positional* args
+    (``.delay(report_id, tenant_id, scan_id[, formats])``). If the task
+    signature is ever reordered without updating those call sites, the wrong
+    values would silently land in the wrong parameters (e.g. tenant_id used as
+    scan_id) — a cross-tenant data-integrity hazard that no functional test
+    would catch because Celery binds positionally. These asserts fail loudly on
+    any drift so the call sites must be revisited.
+    """
+
+    def test_positional_parameter_order_is_frozen(self) -> None:
+        from src.tasks import generate_report_task
+
+        params = list(inspect.signature(generate_report_task.run).parameters)
+        assert params == [
+            "report_id",
+            "tenant_id",
+            "scan_id",
+            "formats",
+            "include_minio",
+        ]
+
+    def test_scans_router_positional_call_binds_expected_params(self) -> None:
+        """scans.py: ``.delay(report_id, tenant_id, scan_id, formats)``."""
+        from src.tasks import generate_report_task
+
+        bound = inspect.signature(generate_report_task.run).bind(
+            "report-123", "tenant-abc", "scan-xyz", ["html", "pdf"]
+        )
+        bound.apply_defaults()
+        assert bound.arguments["report_id"] == "report-123"
+        assert bound.arguments["tenant_id"] == "tenant-abc"
+        assert bound.arguments["scan_id"] == "scan-xyz"
+        assert bound.arguments["formats"] == ["html", "pdf"]
+        assert bound.arguments["include_minio"] is True
+
+    def test_admin_reports_router_positional_call_binds_expected_params(self) -> None:
+        """admin_reports.py: ``.delay(report_id, tenant_id, scan_id)`` (no formats)."""
+        from src.tasks import generate_report_task
+
+        bound = inspect.signature(generate_report_task.run).bind(
+            "report-123", "tenant-abc", None
+        )
+        bound.apply_defaults()
+        assert bound.arguments["report_id"] == "report-123"
+        assert bound.arguments["tenant_id"] == "tenant-abc"
+        assert bound.arguments["scan_id"] is None
+        assert bound.arguments["formats"] is None
 
 
 class ExecScalar:

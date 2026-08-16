@@ -58,6 +58,7 @@ from pydantic import (
 from typing_extensions import Self
 
 from src.core.observability import get_tracer, safe_set_span_attribute
+from src.core.unified_ai_metrics import record_oast_interaction
 from src.oast.provisioner import OASTProvisioner
 
 
@@ -329,6 +330,7 @@ class OASTCorrelator:
         """Inner ingest body wrapped by the OTel span in :meth:`ingest`."""
         token = self._provisioner.get(interaction.token_id)
         if token is None:
+            record_oast_interaction(correlation_status="unknown_token")
             _logger.info(
                 "oast.correlator.unknown_token",
                 extra={
@@ -344,6 +346,7 @@ class OASTCorrelator:
         with self._lock:
             seen = self._seen_ids.setdefault(token.id, set())
             if interaction.id in seen:
+                record_oast_interaction(correlation_status="duplicate")
                 _logger.debug(
                     "oast.correlator.duplicate_interaction",
                     extra={
@@ -354,6 +357,7 @@ class OASTCorrelator:
                 return False
             bucket = self._interactions.setdefault(token.id, [])
             if len(bucket) >= self._max_per_token:
+                record_oast_interaction(correlation_status="bucket_full")
                 _logger.warning(
                     "oast.correlator.bucket_full",
                     extra={
@@ -380,6 +384,7 @@ class OASTCorrelator:
                 "source_ip": interaction.source_ip,
             },
         )
+        record_oast_interaction(correlation_status="correlated")
         return True
 
     def list_interactions(

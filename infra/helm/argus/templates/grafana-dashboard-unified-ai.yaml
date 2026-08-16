@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus.fullname" . }}-grafana-unified-ai
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  unified-ai-rag-lab.json: |-
+{{ .Files.Get "dashboards/unified-ai-rag-lab.json" | indent 4 }}

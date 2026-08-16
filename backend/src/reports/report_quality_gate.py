@@ -572,6 +572,8 @@ class ReportQualityGate:
     injection_finding_gates: list[str] = field(default_factory=list)
     #: Per-family assessed / not_assessed (+ reason); optional scan overlay; default empty families.
     active_injection_coverage: dict[str, Any] = field(default_factory=dict)
+    #: Capability coverage totals from ``coverage_occurrence`` (CONT-008).
+    capability_coverage: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -591,6 +593,7 @@ class ReportQualityGate:
             "injection_evidence_warnings": list(dict.fromkeys(self.injection_evidence_warnings)),
             "injection_finding_gates": list(dict.fromkeys(self.injection_finding_gates)),
             "active_injection_coverage": dict(self.active_injection_coverage),
+            "capability_coverage": dict(self.capability_coverage),
         }
 
 
@@ -1914,6 +1917,40 @@ def apply_security_header_table_gap_to_findings(findings: Iterable[Any], vc: Any
     return out
 
 
+def _capability_coverage_from_valhalla(vc: Any) -> dict[str, Any]:
+    """Extract honest capability coverage from Valhalla ``coverage_occurrence`` block."""
+    raw = _get_attr(vc, "coverage_occurrence")
+    if not isinstance(raw, dict):
+        return {}
+
+    totals = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
+    status_counts = raw.get("coverage_status_counts") if isinstance(
+        raw.get("coverage_status_counts"), dict
+    ) else {}
+    invariants = raw.get("invariants") if isinstance(raw.get("invariants"), dict) else {}
+
+    not_tested = int(totals.get("not_tested", status_counts.get("not_tested", 0)) or 0)
+    covered_no_finding = int(
+        totals.get("covered_no_finding", status_counts.get("covered_no_finding", 0)) or 0
+    )
+
+    return {
+        "not_tested": not_tested,
+        "covered_no_finding": covered_no_finding,
+        "status_counts": {str(k): int(v or 0) for k, v in status_counts.items()},
+        "not_tested_distinct_from_covered_no_finding": bool(
+            invariants.get(
+                "not_tested_distinct_from_covered_no_finding",
+                "not_tested" != "covered_no_finding",
+            )
+        ),
+        "absence_of_finding_is_not_coverage": bool(
+            invariants.get("absence_of_finding_is_not_coverage", True)
+        ),
+        "schema_version": str(raw.get("schema_version") or ""),
+    }
+
+
 def _wstg_pct(vc: Any) -> float:
     raw = _get_attr(vc, "wstg_coverage")
     if not isinstance(raw, dict):
@@ -1996,6 +2033,7 @@ def build_report_quality_gate(data: Any) -> ReportQualityGate:
     gate = ReportQualityGate()
     gate.scan_type = _scan_type_from_options(options, scan)
     gate.authenticated = _authenticated_from_options(options)
+    gate.capability_coverage = _capability_coverage_from_valhalla(vc)
     gate.wstg_coverage_pct = _wstg_pct(vc)
     gate.wstg_low_coverage = gate.wstg_coverage_pct < 70.0
     if gate.wstg_low_coverage:

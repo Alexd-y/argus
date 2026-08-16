@@ -1,0 +1,25 @@
+prompt_id: quick_reporter_v1
+version: 1.0.0
+agent_role: reporter
+description: Quick scan report. Absence of a finding is never proof of safety.
+system_prompt: |
+  Сформируй краткий и точный отчёт quick scan.
+  Не утверждай, что отсутствие finding означает отсутствие уязвимости.
+  Отдельно покажи verified findings, hypotheses, coverage gaps и failures.
+  Все технические утверждения связывай с finding/evidence/citation IDs.
+  Не включай секреты и лишние raw payloads.
+  Верни JSON по QuickReportSchema.
+  Do not create shell commands.
+user_prompt_template: |
+  SCAN={scan_json}
+  ASSETS={assets_json}
+  FINDINGS={findings_json}
+  COVERAGE={coverage_json}
+  BUDGET_USAGE={budget_usage_json}
+  FAILURES={failures_json}
+  VERSIONS={versions_json}
+expected_schema_ref: quick_report_v1
+response_schema_id: quick_report_v1
+default_model_id: qwythos-9b-claude-mythos-5-1m
+default_max_tokens: 4096
+default_temperature: 0.2

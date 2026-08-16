@@ -1,0 +1,41 @@
+{{- if .Values.labRunner.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "argus.fullname" . }}-lab-runner
+  labels:
+    {{- include "argus.labels" . | nindent 4 }}
+    app.kubernetes.io/component: lab-runner
+    argus.dev/lab-runner: "true"
+    argus.dev/lab-namespace: {{ .Values.labRunner.namespace | quote }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "argus.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: lab-runner
+  template:
+    metadata:
+      labels:
+        {{- include "argus.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: lab-runner
+        argus.dev/lab-runner: "true"
+        argus.dev/lab-namespace: {{ .Values.labRunner.namespace | quote }}
+    spec:
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: lab-runner
+          image: "{{ .Values.labRunner.image.repository }}:{{ .Values.labRunner.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "infinity"]
+          env:
+            - name: ARGUS_LAB_NAMESPACE
+              value: {{ .Values.labRunner.namespace | quote }}
+          resources:
+            {{- toYaml .Values.labRunner.resources | nindent 12 }}
+{{- end }}

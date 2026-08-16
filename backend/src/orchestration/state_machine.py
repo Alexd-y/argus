@@ -1,5 +1,7 @@
 """ScanStateMachine — transitions between phases, DB recording."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -7,6 +9,7 @@ import time
 import uuid
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import String, cast, func, select, update
@@ -31,7 +34,16 @@ from src.db.models import (
     ScanTimeline,
 )
 from src.findings.cvss_auto_score import CVSSAutoScorer
-from src.orchestration.aggressive_exploit_tools import maybe_run_aggressive_exploit_tools
+from src.mcp.services.notifications import (
+    DiscordNotifier,
+    GitHubIssuesNotifier,
+    NotificationDispatcher,
+    NotificationEvent,
+    NotificationSeverity,
+)
+from src.orchestration.aggressive_exploit_tools import (
+    maybe_run_aggressive_exploit_tools,
+)
 from src.orchestration.auth_config import TargetConfig
 from src.orchestration.binary_analysis import (
     BinaryAnalysisRequest,
@@ -47,12 +59,17 @@ from src.orchestration.cost_aware_reasoning import (
 from src.orchestration.ephemeral_worker import EphemeralWorkerPool
 from src.orchestration.episodic_memory import EpisodicEntry, EpisodicMemory
 from src.orchestration.evidence_chain import EvidenceChain
+from src.orchestration.execution_mode_context import (
+    attach_execution_mode_to_input,
+    extract_execution_mode,
+    is_lab_lease_active_from_options,
+)
 from src.orchestration.exploit_verification_microvm import (
     ExploitVerificationMicroVM,
     VerificationRequest,
 )
 from src.orchestration.exploit_verify import verify_exploit_poc_async
-from src.orchestration.exploitation_queue import ExploitHypothesis, ExploitationQueue
+from src.orchestration.exploitation_queue import ExploitationQueue, ExploitHypothesis
 from src.orchestration.handlers import (
     run_exploit_attempt,
     run_exploit_verify,
@@ -87,13 +104,39 @@ from src.orchestration.phases import (
 )
 from src.orchestration.poc_watermarking import stamp_payload
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
-from src.orchestration.re_verification import ReVerificationRequest, ReVerificationTracker
-from src.orchestration.scan_events import ScanEventBus, ScanEvent as _ScanEvent
+from src.orchestration.re_verification import (
+    ReVerificationRequest,
+    ReVerificationTracker,
+)
+from src.orchestration.scan_events import ScanEvent as _ScanEvent
+from src.orchestration.scan_events import ScanEventBus
 from src.orchestration.scope_integration import rules_of_engagement_to_prompt_context
 from src.orchestration.self_pentest import SelfPentestRunner
 from src.orchestration.tenant_isolation import TenantIsolationGuard
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import notify_scan_finished
+from src.quick.budget import QuickBudgetError
+from src.quick.cancellation import (
+    ScanCancelledError,
+    propagate_scan_cancellation,
+    scan_row_is_cancelled,
+)
+from src.quick.resolver import QuickProfileResolver, UnknownQuickProfileError
+from src.quick.scheduler import (
+    get_quick_budget_manager,
+    quick_deadline_reached,
+    quick_should_stop_discovery,
+)
+from src.quick.schemas import QuickScanConfig
+from src.quick.workflow import (
+    DISCOVERY_PHASES,
+    SKIPPED_BY_QUICK_PROFILE,
+    VERIFICATION_AND_REPORT_PHASES,
+    is_quick_execution,
+    skip_reason_for_phase,
+    skipped_phase_payload,
+    skipped_phases_for_options,
+)
 from src.recon.recon_runtime import build_recon_runtime_config
 from src.recon.sandbox_tool_runner import clear_tool_availability_cache
 from src.recon.step_registry import plan_recon_steps
@@ -110,13 +153,6 @@ from src.reports.finding_metadata import (
     normalize_confidence,
     normalize_evidence_refs,
     normalize_evidence_type,
-)
-from src.mcp.services.notifications import (
-    DiscordNotifier,
-    GitHubIssuesNotifier,
-    NotificationDispatcher,
-    NotificationEvent,
-    NotificationSeverity,
 )
 from src.storage.s3 import upload_finding_poc_json
 
@@ -178,6 +214,135 @@ async def _upload_raw_phase_snapshot(
 
 class ExploitationApprovalRequiredError(Exception):
     """Raised when exploitation phase requires approval and scan is not approved."""
+
+
+class LabLeaseRequiredError(Exception):
+    """Raised when LAB mode is requested without a usable execution lease."""
+
+
+def _ensure_quick_budget(scan_id: str, tenant_id: str, options: dict) -> None:
+    """Open wall-clock leases for Quick. Idempotent if the scan is already registered."""
+    manager = get_quick_budget_manager()
+    if manager.is_open(scan_id):
+        return
+    config = options.get("quick_config")
+    if not isinstance(config, QuickScanConfig):
+        profile_raw = str(options.get("quick_profile") or "balanced")
+        resolver = QuickProfileResolver()
+        try:
+            config = resolver.resolve(tenant_id, profile_raw)
+        except UnknownQuickProfileError:
+            config = resolver.resolve(tenant_id, "balanced")
+    started = options.get("started_at")
+    if not isinstance(started, datetime):
+        started = datetime.now(tz=UTC)
+    try:
+        snapshot = manager.open_scan(
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            config=config,
+            started_at=started,
+        )
+        options["deadline_at"] = snapshot.deadline_at.isoformat()
+        options["quick_config"] = config
+    except QuickBudgetError as exc:
+        if getattr(exc, "code", "") != "scan_budget_already_open":
+            logger.warning(
+                "quick_budget_open_failed",
+                extra={
+                    "event": "quick_budget_open_failed",
+                    "scan_id": scan_id,
+                    "code": getattr(exc, "code", ""),
+                },
+            )
+
+
+def _apply_skipped_phase_to_ctx(
+    phase: ScanPhase,
+    ctx: ScanContext,
+    payload: dict[str, Any],
+    target: str,
+) -> None:
+    reason = str(payload.get("skip_reason") or "")
+    if phase == ScanPhase.SOURCE_ANALYSIS:
+        ctx.source_out = SourceAnalysisOutput(skipped=True, summary=reason)
+    elif phase == ScanPhase.RECON:
+        assets = [target] if target else []
+        ctx.recon_out = ReconOutput(assets=assets)
+    elif phase == ScanPhase.QUICK_FUZZ:
+        ctx.quick_fuzz_out = QuickFuzzOutput()
+    elif phase == ScanPhase.THREAT_MODELING:
+        ctx.threat_out = ThreatModelOutput(threat_model={"skipped": True, "reason": reason})
+    elif phase == ScanPhase.VULN_ANALYSIS:
+        ctx.vuln_out = VulnAnalysisOutput(findings=[])
+    elif phase == ScanPhase.EXPLOITATION:
+        ctx.exploit_out = ExploitationOutput(exploits=[], evidence=[])
+    elif phase == ScanPhase.POST_EXPLOITATION:
+        ctx.post_out = PostExploitationOutput()
+
+
+async def _persist_quick_phase_skip(
+    *,
+    session: AsyncSession,
+    tenant_id: str,
+    scan_id: str,
+    phase: ScanPhase,
+    ctx: ScanContext,
+    target: str,
+    reason: str,
+    order_index: int,
+    progress: int,
+) -> None:
+    payload = skipped_phase_payload(phase, reason)
+    _apply_skipped_phase_to_ctx(phase, ctx, payload, target)
+    step = await _record_step(session, tenant_id, scan_id, phase, "skipped", order_index)
+    await _persist_phase_output(session, tenant_id, scan_id, phase.value, payload)
+    await _record_event(
+        session,
+        tenant_id,
+        scan_id,
+        "phase_skipped",
+        phase.value,
+        progress,
+        message=f"Skipped {phase.value}",
+        data=payload,
+    )
+    logger.info(
+        "quick_phase_skipped",
+        extra={
+            "event": "quick_phase_skipped",
+            "scan_id": scan_id,
+            "phase": phase.value,
+            "skip_reason": reason,
+            "step_id": step.id,
+        },
+    )
+    await session.commit()
+
+
+def _quick_phase_skip_reason(
+    phase: ScanPhase,
+    *,
+    scan_id: str,
+    options: dict,
+    resume_decision: ResumeDecision | None,
+) -> str | None:
+    if resume_decision is ResumeDecision.SKIPPED_BY_PROFILE:
+        return skip_reason_for_phase(phase)
+    if not is_quick_execution(options):
+        return None
+    if phase in SKIPPED_BY_QUICK_PROFILE:
+        return skip_reason_for_phase(phase)
+    deadline = quick_deadline_reached(scan_id, options)
+    stop_discovery = quick_should_stop_discovery(scan_id, options)
+    if deadline and phase not in VERIFICATION_AND_REPORT_PHASES:
+        return "deadline_reached"
+    if stop_discovery and phase in DISCOVERY_PHASES and phase is not ScanPhase.REPORTING:
+        if phase in VERIFICATION_AND_REPORT_PHASES:
+            return None
+        if phase is ScanPhase.RECON or phase is ScanPhase.QUICK_FUZZ or phase is ScanPhase.SOURCE_ANALYSIS:
+            return "deadline_reached"
+    return None
 
 
 _FID_PK_COLLISION_NS = uuid.UUID("018f4a2e-7c8b-7b4d-8e0e-6b6579317431")
@@ -400,11 +565,15 @@ async def _check_exploitation_approval_required(
     session: AsyncSession,
     tenant_id: str,
     scan_id: str,
+    options: dict[str, Any] | None = None,
 ) -> bool:
     """
     Check if exploitation phase requires approval per tenant policy.
     Returns True if approval is required and scan is not yet approved.
+    Verified LAB lease bypasses tenant exploit_approval gate.
     """
+    if is_lab_lease_active_from_options(options, tenant_id=tenant_id):
+        return False
     result = await session.execute(
         select(Policy)
         .where(
@@ -717,7 +886,11 @@ async def _detect_resume_plan(
     ctx = ScanContext()
 
     completed_phases = await get_completed_phases(session, scan_id)
-    resume_plan = compute_resume_plan(completed_phases)
+    skipped_by_profile = skipped_phases_for_options(options)
+    resume_plan = compute_resume_plan(
+        completed_phases,
+        skipped_by_profile=skipped_by_profile,
+    )
 
     if completed_phases:
         logger.info(
@@ -790,11 +963,24 @@ async def _detect_resume_plan(
     if options:
         freeze_scan_scope_kwargs["vuln_classes"] = options.get("vuln_classes")
         freeze_scan_scope_kwargs["exploit_enabled"] = options.get("exploit_enabled", True)
-    with suppress(Exception):
+    try:
         await freeze_scan_scope(
             session, scan_id,
             target_url=target,
             **{k: v for k, v in freeze_scan_scope_kwargs.items() if v is not None},
+        )
+    except Exception as _scope_exc:
+        # Non-fatal: scope may already be frozen or the row may be absent on
+        # resume. Kept non-blocking to preserve resume behaviour, but logged
+        # with the exception type so a genuine scope-freeze regression is
+        # visible instead of being swallowed silently.
+        logger.warning(
+            "freeze_scan_scope_failed",
+            extra={
+                "scan_id": scan_id,
+                "exception_type": type(_scope_exc).__name__,
+                "error": str(_scope_exc),
+            },
         )
 
     return resume_plan, ctx
@@ -999,7 +1185,13 @@ async def _execute_phase(
         )
         logger.error(
             "Phase handler failed",
-            extra={"event_type": "phase_error", "phase": phase_str, "scan_id": scan_id},
+            extra={
+                "event_type": "phase_error",
+                "phase": phase_str,
+                "scan_id": scan_id,
+                "exception_type": type(exc).__name__,
+            },
+            exc_info=True,
         )
         err_message = "Phase failed"
         err_data: dict[str, str] = {"code": "phase_error"}
@@ -1161,6 +1353,8 @@ async def _dispatch_phase_handler(
             ports=ctx.recon_out.ports if ctx.recon_out else None,
             target=target,
             scan_id=scan_id,
+            tenant_id=tenant_id,
+            scan_options=options,
             source_analysis=ctx.source_out,
             quick_fuzz_findings=ctx.quick_fuzz_out.findings if ctx.quick_fuzz_out else None,
         )
@@ -1186,6 +1380,10 @@ async def _dispatch_phase_handler(
         output_data = vuln_out.model_dump()
 
     elif phase == ScanPhase.EXPLOITATION:
+        if is_quick_execution(options):
+            payload = skipped_phase_payload(phase)
+            ctx.exploit_out = ExploitationOutput(exploits=[], evidence=[])
+            return payload
         findings = ctx.vuln_out.findings if ctx.vuln_out else []
 
         try:
@@ -1235,13 +1433,15 @@ async def _dispatch_phase_handler(
             )
             auth_cfg = None
 
-        maybe_run_aggressive_exploit_tools(
-            findings,
-            tenant_id,
-            scan_id,
-            target,
-            scan_approval_flags=_scan_approval_flags_from_options(options),
-        )
+        if not is_quick_execution(options):
+            maybe_run_aggressive_exploit_tools(
+                findings,
+                tenant_id,
+                scan_id,
+                target,
+                scan_approval_flags=_scan_approval_flags_from_options(options),
+                scan_options=options,
+            )
         await _record_event(
             session, tenant_id, scan_id, "tool_run", phase_str, progress,
             message=f"Running {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
@@ -1294,6 +1494,10 @@ async def _dispatch_phase_handler(
         attempt_out = await run_exploit_attempt(
             _exploitation_findings, scan_id=scan_id, target=target, tenant_id=tenant_id,
             auth_config=_auth_config_dict,
+            execution_mode=extract_execution_mode(
+                options if isinstance(options, dict) else None
+            ).value,
+            scan_options=options if isinstance(options, dict) else None,
         )
         await _record_event(
             session, tenant_id, scan_id, "progress", phase_str, progress,
@@ -1398,9 +1602,16 @@ async def _dispatch_phase_handler(
         output_data = exploit_out.model_dump()
 
     elif phase == ScanPhase.POST_EXPLOITATION:
+        if is_quick_execution(options):
+            payload = skipped_phase_payload(phase)
+            ctx.post_out = PostExploitationOutput()
+            return payload
         exploits = ctx.exploit_out.exploits if ctx.exploit_out else []
         post_out = await run_post_exploitation(
-            exploits, tenant_id=tenant_id, scan_id=scan_id
+            exploits,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            scan_options=options,
         )
         ctx.post_out = post_out
         output_data = post_out.model_dump()
@@ -1415,6 +1626,7 @@ async def _dispatch_phase_handler(
             ctx.exploit_out,
             ctx.post_out,
             scan_id=scan_id,
+            tenant_id=tenant_id,
             scan_options=options,
             scope_config=scope_context,
             source_analysis=ctx.source_out,
@@ -1493,7 +1705,19 @@ async def _finalize_scan(
                         "details": f"PoC verification: {'still vulnerable' if verified else 'patched'}",
                     }
                 except Exception as _sf_exc:
-                    return {"vulnerable": True, "details": f"Verification error: {_sf_exc}"}
+                    logger.warning(
+                        "reverify_scanner_func_failed",
+                        extra={
+                            "scan_id": scan_id,
+                            "exception_type": type(_sf_exc).__name__,
+                            "error": str(_sf_exc),
+                        },
+                    )
+                    # Fail safe: an unverifiable PoC is treated as still
+                    # vulnerable so a real issue is never silently dropped.
+                    # The raw exception is logged above, not returned, to avoid
+                    # leaking internals into re-verification details.
+                    return {"vulnerable": True, "details": "Verification error"}
 
             for _rv_exp in (ctx.exploit_out.exploits or [])[:5]:
                 if str(_rv_exp.get("severity", "")).lower() in ("critical", "high"):
@@ -1747,10 +1971,46 @@ async def run_scan_state_machine(
     episodic_memory = subsystems.get("episodic_memory")
     event_bus = subsystems.get("event_bus")
 
+    if is_quick_execution(options):
+        _ensure_quick_budget(scan_id, tenant_id, options)
+
+    cancelled = False
     # 4. Phase loop
     for order_index, phase in enumerate(PHASE_ORDER):
+        if await scan_row_is_cancelled(session, scan_id):
+            await propagate_scan_cancellation(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                reason="status_cancelled",
+                session=session,
+                revoke_workers=False,
+            )
+            cancelled = True
+            break
+
         if phase in resume_plan and resume_plan.get(phase) == ResumeDecision.SKIP:
             logger.info("Skipping completed phase %s (resume)", phase.value)
+            continue
+
+        progress = _phase_to_progress(phase)
+        skip_reason = _quick_phase_skip_reason(
+            phase,
+            scan_id=scan_id,
+            options=options,
+            resume_decision=resume_plan.get(phase),
+        )
+        if skip_reason:
+            await _persist_quick_phase_skip(
+                session=session,
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                phase=phase,
+                ctx=ctx,
+                target=target,
+                reason=skip_reason,
+                order_index=order_index,
+                progress=progress,
+            )
             continue
 
         if cost_tracker is not None:
@@ -1811,6 +2071,43 @@ async def run_scan_state_machine(
             episodic_memory=episodic_memory,
         )
 
+        exec_preflight = attach_execution_mode_to_input(
+            input_data,
+            options if isinstance(options, dict) else {},
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            engagement_id=str(options.get("engagement_id")) if options else None,
+        )
+        logger.info(
+            "phase_execution_mode_preflight",
+            extra={
+                "event": "phase_execution_mode_preflight",
+                "scan_id": scan_id,
+                "phase": phase_str,
+                "mode": exec_preflight.mode,
+                "lab_lease_active": exec_preflight.lab_lease_active,
+                "reason": exec_preflight.reason,
+                "deny_code": exec_preflight.deny_code,
+            },
+        )
+
+        # LAB without usable lease (missing / kill-switched / expired) — fail closed.
+        if exec_preflight.deny_code and not exec_preflight.lab_lease_active:
+            await _update_scan_phase_status(session, scan_id, phase_str, "failed", progress)
+            await _record_event(
+                session, tenant_id, scan_id, "progress", phase_str, progress,
+                message="LAB mode requires a usable execution lease",
+                data={
+                    "code": "lab_lease_required",
+                    "deny_code": exec_preflight.deny_code,
+                    "reason": exec_preflight.reason,
+                },
+            )
+            await session.commit()
+            raise LabLeaseRequiredError(
+                exec_preflight.reason or "lab_lease_required"
+            )
+
         # Inject dynamic auth_config & scope_context into input_data
         if auth_config_obj:
             if phase == ScanPhase.EXPLOITATION:
@@ -1820,7 +2117,9 @@ async def run_scan_state_machine(
 
         # --- Policy gate: exploitation approval ---
         if phase == ScanPhase.EXPLOITATION:
-            needs_approval = await _check_exploitation_approval_required(session, tenant_id, scan_id)
+            needs_approval = await _check_exploitation_approval_required(
+                session, tenant_id, scan_id, options
+            )
             if needs_approval:
                 await _update_scan_phase_status(session, scan_id, phase_str, "awaiting_approval", progress)
                 await _record_event(
@@ -1928,5 +2227,8 @@ async def run_scan_state_machine(
     with suppress(asyncio.CancelledError):
         await heartbeat_task
 
-    # 6. Finalize scan
+    if cancelled or await scan_row_is_cancelled(session, scan_id):
+        raise ScanCancelledError(scan_id)
+
+    # 6. Finalize scan (deadline still publishes the report)
     await _finalize_scan(session, scan_id, tenant_id, target, options, ctx, subsystems)

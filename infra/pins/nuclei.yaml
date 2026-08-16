@@ -1,0 +1,13 @@
+# Reproducible Nuclei engine + template catalog pins (master prompt §23).
+# Do not follow moving branches (dev/main) as a runtime dependency.
+
+nuclei:
+  repository: "https://github.com/projectdiscovery/nuclei"
+  tag: "v3.11.1"
+  commit: "a8c88feb4a1c8e961b7902534ce3af97e9d524a4"
+  go_install: "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1"
+
+nuclei_templates:
+  repository: "https://github.com/projectdiscovery/nuclei-templates"
+  tag: "v10.4.7"
+  commit: "83234ce456da3e90dda86dfbc5e605e64a846df3"

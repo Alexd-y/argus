@@ -16,12 +16,26 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 class AuthContext:
-    """Authenticated context — user_id, tenant_id."""
+    """Authenticated context — user_id, tenant_id, optional role.
 
-    def __init__(self, user_id: str, tenant_id: str, is_api_key: bool = False):
+    ``role`` is the optional RBAC/ABAC role string (see
+    :class:`src.auth.abac.Role`). It is populated from the JWT ``role`` claim
+    when present; standard user tokens do not carry one yet, so it defaults to
+    ``None`` and the ABAC advisory dependency falls back to
+    ``settings.abac_default_role``.
+    """
+
+    def __init__(
+        self,
+        user_id: str,
+        tenant_id: str,
+        is_api_key: bool = False,
+        role: str | None = None,
+    ):
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.is_api_key = is_api_key
+        self.role = role
 
 
 def _decode_jwt(token: str) -> dict | None:
@@ -115,7 +129,14 @@ async def get_optional_auth(
             sub = payload.get("sub")
             tenant_id = payload.get("tenant_id")
             if sub and tenant_id:
-                return AuthContext(user_id=sub, tenant_id=tenant_id, is_api_key=False)
+                claimed_role = payload.get("role")
+                role = claimed_role if isinstance(claimed_role, str) and claimed_role else None
+                return AuthContext(
+                    user_id=sub,
+                    tenant_id=tenant_id,
+                    is_api_key=False,
+                    role=role,
+                )
 
         # Service clients (e2e harness, nginx gateway) are documented to send
         # their provisioned API key via Authorization: Bearer. The key must

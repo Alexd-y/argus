@@ -1631,6 +1631,7 @@ class ReportGenerator:
             "recon_summary": recon_summary_for_jinja(data),
             "exploitation": exploitation_outputs_for_jinja(data),
             "valhalla_context": data.valhalla_context.model_dump(mode="json"),
+            "coverage_occurrence": data.valhalla_context.coverage_occurrence,
             "wstg_coverage": data.valhalla_context.wstg_coverage,
             "test_limitations": data.valhalla_context.test_limitations,
             "report_executor_display_name": settings.report_executor_display_name,

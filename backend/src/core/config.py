@@ -85,6 +85,72 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("LLM_GATEWAY_URL", "llm_gateway_url"),
     )
+    # Unified in-process LLM gateway (Stage B). When true, call_llm_unified() delegates
+    # typed tasks to UnifiedLlmGateway.generate() with alias failover.
+    # Env: ARGUS_UNIFIED_LLM_GATEWAY (default true — set false for legacy rollback).
+    argus_unified_llm_gateway: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_UNIFIED_LLM_GATEWAY",
+            "argus_unified_llm_gateway",
+        ),
+    )
+    # Quick execution mode (execution_mode=quick). Fail-closed default.
+    # Distinct from SCAN_MODE=quick (scan depth) and ARGUS_ACTIVE_INJECTION_MODE=quick.
+    # Env: ARGUS_QUICK_MODE_ENABLED (true/1).
+    quick_mode_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_QUICK_MODE_ENABLED",
+            "quick_mode_enabled",
+        ),
+    )
+    # Quick profile UPPER CLAMPS (not business defaults — those live in
+    # backend/config/quick/profiles.yaml). Unset = YAML default is the cap.
+    quick_compact_wall_clock_seconds: int | None = Field(
+        default=None,
+        ge=1,
+        le=86_400,
+        validation_alias=AliasChoices(
+            "QUICK_COMPACT_WALL_CLOCK_SECONDS",
+            "quick_compact_wall_clock_seconds",
+        ),
+    )
+    quick_balanced_wall_clock_seconds: int | None = Field(
+        default=None,
+        ge=1,
+        le=86_400,
+        validation_alias=AliasChoices(
+            "QUICK_BALANCED_WALL_CLOCK_SECONDS",
+            "quick_balanced_wall_clock_seconds",
+        ),
+    )
+    quick_extended_wall_clock_seconds: int | None = Field(
+        default=None,
+        ge=1,
+        le=86_400,
+        validation_alias=AliasChoices(
+            "QUICK_EXTENDED_WALL_CLOCK_SECONDS",
+            "quick_extended_wall_clock_seconds",
+        ),
+    )
+    quick_max_wall_clock_seconds: int | None = Field(
+        default=None,
+        ge=1,
+        le=86_400,
+        validation_alias=AliasChoices(
+            "QUICK_MAX_WALL_CLOCK_SECONDS",
+            "quick_max_wall_clock_seconds",
+        ),
+    )
+    # Deployment gate for Quick cloud LLM. Default false; tenant cannot enable alone.
+    quick_cloud_llm_allowed: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "QUICK_CLOUD_LLM_ALLOWED",
+            "quick_cloud_llm_allowed",
+        ),
+    )
 
     # Data Sources (Phase 6) — optional
     censys_api_key: str | None = None
@@ -253,6 +319,48 @@ class Settings(BaseSettings):
 
     sandbox_container_name: str = "argus-sandbox"
     sandbox_enabled: bool = False  # Enable docker exec into sandbox when True
+    # Isolated LAB runner — never the production sandbox container.
+    lab_runner_container_name: str = Field(
+        default="argus-lab-runner",
+        validation_alias=AliasChoices(
+            "LAB_RUNNER_CONTAINER_NAME",
+            "lab_runner_container_name",
+        ),
+    )
+    lab_runner_timeout_sec: float = Field(
+        default=120.0,
+        ge=1.0,
+        le=3600.0,
+        validation_alias=AliasChoices(
+            "LAB_RUNNER_TIMEOUT_SEC",
+            "lab_runner_timeout_sec",
+        ),
+    )
+    lab_script_capture_max_bytes: int = Field(
+        default=65536,
+        ge=1024,
+        le=104857600,
+        validation_alias=AliasChoices(
+            "LAB_SCRIPT_CAPTURE_MAX_BYTES",
+            "lab_script_capture_max_bytes",
+        ),
+    )
+    qwythos_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("QWYTHOS_URL", "qwythos_url"),
+    )
+    qwen_local_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("QWEN_LOCAL_URL", "qwen_local_url"),
+    )
+    gemma_local_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMMA_LOCAL_URL", "gemma_local_url"),
+    )
+    lab_cloud_allowed: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LAB_CLOUD_ALLOWED", "lab_cloud_allowed"),
+    )
 
     # ARG-044 — Intelligence ingest (EPSS / KEV)
     # When True, the daily EPSS / KEV refresh tasks short-circuit and the
@@ -276,7 +384,9 @@ class Settings(BaseSettings):
             return v.strip().lower() in ("true", "1", "yes", "on")
         return bool(v)
 
-    # Dev-only: POST /sandbox/python. Not a security boundary. Env: ARGUS_SANDBOX_PYTHON_ENABLED (true/1).
+    # Dev-only: POST /sandbox/python. Not a security boundary. Requires DEBUG=true
+    # too — the router refuses to run unless both are enabled. Env:
+    # ARGUS_SANDBOX_PYTHON_ENABLED (true/1).
     argus_sandbox_python_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices(
@@ -288,6 +398,66 @@ class Settings(BaseSettings):
     @field_validator("argus_sandbox_python_enabled", mode="before")
     @classmethod
     def coerce_argus_sandbox_python_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+
+    # F-M04: opt-in, fail-closed integrity check for the runtime Jinja2 prompt
+    # templates (src/orchestration/prompts/*.j2). When enabled, the PromptLoader
+    # verifies each template against the committed SHA-256 manifest at init and
+    # raises (aborting the scan) on any drift. Default False → no behaviour
+    # change. Env: ARGUS_PROMPT_INTEGRITY_ENABLED (true/1).
+    prompt_integrity_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_PROMPT_INTEGRITY_ENABLED",
+            "prompt_integrity_enabled",
+        ),
+    )
+
+    @field_validator("prompt_integrity_enabled", mode="before")
+    @classmethod
+    def coerce_prompt_integrity_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
+
+    # F-M05: wire the ABAC engine into request handling as an *opt-in* authZ
+    # layer on top of the existing authN. ``abac_enabled`` is the master switch
+    # (default off → require_access() is a no-op passthrough, zero behaviour
+    # change). When enabled but ``abac_enforce`` is off, the dependency runs in
+    # *advisory* mode: it logs the decision (observability) but never blocks —
+    # letting operators see what WOULD be denied before turning on enforcement.
+    # With both enabled, a deny raises HTTP 403. Env: ARGUS_ABAC_ENABLED,
+    # ARGUS_ABAC_ENFORCE (true/1).
+    abac_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ARGUS_ABAC_ENABLED", "abac_enabled"),
+    )
+    abac_enforce: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ARGUS_ABAC_ENFORCE", "abac_enforce"),
+    )
+    # Fallback role when the authenticated principal carries no ``role`` claim.
+    # Defaults to ``org_admin`` so advisory/enforce mode mirrors today's
+    # "authenticated == full access" reality and does not produce spurious
+    # denials until real role plumbing lands. Env: ARGUS_ABAC_DEFAULT_ROLE.
+    abac_default_role: str = Field(
+        default="org_admin",
+        validation_alias=AliasChoices("ARGUS_ABAC_DEFAULT_ROLE", "abac_default_role"),
+    )
+
+    @field_validator("abac_enabled", "abac_enforce", mode="before")
+    @classmethod
+    def coerce_abac_flags(cls, v: object) -> bool:
         if v is None or v == "":
             return False
         if isinstance(v, bool):
@@ -722,12 +892,38 @@ class Settings(BaseSettings):
             return v.strip().lower() in {"true", "1", "yes", "on"}
         return bool(v)
 
+    @field_validator("argus_unified_llm_gateway", mode="before")
+    @classmethod
+    def coerce_argus_unified_llm_gateway(cls, v: object) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
+    @field_validator("quick_mode_enabled", "quick_cloud_llm_allowed", mode="before")
+    @classmethod
+    def coerce_quick_mode_enabled(cls, v: object) -> bool:
+        if v is None or v == "":
+            return False
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.strip().lower() in {"true", "1", "yes", "on"}
+        return bool(v)
+
     @field_validator(
         "recon_rate_limit",
         "recon_passive_subdomain_timeout_sec",
         "recon_deep_timeout_sec",
         "recon_dns_depth_timeout_sec",
         "recon_gowitness_timeout_sec",
+        "quick_compact_wall_clock_seconds",
+        "quick_balanced_wall_clock_seconds",
+        "quick_extended_wall_clock_seconds",
+        "quick_max_wall_clock_seconds",
         mode="before",
     )
     @classmethod

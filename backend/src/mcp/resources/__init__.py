@@ -1,12 +1,14 @@
 """MCP resources (Backlog/dev1_md §13).
 
 Resources are *read-only* views the LLM can subscribe to with a stable URI
-scheme. We expose four resources:
+scheme. We expose:
 
 * ``argus://catalog/tools`` — signed tool catalog snapshot.
 * ``argus://findings/{scan_id}`` — paginated findings for a scan.
 * ``argus://reports/{report_id}`` — report metadata + presigned URLs.
 * ``argus://approvals/pending`` — pending approval queue for the tenant.
+* ``argus://scans/{scan_id}/plan`` — Quick execution-mode plan.
+* ``argus://scans/{scan_id}/coverage`` — coverage records with reason_code.
 """
 
 from mcp.server.fastmcp import FastMCP
@@ -21,6 +23,9 @@ from src.mcp.resources import (
     reports as reports_resources,
 )
 from src.mcp.resources import (
+    scans as scans_resources,
+)
+from src.mcp.resources import (
     tools_catalog as tools_catalog_resources,
 )
 
@@ -31,6 +36,7 @@ def register_all(mcp: FastMCP) -> None:
     findings_resources.register(mcp)
     reports_resources.register(mcp)
     approvals_resources.register(mcp)
+    scans_resources.register(mcp)
 
 
 __all__ = [
@@ -38,5 +44,6 @@ __all__ = [
     "findings_resources",
     "register_all",
     "reports_resources",
+    "scans_resources",
     "tools_catalog_resources",
 ]

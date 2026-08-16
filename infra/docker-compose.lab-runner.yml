@@ -1,0 +1,46 @@
+# Isolated LAB runner overlay (master prompt §19.1).
+# Usage from repo root:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab-runner.yml up -d lab-runner
+#
+# This container is the ONLY docker exec target for /lab/scripts and /lab/artifacts.
+# It must not join backend/data networks used by postgres/redis/API.
+
+name: argus
+
+networks:
+  lab:
+    name: argus-lab
+    driver: bridge
+
+services:
+  lab-runner:
+    image: argus-sandbox
+    container_name: argus-lab-runner
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    environment:
+      ARGUS_LAB_NAMESPACE: ${ARGUS_LAB_K8S_NAMESPACE:-argus-lab}
+    labels:
+      argus.dev/lab-runner: "true"
+      argus.dev/lab-namespace: ${ARGUS_LAB_K8S_NAMESPACE:-argus-lab}
+    volumes:
+      - lab_runner_tmp:/tmp/argus-lab
+    networks:
+      - lab
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "id argus || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  lab_runner_tmp:

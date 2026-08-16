@@ -7,7 +7,7 @@ that production deployments (behind an OAuth proxy, ingress controller,
 or an OpenAI Responses client) will see:
 
 * ``initialize`` returns the server name + protocol metadata.
-* ``tools/list`` returns the §13 contract (15 tools, no extras).
+* ``tools/list`` returns the §13 contract (17 tools, no extras).
 * ``resources/list`` and ``resources/templates/list`` cover the four §13
   resource URIs.
 * ``prompts/list`` returns the three §13 prompts.
@@ -52,6 +52,8 @@ _EXPECTED_TOOLS: frozenset[str] = frozenset(
         "scan.create",
         "scan.status",
         "scan.cancel",
+        "scan.plan",
+        "scan.coverage",
         "findings.list",
         "findings.get",
         "findings.mark_false_positive",

@@ -1,0 +1,8 @@
+{
+  "fixture_id": "ta-020",
+  "mode": "lab_unrestricted",
+  "intent": "detect issue class 20",
+  "expected_schema": "LabTemplateArtifact",
+  "allow_unsigned": true,
+  "must_not_claim_vuln_before_exec": true
+}

@@ -1,9 +1,10 @@
 {
   "audit_metadata": {
     "timestamp": "2026-07-25",
-    "version": "1.0",
-    "status": "BASELINE_COMPLETE",
-    "description": "Consolidated synthesis of 4 parallel exploration audits: Orchestration, Tools/Sandbox, API/Auth/Reports, Infrastructure. Severities calibrated for production risk. Documentation drift separated into its own section."
+    "last_updated": "2026-07-27",
+    "version": "1.1",
+    "status": "REMEDIATION_IN_PROGRESS",
+    "description": "Consolidated synthesis of 4 parallel exploration audits: Orchestration, Tools/Sandbox, API/Auth/Reports, Infrastructure. Severities calibrated for production risk. Documentation drift separated into its own section. v1.1 syncs per-finding status/resolution with the completed remediation cycles; remaining partial/deferred items are enumerated in BACKLOG.md."
   },
   "critical_findings": [
     {
@@ -34,12 +35,13 @@
       "id": "F-H01",
       "title": "docker.sock mounted RW into workers — container escape surface",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "MITIGATED_OPT_IN",
       "source_audit": "Infrastructure + Tools/Sandbox",
       "cwe": "CWE-250",
       "exploration_refs": [2, 4],
-      "detail": "docker-compose.yml:217-223,294 mounts /var/run/docker.sock:rw. Worker/sandbox compromise → host Docker API → container escape. All documentation incorrectly claims :ro. No gVisor/rootless mitigation. Architectural: cannot be fixed by config alone.",
-      "remediation": "Convert to :ro or implement brokered sandbox API. Requires sandbox tool runner refactor."
+      "detail": "docker-compose.yml:217-223,294 mounts /var/run/docker.sock. Worker/sandbox compromise → host Docker API → container escape. A read-only bind is insufficient because POST /containers/create is still reachable. Architectural: cannot be fully fixed by config alone.",
+      "remediation": "Convert to :ro or implement brokered sandbox API. Requires sandbox tool runner refactor.",
+      "resolution": "MITIGATED via opt-in hardening overlay infra/docker-compose.hardened.yml (Tecnativa docker-socket-proxy): backend/worker-scans/worker-general talk to the proxy over an internal network with no direct socket mount; the allowlist permits only CONTAINERS+EXEC+COMMIT+POST (needed for docker exec and the container-patch verifier) and denies image build / volume / network / swarm / plugin APIs. Runbook docs/docker-socket-hardening.md documents the residual escape vector (POST+CONTAINERS still allows container create) and the true fixes (rootless/sysbox/gVisor, path-filtering broker, or k8s Job executor), which remain deferred as they require a sandbox-runner refactor."
     },
     {
       "id": "F-H02",
@@ -57,63 +59,69 @@
       "id": "F-H03",
       "title": "DEBUG mode login bypass mints valid JWT for any failed authentication",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "cwe": "CWE-287",
       "exploration_ref": 3,
-      "detail": "auth.py:61-72: when settings.debug is True, a failed login (any email/password) returns a valid JWT for 'dev-user' with full tenant access. No network restriction, no additional gate. Staging deployment with DEBUG=true grants unauthenticated access.",
-      "remediation": "Gate behind explicit ALLOW_DEV_BYPASS env var defaulting to False; add network CIDR restriction; or remove entirely."
+      "detail": "auth.py:61-72: when settings.debug is True, a failed login (any email/password) returned a valid JWT for 'dev-user' with full tenant access. No network restriction, no additional gate. Staging deployment with DEBUG=true granted unauthenticated access.",
+      "remediation": "Gate behind explicit ALLOW_DEV_BYPASS env var defaulting to False; add network CIDR restriction; or remove entirely.",
+      "resolution": "FIXED: the bypass now requires BOTH settings.debug AND the new settings.dev_login_bypass_enabled flag (default False) — src/api/routers/auth.py:61. Every activation emits a WARNING structured log event (argus.auth.dev_login_bypass). A dual-gate regression test asserts the bypass is inert unless both flags are set."
     },
     {
       "id": "F-H04",
       "title": "/sandbox/python endpoint executes arbitrary code on API host when enabled",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "cwe": "CWE-94",
       "exploration_ref": 3,
-      "detail": "sandbox.py docstring:3-6 documents a /sandbox/python route that execs user-supplied Python on the API host, protected only by regex blocklist. RCE on API host if the flag is enabled. Must be disabled in production or removed entirely.",
-      "remediation": "Remove the endpoint or gate behind an explicit opt-in flag defaulting to disabled."
+      "detail": "sandbox.py documents a /sandbox/python route that execs user-supplied Python on the API host, protected only by a regex blocklist. RCE on API host if the flag is enabled. Must be disabled in production or removed entirely.",
+      "remediation": "Remove the endpoint or gate behind an explicit opt-in flag defaulting to disabled.",
+      "resolution": "FIXED: the route now requires BOTH settings.debug AND settings.argus_sandbox_python_enabled (default False) and returns HTTP 403 otherwise — src/api/routers/sandbox.py:402. A regression test asserts the endpoint is 403 in every combination except the explicit dev dual-opt-in."
     },
     {
       "id": "F-H05",
       "title": "Catalog tool images != runtime sandbox image — 6+ recon/VA tools silently fail at runtime",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "Tools/Sandbox",
       "exploration_ref": 2,
-      "detail": "YAML catalogs reference argus-kali-* images but docker-compose builds argus-sandbox which lacks katana, gau, waybackurls, assetfinder, findomain, naabu. check_tool_available/which fails → silent skip → incomplete recon presented as complete. 'not found' and 'not run' are conflated.",
-      "remediation": "Install missing tools in argus-sandbox Dockerfile or update catalogs to reflect actual runtime capabilities."
+      "detail": "YAML catalogs reference argus-kali-* images but docker-compose builds argus-sandbox. The finding assumed argus-sandbox lacked katana/gau/waybackurls/assetfinder/findomain/naabu and that check_tool_available/which would silently skip, conflating 'not found' with 'not run'.",
+      "remediation": "Install missing tools in argus-sandbox Dockerfile or update catalogs to reflect actual runtime capabilities.",
+      "resolution": "VERIFIED_NO_RUNTIME_DEFECT + DOCUMENTED: (1) the runtime never reads ToolDescriptor.image — sandbox_tool_runner.py always targets settings.sandbox_container_name (verified by grep across src/recon and src/sandbox), so the argus-kali-* vs argus-sandbox mismatch is build-time metadata only, gated in CI by the C16 image-coverage contract. (2) All flagged tools ARE installed in both infra/Dockerfile.sandbox and sandbox/Dockerfile (go install + findomain release fetch + build-time PATH smoke assert). (3) 'not found' is NOT conflated with 'ran but empty': a missing binary emits a WARNING tool_not_found event and is skipped, whereas a tool that runs without parseable output emits a distinct ARGUS-HEARTBEAT finding (F-M03 path). Full analysis + on-stack verification commands recorded in docs/sandbox-tool-availability.md."
     },
     {
       "id": "F-H06",
       "title": "Admin report enqueue passes wrong positional args to Celery task — broken report generation",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "exploration_ref": 3,
-      "detail": "admin_reports.py:356,511 calls generate_report_task.delay(str(report.id)) but task signature is (report_id, tenant_id, ...). API/task contract drift causes broken report generation or wrong-tenant positional binding. Production impact: admin-generated reports silently fail.",
-      "remediation": "Align admin_reports.py call signature with tasks/__init__.py task definition."
+      "detail": "admin_reports.py:356,511 called generate_report_task.delay(str(report.id)) but the task signature is (report_id, tenant_id, scan_id, ...). API/task contract drift caused broken report generation or wrong-tenant positional binding.",
+      "remediation": "Align admin_reports.py call signature with tasks/__init__.py task definition.",
+      "resolution": "FIXED: both enqueue sites now pass (report.id, report.tenant_id, report.scan_id) positionally, matching the task signature. A regression-guard test pins the argument order/arity so future drift fails CI."
     },
     {
       "id": "F-H07",
       "title": "LLM routing priority in documentation is inverted — WRB is PRIMARY, not fallback",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
-      "detail": "CLAUDE.md line describing LLM providers states priority as OpenRouter → OpenAI → DeepSeek → Kimi → Perplexity → local WhiteRabbitNeo. Actual code in task_router.py and facade.py sends all scan-phase LLM calls to WRB first (zero-cost primary). Cloud providers are fallback for reports only. This misleads operators about data residency and cost model.",
-      "remediation": "Correct CLAUDE.md, README.md, and all architecture docs to reflect WRB-primary routing."
+      "detail": "CLAUDE.md described LLM provider priority as OpenRouter → OpenAI → DeepSeek → Kimi → Perplexity → local WhiteRabbitNeo. Actual code in task_router.py and facade.py sends all scan-phase LLM calls to WRB first (zero-cost primary); cloud providers are fallback for reports only. This misled operators about data residency and cost model.",
+      "remediation": "Correct CLAUDE.md, README.md, and all architecture docs to reflect WRB-primary routing.",
+      "resolution": "FIXED: CLAUDE.md and README now document WhiteRabbitNeo as PRIMARY for all pentest-analysis tasks with cloud models as report-only fallback (WRB-001), matching facade.call_llm_unified. Additionally the analysis path is now fail-closed (RuntimeError when WRB is unconfigured) rather than silently falling back to cloud."
     },
     {
       "id": "F-H08",
       "title": "Phase sequence documented as 6 phases — code runs 8-phase pipeline",
       "severity": "HIGH",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
-      "detail": "CLAUDE.md and phases.py docstring both state 6 phases. Code in PHASE_ORDER runs 8: source_analysis → recon → quick_fuzz → threat_modeling → vuln_analysis → exploitation → post_exploitation → reporting. QUICK_FUZZ and SOURCE_ANALYSIS are missing from all documentation. Operators may believe these phases are not running when they are.",
-      "remediation": "Update CLAUDE.md, phases.py docstring, README, and operational docs to accurately list all 8 phases."
+      "detail": "CLAUDE.md and phases.py docstring both stated 6 phases. Code in PHASE_ORDER runs 8: source_analysis → recon → quick_fuzz → threat_modeling → vuln_analysis → exploitation → post_exploitation → reporting. QUICK_FUZZ and SOURCE_ANALYSIS were missing from all documentation.",
+      "remediation": "Update CLAUDE.md, phases.py docstring, README, and operational docs to accurately list all 8 phases.",
+      "resolution": "FIXED: CLAUDE.md now documents the full 8-phase pipeline (see D-D01/D-D09), and the phases.py module docstring + PHASE_PROGRESS enumerate all eight phases consistently with PHASE_ORDER."
     },
     {
       "id": "F-H09",
@@ -163,93 +171,102 @@
       "id": "F-M02",
       "title": "Three parallel orchestration packages: only one is live, two are dead code",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED_PARTIAL",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
-      "detail": "Active: orchestration/ (state_machine.py). orchestrator/ is 100% shim re-exporting from llm_orchestrator. llm_orchestrator/ Planner/Critic/Verifier stack exists but is NOT wired into the scan path — only schemas/loader reached at API boot. Candidate for cleanup.",
-      "remediation": "Remove orchestrator/ and unused llm_orchestrator/ agents; consolidate remaining schemas into orchestration/."
+      "detail": "Active: orchestration/ (state_machine.py). orchestrator/ was a 100% shim re-exporting from llm_orchestrator. llm_orchestrator/ Planner/Critic/Verifier stack exists but is NOT wired into the scan path — only schemas/loader reached at API boot.",
+      "remediation": "Remove orchestrator/ and unused llm_orchestrator/ agents; consolidate remaining schemas into orchestration/.",
+      "resolution": "FIXED (dead shim): the entire orchestrator/ shim package was deleted after a repo-wide grep proved no import site references it. llm_orchestrator/ is RETAINED deliberately (rationale documented): its schemas/loader is reached at API boot and the Planner/Critic/Verifier stack is a staged capability, so removing it now would be a behaviour/roadmap change rather than dead-code cleanup — tracked as a separate wiring decision."
     },
     {
       "id": "F-M03",
       "title": "44 tools (~27% of catalog) produce heartbeat findings only — no meaningful parsing",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED_PARTIAL",
       "source_audit": "Tools/Sandbox",
       "exploration_ref": 2,
-      "detail": "113 of 162 catalog tools have parsers; 44 tools execute successfully but produce only heartbeat/timestamp findings with no parsed structured output. Tool results are effectively lost. Includes several recon tools and niche scanners.",
-      "remediation": "Prioritize parsers for the 44 heartbeat-only tools based on scan pipeline usage frequency."
+      "detail": "113 of 162 catalog tools have parsers; the rest execute successfully but produce only heartbeat/timestamp findings with no parsed structured output, so their results are effectively lost. Includes several recon tools and niche scanners.",
+      "remediation": "Prioritize parsers for the heartbeat-only tools based on scan pipeline usage frequency.",
+      "resolution": "PARTIAL: added four high-value parsers — commix (text_lines, CMDi), curl (text_lines, header/status security signals), kube_hunter (json_object, K8s), and rustscan (mapped to the canonical nmap-XML parser) — each registered in the dispatch table with unit tests plus dispatch-coverage tests. Parsers use SENTINEL_CVSS_* placeholders consistent with the normalizer and route evidence through scrub_evidence_strings. Remaining lower-frequency heartbeat-only tools are deferred and enumerated in BACKLOG.md; the heartbeat contract itself is intentional (a parser gap is observable, not silent)."
     },
     {
       "id": "F-M04",
       "title": "Signed prompt catalog NOT used by live scan pipeline — unsigned Jinja2 templates used instead",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED_PARTIAL",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
-      "detail": "Ed25519-signed prompt catalog in config/prompts/ is verified fail-closed but PromptRegistry.load() is called only by tests/scripts/CLI. Live scan handlers use unsigned orchestration/prompt_registry.py + prompts/*.j2 with autoescape=False. Integrity guarantee does not cover runtime prompts.",
-      "remediation": "Wire signed prompt catalog into the scan handler prompt loading path."
+      "detail": "Ed25519-signed prompt catalog in config/prompts/ is verified fail-closed but PromptRegistry.load() is called only by tests/scripts/CLI. Live scan handlers use unsigned orchestration/prompt_registry.py + prompts/*.j2. Integrity guarantee did not cover runtime prompts.",
+      "remediation": "Wire signed prompt catalog into the scan handler prompt loading path.",
+      "resolution": "PARTIAL (tamper-evidence added): implemented an opt-in, fail-closed SHA-256 integrity manifest for the runtime prompts/*.j2 templates — src/orchestration/prompt_integrity.py + prompt_integrity_enabled flag, verified in PromptLoader.__init__ (raises PromptIntegrityError on drift). Ships with a regeneration script (scripts/prompt_templates_manifest.py generate|verify) and a drift-guard test that fails CI if a template changes without a manifest refresh. Full Ed25519 signing of runtime templates is BLOCKED: only the public key is committed; the offline private signing key is required to sign the .j2 set, so SHA-256 tamper-evidence is the pragmatic interim control. NOTE: prompt-injection hardening (untrusted-input boundary, input sanitization) is tracked separately under F-H11 and is already fixed."
     },
     {
       "id": "F-M05",
       "title": "ABAC engine defined but never enforced — 6 roles, 7 actions, 10 resource types all dead code",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "exploration_ref": 3,
-      "detail": "ABACEngine.evaluate is referenced only within abac.py itself; no router or dependency imports or calls it. The documented RBAC/ABAC model exists as a spec but provides no runtime authorization. All auth is JWT-presence-only, contributing to SEC-001.",
-      "remediation": "Wire ABAC engine into router dependency injection or remove the dead code."
+      "detail": "ABACEngine.evaluate was referenced only within abac.py itself; no router or dependency imported or called it. The documented RBAC/ABAC model existed as a spec but provided no runtime authorization.",
+      "remediation": "Wire ABAC engine into router dependency injection or remove the dead code.",
+      "resolution": "FIXED (wired, safe default): AuthContext now carries an optional role populated from the JWT role claim (_decode_jwt). A new src/auth/access_dependency.py exposes a require_access(action, resource_type) FastAPI dependency that builds an AccessRequest and calls ABACEngine.evaluate, operating in one of three modes via config — passthrough (abac_enabled=False, default), advisory (log-only), or enforce (HTTP 403). It is wired onto all six findings.py routes as the reference integration. Default behaviour is unchanged (advisory/off) so this is non-breaking; flipping abac_enforce=True turns on 403 enforcement. Unit + FastAPI integration tests cover all three modes and role resolution/fallback. Also corrected _ROLE_PERMISSIONS so ORG_ADMIN has ADMIN on USER (policy/test drift)."
     },
     {
       "id": "F-M06",
       "title": "Shared API keys resolve to default tenant — no tenant binding prevents cross-tenant use",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "cwe": "CWE-639",
       "exploration_ref": 3,
-      "detail": "auth.py:68-71 maps API keys to default_tenant_id; mcp/auth.py allows X-Tenant-ID override. Keys are not bound to a specific tenant, allowing a key issued for tenant A to access tenant B's data by header manipulation.",
-      "remediation": "Bind API keys to a specific tenant_id at creation time; reject cross-tenant usage."
+      "detail": "auth.py:68-71 mapped API keys to default_tenant_id; mcp/auth.py allowed an X-Tenant-ID override. Keys were not bound to a specific tenant, allowing a key issued for tenant A to access tenant B's data by header manipulation.",
+      "remediation": "Bind API keys to a specific tenant_id at creation time; reject cross-tenant usage.",
+      "resolution": "FIXED: ARGUS_API_KEYS now supports a key:tenant_uuid form parsed by _configured_api_keys (mcp/auth.py) and the HTTP auth path (core/auth.py). A bound key resolves to its own tenant; an unbound key falls back to the MCP default tenant. A client-supplied X-Tenant-ID can only CONFIRM the already-bound/authenticated tenant — a mismatch is rejected (TenantMismatchError / 403), never used to override. Mirrors the SEC-001 HTTP tenant-resolution contract."
     },
     {
       "id": "F-M07",
       "title": "WebSocket/SSE tenant auth is spoofable via header or query parameter — no JWT validation",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "API/Auth",
       "cwe": "CWE-639",
       "exploration_ref": 3,
-      "detail": "ws.py:269-271 accepts x-tenant-id header or ?tenant_id= query parameter without JWT/credential validation. Real-time scan events and chat history are readable by any client that knows a valid scan_id.",
-      "remediation": "Implement JWT token validation on WebSocket handshake via connection_params or subprotocol."
+      "detail": "ws.py:269-271 accepted an x-tenant-id header or ?tenant_id= query parameter without JWT/credential validation. Real-time scan events and chat history were readable by any client that knew a valid scan_id.",
+      "remediation": "Implement JWT token validation on WebSocket handshake via connection_params or subprotocol.",
+      "resolution": "FIXED: a new _resolve_ws_tenant helper authenticates the handshake by reusing the HTTP auth primitives (_decode_jwt / _match_api_key) to build an AuthContext; the tenant is taken from the authenticated principal, never from a raw X-Tenant-ID/tenant_id value. A client-supplied tenant is only accepted when it matches the authenticated tenant; unauthenticated handshakes are refused and mismatches are logged and rejected. Applied to both the /scans/{scan_id}/events and /scans/{scan_id}/chat endpoints (SEC-001 parity for the WebSocket transport)."
     },
     {
       "id": "F-M08",
       "title": "Two independent tool planners create divergent execution paths",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "Tools/Sandbox",
       "exploration_ref": 2,
-      "detail": "Bundle-based planner (tech-profile driven) and mode-based planner (quick/standard/deep) independently select tool sets for the same target. No reconciliation between the two; each is used in different code paths. Operators cannot predict which tool set will run.",
-      "remediation": "Unify tool planning into a single planner or add reconciliation layer."
+      "detail": "Bundle-based planner (tech-profile driven) and mode-based planner (quick/standard/deep) both feed the same VA active-scan phase, but their outputs were merged by two duplicated, implicit inline blocks in va_active_scan_phase.py — precedence and dedup were not defined in one place, so operators could not predict the final tool set.",
+      "remediation": "Unify tool planning into a single planner or add reconciliation layer.",
+      "resolution": "FIXED (reconciliation layer): added reconcile_mode_steps_into_plan() in active_scan/planner.py as the single, documented merge point — the bundle-based plan is authoritative, mode-based steps are additive-and-deduplicated, and plan_index values are renumbered deterministically. The two duplicated inline merge blocks in va_active_scan_phase.py were replaced with calls to this helper. Unit tests (tests/unit/recon/test_fm08_planner_reconciliation.py) pin precedence, dedup, and renumbering."
     },
     {
       "id": "F-M09",
       "title": "Hardcoded vulnerability-to-tool mapping in exploitation_executor.py — no LLM-driven tool selection",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
-      "detail": "_VULN_TOOL_MAP and argv templates in exploitation_executor.py:59-227 hardcode 25 vulnerability types to specific tools with fixed arguments. LLM is not involved in exploitation tool selection or argument generation. This is an architectural design choice but contradicts the documented 'AI-driven exploitation' narrative.",
-      "remediation": "Document that exploitation tool selection is deterministic; or wire LLM into tool+argv selection with policy guardrails."
+      "detail": "_VULN_TOOL_MAP and argv templates in exploitation_executor.py:59-227 hardcode 25 vulnerability types to specific tools with fixed arguments. LLM is not involved in exploitation tool selection or argument generation. This is an architectural design choice but contradicted the documented 'AI-driven exploitation' narrative.",
+      "remediation": "Document that exploitation tool selection is deterministic; or wire LLM into tool+argv selection with policy guardrails.",
+      "resolution": "FIXED (documented as intentional): the _select_tools_for_finding docstring and module header now state explicitly that tool selection is a DETERMINISTIC keyword→tool table (_VULN_TOOL_MAP), not LLM-driven, and explain why (allowlist safety / reproducibility). This is the deliberate design; the WRB LLM still re-assesses exploitability from tool output. Choosing to keep it deterministic (rather than wiring the LLM into tool+argv selection) is a safety decision — LLM-chosen argv would widen the sandbox command surface — so the remediation is the documentation path, and it is complete."
     },
     {
       "id": "F-M10",
       "title": "run_scan_state_machine is ~1000-line god function with pervasive silent exception swallowing",
       "severity": "MEDIUM",
-      "status": "OPEN",
+      "status": "RESOLVED_PARTIAL",
       "source_audit": "Orchestration",
       "exploration_ref": 1,
       "detail": "state_machine.py:542-1560 contains dozens of try/except Exception: pass|logger.debug blocks wrapping evidence_chain, cost_tracker, tenant_isolation, microvm, ephemeral_worker, and binary_analysis. Broad suppression can silently disable security-relevant subsystems.",
-      "remediation": "Refactor into smaller functions; log errors at WARNING level; raise on truly unrecoverable failures."
+      "remediation": "Refactor into smaller functions; log errors at WARNING level; raise on truly unrecoverable failures.",
+      "resolution": "PARTIAL (observability first): the security-relevant except blocks (scope enforcement, tenant isolation, and the outer scan wrapper at lines ~808/1019/1519) now record exception_type in their structured log extra, so a swallowed failure in a security subsystem is greppable rather than invisible. The full decomposition of the ~1000-line god function into smaller phase-scoped helpers is a larger structural refactor deferred to BACKLOG.md (higher risk, needs its own review pass); the immediate security concern — silent disabling of security subsystems being undetectable — is addressed."
     }
   ],
   "documentation_drift": [
@@ -258,70 +275,90 @@
       "title": "CLAUDE.md describes 6-phase pipeline — code runs 8 phases",
       "files": ["CLAUDE.md"],
       "detail": "Missing: source_analysis, quick_fuzz. Present in code: phases.py PHASE_ORDER all 8.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "RESOLVED",
+      "resolution": "CLAUDE.md now documents the full 8-phase pipeline matching PHASE_ORDER (source_analysis → recon → quick_fuzz → threat_modeling → vuln_analysis → exploitation → post_exploitation → reporting)."
     },
     {
       "id": "D-D02",
       "title": "LLM routing priority inverted — CLAUDE.md lists WRB as last, code routes WRB first",
       "files": ["CLAUDE.md", "README.md"],
       "detail": "WRB is primary (zero-cost) pentest AI in code; docs show it as fallback after all cloud providers.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "RESOLVED",
+      "resolution": "CLAUDE.md/README now document the WRB-001 routing: WhiteRabbitNeo PRIMARY for all pentest-analysis tasks, cloud models report-only fallback, Perplexity OSINT-only. Paired with the fail-closed analysis path (F-H07)."
     },
     {
       "id": "D-D03",
       "title": "Celery queue topology underreported — docs list 3 queues, code has 10+",
       "files": ["CLAUDE.md"],
       "detail": "Missing: argus.recon, argus.exploitation, argus.tools, argus.reports plus additional specialized queues. Workers now route to 10+ named queues.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "RESOLVED",
+      "resolution": "CLAUDE.md now documents the worker/queue split (worker-scans, worker-general, worker-reports, worker-intruder) and the 10-queue task_routes topology in celery_app.py."
     },
     {
       "id": "D-D04",
       "title": "No documentation for ReAct agent, ExploitationQueue, or aggressive_exploit_tools",
       "files": ["CLAUDE.md", "README.md", "docs/"],
       "detail": "These runtime components exist in code but have zero documentation coverage. Operators are unaware of their existence and behavior.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "RESOLVED",
+      "resolution": "CLAUDE.md now has an 'Exploitation Orchestration Components' section documenting the ReAct agent, ExploitationQueue/ExploitHypothesis contract, aggressive_exploit_tools (sqlmap auto-enqueue gating), and the exploitation_executor _VULN_TOOL_MAP."
     },
     {
       "id": "D-D05",
       "title": "docker.sock documented as read-only (:ro) — actual mount is read-write (:rw)",
       "files": ["CLAUDE.md", "docker-compose.yml", "docs/deployment.md"],
       "detail": "All architecture docs and CLAUDE.md claim ':ro' mount. docker-compose.yml:217-223,294 shows ':rw'. This is a security-significant discrepancy.",
-      "exploration_refs": [2, 4]
+      "exploration_refs": [2, 4],
+      "status": "RESOLVED",
+      "resolution": "Docs and CLAUDE.md now state the socket mount is :rw and explain WHY (docker exec connections require a writable socket). The residual escape surface and the opt-in docker-socket-proxy mitigation are documented in docs/docker-socket-hardening.md (F-H01)."
     },
     {
       "id": "D-D06",
       "title": "Hardcoded CVSS/CWE defaults documented as LLM-driven",
       "files": ["CLAUDE.md", "docs/"],
       "detail": "Documentation implies LLM computes CVSS scores and CWE mappings. Code in handlers.py uses hardcoded defaults; LLM provides only analysis JSON.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "DEFERRED",
+      "resolution": "Deferred to BACKLOG.md: needs a focused docs pass to state that CVSS vectors/scores and CWE come from deterministic normalizer defaults (SENTINEL_CVSS_*) plus tool signals, and the LLM supplies analysis narrative only. No code defect; documentation-accuracy task."
     },
     {
       "id": "D-D07",
       "title": "Stale documentation files: INDEX.md, deployment.md, security.md, MIGRATION_NOTES.md",
       "files": ["docs/INDEX.md", "docs/deployment.md", "docs/security.md", "docs/MIGRATION_NOTES.md"],
       "detail": "These files reference outdated versions, removed features, or incorrect counts. INDEX.md and deployment.md are specifically flagged as stale.",
-      "exploration_ref": 4
+      "exploration_ref": 4,
+      "status": "RESOLVED",
+      "resolution": "Stale/duplicate docs removed (docs/INDEX.md, docs/ARGUS_ANALYSIS_REPORT.md, docs/DOCKER_DOCUMENTATION_INDEX.md, dated implementation/report snapshots) and deployment.md/security.md/MIGRATION_NOTES.md refreshed. Remaining doc consolidation tracked in BACKLOG.md."
     },
     {
       "id": "D-D08",
       "title": "Russian-language documentation likely out of sync with English docs",
       "files": ["docs/ru/"],
       "detail": "Russian docs reference older versions and lack updates present in English documentation tree.",
-      "exploration_ref": 4
+      "exploration_ref": 4,
+      "status": "DEFERRED",
+      "resolution": "Deferred to BACKLOG.md: translation-parity task, no security or code impact. Recommend either regenerating docs/ru/ from the English tree or adding a banner marking it as a best-effort translation of a specific English revision."
     },
     {
       "id": "D-D09",
       "title": "Phase docstring in phases.py says 6 phases — code defines 8",
       "files": ["backend/src/orchestration/phases.py"],
       "detail": "Module-level docstring states 6-phase pipeline. PHASE_ORDER list defines 8 phases. Self-contradicting within the same file.",
-      "exploration_ref": 1
+      "exploration_ref": 1,
+      "status": "RESOLVED",
+      "resolution": "The phases.py module docstring and PHASE_PROGRESS now enumerate all eight phases consistently with PHASE_ORDER."
     },
     {
       "id": "D-D10",
       "title": "Hardcoded TOTP seed in documentation docstring: 'JBSWY3DPEHPK3PXP'",
       "files": ["backend/src/auth/admin_dependencies.py", "docs/security.md"],
       "detail": "TOTP setup documentation includes a hardcoded example secret that matches the RFC 6238 test vector but appears as a live seed in docs.",
-      "exploration_ref": 3
+      "exploration_ref": 3,
+      "status": "RESOLVED",
+      "resolution": "The hardcoded TOTP seed JBSWY3DPEHPK3PXP was removed from admin_dependencies.py (grep-confirmed absent). TOTP secrets are provisioned at enrollment, not embedded in source/docs."
     }
   ],
   "coverage_summary": {
@@ -343,7 +380,17 @@
     "findings_high": 11,
     "findings_medium": 10,
     "findings_doc_drift": 10,
-    "findings_resolved": 6,
-    "findings_open": 27
+    "findings_resolved": 16,
+    "findings_partial_or_mitigated": 7,
+    "findings_open": 0,
+    "doc_drift_resolved": 8,
+    "doc_drift_deferred": 2,
+    "status_legend": {
+      "RESOLVED": "Fully fixed and/or verified; regression coverage where applicable.",
+      "RESOLVED_PARTIAL": "Primary security concern addressed; residual structural/roadmap work tracked in BACKLOG.md.",
+      "MITIGATED_OPT_IN": "Opt-in mitigation shipped; residual risk + stronger fixes documented (F-H01).",
+      "FIXED_NOT_WIRED": "Code repaired but not yet wired into the runtime path (F-M01).",
+      "DEFERRED": "No code/security defect; documentation-accuracy or translation task deferred to BACKLOG.md."
+    }
   }
 }

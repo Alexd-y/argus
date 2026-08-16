@@ -1,0 +1,54 @@
+id: quick-default
+version: 1
+mode: quick
+allowed_protocols: [http, dns, ssl, whois]
+allowed_risk_levels: [passive, safe_active]
+require_verified_templates: true
+disable_unsigned_templates: true
+severity_allow: [critical, high, medium]
+severity:
+  include: [critical, high, medium]
+selection:
+  technology_aware: true
+  require_applicability: true
+  prefer_high_signal: true
+  max_templates_per_asset: 50
+execution:
+  deadline_aware: true
+  bounded_rate: true
+  bounded_concurrency: true
+  retries: 1
+  headless: on_signal
+  oast: on_signal
+  code_templates: policy_controlled
+  unsigned_templates: policy_controlled
+oast: on_signal
+rate_limit_rps: 10
+concurrency: 8
+payload_concurrency: 4
+per_host_rate_limit: true
+timeout_s: 10
+retries: 1
+max_host_errors: 8
+max_requests_total: 3000
+max_response_read_bytes: 1048576
+max_response_evidence_bytes: 4096
+store_raw: findings_only
+redact: [authorization, cookie, set-cookie, api_key, token]
+disable_code: true
+disable_javascript: true
+disable_headless: true
+allow_code: false
+allow_javascript: false
+allow_headless: false
+allow_remote_templates: false
+allow_remote_workflows: false
+allow_oast: false
+allow_file: false
+allow_self_contained: false
+allow_local_file_access: false
+requires_approval: false
+deadline_aware: true
+evidence:
+  retain_raw_match: true
+  retain_request_response: policy_controlled

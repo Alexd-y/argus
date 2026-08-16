@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "comment": "Product eval gates for Quick comparison-report. Not used by scan runtime.",
+  "targets": {
+    "deadline_completion_rate": {"op": "gte", "value": 0.95},
+    "coverage_accounting_rate": {"op": "eq", "value": 1.0},
+    "out_of_scope_network_requests": {"op": "eq", "value": 0},
+    "cross_tenant_data_exposure": {"op": "eq", "value": 0},
+    "untracked_tool_executions": {"op": "eq", "value": 0},
+    "report_without_coverage": {"op": "eq", "value": 0},
+    "high_signal_fixture_recall": {"op": "gte_baseline"},
+    "verified_finding_precision": {"op": "gte_baseline"}
+  }
+}

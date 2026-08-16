@@ -35,6 +35,7 @@ class ResumeDecision(StrEnum):
     SKIP = "skip"          # Already completed, skip and use cached output
     RE_RUN = "re_run"      # Re-run even if previously completed
     RUN_FRESH = "run_fresh"  # No previous completion, run normally
+    SKIPPED_BY_PROFILE = "skipped_by_profile"  # Quick allowlist skip; not a failure
 
 
 async def get_completed_phases(
@@ -111,6 +112,7 @@ async def restore_phase_context(
 def compute_resume_plan(
     completed: set[ScanPhase],
     target_phases: list[ScanPhase] | None = None,
+    skipped_by_profile: set[ScanPhase] | frozenset[ScanPhase] | None = None,
 ) -> dict[ScanPhase, ResumeDecision]:
     """Compute which phases to skip vs. re-run when resuming a scan.
 
@@ -120,16 +122,22 @@ def compute_resume_plan(
         Set of phases already completed (from get_completed_phases).
     target_phases:
         Ordered list of phases to run. Defaults to PHASE_ORDER.
+    skipped_by_profile:
+        Phases omitted by the Quick execution profile. These are not
+        failures and must not be re-run as ``RUN_FRESH``.
 
     Returns
     -------
     Dict mapping each phase to a ResumeDecision.
     """
     phases = target_phases or list(PHASE_ORDER)
+    profile_skips = skipped_by_profile or set()
     plan: dict[ScanPhase, ResumeDecision] = {}
 
     for phase in phases:
-        if phase in completed:
+        if phase in profile_skips:
+            plan[phase] = ResumeDecision.SKIPPED_BY_PROFILE
+        elif phase in completed:
             plan[phase] = ResumeDecision.SKIP
         else:
             plan[phase] = ResumeDecision.RUN_FRESH
@@ -144,7 +152,12 @@ def format_resume_summary(plan: dict[ScanPhase, ResumeDecision]) -> str:
         if phase not in plan:
             continue
         decision = plan[phase]
-        icon = {"skip": "[SKIP]", "re_run": "[RE-RUN]", "run_fresh": "[RUN]"}[decision.value]
+        icon = {
+            "skip": "[SKIP]",
+            "re_run": "[RE-RUN]",
+            "run_fresh": "[RUN]",
+            "skipped_by_profile": "[SKIP-PROFILE]",
+        }[decision.value]
         lines.append(f"  {icon} {phase.value}")
     return "\n".join(lines)
 

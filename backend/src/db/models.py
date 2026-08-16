@@ -187,11 +187,23 @@ class Scan(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
     phase: Mapped[str] = mapped_column(String(50), default="init")
     options: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    #: quick | standard | deep (Strix-style scan mode).
+    #: quick | standard | deep (Strix-style scan *depth*, not execution_mode).
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     scan_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="standard", server_default=text("'standard'")
     )
+    #: Immutable execution profile: production | lab_unrestricted | quick.
+    #: Distinct from ``scan_mode`` (depth). Default production for backward compatibility.
+    execution_mode: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="production",
+        server_default=text("'production'"),
+    )
+    #: Wall-clock deadline for Quick scans; null for production / lab.
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: compact | balanced | extended when execution_mode=quick; otherwise null.
+    quick_profile: Mapped[str | None] = mapped_column(String(32), nullable=True)
     cost_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -202,6 +214,7 @@ class Scan(Base):
     __table_args__ = (
         Index("ix_scans_tenant_status", "tenant_id", "status"),
         Index("ix_scans_tenant_created", "tenant_id", "created_at"),
+        Index("ix_scans_tenant_execution_mode", "tenant_id", "execution_mode"),
     )
 
 
@@ -499,6 +512,10 @@ class Finding(Base):
     exploit_demonstrated: Mapped[bool | None] = mapped_column(Boolean, nullable=True, default=None)
     exploit_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     cvss_vector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    fingerprint_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verdict: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    hypothesis: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    provenance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

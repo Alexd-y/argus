@@ -1,0 +1,9 @@
+{
+  "fixture_id": "et-007",
+  "classification": "contradicted",
+  "must_not_delete_finding": true,
+  "citations_required": true,
+  "evidence_ids": [
+    "artifact:7"
+  ]
+}

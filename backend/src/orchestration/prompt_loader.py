@@ -32,6 +32,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from src.core.config import settings
+from src.orchestration.prompt_integrity import verify_templates
+
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
@@ -59,10 +62,23 @@ class PromptLoader:
     is unavailable or a template file is missing.
     """
 
-    def __init__(self, prompts_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        prompts_dir: Path | None = None,
+        enforce_integrity: bool | None = None,
+    ) -> None:
         self._prompts_dir = prompts_dir or _PROMPTS_DIR
         self._env: Any = None
         self._cache: dict[str, Any] = {}
+
+        # F-M04: fail-closed integrity gate. When ``enforce_integrity`` is None
+        # the flag is resolved from settings (default off); an explicit bool is
+        # honoured verbatim so tests can exercise both paths deterministically.
+        # A failure here propagates (fail-closed): we refuse to serve prompts
+        # that do not match the committed manifest rather than silently render
+        # a tampered template.
+        if self._should_enforce_integrity(enforce_integrity):
+            verify_templates(self._prompts_dir)
 
         if _JINJA_AVAILABLE and self._prompts_dir.exists():
             try:
@@ -81,6 +97,17 @@ class PromptLoader:
                 self._env = None
         else:
             logger.info("Jinja2 unavailable or prompts dir missing — using inline fallback")
+
+    @staticmethod
+    def _should_enforce_integrity(explicit: bool | None) -> bool:
+        """Resolve whether to run the fail-closed template integrity check.
+
+        An explicit value wins; otherwise fall back to
+        ``settings.prompt_integrity_enabled`` (default off).
+        """
+        if explicit is not None:
+            return explicit
+        return bool(settings.prompt_integrity_enabled)
 
     @property
     def available(self) -> bool:
@@ -186,6 +213,13 @@ class PromptLoader:
         """
         system = self.render_extended(f"{module_name}_system", **kwargs)
         user = self.render_extended(f"{module_name}_user", **kwargs)
+        return system, user
+
+    def render_quick(self, prompt_id: str, **kwargs: Any) -> tuple[str, str]:
+        """Render a signed Quick catalog prompt (YAML, not Jinja)."""
+        from src.quick.llm_routes import render_quick_prompt
+
+        system, user, _schema = render_quick_prompt(prompt_id, **kwargs)
         return system, user
 
     def list_templates(self) -> list[str]:

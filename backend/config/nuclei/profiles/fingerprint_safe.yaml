@@ -1,0 +1,24 @@
+id: fingerprint_safe
+version: 1
+allowed_protocols: [http, dns, ssl, whois]
+allowed_risk_levels: [passive, safe_active]
+require_verified_templates: true
+disable_unsigned_templates: true
+oast: disabled
+rate_limit_rps: 6
+concurrency: 5
+payload_concurrency: 2
+per_host_rate_limit: true
+timeout_s: 8
+retries: 0
+max_host_errors: 5
+max_requests_total: 2000
+max_response_read_bytes: 524288
+max_response_evidence_bytes: 2048
+store_raw: findings_only
+redact: [authorization, cookie, set-cookie, api_key, token]
+severity_allow: [info, low]
+disable_code: true
+disable_javascript: true
+disable_headless: true
+requires_approval: false

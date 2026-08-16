@@ -1,0 +1,21 @@
+id: dast_bounded
+version: 1
+allowed_protocols: [http]
+allowed_risk_levels: [safe_active]
+require_verified_templates: true
+disable_unsigned_templates: true
+oast: disabled
+dast: bounded
+fuzz_aggression: low
+fuzz_types: [replace, prefix]
+fuzz_modes: [single]
+attack_types: [batteringram]
+rate_limit_rps: 10
+concurrency: 5
+payload_concurrency: 3
+max_requests_total: 2000
+timeout_s: 10
+retries: 0
+store_raw: findings_only
+redact: [authorization, cookie, set-cookie, api_key, token]
+requires_approval: false

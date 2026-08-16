@@ -12,6 +12,7 @@ from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models import Finding, Report, ReportObject
+from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
 from src.reports.generators import (
     VALHALLA_SECTIONS_CSV_FORMAT,
     generate_csv,
@@ -261,6 +262,8 @@ async def run_generate_report_pipeline(
             texts,
             report_id=report_id,
         )
+        # WIRE-006: AI triage (including classification=contradicted) must not drop findings.
+        report_data.findings = retain_findings_despite_ai_classification(report_data.findings)
 
         tier_str = str(report.tier or "midgard")
         validation = validate_report_data(
@@ -449,6 +452,20 @@ async def run_generate_report_pipeline(
             vctx_log = built.template_context.get("valhalla_context")
             if isinstance(vctx_log, dict):
                 log_extra["full_valhalla"] = bool(vctx_log.get("full_valhalla"))
+                cov_occ = vctx_log.get("coverage_occurrence")
+                if isinstance(cov_occ, dict):
+                    totals = cov_occ.get("totals")
+                    if isinstance(totals, dict):
+                        log_extra["coverage_not_tested"] = totals.get("not_tested")
+                        log_extra["coverage_covered_no_finding"] = totals.get(
+                            "covered_no_finding"
+                        )
+                    log_extra["occurrences_n"] = (
+                        totals.get("occurrences") if isinstance(totals, dict) else None
+                    )
+        cov_top = built.template_context.get("coverage_occurrence")
+        if isinstance(cov_top, dict):
+            log_extra["coverage_occurrence_schema"] = cov_top.get("schema_version")
         logger.info("report_generation_completed", extra=log_extra)
 
         return completed

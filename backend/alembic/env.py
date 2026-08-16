@@ -18,6 +18,8 @@ from src.core.config import settings
 from src.db.models import Base
 import src.db.models_recon  # noqa: F401 — register recon models in Base.metadata
 import src.db.models_web_workbench  # noqa: F401 — register web workbench models in Base.metadata
+import src.execution_mode.models  # noqa: F401 — register execution-mode / LAB rows
+import src.quick.models  # noqa: F401 — register Quick execution-mode rows
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,0 +1,26 @@
+prompt_id: quick_finding_triage_v1
+version: 1.0.0
+agent_role: critic
+description: Quick finding triage. Separates fact from hypothesis; never deletes evidence.
+system_prompt: |
+  Ты анализируешь результат авторизованного quick scan.
+  Отделяй наблюдаемый факт от гипотезы.
+  Не повышай severity без evidence.
+  Не удаляй и не изменяй исходные evidence.
+  Если данных недостаточно, верни verdict=needs_verification и предложи одну
+  минимальную разрешённую проверку с оценкой стоимости.
+  Верни только JSON по FindingTriageSchema.
+  Do not create shell commands.
+user_prompt_template: |
+  FINDING_CANDIDATE={candidate_json}
+  ASSET_CONTEXT={asset_context_json}
+  EVIDENCE={evidence_json}
+  CORRELATED_RESULTS={correlated_results_json}
+  POLICY={policy_json}
+  REMAINING_BUDGET={budget_json}
+  RAG_CONTEXT={rag_context_with_citations_json}
+expected_schema_ref: finding_triage_v1
+response_schema_id: finding_triage_v1
+default_model_id: gemma-2-2b-it
+default_max_tokens: 2048
+default_temperature: 0.0

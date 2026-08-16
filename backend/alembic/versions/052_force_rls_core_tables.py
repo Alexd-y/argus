@@ -42,8 +42,17 @@ depends_on: str | Sequence[str] | None = None
 # this migration (see module docstring for the source migration per group).
 _CORE_ENABLE_ONLY_TABLES: tuple[str, ...] = (
     # 002_rls_and_audit_immutable
-    # users table excluded from FORCE RLS: login endpoint must read users before
-    # authentication, so tenant context is unavailable (GUC is unset)
+    # ``users`` IS forced — this is the reviewed SEC-002 decision
+    # (docs/rls-force-052-checklist.md §3.1: "Exempt users from the FORCE set" was
+    # rejected; "add a policy allowing lookup without a tenant context" was chosen).
+    # The pre-auth login lookup in src/api/routers/auth.py reads ``users`` with no
+    # tenant context, which FORCE would hide. Migration 053 adds the SELECT-only
+    # ``users_auth_bootstrap`` policy (satisfied only when the GUC is unset) so login
+    # keeps working, while tenant-scoped sessions and all writes stay isolated by the
+    # 002 ``tenant_isolation`` policy. Ordering is safe: 052 forces ``users`` (guard
+    # (c) is met by ``tenant_isolation`` from 002), then 053 installs the bootstrap
+    # policy in the following revision.
+    "users",
     "targets",
     "scans",
     "scan_steps",

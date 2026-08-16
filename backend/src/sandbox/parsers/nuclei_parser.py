@@ -147,6 +147,7 @@ def _stable_hash(text: str) -> str:
 # minimal Nikto / Wapiti adapters; mirrors the wpscan_parser /
 # katana_parser pattern (one filename per parser family).
 EVIDENCE_SIDECAR_NAME: Final[str] = "nuclei_findings.jsonl"
+RAW_MATCH_SIDECAR_NAME: Final[str] = "nuclei_raw_matches.jsonl"
 
 
 # Hard cap on emitted findings. A misconfigured template pack scanning
@@ -518,7 +519,7 @@ def _emit(
     """
 
     seen: set[DedupKey] = set()
-    keyed: list[tuple[DedupKey, FindingDTO, str]] = []
+    keyed: list[tuple[DedupKey, FindingDTO, str, str]] = []
 
     for record in records:
         key = _dedup_key(record)
@@ -527,8 +528,12 @@ def _emit(
         seen.add(key)
 
         finding = _build_finding(record)
-        evidence_blob = _build_evidence(record, tool_id=tool_id)
-        keyed.append((key, finding, evidence_blob))
+        raw_blob = _build_raw_match(record, tool_id=tool_id)
+        raw_hash = hashlib.sha256(raw_blob.encode("utf-8")).hexdigest()
+        evidence_blob = _build_evidence(
+            record, tool_id=tool_id, raw_match_hash=raw_hash
+        )
+        keyed.append((key, finding, evidence_blob, raw_blob))
 
         if len(keyed) >= _MAX_FINDINGS:
             _logger.warning(
@@ -546,10 +551,15 @@ def _emit(
         _persist_evidence_sidecar(
             artifacts_dir,
             tool_id=tool_id,
-            evidence_records=[blob for _, _, blob in keyed],
+            evidence_records=[blob for _, _, blob, _ in keyed],
+        )
+        _persist_raw_match_sidecar(
+            artifacts_dir,
+            tool_id=tool_id,
+            raw_records=[raw for _, _, _, raw in keyed],
         )
 
-    return [finding for _, finding, _ in keyed]
+    return [finding for _, finding, _, _ in keyed]
 
 
 def _dedup_key(record: dict[str, Any]) -> DedupKey:
@@ -949,7 +959,59 @@ def _persist_evidence_sidecar(
         )
 
 
-def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
+def _persist_raw_match_sidecar(
+    artifacts_dir: Path,
+    *,
+    tool_id: str,
+    raw_records: list[str],
+) -> None:
+    """Best-effort write of raw Nuclei matches, separate from normalized findings."""
+    try:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        sidecar_path = artifacts_dir / RAW_MATCH_SIDECAR_NAME
+        with sidecar_path.open("w", encoding="utf-8") as fh:
+            for blob in raw_records:
+                fh.write(blob)
+                fh.write("\n")
+    except OSError as exc:
+        _logger.warning(
+            "nuclei_parser.raw_match_sidecar_write_failed",
+            extra={
+                "event": "nuclei_parser_raw_match_sidecar_write_failed",
+                "tool_id": tool_id,
+                "artifacts_dir": str(artifacts_dir),
+                "error_type": type(exc).__name__,
+            },
+        )
+
+
+def _build_raw_match(record: dict[str, Any], *, tool_id: str) -> str:
+    """Raw matcher payload kept out of the normalized FindingDTO."""
+    payload: dict[str, Any] = {
+        "tool_id": tool_id,
+        "kind": record.get("kind"),
+        "template_id": record.get("template_id"),
+        "template_path": record.get("template_path"),
+        "matcher_name": record.get("matcher_name"),
+        "matched_at": record.get("matched_at"),
+        "host": record.get("host"),
+        "request": record.get("request"),
+        "response": record.get("response"),
+    }
+    cleaned: dict[str, Any] = {}
+    for key, value in payload.items():
+        if value is None or value == "":
+            continue
+        cleaned[key] = value
+    return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
+
+
+def _build_evidence(
+    record: dict[str, Any],
+    *,
+    tool_id: str,
+    raw_match_hash: str | None = None,
+) -> str:
     """Build a compact evidence JSON for downstream redaction + persistence."""
     payload: dict[str, Any] = {
         "tool_id": tool_id,
@@ -971,6 +1033,9 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "request": record.get("request"),
         "response": record.get("response"),
     }
+    if raw_match_hash:
+        payload["raw_match_hash"] = raw_match_hash
+        payload["raw_match_sidecar"] = RAW_MATCH_SIDECAR_NAME
     cleaned: dict[str, Any] = {}
     for key, value in payload.items():
         if value is None:
@@ -1265,6 +1330,7 @@ def _owasp_for(category: FindingCategory) -> tuple[str, ...]:
 
 __all__ = [
     "EVIDENCE_SIDECAR_NAME",
+    "RAW_MATCH_SIDECAR_NAME",
     "parse_nikto_json",
     "parse_nuclei_jsonl",
     "parse_wapiti_json",

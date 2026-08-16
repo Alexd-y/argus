@@ -119,6 +119,10 @@ async def run_recon_dns_sandbox_bundle(
             tenant_id=tenant_id,
             scan_id=scan_id,
             password_audit_opt_in=False,
+            scan_options=options if isinstance(options, dict) else None,
+            engagement_id=str(options.get("engagement_id")).strip()
+            if isinstance(options, dict) and options.get("engagement_id")
+            else None,
         )
         tool_results[name] = r
         if isinstance(r.get("stdout"), str) and r["stdout"].strip():

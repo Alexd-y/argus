@@ -271,6 +271,7 @@ def evaluate_tool_approval_policy(
     *,
     scan_approval_flags: dict[str, bool] | None = None,
     policy_settings: Any | None = None,
+    lab_lease_active: bool = False,
 ) -> McpPolicyDecision:
     """Per-tool approval: base allowlist + destructive lab + per-scan flags (fail-closed).
 
@@ -279,11 +280,21 @@ def evaluate_tool_approval_policy(
     ``argus_active_injection_mode=quick`` always denies destructive tools. When
     ``argus_kill_switch_required`` is set, tools that would otherwise pass are denied with
     ``requires_kill_switch_clearance`` (runners must consult the kill switch, P2-009).
+
+    When ``lab_lease_active=True`` (verified ``lab_unrestricted`` lease), every tool and
+    action is allowed with ``requires_approval`` semantics disabled — no per-action gate.
     """
     from src.core.config import Settings, lab_destructive_execution_allowed
     from src.core.config import settings as app_settings
 
     cfg: Settings = app_settings if policy_settings is None else policy_settings  # type: ignore[assignment]
+
+    if lab_lease_active:
+        return McpPolicyDecision(
+            allowed=True,
+            reason="verified_lab_unrestricted",
+            policy_id="lab_unrestricted_lease_v1",
+        )
 
     base_decision = evaluate_va_active_scan_tool_policy(tool_name=tool_name)
     canonical = resolve_va_active_scan_tool_canonical(tool_name)
@@ -356,6 +367,37 @@ def evaluate_tool_approval_policy(
             },
         )
     return decision
+
+
+def evaluate_tool_approval_for_scan(
+    tool_name: str,
+    scan_options: dict[str, Any] | None = None,
+    *,
+    target: str | None = None,
+    tenant_id: str | None = None,
+    scan_approval_flags: dict[str, bool] | None = None,
+    policy_settings: Any | None = None,
+) -> McpPolicyDecision:
+    """VA/scan wrapper: LAB lease in scan options disables per-action approval."""
+    del target, tenant_id
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    ctx = opts.get("execution_mode_context")
+    lab_lease_active = False
+    if isinstance(ctx, dict):
+        lab_lease_active = bool(ctx.get("lab_lease_active"))
+    elif opts.get("lab_lease_active") is True:
+        lab_lease_active = True
+    flags = scan_approval_flags
+    if flags is None:
+        raw_flags = opts.get("scan_approval_flags")
+        if isinstance(raw_flags, dict):
+            flags = {str(k).strip().lower(): bool(v) for k, v in raw_flags.items()}
+    return evaluate_tool_approval_policy(
+        tool_name,
+        scan_approval_flags=flags,
+        policy_settings=policy_settings,
+        lab_lease_active=lab_lease_active,
+    )
 
 
 # Stage 4 Exploitation — unrestricted

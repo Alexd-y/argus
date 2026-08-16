@@ -17,6 +17,7 @@ export interface ScanProgressState {
   phase: string;
   status: "idle" | "starting" | "queued" | "running" | "complete" | "error";
   error: string | null;
+  scanId: string | null;
 }
 
 export function useScanProgress() {
@@ -25,6 +26,7 @@ export function useScanProgress() {
     phase: "",
     status: "idle",
     error: null,
+    scanId: null,
   });
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -74,6 +76,7 @@ export function useScanProgress() {
             phase: s.phase,
             status: "running",
             error: null,
+            scanId,
           });
           const cleanup = subscribeScanEvents(
             scanId,
@@ -111,7 +114,7 @@ export function useScanProgress() {
 
   const startScan = useCallback(
     async (request: CreateScanRequest) => {
-      setState({ progress: 0, phase: "", status: "starting", error: null });
+      setState({ progress: 0, phase: "", status: "starting", error: null, scanId: null });
       stopPolling();
 
       try {
@@ -120,12 +123,12 @@ export function useScanProgress() {
 
         const initialStatus = await getScanStatus(scanId);
         if (initialStatus.status === "queued") {
-          setState({ progress: 0, phase: "In queue", status: "queued", error: null });
+          setState({ progress: 0, phase: "In queue", status: "queued", error: null, scanId });
           startQueuedPolling(scanId);
           return;
         }
 
-        setState((s) => ({ ...s, status: "running", phase: "Initializing" }));
+        setState((s) => ({ ...s, status: "running", phase: "Initializing", scanId }));
 
         const cleanup = subscribeScanEvents(
           scanId,
@@ -161,6 +164,7 @@ export function useScanProgress() {
           phase: "",
           status: "error",
           error: getSafeErrorMessage(err, "Failed to start scan"),
+          scanId: null,
         });
       }
     },
@@ -169,7 +173,7 @@ export function useScanProgress() {
 
   const reset = useCallback(() => {
     stopPolling();
-    setState({ progress: 0, phase: "", status: "idle", error: null });
+    setState({ progress: 0, phase: "", status: "idle", error: null, scanId: null });
   }, [stopPolling]);
 
   return { state, startScan, reset, stopPolling };

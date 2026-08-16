@@ -1,7 +1,7 @@
 """ARGUS AI Orchestrator package — planner / critic / verifier / reporter / fixer.
 
-Re-exports the public API so callers can write ``from src.orchestrator import
-Orchestrator, ValidationPlanV1`` without reaching into submodules.
+Re-exports the public API so callers can write ``from src.llm_orchestrator
+import Orchestrator, ValidationPlanV1`` without reaching into submodules.
 
 Layered structure (low-level → high-level):
 

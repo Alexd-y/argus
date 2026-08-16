@@ -4,7 +4,7 @@ Scope:
 
 * Build the application with :func:`build_app` and assert that the wiring
   surfaced through the *public* MCP API matches the contract advertised
-  in :mod:`docs/mcp-server.md` (15 tools, 4 resources, 2 prompts).
+  in :mod:`docs/mcp-server.md` (17 tools, 4+ resources, 3 prompts).
 * Drive a representative ``initialize`` → ``tools/list`` → ``tools/call``
   round-trip across the in-process FastMCP `Client` so transport-agnostic
   framing (Pydantic input/output validation, audit emission, error
@@ -167,11 +167,13 @@ class TestCapabilitySurface:
     def test_tools_list_returns_full_catalog(self, app: FastMCP) -> None:
         tools = asyncio.run(app.list_tools())
         names = {t.name for t in tools}
-        # ARG-023 contract — 15 tools minimum.
+        # ARG-023 / QUICK-007 contract — 17 tools minimum.
         required = {
             "scan.create",
             "scan.status",
             "scan.cancel",
+            "scan.plan",
+            "scan.coverage",
             "findings.list",
             "findings.get",
             "findings.mark_false_positive",
@@ -188,7 +190,7 @@ class TestCapabilitySurface:
         assert required.issubset(names), (
             f"Missing tools: {required - names}; got {names}"
         )
-        assert len(names) >= 15
+        assert len(names) >= 17
 
     def test_resources_list_returns_four_entries(self, app: FastMCP) -> None:
         resources = asyncio.run(app.list_resources())

@@ -1,0 +1,25 @@
+{
+  "fixture_id": "fd-009",
+  "expected_status": "new",
+  "finding_key": "7595d917247208e2dc814eef9c935d2e973401d0d8834b9650d0cadb02c0dfdc",
+  "baseline_occurrences": [],
+  "current_occurrences": [
+    {
+      "occurrence_key": "3123eb154df9c10f3df42f6a1ebe5cb8a7a551ac7a7c68b9579295f51b4f9e1e",
+      "finding_key": "7595d917247208e2dc814eef9c935d2e973401d0d8834b9650d0cadb02c0dfdc",
+      "tenant_id": "tenant-eval-alpha",
+      "scan_id": "scan-baseline",
+      "scanner": "nuclei",
+      "detector_id": "cve-detector",
+      "detector_version": "1.0.0",
+      "evidence_refs": [],
+      "first_seen_at": "2026-08-15T03:45:37.294339+00:00",
+      "last_seen_at": "2026-08-15T03:45:37.294339+00:00"
+    }
+  ],
+  "baseline_states": {},
+  "current_states": {
+    "7595d917247208e2dc814eef9c935d2e973401d0d8834b9650d0cadb02c0dfdc": "candidate"
+  },
+  "coverage_by_finding": {}
+}

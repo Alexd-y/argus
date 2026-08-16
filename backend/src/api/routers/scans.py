@@ -3,8 +3,10 @@
 import asyncio
 import io
 import json
+import logging
 import time
 import uuid
+from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -17,6 +19,7 @@ from sse_starlette.sse import EventSourceResponse
 from src.api.routers.reports import _attachment_content_disposition
 from src.api.schemas import (
     Finding,
+    QuickBudgetView,
     ReportGenerateAcceptedResponse,
     ReportGenerateAllAcceptedResponse,
     ReportGenerateAllRequest,
@@ -30,11 +33,13 @@ from src.api.schemas import (
     ScanFindingsStatisticsResponse,
     ScanListItemResponse,
     ScanOptions,
+    ScanPlanResponse,
     ScanSkillCreateRequest,
     ScanSmartCreateRequest,
     ScanTimelineEventItem,
     ScanTimelineResponse,
 )
+from src.celery_app import app as celery_app
 from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.core.observability import record_scan_started
@@ -43,15 +48,34 @@ from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
-from src.policy.scan_queue import try_pick_queued_scan
+from src.execution_mode.mode import ExecutionMode
 from src.llm.cost_tracker import ScanCostTracker
 from src.owasp_top10_2025 import parse_owasp_category
+from src.policy.scan_queue import try_pick_queued_scan
+from src.quick.cancellation import propagate_scan_cancellation
+from src.quick.create import (
+    PLAN_NOT_APPLICABLE,
+    QuickCreateError,
+    assert_execution_mode_payload,
+    budget_view_from_mapping,
+    error_detail,
+    overlay_quick_options,
+    parse_requested_execution_mode,
+    persist_quick_rows,
+    resolve_quick_runtime,
+)
+from src.quick.models import QuickScanConfigRow, QuickScanPlanRow
+from src.quick.resolver import UnknownQuickProfileError
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
 from src.reports.generators import build_report_data_from_scan_findings
 from src.reports.junit_generator import generate_junit
 from src.reports.report_bundle import ReportFormat, mime_type_for
 from src.reports.sarif_generator import generate_sarif
-from src.storage.s3 import RAW_ARTIFACT_PHASES, get_presigned_url_by_key, list_scan_artifacts
+from src.storage.s3 import (
+    RAW_ARTIFACT_PHASES,
+    get_presigned_url_by_key,
+    list_scan_artifacts,
+)
 from src.tasks import generate_all_reports_task, generate_report_task
 
 SSE_POLL_INTERVAL_SEC = 1.5
@@ -60,6 +84,7 @@ SSE_KEEPALIVE_INTERVAL_SEC = 15  # Emit keepalive comments to prevent proxy time
 SSE_MAX_WAIT_SEC = 30 * 60
 
 router = APIRouter(prefix="/scans", tags=["scans"])
+logger = logging.getLogger(__name__)
 
 _TERMINAL_SCAN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 _REPORT_TIERS = frozenset({"midgard", "asgard", "valhalla"})
@@ -167,6 +192,66 @@ def _normalize_lab_allowed_target(value: str) -> str:
     if raw.startswith(("http://", "https://")):
         return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
     return parsed.netloc
+
+
+def _quick_http_error(exc: QuickCreateError | UnknownQuickProfileError) -> HTTPException:
+    code = getattr(exc, "code", "quick_create_error")
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=error_detail(str(exc) if str(exc) else code, code),
+    )
+
+
+def _budget_view(raw: dict[str, Any] | None) -> QuickBudgetView | None:
+    projected = budget_view_from_mapping(raw)
+    if not projected:
+        return None
+    return QuickBudgetView.model_validate(projected)
+
+
+def _budget_from_scan(scan: Scan) -> QuickBudgetView | None:
+    options = scan.options if isinstance(scan.options, dict) else {}
+    raw = options.get("quick_budget") if isinstance(options.get("quick_budget"), dict) else None
+    view = _budget_view(raw if isinstance(raw, dict) else None)
+    if view is not None:
+        return view
+    if getattr(scan, "quick_profile", None) and isinstance(options.get("quick"), dict):
+        wall = options["quick"].get("wall_clock_budget_seconds")
+        if wall is not None:
+            return QuickBudgetView(
+                wall_clock_budget_seconds=int(wall),
+                ai_budget_seconds=options["quick"].get("ai_budget_seconds"),
+                reserve_for_validation_percent=options["quick"].get(
+                    "reserve_for_validation_percent"
+                ),
+            )
+    return None
+
+
+def _plan_response_from_row(scan_id: str, row: QuickScanPlanRow) -> ScanPlanResponse:
+    budget_raw = row.budget if isinstance(row.budget, dict) else {}
+    budget = _budget_view(budget_raw)
+    if budget is None:
+        budget = QuickBudgetView(wall_clock_budget_seconds=1)
+    profile = "balanced"
+    if isinstance(budget_raw, dict) and budget_raw.get("profile"):
+        profile = str(budget_raw.get("profile"))
+    return ScanPlanResponse(
+        scan_id=scan_id,
+        mode="quick",
+        profile=profile if profile in {"compact", "balanced", "extended"} else "balanced",
+        plan_version=int(row.plan_version),
+        deadline_at=format_created_at_iso_z(row.deadline_at),
+        budget=budget,
+        stages=list(row.stages) if isinstance(row.stages, list) else [],
+        tasks=list(row.tasks) if isinstance(row.tasks, list) else [],
+        fallbacks=list(row.fallbacks) if isinstance(row.fallbacks, list) else [],
+        coverage_intent=list(row.coverage_intent) if isinstance(row.coverage_intent, list) else [],
+        assumptions=list(row.assumptions) if isinstance(row.assumptions, list) else [],
+        prompt_version=row.prompt_version,
+        model_route=row.model_route,
+        revision_reason=row.revision_reason,
+    )
 
 
 async def _persist_scan_start(
@@ -318,7 +403,47 @@ async def create_scan(
     """Create scan — persist to DB, queue for execution."""
     scan_id = str(uuid.uuid4())
     options_dict = req.options.model_dump() if req.options else {}
-    options_dict = _sync_scan_depth_options(options_dict, req.scan_mode, target=req.target)
+    try:
+        execution_mode = parse_requested_execution_mode(req.execution_mode)
+        assert_execution_mode_payload(
+            execution_mode,
+            has_quick_payload=req.quick is not None,
+        )
+    except QuickCreateError as exc:
+        raise _quick_http_error(exc) from exc
+
+    scan_mode: ScanCreateMode = req.scan_mode
+    deadline_at: datetime | None = None
+    quick_profile: str | None = None
+    quick_config = None
+    quick_budget = None
+
+    if execution_mode is ExecutionMode.QUICK:
+        scan_mode = "quick"
+        options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
+        quick_payload = req.quick.model_dump(exclude_none=True) if req.quick is not None else None
+        started_at = datetime.now(UTC)
+        try:
+            quick_config, quick_budget, deadline_at = resolve_quick_runtime(
+                tenant_id=tenant_id,
+                quick_payload=quick_payload,
+                started_at=started_at,
+            )
+        except UnknownQuickProfileError as exc:
+            raise _quick_http_error(exc) from exc
+        except QuickCreateError as exc:
+            raise _quick_http_error(exc) from exc
+        quick_profile = quick_config.profile.value
+        options_dict = overlay_quick_options(
+            options_dict,
+            config=quick_config,
+            budget=quick_budget,
+            deadline_at=deadline_at,
+        )
+    else:
+        options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
+        if execution_mode is not ExecutionMode.PRODUCTION:
+            options_dict["execution_mode"] = execution_mode.value
 
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
@@ -348,10 +473,22 @@ async def create_scan(
             progress=0,
             phase="init",
             options=options_dict,
-            scan_mode=req.scan_mode,
+            scan_mode=scan_mode,
+            execution_mode=execution_mode.value,
+            deadline_at=deadline_at,
+            quick_profile=quick_profile,
             email=req.email,
         )
         session.add(scan)
+        if quick_config is not None and quick_budget is not None and deadline_at is not None:
+            persist_quick_rows(
+                session,
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                config=quick_config,
+                budget=quick_budget,
+                deadline_at=deadline_at,
+            )
         await session.commit()
 
     record_scan_started()
@@ -383,6 +520,14 @@ async def get_scan(
         if not scan:
             raise HTTPException(status_code=404, detail="Scan not found")
 
+        em_raw = getattr(scan, "execution_mode", None)
+        execution_mode = (
+            em_raw
+            if isinstance(em_raw, str) and em_raw in {"production", "lab_unrestricted", "quick"}
+            else "production"
+        )
+        deadline_raw = getattr(scan, "deadline_at", None)
+        profile_raw = getattr(scan, "quick_profile", None)
         return ScanDetailResponse(
             id=scan.id,
             status=scan.status,
@@ -391,7 +536,98 @@ async def get_scan(
             target=scan.target_url,
             email=scan.email,
             created_at=format_created_at_iso_z(scan.created_at),
+            execution_mode=execution_mode,
+            deadline_at=(
+                format_created_at_iso_z(deadline_raw)
+                if isinstance(deadline_raw, datetime)
+                else None
+            ),
+            quick_profile=(
+                profile_raw
+                if isinstance(profile_raw, str)
+                and profile_raw in {"compact", "balanced", "extended"}
+                else None
+            ),
+            budget=_budget_from_scan(scan),
+            stage=scan.phase if execution_mode == ExecutionMode.QUICK.value else None,
         )
+
+
+@router.get("/{scan_id}/plan", response_model=ScanPlanResponse)
+async def get_scan_plan(
+    scan_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> ScanPlanResponse:
+    """Return the latest Quick plan. 404 plan_not_applicable for non-quick scans."""
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        result = await session.execute(
+            select(Scan).where(
+                cast(Scan.id, String) == scan_id,
+                cast(Scan.tenant_id, String) == tenant_id,
+            )
+        )
+        scan = result.scalar_one_or_none()
+        if not scan:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        mode_raw = getattr(scan, "execution_mode", None)
+        mode = mode_raw if isinstance(mode_raw, str) else ExecutionMode.PRODUCTION.value
+        if mode != ExecutionMode.QUICK.value:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_detail(
+                    "Plan is only available for Quick execution mode",
+                    PLAN_NOT_APPLICABLE,
+                ),
+            )
+        plan_result = await session.execute(
+            select(QuickScanPlanRow)
+            .where(
+                cast(QuickScanPlanRow.scan_id, String) == scan_id,
+                cast(QuickScanPlanRow.tenant_id, String) == tenant_id,
+            )
+            .order_by(desc(QuickScanPlanRow.plan_version))
+            .limit(1)
+        )
+        plan_row = plan_result.scalar_one_or_none()
+        profile = str(getattr(scan, "quick_profile", None) or "balanced")
+        if profile not in {"compact", "balanced", "extended"}:
+            profile = "balanced"
+        if plan_row is None:
+            config_result = await session.execute(
+                select(QuickScanConfigRow).where(
+                    cast(QuickScanConfigRow.scan_id, String) == scan_id,
+                    cast(QuickScanConfigRow.tenant_id, String) == tenant_id,
+                )
+            )
+            config_row = config_result.scalar_one_or_none()
+            deadline = getattr(scan, "deadline_at", None)
+            budget = _budget_from_scan(scan)
+            if budget is None:
+                budget = QuickBudgetView(
+                    wall_clock_budget_seconds=int(
+                        getattr(config_row, "wall_clock_budget_seconds", None) or 1
+                    ),
+                    ai_budget_seconds=getattr(config_row, "ai_budget_seconds", None),
+                    reserve_for_validation_percent=getattr(
+                        config_row, "reserve_for_validation_percent", None
+                    ),
+                )
+            return ScanPlanResponse(
+                scan_id=scan_id,
+                mode="quick",
+                profile=profile,  # type: ignore[arg-type]
+                plan_version=0,
+                deadline_at=format_created_at_iso_z(deadline),
+                budget=budget,
+                stages=["discovery", "fingerprint", "test", "verify", "triage", "report"],
+                tasks=[],
+                fallbacks=["deterministic_planner"],
+                coverage_intent=[],
+                assumptions=["awaiting_fingerprint"],
+            )
+        response = _plan_response_from_row(scan_id, plan_row)
+        return response.model_copy(update={"profile": profile})
 
 
 @router.post("/{scan_id}/cancel", response_model=ScanCancelResponse)
@@ -399,7 +635,7 @@ async def cancel_scan(
     scan_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> ScanCancelResponse:
-    """Mark scan cancelled in DB. Worker revocation is not wired (use status for UX)."""
+    """Mark scan cancelled and revoke Celery/sandbox workers. Raw evidence is kept."""
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         result = await session.execute(
@@ -422,6 +658,19 @@ async def cancel_scan(
             .values(status="cancelled", phase="cancelled")
         )
         await session.commit()
+        try:
+            await propagate_scan_cancellation(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                reason="api_cancel",
+                session=session,
+                celery_app=celery_app,
+            )
+        except Exception:  # noqa: BLE001 — cancel response must succeed even if revoke fails
+            logger.warning(
+                "scan_cancel_revoke_failed",
+                extra={"event": "scan_cancel_revoke_failed", "scan_id": scan_id},
+            )
     return ScanCancelResponse(
         scan_id=scan_id,
         status="cancelled",
@@ -944,7 +1193,10 @@ async def export_burp_config(
     ]
 
     try:
-        from src.integrations.burp_export import generate_burp_config, burp_config_to_json
+        from src.integrations.burp_export import (
+            burp_config_to_json,
+            generate_burp_config,
+        )
 
         target_url = str(scan.target_url) if hasattr(scan, "target_url") else ""
         scope_config = None

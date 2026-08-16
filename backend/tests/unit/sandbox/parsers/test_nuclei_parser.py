@@ -57,6 +57,7 @@ from src.sandbox.parsers._base import (
 )
 from src.sandbox.parsers.nuclei_parser import (
     EVIDENCE_SIDECAR_NAME,
+    RAW_MATCH_SIDECAR_NAME,
     parse_nikto_json,
     parse_nuclei_jsonl,
     parse_wapiti_json,
@@ -143,6 +144,15 @@ def _serialise(records: list[dict[str, Any]]) -> bytes:
 def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
     """Read the sidecar JSONL into a list of dicts."""
     sidecar = artifacts_dir / EVIDENCE_SIDECAR_NAME
+    return [
+        json.loads(line)
+        for line in sidecar.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def _read_raw_match_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
+    sidecar = artifacts_dir / RAW_MATCH_SIDECAR_NAME
     return [
         json.loads(line)
         for line in sidecar.read_text(encoding="utf-8").splitlines()
@@ -771,6 +781,53 @@ def test_sidecar_omits_empty_and_sentinel_fields(tmp_path: Path) -> None:
     assert "cvss_v3_score" not in sidecar  # sentinel score is dropped
     assert "cvss_v3_vector" not in sidecar  # sentinel vector is dropped
     assert sidecar["template_id"] == "minimal"
+
+
+def test_raw_match_sidecar_is_separate_from_normalized_finding(tmp_path: Path) -> None:
+    rec = _nuclei_record(
+        template_id="CVE-2024-raw",
+        request="GET /admin HTTP/1.1\r\nHost: target.example\r\n",
+        response="HTTP/1.1 200 OK\r\nSet-Cookie: session=abc\r\n",
+    )
+    findings = parse_nuclei_jsonl(
+        stdout=_serialise([rec]),
+        stderr=b"",
+        artifacts_dir=tmp_path,
+        tool_id="nuclei",
+    )
+    assert len(findings) == 1
+    dumped = findings[0].model_dump(mode="json")
+    assert "request" not in dumped
+    assert "response" not in dumped
+    assert "matched_at" not in dumped
+    assert "template_id" not in dumped
+
+    raw_rows = _read_raw_match_sidecar(tmp_path)
+    evidence_rows = _read_sidecar(tmp_path)
+    assert len(raw_rows) == 1
+    assert len(evidence_rows) == 1
+    raw = raw_rows[0]
+    evidence = evidence_rows[0]
+    assert raw["request"].startswith("GET /admin")
+    assert "200 OK" in raw["response"]
+    assert raw["template_id"] == "CVE-2024-raw"
+    assert raw["matched_at"] == "https://target.example/admin"
+    assert evidence["raw_match_sidecar"] == RAW_MATCH_SIDECAR_NAME
+    assert evidence["raw_match_hash"]
+    assert len(evidence["raw_match_hash"]) == 64
+    assert evidence["raw_match_hash"] != raw["request"]
+
+
+def test_empty_parse_writes_no_raw_match_sidecar(tmp_path: Path) -> None:
+    findings = parse_nuclei_jsonl(
+        stdout=b"",
+        stderr=b"",
+        artifacts_dir=tmp_path,
+        tool_id="nuclei",
+    )
+    assert findings == []
+    assert not (tmp_path / RAW_MATCH_SIDECAR_NAME).exists()
+    assert not (tmp_path / EVIDENCE_SIDECAR_NAME).exists()
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,18 @@
+id: oast_confirm
+version: 1
+allowed_protocols: [http, dns, network]
+allowed_risk_levels: [passive, safe_active, intrusive]
+require_verified_templates: true
+disable_unsigned_templates: true
+oast: required
+requires_oast_templates: true
+rate_limit_rps: 8
+concurrency: 5
+payload_concurrency: 3
+timeout_s: 15
+retries: 1
+max_host_errors: 10
+max_requests_total: 3000
+store_raw: findings_only
+redact: [authorization, cookie, set-cookie, api_key, token]
+requires_approval: true

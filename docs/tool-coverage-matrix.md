@@ -1,6 +1,6 @@
 # ARGUS Tool Coverage Matrix
 
-> Generated: 2026-05-13 · Total Tools: **161** · Fully Wired: **80** · Categories: **10**
+> Generated: 2026-07-26 · Total Tools: **162** · Fully Wired: **81** · Categories: **10**
 
 ---
 
@@ -8,9 +8,9 @@
 
 | Metric | Count |
 |--------|-------|
-| Total tools (YAML definitions) | **161** |
+| Total tools (YAML definitions) | **162** |
 | Tools with output parsers | **81** |
-| Fully wired (YAML + Parser + Handler/Adapter integration) | **80** |
+| Fully wired (YAML + Parser + Handler/Adapter integration) | **81** |
 | Defined-only (YAML only, no parser or no integration) | **81** |
 | Recon pipeline bundles | **13** |
 
@@ -18,7 +18,7 @@
 
 | Category | YAML Count | Parsers | Wired | Defined-Only |
 |----------|-----------|---------|-------|-------------|
-| Web VA | 48 | 19 | 19 | 29 |
+| Web VA | 49 | 20 | 20 | 29 |
 | Recon | 39 | 29 | 33 | 6 |
 | Network | 23 | 10 | 11 | 12 |
 | Auth / Credential | 11 | 9 | 9 | 2 |
@@ -28,7 +28,7 @@
 | Binary / RE | 5 | 3 | 3 | 2 |
 | IaC / SAST | 4 | 4 | 4 | 0 |
 | OAST | 4 | 1 | 1 | 3 |
-| **TOTAL** | **161** | **81*** | **80** | **81** |
+| **TOTAL** | **162** | **81*** | **81** | **81** |
 
 > \* The 81 parsers cover tools with 1:N or N:1 mapping (e.g. `ffuf_parser.py` covers 3 ffuf_* tool YAMLs, `discovery_text_parser.py` and `sqli_probe_text_parser.py` handle multiple tools generically).
 
@@ -36,7 +36,7 @@
 
 ## 2. Category Breakdown
 
-### 2.1 Web VA (48 tools)
+### 2.1 Web VA (49 tools)
 
 | Tool ID | YAML | Parser | Handler Integration | Status |
 |---------|------|--------|---------------------|--------|
@@ -45,6 +45,7 @@
 | `chrome_csp_probe` | Yes | `chrome_csp_probe_parser.py` | VA active scan | **WIRED** |
 | `clairvoyance` | Yes | — | — | DEFINED-ONLY |
 | `cmsmap` | Yes | — | — | DEFINED-ONLY |
+| `commix` | Yes | `commix_va_adapter.py` (VA adapter) | VA active scan (CMDi) + Exploitation executor | **WIRED** |
 | `cookie_probe` | Yes | — | — | DEFINED-ONLY |
 | `cors_probe` | Yes | — | — | DEFINED-ONLY |
 | `dalfox` | Yes | `dalfox_parser.py` | VA active scan + Exploitation executor | **WIRED** |
@@ -90,7 +91,7 @@
 | `xsstrike` | Yes | `xss_auxiliary_json_parser.py` | Exploitation executor | **WIRED** |
 | `zap_baseline` | Yes | `zap_baseline_parser.py` | — | DEFINED-ONLY |
 
-**Wired: 19 / 48** · **Defined-only: 29**
+**Wired: 20 / 49** · **Defined-only: 29**
 
 ---
 
@@ -308,7 +309,7 @@
 | Category | Recon | Threat Modeling | Vuln Analysis | Exploitation | Post Exploitation | Reporting |
 |----------|-------|-----------------|---------------|--------------|-------------------|-----------|
 | **Recon** | ✓✓✓ (33 tools) | ✓ (assets feed) | — | — | — | ✓ (summary) |
-| **Web VA** | ✓ (url probes) | ✓ (CVEs via NVD) | ✓✓✓ (19 tools: dalfox, nuclei, ffuf, wpscan, etc.) | ✓✓ (exploit executor: dalfox, sqlmap, ffuf, nuclei) | ✓ (internal probes) | ✓ (findings) |
+| **Web VA** | ✓ (url probes) | ✓ (CVEs via NVD) | ✓✓✓ (20 tools: dalfox, commix, nuclei, ffuf, wpscan, etc.) | ✓✓ (exploit executor: dalfox, sqlmap, commix, ffuf, nuclei) | ✓ (internal probes) | ✓ (findings) |
 | **Network** | ✓ (nmap, masscan, dnsx) | ✓ (ports) | ✓ (service vuln) | ✓ (AD: bloodhound, crackmapexec, impacket, kerbrute, rpcclient) | ✓✓ (lateral: enum4linux, smb) | ✓ |
 | **Auth / Credential** | — | — | ✓✓ (password audit: hydra, medusa, ncrack, patator) | ✓ (hash cracking) | ✓ (hash analysis) | ✓ |
 | **Cloud / K8s** | — | — | ✓ (trivy, grype, syft, dockle) | ✓✓ (prowler, scoutsuite, kube_hunter, kube_bench, pacu) | — | ✓ |
@@ -324,7 +325,7 @@
 
 ## 4. Fully Wired Tools
 
-All 80 tools with end-to-end YAML → Parser → Handler/Adapter integration:
+All 81 tools with end-to-end YAML → Parser → Handler/Adapter integration:
 
 ### Recon Phase (33)
 
@@ -368,11 +369,12 @@ All 80 tools with end-to-end YAML → Parser → Handler/Adapter integration:
 | `whois` | — | Step: WHOIS |
 | `wappalyzer_cli` | `wappalyzer_cli_parser.py` | HTTP probe (tech stack) |
 
-### Vuln Analysis Phase (19)
+### Vuln Analysis Phase (20)
 
 | Tool | Parser | Integration Point |
 |------|--------|-------------------|
 | `chrome_csp_probe` | `chrome_csp_probe_parser.py` | VA active scan pipeline |
+| `commix` | `commix_va_adapter.py` | VA active scan (CMDi) + Exploitation |
 | `dalfox` | `dalfox_parser.py` | VA active scan + Exploitation |
 | `ffuf_dir` | `ffuf_parser.py` | VA active scan (injection fuzzing) |
 | `ffuf_param` | `ffuf_parser.py` | VA active scan (parameter discovery) |

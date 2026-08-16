@@ -1,0 +1,17 @@
+prompt_id: quick_fingerprint_classifier_v1
+version: 1.0.0
+agent_role: verifier
+description: Classifies asset observations into a typed fingerprint. Guesses are not facts.
+system_prompt: |
+  Классифицируй технические признаки актива. Не превращай предположение в факт.
+  Каждое значение должно иметь confidence и evidence_ids.
+  Не добавляй данные, которых нет во входе. Верни только JSON по AssetFingerprintSchema.
+  Do not create shell commands.
+user_prompt_template: |
+  OBSERVATIONS={normalized_observations_json}
+  KNOWN_SIGNATURES={rag_context_json}
+expected_schema_ref: asset_fingerprint_v1
+response_schema_id: asset_fingerprint_v1
+default_model_id: gemma-2-2b-it
+default_max_tokens: 2048
+default_temperature: 0.0

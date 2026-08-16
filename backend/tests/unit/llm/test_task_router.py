@@ -36,6 +36,11 @@ EXPECTED_ROLE_MAP: dict[LLMTask, str] = {
     LLMTask.EXECUTIVE_SUMMARY: "report",
     LLMTask.REMEDIATION_PLAN: "report",
     LLMTask.COST_SUMMARY: "report",
+    LLMTask.QUICK_PLANNER: "planner",
+    LLMTask.QUICK_FINGERPRINT: "planner",
+    LLMTask.QUICK_TRIAGE: "planner",
+    LLMTask.QUICK_CRITIC: "planner",
+    LLMTask.QUICK_REPORTER: "report",
 }
 
 EXPECTED_PHASE_MAP: dict[str, LLMTask] = {
@@ -63,10 +68,15 @@ class TestLLMTaskEnum:
         assert LLMTask.POC_GENERATION.value == "poc_generation"
         assert LLMTask.COST_SUMMARY.value == "cost_summary"
         assert LLMTask.VULN_ANALYSIS.value == "vuln_analysis"
+        assert LLMTask.QUICK_PLANNER.value == "quick_planner"
+        assert LLMTask.QUICK_FINGERPRINT.value == "quick_fingerprint"
+        assert LLMTask.QUICK_TRIAGE.value == "quick_triage"
+        assert LLMTask.QUICK_CRITIC.value == "quick_critic"
+        assert LLMTask.QUICK_REPORTER.value == "quick_reporter"
 
-    def test_task_count_is_13(self):
+    def test_task_count_is_18(self):
         tasks = list(LLMTask)
-        assert len(tasks) == 13
+        assert len(tasks) == 18
 
 
 class TestTaskToRoleMapping:
@@ -119,7 +129,7 @@ class TestTaskToRoleMapping:
 
 
 class TestRoutingTable:
-    def test_routing_table_covers_all_12_tasks(self):
+    def test_routing_table_covers_all_tasks(self):
         all_tasks = set(LLMTask)
         routed_tasks = set(ROUTING_TABLE.keys())
         assert routed_tasks == all_tasks, (

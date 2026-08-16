@@ -3,7 +3,7 @@
 Asserts that:
 
 * :func:`build_app` registers the full §13 capability set without raising
-  (15 tools, 4 resources, 3 prompts).
+  (17 tools including scan.plan / scan.coverage, 4+ resources, 3 prompts).
 * All tool names match the Backlog/dev1_md §13 contract exactly.
 * All registered Pydantic schemas are introspectable (FastMCP's tool manager
   generates a JSON schema for every input model).
@@ -24,6 +24,8 @@ _EXPECTED_TOOLS = {
     "scan.create",
     "scan.status",
     "scan.cancel",
+    "scan.plan",
+    "scan.coverage",
     "findings.list",
     "findings.get",
     "findings.mark_false_positive",

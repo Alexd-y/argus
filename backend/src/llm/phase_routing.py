@@ -19,16 +19,16 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_VALID_MODES = frozenset({"cloud", "wrb"})
-_VALID_FALLBACKS = frozenset({"cloud", "wrb", "none"})
+_VALID_MODES = frozenset({"cloud", "wrb", "qwythos", "small"})
+_VALID_FALLBACKS = frozenset({"cloud", "wrb", "qwythos", "small", "none"})
 
 
 @dataclass(frozen=True)
 class PhaseRoute:
     phase: str
     primary_alias: str
-    mode: str  # "cloud" | "wrb"
-    fallback: str  # "cloud" | "wrb" | "none"
+    mode: str  # "cloud" | "wrb" | "qwythos" | "small"
+    fallback: str  # "cloud" | "wrb" | "qwythos" | "small" | "none"
     reviewer_alias: str | None = None
     evidence_contract: str | None = None
     degrade: str | None = None

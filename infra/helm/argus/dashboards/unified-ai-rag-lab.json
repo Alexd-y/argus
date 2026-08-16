@@ -1,0 +1,248 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(argus_llm_requests_total[5m]))",
+          "legendFormat": "llm rps",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(argus_llm_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "llm p95 ms",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_llm_schema_failures_total[1h]))",
+          "legendFormat": "schema failures",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(argus_llm_fallback_total[1h]))",
+          "legendFormat": "fallbacks",
+          "refId": "B"
+        }
+      ],
+      "title": "LLM schema failures / fallbacks",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(argus_rag_queries_total[5m]))",
+          "legendFormat": "rag qps",
+          "refId": "A"
+        }
+      ],
+      "title": "RAG queries",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(argus_rag_retrieval_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "rag p95 ms",
+          "refId": "A"
+        }
+      ],
+      "title": "RAG retrieval latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_rag_cross_tenant_denials_total[1h]))",
+          "legendFormat": "cross-tenant denials",
+          "refId": "A"
+        }
+      ],
+      "title": "RAG cross-tenant denials",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_nuclei_templates_loaded_total[1h]))",
+          "legendFormat": "templates loaded",
+          "refId": "A"
+        }
+      ],
+      "title": "Nuclei templates loaded",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum by (profile, mode) (rate(argus_nuclei_requests_total[5m]))",
+          "legendFormat": "mode-profile",
+          "refId": "A"
+        }
+      ],
+      "title": "Nuclei requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_lab_executions_total[1h]))",
+          "legendFormat": "lab executions",
+          "refId": "A"
+        }
+      ],
+      "title": "LAB executions",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_lab_boundary_denials_total[1h]))",
+          "legendFormat": "boundary denials",
+          "refId": "A"
+        }
+      ],
+      "title": "LAB boundary denials",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "id": 11,
+      "targets": [
+        {
+          "expr": "sum by (status) (argus_coverage_requirements_total)",
+          "legendFormat": "coverage status",
+          "refId": "A"
+        }
+      ],
+      "title": "Coverage by status",
+      "type": "piechart"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "id": 12,
+      "targets": [
+        {
+          "expr": "sum by (state, mode) (argus_findings_total)",
+          "legendFormat": "mode-state",
+          "refId": "A"
+        }
+      ],
+      "title": "Findings by state/mode",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "id": 13,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_retests_total[1h]))",
+          "legendFormat": "retests",
+          "refId": "A"
+        }
+      ],
+      "title": "Retests",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "id": 14,
+      "targets": [
+        {
+          "expr": "sum(increase(argus_oast_interactions_total[1h]))",
+          "legendFormat": "oast interactions",
+          "refId": "A"
+        }
+      ],
+      "title": "OAST interactions",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["argus", "unified-ai", "lab", "canary"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "ARGUS Unified AI / RAG / LAB",
+  "uid": "argus-unified-ai-rag-lab",
+  "version": 2
+}

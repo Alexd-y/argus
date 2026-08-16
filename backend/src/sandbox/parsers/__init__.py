@@ -83,14 +83,16 @@ from src.sandbox.parsers.chaos_parser import parse_chaos
 from src.sandbox.parsers.checkov_parser import parse_checkov_json
 from src.sandbox.parsers.chrome_csp_probe_parser import parse_chrome_csp_probe
 from src.sandbox.parsers.cloudsploit_parser import parse_cloudsploit_json
+from src.sandbox.parsers.commix_parser import parse_commix
 from src.sandbox.parsers.crackmapexec_parser import parse_crackmapexec
 from src.sandbox.parsers.crt_sh_parser import parse_crt_sh
+from src.sandbox.parsers.curl_parser import parse_curl
 from src.sandbox.parsers.dalfox_parser import parse_dalfox_json
 from src.sandbox.parsers.detect_secrets_parser import parse_detect_secrets_json
 from src.sandbox.parsers.dig_parser import parse_dig
+from src.sandbox.parsers.discovery_text_parser import parse_discovery_text_lines
 from src.sandbox.parsers.dnsrecon_parser import parse_dnsrecon
 from src.sandbox.parsers.dnsx_parser import parse_dnsx
-from src.sandbox.parsers.discovery_text_parser import parse_discovery_text_lines
 from src.sandbox.parsers.dockle_parser import parse_dockle_json
 from src.sandbox.parsers.enum4linux_ng_parser import parse_enum4linux_ng
 from src.sandbox.parsers.evil_winrm_parser import parse_evil_winrm
@@ -122,6 +124,7 @@ from src.sandbox.parsers.katana_parser import (
 from src.sandbox.parsers.kerbrute_parser import parse_kerbrute
 from src.sandbox.parsers.kics_parser import parse_kics_json
 from src.sandbox.parsers.kube_bench_parser import parse_kube_bench_json
+from src.sandbox.parsers.kube_hunter_parser import parse_kube_hunter_json
 from src.sandbox.parsers.ldapsearch_parser import parse_ldapsearch
 from src.sandbox.parsers.masscan_parser import parse_masscan_json
 from src.sandbox.parsers.medusa_parser import parse_medusa
@@ -150,8 +153,8 @@ from src.sandbox.parsers.semgrep_parser import parse_semgrep_json
 from src.sandbox.parsers.smbclient_check_parser import parse_smbclient_check
 from src.sandbox.parsers.smbmap_parser import parse_smbmap
 from src.sandbox.parsers.snmpwalk_parser import parse_snmpwalk
-from src.sandbox.parsers.sqlmap_parser import parse_sqlmap_output
 from src.sandbox.parsers.sqli_probe_text_parser import parse_sqli_probe_text
+from src.sandbox.parsers.sqlmap_parser import parse_sqlmap_output
 from src.sandbox.parsers.sslscan_parser import parse_sslscan
 from src.sandbox.parsers.sslyze_parser import parse_sslyze
 from src.sandbox.parsers.subfinder_parser import parse_subfinder
@@ -387,8 +390,24 @@ _DEFAULT_TOOL_PARSERS: dict[str, ToolParser] = {
     "nmap_udp": parse_nmap_xml,
     "nmap_version": parse_nmap_xml,
     "nmap_vuln": parse_nmap_xml,
+    # §4.2 RustScan (F-M03) — RustScan pipes its fast port sweep straight
+    # into ``nmap -sC -sV -oX /out/rustscan.xml`` (see
+    # config/tools/rustscan.yaml, ``parse_strategy: xml_nmap``), so the
+    # XML envelope is byte-identical to any other nmap ``-oX`` output and
+    # routes through the same defusedxml-hardened parser. Only the
+    # canonical filename differs (mapped in
+    # ``nmap_parser._PER_TOOL_CANONICAL_FILENAME``).
+    "rustscan": parse_nmap_xml,
     # §4.4 HTTP fingerprinting (ARG-011).
     "httpx": _httpx_tool_parser,
+    # §4.4 curl (F-M03) — passive HTTP/S banner grab. TEXT_LINES over the
+    # response headers written to ``/out/curl_headers.txt`` (one block per
+    # redirect hop). Emits low-signal FindingCategory.INFO technology-
+    # disclosure findings (CWE-200) for server / framework / language
+    # version headers (``Server`` / ``X-Powered-By`` / ``X-AspNet-Version``
+    # / …); transport + security headers are ignored. Dedup keyed on
+    # ``(header_name, value)`` so a banner repeated across hops collapses.
+    "curl": parse_curl,
     # §4.5 Content / path / parameter discovery (ARG-012).  Every JSON-
     # emitting §4.5 tool routes through the universal ffuf-shape parser:
     #
@@ -503,6 +522,13 @@ _DEFAULT_TOOL_PARSERS: dict[str, ToolParser] = {
     # heuristic TEXT_LINES probes (Cycle 6 T05).
     "sqlmap_safe": parse_sqlmap_output,
     "sqlmap_confirm": parse_sqlmap_output,
+    # §4.9 commix (F-M03) — OS command-injection exploiter. TEXT_LINES
+    # output (``/out/commix_output.txt``); positive detections
+    # ("... parameter '<p>' is vulnerable to (<technique>) command
+    # injection ...") emit FindingCategory.CMDI (CWE-77/-78), confidence
+    # CONFIRMED (positive payload round-trip). Dedup keyed on
+    # ``(param, method)`` so multi-technique hits collapse to one finding.
+    "commix": parse_commix,
     # §4.9 — jsql JSON export + heuristic TEXT_LINES probes (Cycle 6 T05).
     "jsql": parse_jsql_json,
     "ghauri": parse_sqli_probe_text,
@@ -559,6 +585,15 @@ _DEFAULT_TOOL_PARSERS: dict[str, ToolParser] = {
     "dockle": parse_dockle_json,
     "grype": parse_grype_json,
     "kube_bench": parse_kube_bench_json,
+    # §4.15 kube-hunter (F-M03) — Aqua Kubernetes attack-surface prober.
+    # ``--report json`` emits a single ``{nodes, services, vulnerabilities}``
+    # envelope (JSON_OBJECT strategy per config/tools/kube_hunter.yaml).
+    # Only the ``vulnerabilities`` array yields findings; ``nodes`` /
+    # ``services`` are folded into evidence context. Category is driven by
+    # kube-hunter's own ``category`` string (RCE / info-disclosure / access
+    # risk → FindingCategory), defaulting to MISCONFIG for the K8s
+    # attack-surface class. Dedup keyed on ``(vid, location)``.
+    "kube_hunter": parse_kube_hunter_json,
     "kics": parse_kics_json,
     "trivy_image": parse_trivy_json,
     "trivy_fs": parse_trivy_json,

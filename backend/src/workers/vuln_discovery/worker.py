@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from src.analysis.cpg import CodePropertyGraph, NodeType
+from src.llm.facade import call_llm_unified
+from src.llm.task_router import LLMTask
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +115,8 @@ async def run_vuln_discovery(
     *,
     mode: str = "full_repo",
     changed_files: list[str] | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> VulnDiscoveryResult:
     """Run contextual vulnerability discovery via WhiteRabbitNeo.
 
@@ -121,14 +126,12 @@ async def run_vuln_discovery(
         threat_model: Previously built threat model (optional, enriches context).
         mode: "full_repo" or "pr_diff".
         changed_files: List of changed file paths (for PR mode).
+        execution_mode: Optional ``production`` / ``lab_unrestricted`` forwarded
+            to the unified LLM gateway.
 
     Returns:
         VulnDiscoveryResult with findings, file/function counts, FP estimate.
     """
-    import time
-    from src.llm.facade import call_llm_unified
-    from src.llm.task_router import LLMTask
-
     start = time.monotonic()
 
     if mode == "pr_diff" and changed_files:
@@ -160,6 +163,8 @@ async def run_vuln_discovery(
         prompt,
         task=LLMTask.ZERO_DAY_ANALYSIS,
         phase="vuln_discovery",
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
     try:
@@ -214,15 +219,15 @@ async def run_vuln_discovery_on_pr(
     pr_diff: str,
     changed_files: list[str],
     threat_model: dict[str, Any] | None = None,
+    *,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> VulnDiscoveryResult:
     """Run vulnerability discovery focused on a pull request diff.
 
     Analyses only changed files and the diff context for introduced vulnerabilities.
     Returns findings formatted as inline PR review comments.
     """
-    from src.llm.facade import call_llm_unified
-    from src.llm.task_router import LLMTask
-
     prompt = f"""Review this pull request diff for security vulnerabilities.
 
 === REPOSITORY ===
@@ -255,6 +260,8 @@ Respond ONLY with JSON array."""
         system_prompt, prompt,
         task=LLMTask.ZERO_DAY_ANALYSIS,
         phase="pr_review",
+        execution_mode=execution_mode,
+        scan_options=scan_options,
     )
 
     try:

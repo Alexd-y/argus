@@ -36,9 +36,12 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 from typing import Any, Final
 
 from src.core.config import settings
+from src.core.observability import get_tracer, safe_set_span_attribute, tenant_hash
 
 try:
     from opentelemetry import trace
@@ -323,12 +326,66 @@ def is_initialized() -> bool:
     return _setup_done
 
 
+QUICK_SPAN_CHAIN: Final[tuple[str, ...]] = (
+    "request",
+    "scan",
+    "plan",
+    "revision",
+    "task",
+    "tool",
+    "evidence",
+    "triage",
+    "finding",
+    "report",
+)
+
+
+@contextmanager
+def start_quick_span(
+    stage: str,
+    *,
+    scan_id: str,
+    plan_version: int | None = None,
+    task_id: str | None = None,
+    tool_id: str | None = None,
+    tenant_id: str | None = None,
+) -> Generator[Any, None, None]:
+    """Open a Quick execution span linked along the canonical chain.
+
+    Stages: request → scan → plan → revision → task → tool → evidence →
+    triage → finding → report. Unknown stages still open a span (fail-open).
+    """
+    normalized = (stage or "scan").strip().lower() or "scan"
+    tracer = get_tracer("argus.quick")
+    with tracer.start_as_current_span(f"quick.{normalized}") as span:
+        try:
+            safe_set_span_attribute(span, "argus.scan_id", str(scan_id))
+            safe_set_span_attribute(span, "argus.quick.stage", normalized)
+            safe_set_span_attribute(span, "argus.quick.chain", ",".join(QUICK_SPAN_CHAIN))
+            if plan_version is not None:
+                safe_set_span_attribute(span, "argus.quick.plan_version", int(plan_version))
+            if task_id:
+                safe_set_span_attribute(span, "argus.quick.task_id", str(task_id))
+            if tool_id:
+                safe_set_span_attribute(span, "argus.quick.tool_id", str(tool_id)[:64])
+            if tenant_id:
+                safe_set_span_attribute(span, "tenant.hash", tenant_hash(tenant_id))
+        except Exception:  # noqa: BLE001 — span attrs must never break scans
+            _logger.warning(
+                "otel.quick_span_attr_failed",
+                extra={"event": "otel.quick_span_attr_failed", "stage": normalized},
+            )
+        yield span
+
+
 __all__ = [
     "EXCLUDED_URLS",
     "OTEL_SDK_AVAILABLE",
     "OTLP_EXPORTER_AVAILABLE",
+    "QUICK_SPAN_CHAIN",
     "is_initialized",
     "setup_celery_observability",
     "setup_observability",
     "shutdown_observability",
+    "start_quick_span",
 ]

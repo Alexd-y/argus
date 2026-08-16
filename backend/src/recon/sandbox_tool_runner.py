@@ -124,8 +124,44 @@ def run_argv_simple_sync(
     run_parts: list[str],
     *,
     timeout_sec: float,
+    tool_id: str | None = None,
+    target: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
 ) -> dict[str, Any]:
-    """Run *run_parts* with ``subprocess.run`` (uncapped capture). Same shape as ``execute_command`` results."""
+    """Run *run_parts* with ``subprocess.run`` (uncapped capture). Same shape as ``execute_command`` results.
+
+    When ``scan_options`` is set, ``execution_lease_gate`` runs before docker exec.
+    """
+    if scan_options is not None and tool_id:
+        from src.sandbox.execution_lease_gate import assert_execution_allowed
+
+        try:
+            assert_execution_allowed(
+                tool_id,
+                target or "",
+                scan_options,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+            )
+        except PermissionError as exc:
+            logger.info(
+                "sandbox_tool_runner_policy_denied",
+                extra={
+                    "event": "sandbox_tool_runner_policy_denied",
+                    "tool_id": tool_id,
+                    "reason": str(exc),
+                },
+            )
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": str(exc),
+                "return_code": -1,
+                "execution_time": 0.0,
+            }
+
     start = time.perf_counter()
     t = float(timeout_sec)
     if t <= 0:

@@ -25,4 +25,10 @@
         "maxTokens": 8000
       }
     }
+	"models": {
+        "qwythos": {
+          "name": "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q8_0"
+        }
+      }
+    
   }

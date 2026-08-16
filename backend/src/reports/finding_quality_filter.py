@@ -53,6 +53,10 @@ def filter_valid_findings(findings: list) -> list:
     Even SUSPECTED and INFORMATIONAL findings are preserved — they are
     classified, not filtered. This is the key difference from Shannon's
     "No Exploit, No Report" policy.
+
+    AI triage labels (supported / contradicted / insufficient) also never
+    drop a finding. ``classification=contradicted`` is an assessment, not
+    a delete/suppress signal.
     """
     if not findings:
         return findings

@@ -73,6 +73,7 @@ def register(mcp: "FastMCP") -> None:
                 payload=payload,
                 actor=call.auth.user_id or "mcp_anonymous",
                 tenant_id=call.auth.tenant_id,
+                scan_options=payload.scan_options,
             )
 
         return await run_tool(

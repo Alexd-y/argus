@@ -47,6 +47,11 @@ class LLMTask(Enum):
     ORCHESTRATION = "orchestration"
     POC_GENERATION = "poc_generation"
     COST_SUMMARY = "cost_summary"
+    QUICK_PLANNER = "quick_planner"
+    QUICK_FINGERPRINT = "quick_fingerprint"
+    QUICK_TRIAGE = "quick_triage"
+    QUICK_CRITIC = "quick_critic"
+    QUICK_REPORTER = "quick_reporter"
 
 
 _TASK_TO_ROLE: dict[LLMTask, str] = {
@@ -63,6 +68,11 @@ _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.EXECUTIVE_SUMMARY: "report",
     LLMTask.REMEDIATION_PLAN: "report",
     LLMTask.COST_SUMMARY: "report",
+    LLMTask.QUICK_PLANNER: "planner",
+    LLMTask.QUICK_FINGERPRINT: "planner",
+    LLMTask.QUICK_TRIAGE: "planner",
+    LLMTask.QUICK_CRITIC: "planner",
+    LLMTask.QUICK_REPORTER: "report",
 }
 
 
@@ -257,6 +267,44 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         max_tokens=500,
         temperature=0.2,
     ),
+    LLMTask.QUICK_PLANNER: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        max_tokens=4096,
+        temperature=0.2,
+    ),
+    LLMTask.QUICK_FINGERPRINT: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        max_tokens=2048,
+        temperature=0.0,
+    ),
+    LLMTask.QUICK_TRIAGE: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        max_tokens=2048,
+        temperature=0.0,
+    ),
+    LLMTask.QUICK_CRITIC: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        max_tokens=2048,
+        temperature=0.1,
+    ),
+    LLMTask.QUICK_REPORTER: LLMRoute(
+        provider_env_key="DEEPSEEK_API_KEY",
+        base_url="https://api.deepseek.com",
+        model="deepseek-chat",
+        fallback_env_key="OPENAI_API_KEY",
+        fallback_base_url="https://api.openai.com",
+        fallback_model="gpt-4o-mini",
+        max_tokens=4096,
+        temperature=0.2,
+    ),
 }
 
 # --- 3-Tier Model Routing with Escalation ---
@@ -275,6 +323,11 @@ TASK_TIERS: dict[LLMTask, dict[str, Any]] = {
     LLMTask.ORCHESTRATION: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
     LLMTask.POC_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
     LLMTask.COST_SUMMARY: {"tier": LLMTier.SMALL, "escalation_threshold": 0.3},
+    LLMTask.QUICK_PLANNER: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.QUICK_FINGERPRINT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.4},
+    LLMTask.QUICK_TRIAGE: {"tier": LLMTier.SMALL, "escalation_threshold": 0.4},
+    LLMTask.QUICK_CRITIC: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.6},
+    LLMTask.QUICK_REPORTER: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.5},
 }
 
 TIER_MODELS: dict[LLMTier, dict[str, str]] = {

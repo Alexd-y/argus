@@ -9,17 +9,28 @@ import shutil
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from src.core.config import Settings, settings as default_settings
+from src.core.config import Settings
+from src.core.config import settings as default_settings
+from src.nuclei.legacy_inventory import is_profile_compiler_enabled
+from src.nuclei.legacy_metrics import increment_legacy_argv
+from src.nuclei.profile_compiler import NucleiProfileCompiler
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
-from src.recon.mcp.policy import evaluate_kal_mcp_policy, evaluate_va_active_scan_tool_policy
+from src.recon.mcp.policy import (
+    evaluate_kal_mcp_policy,
+    evaluate_va_active_scan_tool_policy,
+)
 from src.recon.recon_runtime import ReconRuntimeConfig
-from src.recon.vulnerability_analysis.active_scan.nuclei_va_adapter import parse_nuclei_stdout
+from src.recon.vulnerability_analysis.active_scan.argv_safe import (
+    safe_http_url_for_argv,
+)
+from src.recon.vulnerability_analysis.active_scan.nuclei_va_adapter import (
+    parse_nuclei_stdout,
+)
 from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
     build_whatweb_va_argv,
     parse_whatweb_stdout,
     parse_whatweb_to_tech_stack,
 )
-from src.recon.vulnerability_analysis.active_scan.argv_safe import safe_http_url_for_argv
 
 if TYPE_CHECKING:
     from src.orchestration.raw_phase_artifacts import RawPhaseSink
@@ -52,14 +63,56 @@ def build_recon_httpx_argv(url: str, rate_limit_rps: int) -> list[str]:
     ]
 
 
+_RECON_NUCLEI_CALLER = "recon.recon_http_probe.build_recon_nuclei_tech_argv"
+
+
+def _profile_compiler_enabled(profile: str | None) -> bool:
+    if profile is not None and str(profile).strip():
+        return True
+    return is_profile_compiler_enabled()
+
+
 def build_recon_nuclei_tech_argv(
     url: str,
     *,
     rate_limit_rps: int,
     tags_csv: str,
     templates_csv: str,
+    profile: str | None = None,
+    mode: str | None = None,
 ) -> list[str]:
-    """Nuclei constrained to tech discovery: JSONL, no interactsh/update; tags or -t from env."""
+    """Nuclei constrained to tech discovery: JSONL, no interactsh/update; tags or -t from env.
+
+    When ``profile`` is set or ``ARGUS_NUCLEI_PROFILE_COMPILER=1``, argv is built via
+    :class:`~src.nuclei.profile_compiler.NucleiProfileCompiler` (``fingerprint_safe`` by
+    default) with recon-specific ``-tags`` / ``-t`` appended after compile.
+    """
+    if _profile_compiler_enabled(profile):
+        profile_id = (profile or "fingerprint_safe").strip()
+        resolved_mode = (mode or "production").strip() or "production"
+        templates: list[str] = []
+        tpl = (templates_csv or "").strip()
+        if tpl:
+            for seg in tpl.split(","):
+                s = seg.strip()
+                if s and not _nuclei_template_segment_rejected(s):
+                    templates.append(s)
+        argv = NucleiProfileCompiler.compile(
+            profile_id,
+            resolved_mode,
+            url,
+            templates=templates or None,
+        )
+        if not argv:
+            return []
+        tags = (tags_csv or "").strip()
+        if not templates and tags:
+            argv.extend(["-tags", tags])
+        elif not templates:
+            argv.extend(["-tags", "tech"])
+        return argv
+
+    increment_legacy_argv(caller=_RECON_NUCLEI_CALLER)
     u = safe_http_url_for_argv(url)
     if not u:
         return []

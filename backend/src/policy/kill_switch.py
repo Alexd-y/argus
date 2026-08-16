@@ -51,6 +51,8 @@ Closed-taxonomy reasons exposed to PolicyEngine deny paths:
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import logging
 from collections.abc import Callable, Iterable
@@ -62,6 +64,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.core.observability import user_id_hash
+from src.execution_mode.repository import ExecutionModeRepository, get_execution_mode_repository
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +318,7 @@ class KillSwitchService:
                 "reason_length": len(normalized_reason),
             },
         )
+        _revoke_leases_after_kill_switch()
         return GlobalEmergencyState(
             reason=normalized_reason,
             activated_at=ts,
@@ -422,6 +426,7 @@ class KillSwitchService:
                 "reason_length": len(normalized_reason),
             },
         )
+        _revoke_leases_after_kill_switch(tid)
         return TenantThrottleState(
             tenant_id=tid,
             reason=normalized_reason,
@@ -605,6 +610,80 @@ class KillSwitchService:
 
 
 # ---------------------------------------------------------------------------
+# LAB lease revocation (CONT-004) — kill-switch terminates active leases
+# ---------------------------------------------------------------------------
+
+
+async def revoke_lab_leases_for_tenant(
+    tenant_id: str | UUID,
+    repo: ExecutionModeRepository | None = None,
+) -> int:
+    """Mark active LAB leases ``kill_switched`` so ``is_usable()`` is False."""
+    store: ExecutionModeRepository = repo or get_execution_mode_repository()
+    tid = _to_tenant_str(tenant_id)
+    revoked = await store.revoke_active_lab_leases_for_tenant(tid)
+    if revoked:
+        logger.info(
+            "kill_switch.lab_leases_revoked",
+            extra={
+                "event": "argus.kill_switch.lab_leases_revoked",
+                "revoked_count": revoked,
+                "scope": "tenant",
+            },
+        )
+    return revoked
+
+
+async def revoke_all_lab_leases(repo: ExecutionModeRepository | None = None) -> int:
+    """Revoke every active LAB lease across tenants (global emergency stop)."""
+    store: ExecutionModeRepository = repo or get_execution_mode_repository()
+    revoked = await store.revoke_all_active_lab_leases()
+    if revoked:
+        logger.info(
+            "kill_switch.lab_leases_revoked",
+            extra={
+                "event": "argus.kill_switch.lab_leases_revoked",
+                "revoked_count": revoked,
+                "scope": "global",
+            },
+        )
+    return revoked
+
+
+def _revoke_leases_after_kill_switch(tenant_id: str | None = None) -> None:
+    """Best-effort sync hook from Redis writes (``asyncio.to_thread`` safe)."""
+    coro = (
+        revoke_lab_leases_for_tenant(tenant_id)
+        if tenant_id is not None
+        else revoke_all_lab_leases()
+    )
+
+    def _run_coro() -> None:
+        asyncio.run(coro)
+
+    try:
+        asyncio.get_running_loop()
+        in_loop = True
+    except RuntimeError:
+        in_loop = False
+
+    try:
+        if in_loop:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                executor.submit(_run_coro).result()
+        else:
+            _run_coro()
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning(
+            "kill_switch.lab_lease_revoke_failed",
+            extra={
+                "event": "argus.kill_switch.lab_lease_revoke_failed",
+                "error_type": type(exc).__name__,
+            },
+        )
+
+
+# ---------------------------------------------------------------------------
 # Module-level dependency factory (for FastAPI ``Depends(...)``)
 # ---------------------------------------------------------------------------
 
@@ -637,4 +716,6 @@ __all__ = [
     "TENANT_THROTTLE_MAX_SECONDS",
     "TenantThrottleState",
     "get_kill_switch_service",
+    "revoke_all_lab_leases",
+    "revoke_lab_leases_for_tenant",
 ]

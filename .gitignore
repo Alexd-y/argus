@@ -24,6 +24,12 @@ __pycache__/
 .idea/
 .vscode/
 .cursor/workspace/
+.continue/
+.cortexide/
+
+# Build / test artifacts
+**/tsconfig.tsbuildinfo
+Frontend/test-results/
 
 # Coverage
 .coverage

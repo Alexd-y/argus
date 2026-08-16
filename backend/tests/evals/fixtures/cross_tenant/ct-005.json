@@ -1,0 +1,10 @@
+{
+  "fixture_id": "ct-005",
+  "querier_tenant_id": "tenant-eval-alpha",
+  "other_tenant_id": "tenant-eval-beta",
+  "engagement_id": "eng-eval-001",
+  "collection": "finding_history",
+  "query_text": "tenant beta exclusive secret token 5",
+  "other_tenant_content": "Tenant B exclusive secret token 5 about confirmed RCE exploit chain.",
+  "other_tenant_title": "tenant-b-secret-5"
+}

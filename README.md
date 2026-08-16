@@ -40,6 +40,30 @@ Each phase is a handler in `backend/src/orchestration/handlers.py`; the state
 machine writes `PhaseInput`/`PhaseOutput` rows and `ScanTimeline` events, and
 resumes after interruption via `backend/src/orchestration/phase_resume.py`.
 
+### Exploitation orchestration
+
+The `vuln_analysis` and `exploitation` phases layer two structured components on
+top of the phase handlers:
+
+- **ReAct agent** (`backend/src/orchestration/react_agent.py`) — an iterative
+  *Thought → Action → Observation* reasoning loop (enabled via `use_react=True`;
+  default 0.85 confidence threshold, 10 max iterations) that replaces single-shot
+  LLM calls with tool-driven cycles and emits a `ReActResult` trace.
+- **Exploitation queue** (`backend/src/orchestration/exploitation_queue.py`) — a
+  Pydantic contract carrying strongly-typed `ExploitHypothesis` records (vuln
+  class, location, evidence tier, confidence) between vuln analysis and
+  exploitation, with filtering by class / evidence tier / confidence and JSON
+  Schema export for LLM `response_format` enforcement.
+
+### Findings and CVSS sentinels
+
+Sandbox parsers (`backend/src/sandbox/parsers/`) emit `FindingDTO`s via
+`make_finding_dto`. When a tool does not supply a CVSS vector, parsers fall back
+to the `info`-severity defaults `SENTINEL_CVSS_VECTOR` / `SENTINEL_CVSS_SCORE`
+(`parsers/_base.py`). These constants mirror `src.findings.normalizer`, which
+re-derives the real CVSS from the `NormalizationContext` downstream — keeping the
+parser and normaliser layers in lock-step.
+
 ### Celery workers and queues
 
 | Worker | Queue(s) | Concurrency |

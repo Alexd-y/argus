@@ -1,0 +1,8 @@
+{
+  "fixture_id": "ta-015",
+  "mode": "production",
+  "intent": "detect issue class 15",
+  "expected_schema": "TemplateProposal",
+  "allow_unsigned": false,
+  "must_not_claim_vuln_before_exec": true
+}

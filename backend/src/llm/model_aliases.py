@@ -50,6 +50,30 @@ class AliasRegistry:
                 ],
             },
             {
+                "alias": "argus-planner-qwythos",
+                "role": "planner",
+                "providers": [
+                    {"key": "qwythos-9b",
+                     "base_url": os.environ.get("QWYTHOS_URL", ""),
+                     "model": "qwythos-9b-claude-mythos-5-1m",
+                     "cloud_allowed": False,
+                     "price_input_per_million_usd": 0.0,
+                     "price_output_per_million_usd": 0.0},
+                ],
+            },
+            {
+                "alias": "argus-triage-fast",
+                "role": "triage",
+                "providers": [
+                    {"key": "gemma-2-2b",
+                     "base_url": os.environ.get("GEMMA_LOCAL_URL", ""),
+                     "model": "gemma-2-2b-it",
+                     "cloud_allowed": False,
+                     "price_input_per_million_usd": 0.0,
+                     "price_output_per_million_usd": 0.0},
+                ],
+            },
+            {
                 "alias": "argus-planner-fast",
                 "role": "planner",
                 "providers": [
@@ -119,6 +143,18 @@ class AliasRegistry:
                      "cloud_allowed": True,
                      "price_input_per_million_usd": 0.28,
                      "price_output_per_million_usd": 0.56},
+                ],
+            },
+            {
+                "alias": "argus-quick-report",
+                "role": "report",
+                "providers": [
+                    {"key": "qwythos-9b",
+                     "base_url": os.environ.get("QWYTHOS_URL", ""),
+                     "model": "qwythos-9b-claude-mythos-5-1m",
+                     "cloud_allowed": False,
+                     "price_input_per_million_usd": 0.0,
+                     "price_output_per_million_usd": 0.0},
                 ],
             },
             {

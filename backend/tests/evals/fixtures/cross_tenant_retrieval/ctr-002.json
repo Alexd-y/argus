@@ -1,0 +1,11 @@
+{
+  "fixture_id": "ctr-002",
+  "description": "Adversarial hybrid-search probe for cross-tenant engagement data",
+  "querier_tenant_id": "tenant-eval-gamma",
+  "other_tenant_id": "tenant-eval-delta",
+  "engagement_id": "eng-eval-002",
+  "collection": "scan_evidence",
+  "query_text": "delta tenant internal credential dump",
+  "other_tenant_content": "Delta tenant internal credential dump with session identifiers for admin panel.",
+  "other_tenant_title": "tenant-delta-evidence"
+}

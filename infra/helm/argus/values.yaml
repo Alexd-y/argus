@@ -475,6 +475,24 @@ sandbox:
         - host: 0.0.0.0/0
           port: 443
 
+# Isolated LAB runner (never the production sandbox). NetworkPolicy denies
+# cluster/private CIDRs so the runner cannot reach postgres/redis/API pods.
+labRunner:
+  enabled: true
+  namespace: argus-lab
+  image:
+    repository: argus-sandbox
+    tag: latest
+  allowedCidrs:
+    - 0.0.0.0/0
+  resources:
+    requests:
+      cpu: "250m"
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
 # ── Bitnami sub-chart overrides ──────────────────────────────────────────────
 postgresql:
   enabled: true
@@ -645,3 +663,61 @@ whiteRabbitNeo:
   cpuMode:
     enabled: true
     quantization: "Q4_K_M"
+
+# ── Optional local orchestrator / fast models (master prompt §4, §15) ────────
+# Disabled by default. Enable per-model when GPU/CPU capacity is provisioned.
+# Images are OpenAI-compatible vLLM/llama.cpp servers; ARGUS talks to them via
+# QWYTHOS_URL / QWEN_LOCAL_URL / GEMMA_LOCAL_URL (see configmap).
+localModels:
+  qwythos:
+    enabled: false
+    replicaCount: 1
+    envKey: QWYTHOS_URL
+    component: qwythos
+    image:
+      repository: argus-qwythos
+      tag: "2026.08.16"
+    modelId: qwythos-9b-claude-mythos-5-1m
+    port: 8000
+    resources:
+      requests:
+        cpu: "4"
+        memory: 16Gi
+      limits:
+        cpu: "8"
+        memory: 32Gi
+  qwen:
+    enabled: false
+    replicaCount: 1
+    envKey: QWEN_LOCAL_URL
+    component: qwen
+    image:
+      repository: argus-qwen
+      tag: "2026.08.16"
+    modelId: Qwen/Qwen2.5-3B-Instruct
+    port: 8000
+    resources:
+      requests:
+        cpu: "2"
+        memory: 8Gi
+      limits:
+        cpu: "4"
+        memory: 16Gi
+  gemma:
+    enabled: false
+    replicaCount: 1
+    envKey: GEMMA_LOCAL_URL
+    component: gemma
+    image:
+      repository: argus-gemma
+      tag: "2026.08.16"
+    modelId: google/gemma-2-2b-it
+    port: 8000
+    resources:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
+

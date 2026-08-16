@@ -84,6 +84,8 @@ source_analysis → recon → quick_fuzz → threat_modeling → vuln_analysis �
 
 `ScanStateMachine` (`backend/src/orchestration/state_machine.py`) drives phase transitions, writes `PhaseInput`/`PhaseOutput` rows, and records `ScanTimeline` events. Each phase is implemented as a handler function in `backend/src/orchestration/handlers.py`. Phase resume after interruption is handled in `backend/src/orchestration/phase_resume.py`.
 
+Quick (`execution_mode=quick`) is a third immutable **execution mode** (alongside production and lab_unrestricted) — not `ScanPhase.QUICK_FUZZ` and not `scan_mode=quick` (scan depth).
+
 ### Celery Workers and Queues
 
 Tasks are routed to dedicated Celery queues; workers are split by concern in `docker-compose.yml`:

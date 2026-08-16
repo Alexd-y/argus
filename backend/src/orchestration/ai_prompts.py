@@ -8,8 +8,10 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+from src.execution_mode.runtime_context import peek_execution_mode_from_options
 from src.llm import is_llm_available
 from src.llm.facade import call_llm_unified
 from src.llm.task_router import LLMTask
@@ -27,6 +29,7 @@ from src.orchestration.phases import (
     VulnAnalysisInput,
     VulnAnalysisOutput,
 )
+from src.orchestration.prompt_loader import render_phase_prompts as _render_jinja2
 from src.orchestration.prompt_registry import (
     EXPLOITATION,
     POST_EXPLOITATION,
@@ -40,7 +43,7 @@ from src.orchestration.prompt_registry import (
     get_report_section_prompt,
     get_schema,
 )
-from src.orchestration.prompt_loader import render_phase_prompts as _render_jinja2
+from src.orchestration.rag_phase_context import render_phase_rag_section
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 
 logger = logging.getLogger(__name__)
@@ -53,6 +56,7 @@ def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     scope_context = kwargs.pop("scope_context", "")
     memory_context = kwargs.pop("memory_context", "")
     code_aware_section = kwargs.pop("code_aware_section", "")
+    rag_context = kwargs.pop("rag_context", "")
     try:
         system, user = _render_jinja2(phase, **kwargs)
     except Exception:
@@ -61,6 +65,8 @@ def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
         user = user + "\n\n" + code_aware_section
     if memory_context:
         user = user + "\n\n" + memory_context
+    if rag_context:
+        user = user + "\n\n" + rag_context
     if scope_context:
         system = system + "\n\n=== RULES OF ENGAGEMENT ===\n" + scope_context + "\n=== END ==="
     sanitize = kwargs.pop("sanitize", True)
@@ -87,6 +93,73 @@ _PHASE_TO_TASK: dict[str, LLMTask] = {
 }
 
 _PHASE_ORDER: list[str] = [RECON, THREAT_MODELING, VULN_ANALYSIS, EXPLOITATION, POST_EXPLOITATION]
+
+
+def _execution_mode_from_options(options: dict[str, Any] | None) -> str | None:
+    """Extract execution_mode from phase/scan options when present."""
+    peeked = peek_execution_mode_from_options(options)
+    return peeked.value if peeked is not None else None
+
+
+def _option_id(options: dict[str, Any] | None, key: str) -> str | None:
+    opts = options if isinstance(options, dict) else {}
+    raw = opts.get(key)
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _phase_rag_context(
+    phase: str,
+    query: str,
+    options: dict[str, Any] | None,
+    *,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+) -> str:
+    """Fail-open RAG section for planner/TM/VA. Empty when scope is missing."""
+    opts = options if isinstance(options, dict) else {}
+    scoped_tenant = (tenant_id or _option_id(opts, "tenant_id") or "").strip()
+    scoped_engagement = (engagement_id or _option_id(opts, "engagement_id") or "").strip()
+    if not scoped_tenant or not scoped_engagement:
+        return ""
+    mode = _execution_mode_from_options(opts) or "production"
+    try:
+        return render_phase_rag_section(
+            phase,
+            scoped_tenant,
+            scoped_engagement,
+            mode,
+            query,
+        )
+    except Exception:
+        logger.warning(
+            "phase_rag_context_failed",
+            extra={"event": "phase_rag_context_failed", "phase": phase},
+        )
+        return ""
+
+
+def _react_llm_caller(
+    task: LLMTask,
+    *,
+    scan_id: str | None,
+    execution_mode: str | None,
+) -> Callable[..., Awaitable[str]]:
+    """Wrap ``call_llm_unified`` so ReAct loops forward execution_mode + task."""
+
+    async def _caller(system_prompt: str, user_prompt: str, **kwargs: Any) -> str:
+        return await call_llm_unified(
+            system_prompt,
+            user_prompt,
+            task=task,
+            scan_id=kwargs.get("scan_id", scan_id),
+            phase=str(kwargs.get("phase") or "react_loop"),
+            execution_mode=execution_mode,
+        )
+
+    return _caller
 
 
 def _parse_llm_json(text: str) -> dict[str, Any] | None:
@@ -145,6 +218,7 @@ async def _call_llm_with_json_retry(
     raw_sink: RawPhaseSink | None = None,
     raw_label_prefix: str = "llm",
     scan_id: str | None = None,
+    execution_mode: str | None = None,
 ) -> dict[str, Any] | None:
     """
     Call LLM, parse JSON. On parse failure, retry once with fixer prompt.
@@ -157,6 +231,7 @@ async def _call_llm_with_json_retry(
         task=task,
         scan_id=scan_id,
         phase=phase,
+        execution_mode=execution_mode,
     )
     if raw_sink is not None and response:
         await asyncio.to_thread(
@@ -176,6 +251,7 @@ async def _call_llm_with_json_retry(
             task=task,
             scan_id=scan_id,
             phase=phase,
+            execution_mode=execution_mode,
         )
         if raw_sink is not None and response:
             await asyncio.to_thread(
@@ -221,13 +297,20 @@ async def ai_recon(
     """Analyze real tool output via LLM to produce structured recon."""
     _require_llm()
     try:
+        rag_query = f"{inp.target} reconnaissance {tool_results[:1500]}".strip()
+        rag_context = _phase_rag_context(RECON, rag_query, inp.options)
         system, user = _get_phase_prompt(
-            RECON, target=inp.target, options=inp.options, tool_results=tool_results
+            RECON,
+            target=inp.target,
+            options=inp.options,
+            tool_results=tool_results,
+            rag_context=rag_context,
         )
         data = _require_json(
             await _call_llm_with_json_retry(
                 RECON, user, system, raw_sink=raw_sink,
                 raw_label_prefix="recon_llm", scan_id=scan_id,
+                execution_mode=_execution_mode_from_options(inp.options),
             ),
             RECON,
         )
@@ -249,15 +332,29 @@ async def ai_threat_modeling(
     *,
     recon_context: str = "",
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ThreatModelOutput:
     """Build threat model from real assets, NVD CVEs, and enriched recon context via LLM."""
     _require_llm()
     try:
+        asset_blob = " ".join(str(item) for item in inp.assets[:20])
+        rag_query = f"threat model {asset_blob} {recon_context[:1500]} {nvd_data[:500]}".strip()
+        rag_context = _phase_rag_context(THREAT_MODELING, rag_query, scan_options)
         system, user = _get_phase_prompt(
-            THREAT_MODELING, assets=inp.assets, nvd_data=nvd_data, recon_context=recon_context,
+            THREAT_MODELING,
+            assets=inp.assets,
+            nvd_data=nvd_data,
+            recon_context=recon_context,
+            rag_context=rag_context,
         )
         data = _require_json(
-            await _call_llm_with_json_retry(THREAT_MODELING, user, system, scan_id=scan_id),
+            await _call_llm_with_json_retry(
+                THREAT_MODELING,
+                user,
+                system,
+                scan_id=scan_id,
+                execution_mode=_execution_mode_from_options(scan_options),
+            ),
             THREAT_MODELING,
         )
         if not isinstance(data.get("threat_model"), dict):
@@ -276,12 +373,14 @@ async def ai_vuln_analysis(
     memory_context: str = "",
     use_react: bool = False,
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> VulnAnalysisOutput:
     _require_llm()
+    execution_mode = _execution_mode_from_options(scan_options)
     try:
         if use_react:
             try:
-                from src.orchestration.react_agent import ReActAgent, format_react_prompt
+                from src.orchestration.react_agent import ReActAgent
                 _agent = ReActAgent(
                     task_description=f"Analyze vulnerabilities for threat model: {json.dumps(inp.threat_model, default=str)[:2000]}",
                     max_iterations=5,
@@ -289,7 +388,11 @@ async def ai_vuln_analysis(
                 )
                 _react_result = await _agent.run(
                     system_prompt="You are a vulnerability analyst. Analyze the threat model and return JSON findings.",
-                    llm_caller=call_llm_unified,
+                    llm_caller=_react_llm_caller(
+                        LLMTask.ZERO_DAY_ANALYSIS,
+                        scan_id=scan_id,
+                        execution_mode=execution_mode,
+                    ),
                     scan_id=scan_id,
                 )
                 data = _parse_llm_json(_react_result.answer)
@@ -297,13 +400,21 @@ async def ai_vuln_analysis(
                     return VulnAnalysisOutput(findings=data["findings"])
             except Exception:
                 pass
+        threat_blob = json.dumps(inp.threat_model, default=str)[:1500]
+        asset_blob = " ".join(str(item) for item in inp.assets[:20])
+        rag_query = f"vulnerability analysis {asset_blob} {threat_blob} {active_scan_context[:800]}".strip()
+        rag_context = _phase_rag_context(VULN_ANALYSIS, rag_query, scan_options)
         system, user = _get_phase_prompt(
             VULN_ANALYSIS, threat_model=inp.threat_model,
             assets=inp.assets, active_scan_context=active_scan_context,
             code_aware_section=code_aware_section, memory_context=memory_context,
+            rag_context=rag_context,
         )
         data = _require_json(
-            await _call_llm_with_json_retry(VULN_ANALYSIS, user, system, scan_id=scan_id),
+            await _call_llm_with_json_retry(
+                VULN_ANALYSIS, user, system, scan_id=scan_id,
+                execution_mode=execution_mode,
+            ),
             VULN_ANALYSIS,
         )
         if not isinstance(data.get("findings"), list):
@@ -369,9 +480,15 @@ def _normalize_exploit_candidates(
 
 
 async def ai_exploitation(
-    inp: ExploitationInput, *, use_react: bool = False, scan_id: str | None = None
+    inp: ExploitationInput,
+    *,
+    use_react: bool = False,
+    scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+    execution_mode: str | None = None,
 ) -> ExploitationOutput:
     _require_llm()
+    resolved_mode = execution_mode or _execution_mode_from_options(scan_options)
     try:
         if use_react:
             try:
@@ -382,7 +499,11 @@ async def ai_exploitation(
                 )
                 _react_result = await _agent.run(
                     system_prompt="You are an exploitation planner. Generate exploit hypotheses and return JSON.",
-                    llm_caller=call_llm_unified,
+                    llm_caller=_react_llm_caller(
+                        LLMTask.EXPLOIT_GENERATION,
+                        scan_id=scan_id,
+                        execution_mode=resolved_mode,
+                    ),
                     scan_id=scan_id,
                 )
                 data = _parse_llm_json(_react_result.answer)
@@ -409,7 +530,10 @@ async def ai_exploitation(
             _prompt_findings = inp.findings
         system, user = _get_phase_prompt(EXPLOITATION, findings=_prompt_findings)
         data = _require_json(
-            await _call_llm_with_json_retry(EXPLOITATION, user, system, scan_id=scan_id),
+            await _call_llm_with_json_retry(
+                EXPLOITATION, user, system, scan_id=scan_id,
+                execution_mode=resolved_mode,
+            ),
             EXPLOITATION,
         )
         if not isinstance(data.get("exploits"), list):
@@ -428,9 +552,11 @@ async def ai_post_exploitation(
     *,
     raw_sink: RawPhaseSink | None = None,
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> PostExploitationOutput:
     """Call LLM for lateral movement / persistence. Returns empty on failure."""
     _require_llm()
+    execution_mode = _execution_mode_from_options(scan_options)
     try:
         system, user = _get_phase_prompt(POST_EXPLOITATION, exploits=inp.exploits)
         data = _require_json(
@@ -438,6 +564,7 @@ async def ai_post_exploitation(
                 POST_EXPLOITATION, user, system,
                 raw_sink=raw_sink, raw_label_prefix="post_exploitation_llm",
                 scan_id=scan_id,
+                execution_mode=execution_mode,
             ),
             POST_EXPLOITATION,
         )
@@ -455,6 +582,7 @@ async def _call_wrb_report_section(
     phase_data: str,
     *,
     scan_id: str | None = None,
+    execution_mode: str | None = None,
 ) -> str:
     """Call WRB to generate a report section for ONE phase. Hard limit 16k chars to stay within 32k context."""
     import json as _json
@@ -478,6 +606,7 @@ async def _call_wrb_report_section(
         response = await call_llm_unified(
             system, user, task=LLMTask.REPORT_SECTION,
             scan_id=scan_id, phase=f"{phase}_report_section",
+            execution_mode=execution_mode,
         )
         if response:
             data = _parse_llm_json(response)
@@ -551,7 +680,9 @@ def _build_fallback_report(inp: ReportingInput) -> ReportingOutput:
     return ReportingOutput(report=report)
 
 
-async def _compress_summary_for_assembly(summary: str, *, max_chars: int = 8000) -> str:
+async def _compress_summary_for_assembly(
+    summary: str, *, max_chars: int = 8000, execution_mode: str | None = None
+) -> str:
     """Ask WRB to compress a summary to key facts only."""
     try:
         prompt = (
@@ -562,6 +693,7 @@ async def _compress_summary_for_assembly(summary: str, *, max_chars: int = 8000)
         resp = await call_llm_unified(
             "Compress text to key facts. Return only the compressed text.",
             prompt, task=LLMTask.REPORT_SECTION, phase="summary_compression",
+            execution_mode=execution_mode,
         )
         return resp[:max_chars] if resp else summary[:max_chars]
     except Exception:
@@ -569,7 +701,7 @@ async def _compress_summary_for_assembly(summary: str, *, max_chars: int = 8000)
 
 
 async def ai_reporting(
-    inp: ReportingInput, *, scan_id: str | None = None
+    inp: ReportingInput, *, scan_id: str | None = None, scan_options: dict[str, Any] | None = None
 ) -> ReportingOutput:
     """Generate report via 6 separate WRB calls — one per phase (FULL data) + assembly.
 
@@ -578,6 +710,7 @@ async def ai_reporting(
     all summaries into the final report JSON. Falls back to structured report on failure.
     """
     _require_llm()
+    execution_mode = _execution_mode_from_options(scan_options)
 
     section_summaries: dict[str, str] = {}
     for phase in _PHASE_ORDER:
@@ -585,7 +718,9 @@ async def ai_reporting(
         if not phase_data:
             continue
         try:
-            summary = await _call_wrb_report_section(phase, phase_data, scan_id=scan_id)
+            summary = await _call_wrb_report_section(
+                phase, phase_data, scan_id=scan_id, execution_mode=execution_mode,
+            )
             if summary:
                 section_summaries[phase] = summary
                 logger.info(
@@ -618,6 +753,7 @@ async def ai_reporting(
             task=LLMTask.REPORT_SECTION,
             scan_id=scan_id,
             phase="report_assembly",
+            execution_mode=execution_mode,
         )
         data = _parse_llm_json(response)
         if data is not None and isinstance(data.get("report"), dict):
@@ -633,7 +769,7 @@ async def ai_reporting(
                     for phase_name, summary in section_summaries.items():
                         if len(summary) > 8000:
                             compressed[phase_name] = await _compress_summary_for_assembly(
-                                summary, max_chars=8000,
+                                summary, max_chars=8000, execution_mode=execution_mode,
                             )
                         else:
                             compressed[phase_name] = summary
@@ -654,6 +790,7 @@ async def ai_reporting(
                     resp2 = await call_llm_unified(
                         sys2, usr2, task=LLMTask.REPORT_SECTION,
                         scan_id=scan_id, phase=f"report_assembly_retry_{retry + 1}",
+                        execution_mode=execution_mode,
                     )
                     data2 = _parse_llm_json(resp2)
                     if data2 is not None and isinstance(data2.get("report"), dict):

@@ -3,8 +3,15 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
+from src.core.config import settings
 from src.llm.task_router import LLMTask
 from src.llm.facade import _CLOUD_FALLBACK_TASKS
+
+
+@pytest.fixture(autouse=True)
+def legacy_facade_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Legacy WRB/cloud routing tests require the unified gateway flag disabled."""
+    monkeypatch.setattr(settings, "argus_unified_llm_gateway", False)
 
 
 class TestCloudFallbackTasks:

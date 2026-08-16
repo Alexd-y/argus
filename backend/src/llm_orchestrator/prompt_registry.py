@@ -45,6 +45,7 @@ from pydantic import (
     StrictStr,
     ValidationError,
     field_validator,
+    model_validator,
 )
 
 from src.sandbox.signing import (
@@ -124,6 +125,7 @@ class PromptDefinition(BaseModel):
     system_prompt: StrictStr = Field(min_length=1, max_length=8_000)
     user_prompt_template: StrictStr = Field(min_length=1, max_length=16_000)
     expected_schema_ref: StrictStr | None = Field(default=None, max_length=64)
+    response_schema_id: StrictStr | None = Field(default=None, max_length=64)
     default_model_id: StrictStr = Field(min_length=1, max_length=128)
     default_max_tokens: StrictInt = Field(ge=1, le=8192)
     default_temperature: StrictFloat = Field(ge=0.0, le=1.0)
@@ -144,14 +146,24 @@ class PromptDefinition(BaseModel):
             )
         return value
 
-    @field_validator("expected_schema_ref")
+    @field_validator("expected_schema_ref", "response_schema_id")
     @classmethod
     def _check_schema_ref(cls, value: str | None) -> str | None:
         if value is not None and not _SCHEMA_REF_RE.fullmatch(value):
             raise ValueError(
-                f"expected_schema_ref {value!r} must match ^[a-z][a-z0-9_]{{2,63}}$"
+                f"schema id {value!r} must match ^[a-z][a-z0-9_]{{2,63}}$"
             )
         return value
+
+    @model_validator(mode="after")
+    def _schema_ids_agree(self) -> PromptDefinition:
+        if (
+            self.response_schema_id
+            and self.expected_schema_ref
+            and self.response_schema_id != self.expected_schema_ref
+        ):
+            raise ValueError("response_schema_id must match expected_schema_ref")
+        return self
 
     @field_validator("default_model_id")
     @classmethod

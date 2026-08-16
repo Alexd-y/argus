@@ -111,14 +111,31 @@ def create_task_engine_and_session() -> tuple[
     return task_engine, task_session_factory
 
 
+def _session_dialect_name(session: AsyncSession) -> str:
+    """Return the SQLAlchemy dialect name for ``session``, or empty string."""
+    bind = session.bind
+    if bind is None:
+        try:
+            bind = session.get_bind()
+        except (RuntimeError, AttributeError):
+            return ""
+    dialect = getattr(bind, "dialect", None)
+    return str(getattr(dialect, "name", "") or "")
+
+
 async def set_session_tenant(session: AsyncSession, tenant_id: str) -> None:
     """Set ``app.current_tenant_id`` for RLS policies.
 
     Must be called at the start of each DB operation when RLS is enabled.
     PostgreSQL ``SET LOCAL`` does not accept bound parameters; ``tenant_id``
     is validated as UUID to prevent injection.
+
+    SQLite has no ``SET LOCAL`` / GUC — skip the statement after UUID checks
+    so unit tests can exercise SQLAlchemy repositories in-memory.
     """
     _validate_tenant_id(tenant_id)
+    if _session_dialect_name(session) == "sqlite":
+        return
     escaped = tenant_id.replace("'", "''")
     await session.execute(text(f"SET LOCAL app.current_tenant_id = '{escaped}'"))
 

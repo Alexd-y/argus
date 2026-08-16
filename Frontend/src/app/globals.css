@@ -16,57 +16,11 @@
   --accent-dim: #8b44d4;
   --secondary: #393A84;
   --highlight: #E3CAFE;
-  /*
-   * `--accent-strong` and `--on-accent` are the WCAG 2.1 AA-compliant
-   * primary-button pair (ISS-T26-001 Option A foundation).
-   *
-   * Existing pairing — `bg-[var(--accent)] text-[var(--bg-primary)]`
-   * (`#A655F7` over `#0a0a0a`) — measured at 4.20:1 by axe-core on the
-   * audit-logs "Verify chain integrity" CTA, below the AA 4.5:1 threshold
-   * for normal text.
-   *
-   * Replacement pair `bg-[var(--accent-strong)] text-[var(--on-accent)]`
-   * (`#6B2EBE` + `#FAFAFA`) measures 7.29:1 — clears AA (4.5:1) and AAA
-   * (7:1) with margin to absorb sub-pixel rasterization drift.
-   *
-   * `--accent` is intentionally retained for borders, focus rings, glow
-   * effects and decorative/brand surfaces; component migration to the new
-   * pair is tracked separately under ISS-T26-001 (see also
-   * `ai_docs/architecture/design-tokens.md`).
-   */
-  --accent-strong: #6B2EBE;
-  --on-accent: #FAFAFA;
-  /*
-   * `--warning-strong` and `--on-warning` are the WCAG 2.1 AA-compliant
-   * warning-button pair (ISS-T26-001 Option A foundation, finalised by
-   * C7-T08).
-   *
-   * `bg-amber-600` (`#D97706`) measured 3.94:1 against `#FFFFFF` text on
-   * the throttle / run-now confirm CTAs — fails AA. The amber-700
-   * (`#B45309`) replacement clears AA at ~5.0:1 against `#FFFFFF` and
-   * ~4.81:1 against `#FAFAFA`.
-   *
-   * `#FAFAFA` is preferred over pure `#FFFFFF` for parity with
-   * `--on-accent` (suppresses harsh pure-white glare on dark UIs).
-   *
-   * The token catalog and pair-with rules live in
-   * `ai_docs/architecture/design-tokens.md` §1.5 and §3. Surface
-   * migration is tracked under ISS-T26-001 follow-up + C7-T08.
-   */
-  --warning-strong: #B45309;
-  --on-warning: #FAFAFA;
-
+  
   /* Text */
   --text-primary: #f5f5f5;
   --text-secondary: #a3a3a3;
-  /*
-   * `--text-muted` previously was #525252 which yields a contrast ratio of
-   * 2.53:1 against `--bg-primary` (#0a0a0a) — well below the WCAG 2.1 AA
-   * threshold of 4.5:1 for normal text. Bumping to #8a8a8a gives ~5.77:1
-   * on bg-primary and ~4.69:1 on bg-tertiary, satisfying AA across all
-   * surface tokens while remaining visually distinct from --text-secondary.
-   */
-  --text-muted: #8a8a8a;
+  --text-muted: #525252;
   
   /* Status */
   --success: #22c55e;

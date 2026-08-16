@@ -208,6 +208,7 @@ class ReconOutput(BaseModel):
     tool_results: dict[str, Any] = Field(default_factory=dict, exclude=True)
     crawl_params: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
     crawl_forms: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
+    coverage_results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Quick Fuzz ---
@@ -278,6 +279,7 @@ class VulnAnalysisOutput(BaseModel):
     """
 
     findings: list[dict[str, Any]] = Field(default_factory=list)
+    coverage_results: list[dict[str, Any]] = Field(default_factory=list)
     active_injection_coverage: dict[str, Any] = Field(default_factory=dict)
     exploitation_queues: dict[str, ExploitationQueue] | None = Field(
         default=None,
@@ -390,6 +392,7 @@ class ReportingOutput(BaseModel):
     """Output of reporting phase."""
 
     report: dict[str, Any] = Field(default_factory=dict)
+    coverage_results: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- Phase definitions (input/output schemas, prompt keys) ---

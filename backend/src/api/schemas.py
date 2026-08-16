@@ -90,6 +90,122 @@ class ScanOptions(BaseModel):
     scan_approval_flags: dict[str, bool] = Field(default_factory=dict)
 
 
+ExecutionModeLiteral = Literal["production", "lab_unrestricted", "quick"]
+QuickProfileLiteral = Literal["compact", "balanced", "extended"]
+QuickSeverityFloorLiteral = Literal["critical", "high", "medium", "low", "info"]
+
+
+class QuickCreateOptions(BaseModel):
+    """Optional Quick execution-mode options on POST /scans.
+
+    Ignored unless ``execution_mode=quick``. Credentials are never accepted —
+    ``authenticated_context_id`` is a secret-store reference only.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: QuickProfileLiteral = "balanced"
+    severity_floor: QuickSeverityFloorLiteral | None = None
+    enable_ai: bool | None = None
+    enable_oast: bool | None = None
+    enable_headless_on_signal: bool | None = None
+    wall_clock_budget_seconds: int | None = Field(default=None, ge=1, le=86_400)
+    ai_budget_seconds: int | None = Field(default=None, ge=0, le=86_400)
+    reserve_for_validation_percent: int | None = Field(default=None, ge=0, le=50)
+    max_targets: int | None = Field(default=None, ge=1, le=10_000)
+    max_urls_per_host: int | None = Field(default=None, ge=1, le=10_000)
+    crawl_depth: int | None = Field(default=None, ge=0, le=10)
+    authenticated_context_id: str | None = Field(default=None, max_length=36)
+    template_policy_id: str | None = Field(default=None, min_length=1, max_length=128)
+    cloud_llm_allowed: bool | None = None
+
+
+class QuickBudgetView(BaseModel):
+    """Budget snapshot on GET /scans/:id (quick only; no secrets)."""
+
+    wall_clock_budget_seconds: int = Field(ge=1)
+    discovery_budget_seconds: int | None = Field(default=None, ge=0)
+    fingerprint_budget_seconds: int | None = Field(default=None, ge=0)
+    verification_budget_seconds: int | None = Field(default=None, ge=0)
+    ai_budget_seconds: int | None = Field(default=None, ge=0)
+    report_budget_seconds: int | None = Field(default=None, ge=0)
+    request_budget: int | None = Field(default=None, ge=0)
+    per_host_budget: int | None = Field(default=None, ge=0)
+    concurrency_budget: int | None = Field(default=None, ge=1)
+    reserve_for_validation_percent: int | None = Field(default=None, ge=0, le=50)
+
+
+class QuickProfileCatalogItem(BaseModel):
+    """One row of GET /quick/profiles."""
+
+    name: QuickProfileLiteral
+    wall_clock_budget_seconds: int = Field(ge=1)
+    ai_budget_seconds: int = Field(ge=0)
+    reserve_for_validation_percent: int = Field(ge=0, le=50)
+    max_targets: int = Field(ge=1)
+    max_urls_per_host: int = Field(ge=1)
+    crawl_depth: int = Field(ge=0)
+    severity_floor: str
+    enable_ai: bool
+    enable_oast: bool
+    enable_headless_on_signal: bool
+    request_budget: int = Field(ge=0)
+    per_host_budget: int = Field(ge=0)
+    concurrency_budget: int = Field(ge=1)
+
+
+class QuickProfilesResponse(BaseModel):
+    """GET /quick/profiles."""
+
+    profiles: list[QuickProfileCatalogItem]
+
+
+class ScanCoverageResultItem(BaseModel):
+    """One coverage result; ``reason_code`` is additive (QUICK-007)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    requirement_id: str | None = None
+    tenant_id: str | None = None
+    scan_id: str | None = None
+    asset_id: str | None = None
+    capability_id: str | None = None
+    status: str | None = None
+    reason_code: str | None = None
+    template_ids: list[str] = Field(default_factory=list)
+    evidence_ids: list[str] = Field(default_factory=list)
+    finding_id: str | None = None
+    execution_evidence_id: str | None = None
+    blocked_reason: str | None = None
+
+
+class ScanCoverageResponse(BaseModel):
+    """GET /scans/{id}/coverage — canonical path (do not duplicate)."""
+
+    scan_id: str
+    requirements: list[dict[str, Any]] = Field(default_factory=list)
+    results: list[ScanCoverageResultItem] = Field(default_factory=list)
+
+
+class ScanPlanResponse(BaseModel):
+    """GET /scans/{id}/plan — Quick execution mode only."""
+
+    scan_id: str
+    mode: Literal["quick"] = "quick"
+    profile: QuickProfileLiteral
+    plan_version: int = Field(ge=0)
+    deadline_at: str
+    budget: QuickBudgetView
+    stages: list[Any] = Field(default_factory=list)
+    tasks: list[Any] = Field(default_factory=list)
+    fallbacks: list[Any] = Field(default_factory=list)
+    coverage_intent: list[Any] = Field(default_factory=list)
+    assumptions: list[Any] = Field(default_factory=list)
+    prompt_version: str | None = None
+    model_route: str | None = None
+    revision_reason: str | None = None
+
+
 class ScanCreateRequest(BaseModel):
     """POST /scans request."""
 
@@ -111,6 +227,17 @@ class ScanCreateRequest(BaseModel):
     scan_mode: Literal["quick", "standard", "deep", "lab"] = Field(
         default="standard",
         description="Scan depth: quick, standard, deep, or lab (owned lab maximum profile)",
+    )
+    execution_mode: ExecutionModeLiteral | None = Field(
+        default=None,
+        description=(
+            "Immutable execution profile. Omit for production (backward compatible). "
+            "Distinct from scan_mode / options.scanType (depth)."
+        ),
+    )
+    quick: QuickCreateOptions | None = Field(
+        default=None,
+        description="Quick options; ignored unless execution_mode=quick",
     )
     report_language: str = Field(
         default="en",
@@ -139,6 +266,11 @@ class ScanDetailResponse(BaseModel):
     target: str
     email: str | None = None
     created_at: str
+    execution_mode: ExecutionModeLiteral | None = None
+    deadline_at: str | None = None
+    quick_profile: QuickProfileLiteral | None = None
+    budget: QuickBudgetView | None = None
+    stage: str | None = None
 
 
 class ScanListItemResponse(BaseModel):
@@ -950,6 +1082,11 @@ class FindingDetailResponse(BaseModel):
     kev_listed: bool = False
     kev_added_date: str | None = None
     ssvc_decision: str | None = None
+    fingerprint_key: str | None = None
+    fingerprint_version: str | None = None
+    verdict: str | None = None
+    hypothesis: dict[str, Any] | None = None
+    provenance: dict[str, Any] | None = None
 
 
 class FindingValidationApiResponse(BaseModel):

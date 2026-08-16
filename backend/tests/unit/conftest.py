@@ -40,30 +40,55 @@ import pytest
 # ---------------------------------------------------------------------------
 # Layer 1 — safe environment defaults for unit-test collection.
 #
-# ``setdefault`` semantics: only writes when the key is unset, so any value
-# already exported by the developer / CI runner takes precedence.
+# These MUST be applied at import time (before any transitive ``src.*`` import
+# triggers ``src.core.config.Settings`` validation), which is why they live at
+# module top-level and cannot be deferred into a normal fixture.  ``setdefault``
+# only writes when the key is unset, so a value exported by the developer / CI
+# runner always wins.
+#
+# NEW-TEST-03: to keep this import-time mutation from leaking into sibling test
+# roots that run later in the same process (e.g. ``tests/auth``), we record the
+# keys WE introduced and restore the environment in a package-scoped autouse
+# fixture teardown (see ``_restore_unit_env_defaults`` below).
 # ---------------------------------------------------------------------------
 
 # DEBUG=true short-circuits the production validators in
 # ``src.core.config.Settings`` (JWT_SECRET / DATABASE_URL / MINIO_SECRET_KEY
 # requirement, CORS wildcard rejection, default-MinIO-creds warning, etc.).
-os.environ.setdefault("DEBUG", "true")
+_UNIT_ENV_DEFAULTS: dict[str, str] = {
+    "DEBUG": "true",
+    # Minimal in-memory DSN — pure unit tests never touch a DB engine, but a
+    # non-empty value keeps any defensive ``Settings`` validator quiet.
+    "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+    # Length-conformant placeholder for HS256 JWT signing; never used to issue
+    # real tokens during unit-test collection.  The string is intentionally
+    # self-describing so it can never be mistaken for a production secret.
+    "JWT_SECRET": "test-secret-not-for-prod-but-required-by-settings",
+    # Marker the rest of the codebase can read to detect unit-test mode without
+    # re-deriving it from DEBUG/DATABASE_URL combinations.
+    "ARGUS_TEST_MODE": "1",
+}
 
-# Minimal in-memory DSN — pure unit tests never touch a DB engine, but a
-# non-empty value keeps any defensive ``Settings`` validator quiet.
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-
-# Length-conformant placeholder for HS256 JWT signing; never used to issue
-# real tokens during unit-test collection.  The string is intentionally
-# self-describing so it can never be mistaken for a production secret.
-os.environ.setdefault(
-    "JWT_SECRET",
-    "test-secret-not-for-prod-but-required-by-settings",
+# Keys that were ABSENT before this conftest ran — only these get rolled back on
+# teardown so we never clobber a value the developer / CI explicitly exported.
+_UNIT_ENV_INTRODUCED_KEYS: tuple[str, ...] = tuple(
+    key for key in _UNIT_ENV_DEFAULTS if key not in os.environ
 )
 
-# Marker the rest of the codebase (and any future fixture) can read to detect
-# unit-test mode without re-deriving it from DEBUG/DATABASE_URL combinations.
-os.environ.setdefault("ARGUS_TEST_MODE", "1")
+for _key, _value in _UNIT_ENV_DEFAULTS.items():
+    os.environ.setdefault(_key, _value)
+
+
+@pytest.fixture(scope="package", autouse=True)
+def _restore_unit_env_defaults() -> Iterator[None]:
+    """Roll back the import-time ``os.environ`` defaults once this package's
+    tests finish, so the process-global mutation cannot leak into sibling test
+    roots collected afterwards (NEW-TEST-03).  Only keys this conftest actually
+    introduced are removed; developer/CI-exported values are left untouched.
+    """
+    yield
+    for key in _UNIT_ENV_INTRODUCED_KEYS:
+        os.environ.pop(key, None)
 
 
 # ---------------------------------------------------------------------------

@@ -38,6 +38,10 @@ FROM base AS standard
 # fingerprinting (whatweb), fuzzing (ffuf/wfuzz/feroxbuster/gobuster/dirsearch),
 # injection (sqlmap/commix), WAF detection (wafw00f), parameter discovery (arjun),
 # AD/SMB (crackmapexec/impacket/enum4linux-ng), OSINT (theharvester).
+# Nuclei engine pin (infra/pins/nuclei.yaml): v3.11.1 @ a8c88feb4a1c8e961b7902534ce3af97e9d524a4
+# Kali rolling may ship a different package. Override with:
+#   go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1
+# Templates pin: nuclei-templates v10.4.7 @ 83234ce456da3e90dda86dfbc5e605e64a846df3
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     nmap masscan subfinder amass dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx-toolkit \

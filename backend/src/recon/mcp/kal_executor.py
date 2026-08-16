@@ -36,12 +36,45 @@ def run_kal_mcp_tool(
     scan_id: str | None,
     password_audit_opt_in: bool,
     timeout_sec: float | None = None,
+    scan_options: dict[str, Any] | None = None,
+    engagement_id: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate KAL policy, optional target guardrails, subprocess (or sandbox exec), MinIO upload."""
     start = time.perf_counter()
     tid = (tenant_id or "").strip() or None
     sid = (scan_id or "").strip() or None
     bin_name = normalize_kal_binary(argv[0]) if argv else ""
+
+    if scan_options is not None:
+        from src.sandbox.execution_lease_gate import assert_execution_allowed
+
+        try:
+            assert_execution_allowed(
+                bin_name or "kal_mcp",
+                target,
+                scan_options,
+                tenant_id=tid,
+                engagement_id=engagement_id,
+            )
+        except PermissionError as exc:
+            logger.info(
+                "kal_mcp_lease_gate_denied",
+                extra={
+                    "event": "kal_mcp_lease_gate_denied",
+                    "category": category,
+                    "tool": bin_name,
+                    "reason": str(exc),
+                },
+            )
+            return {
+                "success": False,
+                "stdout": "",
+                "stderr": str(exc),
+                "return_code": -1,
+                "execution_time": 0.0,
+                "policy_reason": str(exc),
+                "minio_keys": [],
+            }
 
     decision = evaluate_kal_mcp_policy(
         category=category,
@@ -97,7 +130,15 @@ def run_kal_mcp_tool(
     run_parts = build_sandbox_exec_argv(argv, use_sandbox=settings.sandbox_enabled)
 
     minio_keys: list[str] = []
-    exec_out = run_argv_simple_sync(run_parts, timeout_sec=eff_timeout)
+    exec_out = run_argv_simple_sync(
+        run_parts,
+        timeout_sec=eff_timeout,
+        tool_id=bin_name or "kal_mcp",
+        target=target,
+        scan_options=scan_options,
+        tenant_id=tid,
+        engagement_id=engagement_id,
+    )
     stdout = str(exec_out.get("stdout") or "")
     stderr = str(exec_out.get("stderr") or "")
     rc_raw = exec_out.get("return_code")

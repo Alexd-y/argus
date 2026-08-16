@@ -1,0 +1,132 @@
+# ARGUS — Docker socket hardening overlay (F-H01)
+#
+# Purpose
+# -------
+# The base stack (docker-compose.yml) bind-mounts /var/run/docker.sock into
+# `backend`, `worker-scans`, and `worker-general` so the sandbox tool runner can
+# `docker exec` into the argus-sandbox container. A bind-mounted socket — even
+# `:ro` — exposes the FULL Docker Engine API to those processes: the `:ro` flag
+# only makes the *socket file* read-only, not the API behind it. A compromised
+# worker can therefore reach the host daemon and escalate to the host.
+#
+# This overlay removes the raw socket bind mount from the three services and
+# routes their Docker API traffic through a Tecnativa `docker-socket-proxy`
+# that sits on an internal-only network and allows a minimal endpoint set.
+#
+# Usage
+# -----
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.hardened.yml up -d
+#
+# Requires Docker Compose v2.24.0+ (for the `!override` merge tag used to drop
+# the inherited socket bind mount).
+#
+# THREAT MODEL / RESIDUAL RISK  (read docs/docker-socket-hardening.md first)
+# -------------------------------------------------------------------------
+# `docker exec` maps to POST /containers/{id}/exec + POST /exec/{id}/start, so
+# the proxy MUST enable POST + CONTAINERS + EXEC. That same combination also
+# permits POST /containers/create + /start, i.e. an attacker who compromises a
+# worker can still create a privileged/host-mounting container and escape.
+#
+# What this overlay DOES buy (defence-in-depth), relative to a raw socket:
+#   * Denies image pull/build/save/load/import (IMAGES/BUILD off).
+#   * Denies volume, network, and swarm manipulation.
+#   * Denies secrets/configs/plugins read+write.
+#   * Denies direct daemon `system`/`events`/`auth` calls.
+#   * Confines Docker API reachability to an internal network (not the host FS).
+#
+# What it does NOT buy: it does not eliminate the container-create escape while
+# `docker exec` must work. For that you need runtime isolation (rootless Docker,
+# Sysbox, gVisor) or the k8s adapter (no socket at all). See the runbook.
+#
+# NOTE: the shipped allowlist keeps CONTAINERS create/rm/commit reachable so the
+# patch-verification sandbox (backend/src/sandbox/validation/environment/container.py,
+# which uses `docker run`/`rm`/`commit`) keeps working. If you do not use patch
+# verification, apply the stricter variant documented in the runbook.
+
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: argus-docker-socket-proxy
+    restart: unless-stopped
+    privileged: false
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # --- master switch --------------------------------------------------
+      # Allow POST at all (default 0 = read-only API). Required for `docker exec`
+      # and for the patch-verification container lifecycle.
+      POST: "1"
+      # --- endpoint allowlist (anything not set to "1" defaults to denied) --
+      CONTAINERS: "1"   # /containers/* — inspect, logs, stats, exec-create, create, rm
+      EXEC: "1"         # /exec/*       — exec start/resize (the docker exec stream)
+      COMMIT: "1"       # /commit       — patch-verification snapshots; set "0" if unused
+      VERSION: "1"      # docker CLI version negotiation
+      PING: "1"         # docker CLI /_ping handshake
+      # --- explicitly denied (listed for auditability) --------------------
+      IMAGES: "0"
+      BUILD: "0"
+      VOLUMES: "0"
+      NETWORKS: "0"
+      SWARM: "0"
+      SERVICES: "0"
+      TASKS: "0"
+      NODES: "0"
+      SECRETS: "0"
+      CONFIGS: "0"
+      PLUGINS: "0"
+      SYSTEM: "0"
+      EVENTS: "0"
+      AUTH: "0"
+      DISTRIBUTION: "0"
+      SESSION: "0"
+      INFO: "0"
+    volumes:
+      # The proxy is the ONLY component that touches the real socket.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-proxy
+    # No ports: — the proxy is reachable only from the internal docker-proxy net.
+
+  backend:
+    # Drop the inherited raw socket bind mount (base file mounts only the socket).
+    volumes: !override []
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    networks:
+      - backend
+      - data
+      - docker-proxy
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+
+  worker-scans:
+    volumes: !override []
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    networks:
+      - backend
+      - data
+      - docker-proxy
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+
+  worker-general:
+    volumes: !override []
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+    networks:
+      - backend
+      - data
+      - docker-proxy
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+
+networks:
+  # Dedicated, internal-only network isolating the daemon proxy from the host
+  # and from any service that has no business talking to Docker.
+  docker-proxy:
+    driver: bridge
+    internal: true

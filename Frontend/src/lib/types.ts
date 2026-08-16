@@ -46,10 +46,39 @@ export interface ScanOptions {
   scan_approval_flags?: Record<string, boolean>;
 }
 
+export type ExecutionMode = "production" | "lab_unrestricted" | "quick";
+
+export interface QuickCreateOptions {
+  profile?: "compact" | "balanced" | "extended";
+  severity_floor?: "critical" | "high" | "medium" | "low" | "info";
+  enable_ai?: boolean;
+  enable_oast?: boolean;
+  enable_headless_on_signal?: boolean;
+  wall_clock_budget_seconds?: number;
+  ai_budget_seconds?: number;
+  authenticated_context_id?: string;
+  cloud_llm_allowed?: boolean;
+}
+
+export interface QuickBudgetView {
+  wall_clock_budget_seconds: number;
+  discovery_budget_seconds?: number;
+  fingerprint_budget_seconds?: number;
+  verification_budget_seconds?: number;
+  ai_budget_seconds?: number;
+  report_budget_seconds?: number;
+  request_budget?: number;
+  per_host_budget?: number;
+  concurrency_budget?: number;
+  reserve_for_validation_percent?: number;
+}
+
 export interface CreateScanRequest {
   target: string;
   email: string;
   scan_mode?: "quick" | "standard" | "deep" | "lab";
+  execution_mode?: ExecutionMode;
+  quick?: QuickCreateOptions;
   options: ScanOptions;
 }
 
@@ -66,6 +95,11 @@ export interface ScanStatus {
   phase: string;
   target: string;
   created_at: string;
+  execution_mode?: ExecutionMode;
+  deadline_at?: string;
+  quick_profile?: "compact" | "balanced" | "extended";
+  budget?: QuickBudgetView;
+  stage?: string;
 }
 
 export interface SSEEventPayload {

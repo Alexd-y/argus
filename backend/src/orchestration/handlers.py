@@ -14,14 +14,15 @@ from typing import Any
 from urllib.parse import parse_qs, parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 from src.core.config import settings
-from src.llm.task_router import LLMTask
 from src.data_sources.crtsh_client import CrtShClient
 from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
 from src.data_sources.nvd_client import NVDClient
 from src.data_sources.shodan_client import ShodanClient
+from src.execution_mode.mode import ExecutionMode
+from src.llm import facade as llm_facade
+from src.llm.task_router import LLMTask
 from src.orchestration.ai_prompts import (
     ai_exploitation,
     ai_post_exploitation,
@@ -30,14 +31,24 @@ from src.orchestration.ai_prompts import (
     ai_threat_modeling,
     ai_vuln_analysis,
 )
+from src.orchestration.coverage_phase_sink import (
+    attach_phase_coverage,
+    signals_for_vuln_analysis,
+    signals_from_tool_results,
+    snapshot_coverage_dicts,
+)
 from src.orchestration.cve_platform_mitigations import apply_platform_cve_mitigations
+from src.orchestration.execution_mode_context import (
+    attach_execution_mode_to_input,
+    extract_execution_mode,
+    resolve_tool_policy_from_options,
+)
 from src.orchestration.exploit_verify import verify_exploit_poc_async
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
     PostExploitationInput,
     PostExploitationOutput,
-    QuickFuzzInput,
     QuickFuzzOutput,
     ReconInput,
     ReconOutput,
@@ -52,6 +63,11 @@ from src.orchestration.phases import (
 )
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.owasp_top10_2025 import parse_owasp_category
+from src.quick.cancellation import is_scan_cancelled
+from src.quick.circuit_breaker import default_circuit_breaker
+from src.quick.scheduler import QuickScheduler
+from src.quick.schemas import QuickTaskStage
+from src.quick.workflow import QuickWorkflow, is_quick_execution, resolve_quick_plan
 from src.recon.exploitation.custom_xss_poc import run_custom_xss_poc
 from src.recon.pipeline import run_recon_planned_tool_gather
 from src.recon.recon_runtime import build_recon_runtime_config
@@ -73,9 +89,216 @@ from src.recon.vulnerability_analysis.finding_normalizer import (
 from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.finding_metadata import apply_default_finding_metadata
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.tools.executor import execute_command
 
 logger = logging.getLogger(__name__)
+
+
+def _attach_phase_execution_mode(
+    scan_options: dict[str, Any] | None,
+    *,
+    tenant_id: str | None = None,
+    scan_id: str | None = None,
+    engagement_id: str | None = None,
+) -> dict[str, Any]:
+    """Stamp ``execution_mode_context`` onto scan options at phase start; return options."""
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    resolved_tenant = tenant_id or (
+        str(opts.get("tenant_id")).strip() if opts.get("tenant_id") else None
+    )
+    eid = engagement_id or (
+        str(opts.get("engagement_id")).strip() if opts.get("engagement_id") else None
+    )
+    if resolved_tenant and not opts.get("tenant_id"):
+        opts["tenant_id"] = resolved_tenant
+    if eid and not opts.get("engagement_id"):
+        opts["engagement_id"] = eid
+    attach_execution_mode_to_input(
+        opts,
+        opts,
+        tenant_id=resolved_tenant,
+        engagement_id=eid,
+        scan_id=scan_id,
+    )
+    return opts
+
+
+def _lab_tool_dispatch_allowed(
+    tool_name: str,
+    scan_options: dict[str, Any] | None,
+    *,
+    target: str = "",
+    tenant_id: str | None = None,
+) -> bool:
+    """Gate tool dispatch for LAB phases via ``resolve_tool_policy_from_options``.
+
+    Production always returns True (existing downstream gates unchanged).
+    LAB + valid lease → True; outside boundary / missing lease → False.
+    """
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    mode = extract_execution_mode(opts)
+    if mode is ExecutionMode.PRODUCTION:
+        return True
+    decision = resolve_tool_policy_from_options(
+        tool_name,
+        opts,
+        target=target,
+        tenant_id=tenant_id,
+    )
+    if decision.allowed and (decision.lab_lease_active or not decision.requires_approval):
+        return True
+    logger.info(
+        "phase_tool_policy_denied",
+        extra={
+            "event": "phase_tool_policy_denied",
+            "tool": tool_name,
+            "reason": decision.reason,
+            "deny_code": decision.deny_code,
+            "lab_lease_active": decision.lab_lease_active,
+        },
+    )
+    return False
+
+
+_QUICK_RECON_STEPS = (
+    "dig,dns_depth,whois,crtsh,nmap_port_scan,http_surface,security_headers"
+)
+_QUICK_PRIORITY_PORTS = "80,443,8080,8443,8000,3000"
+_QUICK_TOOL_TO_RECON_STEP: dict[str, str] = {
+    "nmap": "nmap_port_scan",
+    "dig": "dig",
+    "whois": "whois",
+    "crtsh": "crtsh",
+    "crt.sh": "crtsh",
+    "httpx": "http_surface",
+    "whatweb": "http_surface",
+    "testssl": "security_headers",
+    "shodan": "shodan",
+    "subfinder": "subdomain_passive",
+}
+
+
+def _apply_quick_recon_constraints(
+    options: dict[str, Any],
+    *,
+    target: str,
+    scan_id: str | None,
+) -> dict[str, Any]:
+    """Cap recon to Quick discovery/fingerprint tasks instead of the full tool set."""
+    opts = dict(options)
+    opts["recon_mode"] = "active"
+    opts["recon_deep_port_scan"] = False
+    opts["recon_enable_content_discovery"] = False
+    opts["recon_js_analysis"] = False
+    opts["recon_screenshots"] = False
+    if opts.get("ports") in (None, "", "1-1000", "1-65535"):
+        opts["ports"] = _QUICK_PRIORITY_PORTS
+    plan = resolve_quick_plan(scan_id=scan_id or "", target=target, options=opts)
+    step_ids: list[str] = []
+    breaker = default_circuit_breaker()
+    if plan is not None:
+        opts["quick_plan"] = plan.model_dump()
+        for task in plan.tasks:
+            if breaker.is_open(task.tool_id, task.target_ref):
+                continue
+            mapped = _QUICK_TOOL_TO_RECON_STEP.get(task.tool_id.strip().lower())
+            if mapped and mapped not in step_ids:
+                step_ids.append(mapped)
+    opts["recon_tool_selection"] = ",".join(step_ids) if step_ids else _QUICK_RECON_STEPS
+    return opts
+
+
+_QUICK_VA_STAGES = frozenset(
+    {
+        QuickTaskStage.TEST.value,
+        QuickTaskStage.VERIFY.value,
+    }
+)
+_QUICK_VA_VULN_FLAGS = (
+    "xss_enabled",
+    "sqli_enabled",
+    "ssrf_enabled",
+    "lfi_enabled",
+    "csrf_enabled",
+    "rce_enabled",
+    "idor_enabled",
+)
+
+
+def _apply_quick_va_constraints(
+    options: dict[str, Any],
+    *,
+    target: str,
+    scan_id: str | None,
+) -> dict[str, Any]:
+    """Force VA onto the Quick task set instead of the full active-scan stack."""
+    opts = dict(options)
+    opts["scan_mode"] = "quick"
+    opts["execution_mode"] = "quick"
+    vulns = dict(opts.get("vulnerabilities") or {}) if isinstance(opts.get("vulnerabilities"), dict) else {}
+    for flag in _QUICK_VA_VULN_FLAGS:
+        vulns[flag] = False
+    opts["vulnerabilities"] = vulns
+    plan = resolve_quick_plan(scan_id=scan_id or "", target=target, options=opts)
+    if plan is None:
+        return opts
+    opts["quick_plan"] = plan.model_dump()
+    workflow = QuickWorkflow.from_plan(plan)
+    scheduler = QuickScheduler(workflow, plan_version=plan.plan_version)
+    eligible = scheduler.eligible_tasks(
+        scan_id=scan_id or "",
+        completed_ids=set(),
+        cancelled=bool(scan_id and is_scan_cancelled(scan_id)),
+    )
+    allowed = [
+        task.tool_id
+        for task in eligible
+        if task.stage.value in _QUICK_VA_STAGES
+    ]
+    if not allowed:
+        breaker = default_circuit_breaker()
+        allowed = [
+            task.tool_id
+            for task in plan.tasks
+            if task.stage.value in _QUICK_VA_STAGES
+            and not breaker.is_open(task.tool_id, task.target_ref)
+        ]
+    opts["quick_allowed_tool_ids"] = allowed
+    return opts
+
+
+def _record_quick_circuit_outcomes(
+    tool_results: dict[str, Any],
+    *,
+    target: str,
+) -> None:
+    breaker = default_circuit_breaker()
+    step_to_tool = {step: tool for tool, step in _QUICK_TOOL_TO_RECON_STEP.items()}
+    for name, result in tool_results.items():
+        if not isinstance(result, dict):
+            continue
+        tool_id = step_to_tool.get(name, name)
+        if result.get("success") is False:
+            breaker.record_failure(tool_id, target)
+        elif result.get("success") is True:
+            breaker.record_success(tool_id, target)
+
+
+def _stamped_lab_lease_active(scan_options: dict[str, Any] | None) -> bool:
+    """Read collaborator stamp — True when attach recorded a usable LAB lease."""
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    ctx = opts.get("execution_mode_context")
+    return isinstance(ctx, dict) and bool(ctx.get("lab_lease_active"))
+
+
+def _llm_execution_mode(scan_options: dict[str, Any] | None) -> str:
+    """Mode string for ``call_llm_unified`` after phase attach (defaults production)."""
+    opts = scan_options if isinstance(scan_options, dict) else {}
+    ctx = opts.get("execution_mode_context")
+    if isinstance(ctx, dict) and ctx.get("mode"):
+        return str(ctx["mode"])
+    return extract_execution_mode(opts).value
 
 
 def _resolve_ip(domain: str) -> str | None:
@@ -371,6 +594,8 @@ _RECON_URL_KEY_HINTS = (
 def _normalize_scan_mode_for_va(scan_options: dict[str, Any] | None) -> str:
     """Single depth selector for VA; top-level scan_mode wins over legacy scanType."""
     opts = scan_options or {}
+    if is_quick_execution(opts):
+        return "quick"
     raw = opts.get("scan_mode") or opts.get("scanType") or "standard"
     mode = str(raw or "standard").strip().lower()
     aliases = {
@@ -909,6 +1134,11 @@ async def run_source_analysis(
 ) -> SourceAnalysisOutput:
     from src.orchestration.source_analysis.analyzer import SourceAnalyzer
 
+    options = _attach_phase_execution_mode(
+        options if isinstance(options, dict) else {},
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
     sa_input = SourceAnalysisInput(
         target=target,
         repo_path=options.get("repo_path"),
@@ -938,6 +1168,17 @@ async def run_recon(
     When tenant_id and scan_id are set, raw tool streams and LLM responses are uploaded to MinIO.
     """
     domain = target.replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
+    options = _attach_phase_execution_mode(
+        options if isinstance(options, dict) else {},
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
+    if is_quick_execution(options):
+        if scan_id and is_scan_cancelled(scan_id):
+            return ReconOutput(assets=[target] if target else [])
+        options = _apply_quick_recon_constraints(
+            options, target=target, scan_id=scan_id
+        )
     ports = options.get("ports", "1-1000")
     recon_cfg = build_recon_runtime_config(options)
     planned_steps = frozenset(plan_recon_steps(recon_cfg))
@@ -997,6 +1238,16 @@ async def run_recon(
     recon_out.tool_results = tool_results
     recon_out.crawl_params = crawl_params
     recon_out.crawl_forms = crawl_forms
+    if is_quick_execution(options):
+        _record_quick_circuit_outcomes(tool_results, target=target)
+    recon_out.coverage_results = attach_phase_coverage(
+        phase="recon",
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        asset_id=target,
+        signals=signals_from_tool_results(tool_results, phase="recon"),
+        scan_options=options,
+    )
     return recon_out
 
 
@@ -1080,9 +1331,19 @@ async def run_quick_fuzz(
     testing with heavy tools.
     """
     options = options or {}
+    options = _attach_phase_execution_mode(
+        options,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
     categories = options.get("quick_fuzz_categories")
     custom_wordlist = options.get("quick_fuzz_wordlist_path")
-    delay = float(options.get("quick_fuzz_delay", 0.3))
+    if "quick_fuzz_delay" in options:
+        delay = float(options["quick_fuzz_delay"])
+    elif _stamped_lab_lease_active(options):
+        delay = 0.0
+    else:
+        delay = 0.3
 
     try:
         from src.recon.quick_fuzz.quick_fuzzer import run_quick_fuzz as _run_qf
@@ -1124,6 +1385,8 @@ async def run_threat_modeling(
     target: str = "",
     recon_summary: dict[str, Any] | None = None,
     scan_id: str | None = None,
+    tenant_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
     source_analysis: Any | None = None,
     quick_fuzz_findings: list[dict[str, Any]] | None = None,
 ) -> ThreatModelOutput:
@@ -1133,6 +1396,12 @@ async def run_threat_modeling(
         format_recon_context_for_prompt,
         merge_threat_model_result_into_output,
         parse_threat_model_result,
+    )
+
+    scan_options = _attach_phase_execution_mode(
+        scan_options if isinstance(scan_options, dict) else {},
+        tenant_id=tenant_id,
+        scan_id=scan_id,
     )
 
     recon_ctx = build_recon_context(
@@ -1177,6 +1446,7 @@ async def run_threat_modeling(
         nvd_data=nvd_data,
         recon_context=recon_context_str,
         scan_id=scan_id,
+        scan_options=scan_options,
     )
 
     parsed = parse_threat_model_result(raw_output.threat_model)
@@ -1294,8 +1564,7 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
     if is_xss:
         default_cvss = _CVSS_DEFAULTS.get("xss", 7.2)
         cvss = max(cvss or 0.0, default_cvss)
-        if cvss < _MIN_CONFIRMED_XSS_CVSS:
-            cvss = _MIN_CONFIRMED_XSS_CVSS
+        cvss = max(cvss, _MIN_CONFIRMED_XSS_CVSS)
     elif cvss is None and vuln_type_lower in _CVSS_DEFAULTS:
         cvss = _CVSS_DEFAULTS[vuln_type_lower]
 
@@ -1501,7 +1770,19 @@ async def run_vuln_analysis(
     prompt as additional context and merged into the final output.
     Falls back to LLM-only when sandbox is disabled or active scan fails.
     """
-    scan_options = scan_options if isinstance(scan_options, dict) else {}
+    scan_options = _attach_phase_execution_mode(
+        scan_options if isinstance(scan_options, dict) else {},
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
+    if scan_id and not scan_options.get("scan_id"):
+        scan_options["scan_id"] = scan_id
+    if is_quick_execution(scan_options) and scan_id and is_scan_cancelled(scan_id):
+        return VulnAnalysisOutput(findings=[])
+    if is_quick_execution(scan_options):
+        scan_options = _apply_quick_va_constraints(
+            scan_options, target=target, scan_id=scan_id
+        )
     active_scan_findings: list[dict[str, Any]] = []
     active_scan_context = ""
     active_injection_coverage: dict[str, Any] = {}
@@ -1513,7 +1794,11 @@ async def run_vuln_analysis(
     js_findings_inv: list[dict[str, Any]] = []
 
     target_present = bool((target or "").strip())
+    va_skip_reason: str | None = None
+    va_tool_executed = False
+    va_tool_error = False
     if not target_present:
+        va_skip_reason = "no_target"
         logger.info(
             "vuln_analysis_active_scan",
             extra={
@@ -1524,6 +1809,7 @@ async def run_vuln_analysis(
             },
         )
     elif not settings.sandbox_enabled:
+        va_skip_reason = "sandbox_disabled"
         logger.info(
             "vuln_analysis_active_scan",
             extra={
@@ -1534,7 +1820,39 @@ async def run_vuln_analysis(
             },
         )
 
-    if settings.sandbox_enabled and target:
+    _lab_tools_ok = _lab_tool_dispatch_allowed(
+        "nuclei",
+        scan_options,
+        target=target,
+        tenant_id=tenant_id,
+    )
+    if is_quick_execution(scan_options):
+        allowed_tools = scan_options.get("quick_allowed_tool_ids") or []
+        if not allowed_tools:
+            va_skip_reason = va_skip_reason or "circuit_open"
+            _lab_tools_ok = False
+            logger.info(
+                "vuln_analysis_active_scan",
+                extra={
+                    "event": "skipped",
+                    "reason": "circuit_open",
+                    "scan_id": scan_id,
+                    "target_present": target_present,
+                },
+            )
+    if not _lab_tools_ok and va_skip_reason != "circuit_open":
+        va_skip_reason = va_skip_reason or "lab_tool_policy_denied"
+        logger.info(
+            "vuln_analysis_active_scan",
+            extra={
+                "event": "skipped",
+                "reason": "lab_tool_policy_denied",
+                "scan_id": scan_id,
+                "target_present": target_present,
+            },
+        )
+
+    if settings.sandbox_enabled and target and _lab_tools_ok:
         try:
             from src.recon.scan_options_kal import scan_kal_flags
 
@@ -1609,16 +1927,19 @@ async def run_vuln_analysis(
                 active_injection_coverage = dict(scan_options["active_injection_coverage"])
             raw_intel = list(result_bundle.intel_findings or [])
             raw_intel = normalize_active_scan_intel_findings(raw_intel)
-            if settings.va_custom_xss_poc_enabled:
+            if settings.va_custom_xss_poc_enabled and not is_quick_execution(scan_options):
                 try:
+                    _lab_active = _stamped_lab_lease_active(scan_options)
                     custom_rows = await run_custom_xss_poc(
                         target,
                         params_inv,
                         forms_inv,
                         timeout=20.0,
-                        max_payloads=80 if settings.va_aggressive_scan else 50,
-                        max_total_requests=200,
-                        aggressive=settings.va_aggressive_scan,
+                        max_payloads=(
+                            80 if (_lab_active or settings.va_aggressive_scan) else 50
+                        ),
+                        max_total_requests=0 if _lab_active else 200,
+                        aggressive=_lab_active or bool(settings.va_aggressive_scan),
                     )
                     if custom_rows:
                         raw_intel.extend(custom_rows)
@@ -1665,8 +1986,15 @@ async def run_vuln_analysis(
                     "active_scan_findings_count": len(active_scan_findings),
                 },
             )
+            va_tool_executed = True
+            if is_quick_execution(scan_options):
+                for tool_id in scan_options.get("quick_allowed_tool_ids") or ("nuclei",):
+                    default_circuit_breaker().record_success(str(tool_id), target)
 
         except Exception:
+            va_tool_error = True
+            if is_quick_execution(scan_options):
+                default_circuit_breaker().record_failure("nuclei", target)
             logger.warning(
                 "va_active_scan_failed_fallback_to_llm",
                 extra={"scan_id": scan_id},
@@ -1772,7 +2100,9 @@ async def run_vuln_analysis(
     code_aware_section = ""
     if source_analysis is not None:
         try:
-            from src.orchestration.code_aware_prompts import build_code_aware_prompt_section
+            from src.orchestration.code_aware_prompts import (
+                build_code_aware_prompt_section,
+            )
             code_aware_section = build_code_aware_prompt_section(source_analysis)
         except Exception:
             pass
@@ -1791,6 +2121,7 @@ async def run_vuln_analysis(
         inp, active_scan_context=active_scan_combined, scan_id=scan_id,
         code_aware_section=code_aware_section, memory_context=memory_context,
         use_react=scan_options.get("use_react", False),
+        scan_options=scan_options,
     )
 
     if active_scan_findings:
@@ -1802,7 +2133,6 @@ async def run_vuln_analysis(
 
     if quick_fuzz_candidates:
         try:
-            from src.recon.quick_fuzz.candidate_builder import FuzzCandidate
             for _qc in quick_fuzz_candidates[:20]:
                 _sev = _qc.get("severity", "medium")
                 if isinstance(_sev, str) and _sev.lower() not in ("info", "informational"):
@@ -1899,8 +2229,6 @@ async def run_vuln_analysis(
                 # Fan-out: run domain-specific LLM analysis for each domain with relevant findings
                 if scan_options.get("enable_vuln_agents", True):
                     try:
-                        from src.llm.facade import call_llm_with_escalation
-                        from src.llm.task_router import LLMTask
                         domain_context = "\n".join(
                             f"- [{f.get('severity','?').upper()}] {f.get('title','?')} (CWE {f.get('cwe','?')})"
                             for f in relevant[:10]
@@ -1917,12 +2245,14 @@ async def run_vuln_analysis(
                             f'"confidence": 0.0-1.0}}\n\n'
                             f"Return a JSON array of hypotheses."
                         )
-                        domain_analysis = await call_llm_with_escalation(
+                        domain_analysis = await llm_facade.call_llm_with_escalation(
                             system_prompt=f"You are {spec.display_name}. {spec.description}",
                             user_prompt=domain_prompt,
                             task=LLMTask.VULN_ANALYSIS,
                             scan_id=scan_id,
                             phase=f"vuln_agent_{domain.value}",
+                            execution_mode=_llm_execution_mode(scan_options),
+                            scan_options=scan_options,
                         )
                         if domain_analysis:
                             import json as _json
@@ -1976,7 +2306,11 @@ async def run_vuln_analysis(
 
     if scan_options.get("fuzzing_enabled") and source_analysis is not None:
         try:
-            from src.orchestration.fuzzing import select_engine, FuzzingRequest, run_fuzzing_campaign
+            from src.orchestration.fuzzing import (
+                FuzzingRequest,
+                run_fuzzing_campaign,
+                select_engine,
+            )
             _fuzz_targets = []
             _sa_dict = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
             _code_files = _sa_dict.get("code_files", [])
@@ -2016,7 +2350,11 @@ async def run_vuln_analysis(
 
     if scan_options.get("binary_analysis_enabled", True) and source_analysis is not None:
         try:
-            from src.orchestration.binary_analysis import detect_binary_type, run_binary_analysis, BinaryAnalysisRequest
+            from src.orchestration.binary_analysis import (
+                BinaryAnalysisRequest,
+                detect_binary_type,
+                run_binary_analysis,
+            )
             _sa_dict_ba = source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else {}
             _code_files_ba = _sa_dict_ba.get("code_files", []) or []
             for _cf_ba in _code_files_ba[:3]:
@@ -2050,7 +2388,10 @@ async def run_vuln_analysis(
 
     if agent_findings_map:
         try:
-            from src.orchestration.sub_agent_spawner import SubAgentSpawner, SubAgentTask
+            from src.orchestration.sub_agent_spawner import (
+                SubAgentSpawner,
+                SubAgentTask,
+            )
             _spawner = SubAgentSpawner(max_depth=2)
             _spawned = 0
             for _domain, _finds in agent_findings_map.items():
@@ -2062,7 +2403,9 @@ async def run_vuln_analysis(
                                 threat_model={"domain": _d, "findings_summary": json.dumps(_f[:5], default=str)[:2000]},
                                 assets=assets,
                             )
-                            _d_out = await ai_vuln_analysis(_d_inp, scan_id=scan_id)
+                            _d_out = await ai_vuln_analysis(
+                                _d_inp, scan_id=scan_id, scan_options=scan_options,
+                            )
                             return {"findings_count": len(_d_out.findings)}
                         except Exception:
                             return {}
@@ -2076,9 +2419,10 @@ async def run_vuln_analysis(
     if agent_findings_map:
         try:
             import asyncio as _asyncio
+
             from src.orchestration.vuln_agents import VULN_AGENT_SPECS, AgentDomain
 
-            async def _fanout_domain(_fo_domain: "AgentDomain") -> list[dict[str, Any]]:
+            async def _fanout_domain(_fo_domain: AgentDomain) -> list[dict[str, Any]]:
                 if _fo_domain.value not in agent_findings_map:
                     return []
                 _fo_spec = VULN_AGENT_SPECS[_fo_domain]
@@ -2098,6 +2442,7 @@ async def run_vuln_analysis(
                         active_scan_context=_build_active_scan_context(_fo_relevant),
                         scan_id=scan_id,
                         code_aware_section=code_aware_section,
+                        scan_options=scan_options,
                     )
                     for _fo_df in _fo_domain_out.findings:
                         _fo_df["source_domain"] = _fo_domain.value
@@ -2132,17 +2477,33 @@ async def run_vuln_analysis(
     # Optional reviewer/judge pass (config-gated via phase routing). Advisory only:
     # annotates output metadata, never mutates/drops findings (idempotent).
     await _maybe_run_phase_reviewer(
-        "vuln_analysis", llm_output, scan_id=scan_id
+        "vuln_analysis", llm_output, scan_id=scan_id, scan_options=scan_options
     )
 
+    llm_output.coverage_results = attach_phase_coverage(
+        phase="vuln_analysis",
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        asset_id=target or (assets[0] if assets else "unknown"),
+        signals=signals_for_vuln_analysis(
+            skipped=va_skip_reason is not None and not va_tool_executed,
+            skip_reason=va_skip_reason,
+            tool_executed=va_tool_executed,
+            tool_error=va_tool_error,
+            findings=llm_output.findings,
+            scan_id=scan_id or "unknown",
+        ),
+        scan_options=scan_options,
+    )
     return llm_output
 
 
 async def _maybe_run_phase_reviewer(
     phase: str,
-    output: "VulnAnalysisOutput",
+    output: VulnAnalysisOutput,
     *,
     scan_id: str | None,
+    scan_options: dict[str, Any] | None = None,
 ) -> None:
     """Run an idempotent reviewer/judge pass when the phase route defines one.
 
@@ -2160,17 +2521,18 @@ async def _maybe_run_phase_reviewer(
         if not findings:
             return
 
-        from src.llm.facade import call_llm_unified
-        from src.llm.task_router import LLMTask
         from src.orchestration.adversarial_critic import run_adversarial_critic
 
+        _review_mode = _llm_execution_mode(scan_options)
+
         async def _executor(system_prompt: str, user_prompt: str) -> dict[str, str]:
-            text = await call_llm_unified(
+            text = await llm_facade.call_llm_unified(
                 system_prompt,
                 user_prompt,
                 task=LLMTask.VALIDATION_ONESHOT,
                 scan_id=scan_id,
                 phase=f"{phase}_review",
+                execution_mode=_review_mode,
             )
             return {"content": text or ""}
 
@@ -2204,6 +2566,8 @@ async def run_exploit_attempt(
     target: str = "",
     tenant_id: str = "",
     auth_config: dict[str, Any] | None = None,
+    execution_mode: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> ExploitationOutput:
     """Exploitation: generates payloads via PayloadBuilder, executes tools in sandbox,
     verifies exploitability via WRB analysis. Falls back to LLM-only if sandbox unavailable.
@@ -2211,20 +2575,66 @@ async def run_exploit_attempt(
     When auth_config is provided, attempts browser-based login via PlaywrightAdapter
     before exploitation to establish authenticated sessions.
     """
+    opts = dict(scan_options) if isinstance(scan_options, dict) else {}
+    if execution_mode and "execution_mode" not in opts:
+        opts["execution_mode"] = execution_mode
+    if is_quick_execution(opts):
+        logger.info(
+            "exploitation_skipped_quick_profile",
+            extra={
+                "event": "exploitation_skipped_quick_profile",
+                "scan_id": scan_id,
+                "coverage_reason": "not_scheduled_by_quick_profile",
+            },
+        )
+        return ExploitationOutput(exploits=[], evidence=[])
+
     from src.orchestration.exploitation_executor import execute_exploitation
 
     if not findings:
         return ExploitationOutput(exploits=[], evidence=[])
 
+    if tenant_id and "tenant_id" not in opts:
+        opts["tenant_id"] = tenant_id
+    if scan_id and "scan_id" not in opts:
+        opts["scan_id"] = scan_id
+    opts = _attach_phase_execution_mode(
+        opts,
+        tenant_id=tenant_id or None,
+        scan_id=scan_id,
+    )
+    effective_mode = extract_execution_mode(opts).value
+
+    # LAB without usable lease / outside boundary: skip sandbox tool dispatch
+    # (LLM theoretical fallback below still runs). Production is unchanged.
+    _sandbox_tools_allowed = _lab_tool_dispatch_allowed(
+        "sqlmap",
+        opts,
+        target=target,
+        tenant_id=tenant_id or None,
+    )
+    if not _sandbox_tools_allowed:
+        logger.info(
+            "exploitation_tool_dispatch_denied",
+            extra={
+                "event": "exploitation_tool_dispatch_denied",
+                "scan_id": scan_id,
+                "reason": "lab_tool_policy_denied",
+            },
+        )
+
     # G-1 fix: establish an authenticated session via Playwright, persist it in a
     # SessionStore (isolated per principal), and propagate the owner session's
     # cookies/headers into execute_exploitation so tools run authenticated.
     _auth_context: dict[str, Any] | None = None
-    if auth_config:
+    if auth_config and _sandbox_tools_allowed:
         try:
             from src.auth.session_store import SessionStore
             from src.orchestration.auth_config import PrincipalRole, TargetConfig
-            from src.sandbox.playwright_adapter import PlaywrightAdapter, export_auth_context
+            from src.sandbox.playwright_adapter import (
+                PlaywrightAdapter,
+                export_auth_context,
+            )
 
             tc = TargetConfig.from_json(auth_config) if isinstance(auth_config, dict) else None
             principals = tc.resolved_principals() if tc else []
@@ -2280,13 +2690,18 @@ async def run_exploit_attempt(
             )
 
     try:
-        exploits, evidence = await execute_exploitation(
-            findings,
-            target=target, tenant_id=tenant_id, scan_id=scan_id,
-            auth_context=_auth_context,
-        )
-        if exploits:
-            return ExploitationOutput(exploits=exploits, evidence=evidence)
+        if _sandbox_tools_allowed:
+            exploits, evidence = await execute_exploitation(
+                findings,
+                target=target,
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                auth_context=_auth_context,
+                execution_mode=effective_mode,
+                scan_options=opts,
+            )
+            if exploits:
+                return ExploitationOutput(exploits=exploits, evidence=evidence)
     except Exception as exc:
         logger.warning(
             "exploitation_executor_failed",
@@ -2296,7 +2711,13 @@ async def run_exploit_attempt(
     # Fallback: LLM theoretical exploitation
     inp = ExploitationInput(findings=findings)
     _use_react = auth_config is not None and isinstance(auth_config, dict) and auth_config.get("use_react")
-    exploit_out = await ai_exploitation(inp, scan_id=scan_id, use_react=bool(_use_react))
+    exploit_out = await ai_exploitation(
+        inp,
+        scan_id=scan_id,
+        use_react=bool(_use_react),
+        scan_options=opts,
+        execution_mode=effective_mode,
+    )
 
     if not exploit_out.exploits and findings:
         try:
@@ -2312,7 +2733,10 @@ async def run_exploit_attempt(
         _sev = str(_exploit.get("severity", "")).lower()
         if _sev in ("critical", "high"):
             try:
-                from src.orchestration.symbolic_execution import SymbolicExecutionRequest, run_symbolic_execution
+                from src.orchestration.symbolic_execution import (
+                    SymbolicExecutionRequest,
+                    run_symbolic_execution,
+                )
                 _ser = SymbolicExecutionRequest(
                     binary_path=str(_exploit.get("target_url", target)),
                     source_function=str(_exploit.get("parameter", "input")),
@@ -2337,7 +2761,9 @@ async def run_exploit_attempt(
         _is_browser_verifiable = any(_bt in _vtype for _bt in _browser_vuln_types)
         if _is_browser_verifiable and _exploit.get("poc_url") or _exploit.get("poc_curl"):
             try:
-                from src.sandbox.playwright_adapter import PlaywrightAdapter, BrowserAction
+                from src.sandbox.playwright_adapter import (
+                    PlaywrightAdapter,
+                )
                 _pa = PlaywrightAdapter()
                 await _pa._start_session()
                 _poc_url = _exploit.get("poc_url", target)
@@ -2404,6 +2830,7 @@ async def run_post_exploitation(
     *,
     tenant_id: str | None = None,
     scan_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
 ) -> PostExploitationOutput:
     """Post exploitation: LLM analyzes lateral movement and persistence.
     
@@ -2412,6 +2839,16 @@ async def run_post_exploitation(
     - Service discovery on compromised host
     - Persistence mechanism feasibility assessment
     """
+    scan_opts = dict(scan_options) if isinstance(scan_options, dict) else {}
+    if tenant_id and "tenant_id" not in scan_opts:
+        scan_opts["tenant_id"] = tenant_id
+    if scan_id and "scan_id" not in scan_opts:
+        scan_opts["scan_id"] = scan_id
+    scan_opts = _attach_phase_execution_mode(
+        scan_opts,
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
     raw_sink: RawPhaseSink | None = None
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "post_exploitation")
@@ -2431,7 +2868,7 @@ async def run_post_exploitation(
             
             # Check internal network — try common internal services
             internal_checks = [
-                ("metadata_service", f"http://169.254.169.254/latest/meta-data/"),
+                ("metadata_service", "http://169.254.169.254/latest/meta-data/"),
                 ("internal_dns", f"http://{host}:53/"),
                 ("internal_api", f"http://{host}:8080/"),
                 ("internal_admin", f"http://{host}:3000/"),
@@ -2455,7 +2892,7 @@ async def run_post_exploitation(
             if post_lateral:
                 post_persistence.append({
                     "type": "internal_service_access",
-                    "description": f"Access to internal services enables potential lateral movement. Review network segmentation.",
+                    "description": "Access to internal services enables potential lateral movement. Review network segmentation.",
                     "risk_level": "medium",
                 })
 
@@ -2463,18 +2900,23 @@ async def run_post_exploitation(
             if any(svc.get("technique", "").startswith("Internal") for svc in post_lateral):
                 try:
                     ad_target = host if host else target
-
-                    enum_result = execute_command(
-                        f"enum4linux-ng -A {ad_target}",
-                        use_sandbox=True,
-                    )
-                    if enum_result["success"] and enum_result["stdout"]:
-                        post_lateral.append({
-                            "technique": "SMB Enumeration via enum4linux",
-                            "description": enum_result["stdout"][:500],
-                            "from_exploit": verified[0].get("finding_id", ""),
-                            "tool": "enum4linux_ng",
-                        })
+                    if _lab_tool_dispatch_allowed(
+                        "enum4linux-ng",
+                        scan_opts,
+                        target=str(ad_target or ""),
+                        tenant_id=tenant_id,
+                    ):
+                        enum_result = execute_command(
+                            f"enum4linux-ng -A {ad_target}",
+                            use_sandbox=True,
+                        )
+                        if enum_result["success"] and enum_result["stdout"]:
+                            post_lateral.append({
+                                "technique": "SMB Enumeration via enum4linux",
+                                "description": enum_result["stdout"][:500],
+                                "from_exploit": verified[0].get("finding_id", ""),
+                                "tool": "enum4linux_ng",
+                            })
                 except Exception as e:
                     logger.debug("ad_enum_skipped", extra={"error": str(e)})
         except Exception as exc:
@@ -2482,7 +2924,9 @@ async def run_post_exploitation(
     
     # Combine with LLM analysis
     inp = PostExploitationInput(exploits=exploits)
-    ai_result = await ai_post_exploitation(inp, raw_sink=raw_sink, scan_id=scan_id)
+    ai_result = await ai_post_exploitation(
+        inp, raw_sink=raw_sink, scan_id=scan_id, scan_options=scan_opts,
+    )
     
     # Merge real checks with AI results
     ai_result.lateral = post_lateral + ai_result.lateral
@@ -2500,13 +2944,18 @@ async def run_reporting(
     post_exploitation: PostExploitationOutput | None,
     *,
     scan_id: str | None = None,
+    tenant_id: str | None = None,
     scan_options: dict[str, Any] | None = None,
     scope_config: dict[str, Any] | None = None,
     source_analysis: Any | None = None,
     quick_fuzz: QuickFuzzOutput | None = None,
 ) -> ReportingOutput:
     """Reporting: aggregates all real data and generates comprehensive report via LLM."""
-    scan_options = scan_options if isinstance(scan_options, dict) else {}
+    scan_options = _attach_phase_execution_mode(
+        scan_options if isinstance(scan_options, dict) else {},
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+    )
     report_context: dict[str, Any] = {}
     if exploitation is not None:
         hibp_summary = await summarize_pwned_passwords_for_report(
@@ -2520,12 +2969,14 @@ async def run_reporting(
     if vuln_analysis and vuln_analysis.findings:
         try:
             from src.orchestration.adversarial_critic import run_adversarial_critic
-            from src.llm.facade import call_llm_unified as _call_llm_critic
+
+            _report_mode = _llm_execution_mode(scan_options)
 
             async def _critic_executor(sys_prompt: str, user_prompt: str):
-                return await _call_llm_critic(
+                return await llm_facade.call_llm_unified(
                     sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
                     scan_id=scan_id, phase="adversarial_critic",
+                    execution_mode=_report_mode,
                 )
 
             _critic_result = await run_adversarial_critic(
@@ -2559,7 +3010,10 @@ async def run_reporting(
         scope_config=scope_config,
         source_analysis=source_analysis.model_dump() if hasattr(source_analysis, "model_dump") else source_analysis,
     )
-    report_out = await ai_reporting(inp, scan_id=scan_id)
+    report_out = await ai_reporting(inp, scan_id=scan_id, scan_options=scan_options)
+    report_out.coverage_results = snapshot_coverage_dicts(scan_id)
+    if report_out.coverage_results:
+        report_out.report["coverage_results"] = report_out.coverage_results
 
     if _critic_insights:
         try:
@@ -2570,13 +3024,15 @@ async def run_reporting(
             pass
 
         try:
-            from src.orchestration.detection_engineering import run_detection_engineering
-            from src.llm.facade import call_llm_unified as _call_llm2
+            from src.orchestration.detection_engineering import (
+                run_detection_engineering,
+            )
 
             async def _de_executor(sys_prompt: str, user_prompt: str):
-                return await _call_llm2(
+                return await llm_facade.call_llm_unified(
                     sys_prompt, user_prompt, task=LLMTask.REPORT_SECTION,
                     scan_id=scan_id, phase="detection_engineering",
+                    execution_mode=_llm_execution_mode(scan_options),
                 )
 
             _de_result = await run_detection_engineering(
@@ -2592,10 +3048,14 @@ async def run_reporting(
 
         if scan_options and scan_options.get("auto_patch_enabled"):
             try:
-                from src.orchestration.auto_patch import build_autopatch_prompt, create_patch_pr, parse_patch_response
-                from src.llm.facade import call_llm_unified as _call_llm3
+                from src.orchestration.auto_patch import (
+                    build_autopatch_prompt,
+                    create_patch_pr,
+                    parse_patch_response,
+                )
                 _patches = []
                 _pr_urls = []
+                _patch_mode = _llm_execution_mode(scan_options)
                 for _hf in vuln_analysis.findings[:10]:
                     _sev = str(_hf.get("severity", "")).lower()
                     if _sev in ("critical", "high") and _hf.get("code_location"):
@@ -2606,7 +3066,11 @@ async def run_reporting(
                             severity=_sev,
                             vulnerable_code=str(_hf.get("vulnerable_code", "")),
                         )
-                        _presp = await _call_llm3(_ps, _pu, task=LLMTask.EXPLOIT_GENERATION, scan_id=scan_id, phase="auto_patch")
+                        _presp = await llm_facade.call_llm_unified(
+                            _ps, _pu, task=LLMTask.EXPLOIT_GENERATION,
+                            scan_id=scan_id, phase="auto_patch",
+                            execution_mode=_patch_mode,
+                        )
                         if _presp:
                             _pc = parse_patch_response(str(_hf.get("finding_id", "")), str(_hf.get("code_location", "")), _presp)
                             _patches.append({"finding_id": _pc.finding_id, "file": _pc.file_path, "diff": _pc.patch_diff[:2000]})

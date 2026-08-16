@@ -16,11 +16,18 @@ from src.cache.tool_recovery import (
     log_recovery_attempt,
 )
 from src.core.config import settings
+from src.nuclei.legacy_inventory import is_profile_compiler_enabled
+from src.nuclei.legacy_metrics import increment_legacy_argv
+from src.nuclei.profile_compiler import (
+    NucleiProfileCompiler,
+    default_profile_id_for_mode,
+)
 from src.recon.sandbox_tool_runner import (
     build_sandbox_exec_argv,
     check_tool_available,
     run_argv_simple_sync,
 )
+from src.sandbox.execution_lease_gate import assert_execution_allowed
 from src.tools.guardrails.command_parser import ALLOWED_TOOLS, extract_tool_name
 
 logger = logging.getLogger(__name__)
@@ -28,6 +35,7 @@ logger = logging.getLogger(__name__)
 _TOOL_RUN_OUTPUT_MAX_CHARS = 50_000
 
 _PHASE_CACHE: dict[str, str] = {}
+_NUCLEI_EXECUTOR_CALLER = "tools.executor.build_nuclei_command"
 
 
 def _current_scan_phase(scan_id: str) -> str:
@@ -105,6 +113,19 @@ def _schedule_tool_run_record(
         logger.debug("tool_run persist skipped (no event loop)", exc_info=exc)
 
 
+def _lease_gate_target(
+    target: str | None,
+    scan_options: dict[str, Any] | None,
+) -> str:
+    if target:
+        return target
+    if isinstance(scan_options, dict):
+        raw = scan_options.get("target")
+        if raw:
+            return str(raw)
+    return ""
+
+
 def execute_command(
     command: str,
     use_cache: bool = True,
@@ -113,6 +134,9 @@ def execute_command(
     *,
     scan_id: str | None = None,
     tenant_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+    engagement_id: str | None = None,
+    target: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute a shell command via subprocess.
@@ -133,6 +157,9 @@ def execute_command(
         timeout_sec: Subprocess timeout seconds; defaults to ``settings.recon_tools_timeout``.
         scan_id: Optional scan UUID — enables ToolRun recording.
         tenant_id: Optional tenant UUID — enables ToolRun recording.
+        scan_options: Scan options carrying ``execution_mode`` / ``lab_lease``.
+        engagement_id: Optional engagement UUID for LAB lease tenant checks.
+        target: Optional target URL/host for the LAB boundary gate.
 
     Returns:
         Dict with success, stdout, stderr, return_code, execution_time
@@ -153,6 +180,14 @@ def execute_command(
                 1,
                 0.0,
             )
+
+        assert_execution_allowed(
+            tool_name,
+            _lease_gate_target(target, scan_options),
+            scan_options,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+        )
 
         if scan_id:
             try:
@@ -236,6 +271,8 @@ def execute_command(
         )
 
         return result
+    except PermissionError:
+        raise
     except Exception:
         elapsed = time.perf_counter() - start
         logger.exception("Command execution failed")
@@ -248,6 +285,11 @@ def execute_command_with_recovery(
     use_cache: bool = True,
     use_sandbox: bool = False,
     timeout_sec: int | None = None,
+    scan_id: str | None = None,
+    tenant_id: str | None = None,
+    scan_options: dict[str, Any] | None = None,
+    engagement_id: str | None = None,
+    target: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Run *command*; on failure, retry with up to ``MAX_RECOVERY_ATTEMPTS`` allowlisted alternatives.
@@ -285,6 +327,11 @@ def execute_command_with_recovery(
         use_cache=use_cache,
         use_sandbox=use_sandbox,
         timeout_sec=timeout_sec,
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        scan_options=scan_options,
+        engagement_id=engagement_id,
+        target=target,
     )
     _append_attempt(original_tool, result)
 
@@ -305,6 +352,11 @@ def execute_command_with_recovery(
             use_cache=use_cache,
             use_sandbox=use_sandbox,
             timeout_sec=timeout_sec,
+            scan_id=scan_id,
+            tenant_id=tenant_id,
+            scan_options=scan_options,
+            engagement_id=engagement_id,
+            target=target,
         )
         final_tool = alt
         _append_attempt(alt, result)
@@ -336,8 +388,15 @@ def build_nmap_command(target: str, scan_type: str, ports: str, additional_args:
     return " ".join(shlex.quote(p) for p in cmd)
 
 
-def build_nuclei_command(target: str, severity: str, tags: str, template: str, additional_args: str) -> str:
-    """Build nuclei command from parameters."""
+def _legacy_nuclei_command(
+    target: str,
+    severity: str,
+    tags: str,
+    template: str,
+    additional_args: str,
+) -> str:
+    """Hand-built argv (pre-compiler). Emits legacy warning metric."""
+    increment_legacy_argv(caller=_NUCLEI_EXECUTOR_CALLER)
     cmd = ["nuclei", "-u", target]
     if severity:
         cmd.extend(["-severity", severity])
@@ -348,6 +407,56 @@ def build_nuclei_command(target: str, severity: str, tags: str, template: str, a
     if additional_args:
         cmd.extend(shlex.split(additional_args))
     return " ".join(shlex.quote(p) for p in cmd)
+
+
+def _append_nuclei_operator_args(
+    argv: list[str],
+    severity: str,
+    tags: str,
+    template: str,
+    additional_args: str,
+) -> list[str]:
+    """Caller targeting only — never re-inject ``-ni`` / rate / concurrency caps."""
+    out = list(argv)
+    if severity:
+        out.extend(["-severity", severity])
+    if tags:
+        out.extend(["-tags", tags])
+    if template:
+        out.extend(["-t", template])
+    if additional_args:
+        out.extend(shlex.split(additional_args))
+    return out
+
+
+def build_nuclei_command(
+    target: str,
+    severity: str,
+    tags: str,
+    template: str,
+    additional_args: str,
+    *,
+    profile: str | None = None,
+    execution_mode: str | None = None,
+) -> str:
+    """Build nuclei command from parameters.
+
+    Legacy positional signature is unchanged. When ``profile`` is set or
+    ``ARGUS_NUCLEI_PROFILE_COMPILER=1``, argv comes from
+    :class:`~src.nuclei.profile_compiler.NucleiProfileCompiler`. LAB profiles
+    do not inject ``-ni``, rate-limit, concurrency caps, or tag exclusions.
+    """
+    profile_id = (profile or "").strip() or None
+    if not (is_profile_compiler_enabled() or profile_id):
+        return _legacy_nuclei_command(target, severity, tags, template, additional_args)
+
+    resolved_mode = (execution_mode or "production").strip() or "production"
+    resolved_profile = profile_id or default_profile_id_for_mode(resolved_mode)
+    argv = NucleiProfileCompiler.compile(resolved_profile, resolved_mode, target)
+    if not argv:
+        return ""
+    argv = _append_nuclei_operator_args(argv, severity, tags, template, additional_args)
+    return " ".join(shlex.quote(p) for p in argv)
 
 
 def build_gobuster_command(url: str, mode: str, wordlist: str, additional_args: str) -> str:

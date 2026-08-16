@@ -224,6 +224,10 @@ class PolicyContext(BaseModel):
     spend_this_month_cents: StrictInt = Field(default=0, ge=0, le=300_000_000)
     estimated_cost_cents: StrictInt = Field(default=0, ge=0, le=10_000_000)
     requested_at: datetime = Field(default_factory=_utcnow)
+    #: When True, a verified ``lab_unrestricted`` lease is active — allow-all,
+    #: no per-action approval/risk/rate/tool gates (boundary already checked).
+    lab_lease_active: StrictBool = False
+    lab_lease_id: StrictStr | None = Field(default=None, max_length=36)
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
@@ -306,6 +310,7 @@ class PolicyEngine:
 
         0. Emergency kill-switch (when checker injected) — global stop or
            per-tenant throttle deny first; nothing else is evaluated.
+        0b. Verified LAB lease — allow-all, requires_approval=False (master §2.5).
         1. Plan-tier ceiling — risk_level must be at or below the tier cap.
         2. Phase-risk cap — risk_level must be at or below the phase cap.
         3. Banned tools / families.
@@ -343,6 +348,28 @@ class PolicyEngine:
                 return self._deny(
                     context, summary, matched_cap=None, skip_log=True
                 )
+
+        # Verified lab_unrestricted lease: capability set = * (master prompt §2.5).
+        # Kill switch above still applies; no per-action risk/tool/rate/approval gates.
+        if context.lab_lease_active:
+            _logger.info(
+                "policy.engine.lab_allow_all",
+                extra={
+                    "event": "lab_unrestricted_allow_all",
+                    "tenant_id_hash": tenant_hash(str(context.tenant_id)),
+                    "lab_lease_id": context.lab_lease_id,
+                    "tool_id": context.tool_id,
+                    "requires_approval": False,
+                },
+            )
+            return PolicyDecision(
+                tenant_id=context.tenant_id,
+                scan_id=context.scan_id,
+                allowed=True,
+                requires_approval=False,
+                failure_summary=None,
+                matched_cap=None,
+            )
 
         plan_cap = PLAN_MAX_RISK[self._policy.plan_tier]
         if not _is_at_or_below(context.risk_level, plan_cap):

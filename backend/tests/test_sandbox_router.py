@@ -63,7 +63,13 @@ class TestSandboxExecute:
 
 
 class TestSandboxPython:
-    """POST /api/v1/sandbox/python — disabled by default; policy when enabled."""
+    """POST /api/v1/sandbox/python — disabled by default; dual-gate + policy when enabled.
+
+    F-H04: the endpoint is an RCE vector and must be gated behind BOTH
+    ``settings.debug`` AND ``settings.argus_sandbox_python_enabled``. A flag
+    accidentally left on in a production image (``DEBUG=false``) must never
+    open the endpoint. Every "enabled" test therefore patches both flags.
+    """
 
     def test_python_disabled_returns_403(self, client: TestClient) -> None:
         with patch.object(settings, "argus_sandbox_python_enabled", False):
@@ -77,8 +83,26 @@ class TestSandboxPython:
         assert body.get("feature") == "sandbox_python"
         assert "detail" in body
 
+    def test_python_flag_on_but_debug_off_returns_403(self, client: TestClient) -> None:
+        """Dual-gate regression: flag enabled without DEBUG must still 403."""
+        with (
+            patch.object(settings, "argus_sandbox_python_enabled", True),
+            patch.object(settings, "debug", False),
+        ):
+            response = client.post(
+                "/api/v1/sandbox/python",
+                json={"code": "print(1)", "timeout_sec": 10},
+            )
+        assert response.status_code == 403
+        body = response.json()
+        assert body.get("success") is False
+        assert body.get("feature") == "sandbox_python"
+
     def test_python_rejects_eval(self, client: TestClient) -> None:
-        with patch.object(settings, "argus_sandbox_python_enabled", True):
+        with (
+            patch.object(settings, "argus_sandbox_python_enabled", True),
+            patch.object(settings, "debug", True),
+        ):
             response = client.post(
                 "/api/v1/sandbox/python",
                 json={"code": "eval('1+1')", "timeout_sec": 10},
@@ -89,7 +113,10 @@ class TestSandboxPython:
         assert "blocked" in (body.get("stderr") or "").lower()
 
     def test_python_rejects_subprocess_import(self, client: TestClient) -> None:
-        with patch.object(settings, "argus_sandbox_python_enabled", True):
+        with (
+            patch.object(settings, "argus_sandbox_python_enabled", True),
+            patch.object(settings, "debug", True),
+        ):
             response = client.post(
                 "/api/v1/sandbox/python",
                 json={"code": "import subprocess\nsubprocess.run(['echo','x'])", "timeout_sec": 10},
@@ -100,7 +127,10 @@ class TestSandboxPython:
         assert "blocked" in (body.get("stderr") or "").lower()
 
     def test_python_rejects_os_system(self, client: TestClient) -> None:
-        with patch.object(settings, "argus_sandbox_python_enabled", True):
+        with (
+            patch.object(settings, "argus_sandbox_python_enabled", True),
+            patch.object(settings, "debug", True),
+        ):
             response = client.post(
                 "/api/v1/sandbox/python",
                 json={"code": "import os\nos.system('echo pwned')", "timeout_sec": 10},
@@ -111,7 +141,10 @@ class TestSandboxPython:
         assert "blocked" in (body.get("stderr") or "").lower()
 
     def test_python_rejects_getattr(self, client: TestClient) -> None:
-        with patch.object(settings, "argus_sandbox_python_enabled", True):
+        with (
+            patch.object(settings, "argus_sandbox_python_enabled", True),
+            patch.object(settings, "debug", True),
+        ):
             response = client.post(
                 "/api/v1/sandbox/python",
                 json={"code": "getattr(__builtins__, 'exec')('1')", "timeout_sec": 10},

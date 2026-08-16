@@ -58,6 +58,25 @@ def _sanitize_kwargs_for_prompt(kwargs: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+sanitize_kwargs_for_prompt = _sanitize_kwargs_for_prompt
+
+QUICK_PLANNER_PROMPT_ID = "quick_planner_v1"
+QUICK_FINGERPRINT_PROMPT_ID = "quick_fingerprint_classifier_v1"
+QUICK_TRIAGE_PROMPT_ID = "quick_finding_triage_v1"
+QUICK_CRITIC_PROMPT_ID = "quick_security_critic_v1"
+QUICK_REPORTER_PROMPT_ID = "quick_reporter_v1"
+
+QUICK_PROMPT_IDS: frozenset[str] = frozenset(
+    {
+        QUICK_PLANNER_PROMPT_ID,
+        QUICK_FINGERPRINT_PROMPT_ID,
+        QUICK_TRIAGE_PROMPT_ID,
+        QUICK_CRITIC_PROMPT_ID,
+        QUICK_REPORTER_PROMPT_ID,
+    }
+)
+
+
 # Phase names aligned with ScanPhase
 RECON = "recon"
 THREAT_MODELING = "threat_modeling"

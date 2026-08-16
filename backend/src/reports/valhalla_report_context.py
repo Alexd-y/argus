@@ -1238,6 +1238,8 @@ class ValhallaReportContext(BaseModel):
     evidence_gate: dict[str, str] = Field(default_factory=dict)
     #: Evidence quality summary (gate counts + validation details)
     evidence_quality: dict[str, Any] = Field(default_factory=dict)
+    #: CONT-009 — capability coverage statuses + finding occurrence references
+    coverage_occurrence: dict[str, Any] = Field(default_factory=dict)
 
 
 _TOOL_VERSION_PARAM_KEYS: tuple[str, ...] = (
@@ -6235,6 +6237,8 @@ def build_valhalla_report_context(
     extra_feature_flags: dict[str, bool] | None = None,
     scan_options: dict[str, Any] | None = None,
     quick_fuzz_output: dict[str, Any] | None = None,
+    persisted_logical_findings: dict[str, Any] | None = None,
+    persisted_occurrences: dict[str, Any] | None = None,
 ) -> ValhallaReportContext:
     """Assemble ValhallaReportContext from already-collected scan report inputs."""
     tid = (tenant_id or "").strip()
@@ -6798,6 +6802,18 @@ def build_valhalla_report_context(
         trivy_run_status = "not_applicable"
         sca_mode = "none"
 
+    from src.reports.coverage_occurrence_context import build_coverage_occurrence_context
+
+    coverage_occurrence_ctx = build_coverage_occurrence_context(
+        tenant_id=tid,
+        scan_id=sid,
+        phase_outputs=phase_outputs,
+        findings=findings,
+        scan_options=scan_options if isinstance(scan_options, dict) else None,
+        persisted_logical_findings=persisted_logical_findings,
+        persisted_occurrences=persisted_occurrences,
+    )
+
     active_injection_scan_options = dict(scan_options) if isinstance(scan_options, dict) else {}
     for ph, od in phase_outputs:
         if (ph or "").lower() != "vuln_analysis" or not isinstance(od, dict):
@@ -6888,6 +6904,7 @@ def build_valhalla_report_context(
         ),
         bounty_plan={},
         burp_config_available=False,
+        coverage_occurrence=coverage_occurrence_ctx,
     )
 
 

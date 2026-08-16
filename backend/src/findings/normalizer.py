@@ -48,6 +48,7 @@ from uuid import UUID, uuid5
 from xml.etree import ElementTree as ET  # noqa: N817 - stdlib alias is conventional
 
 from src.core.observability import record_finding_emitted
+from src.findings.lifecycle_bridge import FindingIngestContext, FindingLifecycleBridge
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -467,9 +468,11 @@ class Normalizer:
     def __init__(
         self,
         *,
-        enricher: "FindingEnricher | None" = None,
+        enricher: FindingEnricher | None = None,
+        lifecycle_bridge: FindingLifecycleBridge | None = None,
     ) -> None:
         self._enricher = enricher
+        self._lifecycle_bridge = lifecycle_bridge or FindingLifecycleBridge()
         self._cve_ids_by_finding: dict[str, list[str]] = {}
 
     def set_enricher(self, enricher: "FindingEnricher | None") -> None:
@@ -533,6 +536,7 @@ class Normalizer:
             if item.cve_ids:
                 cve_bag[str(dto.id)] = [c.upper() for c in item.cve_ids]
             _emit_finding_metric(dto)
+            self._bridge_lifecycle(dto, item, ctx)
         self._cve_ids_by_finding = cve_bag
         return dtos
 
@@ -598,6 +602,46 @@ class Normalizer:
             seen.values(),
             key=lambda f: (f.category.value, f.root_cause_hash, f.parameter or ""),
         )
+
+    def _bridge_lifecycle(
+        self,
+        dto: FindingDTO,
+        item: NormalizedFinding,
+        ctx: NormalizationContext,
+    ) -> None:
+        """Emit logical finding + occurrence after DTO construction (WIRE-006).
+
+        Fail-open: a bridge error must never drop the DTO path.
+        """
+        try:
+            evidence_refs = tuple(str(eid) for eid in dto.evidence_ids)
+            if not evidence_refs and item.raw_payload_hash:
+                evidence_refs = (item.raw_payload_hash,)
+            self._lifecycle_bridge.ingest_dto(
+                dto,
+                context=FindingIngestContext(
+                    engagement_id=str(ctx.scan_id),
+                    asset=item.asset_url or str(ctx.asset_id),
+                    location=item.asset_url or str(ctx.asset_id),
+                    parameter_or_component=item.parameter or "",
+                    root_cause_family=item.category.value,
+                    scanner=ctx.tool_id,
+                    detector_id=ctx.tool_id,
+                    detector_version="1.0.0",
+                    request_signature=item.asset_url or item.root_cause_hash,
+                    evidence=item.root_cause_hash,
+                    title=item.title,
+                    evidence_refs=evidence_refs,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - fail-open; DTO path must survive bridge errors
+            _logger.warning(
+                "normalizer.lifecycle_bridge_failed",
+                extra={
+                    "event": "normalizer_lifecycle_bridge_failed",
+                    "tool_id": ctx.tool_id,
+                },
+            )
 
     def _to_dto(self, item: NormalizedFinding, ctx: NormalizationContext) -> FindingDTO:
         """Lift a :class:`NormalizedFinding` into a strict :class:`FindingDTO`."""
