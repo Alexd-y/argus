@@ -406,13 +406,14 @@ class Settings(BaseSettings):
             return v.strip().lower() in ("true", "1", "yes", "on")
         return bool(v)
 
-    # F-M04: opt-in, fail-closed integrity check for the runtime Jinja2 prompt
-    # templates (src/orchestration/prompts/*.j2). When enabled, the PromptLoader
-    # verifies each template against the committed SHA-256 manifest at init and
-    # raises (aborting the scan) on any drift. Default False → no behaviour
-    # change. Env: ARGUS_PROMPT_INTEGRITY_ENABLED (true/1).
+    # F-M04: fail-closed integrity check for the runtime Jinja2 prompt templates
+    # (src/orchestration/prompts/*.j2). The PromptLoader verifies each template
+    # against the committed SHA-256 manifest at init and raises (aborting the
+    # scan) on any drift. Default True → secure by default; the committed
+    # manifest is kept in sync by the drift-guard test. Operators may opt out on
+    # a dev box with ARGUS_PROMPT_INTEGRITY_ENABLED=false (unset/empty stays on).
     prompt_integrity_enabled: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices(
             "ARGUS_PROMPT_INTEGRITY_ENABLED",
             "prompt_integrity_enabled",
@@ -422,8 +423,10 @@ class Settings(BaseSettings):
     @field_validator("prompt_integrity_enabled", mode="before")
     @classmethod
     def coerce_prompt_integrity_enabled(cls, v: object) -> bool:
+        # Fail-closed: unset/empty resolves to the secure default (enabled). Only
+        # an explicit falsey token disables the check.
         if v is None or v == "":
-            return False
+            return True
         if isinstance(v, bool):
             return v
         if isinstance(v, str):

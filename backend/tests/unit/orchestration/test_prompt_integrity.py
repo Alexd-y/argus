@@ -13,7 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
+from src.core.config import Settings
 from src.orchestration.prompt_integrity import (
     PromptIntegrityError,
     compute_manifest,
@@ -161,3 +161,24 @@ class TestCommittedManifestDriftGuard:
         # Raises PromptIntegrityError if someone edited a template without
         # re-running ``scripts/prompt_templates_manifest.py generate``.
         verify_templates(_REPO_PROMPTS_DIR)
+
+
+class TestPromptIntegritySecureDefault:
+    """T6: prompt-template integrity is fail-closed (enabled) by default."""
+
+    def test_default_is_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("ARGUS_PROMPT_INTEGRITY_ENABLED", raising=False)
+        monkeypatch.delenv("prompt_integrity_enabled", raising=False)
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.prompt_integrity_enabled is True
+
+    def test_empty_env_resolves_to_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("ARGUS_PROMPT_INTEGRITY_ENABLED", "")
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.prompt_integrity_enabled is True
+
+    @pytest.mark.parametrize("raw", ["false", "0", "no", "off", "FALSE"])
+    def test_explicit_falsey_opts_out(self, monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+        monkeypatch.setenv("ARGUS_PROMPT_INTEGRITY_ENABLED", raw)
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.prompt_integrity_enabled is False

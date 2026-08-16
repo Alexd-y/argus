@@ -72,7 +72,7 @@ class PromptLoader:
         self._cache: dict[str, Any] = {}
 
         # F-M04: fail-closed integrity gate. When ``enforce_integrity`` is None
-        # the flag is resolved from settings (default off); an explicit bool is
+        # the flag is resolved from settings (default on); an explicit bool is
         # honoured verbatim so tests can exercise both paths deterministically.
         # A failure here propagates (fail-closed): we refuse to serve prompts
         # that do not match the committed manifest rather than silently render
@@ -103,7 +103,7 @@ class PromptLoader:
         """Resolve whether to run the fail-closed template integrity check.
 
         An explicit value wins; otherwise fall back to
-        ``settings.prompt_integrity_enabled`` (default off).
+        ``settings.prompt_integrity_enabled`` (default on).
         """
         if explicit is not None:
             return explicit

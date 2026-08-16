@@ -8,11 +8,13 @@ Those templates were previously loaded with **no** integrity guarantee
 (F-M04), so a tampered template on a running container would render silently.
 
 This module closes that gap with a SHA-256 manifest committed next to the
-templates. Verification is *opt-in* (``settings.prompt_integrity_enabled``,
-default ``False`` → zero behaviour change) and **fail-closed**: when enabled,
-any drift between the on-disk templates and the manifest raises
-:class:`PromptIntegrityError`, which aborts loader initialisation and therefore
-the scan, rather than proceeding with unverified prompts.
+templates. Verification is **on by default** (``settings.prompt_integrity_enabled``,
+default ``True``) and **fail-closed**: any drift between the on-disk templates
+and the manifest raises :class:`PromptIntegrityError`, which aborts loader
+initialisation and therefore the scan, rather than proceeding with unverified
+prompts. Operators may opt out on a dev box via
+``ARGUS_PROMPT_INTEGRITY_ENABLED=false``; the committed manifest is kept in sync
+with the templates by a drift-guard test.
 
 The manifest is a plain-text digest list (not an Ed25519 signature) because the
 offline private signing key is intentionally not available in the repo. It is
