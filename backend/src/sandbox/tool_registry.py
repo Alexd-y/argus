@@ -45,7 +45,7 @@ from src.sandbox.signing import (
     SignaturesFile,
 )
 from src.sandbox.templating import TemplateRenderError, validate_template
-
+from src.sandbox.tool_aliases import canonical_tool_id
 
 _logger = logging.getLogger(__name__)
 
@@ -207,6 +207,21 @@ class ToolRegistry:
         """Return the descriptor for ``tool_id`` or ``None`` if absent."""
         record = self._registered.get(tool_id)
         return record.descriptor if record is not None else None
+
+    def resolve(self, name: str) -> ToolDescriptor | None:
+        """Return the descriptor for a catalog id **or any known alias** (T7).
+
+        Unlike :meth:`get`, this accepts the short/legacy/operation names that
+        the LLM allowlists, MCP operations, and the vuln->tool map speak
+        (``sqlmap`` -> ``sqlmap_safe``, ``run_ffuf`` -> ``ffuf_dir``,
+        ``enum4linux-ng`` -> ``enum4linux_ng``). Returns ``None`` when the name
+        cannot be reconciled to any registered ``tool_id``.
+        """
+        direct = self.get(name)
+        if direct is not None:
+            return direct
+        canonical = canonical_tool_id(name, self._registered.keys())
+        return self.get(canonical) if canonical is not None else None
 
     def get_adapter(self, tool_id: str) -> ToolAdapter | None:
         """Return the adapter instance for ``tool_id`` or ``None`` if absent."""
