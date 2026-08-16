@@ -93,10 +93,12 @@ _SOURCE_IMAGE_LABEL: Final[str] = "argus-kali-web:latest"
 
 # tool_to_package.json schema version pin. History: 1.1.0 → 1.2.0
 # (ARG-058 migration) → 1.3.0 (Shannon binary profile) → 1.4.0 (P0-T1
-# tool-descriptor integration). The bump signals to JSON consumers that
-# the ``$comment`` / ``generated_by`` / per-profile ``purpose`` /
-# ``tools`` semantics changed.
-_EXPECTED_SCHEMA_VERSION: Final[str] = "1.4.0"
+# tool-descriptor integration) → 1.5.0 (P0-T2: corrected argus-kali-binary
+# dockerfile_present true→false — it is a logical alias resolving to
+# argus-kali-full via resolve_image, not a built image). The bump signals to
+# JSON consumers that the ``$comment`` / ``generated_by`` / per-profile
+# ``purpose`` / ``dockerfile_present`` semantics changed.
+_EXPECTED_SCHEMA_VERSION: Final[str] = "1.5.0"
 
 # YAML top-level keys that every migrated descriptor must STILL carry —
 # proves the worker only touched the ``image`` field. Derived from the
@@ -403,7 +405,9 @@ def test_arg058_schema_version_bumped(
     History: 1.1.0 → 1.2.0 (ARG-058 dual-listed migration) → 1.3.0
     (Shannon Integration binary profile) → 1.4.0 (P0-T1: added
     commix/curl/dig/host/whois; pruned non-descriptor fuzzing entries
-    from the binary profile tool_id list).
+    from the binary profile tool_id list) → 1.5.0 (P0-T2: corrected
+    argus-kali-binary dockerfile_present true→false; it is an alias that
+    resolves to argus-kali-full at runtime, not a built image).
 
     The bump is the operator-visible signal that the JSON shape
     semantics changed (the ``$comment``, ``generated_by``, and

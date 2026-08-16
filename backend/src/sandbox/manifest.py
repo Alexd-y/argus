@@ -24,6 +24,7 @@ shape is shared, never any cluster I/O.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Final
 from uuid import UUID
@@ -35,7 +36,6 @@ from src.sandbox.network_policies import (
     render_networkpolicy_manifest,
 )
 from src.sandbox.templating import render_argv
-
 
 # ---------------------------------------------------------------------------
 # Constants — non-root user/group used for every sandbox pod.
@@ -49,10 +49,24 @@ _NON_ROOT_GID: Final[int] = 65_532
 _TMP_VOLUME_SIZE: Final[str] = "256Mi"
 _OUT_VOLUME_SIZE: Final[str] = "1Gi"
 
+logger = logging.getLogger(__name__)
+
 # Public registry prefix used when a descriptor's image is bare ("nmap:7.94"
 # without a host). Centralised here so a future task can swap the registry
 # without touching every adapter call site.
 _DEFAULT_REGISTRY: Final[str] = "ghcr.io/argus"
+
+# Logical image aliases that have NO Dockerfile of their own and must fall back
+# to a concrete profile at resolution time. ``argus-kali-binary`` is such an
+# alias: its five §4.18 tools (apktool, binwalk, jadx, mobsf_api, radare2_info)
+# declare ``image: argus-kali-binary:latest`` for cohort clarity, but only the
+# monolithic ``argus-kali-full`` image is actually built (it bundles apktool /
+# binwalk / radare2 / JRE — see sandbox/images/argus-kali-full/Dockerfile).
+# Resolving the alias here keeps the descriptors honest about intent while the
+# runtime pulls an image that exists. See infra/sandbox/images/tool_to_package.json.
+_IMAGE_ALIAS_FALLBACK: Final[dict[str, str]] = {
+    "argus-kali-binary": "argus-kali-full",
+}
 
 # K8s memory units (binary IEC + decimal SI). Used by _quantity_to_request.
 _MEM_QUANTITY_RE: Final[re.Pattern[str]] = re.compile(
@@ -60,9 +74,7 @@ _MEM_QUANTITY_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 # K8s CPU units: "500m", "2", "2.5". Matches integer + millicore + decimal.
-_CPU_QUANTITY_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?P<value>\d+(?:\.\d+)?)(?P<suffix>m?)$"
-)
+_CPU_QUANTITY_RE: Final[re.Pattern[str]] = re.compile(r"^(?P<value>\d+(?:\.\d+)?)(?P<suffix>m?)$")
 
 
 # ---------------------------------------------------------------------------
@@ -118,8 +130,7 @@ def build_container_security_context() -> dict[str, Any]:
 def _validate_cpu_quantity(value: str) -> None:
     if not _CPU_QUANTITY_RE.fullmatch(value):
         raise ValueError(
-            f"cpu quantity {value!r} is not a valid k8s value "
-            "(expected '500m', '1', '2.5')"
+            f"cpu quantity {value!r} is not a valid k8s value " "(expected '500m', '1', '2.5')"
         )
 
 
@@ -251,17 +262,43 @@ def build_pod_labels(tool_job: ToolJob) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def _apply_image_alias_fallback(image: str) -> str:
+    """Remap logical image aliases (:data:`_IMAGE_ALIAS_FALLBACK`) to a real image.
+
+    The alias ``repo`` part is matched exactly; any ``:tag`` is preserved. A
+    warning is logged on every remap so operators can see that a descriptor's
+    declared image is not the one actually pulled. Non-alias images pass through
+    unchanged.
+    """
+    repo, sep, tag = image.partition(":")
+    target = _IMAGE_ALIAS_FALLBACK.get(repo)
+    if target is None:
+        return image
+    resolved = f"{target}{sep}{tag}" if sep else target
+    logger.warning(
+        "sandbox image alias %r has no Dockerfile; falling back to %r",
+        image,
+        resolved,
+        extra={
+            "event": "image_alias_fallback",
+            "requested_image": image,
+            "resolved_image": resolved,
+        },
+    )
+    return resolved
+
+
 def resolve_image(descriptor: ToolDescriptor) -> str:
     """Return the fully-qualified image reference for ``descriptor``.
 
-    If the descriptor's image already contains a registry host (``host/path``),
-    it is returned verbatim. Bare references (``nmap:7.94``) get prefixed with
+    Logical aliases without a Dockerfile (e.g. ``argus-kali-binary``) are first
+    remapped to a concrete image via :func:`_apply_image_alias_fallback`. If the
+    resulting image already contains a registry host (``host/path``), it is
+    returned verbatim. Bare references (``nmap:7.94``) get prefixed with
     :data:`_DEFAULT_REGISTRY`.
     """
-    image = descriptor.image
-    if "/" in image and (
-        "." in image.split("/", 1)[0] or ":" in image.split("/", 1)[0]
-    ):
+    image = _apply_image_alias_fallback(descriptor.image)
+    if "/" in image and ("." in image.split("/", 1)[0] or ":" in image.split("/", 1)[0]):
         # Looks like "registry.example.com/path:tag" — use as-is.
         return image
     if "/" in image:

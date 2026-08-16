@@ -240,6 +240,27 @@ def test_resolve_image_handles_path_only_reference() -> None:
     assert resolve_image(desc) == "ghcr.io/argus/nmap:7.94"
 
 
+def test_resolve_image_falls_back_binary_alias_to_full(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``argus-kali-binary`` has no Dockerfile; the §4.18 tools must resolve to
+    the monolithic ``argus-kali-full`` image (which bundles apktool / binwalk /
+    radare2 / JRE) with a warning so operators see the remap."""
+    desc = _make_descriptor("argus-kali-binary:latest")
+    with caplog.at_level("WARNING"):
+        resolved = resolve_image(desc)
+    assert resolved == "ghcr.io/argus/argus-kali-full:latest"
+    assert any(
+        getattr(rec, "event", None) == "image_alias_fallback" for rec in caplog.records
+    ), "expected an image_alias_fallback warning record"
+
+
+def test_resolve_image_alias_fallback_preserves_missing_tag() -> None:
+    """A tagless alias remaps the repo only — no phantom ``:latest`` is added."""
+    desc = _make_descriptor("argus-kali-binary")
+    assert resolve_image(desc) == "ghcr.io/argus/argus-kali-full"
+
+
 # ---------------------------------------------------------------------------
 # Argv rendering (delegates to templating)
 # ---------------------------------------------------------------------------
