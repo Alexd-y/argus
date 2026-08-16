@@ -12,8 +12,10 @@ list of payload strings handed to a sandboxed validator. It enforces:
 * All template placeholders are present in the supplied parameter map.
   Missing placeholders raise :class:`PayloadBuildError`.
 * Every payload is materialised through the family's declared mutation
-  list and the *first* declared encoding pipeline (the LLM picks the
-  pipeline by name in :attr:`PayloadBuildRequest.encoding_pipeline`).
+  list and one declared encoding pipeline. The pipeline is chosen by, in
+  order of precedence: an explicit :attr:`PayloadBuildRequest.encoding_pipeline`;
+  the :attr:`PayloadBuildRequest.context` ``sink_type`` (mapped to the best
+  pipeline the family declares); otherwise the first-declared pipeline.
 * The output is deterministic given a stable correlation key — the same
   ``(scan_id, family_id, encoding_pipeline)`` triple always yields the
   same :class:`PayloadBundle`. This is what lets the validator replay an
@@ -41,6 +43,7 @@ from pydantic import (
     StrictStr,
 )
 
+from src.payloads.context import PayloadContext, select_encoding_pipeline
 from src.payloads.encoders import apply_pipeline
 from src.payloads.mutations import MutationContext, apply_mutations
 from src.payloads.registry import (
@@ -50,7 +53,6 @@ from src.payloads.registry import (
     PayloadRegistry,
 )
 from src.policy.preflight import PreflightDeniedError
-
 
 if TYPE_CHECKING:
     # Concrete types used only for static analysis. The runtime constructor
@@ -155,6 +157,13 @@ class PayloadBuildRequest(BaseModel):
     so the same hypothesis re-uses the same bundle bytes across retries.
     ``parameters`` is the placeholder context substituted into each
     seed template.
+
+    ``context`` supplies structured placeholder + routing data
+    (:class:`~src.payloads.context.PayloadContext`). When present its projected
+    parameters seed the placeholder map (explicit ``parameters`` still win on
+    key collisions) and its ``sink_type`` selects the encoding pipeline whenever
+    ``encoding_pipeline`` is left unset — replacing the previous hardcoded
+    ``url_only`` choice that broke families declaring only ``identity``.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -164,6 +173,7 @@ class PayloadBuildRequest(BaseModel):
     encoding_pipeline: StrictStr | None = Field(default=None, max_length=64)
     approval_id: StrictStr | None = Field(default=None, max_length=128)
     parameters: dict[StrictStr, StrictStr] = Field(default_factory=dict)
+    context: PayloadContext | None = Field(default=None)
     max_payloads: StrictInt = Field(default=_DEFAULT_MAX_PAYLOADS, ge=1, le=1024)
 
 
@@ -243,14 +253,15 @@ class PayloadBuilder:
                 "approval_id must be omitted"
             )
 
-        pipeline = self._resolve_pipeline(family, request.encoding_pipeline)
+        pipeline = self._resolve_pipeline(family, self._select_pipeline_name(family, request))
+        effective_parameters = self._effective_parameters(request)
 
         rendered: list[RenderedPayload] = []
         seed_base = self._derive_seed(request.correlation_key, family.family_id)
         max_payloads = min(request.max_payloads, len(family.payloads))
 
         for index, entry in enumerate(family.payloads[:max_payloads]):
-            substituted = self._substitute(entry.template, request.parameters)
+            substituted = self._substitute(entry.template, effective_parameters)
             ctx = MutationContext(
                 seed=seed_base ^ index,
                 family_id=family.family_id,
@@ -278,9 +289,7 @@ class PayloadBuilder:
             )
 
         if not rendered:
-            raise PayloadBuildError(
-                f"family {family.family_id!r} produced an empty bundle"
-            )
+            raise PayloadBuildError(f"family {family.family_id!r} produced an empty bundle")
 
         manifest_hash = self._compute_manifest_hash(rendered, pipeline.name)
         return PayloadBundle(
@@ -326,9 +335,36 @@ class PayloadBuilder:
         return decision
 
     @staticmethod
-    def _resolve_pipeline(
-        family: PayloadFamily, requested: str | None
-    ) -> "_PipelineSnapshot":
+    def _select_pipeline_name(family: PayloadFamily, request: PayloadBuildRequest) -> str | None:
+        """Resolve the pipeline name to use, honouring precedence.
+
+        1. An explicit ``request.encoding_pipeline`` always wins.
+        2. Otherwise, if a context is supplied, its ``sink_type`` selects the
+           best pipeline the family actually declares (never an unknown one).
+        3. Otherwise ``None`` → the family default (first-declared) pipeline.
+        """
+        if request.encoding_pipeline is not None:
+            return request.encoding_pipeline
+        if request.context is not None:
+            available = (p.name for p in family.encodings)
+            return select_encoding_pipeline(available, request.context.sink_type)
+        return None
+
+    @staticmethod
+    def _effective_parameters(request: PayloadBuildRequest) -> dict[str, str]:
+        """Merge context-projected parameters with explicit request parameters.
+
+        Explicit ``request.parameters`` override context-derived values on key
+        collisions, keeping callers that pass parameters directly authoritative.
+        """
+        if request.context is None:
+            return dict(request.parameters)
+        merged = request.context.to_parameters()
+        merged.update(request.parameters)
+        return merged
+
+    @staticmethod
+    def _resolve_pipeline(family: PayloadFamily, requested: str | None) -> "_PipelineSnapshot":
         if not family.encodings:
             return _PipelineSnapshot(name="identity", stages=())
         by_name = {p.name: p for p in family.encodings}
@@ -349,9 +385,7 @@ class PayloadBuilder:
         def _replace(match: re.Match[str]) -> str:
             name = match.group(1)
             if name not in parameters:
-                raise PayloadBuildError(
-                    f"missing parameter {name!r} for payload template"
-                )
+                raise PayloadBuildError(f"missing parameter {name!r} for payload template")
             value = parameters[name]
             if not isinstance(value, str):
                 raise PayloadBuildError(
@@ -368,9 +402,7 @@ class PayloadBuilder:
         return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
     @staticmethod
-    def _compute_manifest_hash(
-        rendered: list[RenderedPayload], pipeline_name: str
-    ) -> str:
+    def _compute_manifest_hash(rendered: list[RenderedPayload], pipeline_name: str) -> str:
         canonical = json.dumps(
             {
                 "pipeline": pipeline_name,

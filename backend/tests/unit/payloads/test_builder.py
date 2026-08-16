@@ -16,15 +16,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from src.payloads.builder import (
     PayloadApprovalRequiredError,
+    PayloadBuilder,
     PayloadBuildError,
     PayloadBuildRequest,
-    PayloadBuilder,
     PayloadBundle,
     RenderedPayload,
 )
+from src.payloads.context import PayloadContext, SinkType
 from src.payloads.registry import PayloadRegistry
 
 
@@ -212,9 +212,7 @@ def test_missing_parameter_raises(builder: PayloadBuilder) -> None:
 
 def test_unknown_family_id_raises(builder: PayloadBuilder) -> None:
     with pytest.raises(PayloadBuildError, match="unknown payload family_id"):
-        builder.build(
-            PayloadBuildRequest(family_id="ghost", correlation_key="k", parameters={})
-        )
+        builder.build(PayloadBuildRequest(family_id="ghost", correlation_key="k", parameters={}))
 
 
 # ---------------------------------------------------------------------------
@@ -272,3 +270,89 @@ def test_payload_indices_are_zero_based_and_dense(builder: PayloadBuilder) -> No
         )
     )
     assert [p.index for p in bundle.payloads] == list(range(len(bundle.payloads)))
+
+
+# ---------------------------------------------------------------------------
+# PayloadContext integration (Backlog T3/T4)
+# ---------------------------------------------------------------------------
+
+
+def test_context_supplies_template_placeholders(builder: PayloadBuilder) -> None:
+    # No explicit ``parameters`` — the context must resolve {param} and {canary}.
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            context=PayloadContext(parameter_name="uid", canary="cnry42"),
+        )
+    )
+    # The family declares a ``case_flip`` mutation, so compare case-insensitively.
+    joined = " ".join(p.payload for p in bundle.payloads).lower()
+    assert "uid" in joined
+    assert "cnry42" in joined
+    # GENERIC sink (default) keeps the family default pipeline.
+    assert bundle.encoding_pipeline == "identity"
+
+
+def test_context_sink_type_selects_url_only(builder: PayloadBuilder) -> None:
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            context=PayloadContext(sink_type=SinkType.QUERY, parameter_name="id", canary="x"),
+        )
+    )
+    assert bundle.encoding_pipeline == "url_only"
+    assert any("%" in p.payload for p in bundle.payloads)
+
+
+def test_context_json_sink_keeps_identity(builder: PayloadBuilder) -> None:
+    # demo_sqli declares url_only, but a JSON sink must not percent-encode.
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            context=PayloadContext(sink_type=SinkType.JSON, parameter_name="id", canary="x"),
+        )
+    )
+    assert bundle.encoding_pipeline == "identity"
+
+
+def test_explicit_pipeline_overrides_context_sink_type(builder: PayloadBuilder) -> None:
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            encoding_pipeline="url_then_b64",
+            context=PayloadContext(sink_type=SinkType.QUERY, parameter_name="id", canary="x"),
+        )
+    )
+    assert bundle.encoding_pipeline == "url_then_b64"
+
+
+def test_explicit_parameters_override_context(builder: PayloadBuilder) -> None:
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            parameters={"canary": "explicit"},
+            context=PayloadContext(parameter_name="id", canary="from_ctx"),
+        )
+    )
+    # The family declares a ``case_flip`` mutation, so compare case-insensitively.
+    joined = " ".join(p.payload for p in bundle.payloads).lower()
+    assert "explicit" in joined
+    assert "from_ctx" not in joined
+
+
+def test_context_build_is_deterministic(builder: PayloadBuilder) -> None:
+    def _build() -> PayloadBundle:
+        return builder.build(
+            PayloadBuildRequest(
+                family_id="demo_sqli",
+                correlation_key="scan-7|hyp-2",
+                context=PayloadContext(sink_type=SinkType.QUERY, parameter_name="id", canary="c"),
+            )
+        )
+
+    assert _build().manifest_hash == _build().manifest_hash
