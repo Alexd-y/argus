@@ -82,8 +82,10 @@ JSON_OBJECT_WEB_VULN_TOOL_IDS: Final[tuple[str, ...]] = ("nikto", "wapiti")
 # (its dispatch contract now lives under tests/integration/sandbox/parsers/
 # test_arg029_dispatch.py); the remaining three stay deferred to Cycle
 # 4 (see ai_docs/develop/issues/ISS-cycle4-carry-over.md, ARG-032).
+# arachni GRADUATED: it now maps to ``parse_sqli_probe_text`` in
+# ``_DEFAULT_TOOL_PARSERS`` (registered), so it is no longer deferred. skipfish
+# and w3af_console remain genuinely parser-less (deferred) and stay pinned here.
 DEFERRED_WEB_VULN_TOOL_IDS: Final[tuple[str, ...]] = (
-    "arachni",
     "skipfish",
     "w3af_console",
 )

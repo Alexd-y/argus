@@ -76,11 +76,13 @@ CMS_JSON_TOOL_IDS: Final[tuple[str, ...]] = ("wpscan", "droopescan")
 
 # §4.7 tools that emit *text* output (``parse_strategy=text_lines``) and
 # therefore have NO JSON_OBJECT registration. Pinned explicitly.
-TEXT_LINES_CMS_TOOL_IDS: Final[tuple[str, ...]] = (
-    "joomscan",
-    "cmsmap",
-    "magescan",
-)
+# These §4.7 CMS scanners GRADUATED: each now ships a real ``text_lines`` parser
+# (``parse_discovery_text_lines`` in ``_DEFAULT_TOOL_PARSERS``), so they are no
+# longer unmapped — a JSON_OBJECT misroute finds the registered tool and returns
+# [] rather than the ARG-020 heartbeat. Removed from this negative ratchet
+# (positive text_lines routing is covered by the discovery-parser tests).
+# Empty tuple → this guard is now inert by design.
+TEXT_LINES_CMS_TOOL_IDS: Final[tuple[str, ...]] = ()
 
 
 # §4.7 tools that wrap nuclei templates (``parse_strategy=nuclei_jsonl``)

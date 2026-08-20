@@ -102,16 +102,17 @@ SEMGREP_TOOL_IDS: Final[tuple[str, ...]] = ("semgrep",)
 # The remaining entries are the §4.14/§4.15 tools whose parsers stay
 # deferred to Cycle 4 (see ``ai_docs/develop/issues/ISS-cycle4-carry-over.md``,
 # ARG-032 — heartbeat parsers batch 4).
+# clairvoyance + grpcurl_probe GRADUATED (ARG-050 P1 batch: parse_clairvoyance /
+# parse_grpcurl_probe now in _DEFAULT_TOOL_PARSERS); kube_hunter maps to
+# parse_kube_hunter_json. All three are registered, so they are no longer
+# deferred. graphw00f / inql / scoutsuite / pacu remain parser-less and stay.
 DEFERRED_ARG018_TOOL_IDS: Final[tuple[str, ...]] = (
     # §4.14 API/GraphQL (parsers deferred to Cycle 4)
     "graphw00f",
-    "clairvoyance",
     "inql",
-    "grpcurl_probe",
     # §4.15 Cloud / IaC / container (parsers deferred to Cycle 4)
     "scoutsuite",
     "pacu",
-    "kube_hunter",
 )
 
 

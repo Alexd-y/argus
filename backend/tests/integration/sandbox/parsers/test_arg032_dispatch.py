@@ -720,7 +720,7 @@ def test_arg032_does_not_drop_prior_cycle_registrations() -> None:
 
 def test_registered_count_matches_catalog_ratchet() -> None:
     """Pinned count must match ``MAPPED_PARSER_COUNT`` in test_tool_catalog_coverage."""
-    assert len(get_registered_tool_parsers()) == 118
+    assert len(get_registered_tool_parsers()) == 137
 
 
 # ---------------------------------------------------------------------------

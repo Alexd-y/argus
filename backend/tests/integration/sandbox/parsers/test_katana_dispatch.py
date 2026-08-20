@@ -78,13 +78,13 @@ CRAWLER_JSON_TOOL_IDS: Final[tuple[str, ...]] = ("katana", "gospider", "gau")
 # explicitly so the day a text_lines parser ships and these slots silently
 # move into ``_DEFAULT_TOOL_PARSERS`` (or, worse, get cross-wired into
 # JSON_LINES) the diff lights up in CI immediately.
-TEXT_LINES_CRAWLER_TOOL_IDS: Final[tuple[str, ...]] = (
-    "hakrawler",
-    "waybackurls",
-    "linkfinder",
-    "subjs",
-    "secretfinder",
-)
+# These §4.6 crawlers GRADUATED: each now ships a real ``text_lines`` parser
+# (``parse_discovery_text_lines`` in ``_DEFAULT_TOOL_PARSERS``), so they are no
+# longer unmapped — a JSON_LINES misroute finds the registered tool and returns
+# [] rather than the ARG-020 heartbeat. Removed from this negative ratchet
+# (positive text_lines routing is covered by the discovery-parser tests).
+# Empty tuple → this guard is now inert by design.
+TEXT_LINES_CRAWLER_TOOL_IDS: Final[tuple[str, ...]] = ()
 
 
 def _katana_record(endpoint: str, *, method: str = "GET", status: int = 200) -> bytes:

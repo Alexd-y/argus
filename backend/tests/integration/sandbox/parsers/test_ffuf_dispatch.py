@@ -102,10 +102,13 @@ FFUF_FAMILY_TOOL_IDS: Final[tuple[str, ...]] = (
 # explicitly so the day a text_lines parser ships and these slots silently
 # move into ``_DEFAULT_TOOL_PARSERS`` (or, worse, get cross-wired into
 # JSON_OBJECT) the diff lights up in CI immediately.
-TEXT_LINES_TOOL_IDS_UNMAPPED_FROM_JSON_OBJECT: Final[tuple[str, ...]] = (
-    "gobuster_dir",
-    "paramspider",
-)
+# gobuster_dir / paramspider GRADUATED: they now ship a real ``text_lines``
+# parser (``parse_discovery_text_lines`` in ``_DEFAULT_TOOL_PARSERS``), so they
+# are no longer "unmapped from JSON_OBJECT" — a JSON_OBJECT misroute finds the
+# registered tool and returns [] rather than the ARG-020 heartbeat. Removed from
+# this negative ratchet accordingly (positive text_lines routing is covered by
+# the discovery-parser tests). Empty tuple → this guard is now inert by design.
+TEXT_LINES_TOOL_IDS_UNMAPPED_FROM_JSON_OBJECT: Final[tuple[str, ...]] = ()
 
 
 def _ffuf_envelope(*records: dict[str, Any]) -> bytes:
