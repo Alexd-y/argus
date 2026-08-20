@@ -203,7 +203,7 @@ jobs:
           with open(path, "r", encoding="utf-8") as fh:
               doc = json.load(fh)
           assert doc.get("bomFormat") == "CycloneDX", f"unexpected bomFormat: {doc.get('bomFormat')}"
-          assert doc.get("specVersion") in {"1.5", "1.6"}, f"unsupported specVersion: {doc.get('specVersion')}"
+          assert doc.get("specVersion") in {"1.5", "1.6", "1.7"}, f"unsupported specVersion: {doc.get('specVersion')}"
           assert isinstance(doc.get("components"), list), "components must be a list"
           assert len(doc["components"]) > 0, "SBOM has zero components — fallback misfired?"
           print(f"OK: SBOM at {path} is CycloneDX {doc['specVersion']} with {len(doc['components'])} components.")
@@ -330,6 +330,24 @@ jobs:
             echo "─── ${profile}: SBOM head ───────────────────────"
             docker run --rm --entrypoint cat "$IMAGE" /usr/share/doc/sbom.cdx.json | head -c 256
             echo
+          done
+
+      - name: Validate tool coverage per image (validate_tools.sh)
+        # Runs the build-time tool-coverage gate inside each freshly built GHCR
+        # image on the clean runner (bypasses the local Meraki content filter that
+        # blocks Kali repos). Non-blocking: some tools are best-effort (release/
+        # clone/pip) so a missing binary reports rather than fails; the exact
+        # ok/missing counts land in this log for the repin coverage record.
+        continue-on-error: true
+        run: |
+          for profile in web cloud browser full recon network; do
+            IMAGE="ghcr.io/${{ steps.refs.outputs.owner }}/argus-kali-${profile}:${GITHUB_SHA}"
+            echo "═══ validate_tools: ${profile} ══════════════════════════"
+            docker run --rm \
+              -v "$PWD/infra/validate_tools.sh:/tmp/v.sh:ro" \
+              -v "$PWD/infra/sandbox/expected_executables.json:/tmp/e.json:ro" \
+              --entrypoint sh "$IMAGE" \
+              /tmp/v.sh --manifest /tmp/e.json --profile "argus-kali-${profile}" || true
           done
 
       - name: Seed minimal infra/.env for compose
