@@ -276,7 +276,7 @@ jobs:
         # fails the job. Suppressions live in .trivyignore at repo root and
         # MUST carry a justification + expiry date per the policy in
         # docs/sandbox-images.md §3.
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ steps.refs.outputs.image_ref }}
           format: table
