@@ -232,6 +232,21 @@ COPY --chmod=0755 _shared/generate_sbom.sh /usr/local/bin/generate_sbom.sh
 # validate_tools list). Same /usr/local/bin target; fail-safe on missing backends.
 COPY --chmod=0755 _shared/bin/ /usr/local/bin/
 
+# prowler needs Python <3.14 but the Kali base ships 3.14, so the builder's
+# `pip install prowler` is skipped. Recover it in an isolated Python 3.12 tool
+# env via uv (standalone python-build-standalone download — no apt), world-
+# readable so the non-root runtime user (65532) can execute it. Launcher lands
+# on PATH via UV_TOOL_BIN_DIR. Best-effort: a fetch/resolve hiccup leaves prowler
+# absent rather than failing the image.
+ENV UV_TOOL_DIR=/opt/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin \
+    UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN ( curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+      && uv python install 3.12 \
+      && uv tool install --python 3.12 prowler \
+      && chmod -R a+rX /opt/uv /usr/local/bin/prowler ) \
+    || echo "WARN: prowler via uv (py3.12) install failed (best-effort; guarded at runtime)"
+
 # Bake SBOM into the image — this image ships syft, so the wrapper picks
 # up the real syft binary and emits a complete CycloneDX 1.5 doc.
 RUN /usr/local/bin/generate_sbom.sh /usr/share/doc/sbom.cdx.json \

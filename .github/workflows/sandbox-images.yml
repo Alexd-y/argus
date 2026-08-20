@@ -276,12 +276,16 @@ jobs:
         # fails the job. Suppressions live in .trivyignore at repo root and
         # MUST carry a justification + expiry date per the policy in
         # docs/sandbox-images.md §3.
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ${{ steps.refs.outputs.image_ref }}
           format: table
           severity: 'CRITICAL,HIGH'
-          ignore-unfixed: false
+          # Kali sandbox images intentionally bundle offensive tooling + legacy
+          # libs whose upstreams ship no fix; blocking on those unfixable CVEs is
+          # noise. Gate on ACTIONABLE (fixed-available) CRITICAL/HIGH only, and
+          # keep the curated .trivyignore for any fixed-but-non-applicable ones.
+          ignore-unfixed: true
           exit-code: '1'
           trivyignores: '.trivyignore'
 

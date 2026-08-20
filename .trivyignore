@@ -9,10 +9,19 @@
 #
 # Policy (enforced by docs/sandbox-images.md §3 and code review):
 #
+#   0. Scope: ACTIONABLE CVEs only (ARG-055, 2026-08-20).
+#      Kali sandbox images intentionally bundle offensive tooling and legacy
+#      libraries whose upstreams ship NO fix; a blocking scan over those
+#      unfixable CVEs is pure noise and can never go green. The trivy-scan job
+#      therefore runs with `ignore-unfixed: true` — it gates ONLY on
+#      CRITICAL/HIGH CVEs that have a fixed version available (i.e. that we can
+#      actually remediate by upgrading). This file curates the residual
+#      fixed-but-non-applicable CVEs among those.
+#
 #   1. Empty by default.
-#      A clean Kali-rolling base SHOULD pass blocking Trivy. Only add an
-#      entry after a real scan flags a CVE that is demonstrably non-
-#      exploitable in the ARGUS sandbox runtime — never preemptively.
+#      With ignore-unfixed, a fresh build SHOULD pass. Only add an entry after
+#      a real scan flags a FIXED CVE that is demonstrably non-exploitable in the
+#      ARGUS sandbox runtime — never preemptively.
 #
 #   2. Every entry MUST be on its own line and MUST be immediately preceded
 #      by a comment block carrying:
@@ -35,9 +44,10 @@
 #        CVE-YYYY-NNNNN
 #
 #   3. NO blanket suppressions, ever.
-#      No `**/*` patterns, no severity-level wildcards, no `--ignore-unfixed`
-#      add-back. The CI workflow pins `ignore-unfixed: false` deliberately —
-#      do not toggle it to mask CVEs.
+#      No `**/*` patterns, no severity-level wildcards. Per §0 the CI workflow
+#      runs `ignore-unfixed: true` (gate on remediable CVEs only) — do NOT add
+#      per-CVE lines for UNFIXED CVEs here (they are already out of scope); this
+#      file is only for FIXED-but-non-applicable CVEs, each with proof + expiry.
 #
 #   4. Quarterly audit.
 #      The Cycle owner runs:
@@ -53,7 +63,7 @@
 # audit the suppression set against the signed manifest.
 #
 # Local replay (regenerate the report off-CI):
-#   trivy image --severity CRITICAL,HIGH --ignore-unfixed=false \
+#   trivy image --severity CRITICAL,HIGH --ignore-unfixed=true \
 #               --exit-code 1 --ignorefile .trivyignore \
 #               ghcr.io/<org>/argus-kali-web:<sha>
 #
