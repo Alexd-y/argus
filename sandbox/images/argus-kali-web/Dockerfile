@@ -335,6 +335,14 @@ RUN for b in arachni arachni_reporter; do \
       fi; \
     done; true
 
+# Catalog-name reconciliation: Kali ships the testssl binary as `testssl` (not
+# `testssl.sh`), and pip installs jarm's CLI as `jarm.py` — the signed catalog
+# expects `testssl.sh` / `jarm`. Symlink both onto PATH so validate_tools + the
+# adapters resolve them. No-op if the source is absent (best-effort jarm).
+RUN [ -x /usr/bin/testssl ] && ln -sf /usr/bin/testssl /usr/local/bin/testssl.sh || true; \
+    [ -f /home/argus/.local/bin/jarm.py ] && ln -sf /home/argus/.local/bin/jarm.py /usr/local/bin/jarm || true; \
+    true
+
 # Shared helpers (healthcheck + SBOM generator). Owned by root, executable
 # for everyone — no SUID, no group write.
 COPY --chmod=0755 _shared/healthcheck.sh   /usr/local/bin/healthcheck.sh
