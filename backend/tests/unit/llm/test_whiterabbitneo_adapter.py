@@ -1,13 +1,14 @@
 """Unit tests for WhiteRabbitNeo adapter."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from src.llm.whiterabbitneo_adapter import (
+    WRB_DEFAULT_MAX_CONTEXT_TOKENS,
+    WRB_DEFAULT_MODEL,
     WhiteRabbitNeoAdapter,
     get_whiterabbitneo_adapter,
     reset_whiterabbitneo_adapter,
-    WRB_DEFAULT_MODEL,
 )
 
 
@@ -118,6 +119,49 @@ class TestWhiteRabbitNeoAdapter:
         assert usage["completion_tokens"] == 50
         assert usage["total_tokens"] == 150
 
+    def test_prompt_char_budget_reserves_completion(self):
+        adapter = WhiteRabbitNeoAdapter(base_url="http://wr:8000/v1", max_context_tokens=32768)
+        # (32768 - 4096) * 3 chars/token
+        assert adapter._prompt_char_budget(4096) == (32768 - 4096) * 3
+        # Budget is far larger than the old blunt 8 KiB cut.
+        assert adapter._prompt_char_budget(4096) > 8192
+
+    def test_prompt_char_budget_has_token_floor(self):
+        # A huge max_tokens must not starve the prompt below the floor.
+        adapter = WhiteRabbitNeoAdapter(base_url="http://wr:8000/v1", max_context_tokens=4096)
+        assert adapter._prompt_char_budget(1_000_000) == 1024 * 3
+
+    @pytest.mark.asyncio
+    async def test_call_with_usage_truncates_to_registry_budget(self):
+        # Small context → small budget; an oversized prompt is trimmed to it.
+        adapter = WhiteRabbitNeoAdapter(base_url="http://wr:8000/v1", max_context_tokens=4096)
+        budget = adapter._prompt_char_budget(4096)  # 1024 * 3 = 3072
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        }
+
+        with patch(
+            "httpx.AsyncClient.post",
+            new=AsyncMock(return_value=mock_response),
+        ) as mock_post:
+            await adapter.call_with_usage("A" * 50_000)
+
+        sent_user = mock_post.call_args[1]["json"]["messages"][-1]["content"]
+        assert len(sent_user) <= budget
+        assert len(sent_user) < 50_000
+
+    def test_factory_wires_registry_context_window(self):
+        reset_whiterabbitneo_adapter()
+        try:
+            adapter = get_whiterabbitneo_adapter()
+            assert adapter._max_context_tokens == WRB_DEFAULT_MAX_CONTEXT_TOKENS
+        finally:
+            reset_whiterabbitneo_adapter()
+
     @pytest.mark.asyncio
     async def test_health_check_available(self):
         adapter = WhiteRabbitNeoAdapter(base_url="http://wr:8000/v1")
@@ -139,6 +183,7 @@ class TestWhiteRabbitNeoAdapter:
         adapter = WhiteRabbitNeoAdapter(base_url="")
         # health_check is async, run synchronously
         import asyncio
+
         result = asyncio.run(adapter.health_check())
         assert result["status"] == "unconfigured"
 

@@ -102,6 +102,8 @@ from src.sandbox.parsers.findomain_parser import parse_findomain
 from src.sandbox.parsers.gitleaks_parser import parse_gitleaks_json
 from src.sandbox.parsers.gowitness_parser import parse_gowitness
 from src.sandbox.parsers.graphql_cop_parser import parse_graphql_cop_json
+from src.sandbox.parsers.graphql_schema_parser import parse_clairvoyance
+from src.sandbox.parsers.grpcurl_probe_parser import parse_grpcurl_probe
 from src.sandbox.parsers.grype_parser import parse_grype_json
 from src.sandbox.parsers.hash_analyzer_parser import parse_hash_analyzer_json
 from src.sandbox.parsers.hashcat_parser import parse_hashcat
@@ -109,6 +111,7 @@ from src.sandbox.parsers.hashid_parser import parse_hashid_json
 from src.sandbox.parsers.host_parser import parse_host
 from src.sandbox.parsers.httpx_parser import parse_httpx_jsonl
 from src.sandbox.parsers.hydra_parser import parse_hydra
+from src.sandbox.parsers.ike_scan_parser import parse_ike_scan
 from src.sandbox.parsers.impacket_secretsdump_parser import (
     parse_impacket_secretsdump,
 )
@@ -152,9 +155,14 @@ from src.sandbox.parsers.rpcclient_enum_parser import parse_rpcclient_enum
 from src.sandbox.parsers.semgrep_parser import parse_semgrep_json
 from src.sandbox.parsers.smbclient_check_parser import parse_smbclient_check
 from src.sandbox.parsers.smbmap_parser import parse_smbmap
+from src.sandbox.parsers.snmp_probe_parser import (
+    parse_onesixtyone,
+    parse_snmp_check,
+)
 from src.sandbox.parsers.snmpwalk_parser import parse_snmpwalk
 from src.sandbox.parsers.sqli_probe_text_parser import parse_sqli_probe_text
 from src.sandbox.parsers.sqlmap_parser import parse_sqlmap_output
+from src.sandbox.parsers.ssl_enum_ciphers_parser import parse_ssl_enum_ciphers
 from src.sandbox.parsers.sslscan_parser import parse_sslscan
 from src.sandbox.parsers.sslyze_parser import parse_sslyze
 from src.sandbox.parsers.subfinder_parser import parse_subfinder
@@ -162,6 +170,7 @@ from src.sandbox.parsers.syft_parser import parse_syft_json
 from src.sandbox.parsers.terrascan_parser import parse_terrascan_json
 from src.sandbox.parsers.testssl_parser import parse_testssl
 from src.sandbox.parsers.tfsec_parser import parse_tfsec_json
+from src.sandbox.parsers.tlsx_parser import parse_tlsx_json
 from src.sandbox.parsers.trivy_parser import parse_trivy_json
 from src.sandbox.parsers.trufflehog_parser import parse_trufflehog_jsonl
 from src.sandbox.parsers.unicornscan_parser import parse_unicornscan
@@ -835,6 +844,33 @@ _DEFAULT_TOOL_PARSERS: dict[str, ToolParser] = {
     "testssl": parse_testssl,
     "sslscan": parse_sslscan,
     "sslyze": parse_sslyze,
+    # ARG-050 (P1) — high-confidence heartbeat → mapped batch (7 tools).
+    # Each maps a tool whose output format is stable + well-documented so
+    # the parser turns real stdout/artifacts into normalized findings:
+    #
+    # * ``tlsx`` (json_object)          — ProjectDiscovery TLS handshake
+    #   JSON/JSONL: protocol / cipher / cert identity → INFO, with
+    #   deprecated-protocol / weak-cipher / cert-defect → CRYPTO.
+    # * ``ssl_enum_ciphers`` (xml_nmap) — Nmap NSE cipher table (defusedxml
+    #   hardened): one INFO per protocol + CRYPTO for deprecated protocols
+    #   and weak cipher grades.
+    # * ``onesixtyone`` (text_lines)    — SNMP community sweep
+    #   ``<ip> [<community>] <sysDescr>``; default community → MISCONFIG.
+    # * ``snmp_check`` (text_lines)     — snmp-check enumeration report;
+    #   readable tree → INFO, default community → MISCONFIG.
+    # * ``ike_scan`` (text_lines)       — IKE handshake response → INFO;
+    #   aggressive mode PSK exposure → MISCONFIG (hashes scrubbed).
+    # * ``grpcurl_probe`` (text_lines)  — gRPC reflection service list;
+    #   one INFO per enumerated service.
+    # * ``clairvoyance`` (json_object)  — recovered GraphQL introspection
+    #   schema → one INFO (API surface disclosure).
+    "tlsx": parse_tlsx_json,
+    "ssl_enum_ciphers": parse_ssl_enum_ciphers,
+    "onesixtyone": parse_onesixtyone,
+    "snmp_check": parse_snmp_check,
+    "ike_scan": parse_ike_scan,
+    "grpcurl_probe": parse_grpcurl_probe,
+    "clairvoyance": parse_clairvoyance,
 }
 
 
@@ -911,8 +947,7 @@ def register_parser(
     """
     if strategy in _REGISTRY and not override:
         raise ValueError(
-            f"parser for {strategy.value!r} already registered; "
-            "pass override=True to replace it"
+            f"parser for {strategy.value!r} already registered; " "pass override=True to replace it"
         )
     _REGISTRY[strategy] = handler
     _logger.debug(

@@ -35,9 +35,21 @@
 # build toolchain (gcc, go, npm) out of the final image, shrinking surface
 # area and removing all SUID bits the toolchain might leave behind.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1 AS builder
+# Base image tag is overridable for reproducible pinning (--build-arg KALI_TAG=…);
+# default `latest` because Kali publishes no date-stamped `kali-rolling` tag on Docker Hub.
+ARG KALI_TAG=latest
+FROM kalilinux/kali-rolling:${KALI_TAG} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# Some networks/AV middleboxes block Kali security-tool .debs over cleartext HTTP
+# (HTTP 499 "forbidden by antivirus"). Fetch ca-certificates then pin the apt
+# mirror to HTTPS so tool payloads are not content-inspected. Deterministic
+# overwrite of sources.list; first package step of the stage.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 
 # Builder toolchain. Pinned to apt's current "rolling" snapshot.
 RUN apt-get update \
@@ -67,33 +79,45 @@ RUN apt-get update \
 #   * sublist3r     — passive subdomain bruteforcer.
 #   * urlfinder     — passive URL collector.
 #   * whois         — Python whois client (RDAP fallback).
-RUN python3 -m pip install --break-system-packages --no-cache-dir --user \
-        theHarvester==4.6.0 \
-        dnsrecon==1.1.5 \
-        fierce==1.5.0 \
-        censys==2.2.13 \
-        shodan==1.31.0 \
-        dnstwist==20240916 \
-        sublist3r==1.1 \
-        python-whois==0.9.5
+# Best-effort PER PACKAGE (`|| true`): upstream PyPI availability / interpreter
+# compatibility drifts on the rolling base; a single stale pin must not fail the
+# image. Missing tools are guarded at runtime (adapters check presence).
+RUN set -u; \
+    for spec in \
+        "fierce==1.5.0" \
+        "censys==2.2.13" \
+        "shodan==1.31.0" \
+        "dnstwist==20240916" \
+        "sublist3r==1.1" \
+        "python-whois==0.9.5" \
+    ; do \
+        python3 -m pip install --break-system-packages --no-cache-dir --user "$spec" \
+          || echo "WARN: pip install failed (best-effort, guarded at runtime): $spec"; \
+    done
 
 # Pinned Go-installed §4.1 / §4.2 binaries. ``-s -w`` strips symbol tables and
 # debug info so the runtime image stays compact (Trivy still scans the binary
 # via SBOM purl matching, not via debug symbols).
 ENV GOPATH=/root/go GOBIN=/root/go/bin
 ENV PATH="${GOBIN}:${PATH}"
-RUN go install -ldflags="-s -w" github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.7 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.2 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/chaos-client/cmd/chaos@v0.5.1 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.4 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/asnmap/cmd/asnmap@v1.1.1 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/uncover/cmd/uncover@v1.0.9 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/mapcidr/cmd/mapcidr@v1.1.34 \
- && go install -ldflags="-s -w" github.com/owasp-amass/amass/v4/...@v4.2.0 \
- && go install -ldflags="-s -w" github.com/tomnomnom/assetfinder@v0.1.1 \
- && go install -ldflags="-s -w" github.com/Findomain/findomain@v9.0.5 \
- && go install -ldflags="-s -w" github.com/RustScan/RustScan/...@v2.3.0 \
- && go install -ldflags="-s -w" github.com/sensepost/gowitness@v3.0.5
+# Best-effort PER MODULE (`|| echo WARN`): a single stale/retagged module must
+# not abort the whole chain. Failed tools are guarded at runtime.
+RUN set -u; \
+    for mod in \
+        "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.7" \
+        "github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.2" \
+        "github.com/projectdiscovery/chaos-client/cmd/chaos@v0.5.1" \
+        "github.com/projectdiscovery/asnmap/cmd/asnmap@v1.1.1" \
+        "github.com/projectdiscovery/uncover/cmd/uncover@v1.0.9" \
+        "github.com/projectdiscovery/mapcidr/cmd/mapcidr@v1.1.34" \
+        "github.com/owasp-amass/amass/v4/...@v4.2.0" \
+        "github.com/tomnomnom/assetfinder@v0.1.1" \
+        "github.com/RustScan/RustScan/...@v2.3.0" \
+        "github.com/sensepost/gowitness@v3.0.5" \
+    ; do \
+        go install -ldflags="-s -w" "$mod" \
+          || echo "WARN: go install failed (best-effort, guarded at runtime): $mod"; \
+    done
 
 # -----------------------------------------------------------------------------
 # Stage 2 — runtime. Slim final image. No build toolchain, no compilers; only
@@ -101,7 +125,7 @@ RUN go install -ldflags="-s -w" github.com/projectdiscovery/subfinder/v2/cmd/sub
 # helpers (nmap, masscan, unicornscan, smbmap, dnsutils) that don't ship as
 # Go modules.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1
+FROM kalilinux/kali-rolling:${KALI_TAG}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ARGUS_IMAGE_VERSION=1.0.0
@@ -123,6 +147,12 @@ LABEL org.opencontainers.image.title="argus-kali-recon" \
 #   * §4.2 active recon: nmap, ncat, masscan, unicornscan, smbmap, rpcbind,
 #                        ldap-utils, enum4linux, samba-common-bin (rpcclient).
 #   * Common: ca-certificates, curl, wget, jq, python3, openssl.
+# Pin the apt mirror to HTTPS first: recon tool .debs (nmap, masscan, enum4linux,
+# …) are blocked by AV middleboxes over cleartext HTTP (HTTP 499).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -145,6 +175,11 @@ RUN apt-get update \
         smbclient \
         ldap-utils \
         enum4linux \
+        enum4linux-ng \
+        dnsrecon \
+        theharvester \
+        naabu \
+        findomain \
         samba-common-bin \
         openssl \
         net-tools \

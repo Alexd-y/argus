@@ -1,0 +1,37 @@
+family_id: resource_consumption_safe
+description: >-
+  SAFE resource-consumption curriculum — tiny, non-destructive pagination /
+  size probes to test whether limits are enforced. NO exhaustion or flooding.
+cwe_ids: [770, 400]
+owasp_top10:
+  - 'A04:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: small_page_size
+    template: "argus_rc_safe_limit=2"
+    confidence: suspected
+    notes: Tiny page size; probes pagination handling only.
+  - id: modest_page_size
+    template: "argus_rc_safe_limit=50"
+    confidence: suspected
+    notes: Modest page size; verifies a sane upper bound is enforced.
+  - id: short_string_probe
+    template: "argus-rc-safe-probe"
+    confidence: suspected
+    notes: Short benign string; NOT an oversized/repeated payload.
+  - id: marker
+    template: "ARGUS_RESOURCE_CONSUMPTION_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker; no volumetric intent.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

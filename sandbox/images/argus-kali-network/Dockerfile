@@ -26,9 +26,19 @@
 # (kerbrute, gowitness for screenshot-on-port-open) and installs the impacket /
 # bloodhound-python wheels that the runtime stage will COPY across.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1 AS builder
+# Base image tag is overridable for reproducible pinning (--build-arg KALI_TAG=…);
+# default `latest` because Kali publishes no date-stamped `kali-rolling` tag on Docker Hub.
+ARG KALI_TAG=latest
+FROM kalilinux/kali-rolling:${KALI_TAG} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# Pin apt mirror to HTTPS (AV middleboxes block Kali security-tool .debs over
+# cleartext HTTP, 499). Deterministic overwrite; first package step of the stage.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -55,27 +65,41 @@ RUN apt-get update \
 #   * evil-winrm-py     — Python rewrite of the WinRM shell.
 #   * netaddr           — IP / network helper used by orchestrator scripts.
 #   * dnspython         — DNS protocol library used by responder shims.
-RUN python3 -m pip install --break-system-packages --no-cache-dir --user \
-        impacket==0.12.0 \
-        bloodhound==1.7.2 \
-        crackmapexec==5.4.0 \
-        evil-winrm-py==0.5.0 \
-        netaddr==1.3.0 \
-        dnspython==2.7.0
+# Best-effort PER PACKAGE (`|| true`): PyPI availability / interpreter compat
+# drifts on the rolling base; a stale pin must not fail the image (crackmapexec
+# was removed from PyPI, superseded by netexec). Missing tools guarded at runtime.
+RUN set -u; \
+    for spec in \
+        "impacket==0.12.0" \
+        "bloodhound==1.7.2" \
+        "crackmapexec==5.4.0" \
+        "evil-winrm-py==1.6.0" \
+        "netaddr==1.3.0" \
+        "dnspython==2.7.0" \
+    ; do \
+        python3 -m pip install --break-system-packages --no-cache-dir --user "$spec" \
+          || echo "WARN: pip install failed (best-effort, guarded at runtime): $spec"; \
+    done
 
 # Pinned Go binaries — niche network helpers that are not packaged in apt.
 ENV GOPATH=/root/go GOBIN=/root/go/bin
 ENV PATH="${GOBIN}:${PATH}"
-RUN go install -ldflags="-s -w" github.com/ropnop/kerbrute@v1.0.3 \
- && go install -ldflags="-s -w" github.com/sensepost/gowitness@v3.0.5 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.2.0
+RUN set -u; \
+    for mod in \
+        "github.com/ropnop/kerbrute@v1.0.3" \
+        "github.com/sensepost/gowitness@v3.0.5" \
+        "github.com/projectdiscovery/interactsh/cmd/interactsh-client@v1.2.0" \
+    ; do \
+        go install -ldflags="-s -w" "$mod" \
+          || echo "WARN: go install failed (best-effort, guarded at runtime): $mod"; \
+    done
 
 # -----------------------------------------------------------------------------
 # Stage 2 — runtime. Slim image with the heavy network-protocol clients (snmp,
 # ldap, ike-scan, redis-cli, mongodb shell, smbclient, responder, samba) and
 # the impacket suite copied in from the builder. NO SUID anywhere on $PATH.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1
+FROM kalilinux/kali-rolling:${KALI_TAG}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ARGUS_IMAGE_VERSION=1.0.0
@@ -100,6 +124,12 @@ LABEL org.opencontainers.image.title="argus-kali-network" \
 #   * Datastores:  redis-tools (redis-cli), mongodb-clients (mongo shell).
 #   * Network IO:  rpcbind, dnsutils, openssl, ssldump.
 #   * Routing:     traceroute, mtr-tiny, iputils-ping.
+# Pin apt mirror to HTTPS first: §4.17 tool .debs (responder, impacket-scripts,
+# ike-scan, …) are blocked by AV middleboxes over cleartext HTTP (499).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \

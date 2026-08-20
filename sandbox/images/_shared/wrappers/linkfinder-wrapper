@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# linkfinder-wrapper — argv adapter for LinkFinder (tool_id: linkfinder).
+#
+# Catalog contract (backend/config/tools/linkfinder.yaml):
+#   linkfinder-wrapper -i <url> -o cli -out <path>
+# Upstream LinkFinder (GerbenJavado/LinkFinder) prints endpoints to stdout in
+# `-o cli` mode; we redirect stdout to <path> to keep the sandbox argv-only.
+#
+# Fail-safe: always creates <out> (empty on any error).
+set -uo pipefail
+
+inp=""
+ofmt="cli"
+out="/out/linkfinder.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i) inp="${2:-}"; shift 2 ;;
+    -o) ofmt="${2:-cli}"; shift 2 ;;
+    -out) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$inp" ]; then
+  echo "linkfinder-wrapper: missing required -i" >&2
+  exit 2
+fi
+
+lf_bin="$(command -v linkfinder || command -v linkfinder.py || true)"
+if [ -z "$lf_bin" ]; then
+  echo "linkfinder-wrapper: LinkFinder not found on PATH" >&2
+  exit 3
+fi
+
+"$lf_bin" -i "$inp" -o "$ofmt" >"$out" 2>/dev/null || : >"$out"

@@ -1,0 +1,37 @@
+family_id: client_side_path_traversal
+description: >-
+  Client-Side Path Traversal (CSPT) curriculum — benign path-segment and
+  fragment markers used to probe client-built request URLs. No dot-dot escapes.
+cwe_ids: [22]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: single_segment
+    template: "argus-cspt-safe-segment"
+    confidence: suspected
+    notes: Single benign path segment; no traversal sequences.
+  - id: fragment_marker
+    template: "#argus-cspt-safe-fragment"
+    confidence: suspected
+    notes: URL-fragment marker consumed by client routing logic.
+  - id: query_marker
+    template: "argus-cspt-safe-query"
+    confidence: suspected
+    notes: Query-value marker for client-side URL assembly drills.
+  - id: marker
+    template: "ARGUS_CSPT_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without path semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the segment to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for path/query sinks.

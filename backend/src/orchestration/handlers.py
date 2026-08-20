@@ -23,6 +23,10 @@ from src.data_sources.shodan_client import ShodanClient
 from src.execution_mode.mode import ExecutionMode
 from src.llm import facade as llm_facade
 from src.llm.task_router import LLMTask
+from src.orchestration.adaptive_driver import (
+    make_constant_tool_resolver,
+    run_adaptive_vuln_analysis_signed,
+)
 from src.orchestration.ai_prompts import (
     ai_exploitation,
     ai_post_exploitation,
@@ -73,6 +77,9 @@ from src.recon.pipeline import run_recon_planned_tool_gather
 from src.recon.recon_runtime import build_recon_runtime_config
 from src.recon.step_registry import ReconStepId, plan_recon_steps
 from src.recon.summary_builder import build_recon_summary_document
+from src.recon.vulnerability_analysis.active_scan.input_surface_inventory import (
+    build_input_surface_inventory,
+)
 from src.recon.vulnerability_analysis.active_scan.spa_api_surface import (
     extract_script_urls_from_html,
     extract_spa_api_surfaces,
@@ -1751,6 +1758,58 @@ async def _run_sast_scan(
     return findings
 
 
+async def _maybe_adaptive_vuln_analysis(
+    bundle: VulnerabilityAnalysisInputBundle,
+    *,
+    scan_id: str | None,
+    tenant_id: str | None,
+) -> VulnAnalysisOutput | None:
+    """Flag-gated adaptive VA driver (overhaul §6, final integration step).
+
+    When ``ARGUS_ADAPTIVE_LOOP`` is on, drive the plan→execute→verify loop over the
+    freshly-discovered input surfaces via the signed control plane and return its
+    typed ``VulnAnalysisOutput`` (which the FSM persists exactly like the linear
+    one). Returns ``None`` — so the caller falls back to the linear active-scan +
+    LLM path — when the flag is off, no injectable surface was discovered, or the
+    driver raises. Fully exception-guarded: the adaptive path can never fail a scan.
+    """
+    if not settings.argus_adaptive_loop:
+        return None
+    try:
+        inventory = build_input_surface_inventory(bundle)
+        if not inventory.items:
+            logger.info(
+                "adaptive_va_driver",
+                extra={"event": "skipped_no_surfaces", "scan_id": scan_id},
+            )
+            return None
+        result = await run_adaptive_vuln_analysis_signed(
+            inventory=inventory,
+            tool_resolver=make_constant_tool_resolver("nuclei"),
+            scan_id=scan_id or "",
+            tenant_id=tenant_id or "",
+        )
+        logger.info(
+            "adaptive_va_driver",
+            extra={
+                "event": "drove_vuln_analysis",
+                "scan_id": scan_id,
+                "surfaces": len(inventory.items),
+                "actions_run": result.report.actions_run,
+                "findings": len(result.vuln_output.findings),
+                "stopped_reason": result.report.stopped_reason,
+            },
+        )
+        return result.vuln_output
+    except Exception:
+        logger.warning(
+            "adaptive_va_driver_failed_fallback_linear",
+            extra={"scan_id": scan_id},
+            exc_info=True,
+        )
+        return None
+
+
 async def run_vuln_analysis(
     threat_model: dict,
     assets: list[str],
@@ -1889,6 +1948,15 @@ async def run_vuln_analysis(
                 live_hosts=[_live_host_row_for_target(target)],
                 tech_profile=[],
             )
+            # Final adaptive-driver integration (overhaul §6): when the flag is on,
+            # the plan→execute→verify loop drives this phase over the discovered
+            # surfaces and produces the VulnAnalysisOutput directly. Guarded — any
+            # miss/failure returns None and falls through to the linear path below.
+            _adaptive_out = await _maybe_adaptive_vuln_analysis(
+                bundle, scan_id=scan_id, tenant_id=tenant_id
+            )
+            if _adaptive_out is not None:
+                return _adaptive_out
             logger.info(
                 "vuln_analysis_active_scan",
                 extra={

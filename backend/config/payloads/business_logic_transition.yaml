@@ -1,0 +1,34 @@
+family_id: business_logic_transition
+description: >-
+  Business-logic workflow-transition curriculum — inert state tokens for
+  step-skip / replay / out-of-order drills. No destructive state changes.
+cwe_ids: [840, 841]
+owasp_top10:
+  - 'A04:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: state_skip
+    template: "argus-blt-safe-state-skip"
+    confidence: suspected
+    notes: Skip-ahead workflow-state token; differential vs valid order.
+  - id: replay_marker
+    template: "argus-blt-safe-replay"
+    confidence: suspected
+    notes: Replay of a prior step marker.
+  - id: out_of_order
+    template: "argus-blt-safe-out-of-order"
+    confidence: suspected
+    notes: Out-of-order transition marker.
+  - id: marker
+    template: "ARGUS_BLT_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without workflow semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the state token to exercise case-insensitive rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

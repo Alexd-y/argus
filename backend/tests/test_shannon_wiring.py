@@ -1390,8 +1390,26 @@ class TestWebSocketDelivery:
 
     def test_ws_router_registered_in_app(self):
         from main import app
-        ws_routes = [r.path for r in app.routes if hasattr(r, "path") and "/ws/" in getattr(r, "path", "")]
-        assert any("events" in r for r in ws_routes)
+
+        def _collect_paths(routes: object) -> list[str]:
+            # FastAPI >=0.115 wraps included routers in ``_IncludedRouter`` (lazy
+            # matching); the concrete routes live on ``original_router.routes``.
+            # Traverse both the flat ``.path`` and any wrapped router so this
+            # check is robust across FastAPI inclusion models.
+            collected: list[str] = []
+            for r in routes or []:
+                path = getattr(r, "path", None)
+                if isinstance(path, str):
+                    collected.append(path)
+                inner = getattr(r, "original_router", None)
+                inner_routes = getattr(inner, "routes", None)
+                if inner_routes:
+                    collected.extend(_collect_paths(inner_routes))
+            return collected
+
+        all_paths = _collect_paths(app.routes)
+        ws_events = [p for p in all_paths if "/ws/" in p and "events" in p]
+        assert ws_events, f"ws events route not registered (sample={all_paths[:5]})"
 
     def test_scan_event_bus_has_publish(self):
         from src.orchestration.scan_events import ScanEventBus

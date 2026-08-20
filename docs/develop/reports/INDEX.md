@@ -6,6 +6,50 @@
 
 ## Reports Index
 
+### 2026-08-17: ARGUS Overhaul — цикл B2–B8
+
+**File:** [`orch-2026-08-17-argus-overhaul-b2-b8-completion.md`](./orch-2026-08-17-argus-overhaul-b2-b8-completion.md)
+
+**What Delivered:**
+- ✅ **B2 (gate):** `validate_tools.sh` + `expected_executables.json` (генератор из 162 дескрипторов) + drift-тест
+- ✅ **B3:** +7 реальных парсеров (ратчет 130→137)
+- ✅ **B4:** +13 безопасных семейств пейлоадов (54→67), upsert-подпись
+- ✅ **B5:** WRB budget из реестра, phase-routing precedence, флаг structured-output, provenance untrusted_input
+- ✅ **B6:** `AssetGraph` + populator + coverage-метрики (%params/%endpoints)
+- ✅ **B7:** единый control plane (`signed_tool_runner`, ОДИН реестр); exploitation + VA active-scan за флагами
+- ✅ **B8:** удалён genuine dead-code; прочие «дубли» = разные активные слои (admin-frontend сохранён)
+- ✅ **WS wiring:** тест исправлен под FastAPI 0.140 `_IncludedRouter`
+
+**Флаги (default off):** `ARGUS_EXPLOITATION_SIGNED_RUNNER`, `ARGUS_RECON_SIGNED_RUNNER`, `ARGUS_SCAN_SCHEMA_ENFORCEMENT`. См. [ADR-012](../../architecture-decisions.md#adr-012).
+
+**Границы:** B2 wrapper-скрипты (image-build), B6-adaptive loop (ядерная миграция), B7-остаток (recon-адаптеры), PayloadSynthesizer (P3), семантика LLM (live-WRB).
+
+**Status:** ✅ Complete (безопасно-достижимый scope) | **Tests:** 0 failed по срезам | **Lint:** новый код чист | **Не закоммичено**
+
+---
+
+### 2026-08-16: Exploitation Executor → Single Control Plane
+
+**File:** [`orch-2026-08-16-executor-single-control-plane-completion.md`](./orch-2026-08-16-executor-single-control-plane-completion.md)
+
+**What Delivered:**
+- ✅ **T1:** LLM-free payload-путь — `PayloadContext` + динамическая кодировка по `sink_type`; удалён raw-LLM fallback (`_wrb_generate_*`); починен баг пути каталога
+- ✅ **T2:** Сквозная интеграция `PayloadContext.context` в `payloads/builder.py` (восстановлен откат) + executor на `context=`
+- ✅ **T3:** Подписанный `config/tool_profiles/tool_profiles.yaml` (Ed25519, fail-closed) вместо hardcoded `_VULN_TOOL_MAP`
+- ✅ **T4:** Привязка exploitation-плоскости к подписанному `ToolRegistry` + регрессионный тест синхронизации неймспейса (27/27 инструментов резолвятся)
+- ✅ **T5:** `DockerSandboxAdapter` — локальный раннер с контрактом `KubernetesSandboxAdapter` (эфемерный hardened `docker run`)
+- ✅ **T6:** Opt-in проводка `ToolRegistry`+`DockerSandboxAdapter` в executor (finding→`ToolJob`), фолбэк на legacy `docker exec`
+
+**Принципы промта закрыты:** §1 (единый контур), §4 (переработка пейлоадов), P0 (убран raw LLM fallback), задача #1 (sync неймспейсов).
+
+**Ограничения (opt-in путь):** auth-context не пробрасывается (нарушил бы signed-catalog контракт), approval-gated инструменты вне пути, egress через docker-сеть.
+
+**Follow-up (2026-08-16):** e2e docker-runner проверен на реальном Docker (2 passed); approval-подсистема исправлена (`engagement_id` + reason-контракт, `test_execution_mode_*` 29 passed); auth secret-ref в signed-пути заблокирован (нет secret-store + нет ключа tools-каталога) — interim корректен.
+
+**Status:** ✅ Complete (6/6 + follow-up) | **Tests:** широкий регресс-прогон **5772 passed / 0 failed** (прежние 5 `test_execution_mode_*` устранены); e2e на Docker 2 passed | **Lint:** новый код ruff/black чист | **Не закоммичено**
+
+---
+
 ### 2026-03-14: Stage 3 Vulnerability Analysis Upgrade — Evidence-Driven Findings
 
 **File:** [`orch-2026-03-14-stage3-upgrade-completion.md`](./orch-2026-03-14-stage3-upgrade-completion.md)
@@ -162,5 +206,5 @@
 
 ---
 
-**Last Updated:** 2026-03-12  
-**Documentation Version:** 1.0
+**Last Updated:** 2026-08-16  
+**Documentation Version:** 1.1

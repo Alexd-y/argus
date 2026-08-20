@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# kxss-runner — argv adapter for kxss (tool_id: kxss).
+#
+# Catalog contract (backend/config/tools/kxss.yaml):
+#   kxss-runner --url <url> --output <path>
+# Upstream kxss (Emoe/kxss) reads candidate URLs (with params) from stdin and
+# reports parameters whose reflected value is unfiltered. This runner derives a
+# candidate URL list from <url> (the seed plus its wayback history) and pipes it
+# into kxss, writing the per-parameter reflection report to <path>.
+#
+# Fail-safe: always creates <out> (empty on any error).
+set -uo pipefail
+
+url=""
+out="/out/kxss.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) url="${2:-}"; shift 2 ;;
+    --output) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$url" ]; then
+  echo "kxss-runner: missing required --url" >&2
+  exit 2
+fi
+if ! command -v kxss >/dev/null 2>&1; then
+  echo "kxss-runner: kxss not found on PATH" >&2
+  exit 3
+fi
+
+# Build the candidate list: the seed URL plus historical URLs (if waybackurls is
+# available), deduplicated. kxss itself only consumes stdin.
+{
+  printf '%s\n' "$url"
+  if command -v waybackurls >/dev/null 2>&1; then
+    printf '%s\n' "$url" | waybackurls 2>/dev/null || true
+  fi
+} | sort -u | kxss >"$out" 2>/dev/null || : >"$out"

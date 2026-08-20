@@ -1,0 +1,32 @@
+#!/bin/sh
+# wappalyzer — tech-stack detection CLI (config/tools/wappalyzer_cli.yaml):
+#   wappalyzer <url> --pretty        (JSON on stdout → captured to wappalyzer.json)
+#
+# The npm `wappalyzer` package ships no CLI binary (library only), so ARGUS uses
+# webanalyze — a Go reimplementation driven by the same Wappalyzer fingerprint
+# set — as the engine. This launcher adapts the `wappalyzer <url>` contract to
+# webanalyze and prints JSON to stdout. NOTE: webanalyze's JSON schema differs
+# from Wappalyzer's; the downstream parser treats it as best-effort tech hints.
+# Fail-safe: prints `{}` and exits 0 when the engine or fingerprints are absent.
+
+APPS="/opt/argus-tools/webanalyze/technologies.json"
+
+url=""
+for arg in "$@"; do
+  case "$arg" in
+    -*) : ;;            # skip flags like --pretty
+    *) [ -z "$url" ] && url="$arg" ;;
+  esac
+done
+
+if [ -z "$url" ] || ! command -v webanalyze >/dev/null 2>&1; then
+  echo '{}'
+  exit 0
+fi
+
+if [ -f "$APPS" ]; then
+  webanalyze -host "$url" -apps "$APPS" -output json 2>/dev/null || echo '{}'
+else
+  webanalyze -host "$url" -output json 2>/dev/null || echo '{}'
+fi
+exit 0

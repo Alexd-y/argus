@@ -11,6 +11,9 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import jsonschema
+
+from src.core.config import settings
 from src.execution_mode.runtime_context import peek_execution_mode_from_options
 from src.llm import is_llm_available
 from src.llm.facade import call_llm_unified
@@ -28,6 +31,11 @@ from src.orchestration.phases import (
     ThreatModelOutput,
     VulnAnalysisInput,
     VulnAnalysisOutput,
+)
+from src.orchestration.prompt_injection_defense import (
+    InjectionRisk,
+    classify_injection_risk,
+    sanitize_prompt_inputs,
 )
 from src.orchestration.prompt_loader import render_phase_prompts as _render_jinja2
 from src.orchestration.prompt_registry import (
@@ -72,15 +80,25 @@ def _get_phase_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     sanitize = kwargs.pop("sanitize", True)
     if sanitize:
         try:
-            from src.orchestration.prompt_injection_defense import sanitize_prompt_inputs, InjectionRisk, classify_injection_risk
             check = classify_injection_risk(user)
             if check.risk == InjectionRisk.DANGEROUS:
-                logger.warning("dangerous_injection_pattern_in_prompt", extra={"phase": phase, "patterns": check.matched_patterns})
-            enhanced_system, sanitized = sanitize_prompt_inputs(system, {"user_data": user})
+                logger.warning(
+                    "dangerous_injection_pattern_in_prompt",
+                    extra={"phase": phase, "patterns": check.matched_patterns},
+                )
+            # Tag the phase input as untrusted DATA with phase provenance, so the
+            # model + audit trail know its origin; the instruction hierarchy is
+            # appended to the (trusted) system prompt by sanitize_prompt_inputs.
+            enhanced_system, sanitized = sanitize_prompt_inputs(
+                system, {"user_data": user}, source=phase
+            )
             user = sanitized["user_data"]
             system = enhanced_system
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001 — sanitization is best-effort, never fatal
+            logger.warning(
+                "prompt_sanitization_failed",
+                extra={"event": "prompt_sanitization_failed", "phase": phase},
+            )
     return system, user
 
 _PHASE_TO_TASK: dict[str, LLMTask] = {
@@ -210,6 +228,29 @@ def _parse_llm_json(text: str) -> dict[str, Any] | None:
     return None
 
 
+def _phase_schema_ok(data: dict[str, Any], phase: str) -> bool:
+    """Whether ``data`` satisfies the phase's JSON schema.
+
+    Returns ``True`` (accept) when enforcement is disabled
+    (:data:`settings.argus_scan_schema_enforcement` is false) or the phase has no
+    registered schema, preserving the historical "accept any parseable JSON"
+    behaviour. When enforcement is on and the phase HAS a schema, a schema
+    mismatch returns ``False`` so the caller routes the response through the
+    existing JSON fixer-retry loop instead of accepting loose output.
+    """
+    if not settings.argus_scan_schema_enforcement:
+        return True
+    try:
+        schema = get_schema(phase)
+    except ValueError:
+        return True
+    try:
+        jsonschema.validate(instance=data, schema=schema)
+    except jsonschema.ValidationError:
+        return False
+    return True
+
+
 async def _call_llm_with_json_retry(
     phase: str,
     user_prompt: str,
@@ -240,7 +281,7 @@ async def _call_llm_with_json_retry(
             response,
         )
     data = _parse_llm_json(response)
-    if data is not None:
+    if data is not None and _phase_schema_ok(data, phase):
         return data
 
     for attempt in range(MAX_JSON_RETRIES):
@@ -260,7 +301,7 @@ async def _call_llm_with_json_retry(
                 response,
             )
         data = _parse_llm_json(response)
-        if data is not None:
+        if data is not None and _phase_schema_ok(data, phase):
             return data
         logger.warning(
             "JSON fixer retry did not produce valid JSON",

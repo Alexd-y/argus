@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# xsstrike-runner — argv adapter for XSStrike (tool_id: xsstrike).
+#
+# Catalog contract (backend/config/tools/xsstrike.yaml):
+#   xsstrike-runner --url <url> --crawl --skip-poc --output <path.json>
+# Upstream XSStrike (s0md3v/XSStrike) prints a human-readable report and has no
+# native JSON mode, so this runner invokes it with WAF-aware crawling and wraps
+# the captured output in a JSON envelope at <path.json>. `--skip-poc` suppresses
+# proof-of-concept injection (XSStrike stays in detection-only mode).
+#
+# Fail-safe: always writes a valid JSON object to <output> (even on error).
+set -uo pipefail
+
+url=""
+crawl=""
+out="/out/xsstrike.json"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) url="${2:-}"; shift 2 ;;
+    --crawl) crawl="--crawl"; shift ;;
+    --skip-poc) shift ;;  # detection-only: interpreted by this wrapper
+    --output) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+
+write_envelope() {
+  # $1 = error string ("" if none); reads raw output from stdin.
+  python3 - "$url" "$out" "$1" <<'PY'
+import json, sys
+url, out, err = sys.argv[1], sys.argv[2], sys.argv[3]
+raw = sys.stdin.read()
+doc = {"tool": "xsstrike", "url": url, "raw_output": raw}
+if err:
+    doc["error"] = err
+with open(out, "w") as fh:
+    json.dump(doc, fh)
+PY
+}
+
+if [ -z "$url" ]; then
+  printf '' | write_envelope "missing required --url"
+  exit 2
+fi
+
+xs_bin="$(command -v xsstrike || command -v XSStrike || true)"
+if [ -z "$xs_bin" ]; then
+  printf '' | write_envelope "xsstrike not found on PATH"
+  exit 3
+fi
+
+# shellcheck disable=SC2086
+raw_output="$("$xs_bin" -u "$url" $crawl --skip-dom 2>&1 || true)"
+printf '%s' "$raw_output" | write_envelope ""

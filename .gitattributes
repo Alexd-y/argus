@@ -15,6 +15,12 @@
 *.sh             text eol=lf
 *.bash           text eol=lf
 *.zsh            text eol=lf
+# Extensionless sandbox tool wrappers run inside Kali containers — MUST be LF
+# (no .sh suffix, so pin the directory explicitly).
+sandbox/images/_shared/wrappers/* text eol=lf
+# Extensionless ARGUS launcher shims for kind=binary tools that lack a clean
+# upstream package (internal probes, GitHub-only clones, EOL tools) — also LF.
+sandbox/images/_shared/bin/* text eol=lf
 Dockerfile       text eol=lf
 Dockerfile.*     text eol=lf
 *.dockerfile     text eol=lf

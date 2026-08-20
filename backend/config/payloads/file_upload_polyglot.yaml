@@ -1,0 +1,34 @@
+family_id: file_upload_polyglot
+description: >-
+  Inert file-upload polyglot curriculum — benign magic-byte prefixes,
+  double-extension and content-type markers. No script/executable content.
+cwe_ids: [434, 436]
+owasp_top10:
+  - 'A04:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: gif_header_marker
+    template: "GIF89a ARGUS_UPLOAD_POLYGLOT_SAFE"
+    confidence: suspected
+    notes: Benign GIF magic-byte prefix + marker; probes content-sniffing only.
+  - id: double_extension
+    template: "argus-upload-safe.txt.png"
+    confidence: suspected
+    notes: Double-extension filename probe; inert (no code).
+  - id: benign_content_type
+    template: "ARGUS_UPLOAD_POLYGLOT_SAFE_CTYPE"
+    confidence: suspected
+    notes: Content-type mismatch marker; plain token.
+  - id: benign_filename
+    template: "argus-upload-safe-probe.txt"
+    confidence: suspected
+    notes: Neutral filename baseline for differential comparison.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

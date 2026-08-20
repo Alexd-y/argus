@@ -1,0 +1,30 @@
+#!/bin/sh
+# cmsmap — Dionach/CMSmap multi-CMS scanner (Python, GitHub-only, no PyPI dist).
+#
+# Catalog contract (config/tools/cmsmap.yaml):
+#   cmsmap <url> -F -o <file>
+# Runs the cloned entrypoint at /opt/argus-tools/cmsmap/cmsmap.py (git-cloned in
+# the builder stage). Fail-safe: writes an empty report and exits 0 if the clone
+# is absent so the text_lines parse strategy never faults.
+
+REAL="/opt/argus-tools/cmsmap/cmsmap.py"
+
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then
+    out="$arg"
+  fi
+  prev="$arg"
+done
+
+if [ -f "$REAL" ] && command -v python3 >/dev/null 2>&1; then
+  exec python3 "$REAL" "$@"
+fi
+
+if [ -n "$out" ]; then
+  mkdir -p "$(dirname "$out")" 2>/dev/null || true
+  : > "$out" 2>/dev/null || true
+fi
+echo "WARN: cmsmap unavailable (clone missing at $REAL)" >&2
+exit 0

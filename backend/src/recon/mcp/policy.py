@@ -369,34 +369,118 @@ def evaluate_tool_approval_policy(
     return decision
 
 
+def _scan_lab_lease_state(opts: dict[str, Any], tenant_id: str | None) -> tuple[bool, bool]:
+    """Return ``(lab_lease_active, lab_mode_requested)`` from scan options.
+
+    Mirrors
+    :func:`src.orchestration.execution_mode_context.is_lab_lease_active_from_options`
+    without importing it: that module imports THIS one
+    (``evaluate_tool_approval_policy``), so importing back would create a cycle.
+    The LAB-lease primitives in ``src.execution_mode.*`` do not depend on
+    ``src.recon``, so the lease is resolved against them directly.
+
+    A usable LAB lease is honoured from either a pre-computed
+    ``execution_mode_context`` snapshot or a raw ``lab_lease`` payload; a
+    malformed lease fails closed (treated as no lease). This is the same trust
+    model already used by the orchestration preflight.
+    """
+    # Local import — documented cycle-avoidance (see docstring); consistent with
+    # this module's existing lazy ``src.core.config`` import in
+    # ``evaluate_tool_approval_policy``.
+    from src.execution_mode.lab_lease import LabExecutionLease
+    from src.execution_mode.mode import ExecutionMode, parse_execution_mode
+
+    ctx = opts.get("execution_mode_context")
+
+    lab_mode_requested = False
+    if isinstance(ctx, dict) and str(ctx.get("mode") or "").strip():
+        lab_mode_requested = (
+            str(ctx.get("mode")).strip().lower() == ExecutionMode.LAB_UNRESTRICTED.value
+        )
+    else:
+        raw_mode = opts.get("execution_mode")
+        if raw_mode is not None and str(raw_mode).strip():
+            try:
+                lab_mode_requested = (
+                    parse_execution_mode(raw_mode) is ExecutionMode.LAB_UNRESTRICTED
+                )
+            except (ValueError, TypeError):
+                lab_mode_requested = False
+
+    if isinstance(ctx, dict) and ctx.get("lab_lease_active") is True:
+        return True, lab_mode_requested
+    if opts.get("lab_lease_active") is True:
+        return True, lab_mode_requested
+
+    raw_lease = opts.get("lab_lease")
+    if raw_lease is None:
+        raw_lease = opts.get("lab_execution_lease")
+    lease: LabExecutionLease | None = None
+    if isinstance(raw_lease, LabExecutionLease):
+        lease = raw_lease
+    elif isinstance(raw_lease, dict):
+        try:
+            lease = LabExecutionLease.from_storage_dict(raw_lease)
+        except Exception:  # noqa: BLE001 — malformed lease → fail closed (no lease)
+            lease = None
+    if lease is None or not lease.is_usable():
+        return False, lab_mode_requested
+    if tenant_id and lease.tenant_id != tenant_id:
+        return False, lab_mode_requested
+    return True, lab_mode_requested
+
+
 def evaluate_tool_approval_for_scan(
     tool_name: str,
     scan_options: dict[str, Any] | None = None,
     *,
     target: str | None = None,
     tenant_id: str | None = None,
+    engagement_id: str | None = None,
     scan_approval_flags: dict[str, bool] | None = None,
     policy_settings: Any | None = None,
 ) -> McpPolicyDecision:
-    """VA/scan wrapper: LAB lease in scan options disables per-action approval."""
-    del target, tenant_id
+    """VA/scan wrapper: LAB lease in scan options disables per-action approval.
+
+    Applies the same reason contract as the orchestration preflight
+    (:mod:`src.orchestration.execution_mode_context`):
+
+    * usable LAB lease → ``verified_lab_unrestricted`` (no per-action approval);
+    * ``lab_unrestricted`` requested but no usable lease → deny with
+      ``lab_lease_required`` (mirrors ``DENY_OUTSIDE_LAB``);
+    * production / quick → the standard per-tool approval gate.
+
+    ``engagement_id`` is accepted for signature parity with the lab-lease
+    resolution stack (it participates in tenant/engagement scoping upstream);
+    the per-tool decision keys on the resolved lease + ``tenant_id``.
+    """
+    del target, engagement_id
     opts = scan_options if isinstance(scan_options, dict) else {}
-    ctx = opts.get("execution_mode_context")
-    lab_lease_active = False
-    if isinstance(ctx, dict):
-        lab_lease_active = bool(ctx.get("lab_lease_active"))
-    elif opts.get("lab_lease_active") is True:
-        lab_lease_active = True
     flags = scan_approval_flags
     if flags is None:
         raw_flags = opts.get("scan_approval_flags")
         if isinstance(raw_flags, dict):
             flags = {str(k).strip().lower(): bool(v) for k, v in raw_flags.items()}
+
+    lab_lease_active, lab_mode_requested = _scan_lab_lease_state(opts, tenant_id)
+    if lab_lease_active:
+        return evaluate_tool_approval_policy(
+            tool_name,
+            scan_approval_flags=flags,
+            policy_settings=policy_settings,
+            lab_lease_active=True,
+        )
+    if lab_mode_requested:
+        return McpPolicyDecision(
+            allowed=False,
+            reason="lab_lease_required",
+            policy_id=TOOL_APPROVAL_POLICY_ID,
+        )
     return evaluate_tool_approval_policy(
         tool_name,
         scan_approval_flags=flags,
         policy_settings=policy_settings,
-        lab_lease_active=lab_lease_active,
+        lab_lease_active=False,
     )
 
 

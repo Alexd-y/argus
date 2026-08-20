@@ -245,7 +245,8 @@ _APPROVAL_RISK_FLOOR: Final[RiskLevel] = RiskLevel.MEDIUM
 #   ARG-029 (Cycle 3 batch 3):  68 mapped →  89 heartbeat
 #   ARG-032 (Cycle 4 batch 4):  98 mapped →  59 heartbeat
 #   T05 (Cycle 6 batch 1):     118 mapped →  39 heartbeat
-#   P0-T1 (autonomous-orch):   130 mapped →  32 heartbeat   <- pinned here
+#   P0-T1 (autonomous-orch):   130 mapped →  32 heartbeat
+#   ARG-050 (P1 batch):        137 mapped →  25 heartbeat   <- pinned here
 #
 # A drop in `MAPPED_PARSER_COUNT` (or a rise that does not have a
 # matching drop in `HEARTBEAT_PARSER_COUNT`) is a regression and the
@@ -256,9 +257,14 @@ _APPROVAL_RISK_FLOOR: Final[RiskLevel] = RiskLevel.MEDIUM
 # P0-T1 note: 12 parsers registered since the T05 pin (commix, curl,
 # kube_hunter batches + backfill) moved the split from 118/39 to the
 # runtime-observed 130/32.  Total descriptors stay at 162, binary_blob 0.
+#
+# ARG-050 note: 7 high-confidence parsers wired up (tlsx,
+# ssl_enum_ciphers, onesixtyone, snmp_check, ike_scan, grpcurl_probe,
+# clairvoyance) moved the split from 130/32 to 137/25.  Total
+# descriptors stay at 162, binary_blob 0.  See `_ARG050_NEWLY_MAPPED`.
 # ---------------------------------------------------------------------------
-MAPPED_PARSER_COUNT: Final[int] = 130
-HEARTBEAT_PARSER_COUNT: Final[int] = 32
+MAPPED_PARSER_COUNT: Final[int] = 137
+HEARTBEAT_PARSER_COUNT: Final[int] = 25
 
 
 # ---------------------------------------------------------------------------
@@ -1877,6 +1883,21 @@ _T05_NEWLY_MAPPED: Final[frozenset[str]] = frozenset(
     }
 )
 
+# ARG-050 (P1) — high-confidence heartbeat → mapped batch (sorted).  Each
+# tool has a stable, well-documented output format wired to a first-class
+# parser under src.sandbox.parsers.
+_ARG050_NEWLY_MAPPED: Final[frozenset[str]] = frozenset(
+    {
+        "clairvoyance",
+        "grpcurl_probe",
+        "ike_scan",
+        "onesixtyone",
+        "snmp_check",
+        "ssl_enum_ciphers",
+        "tlsx",
+    }
+)
+
 
 def test_parser_coverage_counts_match_arg032_ratchet(
     loaded_registry: ToolRegistry,
@@ -2001,6 +2022,32 @@ def test_t05_newly_mapped_tools_have_first_class_parsers(
     assert not unmapped, (
         f"T05 mapped these tools but the parser registry has lost them: "
         f"{unmapped!r}. Restore the entries in "
+        f"src.sandbox.parsers._DEFAULT_TOOL_PARSERS."
+    )
+
+
+def test_arg050_newly_mapped_tools_have_first_class_parsers(
+    loaded_registry: ToolRegistry,
+) -> None:
+    """Every ARG-050 (P1) tool routes through the first-class parser path.
+
+    Guards against a regression where one of the 7 high-confidence tools
+    wired up in the P1 batch is silently dropped from
+    :data:`src.sandbox.parsers._DEFAULT_TOOL_PARSERS` — the generic
+    ratchet would flag the count drift, but this test names the offender.
+    """
+    catalog_ids = {
+        descriptor.tool_id for descriptor in loaded_registry.all_descriptors()
+    }
+    missing = sorted(_ARG050_NEWLY_MAPPED - catalog_ids)
+    assert not missing, (
+        f"ARG-050 names {missing!r} but the catalog has no matching descriptor."
+    )
+    mapped_tools = get_registered_tool_parsers()
+    unmapped = sorted(_ARG050_NEWLY_MAPPED - mapped_tools)
+    assert not unmapped, (
+        f"ARG-050 mapped these tools but the parser registry has lost "
+        f"them: {unmapped!r}. Restore the entries in "
         f"src.sandbox.parsers._DEFAULT_TOOL_PARSERS."
     )
 

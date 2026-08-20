@@ -10,7 +10,6 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.recon.vulnerability_analysis.active_scan.mcp_runner import (
     get_active_scan_semaphore,
     reset_active_scan_semaphore_for_testing,
@@ -85,6 +84,58 @@ def test_sync_subprocess_success() -> None:
     assert r["exit_code"] == 0
     assert "ok" in r["stdout"]
     assert r["tool_id"] == "dalfox"
+
+
+def test_signed_runner_flag_routes_to_single_control_plane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ARGUS_RECON_SIGNED_RUNNER on → VA active scan runs via the signed single
+    # control plane (run_signed_tool), NOT the legacy subprocess path.
+    from src.core.config import settings as _settings
+    from src.recon.vulnerability_analysis.active_scan import mcp_runner as _mr
+
+    monkeypatch.setattr(_settings, "argus_recon_signed_runner", True)
+    sentinel = {"stdout": "SIGNED-VA", "stderr": "", "exit_code": 0, "duration_ms": 7}
+
+    async def _fake_run_signed(*_a: object, **_k: object) -> dict[str, object]:
+        return sentinel
+
+    monkeypatch.setattr(_mr, "run_signed_tool", _fake_run_signed)
+    with patch("subprocess.Popen", side_effect=AssertionError("legacy path must not run")):
+        r = run_va_active_scan_sync(
+            tool_name="dalfox",
+            target="https://example.com/",
+            argv=[sys.executable, "-c", "print('legacy')"],
+            timeout_sec=10.0,
+        )
+    assert r["tool_id"] == "dalfox"
+    assert r["stdout"] == "SIGNED-VA"
+    assert r["exit_code"] == 0
+    assert r["error_reason"] == ""
+
+
+def test_signed_runner_falls_back_to_legacy_when_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Flag on, but the signed path declines (unmappable tool) → legacy subprocess.
+    from src.core.config import settings as _settings
+    from src.recon.vulnerability_analysis.active_scan import mcp_runner as _mr
+
+    monkeypatch.setattr(_settings, "argus_recon_signed_runner", True)
+
+    async def _fake_none(*_a: object, **_k: object) -> None:
+        return None
+
+    monkeypatch.setattr(_mr, "run_signed_tool", _fake_none)
+    r = run_va_active_scan_sync(
+        tool_name="dalfox",
+        target="https://example.com/",
+        argv=[sys.executable, "-c", "print('ok')"],
+        timeout_sec=10.0,
+    )
+    assert r["exit_code"] == 0
+    assert "ok" in r["stdout"]
+    assert r["error_reason"] == ""
 
 
 def test_popen_os_error() -> None:

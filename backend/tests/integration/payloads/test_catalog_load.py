@@ -4,14 +4,14 @@ Loads the real ``backend/config/payloads/`` registry and asserts the
 invariants documented in the ARG-005 cycle plan and Backlog/dev1_md §7:
 
 * Every YAML descriptor passes Ed25519 signature verification.
-* All 23 expected ``family_id`` s are present.
-* Approval gating matches the policy (only the four high-risk families
-  carry ``requires_approval=True``).
+* All expected ``family_id`` s are present (see ``EXPECTED_FAMILIES``).
+* Approval gating matches the policy (only the HIGH/DESTRUCTIVE families
+  in ``APPROVAL_REQUIRED`` carry ``requires_approval=True``).
 * Mutation/encoder rule names referenced by the catalog only use the
   registry-allowed names.
 
 The fixture ``loaded_registry`` loads once per session — Ed25519
-verification is the slow path and re-running it 23 times would dominate
+verification is the slow path and re-running it per family would dominate
 the test wall time for no extra coverage.
 """
 
@@ -31,13 +31,17 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
     {
         "sqli",
         "xss",
+        "xss_stored",
+        "xss_dom",
         "ssrf",
         "rce",
         "lfi_rfi",
         "crlf",
         "open_redirect",
         "oauth",
+        "oauth_misconfig",
         "jwt",
+        "jwt_none_alg",
         "graphql",
         "proto_smuggle",
         "http_smuggling",
@@ -46,12 +50,22 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "path_traversal",
         "nosqli",
         "ldapi",
+        "ldap_injection",
         "xxe",
         "ssti",
         "auth_bypass",
         "idor",
         "mass_assignment",
         "race_condition",
+        "cors_misconfig",
+        "csrf_token_bypass",
+        "deserialization",
+        "format_string",
+        "integer_overflow",
+        "buffer_overflow",
+        "smtp_injection",
+        "type_juggling",
+        "xpath_injection",
         # Phase 2 — signed safe curriculum families (P2-005)
         "xss_contextual",
         "sqli_safe",
@@ -63,17 +77,46 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "xxe_oast_safe",
         "command_injection_safe",
         "crlf_safe",
+        "csrf_safe",
         "traversal_safe",
         "prototype_pollution_safe",
         "graphql_safe",
         "jwt_safe",
         "mass_assignment_safe",
         "open_redirect_safe",
+        # Seed families — additional attack surfaces (all SAFE/conservative)
+        "file_upload_polyglot",
+        "http_parameter_pollution",
+        "web_cache_deception",
+        "saml_validation",
+        "client_side_path_traversal",
+        "dns_rebinding",
+        "xs_leak",
+        "business_logic_transition",
+        "api_bola",
+        "api_bopla",
+        "api_bfla",
+        "resource_consumption_safe",
+        "unsafe_api_consumption",
     }
 )
 
 APPROVAL_REQUIRED: Final[frozenset[str]] = frozenset(
-    {"rce", "proto_smuggle", "http_smuggling", "race_condition"}
+    {
+        "rce",
+        "proto_smuggle",
+        "http_smuggling",
+        "race_condition",
+        "buffer_overflow",
+        "deserialization",
+        "format_string",
+        "integer_overflow",
+        "jwt_none_alg",
+        "ldap_injection",
+        "oauth_misconfig",
+        "type_juggling",
+        "xpath_injection",
+    }
 )
 
 

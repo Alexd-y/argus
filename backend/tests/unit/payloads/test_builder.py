@@ -318,6 +318,40 @@ def test_context_json_sink_keeps_identity(builder: PayloadBuilder) -> None:
     assert bundle.encoding_pipeline == "identity"
 
 
+def test_context_encoding_pipeline_pin_overrides_sink(builder: PayloadBuilder) -> None:
+    # A JSON sink would route to ``identity``, but an explicit declared pin wins.
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            context=PayloadContext(
+                sink_type=SinkType.JSON,
+                encoding_pipeline="url_only",
+                parameter_name="id",
+                canary="x",
+            ),
+        )
+    )
+    assert bundle.encoding_pipeline == "url_only"
+
+
+def test_context_unknown_encoding_pipeline_pin_ignored(builder: PayloadBuilder) -> None:
+    # An undeclared pin must be ignored (never raised) and fall back to sink routing.
+    bundle = builder.build(
+        PayloadBuildRequest(
+            family_id="demo_sqli",
+            correlation_key="k",
+            context=PayloadContext(
+                sink_type=SinkType.QUERY,
+                encoding_pipeline="does_not_exist",
+                parameter_name="id",
+                canary="x",
+            ),
+        )
+    )
+    assert bundle.encoding_pipeline == "url_only"
+
+
 def test_explicit_pipeline_overrides_context_sink_type(builder: PayloadBuilder) -> None:
     bundle = builder.build(
         PayloadBuildRequest(

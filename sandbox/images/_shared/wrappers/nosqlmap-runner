@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# nosqlmap-runner — argv adapter for NoSQLMap (tool_id: nosqlmap).
+#
+# Catalog contract (backend/config/tools/nosqlmap.yaml):
+#   nosqlmap-runner --target <url> --attack <profile> --output <path.txt>
+# Upstream NoSQLMap (codingo/NoSQLMap) is menu-driven; this runner invokes its
+# script form non-interactively (empty stdin so the TUI never blocks) with the
+# documented target + attack profile, capturing stdout+stderr to <path>.
+# APPROVAL-GATED upstream: fires NoSQLi payloads / auth-bypass attempts.
+# NoSQLMap is not a PyPI package — expected at NOSQLMAP_BIN or /opt/NoSQLMap/nosqlmap.py.
+#
+# Fail-safe: always creates <out> (error line on any failure).
+set -uo pipefail
+
+target=""
+attack="2"
+out="/out/nosqlmap.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --target) target="${2:-}"; shift 2 ;;
+    --attack) attack="${2:-2}"; shift 2 ;;
+    --output) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$target" ]; then
+  echo "nosqlmap-runner: missing required --target" >&2
+  exit 2
+fi
+
+if [ -n "${NOSQLMAP_BIN:-}" ] && [ -x "${NOSQLMAP_BIN}" ]; then
+  set -- "${NOSQLMAP_BIN}"
+elif command -v nosqlmap >/dev/null 2>&1; then
+  set -- nosqlmap
+elif command -v nosqlmap.py >/dev/null 2>&1; then
+  set -- nosqlmap.py
+elif [ -f /opt/NoSQLMap/nosqlmap.py ]; then
+  set -- python3 /opt/NoSQLMap/nosqlmap.py
+else
+  echo "nosqlmap-runner: NoSQLMap not found (set NOSQLMAP_BIN or install /opt/NoSQLMap)" >&2
+  echo "ERROR nosqlmap not installed" >"$out"
+  exit 3
+fi
+
+# shellcheck disable=SC2086
+"$@" --target "$target" --attack "$attack" </dev/null >"$out" 2>&1 || true

@@ -49,6 +49,12 @@ config/mcp/_keys/dev_signing*
 !config/mcp/_keys/README.md
 
 # ---------------------------------------------------------------------------
+# Tool-profile catalog signing keys. See backend/config/tool_profiles/tool_profiles.yaml
+# ---------------------------------------------------------------------------
+config/tool_profiles/_keys/*.priv
+config/tool_profiles/_keys/dev_signing*
+
+# ---------------------------------------------------------------------------
 # Python build / test artefacts (also covered by repo-root .gitignore)
 # ---------------------------------------------------------------------------
 __pycache__/

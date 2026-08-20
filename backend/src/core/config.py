@@ -2,7 +2,6 @@
 
 import logging
 import os
-
 from typing import Literal, Self
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -93,6 +92,67 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices(
             "ARGUS_UNIFIED_LLM_GATEWAY",
             "argus_unified_llm_gateway",
+        ),
+    )
+    # Single control plane for exploitation tools. When true, the exploitation
+    # executor routes tools through the signed ToolRegistry + DockerSandboxAdapter
+    # (argv compiled from the signed descriptor in an ephemeral hardened
+    # container) by default, instead of the legacy hardcoded ``docker exec``
+    # branches. The per-scan ``use_docker_sandbox_runner`` option still forces it
+    # on for a single scan. Legacy remains the automatic fallback for
+    # uncatalogued / approval-gated / unmappable tools, so enabling this is a
+    # strict superset. Default false for a conservative rollout.
+    # Env: ARGUS_EXPLOITATION_SIGNED_RUNNER.
+    argus_exploitation_signed_runner: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_EXPLOITATION_SIGNED_RUNNER",
+            "argus_exploitation_signed_runner",
+        ),
+    )
+    # Single control plane for the VA active-scan runner. When true, VA active
+    # scans route through the signed ToolRegistry + DockerSandboxAdapter (argv
+    # compiled from the signed descriptor) instead of the caller-built argv +
+    # ``docker exec`` path. Because the signed descriptor's command_template
+    # becomes authoritative (the caller's custom argv is not used), this changes
+    # WHICH command runs — hence a conservative default-off, opt-in rollout with
+    # automatic legacy fallback for uncatalogued / unmappable tools.
+    # Env: ARGUS_RECON_SIGNED_RUNNER.
+    argus_recon_signed_runner: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_RECON_SIGNED_RUNNER",
+            "argus_recon_signed_runner",
+        ),
+    )
+    # Structured-output enforcement for the 8-phase scan pipeline. When true, an
+    # LLM phase response that parses as JSON but does NOT match the phase schema
+    # (:func:`src.orchestration.prompt_registry.get_schema`) is rejected and the
+    # existing JSON fixer-retry loop is triggered (instead of accepting loose,
+    # schema-invalid JSON). On final failure the phase still degrades to ``None``
+    # exactly as today, so this is a strict superset. Default false — enabling it
+    # tightens contract adherence but should be validated against a live model.
+    # Env: ARGUS_SCAN_SCHEMA_ENFORCEMENT.
+    argus_scan_schema_enforcement: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_SCAN_SCHEMA_ENFORCEMENT",
+            "argus_scan_schema_enforcement",
+        ),
+    )
+    # Adaptive planner→critic→executor→verifier loop (overhaul §6). When true,
+    # eligible scan work is driven by the runtime AssetGraph feedback loop
+    # (src/orchestration/adaptive_loop.py) instead of a fixed linear phase pass —
+    # actions are proposed from untested surfaces, executed via the signed single
+    # control plane, verified, and the graph is updated until a coverage/budget
+    # stop condition. Default false: the linear 8-phase FSM is unchanged. Full
+    # state-machine adoption is staged; the engine + production adapters ship
+    # first. Env: ARGUS_ADAPTIVE_LOOP.
+    argus_adaptive_loop: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_ADAPTIVE_LOOP",
+            "argus_adaptive_loop",
         ),
     )
     # Quick execution mode (execution_mode=quick). Fail-closed default.

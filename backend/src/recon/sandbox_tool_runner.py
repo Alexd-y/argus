@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.core.config import settings
+from src.orchestration.signed_tool_runner import run_coro_sync, run_signed_tool
+from src.pipeline.contracts.tool_job import TargetKind
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +162,44 @@ def run_argv_simple_sync(
                 "stderr": str(exc),
                 "return_code": -1,
                 "execution_time": 0.0,
+            }
+
+    # Single control plane (opt-in via ARGUS_RECON_SIGNED_RUNNER): route the tool
+    # through the signed ToolRegistry + DockerSandboxAdapter. Argv is compiled
+    # from the signed descriptor (the caller-built run_parts is NOT used), so this
+    # is a deliberate, flag-gated behaviour change. Any gap (no tool_id / empty
+    # target / uncatalogued / unmappable tool) returns None → fall through to the
+    # legacy subprocess path below (strict superset while off). Callers own their
+    # own artifact/MinIO handling, so nothing is lost by returning early here.
+    if settings.argus_recon_signed_runner and tool_id:
+        _to = (
+            int(timeout_sec)
+            if (timeout_sec and float(timeout_sec) > 0)
+            else int(getattr(settings, "recon_tools_timeout", 300) or 300)
+        )
+        signed = run_coro_sync(
+            run_signed_tool(
+                tool_id,
+                target or "",
+                timeout=max(1, _to),
+                scan_id=str((scan_options or {}).get("scan_id") or ""),
+                tenant_id=str(tenant_id or ""),
+                target_kind=(
+                    TargetKind.URL
+                    if (target or "").strip().startswith(("http://", "https://"))
+                    else TargetKind.HOST
+                ),
+                correlation_id="argus-recon-tool",
+            )
+        )
+        if signed is not None:
+            rc = int(signed.get("exit_code", -1))
+            return {
+                "success": rc == 0,
+                "stdout": str(signed.get("stdout", "")),
+                "stderr": str(signed.get("stderr", "")),
+                "return_code": rc,
+                "execution_time": float(signed.get("duration_ms", 0)) / 1000.0,
             }
 
     start = time.perf_counter()

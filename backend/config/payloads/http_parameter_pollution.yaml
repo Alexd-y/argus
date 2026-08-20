@@ -1,0 +1,37 @@
+family_id: http_parameter_pollution
+description: >-
+  HTTP Parameter Pollution curriculum — duplicate/array/semicolon-separated
+  benign key=value probes to test parameter-precedence handling. Inert markers.
+cwe_ids: [235, 88]
+owasp_top10:
+  - 'A03:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: duplicate_pair
+    template: "argus_hpp_safe=A&argus_hpp_safe=B"
+    confidence: suspected
+    notes: Duplicate parameter; differential reveals which copy wins.
+  - id: array_brackets
+    template: "argus_hpp_safe[]=A&argus_hpp_safe[]=B"
+    confidence: suspected
+    notes: Array-bracket notation probe; benign values.
+  - id: semicolon_separated
+    template: "argus_hpp_safe=A;argus_hpp_safe=B"
+    confidence: suspected
+    notes: Semicolon separator variant for legacy parsers.
+  - id: marker
+    template: "ARGUS_HPP_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without parameter semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the parameter key to exercise case-insensitive rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

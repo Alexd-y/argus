@@ -1,0 +1,30 @@
+family_id: saml_validation
+description: >-
+  SAML assertion-validation curriculum — inert NameID / comment-node markers
+  for signature-scope drills. No signature-wrapping or live XML documents.
+cwe_ids: [347, 287]
+owasp_top10:
+  - 'A07:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: benign_nameid
+    template: "argus-saml-safe-nameid"
+    confidence: suspected
+    notes: Neutral NameID token; differential vs control identifies mapping.
+  - id: comment_marker
+    template: "argus-saml-safe-comment-node"
+    confidence: suspected
+    notes: Comment-node canary for XML-comment truncation drills.
+  - id: assertion_marker
+    template: "ARGUS_SAML_VALIDATION_SAFE"
+    confidence: suspected
+    notes: Plain assertion marker; not a signed document.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

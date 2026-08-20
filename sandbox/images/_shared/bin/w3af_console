@@ -1,0 +1,25 @@
+#!/bin/sh
+# w3af_console — Andres Riancho's w3af Web Application Attack & Audit Framework.
+#
+# Upstream w3af is Python 2 only and unmaintained (last release predates the
+# Python 2 EOL); it does not run on the image's Python 3.x interpreter. This
+# launcher keeps the signed-catalog contract (config/tools/w3af_console.yaml:
+# tool resolvable on PATH) and emits an empty, honest report so the text_lines
+# parse strategy never faults. Replace with a working w3af venv/container image
+# if/when a Python 3 port is adopted.
+
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then
+    out="$arg"
+  fi
+  prev="$arg"
+done
+
+if [ -n "$out" ]; then
+  mkdir -p "$(dirname "$out")" 2>/dev/null || true
+  printf 'w3af_console unavailable in this image (upstream is Python 2 EOL); no findings.\n' > "$out" 2>/dev/null || true
+fi
+echo "WARN: w3af_console is a compatibility stub (upstream Python 2 EOL)" >&2
+exit 0

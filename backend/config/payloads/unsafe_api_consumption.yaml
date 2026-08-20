@@ -1,0 +1,30 @@
+family_id: unsafe_api_consumption
+description: >-
+  Unsafe Consumption of APIs (OWASP API10) curriculum — inert third-party
+  response and non-routable upstream markers for trust-boundary drills.
+cwe_ids: [20, 918]
+owasp_top10:
+  - 'A10:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: third_party_marker
+    template: "ARGUS_UNSAFE_API_CONSUMPTION_SAFE"
+    confidence: suspected
+    notes: Inert upstream-response marker; validates untrusted-data handling.
+  - id: synthetic_upstream
+    template: "argus-upstream-safe.invalid"
+    confidence: suspected
+    notes: Non-routable upstream host (invalid TLD); never resolves.
+  - id: benign_redirect_marker
+    template: "argus-unsafe-api-safe-redirect"
+    confidence: suspected
+    notes: Redirect-following marker; benign, no live location.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

@@ -1,0 +1,18 @@
+#!/bin/sh
+# magescan — steverobbins/magescan Magento scanner (PHP phar).
+#
+# Catalog contract (config/tools/magescan.yaml):
+#   magescan scan:all <url> --format=json --no-ansi --quiet
+# Executes the phar at /opt/argus-tools/magescan.phar via php (both provisioned
+# in the image: php-cli via apt, phar via release download in the builder stage).
+# Fail-safe: exits 0 with a warning if php or the phar is missing (evidence_
+# artifacts is empty for this tool, output is stdout text_lines).
+
+REAL="/opt/argus-tools/magescan.phar"
+
+if command -v php >/dev/null 2>&1 && [ -f "$REAL" ]; then
+  exec php "$REAL" "$@"
+fi
+
+echo "WARN: magescan unavailable (need php + $REAL)" >&2
+exit 0

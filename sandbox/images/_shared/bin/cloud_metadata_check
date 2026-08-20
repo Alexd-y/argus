@@ -1,0 +1,86 @@
+#!/bin/sh
+# cloud_metadata_check — ARGUS-internal cloud IMDS/SSRF metadata probe.
+#
+# Catalog contract (config/tools/cloud_metadata_check.yaml):
+#   cloud_metadata_check --target <url> --clouds aws,gcp,azure \
+#       --output <file> --timeout <seconds>
+# Issues argv-only HTTP probes against the well-known cloud metadata endpoints
+# (AWS IMDSv1/v2 169.254.169.254, GCE metadata.google.internal, Azure IMDS) with
+# the provider-specific required headers, recording which endpoints answer with
+# credential/identity material. Approval-gated upstream (requires_approval: true).
+# Fail-safe: always writes the text report and exits 0 so text_lines parsing
+# never faults; unreachable endpoints are recorded as such (the common,
+# expected result outside a cloud instance).
+
+target=""
+clouds="aws,gcp,azure"
+output=""
+timeout="5"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --target) target="${2:-}"; shift 2 2>/dev/null || shift ;;
+    --clouds) clouds="${2:-aws,gcp,azure}"; shift 2 2>/dev/null || shift ;;
+    --output) output="${2:-}"; shift 2 2>/dev/null || shift ;;
+    --timeout) timeout="${2:-5}"; shift 2 2>/dev/null || shift ;;
+    *) shift ;;
+  esac
+done
+
+[ -z "$output" ] && output="./cloud_metadata_check.txt"
+mkdir -p "$(dirname "$output")" 2>/dev/null || true
+
+{
+  echo "# cloud_metadata_check"
+  echo "target=$target"
+  echo "clouds=$clouds"
+  echo "timeout=${timeout}s"
+  echo "generated=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+  echo "---"
+} > "$output" 2>/dev/null || true
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "ERROR: curl unavailable; no probes issued" >> "$output" 2>/dev/null || true
+  echo "WARN: cloud_metadata_check found no curl" >&2
+  exit 0
+fi
+
+probe() {
+  # $1=label $2=url  extra header args in $3 (optional)
+  label="$1"
+  url="$2"
+  header="$3"
+  if [ -n "$header" ]; then
+    body="$(curl -fsS --max-time "$timeout" -H "$header" "$url" 2>/dev/null)"
+  else
+    body="$(curl -fsS --max-time "$timeout" "$url" 2>/dev/null)"
+  fi
+  if [ -n "$body" ]; then
+    echo "REACHABLE  $label  $url" >> "$output"
+    echo "$body" | head -c 512 | sed 's/^/    /' >> "$output"
+    echo "" >> "$output"
+  else
+    echo "unreachable $label  $url" >> "$output"
+  fi
+}
+
+IFS=','
+for c in $clouds; do
+  case "$c" in
+    aws)
+      probe "aws-imdsv1" "http://169.254.169.254/latest/meta-data/iam/security-credentials/" ""
+      probe "aws-imdsv2-token" "http://169.254.169.254/latest/api/token" "X-aws-ec2-metadata-token-ttl-seconds: 21600"
+      ;;
+    gcp)
+      probe "gcp-metadata" "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" "Metadata-Flavor: Google"
+      ;;
+    azure)
+      probe "azure-imds" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" "Metadata: true"
+      ;;
+    *)
+      echo "skipped unknown-cloud $c" >> "$output"
+      ;;
+  esac
+done
+unset IFS
+
+exit 0

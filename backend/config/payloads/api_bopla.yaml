@@ -1,0 +1,34 @@
+family_id: api_bopla
+description: >-
+  API Broken Object Property Level Authorization (OWASP API3) curriculum —
+  benign extra-property names to probe write/read property scoping. Inert keys.
+cwe_ids: [915, 213]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: benign_property_a
+    template: "argusBoplaSafePropertyA"
+    confidence: suspected
+    notes: Benign camelCase property; not a known privileged key.
+  - id: benign_property_b
+    template: "argusBoplaSafePropertyB"
+    confidence: suspected
+    notes: Companion benign property name.
+  - id: benign_property_c
+    template: "argusBoplaSafePropertyC"
+    confidence: suspected
+    notes: Third benign property for binding-surface drills.
+  - id: marker
+    template: "ARGUS_API_BOPLA_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without property semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the property name to exercise case-insensitive rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

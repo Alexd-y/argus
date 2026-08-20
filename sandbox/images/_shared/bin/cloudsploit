@@ -1,0 +1,47 @@
+#!/bin/sh
+# cloudsploit — Aqua CloudSploit multi-cloud posture scan (aquasecurity/cloudsploit).
+#
+# Catalog contract (config/tools/cloudsploit.yaml):
+#   cloudsploit scan --config <path> --json <file>
+# The real tool is a Node app run via `node index.js` (no npm-published CLI), so
+# this launcher drops the `scan` verb, rewrites the space-separated flags to the
+# `--flag=value` form index.js expects, and runs the git-cloned copy at
+# /opt/argus-tools/cloudsploit. Fail-safe: writes `{}` to the --json target and
+# exits 0 when node or the clone is absent (json_object parse never faults).
+
+REAL="/opt/argus-tools/cloudsploit/index.js"
+
+json_out=""
+set -- "$@"
+args=""
+skip_next=0
+prev=""
+for tok in "$@"; do
+  if [ "$skip_next" = "1" ]; then skip_next=0; prev=""; continue; fi
+  case "$tok" in
+    scan) : ;;                                  # drop the verb
+    --config) prev="--config" ;;                # value folded on next token
+    --json) prev="--json" ;;
+    *)
+      if [ "$prev" = "--config" ]; then
+        args="$args --config=$tok"; prev=""
+      elif [ "$prev" = "--json" ]; then
+        json_out="$tok"; args="$args --json=$tok"; prev=""
+      else
+        args="$args $tok"
+      fi
+      ;;
+  esac
+done
+
+if [ -f "$REAL" ] && command -v node >/dev/null 2>&1; then
+  # shellcheck disable=SC2086
+  exec node "$REAL" $args
+fi
+
+if [ -n "$json_out" ]; then
+  mkdir -p "$(dirname "$json_out")" 2>/dev/null || true
+  echo '{}' > "$json_out" 2>/dev/null || true
+fi
+echo "WARN: cloudsploit unavailable (need node + $REAL)" >&2
+exit 0

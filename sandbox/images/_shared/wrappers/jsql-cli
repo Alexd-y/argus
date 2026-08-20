@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# jsql-cli — argv adapter for jSQL Injection (tool_id: jsql).
+#
+# Catalog contract (backend/config/tools/jsql.yaml):
+#   jsql-cli --url <url> --get-data --output <path.json>
+# Upstream jSQL Injection (ron190/jsql-injection) is a GUI-first Java tool driven
+# here via its headless jar. This runner invokes `java -jar <jar> -u <url> [...]`
+# and writes a JSON envelope to <path.json>. APPROVAL-GATED upstream: --get-data
+# exfiltrates injectable column data. Jar expected at JSQL_JAR or /opt/jsql/jsql.jar.
+#
+# Fail-safe: always writes a valid JSON object to <output> (even on error).
+set -uo pipefail
+
+url=""
+getdata=""
+out="/out/jsql.json"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) url="${2:-}"; shift 2 ;;
+    --get-data) getdata="1"; shift ;;
+    --output) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+
+write_envelope() {
+  # $1 = error string ("" if none); reads raw output from stdin.
+  python3 - "$url" "$out" "$1" <<'PY'
+import json, sys
+url, out, err = sys.argv[1], sys.argv[2], sys.argv[3]
+raw = sys.stdin.read()
+doc = {"tool": "jsql", "url": url, "get_data": True, "raw_output": raw}
+if err:
+    doc["error"] = err
+with open(out, "w") as fh:
+    json.dump(doc, fh)
+PY
+}
+
+if [ -z "$url" ]; then
+  printf '' | write_envelope "missing required --url"
+  exit 2
+fi
+
+jar="${JSQL_JAR:-/opt/jsql/jsql.jar}"
+if ! command -v java >/dev/null 2>&1; then
+  printf '' | write_envelope "java runtime not found on PATH"
+  exit 3
+fi
+if [ ! -f "$jar" ]; then
+  printf '' | write_envelope "jsql jar not found (set JSQL_JAR or install /opt/jsql/jsql.jar)"
+  exit 3
+fi
+
+argv="-u $url"
+[ -n "$getdata" ] && argv="$argv --get-data"
+# shellcheck disable=SC2086
+raw_output="$(java -jar "$jar" $argv </dev/null 2>&1 || true)"
+printf '%s' "$raw_output" | write_envelope ""

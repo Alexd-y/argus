@@ -1,0 +1,30 @@
+family_id: xs_leak
+description: >-
+  Cross-Site Leaks (XS-Leaks) curriculum — inert markers for observable
+  cross-origin discrepancy drills (frame count, status, cache). No live probing.
+cwe_ids: [200, 203]
+owasp_top10:
+  - 'A04:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: frame_count_marker
+    template: "ARGUS_XSLEAK_SAFE_FRAMECOUNT"
+    confidence: suspected
+    notes: Frame-count side-channel marker; plain token.
+  - id: status_marker
+    template: "argus-xsleak-safe-status-probe"
+    confidence: suspected
+    notes: Response-status discrepancy marker.
+  - id: cache_probe_marker
+    template: "argus-xsleak-safe-cache-probe"
+    confidence: suspected
+    notes: Cache-timing discrepancy marker.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

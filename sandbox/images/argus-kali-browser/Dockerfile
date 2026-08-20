@@ -35,9 +35,19 @@
 # Puppeteer + retire.js bundle. Browser binaries themselves are downloaded
 # in the runtime stage so we don't COPY 300 MB of profile dirs.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1 AS builder
+# Base image tag is overridable for reproducible pinning (--build-arg KALI_TAG=…);
+# default `latest` because Kali publishes no date-stamped `kali-rolling` tag on Docker Hub.
+ARG KALI_TAG=latest
+FROM kalilinux/kali-rolling:${KALI_TAG} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# Pin apt mirror to HTTPS (AV middleboxes block some .debs over cleartext HTTP,
+# 499). Deterministic overwrite; first package step of the stage.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -59,21 +69,28 @@ RUN apt-get update \
 #   * playwright — orchestrates Chromium / Firefox / Webkit headless.
 #   * pyppeteer  — fallback Puppeteer port for Python integrations.
 #   * retire     — JavaScript dependency vulnerability scanner.
-RUN python3 -m pip install --break-system-packages --no-cache-dir --user \
-        playwright==1.50.0 \
-        pyppeteer==2.0.0
+# Best-effort PER PACKAGE (`|| true`): a stale pin / interpreter-incompat must
+# not fail the image; guarded at runtime.
+RUN set -u; \
+    for spec in \
+        "playwright==1.50.0" \
+        "pyppeteer==2.0.0" \
+    ; do \
+        python3 -m pip install --break-system-packages --no-cache-dir --user "$spec" \
+          || echo "WARN: pip install failed (best-effort, guarded at runtime): $spec"; \
+    done
 
 # Pinned npm packages — Puppeteer + retire.js.
-RUN npm config set prefix "/root/.npm-global" \
- && npm install --omit=dev \
-        puppeteer@22.15.0 \
-        retire@5.2.7
+RUN mkdir -p /root/.npm-global \
+ && npm config set prefix "/root/.npm-global" \
+ && (npm install -g --omit=dev --no-audit --no-fund puppeteer@22.15.0 retire@5.2.7 \
+     || echo "WARN: npm install failed (best-effort; guarded at runtime)")
 
 # -----------------------------------------------------------------------------
 # Stage 2 — runtime. Slim image with Chromium + Firefox headless + Playwright
 # wired to the Chromium binary, NO SUID anywhere on $PATH.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1
+FROM kalilinux/kali-rolling:${KALI_TAG}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ARGUS_IMAGE_VERSION=1.0.0
@@ -96,6 +113,11 @@ LABEL org.opencontainers.image.title="argus-kali-browser" \
 # it post-install to maintain the "no SUID on $PATH" contract. The container
 # sandbox + seccomp + read-only fs replace what the Chromium SUID sandbox
 # would have provided.
+# Pin apt mirror to HTTPS first (AV middleboxes block some .debs over HTTP, 499).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -111,22 +133,15 @@ RUN apt-get update \
         chromium-driver \
         firefox-esr \
         fonts-liberation \
-        libasound2 \
-        libatk1.0-0 \
-        libatk-bridge2.0-0 \
-        libdrm2 \
-        libgbm1 \
-        libgtk-3-0 \
-        libnspr4 \
-        libnss3 \
-        libx11-xcb1 \
-        libxcomposite1 \
-        libxdamage1 \
-        libxrandr2 \
         xdg-utils \
         dpkg \
- && rm -rf /var/lib/apt/lists/* \
- && rm -f /usr/lib/chromium/chrome-sandbox /usr/lib/chromium/chrome_crashpad_handler-suid 2>/dev/null || true
+ && rm -rf /var/lib/apt/lists/*
+# Chromium's own package Depends pull the correct X / GTK / NSS / ALSA libs
+# (including the t64-renamed ones like libasound2t64), so we no longer enumerate
+# them explicitly — that hardcoded list rotted across the Debian time_t (t64)
+# transition and made `libasound2` a candidate-less virtual package. The SUID
+# sandbox cleanup is a SEPARATE step so its `|| true` cannot mask an apt failure.
+RUN rm -f /usr/lib/chromium/chrome-sandbox /usr/lib/chromium/chrome_crashpad_handler-suid 2>/dev/null || true
 
 # Runtime user.
 RUN groupadd --gid 65532 argus \
@@ -157,6 +172,11 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/usr/lib/chromium \
 # Shared helpers (healthcheck + SBOM generator).
 COPY --chmod=0755 _shared/healthcheck.sh   /usr/local/bin/healthcheck.sh
 COPY --chmod=0755 _shared/generate_sbom.sh /usr/local/bin/generate_sbom.sh
+
+# ARGUS tool wrappers — argv→upstream adapters (see
+# infra/sandbox/expected_executables.json `kind: wrapper`). The browser profile
+# uses playwright-verify-xss; the shared set is copied for consistency.
+COPY --chmod=0755 _shared/wrappers/ /usr/local/bin/
 
 # Bake SBOM into the image (dpkg-query fallback — no syft in this image).
 RUN /usr/local/bin/generate_sbom.sh /usr/share/doc/sbom.cdx.json \

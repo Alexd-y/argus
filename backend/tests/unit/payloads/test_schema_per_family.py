@@ -90,6 +90,20 @@ EXPECTED_FAMILIES: Final[frozenset[str]] = frozenset(
         "xpathi_safe",
         "xss_contextual",
         "xxe_oast_safe",
+        # Seed families — additional attack surfaces (all SAFE/conservative)
+        "file_upload_polyglot",
+        "http_parameter_pollution",
+        "web_cache_deception",
+        "saml_validation",
+        "client_side_path_traversal",
+        "dns_rebinding",
+        "xs_leak",
+        "business_logic_transition",
+        "api_bola",
+        "api_bopla",
+        "api_bfla",
+        "resource_consumption_safe",
+        "unsafe_api_consumption",
     }
 )
 

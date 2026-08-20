@@ -1,0 +1,37 @@
+family_id: api_bola
+description: >-
+  API Broken Object Level Authorization (OWASP API1) curriculum — conservative
+  read-only adjacent-object markers for cross-tenant scope drills.
+cwe_ids: [639, 284]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: adjacent_object_id
+    template: "99999999"
+    confidence: suspected
+    notes: Out-of-range object id; tests range/scope enforcement (read-only).
+  - id: zero_object_id
+    template: "0"
+    confidence: suspected
+    notes: Zero object id; tests sentinel-value handling.
+  - id: benign_object_marker
+    template: "argus-bola-safe-object"
+    confidence: suspected
+    notes: Neutral object identifier for differential comparison.
+  - id: tenant_marker
+    template: "ARGUS_API_BOLA_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without object semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the marker to exercise case-insensitive detection rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Raw id payload (path sinks).
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for query-string sinks.

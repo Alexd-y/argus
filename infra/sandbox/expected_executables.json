@@ -1,0 +1,970 @@
+{
+  "schema_version": 1,
+  "generated_by": "scripts/generate_tool_executables.py",
+  "total_tools": 162,
+  "total_executables": 88,
+  "binary_count": 77,
+  "wrapper_count": 11,
+  "executables": [
+    {
+      "name": "amass",
+      "kind": "binary",
+      "tools": [
+        "amass_passive"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "aquatone",
+      "kind": "binary",
+      "tools": [
+        "aquatone"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "arachni",
+      "kind": "binary",
+      "tools": [
+        "arachni"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "arjun",
+      "kind": "binary",
+      "tools": [
+        "arjun"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "bandit",
+      "kind": "binary",
+      "tools": [
+        "bandit"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "chaos",
+      "kind": "binary",
+      "tools": [
+        "chaos"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "clairvoyance",
+      "kind": "binary",
+      "tools": [
+        "clairvoyance"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "cloud_metadata_check",
+      "kind": "binary",
+      "tools": [
+        "cloud_metadata_check"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "cloudsploit",
+      "kind": "binary",
+      "tools": [
+        "cloudsploit"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "cmsmap",
+      "kind": "binary",
+      "tools": [
+        "cmsmap"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "commix",
+      "kind": "binary",
+      "tools": [
+        "commix"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "curl",
+      "kind": "binary",
+      "tools": [
+        "curl"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "dalfox",
+      "kind": "binary",
+      "tools": [
+        "dalfox"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "dig",
+      "kind": "binary",
+      "tools": [
+        "dig"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "dirsearch",
+      "kind": "binary",
+      "tools": [
+        "dirsearch"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "dnsrecon",
+      "kind": "binary",
+      "tools": [
+        "dnsrecon"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "dnsx",
+      "kind": "binary",
+      "tools": [
+        "dnsx"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "dockle",
+      "kind": "binary",
+      "tools": [
+        "dockle"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "droopescan",
+      "kind": "binary",
+      "tools": [
+        "droopescan"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "enum4linux-ng",
+      "kind": "binary",
+      "tools": [
+        "enum4linux_ng"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "eyewitness",
+      "kind": "binary",
+      "tools": [
+        "eyewitness"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "favfreak",
+      "kind": "binary",
+      "tools": [
+        "favfreak"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "feroxbuster",
+      "kind": "binary",
+      "tools": [
+        "feroxbuster"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "ffuf",
+      "kind": "binary",
+      "tools": [
+        "ffuf_dir",
+        "ffuf_param",
+        "ffuf_vhost"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "fierce",
+      "kind": "binary",
+      "tools": [
+        "fierce"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "findomain",
+      "kind": "binary",
+      "tools": [
+        "findomain"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "gau",
+      "kind": "binary",
+      "tools": [
+        "gau"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "ghauri",
+      "kind": "binary",
+      "tools": [
+        "ghauri"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "gitleaks",
+      "kind": "binary",
+      "tools": [
+        "gitleaks"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "gobuster",
+      "kind": "binary",
+      "tools": [
+        "gobuster_auth",
+        "gobuster_dir"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "gospider",
+      "kind": "binary",
+      "tools": [
+        "gospider"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "gowitness",
+      "kind": "binary",
+      "tools": [
+        "gowitness"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "graphw00f",
+      "kind": "binary",
+      "tools": [
+        "graphw00f"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "hakrawler-wrapper",
+      "kind": "wrapper",
+      "tools": [
+        "hakrawler"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "host",
+      "kind": "binary",
+      "tools": [
+        "host"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "httpx",
+      "kind": "binary",
+      "tools": [
+        "httpx"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "inql",
+      "kind": "binary",
+      "tools": [
+        "inql"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "interactsh-client",
+      "kind": "binary",
+      "tools": [
+        "interactsh_client"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "jarm",
+      "kind": "binary",
+      "tools": [
+        "jarm"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "joomscan",
+      "kind": "binary",
+      "tools": [
+        "joomscan"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "jsql-cli",
+      "kind": "wrapper",
+      "tools": [
+        "jsql"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "katana",
+      "kind": "binary",
+      "tools": [
+        "katana"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "kics",
+      "kind": "binary",
+      "tools": [
+        "kics"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "kr",
+      "kind": "binary",
+      "tools": [
+        "kiterunner"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "kxss-runner",
+      "kind": "wrapper",
+      "tools": [
+        "kxss"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "linkfinder-wrapper",
+      "kind": "wrapper",
+      "tools": [
+        "linkfinder"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "magescan",
+      "kind": "binary",
+      "tools": [
+        "magescan"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "masscan",
+      "kind": "binary",
+      "tools": [
+        "masscan"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "naabu",
+      "kind": "binary",
+      "tools": [
+        "naabu"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "newman",
+      "kind": "binary",
+      "tools": [
+        "postman_newman"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "nikto",
+      "kind": "binary",
+      "tools": [
+        "nikto"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "nmap",
+      "kind": "binary",
+      "tools": [
+        "nmap_tcp_full",
+        "nmap_tcp_top",
+        "nmap_udp",
+        "nmap_version",
+        "nmap_vuln",
+        "ssl_enum_ciphers"
+      ],
+      "images": [
+        "argus-kali-recon",
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "nosqlmap-runner",
+      "kind": "wrapper",
+      "tools": [
+        "nosqlmap"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "nuclei",
+      "kind": "binary",
+      "tools": [
+        "jenkins_enum",
+        "nextjs_check",
+        "nuclei",
+        "spring_boot_actuator"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "oastify-client",
+      "kind": "binary",
+      "tools": [
+        "oastify_client"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "openapi-scanner",
+      "kind": "binary",
+      "tools": [
+        "openapi_scanner"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "pacu",
+      "kind": "binary",
+      "tools": [
+        "pacu"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "paramspider",
+      "kind": "binary",
+      "tools": [
+        "paramspider"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "playwright-verify-xss",
+      "kind": "wrapper",
+      "tools": [
+        "playwright_xss_verify"
+      ],
+      "images": [
+        "argus-kali-browser"
+      ]
+    },
+    {
+      "name": "prowler",
+      "kind": "binary",
+      "tools": [
+        "prowler"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "scout",
+      "kind": "binary",
+      "tools": [
+        "scoutsuite"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "secretfinder-wrapper",
+      "kind": "wrapper",
+      "tools": [
+        "secretfinder"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "semgrep",
+      "kind": "binary",
+      "tools": [
+        "semgrep"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "sh",
+      "kind": "binary",
+      "tools": [
+        "apktool",
+        "assetfinder",
+        "binwalk",
+        "bloodhound_python",
+        "censys",
+        "checkov",
+        "chrome_csp_probe",
+        "cookie_probe",
+        "cors_probe",
+        "crackmapexec",
+        "crt_sh",
+        "detect_secrets",
+        "evil_winrm",
+        "github_search",
+        "gopherus",
+        "graphql_cop",
+        "grpcurl_probe",
+        "grype",
+        "hash_analyzer",
+        "hashcat",
+        "hashid",
+        "hydra",
+        "ike_scan",
+        "impacket_examples",
+        "impacket_secretsdump",
+        "jadx",
+        "john",
+        "kerbrute",
+        "kube_bench",
+        "kube_hunter",
+        "ldapsearch",
+        "medusa",
+        "mkcert_verify",
+        "mobsf_api",
+        "mongodb_probe",
+        "ncrack",
+        "ntlmrelayx",
+        "oast_dns_probe",
+        "onesixtyone",
+        "ophcrack",
+        "otx_alienvault",
+        "patator",
+        "playwright_runner",
+        "puppeteer_screens",
+        "radare2_info",
+        "redis_cli_probe",
+        "responder",
+        "rpcclient_enum",
+        "rustscan",
+        "securitytrails",
+        "shodan_cli",
+        "smbclient",
+        "smbmap",
+        "snmp_check",
+        "snmpwalk",
+        "ssrfmap",
+        "syft",
+        "terrascan",
+        "tfsec",
+        "trufflehog",
+        "urlscan",
+        "whois_rdap"
+      ],
+      "images": [
+        "argus-kali-binary",
+        "argus-kali-browser",
+        "argus-kali-cloud",
+        "argus-kali-network",
+        "argus-kali-recon",
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "skipfish",
+      "kind": "binary",
+      "tools": [
+        "skipfish"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "sqlmap",
+      "kind": "binary",
+      "tools": [
+        "sqlmap_confirm",
+        "sqlmap_safe"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "sslscan",
+      "kind": "binary",
+      "tools": [
+        "sslscan"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "sslyze",
+      "kind": "binary",
+      "tools": [
+        "sslyze"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "subfinder",
+      "kind": "binary",
+      "tools": [
+        "subfinder"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "subjs-wrapper",
+      "kind": "wrapper",
+      "tools": [
+        "subjs"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "testssl.sh",
+      "kind": "binary",
+      "tools": [
+        "testssl"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "theHarvester",
+      "kind": "binary",
+      "tools": [
+        "theharvester"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "tlsx",
+      "kind": "binary",
+      "tools": [
+        "tlsx"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "tplmap-runner",
+      "kind": "wrapper",
+      "tools": [
+        "tplmap"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "trivy",
+      "kind": "binary",
+      "tools": [
+        "trivy_fs",
+        "trivy_image"
+      ],
+      "images": [
+        "argus-kali-cloud"
+      ]
+    },
+    {
+      "name": "unicornscan",
+      "kind": "binary",
+      "tools": [
+        "unicornscan"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "w3af_console",
+      "kind": "binary",
+      "tools": [
+        "w3af_console"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "wapiti",
+      "kind": "binary",
+      "tools": [
+        "wapiti"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "wappalyzer",
+      "kind": "binary",
+      "tools": [
+        "wappalyzer_cli"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "waybackurls-wrapper",
+      "kind": "wrapper",
+      "tools": [
+        "waybackurls"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "webanalyze",
+      "kind": "binary",
+      "tools": [
+        "webanalyze"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "wfuzz",
+      "kind": "binary",
+      "tools": [
+        "wfuzz"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "whatweb",
+      "kind": "binary",
+      "tools": [
+        "whatweb"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "whois",
+      "kind": "binary",
+      "tools": [
+        "whois"
+      ],
+      "images": [
+        "argus-kali-recon"
+      ]
+    },
+    {
+      "name": "wpscan",
+      "kind": "binary",
+      "tools": [
+        "wpscan"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "xsser",
+      "kind": "binary",
+      "tools": [
+        "xsser"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "xsstrike-runner",
+      "kind": "wrapper",
+      "tools": [
+        "xsstrike"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    },
+    {
+      "name": "zap-baseline.py",
+      "kind": "binary",
+      "tools": [
+        "zap_baseline"
+      ],
+      "images": [
+        "argus-kali-web"
+      ]
+    }
+  ]
+}

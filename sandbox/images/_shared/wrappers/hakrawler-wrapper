@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# hakrawler-wrapper — argv→stdin adapter for hakrawler (tool_id: hakrawler).
+#
+# Catalog contract (backend/config/tools/hakrawler.yaml):
+#   hakrawler-wrapper -url <url> -depth <n> -subs -out <path>
+# Upstream hakrawler (hakluke/hakrawler v1.0.2) reads seed URLs from stdin and
+# writes discovered URLs to stdout, so this wrapper translates the sandbox's
+# argv-only contract to `printf <url> | hakrawler -d <n> [-subs] -u`.
+#
+# Fail-safe: always creates <out> (empty on any error) so the sandbox parse
+# strategy never faults on a missing artifact.
+set -uo pipefail
+
+url=""
+depth="3"
+subs=""
+out="/out/hakrawler.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -url) url="${2:-}"; shift 2 ;;
+    -depth) depth="${2:-3}"; shift 2 ;;
+    -subs) subs="-subs"; shift ;;
+    -out) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$url" ]; then
+  echo "hakrawler-wrapper: missing required -url" >&2
+  exit 2
+fi
+if ! command -v hakrawler >/dev/null 2>&1; then
+  echo "hakrawler-wrapper: hakrawler not found on PATH" >&2
+  exit 3
+fi
+
+# shellcheck disable=SC2086
+printf '%s\n' "$url" | hakrawler -d "$depth" $subs -u >"$out" 2>/dev/null || : >"$out"

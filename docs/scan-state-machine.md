@@ -308,6 +308,33 @@ stateDiagram-v2
 - Path: `{tenant_id}/{scan_id}/exploitation/raw/`
 - Artifacts: exploit attempts, proof-of-concept evidence, tool outputs, post-exploit logs
 
+#### Tool execution plane (single control plane)
+
+Исполнение инструментов в `exploitation_executor.py` приведено к принципу единого
+контролируемого контура (LLM — диспетчер, но не исполнитель сырых строк):
+
+| Слой | Источник истины |
+|------|-----------------|
+| **Пейлоады** | Только подписанный каталог `config/payloads/*` через `PayloadBuilder` + типизированный `PayloadContext` (canary / oast_host / baseline, кодировка по `sink_type`). **Нет** raw-LLM генерации: `_build_payloads_for_finding` при неудаче логирует и возвращает `[]`/PoC, не строку от LLM. |
+| **Выбор инструментов** | Подписанный `config/tool_profiles/tool_profiles.yaml` (Ed25519, fail-closed) через `_select_tools_for_finding`; при недоступности — in-code фолбэк `_VULN_TOOL_MAP`. |
+| **Неймспейс** | Каждый инструмент резолвится в подписанный `tool_id` через `ToolRegistry.resolve` (алиасы T7). Регрессионный тест фиксирует 27/27. |
+| **Транспорт (opt-in)** | При `scan_options["use_docker_sandbox_runner"]` — `ToolRegistry` + `DockerSandboxAdapter` (эфемерный hardened `docker run`, argv из `command_template` через `render_argv`). По умолчанию флаг выключен → рабочий legacy `docker exec`. |
+
+**Фолбэк на legacy (без потери функциональности):** signed-путь возвращает `None`
+(и исполнение идёт по legacy) для approval-gated инструментов, неизвлекаемых из
+URL плейсхолдеров и render/config-ошибок.
+
+**Auth в signed-пути (реализовано):** аутентифицированная сессия из доверенного
+`SessionStore` пробрасывается как `auth_argv` — фрагмент, добавляемый
+`DockerSandboxAdapter` ПОСЛЕ argv из подписанного `command_template`. Значение
+строго валидируется (`_validate_auth_header_value`: нет CR/LF/NUL/control → нет
+header/argv-инъекции; один argv-токен) и редактируется в persisted plan. Выбор
+уровня адаптера (а не подписанных auth-дескрипторов) обоснован в ADR-011:
+auth-значения динамические и не подписываемы, поэтому «signed placeholder» и
+«валидируемый флаг доверенного кода» security-эквивалентны.
+
+Подробности цикла: [develop/reports/orch-2026-08-16-executor-single-control-plane-completion.md](./develop/reports/orch-2026-08-16-executor-single-control-plane-completion.md).
+
 ---
 
 ### 4.5 post_exploitation
@@ -423,3 +450,5 @@ All phases persist raw outputs to MinIO for audit trail, evidence preservation, 
 - [erd.md](./erd.md)
 - [frontend-api-contract.md](./frontend-api-contract.md)
 - [mcp-server.md](./mcp-server.md) — MCP KAL tools и `POST /api/v1/tools/kal/run`
+- [sandbox-images.md](./sandbox-images.md) — образы песочницы и доступность инструментов
+- [develop/reports/orch-2026-08-16-executor-single-control-plane-completion.md](./develop/reports/orch-2026-08-16-executor-single-control-plane-completion.md) — единый контур исполнения exploitation (PayloadContext, tool_profiles, DockerSandboxAdapter)

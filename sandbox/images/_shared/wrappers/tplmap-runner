@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# tplmap-runner — argv adapter for tplmap (tool_id: tplmap).
+#
+# Catalog contract (backend/config/tools/tplmap.yaml):
+#   tplmap-runner --url <url> --level 3 --os-cmd id --output <path.txt>
+# Upstream tplmap (epinna/tplmap) is invoked as `tplmap.py -u <url> --level <n>
+# --os-cmd <cmd>`; this runner maps the sandbox argv to those flags and captures
+# stdout+stderr to <path>. APPROVAL-GATED upstream: --os-cmd is a real RCE probe.
+# tplmap is not a PyPI package — it is expected at TPLMAP_BIN or /opt/tplmap/tplmap.py.
+#
+# Fail-safe: always creates <out> (error line on any failure).
+set -uo pipefail
+
+url=""
+level="3"
+oscmd=""
+out="/out/tplmap.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) url="${2:-}"; shift 2 ;;
+    --level) level="${2:-3}"; shift 2 ;;
+    --os-cmd) oscmd="${2:-}"; shift 2 ;;
+    --output) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$url" ]; then
+  echo "tplmap-runner: missing required --url" >&2
+  exit 2
+fi
+
+# Resolve the tplmap entrypoint: explicit override, PATH, or the conventional
+# /opt clone. Run through python3 when we have a script path.
+if [ -n "${TPLMAP_BIN:-}" ] && [ -x "${TPLMAP_BIN}" ]; then
+  set -- "${TPLMAP_BIN}"
+elif command -v tplmap >/dev/null 2>&1; then
+  set -- tplmap
+elif command -v tplmap.py >/dev/null 2>&1; then
+  set -- tplmap.py
+elif [ -f /opt/tplmap/tplmap.py ]; then
+  set -- python3 /opt/tplmap/tplmap.py
+else
+  echo "tplmap-runner: tplmap not found (set TPLMAP_BIN or install /opt/tplmap)" >&2
+  echo "ERROR tplmap not installed" >"$out"
+  exit 3
+fi
+
+args="--url $url --level $level"
+[ -n "$oscmd" ] && args="$args --os-cmd $oscmd"
+# tplmap prompts on findings; feed empty stdin so it never blocks.
+# shellcheck disable=SC2086
+"$@" $args </dev/null >"$out" 2>&1 || true

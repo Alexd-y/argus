@@ -1,0 +1,30 @@
+family_id: dns_rebinding
+description: >-
+  DNS rebinding curriculum — non-routable synthetic hostnames (invalid TLD)
+  for origin-validation drills. Inert; no live DNS callback or rebinding.
+cwe_ids: [350, 346]
+owasp_top10:
+  - 'A10:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: synthetic_host
+    template: "argus-rebind-safe.invalid"
+    confidence: suspected
+    notes: Non-routable host (invalid TLD); never resolves.
+  - id: synthetic_host_b
+    template: "argus-rebind-safe-b.invalid"
+    confidence: suspected
+    notes: Second non-routable host for differential comparison.
+  - id: marker
+    template: "ARGUS_DNS_REBIND_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without host semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the host label to exercise case-insensitive rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.

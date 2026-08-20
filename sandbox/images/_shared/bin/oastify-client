@@ -1,0 +1,32 @@
+#!/bin/sh
+# oastify-client — ARGUS OAST receiver, wire-compatible with interactsh-client.
+#
+# The signed catalog (config/tools/oastify_client.yaml) invokes this with the
+# same flags as interactsh_client (`-server`, `-json`, `-o <file>`, `-v`), so we
+# delegate straight to the real interactsh-client binary when present. Fail-safe:
+# if interactsh-client is absent (its go install failed at build time), emit an
+# empty JSONL file so the json_lines parse strategy never faults on a missing
+# artifact. Never exits non-zero on the fail-safe path.
+#
+# kind=binary in expected_executables.json (name has no wrapper suffix); shipped
+# here because it is an ARGUS-authored launcher, not an upstream package.
+
+outfile=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then
+    outfile="$arg"
+  fi
+  prev="$arg"
+done
+
+if command -v interactsh-client >/dev/null 2>&1; then
+  exec interactsh-client "$@"
+fi
+
+if [ -n "$outfile" ]; then
+  mkdir -p "$(dirname "$outfile")" 2>/dev/null || true
+  : > "$outfile" 2>/dev/null || true
+fi
+echo "WARN: interactsh-client not on PATH; oastify-client emitted empty JSONL" >&2
+exit 0

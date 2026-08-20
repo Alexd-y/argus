@@ -41,6 +41,7 @@ from src.mcp.services.notifications import (
     NotificationEvent,
     NotificationSeverity,
 )
+from src.orchestration.adaptive_phase import adaptive_coverage_snapshot
 from src.orchestration.aggressive_exploit_tools import (
     maybe_run_aggressive_exploit_tools,
 )
@@ -2202,6 +2203,16 @@ async def run_scan_state_machine(
             session, tenant_id, scan_id, phase_str, order_index,
             {"phase": phase_str, "output": output_data, "duration_seconds": round(phase_duration, 2)},
         )
+        # Adaptive-driver seam (overhaul §6): flag-gated, append-only, tool-free.
+        # Off by default -> no-op. On -> record one extra AssetGraph coverage entry
+        # derived from this phase's output; never mutates existing artifacts.
+        _adaptive_cov = adaptive_coverage_snapshot(
+            output_data, enabled=settings.argus_adaptive_loop
+        )
+        if _adaptive_cov is not None:
+            await _record_timeline_entry(
+                session, tenant_id, scan_id, phase_str, order_index, _adaptive_cov,
+            )
         await _record_event(
             session, tenant_id, scan_id, "phase_complete", phase_str, progress,
             message=f"Completed {phase_str}", data=output_data,

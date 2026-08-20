@@ -8,6 +8,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.core.config import settings
+from src.orchestration.signed_tool_runner import run_coro_sync, run_signed_tool
+from src.pipeline.contracts.tool_job import TargetKind
 from src.recon.mcp.policy import evaluate_kal_mcp_policy, normalize_kal_binary
 from src.recon.raw_artifact_sink import sink_raw_text, slug_for_artifact_type_component
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
@@ -22,9 +24,52 @@ def _host_from_target(raw: str) -> str:
     s = (raw or "").strip()
     if not s:
         return ""
-    if s.startswith("http://") or s.startswith("https://"):
+    if s.startswith(("http://", "https://")):
         return (urlparse(s).hostname or "").strip()
     return s
+
+
+def _upload_kal_raw_streams(
+    tid: str | None,
+    sid: str | None,
+    category: str,
+    bin_name: str,
+    stdout: str,
+    stderr: str,
+) -> list[str]:
+    """Persist non-empty stdout/stderr to MinIO; return the object keys.
+
+    Shared by the legacy and single-control-plane execution paths so evidence
+    persistence is identical regardless of which runner produced the output.
+    """
+    keys: list[str] = []
+    if not (tid and sid):
+        return keys
+    cat_slug = slug_for_artifact_type_component(category)
+    bin_slug = slug_for_artifact_type_component(bin_name or "tool")
+    if isinstance(stdout, str) and stdout:
+        k_out = sink_raw_text(
+            tenant_id=tid,
+            scan_id=sid,
+            phase=KAL_MCP_RAW_PHASE,
+            artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stdout",
+            text=stdout,
+            ext="txt",
+        )
+        if k_out:
+            keys.append(k_out)
+    if isinstance(stderr, str) and stderr:
+        k_err = sink_raw_text(
+            tenant_id=tid,
+            scan_id=sid,
+            phase=KAL_MCP_RAW_PHASE,
+            artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stderr",
+            text=stderr,
+            ext="txt",
+        )
+        if k_err:
+            keys.append(k_err)
+    return keys
 
 
 def run_kal_mcp_tool(
@@ -125,11 +170,58 @@ def run_kal_mcp_tool(
                 "minio_keys": [],
             }
 
-    eff_timeout = timeout_sec if timeout_sec is not None else float(max(1, int(settings.recon_tools_timeout)))
+    eff_timeout = (
+        timeout_sec if timeout_sec is not None else float(max(1, int(settings.recon_tools_timeout)))
+    )
     eff_timeout = max(1.0, float(eff_timeout))
+
+    # Single control plane (opt-in via ARGUS_RECON_SIGNED_RUNNER): route KAL-MCP
+    # through the signed ToolRegistry + DockerSandboxAdapter. Argv is compiled
+    # from the signed descriptor (the caller-built argv is NOT used), evidence
+    # upload is preserved, and any gap (uncatalogued / unmappable tool) returns
+    # None → fall through to the legacy path below (strict superset while off).
+    if settings.argus_recon_signed_runner:
+        target_kind = (
+            TargetKind.URL
+            if (target or "").strip().startswith(("http://", "https://"))
+            else TargetKind.HOST
+        )
+        signed = run_coro_sync(
+            run_signed_tool(
+                bin_name or "kal_mcp",
+                target,
+                timeout=int(eff_timeout),
+                scan_id=sid or "",
+                tenant_id=tid or "",
+                target_kind=target_kind,
+                correlation_id="argus-kal-mcp",
+            )
+        )
+        if signed is not None:
+            s_out = str(signed.get("stdout", ""))
+            s_err = str(signed.get("stderr", ""))
+            s_rc = int(signed.get("exit_code", -1))
+            keys = _upload_kal_raw_streams(tid, sid, category, bin_name, s_out, s_err)
+            logger.info(
+                "kal_mcp_signed_runner_used",
+                extra={
+                    "event": "kal_mcp_signed_runner_used",
+                    "category": category,
+                    "tool": bin_name,
+                },
+            )
+            return {
+                "success": s_rc == 0,
+                "stdout": s_out,
+                "stderr": s_err,
+                "return_code": s_rc,
+                "execution_time": time.perf_counter() - start,
+                "policy_reason": None,
+                "minio_keys": keys,
+            }
+
     run_parts = build_sandbox_exec_argv(argv, use_sandbox=settings.sandbox_enabled)
 
-    minio_keys: list[str] = []
     exec_out = run_argv_simple_sync(
         run_parts,
         timeout_sec=eff_timeout,
@@ -146,33 +238,7 @@ def run_kal_mcp_tool(
     elapsed = time.perf_counter() - start
     success = bool(exec_out.get("success"))
 
-    cat_slug = slug_for_artifact_type_component(category)
-    bin_slug = slug_for_artifact_type_component(bin_name or "tool")
-    if tid and sid:
-        # Skip empty streams (matches RawPhaseSink / recon handlers): avoids useless
-        # 0-byte PUTs and reduces MinIO+urllib3 edge cases on empty-object responses.
-        if isinstance(stdout, str) and len(stdout) > 0:
-            k_out = sink_raw_text(
-                tenant_id=tid,
-                scan_id=sid,
-                phase=KAL_MCP_RAW_PHASE,
-                artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stdout",
-                text=stdout,
-                ext="txt",
-            )
-            if k_out:
-                minio_keys.append(k_out)
-        if isinstance(stderr, str) and len(stderr) > 0:
-            k_err = sink_raw_text(
-                tenant_id=tid,
-                scan_id=sid,
-                phase=KAL_MCP_RAW_PHASE,
-                artifact_type=f"tool_mcp_kal_{cat_slug}_{bin_slug}_stderr",
-                text=stderr,
-                ext="txt",
-            )
-            if k_err:
-                minio_keys.append(k_err)
+    minio_keys = _upload_kal_raw_streams(tid, sid, category, bin_name, stdout, stderr)
 
     logger.info(
         "kal_mcp_run",

@@ -1,0 +1,87 @@
+# ARGUS tool-selection profiles (signed catalog).
+#
+# Maps a vulnerability type to the sandbox tools used to probe / exploit it.
+# Replaces the hardcoded ``_VULN_TOOL_MAP`` table in
+# ``src.orchestration.exploitation_executor``: selection is now driven by this
+# signed config instead of a code constant. Selection is keyword-in-blob over
+# ``vuln_type + title`` — see
+# ``src.orchestration.tool_profiles.ToolProfileRegistry.tools_for``.
+#
+# Every tool id here MUST have a descriptor under ``backend/config/tools/*.yaml``.
+# The loader is FAIL-CLOSED: an unsigned / tampered catalog is rejected and the
+# executor falls back to the in-code default table (logged), never to raw output.
+#
+# Re-sign after editing (dev workflow — private key is gitignored and deleted
+# after signing; only the public key + SIGNATURES are committed):
+#   python backend/scripts/tools_sign.py sign \
+#     --key       backend/config/tool_profiles/_keys/dev_signing.ed25519.priv \
+#     --tools-dir backend/config/tool_profiles \
+#     --out       backend/config/tool_profiles/SIGNATURES
+version: 1
+defaults:
+  tools: [nuclei, ffuf]
+profiles:
+  # --- Web application ---
+  xss:
+    tools: [dalfox, xsstrike]
+  sqli:
+    tools: [sqlmap]
+  sql_injection:
+    tools: [sqlmap]
+  ssrf:
+    tools: [ffuf, nuclei]
+  lfi:
+    tools: [ffuf]
+  rfi:
+    tools: [ffuf]
+  csrf:
+    tools: [nuclei]
+  idor:
+    tools: [ffuf]
+  open_redirect:
+    tools: [ffuf]
+  command_injection:
+    tools: [commix]
+  ssti:
+    tools: [nuclei]
+  nosqli:
+    tools: [nuclei]
+  graphql:
+    tools: [nuclei]
+  prototype_pollution:
+    tools: [nuclei]
+  xxe:
+    tools: [nuclei]
+  path_traversal:
+    tools: [ffuf]
+  rce:
+    tools: [nuclei]
+  # --- Active Directory / Windows ---
+  ad_kerberoasting:
+    tools: [impacket_secretsdump]
+  ad_asreproasting:
+    tools: [impacket_secretsdump]
+  ad_null_session:
+    tools: [enum4linux_ng]
+  ad_pass_the_hash:
+    tools: [crackmapexec]
+  # --- Cloud / Kubernetes ---
+  cloud_misconfig:
+    tools: [prowler]
+  cloud_iam_weakness:
+    tools: [prowler]
+  cloud_storage_exposure:
+    tools: [scoutsuite]
+  k8s_misconfig:
+    tools: [kube_hunter]
+  k8s_rbac_weakness:
+    tools: [kube_bench]
+  # --- SAST / secrets ---
+  hardcoded_secret:
+    tools: [gitleaks]
+  weak_crypto:
+    tools: [bandit]
+  insecure_function:
+    tools: [semgrep]
+  code_injection_pattern:
+    tools: [semgrep]

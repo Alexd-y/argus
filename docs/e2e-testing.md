@@ -201,6 +201,23 @@ job summary автоматически содержит `summary.json` и хво
   через GitHub OIDC + Sigstore. Если запускаете локально вне CI и образы
   не подписаны — Phase 08 завершится со `status='no_signatures_found'`
   (предупреждение, не ошибка).
+* **Единый контур исполнения (DockerSandboxAdapter) — opt-in, требует Docker.**
+  Путь `ToolRegistry` + `DockerSandboxAdapter` (argv из подписанного
+  `command_template`, эфемерный hardened `docker run`) по умолчанию **выключен**;
+  фаза exploitation идёт по legacy `docker exec`. Юнит-уровень полностью покрыт
+  без демона (мок `create_subprocess_exec`): `tests/unit/sandbox/test_docker_adapter.py`,
+  `tests/unit/orchestration/test_exploitation_docker_runner.py`. Полная e2e-обкатка
+  требует запущенного Docker + собранных `argus-kali-*` образов и в этой среде
+  не выполнялась (TODO). Ручная валидация:
+
+  1. Поднять e2e-стек (см. §3) — Docker-демон + `argus-sandbox`/`argus-kali-*`.
+  2. Создать скан с `scan.options["use_docker_sandbox_runner"] = true`
+     (опц. `scan.options["docker_sandbox_network"] = "argus-e2e"` для egress-контроля).
+  3. Ожидаемо: web-VA инструменты (nuclei/dalfox — без approval, цель http(s))
+     исполняются через `docker run --rm` (hardened), а approval-gated
+     (commix) и аутентифицированные (`auth_context`) findings — по legacy-пути.
+  4. Проверить в логах события `sandbox.docker.completed` / отсутствие
+     `exploitation_tool_not_in_signed_catalog`; артефакты — в per-job `/out`.
 
 ---
 

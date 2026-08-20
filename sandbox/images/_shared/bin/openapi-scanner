@@ -1,0 +1,91 @@
+#!/bin/sh
+# openapi-scanner — ARGUS-internal OpenAPI/Swagger surface extractor.
+#
+# Catalog contract (config/tools/openapi_scanner.yaml):
+#   openapi-scanner --target <url> --output <file>
+# Fetches the schema document at --target and writes a JSON object describing the
+# discovered API surface (paths, HTTP methods, declared security schemes) to
+# --output. Active recon is *schema fetch only* — endpoint probing is delegated
+# downstream to nuclei api-templates, matching the descriptor. Fail-safe: always
+# writes a valid JSON object and exits 0, so the json_object parse strategy never
+# faults even when the target is unreachable or serves a non-schema body.
+
+target=""
+output=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --target)
+      target="${2:-}"
+      shift 2 2>/dev/null || shift
+      ;;
+    --output)
+      output="${2:-}"
+      shift 2 2>/dev/null || shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+[ -z "$output" ] && output="./openapi.json"
+mkdir -p "$(dirname "$output")" 2>/dev/null || true
+
+write_error() {
+  # $1 = error tag
+  printf '{"target":"%s","paths":[],"endpoint_count":0,"error":"%s"}\n' "$target" "$1" > "$output" 2>/dev/null || true
+}
+
+schema="$(mktemp 2>/dev/null || echo /tmp/openapi_schema.$$)"
+
+if [ -z "$target" ] || ! command -v curl >/dev/null 2>&1; then
+  write_error "no_target_or_curl"
+  rm -f "$schema" 2>/dev/null || true
+  exit 0
+fi
+
+if ! curl -fsSL --max-time 60 "$target" -o "$schema" 2>/dev/null; then
+  write_error "fetch_failed"
+  rm -f "$schema" 2>/dev/null || true
+  exit 0
+fi
+
+if command -v python3 >/dev/null 2>&1; then
+  python3 - "$schema" "$target" "$output" <<'PY' 2>/dev/null || write_error "parse_failed"
+import json
+import sys
+
+schema_path, target, out = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(schema_path, "r", encoding="utf-8", errors="replace") as fh:
+        doc = json.load(fh)
+    if not isinstance(doc, dict):
+        raise ValueError("not an object")
+except Exception:
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump({"target": target, "paths": [], "endpoint_count": 0, "error": "non_json_schema"}, fh)
+    sys.exit(0)
+
+paths = doc.get("paths", {}) or {}
+methods = sorted(
+    {m.upper() for ops in paths.values() if isinstance(ops, dict) for m in ops.keys()}
+)
+sec = (doc.get("components", {}) or {}).get("securitySchemes", {}) or doc.get("securityDefinitions", {}) or {}
+report = {
+    "target": target,
+    "version": doc.get("openapi") or doc.get("swagger"),
+    "title": (doc.get("info", {}) or {}).get("title"),
+    "paths": sorted(paths.keys()),
+    "methods": methods,
+    "security_schemes": sorted(sec.keys()),
+    "endpoint_count": len(paths),
+}
+with open(out, "w", encoding="utf-8") as fh:
+    json.dump(report, fh, indent=2)
+PY
+else
+  write_error "no_python3"
+fi
+
+rm -f "$schema" 2>/dev/null || true
+exit 0

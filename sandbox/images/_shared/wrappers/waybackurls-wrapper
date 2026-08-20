@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# waybackurls-wrapper — argv→stdin adapter for waybackurls (tool_id: waybackurls).
+#
+# Catalog contract (backend/config/tools/waybackurls.yaml):
+#   waybackurls-wrapper -domain <domain> -out <path>
+# Upstream waybackurls (tomnomnom/waybackurls) reads a domain from stdin and
+# emits every archived URL to stdout: `printf <domain> | waybackurls > <path>`.
+#
+# Fail-safe: always creates <out> (empty on any error).
+set -uo pipefail
+
+domain=""
+out="/out/wayback.txt"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -domain) domain="${2:-}"; shift 2 ;;
+    -out) out="${2:-$out}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+: > "$out"
+
+if [ -z "$domain" ]; then
+  echo "waybackurls-wrapper: missing required -domain" >&2
+  exit 2
+fi
+if ! command -v waybackurls >/dev/null 2>&1; then
+  echo "waybackurls-wrapper: waybackurls not found on PATH" >&2
+  exit 3
+fi
+
+printf '%s\n' "$domain" | waybackurls >"$out" 2>/dev/null || : >"$out"

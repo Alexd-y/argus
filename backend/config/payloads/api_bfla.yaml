@@ -1,0 +1,33 @@
+family_id: api_bfla
+description: >-
+  API Broken Function Level Authorization (OWASP API5) curriculum — benign
+  route/method markers to probe function-scope enforcement. No privileged calls.
+cwe_ids: [285, 862]
+owasp_top10:
+  - 'A01:2021'
+risk_level: low
+requires_approval: false
+oast_required: false
+payloads:
+  - id: admin_route_marker
+    template: "argus-bfla-safe-admin-route"
+    confidence: suspected
+    notes: Neutral admin-route token; differential vs allowed role.
+  - id: method_marker
+    template: "argus-bfla-safe-method"
+    confidence: suspected
+    notes: HTTP-method-override marker (benign).
+  - id: marker
+    template: "ARGUS_API_BFLA_SAFE_MARKER"
+    confidence: suspected
+    notes: Plain marker without route semantics.
+mutations:
+  - name: case_flip
+    description: Case-flip the route token to exercise case-insensitive rules.
+encodings:
+  - name: identity
+    stages: []
+    description: Literal marker pass-through.
+  - name: url_only
+    stages: [url]
+    description: URL-encoded for path sinks.

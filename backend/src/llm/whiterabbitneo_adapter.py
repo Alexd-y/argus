@@ -17,7 +17,20 @@ WRB_DEFAULT_MODEL = "taico-ai/WhiteRabbitNeo-v3-7B"
 WRB_DEFAULT_MAX_TOKENS = 4096
 WRB_DEFAULT_TEMPERATURE = 0.3
 WRB_DEFAULT_TIMEOUT = 3600.0
-WRB_MAX_PROMPT_BYTES = 8192
+# WhiteRabbitNeo v3 7B context window (tokens). Source of truth: the unified
+# model registry (src/llm/registry.py → provider_id "local_wrb"). The adapter
+# factory reads the live registry value; this default mirrors it.
+WRB_DEFAULT_MAX_CONTEXT_TOKENS = 32768
+# Conservative chars-per-token estimate for prompt-budget math — undershoots so
+# the rendered prompt never overflows the model context window.
+_CHARS_PER_TOKEN = 3
+# Prompt token floor so a large ``max_tokens`` can never starve the prompt.
+_MIN_PROMPT_TOKENS = 1024
+# Character budget for the combined prompt at the DEFAULT context window.
+# Replaces the previous blunt 8 KiB byte cut that silently dropped ~75% of the
+# available WRB context on every ``call_with_usage``. Still exported for the
+# admin diagnostic dashboard (``WrbDashboardOut.max_prompt_bytes``).
+WRB_MAX_PROMPT_BYTES = (WRB_DEFAULT_MAX_CONTEXT_TOKENS - WRB_DEFAULT_MAX_TOKENS) * _CHARS_PER_TOKEN
 
 
 class WhiteRabbitNeoAdapter(LLMAdapter):
@@ -32,10 +45,12 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         api_key: str = "",
         *,
         timeout_sec: float = WRB_DEFAULT_TIMEOUT,
+        max_context_tokens: int = WRB_DEFAULT_MAX_CONTEXT_TOKENS,
     ) -> None:
         self._base_url: str = base_url.rstrip("/") if base_url else ""
         self._api_key: str = api_key
         self._timeout_sec: float = max(10.0, float(timeout_sec))
+        self._max_context_tokens: int = max(2048, int(max_context_tokens))
 
     def _httpx_timeout(self) -> httpx.Timeout:
         return httpx.Timeout(
@@ -55,6 +70,17 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
 
     def is_available(self) -> bool:
         return bool(self._base_url)
+
+    def _prompt_char_budget(self, max_tokens: int) -> int:
+        """Character budget for the combined prompt, derived from the context window.
+
+        Reserves ``max_tokens`` for the completion and converts the remaining
+        context tokens to characters with a conservative ratio, so prompts are
+        trimmed to the REAL WRB window (registry-driven) instead of a blunt fixed
+        byte cut that discarded most of the available context.
+        """
+        usable_tokens = max(_MIN_PROMPT_TOKENS, self._max_context_tokens - max(0, max_tokens))
+        return usable_tokens * _CHARS_PER_TOKEN
 
     async def call(
         self,
@@ -123,9 +149,16 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
 
-        # Truncate prompts to fit WRB context window (7B model ~8k tokens)
-        system_prompt = (system_prompt or "")[:WRB_MAX_PROMPT_BYTES]
-        prompt = prompt[:WRB_MAX_PROMPT_BYTES]
+        # Trim to the REAL WRB context window (registry-driven) instead of a blunt
+        # fixed byte cut. The system prompt may take up to half the budget; the
+        # user prompt takes the remainder.
+        budget = self._prompt_char_budget(max_tokens)
+        system_prompt = system_prompt or ""
+        if len(system_prompt) > budget // 2:
+            system_prompt = system_prompt[: budget // 2]
+        remaining = max(0, budget - len(system_prompt))
+        if len(prompt) > remaining:
+            prompt = prompt[:remaining]
 
         messages: list[dict[str, str]] = []
         if system_prompt:
@@ -191,6 +224,25 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
 _wrb_adapter: WhiteRabbitNeoAdapter | None = None
 
 
+def _resolve_wrb_max_context() -> int:
+    """Read WRB's context window from the unified model registry (fail-safe).
+
+    Lazily imported to keep this low-level adapter module decoupled from the
+    registry at import time (mirrors the lazy ``settings`` import below and
+    avoids an import cycle). Falls back to
+    :data:`WRB_DEFAULT_MAX_CONTEXT_TOKENS` if the registry is unavailable.
+    """
+    try:
+        from src.llm.registry import ProviderRegistry
+
+        record = ProviderRegistry().get("local_wrb")
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return WRB_DEFAULT_MAX_CONTEXT_TOKENS
+    if record is not None and record.capabilities.max_context > 0:
+        return int(record.capabilities.max_context)
+    return WRB_DEFAULT_MAX_CONTEXT_TOKENS
+
+
 def get_whiterabbitneo_adapter() -> WhiteRabbitNeoAdapter:
     global _wrb_adapter
     if _wrb_adapter is None:
@@ -200,6 +252,7 @@ def get_whiterabbitneo_adapter() -> WhiteRabbitNeoAdapter:
             base_url=settings.whiterabbitneo_url,
             api_key=settings.whiterabbitneo_api_key,
             timeout_sec=float(settings.whiterabbitneo_timeout_seconds),
+            max_context_tokens=_resolve_wrb_max_context(),
         )
     return _wrb_adapter
 

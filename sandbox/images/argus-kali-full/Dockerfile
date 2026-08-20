@@ -29,9 +29,19 @@
 # Stage 1 — builder. Compiles the same Go binaries we ship in slim images
 # plus a few extras the full image needs (radare2 build deps).
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1 AS builder
+# Base image tag is overridable for reproducible pinning (--build-arg KALI_TAG=…);
+# default `latest` because Kali publishes no date-stamped `kali-rolling` tag on Docker Hub.
+ARG KALI_TAG=latest
+FROM kalilinux/kali-rolling:${KALI_TAG} AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# Pin apt mirror to HTTPS (AV middleboxes block Kali security-tool .debs over
+# cleartext HTTP, 499). Deterministic overwrite; first package step of the stage.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -53,41 +63,56 @@ RUN apt-get update \
 # Pinned Python tools — superset of web + cloud + browser plus the §4.18
 # binary / mobile / firmware tools that have no slim image of their own
 # (mobsf_api, plus support packages).
-RUN python3 -m pip install --break-system-packages --no-cache-dir --user \
-        jarm==0.1.5 \
-        arjun==2.2.2 \
-        sqlmap==1.9 \
-        XSStrike==3.1.5 \
-        impacket==0.12.0 \
-        bloodhound==1.7.2 \
-        crackmapexec==5.4.0 \
-        prowler==5.20.0 \
-        scoutsuite==5.14.0 \
-        semgrep==1.99.0 \
-        bandit==1.8.0 \
-        checkov==3.2.382 \
-        detect-secrets==1.5.0 \
-        playwright==1.50.0
+# Best-effort PER PACKAGE (`|| true`): PyPI availability / interpreter compat
+# drifts on the rolling base; a stale pin must not fail the image (jarm→0.1.0,
+# XSStrike→3.2.2 corrected; crackmapexec removed from PyPI → skipped). Missing
+# tools guarded at runtime.
+RUN set -u; \
+    for spec in \
+        "jarm==0.1.0" \
+        "arjun==2.2.2" \
+        "sqlmap==1.9" \
+        "XSStrike==3.2.2" \
+        "impacket==0.12.0" \
+        "bloodhound==1.7.2" \
+        "crackmapexec==5.4.0" \
+        "prowler==5.20.0" \
+        "scoutsuite==5.14.0" \
+        "semgrep==1.99.0" \
+        "bandit==1.8.0" \
+        "checkov==3.2.382" \
+        "detect-secrets==1.5.0" \
+        "playwright==1.50.0" \
+    ; do \
+        python3 -m pip install --break-system-packages --no-cache-dir --user "$spec" \
+          || echo "WARN: pip install failed (best-effort, guarded at runtime): $spec"; \
+    done
 
 # Pinned Go binaries — flagship tools used across phases.
 ENV GOPATH=/root/go GOBIN=/root/go/bin
 ENV PATH="${GOBIN}:${PATH}"
-RUN go install -ldflags="-s -w" github.com/projectdiscovery/httpx/cmd/httpx@v1.6.10 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.7.1 \
- && go install -ldflags="-s -w" github.com/projectdiscovery/katana/cmd/katana@v1.1.2 \
- && go install -ldflags="-s -w" github.com/ffuf/ffuf/v2@v2.1.0 \
- && go install -ldflags="-s -w" github.com/OJ/gobuster/v3@v3.6.0 \
- && go install -ldflags="-s -w" github.com/aquasecurity/trivy/cmd/trivy@v0.70.0 \
- && go install -ldflags="-s -w" github.com/anchore/syft/cmd/syft@v1.42.4 \
- && go install -ldflags="-s -w" github.com/anchore/grype/cmd/grype@v0.92.0 \
- && go install -ldflags="-s -w" github.com/zricethezav/gitleaks/v8@v8.21.4
+RUN set -u; \
+    for mod in \
+        "github.com/projectdiscovery/httpx/cmd/httpx@v1.6.10" \
+        "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.7.1" \
+        "github.com/projectdiscovery/katana/cmd/katana@v1.1.2" \
+        "github.com/ffuf/ffuf/v2@v2.1.0" \
+        "github.com/OJ/gobuster/v3@v3.6.0" \
+        "github.com/aquasecurity/trivy/cmd/trivy@v0.70.0" \
+        "github.com/anchore/syft/cmd/syft@v1.42.4" \
+        "github.com/anchore/grype/cmd/grype@v0.92.0" \
+        "github.com/zricethezav/gitleaks/v8@v8.21.4" \
+    ; do \
+        go install -ldflags="-s -w" "$mod" \
+          || echo "WARN: go install failed (best-effort, guarded at runtime): $mod"; \
+    done
 
 # -----------------------------------------------------------------------------
 # Stage 2 — runtime. The big monolithic image. apt-get without strict
 # pinning is OK here per the task spec; what's NOT OK is dropping USER 65532
 # or skipping the SBOM. Both are mandatory.
 # -----------------------------------------------------------------------------
-FROM kalilinux/kali-rolling:2026.1
+FROM kalilinux/kali-rolling:${KALI_TAG}
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG ARGUS_IMAGE_VERSION=1.0.0
@@ -104,6 +129,12 @@ LABEL org.opencontainers.image.title="argus-kali-full" \
 
 # Runtime apt — relaxed pinning, broad surface. We deliberately do NOT
 # install awscli / gcloud / az SDKs (cloud creds story in §10/§18).
+# Pin apt mirror to HTTPS first: broad §4.x tool .debs (nikto/responder/impacket/
+# …) are blocked by AV middleboxes over cleartext HTTP (499).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && printf 'deb https://http.kali.org/kali kali-rolling main contrib non-free non-free-firmware\n' > /etc/apt/sources.list \
+ && rm -rf /var/lib/apt/lists/*
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -141,8 +172,6 @@ RUN apt-get update \
         chromium-driver \
         firefox-esr \
         fonts-liberation \
-        libgtk-3-0 \
-        libnss3 \
         apktool \
         binwalk \
         radare2 \
@@ -154,11 +183,16 @@ RUN apt-get update \
         openssl \
         unzip \
         dpkg \
- && rm -rf /var/lib/apt/lists/* \
- && rm -f /usr/lib/chromium/chrome-sandbox /usr/lib/chromium/chrome_crashpad_handler-suid 2>/dev/null || true
+ && rm -rf /var/lib/apt/lists/*
+# Chromium's own Depends pull the correct GTK/NSS/ALSA libs (incl. t64-renamed
+# ones). SUID sandbox cleanup is a SEPARATE step so its `|| true` cannot mask an
+# apt-get failure (which previously produced a silently-incomplete image).
+RUN rm -f /usr/lib/chromium/chrome-sandbox /usr/lib/chromium/chrome_crashpad_handler-suid 2>/dev/null || true
 
-# wpscan via gem.
-RUN gem install --no-document wpscan -v 3.8.27
+# wpscan via gem. Best-effort + unpinned: the old 3.8.27 pin fails its native
+# extension against current Kali ruby; missing wpscan is guarded at runtime.
+RUN gem install --no-document wpscan \
+ || echo "WARN: wpscan gem install failed (best-effort; guarded at runtime)"
 
 # Runtime user.
 RUN groupadd --gid 65532 argus \

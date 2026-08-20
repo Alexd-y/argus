@@ -12,10 +12,8 @@ list of payload strings handed to a sandboxed validator. It enforces:
 * All template placeholders are present in the supplied parameter map.
   Missing placeholders raise :class:`PayloadBuildError`.
 * Every payload is materialised through the family's declared mutation
-  list and one declared encoding pipeline. The pipeline is chosen by, in
-  order of precedence: an explicit :attr:`PayloadBuildRequest.encoding_pipeline`;
-  the :attr:`PayloadBuildRequest.context` ``sink_type`` (mapped to the best
-  pipeline the family declares); otherwise the first-declared pipeline.
+  list and the *first* declared encoding pipeline (the LLM picks the
+  pipeline by name in :attr:`PayloadBuildRequest.encoding_pipeline`).
 * The output is deterministic given a stable correlation key — the same
   ``(scan_id, family_id, encoding_pipeline)`` triple always yields the
   same :class:`PayloadBundle`. This is what lets the validator replay an
@@ -339,14 +337,20 @@ class PayloadBuilder:
         """Resolve the pipeline name to use, honouring precedence.
 
         1. An explicit ``request.encoding_pipeline`` always wins.
-        2. Otherwise, if a context is supplied, its ``sink_type`` selects the
+        2. Otherwise, a context-level ``encoding_pipeline`` pin wins IF the
+           family actually declares it (an unknown pin is ignored, never
+           raised).
+        3. Otherwise, if a context is supplied, its ``sink_type`` selects the
            best pipeline the family actually declares (never an unknown one).
-        3. Otherwise ``None`` → the family default (first-declared) pipeline.
+        4. Otherwise ``None`` → the family default (first-declared) pipeline.
         """
         if request.encoding_pipeline is not None:
             return request.encoding_pipeline
         if request.context is not None:
-            available = (p.name for p in family.encodings)
+            available = [p.name for p in family.encodings]
+            ctx_pipeline = request.context.encoding_pipeline
+            if ctx_pipeline is not None and ctx_pipeline in available:
+                return ctx_pipeline
             return select_encoding_pipeline(available, request.context.sink_type)
         return None
 

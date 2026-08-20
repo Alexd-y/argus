@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
 from src.recon.recon_http_probe import (
     build_recon_httpx_argv,
     build_recon_nuclei_tech_argv,
@@ -22,7 +21,11 @@ def test_build_recon_httpx_argv_respects_rate_limit() -> None:
     assert argv[argv.index("-rate-limit") + 1] == "25"
 
 
-def test_build_recon_nuclei_tech_argv_default_tags() -> None:
+def test_build_recon_nuclei_tech_argv_default_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Legacy argv path (profile compiler OFF): the caller's rate_limit_rps is
+    # honored verbatim. With the compiler ON (default) the rate-limit is instead
+    # governed by the safe profile — see the companion test below.
+    monkeypatch.setattr("src.recon.recon_http_probe.is_profile_compiler_enabled", lambda: False)
     argv = build_recon_nuclei_tech_argv(
         "https://b.example",
         rate_limit_rps=8,
@@ -33,6 +36,27 @@ def test_build_recon_nuclei_tech_argv_default_tags() -> None:
     assert "-tags" in argv
     assert argv[argv.index("-tags") + 1] == "tech"
     assert argv[argv.index("-rate-limit") + 1] == "8"
+
+
+def test_build_recon_nuclei_tech_argv_profile_compiler_rate_is_profile_driven(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Default path (profile compiler ON): the argv is compiled from the safe
+    # profile, so the rate-limit comes from the profile (NOT the caller's value).
+    # This is intentional — the profile is authoritative for safety.
+    monkeypatch.setattr("src.recon.recon_http_probe.is_profile_compiler_enabled", lambda: True)
+    argv = build_recon_nuclei_tech_argv(
+        "https://b.example",
+        rate_limit_rps=999,
+        tags_csv="",
+        templates_csv="",
+    )
+    assert argv[0] == "nuclei"
+    assert "-tags" in argv
+    assert argv[argv.index("-tags") + 1] == "tech"
+    # Profile-driven rate-limit, never the caller's 999.
+    if "-rate-limit" in argv:
+        assert argv[argv.index("-rate-limit") + 1] != "999"
 
 
 def test_build_recon_nuclei_tech_argv_templates_override() -> None:

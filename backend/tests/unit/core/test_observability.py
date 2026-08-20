@@ -150,7 +150,7 @@ def test_tenant_hash_never_echoes_raw_value() -> None:
 def test_user_id_hash_matches_uid_prefix_discipline() -> None:
     h = user_id_hash("sub-123", salt="")
     assert _HEX16.fullmatch(h)
-    expected = hashlib.sha256(b"uid:sub-123".encode()).hexdigest()[:16]
+    expected = hashlib.sha256(b"uid:sub-123").hexdigest()[:16]
     assert h == expected
 
 

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# playwright-verify-xss — headless XSS canary verifier (tool_id: playwright_xss_verify).
+#
+# Catalog contract (backend/config/tools/playwright_xss_verify.yaml):
+#   playwright-verify-xss --url <url> --canary <canary> --output <path.json> --screenshot <path.png>
+# Loads <url> in headless Chromium (Playwright), observes whether the <canary>
+# actually executes in a JS context (dialog message or a canary-invoked binding),
+# captures a screenshot, and writes a JSON verdict to <path.json>.
+#
+# Fail-safe: always writes a valid JSON verdict (executed=false + error on any failure).
+set -uo pipefail
+
+url=""
+canary=""
+out="/out/playwright.json"
+shot="/out/playwright.png"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --url) url="${2:-}"; shift 2 ;;
+    --canary) canary="${2:-}"; shift 2 ;;
+    --output) out="${2:-$out}"; shift 2 ;;
+    --screenshot) shot="${2:-$shot}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+mkdir -p "$(dirname "$out")" "$(dirname "$shot")" 2>/dev/null || true
+
+emit_error() {
+  # $1 = error message
+  python3 - "$url" "$canary" "$out" "$1" <<'PY' 2>/dev/null || printf '{"tool":"playwright_xss_verify","executed":false,"error":"emit_failed"}' >"$out"
+import json, sys
+url, canary, out, err = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+with open(out, "w") as fh:
+    json.dump({"tool": "playwright_xss_verify", "url": url, "canary": canary,
+               "executed": False, "error": err}, fh)
+PY
+}
+
+if [ -z "$url" ] || [ -z "$canary" ]; then
+  emit_error "missing required --url/--canary"
+  exit 2
+fi
+if ! command -v node >/dev/null 2>&1; then
+  emit_error "node runtime not found on PATH"
+  exit 3
+fi
+
+script="$(mktemp /tmp/argus-pw-XXXXXX.js)"
+trap 'rm -f "$script"' EXIT
+
+cat >"$script" <<'NODE'
+const fs = require('fs');
+const [url, canary, out, shot] = process.argv.slice(2);
+(async () => {
+  const verdict = { tool: 'playwright_xss_verify', url, canary, executed: false, evidence: [] };
+  let chromium;
+  try { ({ chromium } = require('playwright')); }
+  catch (e) {
+    verdict.error = 'playwright module not available: ' + e.message;
+    fs.writeFileSync(out, JSON.stringify(verdict));
+    process.exit(3);
+  }
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    const page = await browser.newPage();
+    // A canary "execution" is any dialog whose text carries the canary, or an
+    // explicit call to the exposed binding — both prove JS ran attacker input.
+    page.on('dialog', async (d) => {
+      const msg = d.message() || '';
+      if (msg.includes(canary)) { verdict.executed = true; verdict.evidence.push('dialog:' + msg.slice(0, 200)); }
+      try { await d.dismiss(); } catch (_) {}
+    });
+    await page.exposeFunction('__argus_canary_hit', (token) => {
+      if (String(token).includes(canary)) { verdict.executed = true; verdict.evidence.push('binding'); }
+    });
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 }).catch((e) => {
+      verdict.evidence.push('nav_error:' + e.message.slice(0, 200));
+    });
+    await page.waitForTimeout(1500);
+    try { await page.screenshot({ path: shot, fullPage: false }); verdict.screenshot = shot; } catch (_) {}
+    await browser.close();
+  } catch (e) {
+    verdict.error = e.message;
+    if (browser) { try { await browser.close(); } catch (_) {} }
+  }
+  fs.writeFileSync(out, JSON.stringify(verdict));
+})();
+NODE
+
+node "$script" "$url" "$canary" "$out" "$shot" || {
+  [ -s "$out" ] || emit_error "node execution failed"
+}

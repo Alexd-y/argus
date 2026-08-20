@@ -113,6 +113,11 @@ class PayloadContext(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     sink_type: SinkType = SinkType.GENERIC
+    # Optional explicit encoding-pipeline pin. When set AND declared by the
+    # target family, it overrides sink-type routing; otherwise the builder falls
+    # back to :func:`select_encoding_pipeline`. Never projected as a template
+    # placeholder — it is build-time routing metadata only.
+    encoding_pipeline: StrictStr | None = Field(default=None, max_length=64)
     target_url: StrictStr | None = Field(default=None, max_length=2048)
     parameter_name: StrictStr | None = Field(default=None, max_length=256)
     parameter_value: StrictStr | None = Field(default=None, max_length=8192)

@@ -961,7 +961,15 @@ async def call_llm_unified(
     """
     _safety_check_prompt(user_prompt, task.value if task else "none")
 
-    if _should_use_unified_gateway(task, response_schema_id, use_unified):
+    # Phase-aware routing (opt-in via ARGUS_PHASE_ROUTING_ENABLED) takes
+    # precedence over the generic unified gateway: when an operator explicitly
+    # enables it and the phase is mapped, the phase route below governs
+    # primary/fallback ordering. Default OFF → ``get_phase_route`` returns None
+    # and the unified-gateway path is unchanged (no behaviour change by default).
+    _phase_route_active = get_phase_route(phase) is not None
+    if not _phase_route_active and _should_use_unified_gateway(
+        task, response_schema_id, use_unified
+    ):
         result = await _call_via_unified_gateway(
             system_prompt,
             user_prompt,

@@ -1,0 +1,44 @@
+#!/bin/sh
+# aquatone — michenriksen/aquatone HTTP visual recon.
+#
+# Upstream aquatone reads its target list from STDIN; the signed catalog
+# (config/tools/aquatone.yaml) invokes `aquatone -list <file> -out <dir>`. This
+# launcher adapts the `-list` contract to upstream's stdin interface and pins the
+# real binary at /opt/argus-tools/bin/aquatone (installed from the release zip in
+# the builder stage). Fail-safe: provisions the out dir and exits 0 if the binary
+# is absent, so the json_object parse strategy never faults on a missing tool.
+
+REAL="/opt/argus-tools/bin/aquatone"
+
+list=""
+out=""
+# Pass through everything except the -list shim flag (which upstream lacks).
+set -- "$@"
+passthru=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -list) list="${2:-}"; shift 2 2>/dev/null || shift ;;
+    -out) out="${2:-}"; passthru="$passthru -out $2"; shift 2 2>/dev/null || shift ;;
+    *) passthru="$passthru $1"; shift ;;
+  esac
+done
+
+[ -z "$out" ] && out="./aquatone"
+mkdir -p "$out" 2>/dev/null || true
+
+if [ ! -x "$REAL" ]; then
+  if command -v aquatone >/dev/null 2>&1 && [ "$(command -v aquatone)" != "$0" ]; then
+    REAL="$(command -v aquatone)"
+  else
+    echo "WARN: aquatone binary absent (guarded)" >&2
+    exit 0
+  fi
+fi
+
+# shellcheck disable=SC2086
+if [ -n "$list" ] && [ -f "$list" ]; then
+  "$REAL" $passthru < "$list"
+else
+  "$REAL" $passthru
+fi
+exit 0
