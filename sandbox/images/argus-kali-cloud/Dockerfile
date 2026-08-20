@@ -126,10 +126,12 @@ RUN curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.8
         | sh -s -- -b /root/go/bin v3.84.2 \
  || echo "WARN: trufflehog install failed (best-effort; guarded at runtime)"
 
-# kics — installed via release binary (large module, awkward go-install).
+# kics — release binary. v2.1.6 shipped no binary asset (only extracted-info.zip)
+# and the arch suffix is `linux_amd64` (not `linux_x64`); v2.1.20 is the latest
+# release carrying the linux tarball (kics binary + assets/queries at the root).
 RUN mkdir -p /root/kics \
  && ( curl -sSfL -o /tmp/kics.tar.gz \
-        https://github.com/Checkmarx/kics/releases/download/v2.1.6/kics_2.1.6_linux_x64.tar.gz \
+        https://github.com/Checkmarx/kics/releases/download/v2.1.20/kics_2.1.20_linux_amd64.tar.gz \
       && tar -xzf /tmp/kics.tar.gz -C /root/kics \
       && rm -f /tmp/kics.tar.gz \
     || echo "WARN: kics install failed (best-effort; guarded at runtime)" )

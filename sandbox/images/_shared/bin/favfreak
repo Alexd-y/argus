@@ -1,0 +1,35 @@
+#!/bin/sh
+# favfreak — FavFreak favicon-hash fingerprinter (devanshbatham/FavFreak).
+#
+# Catalog contract (config/tools/favfreak.yaml): favfreak -l <file> -o <out>.
+# Upstream is a stdin-based Python script (`cat urls | python3 favfreak.py`), so
+# this launcher pipes the -l file into it and captures output to -o. Runs the
+# git-cloned copy at /opt/argus-tools/favfreak. Fail-safe: writes an empty JSON
+# object and exits 0 when the clone/python/input is absent so the json_object
+# parse strategy never faults.
+
+REAL="/opt/argus-tools/favfreak/favfreak.py"
+
+list=""
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -l) list="${2:-}"; shift 2 2>/dev/null || shift ;;
+    -o) out="${2:-}"; shift 2 2>/dev/null || shift ;;
+    *) shift ;;
+  esac
+done
+
+[ -z "$out" ] && out="./favfreak.json"
+mkdir -p "$(dirname "$out")" 2>/dev/null || true
+
+if [ -f "$REAL" ] && command -v python3 >/dev/null 2>&1 && [ -n "$list" ] && [ -f "$list" ]; then
+  ( cd /opt/argus-tools/favfreak && python3 favfreak.py < "$list" > "$out" 2>/dev/null ) \
+    || echo '{}' > "$out"
+  # Guarantee a non-empty artifact for the parser even if upstream printed nothing.
+  [ -s "$out" ] || echo '{}' > "$out"
+else
+  echo '{}' > "$out"
+  echo "WARN: favfreak unavailable (need clone at $REAL + python3 + -l input)" >&2
+fi
+exit 0

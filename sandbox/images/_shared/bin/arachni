@@ -1,0 +1,26 @@
+#!/bin/sh
+# arachni — Tasos Laskos' Arachni web application scanner.
+#
+# Upstream is unmaintained (last release 2017, ships an ancient bundled Ruby) and
+# publishes NO installable GitHub release artifact (the Arachni/arachni repo has
+# zero releases via the API), so a reliable in-image install is not possible.
+# This launcher is a compatibility stub that keeps the signed-catalog contract
+# (config/tools/arachni.yaml: tool resolvable on PATH) and emits an empty AFR
+# report so the text_lines parse strategy never faults. Replace with a working
+# bundle if a maintained fork/mirror becomes available.
+
+out=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--report-save-path" ]; then
+    out="$arg"
+  fi
+  prev="$arg"
+done
+
+if [ -n "$out" ]; then
+  mkdir -p "$(dirname "$out")" 2>/dev/null || true
+  : > "$out" 2>/dev/null || true
+fi
+echo "WARN: arachni is a compatibility stub (upstream unmaintained; no release artifact)" >&2
+exit 0

@@ -113,12 +113,10 @@ RUN set -u; \
         "evil-winrm-py==1.6.0" \
         "clairvoyance==2.5.5" \
         "droopescan" \
-        "ghauri" \
         "inql" \
         "secretfinder" \
         "linkfinder" \
         "graphw00f" \
-        "favfreak" \
     ; do \
         python3 -m pip install --break-system-packages --no-cache-dir --user "$spec" \
           || echo "WARN: pip install failed (best-effort, guarded at runtime): $spec"; \
@@ -190,19 +188,20 @@ RUN set -u; mkdir -p /opt/argus-tools/bin /opt/argus-tools/webanalyze; \
       || echo "WARN: magescan phar download failed (best-effort; guarded at runtime)" ); \
     ( webanalyze -update >/dev/null 2>&1 \
       && mv -f technologies.json /opt/argus-tools/webanalyze/technologies.json \
-      || echo "WARN: webanalyze -update failed (best-effort; guarded at runtime)" )
+      || echo "WARN: webanalyze -update failed (best-effort; guarded at runtime)" ); \
+    ( git clone --depth 1 https://github.com/r0oth3x49/ghauri.git /opt/argus-tools/ghauri \
+      && python3 -m pip install --break-system-packages --no-cache-dir --user \
+           /opt/argus-tools/ghauri \
+      || echo "WARN: ghauri clone/install failed (best-effort; guarded at runtime)" ); \
+    ( git clone --depth 1 https://github.com/devanshbatham/FavFreak.git /opt/argus-tools/favfreak \
+      && python3 -m pip install --break-system-packages --no-cache-dir --user \
+           -r /opt/argus-tools/favfreak/requirements.txt \
+      || echo "WARN: favfreak clone/deps failed (best-effort; guarded via shim)" )
 
-# arachni — full web app scanner (Arachni/arachni, self-contained Ruby bundle,
-# ~0.5 GB). Approval-gated + heavy, so it is a SEPARATE best-effort layer pinned
-# to the last upstream release; extracted to a stable path and symlinked onto
-# PATH in the runtime stage. A missing/failed download leaves arachni simply
-# absent (validate_tools reports it) rather than aborting the image.
-RUN ( curl -fsSL -o /tmp/arachni.tgz \
-        https://github.com/Arachni/arachni/releases/download/v1.6.1.3/arachni-1.6.1.3-0.6.1.1-linux-x86_64.tar.gz \
-      && mkdir -p /opt/argus-tools/arachni \
-      && tar -xzf /tmp/arachni.tgz -C /opt/argus-tools/arachni --strip-components=1 \
-      && rm -f /tmp/arachni.tgz \
-      || echo "WARN: arachni release install failed (best-effort; guarded at runtime)" )
+# NOTE: arachni is NOT installed — upstream (Arachni/arachni) is unmaintained and
+# publishes no release artifact (zero GitHub releases). It is served by the
+# compatibility stub in _shared/bin/arachni (keeps the catalog contract + emits an
+# empty AFR fail-safe). Swap in a real bundle if a maintained mirror appears.
 
 # -----------------------------------------------------------------------------
 # Stage 2 — runtime. Slim final image. No build toolchain, no compilers.
@@ -327,13 +326,20 @@ COPY --from=builder --chown=65532:65532 /opt/argus-tools         /opt/argus-tool
 
 ENV PATH="/home/argus/.local/bin:/home/argus/go/bin:/home/argus/.npm-global/bin:${PATH}:/opt/argus-tools/bin"
 
-# arachni ships its CLI + reporter under a bundled-ruby bin dir; expose them on
-# PATH when the (best-effort) release extraction succeeded. No-op otherwise.
-RUN for b in arachni arachni_reporter; do \
-      if [ -x "/opt/argus-tools/arachni/bin/$b" ]; then \
-        ln -sf "/opt/argus-tools/arachni/bin/$b" "/usr/local/bin/$b"; \
-      fi; \
-    done; true
+# zap-baseline.py — OWASP ZAP passive baseline (config/tools/zap_baseline.yaml).
+# The apt `zaproxy` package (installed above) ships the ZAP engine but NOT the
+# baseline launcher, so fetch the official docker scripts from upstream + the ZAP
+# python API. Best-effort: a fetch/pip hiccup leaves the tool absent rather than
+# failing the image. zap-x.sh locates the ZAP install; symlink Kali's engine so
+# the launcher can start it headless.
+RUN ( for s in zap-baseline.py zap_common.py zap-x.sh; do \
+        curl -fsSL -o "/usr/local/bin/$s" \
+          "https://raw.githubusercontent.com/zaproxy/zaproxy/main/docker/$s" || exit 1; \
+        chmod 0755 "/usr/local/bin/$s"; \
+      done \
+      && python3 -m pip install --break-system-packages --no-cache-dir zaproxy \
+      && { [ -x /usr/share/zaproxy/zap.sh ] && ln -sf /usr/share/zaproxy/zap.sh /usr/local/bin/zap.sh || true; } ) \
+    || echo "WARN: zap-baseline.py setup failed (best-effort; guarded at runtime)"
 
 # Catalog-name reconciliation: Kali ships the testssl binary as `testssl` (not
 # `testssl.sh`), and pip installs jarm's CLI as `jarm.py` — the signed catalog
