@@ -99,6 +99,14 @@ class ProviderRegistry:
 
     def _load_defaults(self) -> None:
         wrb_url = os.environ.get("WHITERABBITNEO_URL", "").strip()
+        # WRB served model id is env-overridable so an operator can point the
+        # local_wrb provider at whatever the backing OpenAI-compatible server
+        # actually serves (e.g. a laptop Ollama tag, or a differently-named AWS
+        # deployment) without a code change. Default preserves prod behaviour.
+        wrb_model = (
+            os.environ.get("WHITERABBITNEO_MODEL", "").strip()
+            or "taico-ai/WhiteRabbitNeo-v3-7B"
+        )
         qwythos_url = os.environ.get("QWYTHOS_URL", "").strip()
         gemma_url = os.environ.get("GEMMA_LOCAL_URL", "").strip()
         qwen_url = os.environ.get("QWEN_LOCAL_URL", "").strip()
@@ -120,7 +128,7 @@ class ProviderRegistry:
             ),
             ModelRecord(
                 provider_id="local_wrb",
-                model="taico-ai/WhiteRabbitNeo-v3-7B",
+                model=wrb_model,
                 capabilities=ProviderCapability(
                     json_schema=True,
                     tool_calling=True,

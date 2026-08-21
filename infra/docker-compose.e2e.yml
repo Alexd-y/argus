@@ -202,13 +202,30 @@ services:
       # Sandbox runs in-process via the Python executor; no docker.sock needed.
       SANDBOX_ENABLED: "true"
       ARGUS_SANDBOX_PYTHON_ENABLED: "true"
-      VA_AI_PLAN_ENABLED: "false"
+      # LLM-driven phases are OFF by default (structural e2e). To exercise the
+      # orchestration against a live model (laptop Ollama or AWS WRB), override
+      # VA_AI_PLAN_ENABLED=true + point WHITERABBITNEO_URL/MODEL at the endpoint
+      # (see infra/.env.local-e2e). host.docker.internal reaches a host Ollama.
+      VA_AI_PLAN_ENABLED: ${VA_AI_PLAN_ENABLED:-false}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-}
+      WHITERABBITNEO_MODEL: ${WHITERABBITNEO_MODEL:-taico-ai/WhiteRabbitNeo-v3-7B}
+      WHITERABBITNEO_TIMEOUT_SEC: ${WHITERABBITNEO_TIMEOUT_SEC:-1800}
+      # Overhaul feature flags — overridable per run (default off preserves the
+      # structural e2e; the AWS/prod rollout sets them true in .env).
+      ARGUS_ADAPTIVE_LOOP: ${ARGUS_ADAPTIVE_LOOP:-false}
+      ARGUS_SCAN_SCHEMA_ENFORCEMENT: ${ARGUS_SCAN_SCHEMA_ENFORCEMENT:-false}
+      ARGUS_EXPLOITATION_SIGNED_RUNNER: ${ARGUS_EXPLOITATION_SIGNED_RUNNER:-false}
+      ARGUS_RECON_SIGNED_RUNNER: ${ARGUS_RECON_SIGNED_RUNNER:-false}
       SQLMAP_VA_ENABLED: "false"
       VA_EXPLOIT_AGGRESSIVE_ENABLED: "false"
       VA_ACTIVE_SCAN_DRY_RUN: "false"
       ACTIVE_SCAN_MAX_CONCURRENT_JOBS: "3"
       VA_ACTIVE_SCAN_TOOL_TIMEOUT_SEC: "120"
       ARGUS_TEST_MODE: "1"
+    extra_hosts:
+      # Lets Linux containers reach a model server on the Docker host (laptop
+      # Ollama at host.docker.internal:11434). No-op on AWS where WRB is a service.
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -250,7 +267,19 @@ services:
       OTEL_ENABLED: "false"
       SANDBOX_ENABLED: "true"
       ARGUS_SANDBOX_PYTHON_ENABLED: "true"
+      # Celery runs the scan tasks, so it needs the same LLM endpoint + flags as
+      # the backend to drive the phases/adaptive loop (see infra/.env.local-e2e).
+      VA_AI_PLAN_ENABLED: ${VA_AI_PLAN_ENABLED:-false}
+      WHITERABBITNEO_URL: ${WHITERABBITNEO_URL:-}
+      WHITERABBITNEO_MODEL: ${WHITERABBITNEO_MODEL:-taico-ai/WhiteRabbitNeo-v3-7B}
+      WHITERABBITNEO_TIMEOUT_SEC: ${WHITERABBITNEO_TIMEOUT_SEC:-1800}
+      ARGUS_ADAPTIVE_LOOP: ${ARGUS_ADAPTIVE_LOOP:-false}
+      ARGUS_SCAN_SCHEMA_ENFORCEMENT: ${ARGUS_SCAN_SCHEMA_ENFORCEMENT:-false}
+      ARGUS_EXPLOITATION_SIGNED_RUNNER: ${ARGUS_EXPLOITATION_SIGNED_RUNNER:-false}
+      ARGUS_RECON_SIGNED_RUNNER: ${ARGUS_RECON_SIGNED_RUNNER:-false}
       ARGUS_TEST_MODE: "1"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

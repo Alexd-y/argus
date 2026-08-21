@@ -5,6 +5,7 @@ Cloud providers (DeepSeek, OpenAI, Perplexity) serve only as report supplements.
 
 import json
 import logging
+import os
 from typing import Any
 
 import httpx
@@ -13,7 +14,10 @@ from src.llm.base import LLMAdapter
 
 logger = logging.getLogger(__name__)
 
-WRB_DEFAULT_MODEL = "taico-ai/WhiteRabbitNeo-v3-7B"
+# Served model id, env-overridable so the adapter's fallback matches whatever the
+# backing OpenAI-compatible server actually serves (laptop Ollama tag / AWS
+# deployment name) even when a caller does not pass an explicit model.
+WRB_DEFAULT_MODEL = os.environ.get("WHITERABBITNEO_MODEL", "").strip() or "taico-ai/WhiteRabbitNeo-v3-7B"
 WRB_DEFAULT_MAX_TOKENS = 4096
 WRB_DEFAULT_TEMPERATURE = 0.3
 WRB_DEFAULT_TIMEOUT = 3600.0
