@@ -169,7 +169,7 @@ services:
 
   # ── Backend tier ───────────────────────────────────────────────────────────
   argus-backend:
-    image: ${ARGUS_BACKEND_IMAGE:-ghcr.io/your-org/argus-backend:cycle5-e2e}
+    image: ${ARGUS_BACKEND_IMAGE:-ghcr.io/alexd-y/argus-backend:latest}
     container_name: argus-e2e-backend
     pull_policy: missing
     networks:
@@ -246,7 +246,7 @@ services:
           memory: 2G
 
   argus-celery:
-    image: ${ARGUS_CELERY_IMAGE:-ghcr.io/your-org/argus-celery:cycle5-e2e}
+    image: ${ARGUS_CELERY_IMAGE:-ghcr.io/alexd-y/argus-worker:latest}
     container_name: argus-e2e-celery
     pull_policy: missing
     networks:
@@ -300,7 +300,7 @@ services:
           memory: 2G
 
   argus-mcp:
-    image: ${ARGUS_MCP_IMAGE:-ghcr.io/your-org/argus-mcp:cycle5-e2e}
+    image: ${ARGUS_MCP_IMAGE:-ghcr.io/alexd-y/argus-mcp:latest}
     container_name: argus-e2e-mcp
     pull_policy: missing
     networks:
