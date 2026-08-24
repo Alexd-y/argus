@@ -31,7 +31,7 @@ import os
 import secrets as _secrets_module
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
 import httpx
@@ -60,7 +60,7 @@ _MAX_ATTEMPTS_ENV: Final[str] = "MCP_NOTIFICATIONS_MAX_ATTEMPTS"
 
 def _utcnow() -> datetime:
     """Return current UTC time (helper for monkeypatching in tests)."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _resolve_timeout_seconds() -> float:
@@ -133,7 +133,7 @@ class _BoundedRecentSet:
     def __init__(self, capacity: int = DEFAULT_DEDUP_CAPACITY) -> None:
         if capacity < 1:
             raise ValueError("capacity must be >= 1")
-        self._items: "OrderedDict[str, None]" = OrderedDict()
+        self._items: OrderedDict[str, None] = OrderedDict()
         self._capacity = capacity
 
     def __contains__(self, key: object) -> bool:
@@ -378,7 +378,7 @@ class NotifierBase:
         if self._owned_client:
             await self._client.aclose()
 
-    async def __aenter__(self) -> "NotifierBase":
+    async def __aenter__(self) -> NotifierBase:
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:

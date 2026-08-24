@@ -3,7 +3,7 @@
 GET /api/v1/llm/whiterabbitneo/health
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/llm", tags=["llm"])
@@ -40,8 +40,8 @@ async def whiterabbitneo_health() -> WRBHealthResponse:
 
 @router.get("/health/all")
 async def all_llm_health() -> dict:
-    from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
     from src.llm.router import is_llm_available
+    from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
 
     wrb = get_whiterabbitneo_adapter()
     wrb_status = "available" if wrb.is_configured else "unconfigured"

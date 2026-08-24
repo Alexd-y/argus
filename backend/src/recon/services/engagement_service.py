@@ -1,7 +1,7 @@
 """Engagement service - CRUD and lifecycle management."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -127,7 +127,7 @@ async def activate_engagement(
         raise EngagementStateError("Cannot activate: no scope rules defined")
 
     engagement.status = "active"
-    engagement.started_at = datetime.now(timezone.utc)
+    engagement.started_at = datetime.now(UTC)
     await db.flush()
     await db.refresh(engagement)
     logger.info("Engagement activated", extra={"engagement_id": engagement_id})
@@ -148,7 +148,7 @@ async def complete_engagement(
         )
 
     engagement.status = "completed"
-    engagement.completed_at = datetime.now(timezone.utc)
+    engagement.completed_at = datetime.now(UTC)
     await db.flush()
     logger.info("Engagement completed", extra={"engagement_id": engagement_id})
     return engagement

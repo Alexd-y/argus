@@ -87,7 +87,7 @@ names) so the frontend can branch on them without parsing English.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Final, NoReturn
 
 from fastapi import Depends, HTTPException, Request, status
@@ -281,7 +281,7 @@ _HEADER_MFA_ENROLLMENT_REQUIRED: Final[str] = "X-MFA-Enrollment-Required"
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _normalize_enforce_role(raw: str) -> str:
@@ -408,7 +408,7 @@ def _is_mfa_fresh(passed_at: datetime | None) -> bool:
     if passed_at is None:
         return False
     if passed_at.tzinfo is None:
-        passed_at = passed_at.replace(tzinfo=timezone.utc)
+        passed_at = passed_at.replace(tzinfo=UTC)
     threshold = _utcnow() - timedelta(seconds=settings.admin_mfa_reauth_window_seconds)
     return passed_at >= threshold
 

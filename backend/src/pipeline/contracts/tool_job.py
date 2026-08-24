@@ -15,7 +15,7 @@ sandbox by the ToolAdapter using a signed registry entry; see Backlog/dev1_md §
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Self
 from uuid import UUID
@@ -30,7 +30,9 @@ from pydantic import (
     model_validator,
 )
 
-from src.pipeline.contracts._placeholders import ALLOWED_PLACEHOLDERS as _ALLOWED_PARAM_KEYS
+from src.pipeline.contracts._placeholders import (
+    ALLOWED_PLACEHOLDERS as _ALLOWED_PARAM_KEYS,
+)
 from src.pipeline.contracts.phase_io import ScanPhase
 
 # ``_ALLOWED_PARAM_KEYS`` is intentionally a thin re-export of the canonical
@@ -129,7 +131,7 @@ class TargetSpec(BaseModel):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class ToolJob(BaseModel):

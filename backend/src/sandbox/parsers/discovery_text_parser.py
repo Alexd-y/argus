@@ -33,7 +33,10 @@ from src.sandbox.parsers._base import (
     stable_hash_12,
 )
 from src.sandbox.parsers._jsonl_base import persist_jsonl_sidecar
-from src.sandbox.parsers._subdomain_base import build_subdomain_finding, is_valid_hostname
+from src.sandbox.parsers._subdomain_base import (
+    build_subdomain_finding,
+    is_valid_hostname,
+)
 from src.sandbox.parsers._text_base import (
     load_canonical_or_stdout_text,
     redact_password_in_text,

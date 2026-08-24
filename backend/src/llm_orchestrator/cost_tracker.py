@@ -27,7 +27,7 @@ import logging
 import threading
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final
 from uuid import UUID, uuid4
 
@@ -49,7 +49,7 @@ _MIN_RECORD_AGE = 0  # seconds; records are timestamp-checked, not aged out
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class CostRecord(BaseModel):

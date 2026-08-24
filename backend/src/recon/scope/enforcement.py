@@ -1,6 +1,7 @@
 """Scope enforcement - high-level functions for scope checking with DB integration."""
 
 import logging
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

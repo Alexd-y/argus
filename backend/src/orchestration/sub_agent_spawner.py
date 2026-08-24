@@ -8,8 +8,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class SubAgentResult:
     session_id: str
     depth: int
     output: dict[str, Any] = field(default_factory=dict)
-    sub_results: list["SubAgentResult"] = field(default_factory=list)
+    sub_results: list[SubAgentResult] = field(default_factory=list)
     tokens_used: int = 0
     error: str = ""
 

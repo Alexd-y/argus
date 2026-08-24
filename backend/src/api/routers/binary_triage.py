@@ -6,9 +6,10 @@ POST /api/v1/binary/quarantine     — custody chain
 POST /api/v1/binary/yara           — generate YARA rules
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from pydantic import BaseModel
 from typing import Any
+
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/binary", tags=["binary"])
 

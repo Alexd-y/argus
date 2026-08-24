@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final, Self
 from uuid import UUID, uuid4
@@ -49,7 +49,6 @@ from pydantic import (
     StrictStr,
     model_validator,
 )
-
 
 # ---------------------------------------------------------------------------
 # Closed taxonomy of failure summaries
@@ -130,7 +129,7 @@ class ApprovalStatus(StrEnum):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +217,7 @@ def _canonical_approval_payload(request: ApprovalRequest) -> bytes:
         "tool_id": request.tool_id,
         "target": request.target,
         "justification": request.justification,
-        "expires_at": request.expires_at.astimezone(timezone.utc).isoformat(),
+        "expires_at": request.expires_at.astimezone(UTC).isoformat(),
     }
     return json.dumps(
         payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")

@@ -60,7 +60,7 @@ def parse_critical_assets_to_stage3(
     bundle.critical_assets when empty. Infers source from task name or bundle.
     """
     result: list[Stage3CriticalAsset] = []
-    source = f"ai_tm_critical_assets"
+    source = "ai_tm_critical_assets"
     assets = prior_outputs.get("critical_assets", {}) or {}
     raw = (assets.get("assets") if isinstance(assets, dict) else []) or []
 

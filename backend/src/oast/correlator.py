@@ -42,9 +42,9 @@ import logging
 import re
 import threading
 from collections.abc import Callable, Iterable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Final
+from typing import Final, Self
 from uuid import UUID
 
 from pydantic import (
@@ -55,12 +55,10 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 
 from src.core.observability import get_tracer, safe_set_span_attribute
 from src.core.unified_ai_metrics import record_oast_interaction
 from src.oast.provisioner import OASTProvisioner
-
 
 _logger = logging.getLogger(__name__)
 _tracer = get_tracer("argus.oast.correlator")
@@ -92,7 +90,7 @@ _EventEntry = tuple[asyncio.Event, asyncio.AbstractEventLoop]
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class InteractionKind(StrEnum):
@@ -198,7 +196,7 @@ class OASTInteraction(BaseModel):
         raw_request_bytes: bytes,
         metadata: dict[str, str] | None = None,
         received_at: datetime | None = None,
-    ) -> "OASTInteraction":
+    ) -> OASTInteraction:
         """Convenience constructor that hashes ``raw_request_bytes`` for you.
 
         Listeners feed the bytes they already have on hand (one DNS UDP
@@ -449,7 +447,7 @@ class OASTCorrelator:
                 break
             try:
                 await asyncio.wait_for(event.wait(), timeout=remaining)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 break
             # Consume the wake immediately so the next iteration cannot
             # busy-loop on a stale "set" flag. ``ingest`` always appends to

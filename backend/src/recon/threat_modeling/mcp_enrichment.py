@@ -21,7 +21,10 @@ from src.recon.mcp.policy import (
 )
 
 if TYPE_CHECKING:
-    from src.schemas.threat_modeling.schemas import MCPInvocationTrace, ThreatModelInputBundle
+    from src.schemas.threat_modeling.schemas import (
+        MCPInvocationTrace,
+        ThreatModelInputBundle,
+    )
 
 logger = logging.getLogger(__name__)
 

@@ -86,7 +86,6 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +233,6 @@ class EphemeralWorkerPool:
         each to MinIO. Returns list of MinIO artifact keys.
         """
         import os
-        import shutil
         import tempfile
 
         artifact_prefix = f"{scan_id}/{phase}/{task_id}"

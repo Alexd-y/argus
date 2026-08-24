@@ -6,9 +6,10 @@ GET  /api/v1/sandbox/runs/{id}      — get run status
 GET  /api/v1/sandbox/runs           — list runs
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
 from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/sandbox", tags=["sandbox"])
 
@@ -46,7 +47,9 @@ class ValidationResponse(BaseModel):
 @router.post("/validate", response_model=ValidationResponse)
 async def validate_finding(req: ValidateRequest) -> ValidationResponse:
     from src.sandbox.validation.orchestrator import (
-        ValidationOrchestrator, ValidationConfig, ValidationProfile,
+        ValidationConfig,
+        ValidationOrchestrator,
+        ValidationProfile,
     )
 
     try:
@@ -80,7 +83,9 @@ async def validate_finding(req: ValidateRequest) -> ValidationResponse:
 @router.post("/validate/batch")
 async def validate_batch(req: ValidateBatchRequest) -> list[ValidationResponse]:
     from src.sandbox.validation.orchestrator import (
-        ValidationOrchestrator, ValidationConfig, ValidationProfile,
+        ValidationConfig,
+        ValidationOrchestrator,
+        ValidationProfile,
     )
 
     try:

@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ def build_evidence_bundle(
     bundle = {
         "validation_id": validation_id,
         "finding_id": finding_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "evidence_hash": hashlib.blake2b(
             json.dumps(result, sort_keys=True, default=str).encode(),
             digest_size=16,

@@ -338,7 +338,7 @@ async def run_recon_http_probe_bundle(
     target: str,
     cfg: ReconRuntimeConfig,
     *,
-    raw_sink: "RawPhaseSink | None",
+    raw_sink: RawPhaseSink | None,
     tenant_id: str | None,
     scan_id: str | None,
     app_settings: Settings | None = None,

@@ -1,10 +1,10 @@
 """Usage Ledger — DB-persistent + Prometheus metrics + in-memory cache per tenant/scan/provider."""
 
+import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -41,21 +41,31 @@ def record_usage(
         "completion_tokens": completion_tokens,
         "total_tokens": prompt_tokens + completion_tokens,
         "estimated_cost_usd": round(estimated_cost, 6),
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "recorded_at": datetime.now(UTC).isoformat(),
     }
     _ledger.append(entry)
 
     _record_prometheus(provider, model, prompt_tokens, completion_tokens)
 
-    # Fire-and-forget DB persistence (non-blocking)
-    asyncio.ensure_future(_persist_to_db(
-        tenant_id=tenant_id, scan_id=scan_id, phase=phase, task=task,
-        alias=alias, provider=provider, model=model,
-        prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-        estimated_cost_usd=entry["estimated_cost_usd"],
-        status=status, error_code=error_code, latency_ms=latency_ms,
-        prompt_hash=prompt_hash, response_hash=response_hash,
-    ))
+    # Fire-and-forget DB persistence (non-blocking, best-effort). Only schedule
+    # when an event loop is actually running: ``record_usage`` is a sync
+    # function that may be called outside a loop (tests, sync callers), and on
+    # Python 3.12 ``ensure_future``/``get_event_loop`` raises RuntimeError when
+    # no loop is running. In that case the in-memory ledger above is still
+    # recorded; the DB row is simply skipped rather than crashing the caller.
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None:
+        loop.create_task(_persist_to_db(
+            tenant_id=tenant_id, scan_id=scan_id, phase=phase, task=task,
+            alias=alias, provider=provider, model=model,
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+            estimated_cost_usd=entry["estimated_cost_usd"],
+            status=status, error_code=error_code, latency_ms=latency_ms,
+            prompt_hash=prompt_hash, response_hash=response_hash,
+        ))
 
 
 def _record_prometheus(provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> None:
@@ -75,8 +85,8 @@ async def _persist_to_db(
 ) -> None:
     """Persist invocation record to gateway_invocations table (fire-and-forget)."""
     try:
-        from src.db.session import async_session_factory, set_session_tenant
         from src.db.models import GatewayInvocation
+        from src.db.session import async_session_factory, set_session_tenant
 
         async with async_session_factory() as session:
             await set_session_tenant(session, tenant_id)

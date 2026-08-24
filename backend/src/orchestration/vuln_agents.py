@@ -9,7 +9,7 @@ This module provides the fan-out definition for the Celery task system.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 

@@ -40,12 +40,6 @@ from uuid import UUID
 
 from src.auth.session_store import SessionStore
 from src.pipeline.contracts.tool_job import TargetSpec
-from src.policy.engagement_authorization import (
-    ActionClass,
-    EngagementAuthorizationProfile,
-    EngagementAuthorizationService,
-    default_action_class,
-)
 from src.playbooks.actions import (
     ActionContext,
     HttpExchange,
@@ -58,6 +52,12 @@ from src.playbooks.evidence import EvidenceBundle, build_evidence_bundle
 from src.playbooks.lifecycle import ScenarioState, ScenarioStatus
 from src.playbooks.oracles import OracleResult, OracleVerdict, get_oracle
 from src.playbooks.schema import Playbook
+from src.policy.engagement_authorization import (
+    ActionClass,
+    EngagementAuthorizationProfile,
+    EngagementAuthorizationService,
+    default_action_class,
+)
 
 _logger = logging.getLogger(__name__)
 

@@ -1,12 +1,13 @@
 """Recon findings API endpoints."""
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.session import get_db
 from src.db.models_recon import NormalizedFinding
+from src.db.session import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["recon-findings"])

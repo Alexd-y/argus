@@ -9,7 +9,8 @@ Pure functions, no I/O. Safe to call defensively — never raise on malformed in
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 _MAX_ITEMS = 40
 _MAX_STR = 400

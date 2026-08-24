@@ -185,7 +185,7 @@ def evaluate_ssvc(
 
 
 def derive_ssvc_inputs(
-    finding: "FindingDTO",
+    finding: FindingDTO,
     *,
     kev_listed: bool,
     public_exploit_known: bool,

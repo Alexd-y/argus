@@ -43,11 +43,15 @@ from src.web_workbench.intruder.repository import (
     STATUS_QUEUED,
     AttackNameConflictError,
     AttackNotFoundError,
-    IntruderAttackDTO as IntruderAttackRow,
     IntruderRepository,
-    IntruderRequestDTO as IntruderRequestRow,
     OptimisticLockError,
     ProjectNotFoundError,
+)
+from src.web_workbench.intruder.repository import (
+    IntruderAttackDTO as IntruderAttackRow,
+)
+from src.web_workbench.intruder.repository import (
+    IntruderRequestDTO as IntruderRequestRow,
 )
 from src.web_workbench.intruder.tasks import run_intruder_attack
 from src.web_workbench.projects.repository import WorkbenchProjectRepository

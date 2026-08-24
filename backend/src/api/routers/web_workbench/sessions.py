@@ -38,9 +38,13 @@ from src.web_workbench.sessions.repository import (
     OptimisticLockError,
     PrincipalNotFoundError,
     ProjectNotFoundError,
-    SessionMacroDTO as SessionMacroRow,
-    SessionPrincipalDTO as SessionPrincipalRow,
     SessionRepository,
+)
+from src.web_workbench.sessions.repository import (
+    SessionMacroDTO as SessionMacroRow,
+)
+from src.web_workbench.sessions.repository import (
+    SessionPrincipalDTO as SessionPrincipalRow,
 )
 
 logger = logging.getLogger(__name__)

@@ -12,7 +12,11 @@ from typing import Any
 from src.core.config import settings
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
 from src.recon.mcp.policy import THEHARVESTER_RECON_B_SOURCES_CAP
-from src.recon.recon_dns_sandbox import _apex_domain, _domain_allowed, _subdomain_intel_rows
+from src.recon.recon_dns_sandbox import (
+    _apex_domain,
+    _domain_allowed,
+    _subdomain_intel_rows,
+)
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
 from src.recon.scan_options_kal import scan_kal_flags
 

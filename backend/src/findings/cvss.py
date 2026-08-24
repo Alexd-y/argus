@@ -22,7 +22,6 @@ from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictStr
 
 from src.pipeline.contracts.finding_dto import _CVSS_VECTOR_RE
 
-
 _CVSSVersion = Literal["3.0", "3.1", "4.0"]
 
 

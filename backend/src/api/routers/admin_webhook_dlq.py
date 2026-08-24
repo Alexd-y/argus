@@ -36,7 +36,6 @@ from src.api.routers.admin import require_admin
 from src.api.routers.admin_bulk_ops import _operator_subject_dep
 from src.api.routers.admin_emergency import _emit_audit
 from src.api.routers.admin_findings import _admin_role_dep, _admin_tenant_dep
-from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.api.schemas import (
     WebhookDlqAbandonRequest,
     WebhookDlqAbandonResponse,
@@ -45,6 +44,7 @@ from src.api.schemas import (
     WebhookDlqReplayRequest,
     WebhookDlqReplayResponse,
 )
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import WebhookDlqEntry, gen_uuid
 from src.db.session import async_session_factory

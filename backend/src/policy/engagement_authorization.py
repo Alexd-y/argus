@@ -34,7 +34,7 @@ import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final, Self
 from uuid import UUID, uuid4
@@ -125,7 +125,7 @@ class ActionClass(StrEnum):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class EngagementAuthorizationProfile(BaseModel):
             "targets": sorted(self.targets),
             "allow_action_classes": sorted(c.value for c in self.allow_action_classes),
             "max_request_budget": self.max_request_budget,
-            "expires": self.expires.astimezone(timezone.utc).isoformat(),
+            "expires": self.expires.astimezone(UTC).isoformat(),
         }
         return json.dumps(
             payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")

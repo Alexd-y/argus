@@ -207,7 +207,7 @@ def assert_reserve_invariant(budget: QuickBudget) -> None:
 def split_int_by_weights(total: int, weights: dict[str, int]) -> dict[str, int]:
     keys = tuple(weights.keys())
     if total <= 0:
-        return {key: 0 for key in keys}
+        return dict.fromkeys(keys, 0)
     weight_sum = sum(weights.values())
     if weight_sum <= 0:
         raise QuickBudgetError("invalid_work_split_weights", code="invalid_work_split_weights")
@@ -292,7 +292,7 @@ def _new_remaining(budget: QuickBudget) -> dict[QuickBudgetKind, int]:
 
 
 def _zero_consumed() -> dict[QuickBudgetKind, int]:
-    return {kind: 0 for kind in QuickBudgetKind}
+    return dict.fromkeys(QuickBudgetKind, 0)
 
 
 class QuickBudgetManager:

@@ -25,7 +25,7 @@ import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Final
 
 from sqlalchemy import (
@@ -51,7 +51,7 @@ _DEFAULT_BATCH_SIZE: Final[int] = 500
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class KevEntry(Base):

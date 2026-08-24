@@ -307,7 +307,7 @@ class PrincipalConfig(BaseModel):
         description="Opaque handle resolved to an API key on the execution layer.",
     )
 
-    def resolve_placeholders(self) -> "PrincipalConfig":
+    def resolve_placeholders(self) -> PrincipalConfig:
         """Return a copy with login-flow placeholders resolved from credentials.
 
         Mirrors :meth:`TargetConfig.resolve_placeholders` but scoped to this
@@ -447,7 +447,7 @@ class TargetConfig(BaseModel):
         description="Whether to run the exploitation phase.",
     )
 
-    def resolve_placeholders(self) -> "TargetConfig":
+    def resolve_placeholders(self) -> TargetConfig:
         """Return a copy with ``$username``, ``$password``, ``$totp``
         placeholders resolved from credentials.
 
@@ -493,7 +493,7 @@ class TargetConfig(BaseModel):
         return _generate_totp(secret)
 
     @classmethod
-    def from_yaml(cls, content: str) -> "TargetConfig":
+    def from_yaml(cls, content: str) -> TargetConfig:
         """Load a :class:`TargetConfig` from a YAML string."""
         data = yaml.safe_load(content)
         if data is None:
@@ -501,18 +501,18 @@ class TargetConfig(BaseModel):
         return cls.model_validate(data)
 
     @classmethod
-    def from_yaml_file(cls, path: str) -> "TargetConfig":
+    def from_yaml_file(cls, path: str) -> TargetConfig:
         """Load a :class:`TargetConfig` from a YAML file path."""
         with open(path, encoding="utf-8") as f:
             return cls.from_yaml(f.read())
 
     @classmethod
-    def from_json(cls, data: dict[str, Any]) -> "TargetConfig":
+    def from_json(cls, data: dict[str, Any]) -> TargetConfig:
         """Load a :class:`TargetConfig` from a JSON-compatible dict."""
         return cls.model_validate(data)
 
     @classmethod
-    def from_scan_options(cls, options: dict[str, Any]) -> "TargetConfig | None":
+    def from_scan_options(cls, options: dict[str, Any]) -> TargetConfig | None:
         """Build a TargetConfig from scan options dict (engagement API).
 
         Looks for ``auth_config`` or ``target_config`` keys in options.

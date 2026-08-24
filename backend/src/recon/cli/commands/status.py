@@ -23,9 +23,10 @@ def show(
 
 async def _show_status(engagement_id: str) -> None:
     """Async implementation of status display."""
+    from sqlalchemy import func, select
+
+    from src.db.models_recon import Artifact, Engagement, NormalizedFinding, ScanJob
     from src.db.session import async_session_factory
-    from src.db.models_recon import Engagement, ScanJob, Artifact, NormalizedFinding
-    from sqlalchemy import select, func
 
     async with async_session_factory() as session:
         eng = await session.execute(

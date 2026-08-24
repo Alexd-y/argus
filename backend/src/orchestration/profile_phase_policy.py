@@ -71,7 +71,7 @@ def plan_phases(resolved: ResolvedScanProfile) -> PhasePlan:
     if profile is ScanProfile.LIGHT:
         # Production-safe full web workflow; destructive phases stay out of scope.
         allowed = tuple(p for p in PHASE_ORDER if p not in DESTRUCTIVE_PHASES)
-        skipped = {p: "out_of_scope" for p in DESTRUCTIVE_PHASES}
+        skipped = dict.fromkeys(DESTRUCTIVE_PHASES, "out_of_scope")
         return PhasePlan(
             scan_profile=profile.value,
             allowed_phases=allowed,

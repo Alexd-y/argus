@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -38,7 +38,7 @@ class ReActStep:
     tool_name: str | None = None
     tool_args: dict[str, Any] | None = None
     tool_result: Any = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 @dataclass
@@ -204,7 +204,7 @@ class ReActAgent:
                     except Exception as exc:
                         self.add_observation(f"Tool error: {exc}")
                 else:
-                    self.add_observation(f"(tool execution skipped: no executor)")
+                    self.add_observation("(tool execution skipped: no executor)")
 
         duration = time.monotonic() - start
         if not answer:

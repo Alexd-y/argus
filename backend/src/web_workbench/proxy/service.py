@@ -191,7 +191,7 @@ class WorkbenchProxyAddon:
             raise RuntimeError("mitmproxy is not installed; the web-proxy image is required")
         self._processor = processor
 
-    def _normalized(self, flow: "http.HTTPFlow") -> NormalizedRequest:  # pragma: no cover - e2e
+    def _normalized(self, flow: http.HTTPFlow) -> NormalizedRequest:  # pragma: no cover - e2e
         headers = tuple(
             (name.decode("latin-1"), value.decode("latin-1"))
             for name, value in flow.request.headers.fields
@@ -204,7 +204,7 @@ class WorkbenchProxyAddon:
             headers=headers,
         )
 
-    async def request(self, flow: "http.HTTPFlow") -> None:  # pragma: no cover - e2e
+    async def request(self, flow: http.HTTPFlow) -> None:  # pragma: no cover - e2e
         try:
             request = self._normalized(flow)
         except HttpMessageError:
@@ -232,7 +232,7 @@ class WorkbenchProxyAddon:
         elif self._processor.intercept_action(request) is InterceptAction.INTERCEPT:
             flow.intercept()
 
-    async def response(self, flow: "http.HTTPFlow") -> None:  # pragma: no cover - e2e
+    async def response(self, flow: http.HTTPFlow) -> None:  # pragma: no cover - e2e
         if flow.metadata.get("wb_blocked"):
             return
         request = flow.metadata.get("wb_request")

@@ -7,11 +7,20 @@ import logging
 from typing import Any
 
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
-from src.recon.recon_asn_screenshots import run_recon_asnmap_bundle, run_recon_gowitness_bundle
+from src.recon.recon_asn_screenshots import (
+    run_recon_asnmap_bundle,
+    run_recon_gowitness_bundle,
+)
 from src.recon.recon_deep_port_scan import run_recon_deep_port_scan_bundle
 from src.recon.recon_dns_depth import run_recon_dns_depth_bundle
-from src.recon.recon_dns_sandbox import dedupe_subdomain_intel_rows, run_recon_dns_sandbox_bundle
-from src.recon.recon_http_headers import collect_security_headers, security_headers_result_to_dict
+from src.recon.recon_dns_sandbox import (
+    dedupe_subdomain_intel_rows,
+    run_recon_dns_sandbox_bundle,
+)
+from src.recon.recon_http_headers import (
+    collect_security_headers,
+    security_headers_result_to_dict,
+)
 from src.recon.recon_http_probe import run_recon_http_probe_bundle
 from src.recon.recon_js_analysis import run_recon_js_analysis_bundle
 from src.recon.recon_runtime import ReconRuntimeConfig

@@ -390,9 +390,10 @@ async def _persist_patch_proposal(
 ) -> None:
     """Persist a PatchProposal row to the database."""
     try:
+        import uuid
+
         from src.core.database import get_session
         from src.db.models import PatchProposal
-        import uuid
 
         async for session in get_session():
             proposal = PatchProposal(

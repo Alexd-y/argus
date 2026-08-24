@@ -2,7 +2,7 @@
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,6 @@ class ProvenanceTracker:
             "content_hash": content_hash,
             "commit_sha": commit_sha,
             "source": source,
-            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "synced_at": datetime.now(UTC).isoformat(),
             "size_bytes": len(content),
         }

@@ -36,11 +36,10 @@ from src.core.config import settings
 from src.execution_mode.metrics import increment_llm_fallback
 from src.execution_mode.runtime_context import resolve_execution_mode_with_fallback
 from src.governance.safety.monitor import get_safety_monitor
-
 from src.llm.adapters import _get_key
+from src.llm.gateway import get_unified_llm_gateway
 from src.llm.phase_routing import PhaseRoute, get_phase_route
 from src.llm.router import call_llm as _router_call_llm
-from src.llm.gateway import get_unified_llm_gateway
 from src.llm.schemas import (
     ContentClass,
     ExecutionMode,
@@ -48,10 +47,8 @@ from src.llm.schemas import (
     LlmResponseEnvelope,
     LlmResponseStatus,
 )
-from src.llm.task_router import LLMTask
-from src.llm.task_router import _TASK_TO_ROLE
+from src.llm.task_router import _TASK_TO_ROLE, LLMTask, check_tier_escalation
 from src.llm.task_router import call_llm_for_task as _task_router_call
-from src.llm.task_router import check_tier_escalation
 
 logger = logging.getLogger(__name__)
 
@@ -474,7 +471,10 @@ def _record_llm_cost(
     except Exception:
         pass
     try:
-        from src.orchestration.cost_aware_reasoning import TokenUsageRecord, get_cost_tracker
+        from src.orchestration.cost_aware_reasoning import (
+            TokenUsageRecord,
+            get_cost_tracker,
+        )
         _cost_usd = (prompt_tokens + completion_tokens) * 0.00001
         _record = TokenUsageRecord(
             phase=phase, tier=task_label, model=model,
@@ -1246,7 +1246,7 @@ async def call_llm_with_escalation(
     user_prompt: str,
     *,
     task: LLMTask,
-    confidence_extractor: "callable | None" = None,
+    confidence_extractor: callable | None = None,
     max_escalations: int = 1,
     scan_id: str | None = None,
     phase: str = "unknown",

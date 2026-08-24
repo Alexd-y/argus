@@ -10,11 +10,11 @@ import contextlib
 import dataclasses
 import hashlib
 import json
-from itertools import islice
 import logging
 import os
 import re
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -28,16 +28,15 @@ from src.recon.vulnerability_analysis.active_scan.whatweb_va_adapter import (
     parse_whatweb_text_fallback,
     parse_whatweb_to_tech_stack,
 )
+from src.reports.evidence_gates import (
+    EvidenceQuality,
+    calculate_evidence_gate,
+)
 from src.reports.infra_recommendations import generate_infra_recommendations
 from src.reports.ownership_evidence import build_ownership_evidence
 from src.reports.report_quality_gate import (
     build_active_injection_coverage,
     is_header_only_advisory_finding,
-)
-from src.reports.evidence_gates import (
-    calculate_evidence_gate,
-    EvidenceQuality,
-    get_missing_artifact_message,
 )
 from src.storage.s3 import download_by_key
 
@@ -959,7 +958,7 @@ class RobotsSitemapMergedSummaryModel(BaseModel):
     notes_ru: str = Field(default="", description="Deprecated: backward-compat alias for notes.")
 
     @model_validator(mode="after")
-    def _migrate_notes_ru(self) -> "RobotsSitemapMergedSummaryModel":
+    def _migrate_notes_ru(self) -> RobotsSitemapMergedSummaryModel:
         """Copy legacy notes_ru → notes when notes is empty (backward compat)."""
         if not self.notes and self.notes_ru:
             self.notes = self.notes_ru
@@ -3088,7 +3087,6 @@ def _parse_openssl_sclient_output(stdout: str) -> SslTlsAnalysisModel:
         issuer = issuer_m.group(1).strip()[:512]
     cert_block = re.search(r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----", stdout, re.DOTALL)
     if cert_block:
-        import base64
         try:
             from cryptography import x509
             from cryptography.hazmat.backends import default_backend
@@ -6678,8 +6676,13 @@ def build_valhalla_report_context(
     wstg_total = int(getattr(wstg_result, "total_tests", 0) or 0)
     wstg_exec_degraded = wstg_pct < 70.0
     wstg_zero = wstg_total > 0 and wstg_cov_n == 0 and wstg_partial_n == 0
-    from src.reports.report_quality_gate import evaluate_valhalla_engagement_title_and_full
-    from src.reports.valhalla_tool_health import build_tool_health_summary_rows, tool_health_rows_to_jinja
+    from src.reports.report_quality_gate import (
+        evaluate_valhalla_engagement_title_and_full,
+    )
+    from src.reports.valhalla_tool_health import (
+        build_tool_health_summary_rows,
+        tool_health_rows_to_jinja,
+    )
 
     mstat: dict[str, str] = {}
     md_mand = mandatory.model_dump(mode="python")
@@ -6802,7 +6805,9 @@ def build_valhalla_report_context(
         trivy_run_status = "not_applicable"
         sca_mode = "none"
 
-    from src.reports.coverage_occurrence_context import build_coverage_occurrence_context
+    from src.reports.coverage_occurrence_context import (
+        build_coverage_occurrence_context,
+    )
 
     coverage_occurrence_ctx = build_coverage_occurrence_context(
         tenant_id=tid,
@@ -6910,7 +6915,6 @@ def build_valhalla_report_context(
 
 def _build_evidence_gate_map(findings: list[dict[str, Any]]) -> dict[str, str]:
     """Build per-finding evidence gate classification map."""
-    from src.reports.evidence_gates import EvidenceQuality
     result: dict[str, str] = {}
     for f in findings:
         if not isinstance(f, dict):
@@ -6938,7 +6942,6 @@ def _build_evidence_gate_map(findings: list[dict[str, Any]]) -> dict[str, str]:
 
 def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
     """Build evidence quality summary from per-finding gate classifications."""
-    from src.reports.evidence_gates import EvidenceQuality
     gate_counts: dict[str, int] = {"validated": 0, "observed": 0, "candidate": 0, "inconclusive": 0}
     critical_high_gates: list[dict[str, str]] = []
     for f in findings:
@@ -6978,21 +6981,21 @@ def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str,
 def validate_report_for_valhalla(context: ValhallaReportContext) -> dict:
     score = 100
     details: list[str] = []
-    
+
     wstg = context.wstg_coverage or {}
     if len(wstg.get("tests", [])) < 69:
         score -= 5
         details.append("WSTG coverage below 69 tests")
-    
+
     eq = context.evidence_quality
     if eq and not eq.get("all_critical_high_validated", True):
         score -= 20
         details.append("Critical/High findings not all VALIDATED")
-    
+
     if len(context.missing_artifacts) > 0:
         score -= 15
         details.append(f"{len(context.missing_artifacts)} missing artifacts")
-    
+
     return {"score": max(score, 0), "total": 100, "details": details}
 
 

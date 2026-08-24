@@ -197,7 +197,7 @@ class PayloadBuilder:
         self,
         registry: PayloadRegistry,
         *,
-        preflight_checker: "PreflightChecker | None" = None,
+        preflight_checker: PreflightChecker | None = None,
     ) -> None:
         self._registry = registry
         self._preflight_checker = preflight_checker
@@ -206,8 +206,8 @@ class PayloadBuilder:
         self,
         request: PayloadBuildRequest,
         *,
-        preflight_context: "PolicyContext | None" = None,
-        target_spec: "TargetSpec | None" = None,
+        preflight_context: PolicyContext | None = None,
+        target_spec: TargetSpec | None = None,
     ) -> PayloadBundle:
         """Build the payload bundle for ``request``.
 
@@ -313,9 +313,9 @@ class PayloadBuilder:
         self,
         *,
         request: PayloadBuildRequest,
-        preflight_context: "PolicyContext | None",
-        target_spec: "TargetSpec | None",
-    ) -> "PreflightDecision":
+        preflight_context: PolicyContext | None,
+        target_spec: TargetSpec | None,
+    ) -> PreflightDecision:
         """Invoke the preflight checker and surface denials as exceptions."""
         if preflight_context is None or target_spec is None:
             raise PayloadBuildError(
@@ -368,7 +368,7 @@ class PayloadBuilder:
         return merged
 
     @staticmethod
-    def _resolve_pipeline(family: PayloadFamily, requested: str | None) -> "_PipelineSnapshot":
+    def _resolve_pipeline(family: PayloadFamily, requested: str | None) -> _PipelineSnapshot:
         if not family.encodings:
             return _PipelineSnapshot(name="identity", stages=())
         by_name = {p.name: p for p in family.encodings}
@@ -401,7 +401,7 @@ class PayloadBuilder:
 
     @staticmethod
     def _derive_seed(correlation_key: str, family_id: str) -> int:
-        material = f"{correlation_key}|{family_id}".encode("utf-8")
+        material = f"{correlation_key}|{family_id}".encode()
         digest = hashlib.sha256(material).digest()
         return int.from_bytes(digest[:8], byteorder="big", signed=False)
 

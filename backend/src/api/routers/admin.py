@@ -253,7 +253,7 @@ def _extract_model_fallback_chain(config: dict[str, Any]) -> list[str] | None:
     return out
 
 
-def _provider_config_to_out(row: ProviderConfig) -> "ProviderConfigOut":
+def _provider_config_to_out(row: ProviderConfig) -> ProviderConfigOut:
     cfg = _coerce_provider_config_dict(row.config)
     key = _extract_stored_api_key(cfg)
     safe_cfg = _sanitize_provider_config_tree(cfg)
@@ -343,7 +343,6 @@ from src.auth.admin_dependencies import (  # noqa: E402, F401 — re-exports for
     require_admin,
     require_admin_mfa_passed,
 )
-
 
 # --- Schemas ---
 
@@ -969,9 +968,7 @@ async def _resolve_dns_preview(hostname: str) -> DnsPreviewOut:
         try:
             answer = await dns_asyncresolver.resolve(h, rrtype, lifetime=5.0)
             for r in answer:
-                if rrtype == "A":
-                    addresses.append(r.address)
-                elif rrtype == "AAAA" and hasattr(r, "address"):
+                if rrtype == "A" or rrtype == "AAAA" and hasattr(r, "address"):
                     addresses.append(r.address)
         except (
             dnsexception.DNSException,

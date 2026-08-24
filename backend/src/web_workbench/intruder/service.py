@@ -45,9 +45,13 @@ from src.web_workbench.intruder.repository import (
 )
 from src.web_workbench.intruder.strategies import PayloadSet, Strategy
 from src.web_workbench.message_editor.engine import RawHttpMessage
-from src.web_workbench.proxy.forward_gate import ForwardGate, ForwardOutcome, PreflightHook
-from src.web_workbench.proxy.transport import HttpMessageError, NormalizedRequest
 from src.web_workbench.projects.service import ProjectScopeService
+from src.web_workbench.proxy.forward_gate import (
+    ForwardGate,
+    ForwardOutcome,
+    PreflightHook,
+)
+from src.web_workbench.proxy.transport import HttpMessageError, NormalizedRequest
 from src.web_workbench.repeater.engine import HttpSender
 
 _OUTCOME_FORWARD = str(ForwardOutcome.FORWARD.value)

@@ -5,7 +5,6 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-
 class ScanJobCreate(BaseModel):
     """Create scan job request."""
     target_id: str

@@ -6,8 +6,9 @@ compliance flags, and telemetry collection.
 """
 
 from fastapi import FastAPI
-from src.llm_gateway.router import router as chat_router
+
 from src.llm_gateway.health import router as health_router
+from src.llm_gateway.router import router as chat_router
 
 app = FastAPI(title="ARGUS LLM Gateway", version="1.0.0")
 

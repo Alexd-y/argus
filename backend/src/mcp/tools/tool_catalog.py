@@ -16,7 +16,11 @@ from src.mcp.schemas.tool_run import (
 )
 from src.mcp.services.tool_service import (
     get_tool_run_status as svc_get_tool_run_status,
+)
+from src.mcp.services.tool_service import (
     list_catalog as svc_list_catalog,
+)
+from src.mcp.services.tool_service import (
     trigger_tool_run as svc_trigger_tool_run,
 )
 from src.mcp.tools._runtime import run_tool
@@ -27,7 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``tool.catalog.*`` and ``tool.run.*`` tools to ``mcp``."""
 
     @mcp.tool(

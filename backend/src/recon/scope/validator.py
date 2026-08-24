@@ -5,7 +5,7 @@ import logging
 import re
 
 import tldextract
-from netaddr import IPNetwork, IPAddress, AddrFormatError
+from netaddr import AddrFormatError, IPAddress, IPNetwork
 
 from src.recon.schemas.scope import ScopeConfig, ScopeRule, ScopeValidationResult
 

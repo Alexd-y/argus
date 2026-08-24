@@ -72,12 +72,12 @@ from src.reports.generators import (
     generate_pdf,
 )
 from src.reports.junit_generator import generate_junit
+from src.reports.replay_command_sanitizer import SanitizeContext
+from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.report_findings_scope import (
     load_findings_for_report,
     scan_id_hint_for_report_findings,
 )
-from src.reports.replay_command_sanitizer import SanitizeContext
-from src.reports.report_bundle import ReportBundle, ReportFormat, ReportTier
 from src.reports.sarif_generator import generate_sarif
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.tier_classifier import classify_for_tier

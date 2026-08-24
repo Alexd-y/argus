@@ -9,8 +9,9 @@ GET  /api/v1/admin/gateway/invocations  — invocation history
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
 from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.auth.admin_sessions import SessionPrincipal
 

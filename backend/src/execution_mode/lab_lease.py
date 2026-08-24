@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final, Literal
 from uuid import uuid4
@@ -14,7 +14,7 @@ from src.execution_mode.mode import ExecutionMode
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class LabLeaseStatus(StrEnum):
@@ -70,7 +70,7 @@ class LabExecutionLease(BaseModel):
     def is_usable(self, *, now: datetime | None = None) -> bool:
         ref = now or _utcnow()
         if ref.tzinfo is None:
-            ref = ref.replace(tzinfo=timezone.utc)
+            ref = ref.replace(tzinfo=UTC)
         if self.status is not LabLeaseStatus.ACTIVE:
             return False
         if not self.kill_switch_cleared:

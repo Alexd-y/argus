@@ -11,11 +11,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.bounty.schemas import BountyScope, BountyTestPlan, ScopeIngestRequest
 from src.bounty.scope_ingester import ingest_scope
 from src.bounty.surface_classifier import classify_surfaces
-from src.bounty.vuln_prioritizer import prioritize_vulns
 from src.bounty.test_planner import generate_test_plan
-from src.bounty.schemas import BountyScope, BountyTestPlan, ScopeIngestRequest
+from src.bounty.vuln_prioritizer import prioritize_vulns
 from src.core.tenant import get_current_tenant_id
 from src.db.session import async_session_factory, set_session_tenant
 
@@ -139,8 +139,8 @@ async def create_bounty_program(
     await set_session_tenant(session, tenant_id)
 
     try:
-        from src.db.models import BountyProgram
         from src.core.database import gen_uuid
+        from src.db.models import BountyProgram
 
         program = BountyProgram(
             id=gen_uuid(),

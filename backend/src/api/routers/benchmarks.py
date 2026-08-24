@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
 from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.auth.admin_sessions import SessionPrincipal
 
@@ -43,7 +44,6 @@ async def run_benchmarks(req: BenchRunRequest, _principal: Annotated[SessionPrin
 
 @router.get("/results")
 async def list_results(model: str = "", _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> list[dict[str, Any]]:
-    from src.governance.benchmarks.runner import run_synthetic_benchmark
     return [
         {"model": model or "WhiteRabbitNeo-7B", "profile": "standard", "f1": 0.90},
     ]

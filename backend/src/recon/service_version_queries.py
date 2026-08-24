@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from collections.abc import Iterable
 
 # Strip leading ip:port or [ip]:port
 _LEADING_ENDPOINT_RE = re.compile(

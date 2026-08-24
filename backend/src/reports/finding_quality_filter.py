@@ -12,7 +12,6 @@ import logging
 from typing import Any
 
 from src.orchestration.evidence_tier import (
-    EVIDENCE_TIER_LABELS,
     EvidenceTier,
     classify_finding,
 )

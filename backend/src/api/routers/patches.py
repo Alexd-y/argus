@@ -6,9 +6,10 @@ GET  /api/v1/patches/{id}        — get patch status
 POST /api/v1/patches/{id}/validate   — re-validate
 """
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Any
 
 router = APIRouter(prefix="/patches", tags=["patches"])
 
@@ -40,7 +41,8 @@ class PatchResponse(BaseModel):
 @router.post("/generate", response_model=PatchResponse)
 async def generate_patch(req: PatchGenerateRequest) -> PatchResponse:
     from src.workers.patches.generator import (
-        generate_and_validate_patch, PatchType,
+        PatchType,
+        generate_and_validate_patch,
     )
 
     try:
@@ -75,7 +77,8 @@ async def generate_patches_batch(
     patch_type: str = "minimal",
 ) -> list[PatchResponse]:
     from src.workers.patches.generator import (
-        batch_generate_patches, PatchType,
+        PatchType,
+        batch_generate_patches,
     )
 
     try:

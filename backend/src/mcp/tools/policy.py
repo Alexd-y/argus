@@ -14,6 +14,8 @@ from src.mcp.schemas.policy import (
 )
 from src.mcp.services.policy_service import (
     evaluate_policy as svc_evaluate_policy,
+)
+from src.mcp.services.policy_service import (
     verify_scope as svc_verify_scope,
 )
 from src.mcp.tenancy import assert_tenant_match
@@ -25,7 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``policy.*`` and ``scope.*`` tools to ``mcp``."""
 
     @mcp.tool(

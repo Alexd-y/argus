@@ -9,7 +9,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.config import settings
-from src.recon.stage_object_download import StageObjectFetchError, fetch_stage_bucket_object
+from src.recon.stage_object_download import (
+    StageObjectFetchError,
+    fetch_stage_bucket_object,
+)
 from src.storage.s3 import _get_client, _sanitize_path_component, ensure_bucket
 
 logger = logging.getLogger(__name__)

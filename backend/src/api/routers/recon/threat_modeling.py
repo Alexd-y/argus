@@ -260,7 +260,9 @@ async def get_input_bundle(
             recon_dir = recon_path
 
     if recon_dir:
-        from src.recon.threat_modeling.input_loader import load_threat_model_input_bundle
+        from src.recon.threat_modeling.input_loader import (
+            load_threat_model_input_bundle,
+        )
 
         bundle = load_threat_model_input_bundle(recon_dir, engagement_id, run.target_id)
     else:

@@ -62,7 +62,7 @@ import logging
 import secrets
 import threading
 from collections.abc import Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Final, Protocol, Self, runtime_checkable
 from urllib.parse import urlparse, urlunparse
@@ -78,7 +78,6 @@ from pydantic import (
 )
 
 from src.policy.audit import AuditEventType, AuditLogger
-
 
 _logger = logging.getLogger(__name__)
 
@@ -261,7 +260,7 @@ CLOUD_IAM_METHODS: Final[frozenset[OwnershipMethod]] = frozenset(
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class OwnershipChallenge(BaseModel):
@@ -745,7 +744,7 @@ class OwnershipVerifier:
         except (dnsresolver_sync.NXDOMAIN, dnsresolver_sync.NoAnswer) as exc:
             self._log_dns_error(fqdn, "nxdomain", exc)
             raise OwnershipVerificationError(_REASON_DNS_NXDOMAIN) from exc
-        except (asyncio.TimeoutError, dnsexc.Timeout) as exc:
+        except (TimeoutError, dnsexc.Timeout) as exc:
             self._log_dns_error(fqdn, "timeout", exc)
             raise OwnershipVerificationError(_REASON_DNS_TIMEOUT) from exc
         except dnsexc.DNSException as exc:

@@ -10,7 +10,7 @@ exchange findings without importing the persistence layer.
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import IntEnum, StrEnum
 from typing import Any, Self
 from uuid import UUID
@@ -175,7 +175,7 @@ class ScenarioContextDTO(BaseModel):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class EvidenceDTO(BaseModel):

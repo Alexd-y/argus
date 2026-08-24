@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final, Self
 from uuid import UUID, uuid4
@@ -121,7 +121,7 @@ def _is_at_or_below(risk: RiskLevel, cap: RiskLevel) -> bool:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class RateLimit(BaseModel):

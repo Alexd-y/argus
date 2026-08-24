@@ -8,13 +8,24 @@ import logging
 import subprocess
 from contextlib import asynccontextmanager
 
+import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
+import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
+import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / throttle (T31)
+import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
+import src.api.routers.admin_password  # noqa: F401 — admin password change / reset
+import src.api.routers.admin_reports  # noqa: F401 — admin report list / detail / generate / download
+import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
+import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from src.api.admin import mfa as admin_mfa_router  # admin MFA endpoints (C7-T03)
+from src.api.errors import register_profile_error_handler
 from src.api.routers import (
     admin,
     admin_auth,
     admin_password,
     admin_profile,
+    admin_webhook_dlq,  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
     auth,
     bounty,
     cache,
@@ -37,38 +48,26 @@ from src.api.routers import (
     unified_ai_lab,
     ws,
 )
-import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
-import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
-import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / throttle (T31)
-import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
-import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
-import src.api.routers.admin_reports  # noqa: F401 — admin report list / detail / generate / download
-import src.api.routers.admin_password  # noqa: F401 — admin password change / reset
-import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
-from src.api.admin import mfa as admin_mfa_router  # admin MFA endpoints (C7-T03)
-from src.api.routers import admin_webhook_dlq  # admin webhook DLQ list/replay/abandon (T39, ARG-053)
-from src.auth.admin_dependencies import log_mfa_enforcement_state
-
-from src.api.routers.llm_health import router as llm_health_router
-from src.api.routers.recon import recon_router
-from src.api.routers.sandbox_validation import router as sandbox_validation_router
-from src.api.routers.web_workbench import web_workbench_router
-from src.api.routers.patches import router as patches_router
+from src.api.routers.admin_gateway import router as admin_gateway_router
 from src.api.routers.analysis import router as analysis_router
+from src.api.routers.benchmarks import router as benchmarks_router
 from src.api.routers.binary_triage import router as binary_router
+from src.api.routers.compliance import router as compliance_router
+from src.api.routers.cvss import router as cvss_router
 from src.api.routers.incidents import router as incidents_router
 from src.api.routers.integrations import router as integrations_router
-from src.api.routers.compliance import router as compliance_router
-from src.api.routers.admin_gateway import router as admin_gateway_router
-from src.api.routers.benchmarks import router as benchmarks_router
+from src.api.routers.llm_health import router as llm_health_router
+from src.api.routers.patches import router as patches_router
+from src.api.routers.recon import recon_router
 from src.api.routers.release import router as release_router
 from src.api.routers.research import router as research_router
-from src.api.routers.cvss import router as cvss_router
+from src.api.routers.sandbox_validation import router as sandbox_validation_router
+from src.api.routers.web_workbench import web_workbench_router
+from src.auth.admin_dependencies import log_mfa_enforcement_state
 from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.auth import get_required_auth
 from src.core.config import settings
-from src.api.errors import register_profile_error_handler
 from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
 from src.core.metrics_middleware import HttpMetricsMiddleware
@@ -175,7 +174,12 @@ def _verify_prompt_catalog() -> int:
     """
     from pathlib import Path
 
-    from src.sandbox.signing import KeyManager, KeyNotFoundError, SignatureError, SignaturesFile
+    from src.sandbox.signing import (
+        KeyManager,
+        KeyNotFoundError,
+        SignatureError,
+        SignaturesFile,
+    )
 
     # Resolve relative to this module (backend/) so verification works regardless
     # of the current working directory (repo root in prod, ``backend`` under

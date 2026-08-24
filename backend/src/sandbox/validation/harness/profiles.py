@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -163,7 +162,7 @@ class CliHarness(BaseHarness):
                 "logs": [f"[CLI] exit={proc.returncode}"],
                 "syscalls": [],
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {"stdout": "", "stderr": "Command timeout", "exit_code": 124, "logs": ["TIMEOUT"]}
         except Exception as exc:
             return {"stdout": "", "stderr": str(exc), "exit_code": 1, "logs": [f"ERROR: {exc}"]}
@@ -204,7 +203,7 @@ class LibraryHarness(BaseHarness):
                     "logs": [f"[LIB] exit={proc.returncode}"],
                     "syscalls": [],
                 }
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {"stdout": "", "stderr": "Library execution timeout", "exit_code": 124, "logs": []}
             except Exception as exc:
                 return {"stdout": "", "stderr": str(exc), "exit_code": 1, "logs": [f"ERROR: {exc}"]}

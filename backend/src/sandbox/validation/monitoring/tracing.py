@@ -28,7 +28,7 @@ async def trace_syscalls(
         for line in (stderr or b"").decode(errors="replace").splitlines():
             traces.append({"raw": line[:500], "source": "strace"})
         return traces
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return [{"raw": "strace timed out", "source": "orchestrator"}]
     except FileNotFoundError:
         return [{"raw": "strace not available in sandbox", "source": "orchestrator"}]
@@ -61,7 +61,7 @@ async def capture_network_traffic(
             if line and not line.startswith("tcpdump:"):
                 captures.append({"raw": line[:300], "source": "tcpdump"})
         return captures
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return [{"raw": "tcpdump timed out", "source": "orchestrator"}]
     except Exception as exc:
         return [{"raw": f"tcpdump error: {exc}", "source": "orchestrator"}]

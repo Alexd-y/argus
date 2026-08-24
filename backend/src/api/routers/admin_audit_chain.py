@@ -59,7 +59,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -140,7 +140,7 @@ def _resolve_chain_window(
     Open-ended bounds are anchored to ``utcnow`` (upper) or ``until - cap``
     (lower) consistently so the cap check below has a stable comparison.
     """
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     effective_until = until if until is not None else now
     effective_since = (
         since

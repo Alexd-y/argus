@@ -6,7 +6,6 @@ capability labeling (capa-style), control-flow characteristics.
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import logging

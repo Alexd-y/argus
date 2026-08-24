@@ -6,15 +6,15 @@ Wraps the existing :mod:`src.oast.provisioner` without modifying its contracts.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Final
+from typing import Final, Self
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
-from typing_extensions import Self
 
-from src.oast.correlator import InteractionKind, OASTInteraction as CorrelatorInteraction
+from src.oast.correlator import InteractionKind
+from src.oast.correlator import OASTInteraction as CorrelatorInteraction
 from src.oast.provisioner import (
     InternalOASTProvisioner,
     OASTProvisioner,
@@ -183,7 +183,7 @@ class OastLeaseService:
         revoked = lease.model_copy(
             update={
                 "status": OastLeaseStatus.REVOKED,
-                "revoked_at": datetime.now(tz=timezone.utc),
+                "revoked_at": datetime.now(tz=UTC),
             }
         )
         self._leases[lease_id] = revoked
@@ -217,7 +217,7 @@ class OastLeaseService:
         return tuple(self._interactions.get(lease_id, ()))
 
     def _refresh_status(self, lease: OastLease) -> OastLease:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         if lease.status is OastLeaseStatus.REVOKED:
             return lease
         if now >= lease.expires_at:

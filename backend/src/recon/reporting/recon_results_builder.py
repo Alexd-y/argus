@@ -21,7 +21,6 @@ from src.recon.reporting.headers_builder import (
     _normalize_headers,
     get_ssl_cert_entry,
 )
-
 from src.schemas.recon.stage1 import (
     ReconResults,
     SslCertEntry,

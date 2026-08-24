@@ -89,7 +89,7 @@ def build_intel_section_html(intel_findings: dict) -> str:
         skipped = ad.get("skipped", False)
         error = ad.get("error")
 
-        out.append(f'<div class="observation">')
+        out.append('<div class="observation">')
         out.append(f'<span class="badge badge-observation">{_escape(source.upper())}</span>')
         out.append(f"<h3>{_escape(source)}</h3>")
 
@@ -106,7 +106,7 @@ def build_intel_section_html(intel_findings: dict) -> str:
                 value = f.get("value", "")
                 data = f.get("data", {})
                 conf = f.get("confidence", 0)
-                out.append(f'<li class="inference">')
+                out.append('<li class="inference">')
                 out.append(f'<span class="badge badge-inference">{_escape(f_type)}</span> ')
                 out.append(f"<code>{_escape(str(value)[:200])}</code>")
                 if conf:

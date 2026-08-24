@@ -26,7 +26,6 @@ from src.sandbox.parsers._base import (
     make_finding_dto,
 )
 
-
 _HOSTNAME_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?=.{1,253}$)"
     r"([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)"

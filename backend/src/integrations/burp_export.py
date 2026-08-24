@@ -14,7 +14,6 @@ This module produces a self-contained JSON that can be imported directly into
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from pydantic import BaseModel, Field

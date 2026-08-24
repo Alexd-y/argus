@@ -41,7 +41,7 @@ import re
 import threading
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Final, Protocol, runtime_checkable
 from uuid import UUID, uuid4
@@ -54,7 +54,6 @@ from pydantic import (
     StrictStr,
     model_validator,
 )
-
 
 _logger = logging.getLogger(__name__)
 
@@ -165,7 +164,7 @@ def _coerce_payload(value: object) -> object:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +215,7 @@ class AuditEvent(BaseModel):
         return {**data, "payload": coerced}
 
     @model_validator(mode="after")
-    def _bind_hash(self) -> "AuditEvent":
+    def _bind_hash(self) -> AuditEvent:
         expected = _compute_event_hash(self)
         if not self.event_hash:
             object.__setattr__(self, "event_hash", expected)

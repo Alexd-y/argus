@@ -14,6 +14,8 @@ from src.mcp.schemas.report import (
 )
 from src.mcp.services.report_service import (
     get_report_download as svc_get_report_download,
+)
+from src.mcp.services.report_service import (
     request_report_generation as svc_request_report_generation,
 )
 from src.mcp.tools._runtime import run_tool
@@ -24,7 +26,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``report.*`` tools to ``mcp``."""
 
     @mcp.tool(

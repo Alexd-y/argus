@@ -25,7 +25,7 @@ _SYSTEM_GUIDANCE = (
 )
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``remediation.advisor`` prompt to ``mcp``."""
 
     @mcp.prompt(

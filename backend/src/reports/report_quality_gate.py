@@ -7,8 +7,8 @@ evidence, or conflicting scoring data must produce "not assessed" /
 
 from __future__ import annotations
 
-import re
 import contextlib
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -1853,7 +1853,10 @@ def normalize_findings_for_report(findings: Iterable[Any]) -> list[Any]:
     high-critical-without-PoC downgrade) but never drops a finding: the Valhalla
     partition (VHL-PROVABLE-001) routes anything unproven to the Unconfirmed section.
     """
-    from src.reports.finding_dedup import merge_http_security_header_gaps, merge_reflected_xss_findings
+    from src.reports.finding_dedup import (
+        merge_http_security_header_gaps,
+        merge_reflected_xss_findings,
+    )
 
     base = merge_http_security_header_gaps(list(findings))
     normalized: list[Any] = []

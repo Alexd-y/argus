@@ -1,15 +1,16 @@
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel
 
 
 class XssValidationResult(BaseModel):
-    reflection_context: Optional[str] = None
-    payload_entered: Optional[str] = None
-    payload_reflected: Optional[str] = None
-    verified_via_browser: Optional[bool] = None
-    browser_alert_text: Optional[str] = None
-    affected_parameter: Optional[str] = None
-    negative_control: Optional[str] = None
+    reflection_context: str | None = None
+    payload_entered: str | None = None
+    payload_reflected: str | None = None
+    verified_via_browser: bool | None = None
+    browser_alert_text: str | None = None
+    affected_parameter: str | None = None
+    negative_control: str | None = None
 
     def is_validated(self) -> bool:
         required = [
@@ -25,13 +26,13 @@ class XssValidationResult(BaseModel):
 
 
 class CsrfValidationResult(BaseModel):
-    raw_html_form: Optional[str] = None
-    raw_post: Optional[str] = None
-    cookies: Optional[dict] = None
-    origin_referer: Optional[str] = None
-    csrftoken_status: Optional[Literal["missing", "weak", "absent", "present"]] = None
-    state_changing: Optional[bool] = None
-    negative_control: Optional[str] = None
+    raw_html_form: str | None = None
+    raw_post: str | None = None
+    cookies: dict | None = None
+    origin_referer: str | None = None
+    csrftoken_status: Literal["missing", "weak", "absent", "present"] | None = None
+    state_changing: bool | None = None
+    negative_control: str | None = None
 
     def is_validated(self) -> bool:
         required = [
@@ -47,10 +48,10 @@ class CsrfValidationResult(BaseModel):
 
 
 class CmdiValidationResult(BaseModel):
-    harmless_marker: Optional[str] = None
-    controlled_output: Optional[str] = None
-    server_proof: Optional[str] = None
-    negative_control: Optional[str] = None
+    harmless_marker: str | None = None
+    controlled_output: str | None = None
+    server_proof: str | None = None
+    negative_control: str | None = None
 
     def is_validated(self) -> bool:
         required = [

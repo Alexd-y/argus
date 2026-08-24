@@ -1,4 +1,5 @@
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -28,7 +29,7 @@ class TlsAnalysis(BaseModel):
     cert_chain: list[CertificateChain]
     protocols: list[TlsProtocol]
     ciphers: list[CipherSuite]
-    hsts: Optional[str] = None
+    hsts: str | None = None
     ocsp_stapling: bool = False
     weak_protocols: list[str] = []
     expiry_days: int = 0
@@ -37,13 +38,13 @@ class TlsAnalysis(BaseModel):
 
 def parse_testssl_output(stdout: str) -> TlsAnalysis:
     analysis = TlsAnalysis(domain="")
-    
+
     for line in stdout.split("\n"):
         line_lower = line.lower()
-        
+
         if "hostname" in line_lower:
             analysis.domain = extract_value(line, "hostname")
-        
+
         if "protocol" in line_lower:
             if "tls 1.0" in line_lower and "not supported" in line_lower:
                 analysis.protocols.append(TlsProtocol(name="TLSv1.0", enabled=False, weak=True))
@@ -57,51 +58,51 @@ def parse_testssl_output(stdout: str) -> TlsAnalysis:
                 analysis.protocols.append(TlsProtocol(name="TLSv1.2", enabled=True, weak=False))
             elif "tls 1.3" in line_lower:
                 analysis.protocols.append(TlsProtocol(name="TLSv1.3", enabled=True, weak=False))
-        
+
         if "ciphers" in line_lower and "weak" in line_lower:
             if "rc4" in line_lower or "des" in line_lower or "3des" in line_lower:
                 analysis.ciphers.append(CipherSuite(name=line.strip(), strength="weak", key_exchange="unknown", weak=True))
                 analysis.weak_protocols.append("weak ciphers detected")
-        
+
         if "hsts" in line_lower and "max-age" in line_lower:
             analysis.hsts = extract_value(line, "max-age")
-        
+
         if "ocsp stapling" in line_lower:
             if "supported" in line_lower:
                 analysis.ocsp_stapling = True
-    
+
     calculate_expiry_days(analysis)
-    
+
     return analysis
 
 
 def parse_sslscan_output(stdout: str) -> TlsAnalysis:
     analysis = TlsAnalysis(domain="")
-    
+
     for line in stdout.split("\n"):
         line_lower = line.lower()
-        
+
         if "host" in line_lower:
             analysis.domain = extract_value(line, "host")
-        
+
         if "ssl" in line_lower and "v1.0" in line_lower:
             analysis.protocols.append(TlsProtocol(name="TLSv1.0", enabled="accepted" in line_lower, weak=True))
-        
+
         if "ssl" in line_lower and "v1.1" in line_lower:
             analysis.protocols.append(TlsProtocol(name="TLSv1.1", enabled="accepted" in line_lower, weak=True))
-        
+
         if "ssl" in line_lower and "v1.2" in line_lower:
             analysis.protocols.append(TlsProtocol(name="TLSv1.2", enabled="accepted" in line_lower, weak=False))
-        
+
         if "ssl" in line_lower and "v1.3" in line_lower:
             analysis.protocols.append(TlsProtocol(name="TLSv1.3", enabled="accepted" in line_lower, weak=False))
-    
+
     return analysis
 
 
 def parse_openssl_output(cert_pem: str, protocols: str, ciphers: str) -> TlsAnalysis:
     analysis = TlsAnalysis(domain="")
-    
+
     for line in protocols.split("\n"):
         line_lower = line.lower()
         if "tls" in line_lower and "1.0" in line_lower:
@@ -112,9 +113,9 @@ def parse_openssl_output(cert_pem: str, protocols: str, ciphers: str) -> TlsAnal
             analysis.protocols.append(TlsProtocol(name="TLSv1.2", enabled=True, weak=False))
         elif "tls" in line_lower and "1.3" in line_lower:
             analysis.protocols.append(TlsProtocol(name="TLSv1.3", enabled=True, weak=False))
-    
+
     analysis.cert_chain.append(CertificateChain(issuer="unknown", subject="unknown", expiry="unknown", depth=1))
-    
+
     return analysis
 
 
@@ -129,7 +130,7 @@ def extract_value(line: str, key: str) -> str:
 def calculate_expiry_days(analysis: TlsAnalysis) -> int:
     if not analysis.cert_chain:
         return 0
-    
+
     expiry_str = analysis.cert_chain[0].expiry
     if expiry_str:
         try:
@@ -142,5 +143,5 @@ def calculate_expiry_days(analysis: TlsAnalysis) -> int:
             analysis.expiry_days = -1
     else:
         analysis.expiry_days = -1
-    
+
     return analysis.expiry_days

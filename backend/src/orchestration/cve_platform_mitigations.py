@@ -6,7 +6,10 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
-from src.reports.finding_metadata import extract_cve_ids_from_finding, normalize_confidence
+from src.reports.finding_metadata import (
+    extract_cve_ids_from_finding,
+    normalize_confidence,
+)
 
 # CVE IDs known to be addressed or materially mitigated on specific managed platforms
 # (conservative allowlist; extend via product security advisories).

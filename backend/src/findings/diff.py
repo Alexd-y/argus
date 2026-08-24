@@ -9,7 +9,10 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from src.capabilities.schemas import CoverageStatus
-from src.findings.fingerprint import compute_evidence_signal_hash, compute_occurrence_key
+from src.findings.fingerprint import (
+    compute_evidence_signal_hash,
+    compute_occurrence_key,
+)
 from src.findings.lifecycle import FindingOccurrence, FindingState, LogicalFinding
 
 

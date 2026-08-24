@@ -9,8 +9,6 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from src.reports.tool_registry import get_tools_by_capability, get_tool_count, get_tool_names
-
 _DOCKER_NOISE = re.compile(
     r"docker|containerd|/var/run/docker|docker\.sock|com\.docker|moby|"
     r"\\\.docker|daemon\.json|Error response from daemon",

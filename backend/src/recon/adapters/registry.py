@@ -33,17 +33,17 @@ def list_all() -> list[str]:
 def _auto_register() -> None:
     """Auto-register built-in adapters."""
     from src.recon.adapters.httpx_adapter import HttpxAdapter
-    from src.recon.adapters.subfinder_adapter import SubfinderAdapter
     from src.recon.adapters.security import (
+        CheckovAdapter,
         GitleaksAdapter,
-        TrivyAdapter,
-        SemgrepAdapter,
-        TruffleHogAdapter,
         ProwlerAdapter,
         ScoutSuiteAdapter,
-        CheckovAdapter,
+        SemgrepAdapter,
         TerrascanAdapter,
+        TrivyAdapter,
+        TruffleHogAdapter,
     )
+    from src.recon.adapters.subfinder_adapter import SubfinderAdapter
 
     register(SubfinderAdapter())
     register(HttpxAdapter())

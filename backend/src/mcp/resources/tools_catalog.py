@@ -14,7 +14,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the tools-catalog resource to ``mcp``."""
 
     @mcp.resource(

@@ -1,4 +1,3 @@
-from typing import Literal, Optional
 from pydantic import BaseModel
 
 __all__ = [
@@ -47,10 +46,10 @@ class AuthorizationTesting(BaseModel):
 
 
 class AuthTestingContextV2(BaseModel):
-    session: Optional[SessionTesting] = None
-    token: Optional[TokenTesting] = None
-    mfa: Optional[MfaTesting] = None
-    authorization: Optional[AuthorizationTesting] = None
+    session: SessionTesting | None = None
+    token: TokenTesting | None = None
+    mfa: MfaTesting | None = None
+    authorization: AuthorizationTesting | None = None
     testing_methodology: str = "OWASP WSTG + PTES"
     tools_used: list[str] = []
 
@@ -64,7 +63,7 @@ def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTesti
     context.token = context.token or TokenTesting()
     context.mfa = context.mfa or MfaTesting()
     context.authorization = context.authorization or AuthorizationTesting()
-    
+
     for finding in findings:
         if finding.get("type") == "session_hijacking":
             context.session.session_hijacking = True
@@ -82,7 +81,7 @@ def build_auth_testing_context(scenario: str, findings: list[dict]) -> AuthTesti
             context.authorization.privilege_escalation = True
         if finding.get("type") == "broken_access":
             context.authorization.broken_access_control = True
-    
+
     return context
 
 

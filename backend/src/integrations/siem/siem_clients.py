@@ -6,11 +6,10 @@ All integrations are optional — fail gracefully when not configured.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -44,7 +43,7 @@ async def send_to_splunk(
     events = []
     for f in findings:
         events.append({
-            "time": datetime.now(timezone.utc).timestamp(),
+            "time": datetime.now(UTC).timestamp(),
             "host": source,
             "source": source,
             "sourcetype": "argus:finding",
@@ -92,7 +91,7 @@ async def send_to_elastic(
     for f in findings:
         bulk_lines.append(json.dumps({"index": {"_index": index}}))
         bulk_lines.append(json.dumps({
-            "@timestamp": datetime.now(timezone.utc).isoformat(),
+            "@timestamp": datetime.now(UTC).isoformat(),
             "finding": {
                 "id": f.get("id", ""), "title": f.get("title", ""),
                 "severity": f.get("severity", ""), "cwe": f.get("cwe", ""),

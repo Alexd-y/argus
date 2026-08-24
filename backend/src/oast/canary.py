@@ -36,9 +36,9 @@ from __future__ import annotations
 import logging
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Final, Protocol
+from typing import Final, Protocol, Self
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -51,10 +51,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
 
 from src.pipeline.contracts.finding_dto import ConfidenceLevel
-
 
 _logger = logging.getLogger(__name__)
 
@@ -96,7 +94,7 @@ class CanaryVerificationInputError(CanaryError):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class CanaryKind(StrEnum):
@@ -240,10 +238,10 @@ class CanaryGenerator:
     def __init__(
         self,
         *,
-        id_factory: "_IdFn | None" = None,
-        token_factory: "_TokenFn | None" = None,
-        delay_ms_factory: "_DelayFn | None" = None,
-        clock: "_ClockFn | None" = None,
+        id_factory: _IdFn | None = None,
+        token_factory: _TokenFn | None = None,
+        delay_ms_factory: _DelayFn | None = None,
+        clock: _ClockFn | None = None,
     ) -> None:
         self._id_factory: _IdFn = id_factory or uuid4
         self._token_factory: _TokenFn = token_factory or _default_token_hex

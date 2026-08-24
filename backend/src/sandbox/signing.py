@@ -43,7 +43,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-
 _ED25519_RAW_KEY_LEN = 32
 _ED25519_SIG_LEN = 64
 _KEY_ID_LEN = 16

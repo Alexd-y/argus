@@ -29,10 +29,11 @@ def artifacts(
 
 async def _export_artifacts(engagement_id: str, output_dir: Path) -> None:
     """Async implementation of artifact export."""
-    from src.db.session import async_session_factory
-    from src.db.models_recon import Engagement, Artifact
-    from src.recon.storage import download_artifact, get_stage_name
     from sqlalchemy import select
+
+    from src.db.models_recon import Artifact, Engagement
+    from src.db.session import async_session_factory
+    from src.recon.storage import download_artifact, get_stage_name
 
     async with async_session_factory() as session:
         eng = await session.execute(

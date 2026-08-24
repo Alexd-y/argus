@@ -179,8 +179,8 @@ class PromptLoader:
         Returns (system_prompt, user_prompt).
         """
         from src.orchestration.prompt_registry import (
-            REPORT_AI_SYSTEM,
             ORCHESTRATION_PROMPT_VERSION,
+            REPORT_AI_SYSTEM,
         )
 
         system = self._get_system_base(ORCHESTRATION_PROMPT_VERSION)
@@ -314,7 +314,6 @@ def render_phase_prompts(phase: str, **kwargs: Any) -> tuple[str, str]:
     Uses Jinja2 templates when available, falls back to inline constants.
     """
     from src.orchestration.prompt_registry import (
-        ORCHESTRATION_PROMPT_VERSION,
         _sanitize_kwargs_for_prompt,
     )
 

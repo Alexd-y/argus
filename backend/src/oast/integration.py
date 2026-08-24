@@ -50,6 +50,7 @@ from src.oast.provisioner import (
     OASTToken,
     OASTUnavailableError,
 )
+
 if TYPE_CHECKING:
     from src.payloads.registry import PayloadFamily
     from src.policy.policy_engine import PolicyContext
@@ -227,7 +228,7 @@ class OASTPlane:
         self,
         *,
         family: PayloadFamily,
-        policy_context: "PolicyContext",
+        policy_context: PolicyContext,
         correlation_key: str,
         encoding_pipeline: str | None = None,
         approval_id: str | None = None,
@@ -304,7 +305,7 @@ class OASTPlane:
         self,
         *,
         family: PayloadFamily,
-        policy_context: "PolicyContext",
+        policy_context: PolicyContext,
         correlation_key: str,
         encoding_pipeline: str | None,
         approval_id: str | None,

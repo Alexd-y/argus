@@ -47,7 +47,9 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET  # noqa: S405  # nosec B405 — emission-only; tests parse via defusedxml
 from typing import Final
-from xml.dom import minidom  # noqa: S408  # nosec B408 — pretty-print only; never parses external input
+from xml.dom import (
+    minidom,  # noqa: S408  # nosec B408 — pretty-print only; never parses external input
+)
 
 from src.api.schemas import Finding
 from src.reports.generators import ReportData

@@ -57,9 +57,10 @@ import re
 import shutil
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, ClassVar, Final, Mapping, Protocol, runtime_checkable
+from typing import Any, ClassVar, Final, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +334,7 @@ def _epoch_seconds_from_iso(timestamp: str) -> int:
     except ValueError:
         return 0
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     seconds = int(parsed.timestamp())
     return max(seconds, 0)
 

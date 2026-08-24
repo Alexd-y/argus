@@ -216,6 +216,7 @@ async def _scan_event_stream(
     ``{"type": "ping"}`` to keep connection alive.
     """
     from sqlalchemy import String, cast, select
+
     from src.db.models import Scan, ScanEvent
 
     seen_ids: set[str] = set()
@@ -412,7 +413,7 @@ async def ws_scan_chat(ws: WebSocket, scan_id: str) -> None:
         while msg_count < _WS_MAX_MESSAGES_DEFAULT:
             try:
                 raw = await asyncio.wait_for(ws.receive_text(), timeout=300)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 try:
                     await ws.send_json({"event": "keepalive"})
                     continue

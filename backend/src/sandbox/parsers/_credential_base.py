@@ -31,7 +31,6 @@ from src.sandbox.parsers._text_base import (
     REDACTED_PASSWORD_MARKER,
 )
 
-
 _CRED_DUMP_CVSS_VECTOR: Final[str] = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
 _CRED_DUMP_CVSS_SCORE: Final[float] = 9.1
 

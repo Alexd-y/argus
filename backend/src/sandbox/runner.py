@@ -35,7 +35,6 @@ from src.sandbox.k8s_adapter import (
 from src.sandbox.templating import TemplateRenderError
 from src.sandbox.tool_registry import ToolRegistry
 
-
 _logger = logging.getLogger(__name__)
 _tracer = get_tracer("argus.sandbox")
 
@@ -150,7 +149,7 @@ class SandboxRunner:
                                 result = await self._adapter.run(
                                     tool_job, descriptor
                                 )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             timed_out = True
                             _logger.warning(
                                 "sandbox.runner.timeout",

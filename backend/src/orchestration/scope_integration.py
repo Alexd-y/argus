@@ -6,8 +6,6 @@ ScopeEngine so that scan scoping is driven by the YAML config.
 
 from __future__ import annotations
 
-from typing import Any
-
 from src.orchestration.auth_config import ScopeRuleConfig, TargetConfig
 from src.policy.scope import ScopeKind, ScopeRule
 

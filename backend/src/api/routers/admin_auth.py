@@ -49,7 +49,16 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,7 +151,7 @@ class _LoginRateLimiter:
     _lock: asyncio.Lock
 
     @classmethod
-    def make(cls, per_minute: int) -> "_LoginRateLimiter":
+    def make(cls, per_minute: int) -> _LoginRateLimiter:
         if per_minute < 1:
             raise ValueError("per_minute must be >= 1")
         return cls(

@@ -9,8 +9,8 @@ and marks it as verified-fixed if the issue is resolved, or re-opens it if not.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class ReVerificationTracker:
 
         verified_fixed_at = ""
         if status == "verified_fixed":
-            verified_fixed_at = datetime.now(timezone.utc).isoformat()
+            verified_fixed_at = datetime.now(UTC).isoformat()
 
         rv_result = ReVerificationResult(
             finding_id=request.finding_id,

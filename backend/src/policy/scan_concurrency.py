@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any
 
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession

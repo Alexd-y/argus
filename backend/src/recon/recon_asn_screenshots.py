@@ -11,13 +11,16 @@ import shutil
 import tempfile
 from typing import TYPE_CHECKING, Any
 
-from src.core.config import Settings, settings as default_settings
+from src.core.config import Settings
+from src.core.config import settings as default_settings
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
 from src.recon.mcp.policy import evaluate_kal_mcp_policy
 from src.recon.raw_artifact_sink import sink_raw_bytes, slug_for_artifact_type_component
 from src.recon.recon_runtime import ReconRuntimeConfig
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
-from src.recon.vulnerability_analysis.active_scan.argv_safe import safe_http_url_for_argv
+from src.recon.vulnerability_analysis.active_scan.argv_safe import (
+    safe_http_url_for_argv,
+)
 from src.tools.guardrails import validate_target_for_tool
 
 if TYPE_CHECKING:

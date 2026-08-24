@@ -204,7 +204,7 @@ class MFAVerifyRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _exactly_one_credential(self) -> "MFAVerifyRequest":
+    def _exactly_one_credential(self) -> MFAVerifyRequest:
         if (self.totp_code is None) == (self.backup_code is None):
             raise ValueError("provide exactly one of totp_code or backup_code")
         return self
@@ -266,7 +266,7 @@ class MFADisableRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _exactly_one_credential(self) -> "MFADisableRequest":
+    def _exactly_one_credential(self) -> MFADisableRequest:
         if (self.totp_code is None) == (self.backup_code is None):
             raise ValueError("provide exactly one of totp_code or backup_code")
         return self

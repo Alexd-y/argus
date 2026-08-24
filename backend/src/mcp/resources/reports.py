@@ -19,7 +19,7 @@ _logger = logging.getLogger(__name__)
 _VALID_REPORT_ID = (8, 64)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the reports resource template to ``mcp``."""
 
     @mcp.resource(

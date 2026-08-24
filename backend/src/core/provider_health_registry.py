@@ -88,7 +88,7 @@ class ProviderHealthRegistry:
     * :meth:`snapshot` — return per-provider snapshots for the JSON response.
     """
 
-    def __init__(self, *, clock: "callable[[], float] | None" = None) -> None:
+    def __init__(self, *, clock: callable[[], float] | None = None) -> None:
         self._clock = clock or time.time
         self._states: dict[str, ProviderState] = {}
         self._lock = threading.Lock()

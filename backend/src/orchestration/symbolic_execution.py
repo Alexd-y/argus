@@ -8,7 +8,6 @@ providing mathematical proof that user input can reach a dangerous sink.
 
 from __future__ import annotations
 
-import json
 import logging
 import tempfile
 import time

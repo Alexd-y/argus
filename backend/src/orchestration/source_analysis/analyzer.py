@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,6 @@ from src.orchestration.phases import (
 )
 from src.orchestration.source_analysis.tree_sitter_parser import (
     LanguageDetector,
-    Language,
     TreeSitterParser,
 )
 
@@ -73,7 +71,7 @@ class SourceAnalyzer:
                     )
                     try:
                         _stdout, _stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         proc.kill()
                         await proc.wait()
                         return SourceAnalysisOutput(skipped=True, summary=f"git clone timed out for {self.repo_url}")

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final
 from uuid import UUID, uuid4
 
@@ -125,7 +125,7 @@ class PreflightDeniedError(Exception):
     underlying guardrails — safe to surface to the customer.
     """
 
-    def __init__(self, summary: str, *, decision: "PreflightDecision") -> None:
+    def __init__(self, summary: str, *, decision: PreflightDecision) -> None:
         super().__init__(summary)
         self.summary = summary
         self.decision = decision
@@ -137,7 +137,7 @@ class PreflightDeniedError(Exception):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class PreflightDecision(BaseModel):
@@ -198,6 +198,8 @@ def _ensure_pydantic_built() -> None:
         return
     from src.policy.policy_engine import (
         PolicyContext as _PolicyContext,
+    )
+    from src.policy.policy_engine import (
         PolicyDecision as _PolicyDecision,
     )
     from src.policy.scope import ScopeDecision as _ScopeDecision

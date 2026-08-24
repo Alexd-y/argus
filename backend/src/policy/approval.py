@@ -38,7 +38,6 @@ from src.policy.approval_dto import (
 )
 from src.policy.approval_service import ApprovalService
 
-
 __all__ = [
     "APPROVAL_FAILURE_REASONS",
     "ApprovalAction",

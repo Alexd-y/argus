@@ -31,15 +31,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final, cast
 
 import bcrypt
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.sql.expression import TableClause
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import TableClause
 
 from src.core.config import settings
 from src.db.models import AdminUser
@@ -78,7 +78,7 @@ class AdminPrincipal:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _normalize_subject(subject: str | None) -> str | None:

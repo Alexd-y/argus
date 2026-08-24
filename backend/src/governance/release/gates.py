@@ -10,10 +10,9 @@ Every model/prompt change requires:
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -142,7 +141,7 @@ def generate_system_card(
         id=hashlib.blake2b(f"card:{model}:{version}".encode(), digest_size=12).hexdigest(),
         model=model,
         version=version,
-        release_date=datetime.now(timezone.utc).isoformat(),
+        release_date=datetime.now(UTC).isoformat(),
         capabilities=[
             "Semantic code review across Python/JS/Go/Java/Rust",
             "STRIDE threat modeling with NVD CVE enrichment",

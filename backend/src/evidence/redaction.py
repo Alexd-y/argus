@@ -34,7 +34,6 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
-
 _logger = logging.getLogger(__name__)
 
 

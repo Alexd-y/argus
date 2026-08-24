@@ -10,7 +10,8 @@ import re
 import shutil
 from typing import TYPE_CHECKING, Any
 
-from src.core.config import Settings, settings as default_settings
+from src.core.config import Settings
+from src.core.config import settings as default_settings
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
 from src.recon.mcp.policy import evaluate_kal_mcp_policy
 from src.recon.recon_runtime import ReconRuntimeConfig

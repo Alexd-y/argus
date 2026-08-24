@@ -24,8 +24,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from src.pipeline.contracts.tool_job import TargetSpec
-from src.web_workbench.proxy.transport import HttpMessageError, NormalizedRequest
 from src.web_workbench.projects.service import ProjectScopeService
+from src.web_workbench.proxy.transport import HttpMessageError, NormalizedRequest
 
 
 class ForwardOutcome(StrEnum):

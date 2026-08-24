@@ -24,7 +24,7 @@ _SYSTEM_GUIDANCE = (
 )
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``severity.normalizer`` prompt to ``mcp``."""
 
     @mcp.prompt(

@@ -15,9 +15,7 @@ from pydantic import BaseModel, Field
 from src.orchestration.evidence_tier import EvidenceTier
 from src.orchestration.exploitation_queue import (
     ExploitationQueue,
-    VulnClass,
 )
-
 
 # Progress mapping per phase (0-100)
 PHASE_PROGRESS: dict[str, int] = {

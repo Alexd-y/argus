@@ -475,7 +475,7 @@ class Normalizer:
         self._lifecycle_bridge = lifecycle_bridge or FindingLifecycleBridge()
         self._cve_ids_by_finding: dict[str, list[str]] = {}
 
-    def set_enricher(self, enricher: "FindingEnricher | None") -> None:
+    def set_enricher(self, enricher: FindingEnricher | None) -> None:
         """Late-binding setter for the enricher (FastAPI / Celery wiring)."""
         self._enricher = enricher
 

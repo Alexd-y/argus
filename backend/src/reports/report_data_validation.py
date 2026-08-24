@@ -210,7 +210,7 @@ def pre_release_quality_warnings(
     # WSTG < 100% but title says "full" pentest — informational only
     if wstg_coverage_pct < 100.0 and tier_norm == "valhalla":
         reasons.append("WARNING: WSTG coverage below 100% — use WRB-powered gap closure commands to cover missing tests")
-    
+
     # High finding without VALIDATED evidence — flag for retest, never block
     for f in report_data.findings:
         sev = str(getattr(f, "severity", "") or "").lower()
@@ -218,27 +218,25 @@ def pre_release_quality_warnings(
         if sev == "high" and classif != "validated":
             reasons.append("WARNING: High-severity finding without VALIDATED evidence — re-test with WRB-generated payloads")
             break
-    
+
     # HIBP checks_run = 0 — flag for next scan, never block
     if tier_norm == "valhalla":
         hibp = report_data.hibp_pwned_password_summary
-        if not isinstance(hibp, dict) or not hibp:
+        if not isinstance(hibp, dict) or not hibp or int(hibp.get("checks_run", 0) or 0) == 0:
             reasons.append("WARNING: HIBP checks_run = 0 — schedule credential scan with authorized_password_samples_or_hashes")
-        elif int(hibp.get("checks_run", 0) or 0) == 0:
-            reasons.append("WARNING: HIBP checks_run = 0 — schedule credential scan with authorized_password_samples_or_hashes")
-    
+
     # TLS parser empty — flag for retest, never block
     if vc:
         ssl_data = vc.get("ssl_tls_analysis")
         if isinstance(ssl_data, dict) and not ssl_data.get("protocols") and not ssl_data.get("issuer") and not ssl_data.get("evidence_id"):
             reasons.append("WARNING: TLS parser produced no results — re-run with testssl/sslscan/openssl fallback tools")
-    
+
     # Port parser empty — flag for retest, never block
     if vc:
         port_data = vc.get("port_exposure")
         if isinstance(port_data, dict) and not port_data.get("has_open_ports") and not port_data.get("data_sources"):
             reasons.append("WARNING: Port exposure parser empty — re-run with nmap/naabu/httpx probes")
-    
+
     # Headers table has artifact path instead of endpoint URL — fix, never block
     if vc:
         headers = vc.get("security_headers_table_rows") or []
@@ -247,7 +245,7 @@ def pre_release_quality_warnings(
                 if isinstance(row, dict) and "artifact" in str(row.get("header", row.get("url", ""))).lower():
                     reasons.append("WARNING: Headers table contains artifact path instead of endpoint URL — correct in next scan")
                     break
-    
+
     # Tool commands/versions/artifact paths empty — flag, never block
     if vc:
         tool_health = vc.get("tool_health_summary") or []
@@ -257,7 +255,7 @@ def pre_release_quality_warnings(
                     if not row.get("tool_command") or not row.get("tool_version"):
                         reasons.append("WARNING: Tool health row has empty tool_command or tool_version — re-collect tool metadata")
                         break
-    
+
     # Technology version fields empty without reason — flag, never block
     if vc:
         tech_stack = vc.get("tech_stack_table") or []
@@ -266,7 +264,7 @@ def pre_release_quality_warnings(
                 if isinstance(row, dict) and not row.get("version") and not row.get("version_reason"):
                     reasons.append("WARNING: Technology version field empty — re-run whatweb/wappalyzer/trivy for version detection")
                     break
-    
+
     # AI/debug snippets in any AI section — strip, never block
     ai_sections = ctx.get("ai_sections") or {}
     if isinstance(ai_sections, dict):
@@ -277,7 +275,7 @@ def pre_release_quality_warnings(
                 if garbage:
                     reasons.append(f"WARNING: Code/debug garbage detected in AI section '{key}' — auto-sanitized")
                     break
-    
+
     # Prompt leakage in AI sections (ROLE:, CONSTRAINTS:, FOCUS:, GROUNDING:) — flag, never block
     if isinstance(ai_sections, dict):
         from src.reports.report_text_sanitizer import contains_raw_prompt_leakage
@@ -285,7 +283,7 @@ def pre_release_quality_warnings(
                   if isinstance(v, str) and contains_raw_prompt_leakage(v)]
         if leaked:
             reasons.append(f"WARNING: Raw prompt leakage detected in AI sections: {', '.join(leaked[:3])} — LLM may have regurgitated prompt instructions")
-    
+
     # Remediation deduplication > 2 sections — flag, never block
     if isinstance(ai_sections, dict):
         from src.reports.report_text_sanitizer import find_duplicate_paragraphs
@@ -293,7 +291,7 @@ def pre_release_quality_warnings(
         dups = find_duplicate_paragraphs(combined)
         if len(dups) > 2:
             reasons.append(f"WARNING: {len(dups)} duplicate paragraphs across AI sections — content deduplication needed")
-    
+
     # ANSI escape sequences in raw request/response — strip, never block
     for f in report_data.findings:
         poc = getattr(f, "proof_of_concept", {}) or {}
@@ -303,7 +301,7 @@ def pre_release_quality_warnings(
             if _ANSI_ESCAPE_RE.search(raw_req) or _ANSI_ESCAPE_RE.search(raw_resp):
                 reasons.append("WARNING: ANSI escape sequences in raw request/response — auto-sanitized")
                 break
-    
+
     return reasons
 
 

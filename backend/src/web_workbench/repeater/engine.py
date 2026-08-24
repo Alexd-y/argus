@@ -17,13 +17,13 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.web_workbench.message_editor.engine import RawHttpMessage
+from src.web_workbench.projects.service import ProjectScopeService
 from src.web_workbench.proxy.forward_gate import (
     ForwardGate,
     ForwardOutcome,
     PreflightHook,
 )
 from src.web_workbench.proxy.transport import HttpMessageError, NormalizedRequest
-from src.web_workbench.projects.service import ProjectScopeService
 
 
 @dataclass(frozen=True)

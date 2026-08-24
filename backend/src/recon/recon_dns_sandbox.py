@@ -8,9 +8,9 @@ import re
 from typing import Any
 
 from src.core.config import settings
-from src.recon.schemas.base import FindingType
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
 from src.recon.scan_options_kal import scan_kal_flags
+from src.recon.schemas.base import FindingType
 
 logger = logging.getLogger(__name__)
 

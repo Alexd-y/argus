@@ -23,8 +23,14 @@ from src.schemas.ai.content_similarity_interpretation import (
     ContentSimilarityInterpretationInput,
     ContentSimilarityInterpretationOutput,
 )
-from src.schemas.ai.headers_tls_summary import HeadersTlsSummaryInput, HeadersTlsSummaryOutput
-from src.schemas.ai.js_findings_analysis import JsFindingsAnalysisInput, JsFindingsAnalysisOutput
+from src.schemas.ai.headers_tls_summary import (
+    HeadersTlsSummaryInput,
+    HeadersTlsSummaryOutput,
+)
+from src.schemas.ai.js_findings_analysis import (
+    JsFindingsAnalysisInput,
+    JsFindingsAnalysisOutput,
+)
 from src.schemas.ai.parameter_input_analysis import (
     ParameterInputAnalysisInput,
     ParameterInputAnalysisOutput,
@@ -265,7 +271,9 @@ def validate_recon_ai_payload(
 
 def get_vulnerability_analysis_ai_task_definitions() -> dict[str, dict[str, Any]]:
     """Return JSON-schema friendly definitions for all vulnerability analysis AI tasks."""
-    from src.recon.vulnerability_analysis.ai_task_registry import get_va_ai_task_definitions
+    from src.recon.vulnerability_analysis.ai_task_registry import (
+        get_va_ai_task_definitions,
+    )
 
     return get_va_ai_task_definitions()
 
@@ -321,10 +329,7 @@ def to_report_notes(task_name: str, output_payload: dict[str, Any]) -> list[dict
     elif task_name == ReconAiTask.ANOMALY_INTERPRETATION.value:
         for item in output_payload.get("anomalies", [])[:20]:
             _note(f"{item.get('host', '')}: {item.get('classification', '')}")
-    elif task_name == ReconAiTask.STAGE2_PREPARATION_SUMMARY.value:
-        for item in output_payload.get("next_steps", [])[:20]:
-            _note(f"{item.get('priority', '')}: {item.get('step', '')}")
-    elif task_name == ReconAiTask.STAGE3_PREPARATION_SUMMARY.value:
+    elif task_name == ReconAiTask.STAGE2_PREPARATION_SUMMARY.value or task_name == ReconAiTask.STAGE3_PREPARATION_SUMMARY.value:
         for item in output_payload.get("next_steps", [])[:20]:
             _note(f"{item.get('priority', '')}: {item.get('step', '')}")
     else:

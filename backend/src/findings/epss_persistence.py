@@ -31,7 +31,7 @@ import logging
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Final, cast
 
 from sqlalchemy import (
@@ -57,7 +57,7 @@ _DEFAULT_BATCH_SIZE: Final[int] = 500
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class EpssScore(Base):

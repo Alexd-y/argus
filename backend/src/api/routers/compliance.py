@@ -4,9 +4,10 @@ POST /api/v1/compliance/map        — map finding to frameworks
 GET  /api/v1/compliance/report     — build audit report
 """
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel
 from typing import Any
+
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
@@ -19,7 +20,7 @@ class ComplianceMapRequest(BaseModel):
 
 @router.post("/map")
 async def map_finding(req: ComplianceMapRequest) -> list[dict[str, Any]]:
-    from src.governance.compliance.mapper import map_finding_to_compliance, Framework
+    from src.governance.compliance.mapper import Framework, map_finding_to_compliance
 
     frameworks = []
     for fw in req.frameworks:
@@ -49,7 +50,7 @@ async def build_report(
     tenant_id: str = "",
     frameworks: list[str] = ["iso27001", "soc2"],
 ) -> dict[str, Any]:
-    from src.governance.compliance.mapper import build_audit_report, Framework
+    from src.governance.compliance.mapper import Framework, build_audit_report
 
     fw_list = []
     for f in frameworks:

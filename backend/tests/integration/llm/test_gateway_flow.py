@@ -46,7 +46,7 @@ class TestGatewayStandardPolicy:
         policy = {"compliance": {"no_cloud_llm_for_source_code": True}}
         req = type("req", (), {"model": "argus-planner-fast", "metadata": {"content_class": "source_code"}})()
 
-        with pytest.raises(PolicyDeniedError, match="source.code.*cloud"):
+        with pytest.raises(PolicyDeniedError, match="(?i)source.code.*cloud"):
             self.enforcer.evaluate(policy, req)
 
     def test_source_code_allows_wrb(self):

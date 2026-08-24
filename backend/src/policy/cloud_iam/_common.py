@@ -32,7 +32,7 @@ import hmac
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Final, TypeVar
 from uuid import UUID
 
@@ -105,7 +105,7 @@ class CloudPrincipalDescriptor:
 
 def utcnow() -> datetime:
     """Return ``datetime.now(tz=UTC)`` — single source of truth."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def constant_time_str_equal(left: str, right: str) -> bool:
@@ -194,7 +194,7 @@ async def run_with_timeout(
         raise ValueError("timeout_s must be positive")
     try:
         return await asyncio.wait_for(coro_factory(), timeout=effective)
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise OwnershipTimeoutError(timeout_reason) from exc
 
 

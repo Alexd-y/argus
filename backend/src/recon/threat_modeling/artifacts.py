@@ -12,6 +12,14 @@ from datetime import datetime
 from io import StringIO
 from typing import Any
 
+from src.recon.threat_modeling.stage2_parsers import (
+    parse_application_flows_to_stage3,
+    parse_critical_assets_to_stage3,
+    parse_entry_points_to_stage3,
+    parse_priority_hypotheses,
+    parse_threat_scenarios_to_stage3,
+    parse_trust_boundaries_to_stage3,
+)
 from src.schemas.ai.common import PriorityLevel
 from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
@@ -21,14 +29,6 @@ from src.schemas.threat_modeling.schemas import (
     ThreatModelInputBundle,
 )
 from src.schemas.threat_modeling.stage2_artifacts import ThreatModelUnified
-from src.recon.threat_modeling.stage2_parsers import (
-    parse_application_flows_to_stage3,
-    parse_critical_assets_to_stage3,
-    parse_entry_points_to_stage3,
-    parse_priority_hypotheses,
-    parse_threat_scenarios_to_stage3,
-    parse_trust_boundaries_to_stage3,
-)
 
 # --- Helpers ---
 

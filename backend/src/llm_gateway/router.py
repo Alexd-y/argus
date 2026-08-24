@@ -4,12 +4,11 @@ Enforces policy, routes through WhiteRabbitNeo → cloud fallback chain,
 records usage, redacts sensitive content.
 """
 
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
-from typing import Any
-import json
-import time
 import uuid
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/v1", tags=["llm"])
 

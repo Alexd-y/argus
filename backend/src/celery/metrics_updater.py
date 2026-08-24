@@ -193,7 +193,7 @@ def _inspect_reserved_depths() -> dict[str, int] | None:
     if not (reserved or active or scheduled):
         return None
 
-    counts: dict[str, int] = {q: 0 for q in KNOWN_QUEUES}
+    counts: dict[str, int] = dict.fromkeys(KNOWN_QUEUES, 0)
     for bucket in (reserved, active, scheduled):
         for tasks in bucket.values():
             if not isinstance(tasks, list):
@@ -232,7 +232,7 @@ def _redis_llen_depths() -> dict[str, int]:
     """
     from src.core.redis_client import get_redis
 
-    counts: dict[str, int] = {q: 0 for q in KNOWN_QUEUES}
+    counts: dict[str, int] = dict.fromkeys(KNOWN_QUEUES, 0)
     client = get_redis()
     if client is None:
         logger.warning(
@@ -341,7 +341,7 @@ try:
                 "metrics_updater.task_unhandled",
                 extra={"event": "metrics_updater_task_unhandled"},
             )
-            return {q: 0 for q in KNOWN_QUEUES}
+            return dict.fromkeys(KNOWN_QUEUES, 0)
 
 except Exception:  # pragma: no cover — defensive, only hits when Celery import fails
     logger.debug(

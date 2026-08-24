@@ -8,8 +8,8 @@
 - Cross-reference placeholder spam (\"See «...»\")
 """
 
-import re
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 

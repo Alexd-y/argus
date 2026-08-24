@@ -1629,13 +1629,20 @@ class Settings(BaseSettings):
         return out
 
 
-def lab_destructive_execution_allowed(settings: Settings) -> bool:
+def lab_destructive_execution_allowed(
+    settings: Settings,
+    extra_allowed_targets: list[str] | None = None,
+) -> bool:
     """Return True only when destructive lab execution is fully pre-authorized (conservative).
 
     Requires lab mode, explicit destructive lab flag, non-empty operator + signed approval ids,
-    sandbox, and at least one allowed target. When :attr:`Settings.argus_kill_switch_required`
-    is True, this settings-only check cannot verify Redis kill-switch clearance and returns
-    False — the runner must consult :mod:`src.policy.kill_switch` and gate there.
+    sandbox, and at least one allowed target. ``extra_allowed_targets`` lets a per-scan
+    allowlist satisfy the "at least one allowed target" requirement when the global
+    ``argus_lab_allowed_targets`` is empty — every other gate still applies, so this only
+    scopes *which* targets are in play, never *whether* destructive mode is enabled. When
+    :attr:`Settings.argus_kill_switch_required` is True, this settings-only check cannot verify
+    Redis kill-switch clearance and returns False — the runner must consult
+    :mod:`src.policy.kill_switch` and gate there.
     """
     if not settings.argus_lab_mode:
         return False
@@ -1647,11 +1654,13 @@ def lab_destructive_execution_allowed(settings: Settings) -> bool:
         return False
     if not (settings.argus_lab_signed_approval_id or "").strip():
         return False
-    if not [p.strip() for p in (settings.argus_lab_allowed_targets or "").split(",") if p.strip()]:
+    global_targets = [p.strip() for p in (settings.argus_lab_allowed_targets or "").split(",") if p.strip()]
+    extra_targets = [str(t).strip() for t in (extra_allowed_targets or []) if str(t).strip()]
+    if not global_targets and not extra_targets:
         return False
-    if settings.argus_kill_switch_required:
-        return False
-    return True
+    # kill-switch clearance can't be verified from settings alone; the runner
+    # gates on Redis separately, so this settings-only check stays conservative.
+    return not settings.argus_kill_switch_required
 
 
 settings = Settings()

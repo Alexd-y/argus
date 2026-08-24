@@ -26,7 +26,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Final, TypeAlias
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,

@@ -114,8 +114,11 @@ _RAW_TOOL_OUTPUT_NAME_RE = re.compile(
     r"^\d{8}T\d{6}_[0-9a-f]{12}_[a-z][a-z0-9_]{0,127}\.[a-zA-Z0-9]{1,16}$"
 )
 
-# Raw artifact basename: ``{ts}_{artifact_type}.{ext}`` — active VA tools use ``tool_<name>_scan_...``
-_ACTIVE_WEB_SCAN_TOOL_RE = re.compile(r"_tool_([a-z0-9]+)_scan_", re.IGNORECASE)
+# Raw artifact basename: ``{ts}_{artifact_type}.{ext}`` — active VA tools emit
+# ``tool_<name>_<suffix>_...`` where the suffix varies (``scan_results``,
+# ``celery_results``, …). Capture the tool id right after ``_tool_`` regardless
+# of the trailing suffix so Celery-produced artifacts are counted too.
+_ACTIVE_WEB_SCAN_TOOL_RE = re.compile(r"_tool_([a-z0-9]+)_", re.IGNORECASE)
 _ACTIVE_WEB_SCAN_PHASE_KEYS: frozenset[str] = frozenset(
     {(VULN_ANALYSIS or "vuln_analysis").lower(), (EXPLOITATION or "exploitation").lower()}
 )

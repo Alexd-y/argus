@@ -10,10 +10,7 @@ from src.schemas.ai.common import PriorityLevel
 from src.schemas.threat_modeling.schemas import (
     ApplicationFlow,
     AttackerProfile,
-    CriticalAsset,
-    EntryPoint,
     ThreatModelInputBundle,
-    TrustBoundary,
 )
 
 

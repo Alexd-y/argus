@@ -4,9 +4,10 @@ POST /api/v1/incidents/enrich      — enrich alert with code context
 POST /api/v1/incidents/playbook    — generate remediation playbook
 """
 
+from typing import Any
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Any
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -53,7 +54,10 @@ async def enrich_alert(req: EnrichRequest) -> EnrichResponse:
 
 @router.post("/playbook")
 async def generate_playbook(enriched: EnrichResponse) -> list[dict[str, Any]]:
-    from src.workers.incidents.enricher import generate_remediation_playbook, EnrichedAlert
+    from src.workers.incidents.enricher import (
+        EnrichedAlert,
+        generate_remediation_playbook,
+    )
 
     ea = EnrichedAlert(
         id=enriched.id, incident_id=enriched.incident_id,

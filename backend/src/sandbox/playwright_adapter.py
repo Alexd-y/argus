@@ -415,7 +415,7 @@ class PlaywrightAdapter:
                 js_result=data.get("js_result"),
                 elapsed_ms=elapsed,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             elapsed = (time.monotonic() - start) * 1000
             return BrowserResponse(success=False, error="Timeout", elapsed_ms=elapsed)
         except Exception as exc:

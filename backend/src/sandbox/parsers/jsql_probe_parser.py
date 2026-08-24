@@ -6,10 +6,20 @@ import json
 from pathlib import Path
 from typing import Final
 
-from src.pipeline.contracts.finding_dto import ConfidenceLevel, FindingCategory, FindingDTO
+from src.pipeline.contracts.finding_dto import (
+    ConfidenceLevel,
+    FindingCategory,
+    FindingDTO,
+)
 from src.sandbox.parsers._base import make_finding_dto, stable_hash_12
-from src.sandbox.parsers._jsonl_base import load_canonical_or_stdout_json, persist_jsonl_sidecar
-from src.sandbox.parsers._text_base import redact_password_in_text, scrub_evidence_strings
+from src.sandbox.parsers._jsonl_base import (
+    load_canonical_or_stdout_json,
+    persist_jsonl_sidecar,
+)
+from src.sandbox.parsers._text_base import (
+    redact_password_in_text,
+    scrub_evidence_strings,
+)
 
 EVIDENCE_SIDECAR: Final[str] = "jsql_findings.jsonl"
 _CANONICAL: Final[str] = "jsql.json"

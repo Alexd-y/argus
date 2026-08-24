@@ -54,7 +54,7 @@ import hmac
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final, cast
 
 from sqlalchemy import CursorResult, select, update
@@ -97,7 +97,7 @@ class SessionPrincipal:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _sha256_hex(value: str | None) -> str:
@@ -429,5 +429,5 @@ async def _lookup_session_row(
 def _ensure_aware(dt: datetime) -> datetime:
     """Return *dt* with UTC tzinfo when it was loaded as naive (SQLite)."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt

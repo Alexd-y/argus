@@ -29,7 +29,8 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Final, TypeVar
 
-from pydantic import BaseModel, ValidationError as PydanticValidationError
+from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
 from src.core.observability import (
     get_tracer,

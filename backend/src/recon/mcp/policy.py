@@ -172,10 +172,6 @@ VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     "dig",
     "openssl",
     "testssl.sh",
-    "nikto",
-    "wpscan",
-    "joomscan",
-    "droopescan",
 })
 
 VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({

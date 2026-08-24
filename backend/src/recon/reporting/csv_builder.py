@@ -5,9 +5,8 @@ import io
 import logging
 from urllib.parse import urlparse
 
-from src.schemas.recon.stage3_readiness import ROUTE_CLASSIFICATION_CSV_COLUMNS
-
 from src.db.models_recon import NormalizedFinding
+from src.schemas.recon.stage3_readiness import ROUTE_CLASSIFICATION_CSV_COLUMNS
 
 logger = logging.getLogger(__name__)
 

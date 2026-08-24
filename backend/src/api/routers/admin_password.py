@@ -20,7 +20,6 @@ Security invariants
 
 from __future__ import annotations
 
-import bcrypt
 import hashlib
 import hmac
 import logging
@@ -28,9 +27,10 @@ import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Final
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.auth.admin_sessions import resolve_session
 from src.auth.admin_users import _encode_password
 from src.core.config import settings
-from src.db.models import AdminPasswordResetToken, AdminUser, AdminSession
+from src.db.models import AdminPasswordResetToken, AdminSession, AdminUser
 from src.db.session import get_db
 from src.services.email import send_reset_email
 
@@ -137,7 +137,7 @@ async def _revoke_user_sessions(db: AsyncSession, subject: str) -> None:
     stmt = (
         update(AdminSession)
         .where(AdminSession.subject == subject, AdminSession.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(tz=timezone.utc))
+        .values(revoked_at=datetime.now(tz=UTC))
     )
     await db.execute(stmt)
     await db.commit()
@@ -224,7 +224,7 @@ async def request_reset(
     raw_token = secrets.token_urlsafe(_TOKEN_BYTES)
     token_hash = _hash_token(raw_token)
     otp_code = _generate_otp()
-    expires_at = datetime.now(tz=timezone.utc) + timedelta(minutes=settings.admin_reset_token_ttl_minutes)
+    expires_at = datetime.now(tz=UTC) + timedelta(minutes=settings.admin_reset_token_ttl_minutes)
     ip_hash = hashlib.sha256(ip.encode()).hexdigest()
 
     reset_token = AdminPasswordResetToken(
@@ -277,7 +277,7 @@ async def confirm_reset(
     if reset_token is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     if reset_token.expires_at < now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reset token has expired")
 

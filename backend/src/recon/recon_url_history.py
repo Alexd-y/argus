@@ -9,11 +9,14 @@ import shutil
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from src.core.config import Settings, settings as default_settings
+from src.core.config import Settings
+from src.core.config import settings as default_settings
 from src.recon.mcp.kal_executor import run_kal_mcp_tool
 from src.recon.mcp.policy import evaluate_kal_mcp_policy
 from src.recon.recon_runtime import ReconRuntimeConfig
-from src.recon.vulnerability_analysis.active_scan.argv_safe import safe_http_url_for_argv
+from src.recon.vulnerability_analysis.active_scan.argv_safe import (
+    safe_http_url_for_argv,
+)
 
 if TYPE_CHECKING:
     from src.orchestration.raw_phase_artifacts import RawPhaseSink

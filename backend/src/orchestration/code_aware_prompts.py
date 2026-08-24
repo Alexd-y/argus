@@ -10,11 +10,14 @@ specific "file X line Y calls mysql_query with user input from line Z".
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any
 
-from src.orchestration.phases import CodeSink, CodeSource, SourceAnalysisOutput, TaintPath
+from src.orchestration.phases import (
+    CodeSink,
+    CodeSource,
+    SourceAnalysisOutput,
+    TaintPath,
+)
 
 logger = logging.getLogger(__name__)
 

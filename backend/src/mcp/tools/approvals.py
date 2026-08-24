@@ -14,6 +14,8 @@ from src.mcp.schemas.approval import (
 )
 from src.mcp.services.approval_service import (
     decide_approval as svc_decide_approval,
+)
+from src.mcp.services.approval_service import (
     list_approvals as svc_list_approvals,
 )
 from src.mcp.tenancy import assert_tenant_match
@@ -25,7 +27,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``approvals.*`` tools to ``mcp``."""
 
     @mcp.tool(

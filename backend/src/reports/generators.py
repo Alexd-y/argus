@@ -6,18 +6,17 @@ import io
 import json
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
 from src.api.schemas import Finding, ReportSummary
 from src.db.models import Finding as FindingModel
-from src.db.models import Report
-from src.db.models import Scan
+from src.db.models import Report, Scan
 from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_IDS,
     OWASP_TOP10_2025_CATEGORY_TITLES,
@@ -33,25 +32,25 @@ from src.reports.data_collector import (
     headline_findings,
     headline_severity_totals,
 )
-from src.reports.finding_metadata import (
-    normalize_confidence,
-    normalize_evidence_refs,
-    normalize_evidence_type,
-)
-from src.reports.report_quality_gate import (
-    classify_evidence,
-    score_evidence_quality,
-    validation_status_for_quality,
-)
 from src.reports.evidence_partition import (
     is_provable_from_raw,
     partition_findings,
     unconfirmed_reason,
 )
+from src.reports.finding_metadata import (
+    normalize_confidence,
+    normalize_evidence_refs,
+    normalize_evidence_type,
+)
 from src.reports.infra_recommendations import (
+    build_truthfulness_metrics,
     build_verification_commands,
     generate_infra_recommendations,
-    build_truthfulness_metrics,
+)
+from src.reports.report_quality_gate import (
+    classify_evidence,
+    score_evidence_quality,
+    validation_status_for_quality,
 )
 from src.storage.s3 import get_finding_poc_screenshot_presigned_url
 
@@ -918,12 +917,10 @@ def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
 
         if is_external:
             try:
-                setattr(f, "severity", "info")
-                setattr(f, "evidence_classification", "CANDIDATE")
-                setattr(f, "scope_status", "out_of_scope")
-                setattr(f, "applicability_notes",
-                        f"Finding references external domain '{external_domain}' which is outside the target scope "
-                        f"({target_domain}). This is likely a third-party SaaS/service and should be manually verified.")
+                f.severity = "info"
+                f.evidence_classification = "CANDIDATE"
+                f.scope_status = "out_of_scope"
+                f.applicability_notes = f"Finding references external domain '{external_domain}' which is outside the target scope " f"({target_domain}). This is likely a third-party SaaS/service and should be manually verified."
                 logger.warning(
                     "scope_filter_out_of_scope",
                     extra={"finding_id": getattr(f, "id", "?"),
@@ -971,9 +968,9 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
             missing.append("remediation")
         if missing:
             try:
-                setattr(f, "evidence_classification", "CANDIDATE")
-                setattr(f, "validation_status", "unverified")
-                setattr(f, "evidence_quality", "weak")
+                f.evidence_classification = "CANDIDATE"
+                f.validation_status = "unverified"
+                f.evidence_quality = "weak"
                 logger.warning(
                     "evidence_gate_downgrade",
                     extra={"finding_id": getattr(f, "id", "?"), "missing": missing,
@@ -994,14 +991,14 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
         ec = str(getattr(f, "evidence_classification", "") or "").upper()
         if sev == "high" and ec != "VALIDATED":
             try:
-                setattr(f, "severity", "medium")
+                f.severity = "medium"
                 logger.warning("severity_downgraded_no_validated",
                                extra={"finding_id": getattr(f, "id", "?"), "from": "high", "to": "medium"})
             except Exception:
                 pass
         if sev == "critical" and ec != "VALIDATED":
             try:
-                setattr(f, "severity", "high")
+                f.severity = "high"
                 logger.warning("severity_downgraded_critical_no_validated",
                                extra={"finding_id": getattr(f, "id", "?"), "from": "critical", "to": "high"})
             except Exception:
@@ -1090,10 +1087,10 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 if is_cmdi_candidate:
                     reason_parts.append("command_injection_without_server_output")
                 reason = "+".join(reason_parts) if reason_parts else "no_verified_evidence"
-                setattr(f, "severity", "info")
-                setattr(f, "evidence_classification", "CANDIDATE")
-                setattr(f, "validation_status", "unverified")
-                setattr(f, "evidence_quality", "weak")
+                f.severity = "info"
+                f.evidence_classification = "CANDIDATE"
+                f.validation_status = "unverified"
+                f.evidence_quality = "weak"
                 source = getattr(f, "id", "?")
                 logger.warning(
                     "fuzz_hit_downgraded",
@@ -1613,9 +1610,9 @@ def _build_valhalla_report_context(
         return None
     from src.reports.valhalla_report_context import (
         ValhallaReportContext,
-        build_xss_structured_rows_from_findings,
-        build_csrf_structured_rows_from_findings,
         build_cmdi_structured_rows_from_findings,
+        build_csrf_structured_rows_from_findings,
+        build_xss_structured_rows_from_findings,
     )
     ctx = jinja_context
     valhalla_ctx = ctx.get("valhalla_context")
@@ -1747,7 +1744,7 @@ def generate_json(
     active_web_scan = _jinja_active_web_scan(jinja_context)
     from src.reports.valhalla_report_context import get_brand
     brand = get_brand()
-    now_utc = datetime.now(timezone.utc).isoformat()
+    now_utc = datetime.now(UTC).isoformat()
 
     # scope filter is always applied; Valhalla additionally uses the single provability
     # partition (VHL-PROVABLE-001) shared with HTML/PDF, which routes findings without raw
@@ -2415,7 +2412,7 @@ def generate_export_validation_report(
         "scan_id": data.scan_id or "",
         "target": data.target or "",
         "brand": brand.name,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "validation": {
             "passed": len(issues) == 0,
             "issues": issues,
@@ -2457,7 +2454,9 @@ def generate_html(
     tier: str | None = None,
 ) -> bytes:
     """RPT-008 — Tiered Jinja2 HTML (autoescape). Pass ``jinja_context`` from Report pipeline when available."""
-    from src.reports.jinja_minimal_context import offline_minimal_jinja_context_from_report_data
+    from src.reports.jinja_minimal_context import (
+        offline_minimal_jinja_context_from_report_data,
+    )
     from src.reports.template_env import render_tier_report_html
 
     ctx = (
@@ -2544,7 +2543,9 @@ def _build_branded_pdf_context(
     tier: str,
 ) -> dict[str, Any]:
     """Decorate ``base_context`` with ARG-036 fields the branded templates need."""
-    from src.reports.jinja_minimal_context import offline_minimal_jinja_context_from_report_data
+    from src.reports.jinja_minimal_context import (
+        offline_minimal_jinja_context_from_report_data,
+    )
 
     ctx: dict[str, Any] = (
         dict(base_context)

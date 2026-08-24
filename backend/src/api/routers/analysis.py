@@ -5,9 +5,10 @@ POST /api/v1/analysis/path         — build attack path
 POST /api/v1/analysis/batch        — batch scoring + paths
 """
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
 from typing import Any
+
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -58,7 +59,9 @@ async def calculate_score(req: ScoreRequest) -> ScoreResponse:
 @router.post("/path", response_model=PathResponse)
 async def build_path(req: PathRequest) -> PathResponse:
     from src.analysis.attack_paths.builder import (
-        build_attack_path, to_mermaid, to_d3_json,
+        build_attack_path,
+        to_d3_json,
+        to_mermaid,
     )
 
     path = build_attack_path(req.finding)
@@ -77,7 +80,9 @@ async def build_path(req: PathRequest) -> PathResponse:
 @router.post("/batch")
 async def analyse_batch(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     from src.analysis.attack_paths.builder import (
-        calculate_risk_score, build_attack_path, to_d3_json,
+        build_attack_path,
+        calculate_risk_score,
+        to_d3_json,
     )
 
     results = []

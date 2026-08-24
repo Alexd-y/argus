@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -23,7 +23,7 @@ from src.execution_mode.mode import ExecutionMode
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class LabScopeManifest(BaseModel):
@@ -75,7 +75,7 @@ class LabScopeManifest(BaseModel):
     def is_expired(self, *, now: datetime | None = None) -> bool:
         ref = now or _utcnow()
         if ref.tzinfo is None:
-            ref = ref.replace(tzinfo=timezone.utc)
+            ref = ref.replace(tzinfo=UTC)
         return ref >= self.expires_at
 
     def canonical_payload(self) -> dict[str, Any]:

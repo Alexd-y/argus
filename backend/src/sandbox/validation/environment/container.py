@@ -7,12 +7,9 @@ Container mode uses docker exec; VM mode uses Firecracker microVMs.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import subprocess
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -78,7 +75,7 @@ async def provision_container(
             "status": "ready",
             "network_policy": network_policy,
         }
-    except asyncio.TimeoutError:
+    except TimeoutError:
         raise EnvironmentError("Container creation timed out")
 
 

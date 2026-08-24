@@ -44,7 +44,6 @@ from pydantic import (
 
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 
-
 # ---------------------------------------------------------------------------
 # Closed-taxonomy failure summaries
 # ---------------------------------------------------------------------------

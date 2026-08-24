@@ -32,9 +32,9 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
+from src.pipeline.contracts.finding_dto import ConfidenceLevel
 from src.playbooks.actions import HttpExchange
 from src.playbooks.schema import OracleType
-from src.pipeline.contracts.finding_dto import ConfidenceLevel
 
 # Fields whose values legitimately change between two otherwise-identical
 # responses (server clocks, request ids). A difference confined to these is

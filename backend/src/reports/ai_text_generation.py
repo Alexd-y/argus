@@ -22,10 +22,10 @@ from src.reports.report_data_validation import (
     validate_executive_ai_text_against_payload,
 )
 from src.reports.report_text_sanitizer import (
-    sanitize_ai_report_text,
-    contains_raw_prompt_leakage,
     contains_ai_stub_output,
+    contains_raw_prompt_leakage,
     find_duplicate_paragraphs,
+    sanitize_ai_report_text,
 )
 
 logger = logging.getLogger(__name__)

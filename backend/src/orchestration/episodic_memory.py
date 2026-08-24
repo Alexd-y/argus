@@ -10,10 +10,9 @@ a Django app, we found these patterns."
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ class EpisodicEntry:
     technique: str = ""
     framework: str = ""
     resolution: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_vector_text(self) -> str:
         return f"{self.finding_type} {self.cwe} {self.title} {self.description} {self.technique} {self.framework}"

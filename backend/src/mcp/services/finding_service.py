@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import String, cast, desc, func, select, update
 
 from src.db.models import Finding as FindingModel
-from src.db.models import FindingNote
-from src.db.models import Scan
+from src.db.models import FindingNote, Scan
 from src.db.session import async_session_factory, set_session_tenant
 from src.mcp.exceptions import (
     ResourceNotFoundError,
@@ -40,7 +39,7 @@ def _ensure_aware(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 

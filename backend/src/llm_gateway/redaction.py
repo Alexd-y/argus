@@ -6,7 +6,6 @@ Never logs raw API keys, bearer tokens, or credentials.
 
 import hashlib
 import re
-from typing import Any
 
 
 def hash_prompt(prompt: str) -> str:
@@ -22,7 +21,9 @@ def redact_api_keys(text: str) -> str:
         (r'\bsk-or-[a-zA-Z0-9\-_]{6,}', '<REDACTED:openrouter_key>'),
         (r'\bsk-[a-zA-Z0-9\-_]{6,}', '<REDACTED:openai_key>'),
         (r'\bpplx-[a-zA-Z0-9\-_]{6,}', '<REDACTED:perplexity_key>'),
-        (r'Bearer\s+[a-zA-Z0-9\-_\.]{20,}', '<REDACTED:bearer_token>'),
+        # Case-insensitive: real headers use "Bearer" but logs/tool output may
+        # carry lowercase "bearer"; a leaked token must be masked either way.
+        (r'(?i)bearer\s+[a-zA-Z0-9\-_\.]{20,}', '<REDACTED:bearer_token>'),
         (r'AKIA[0-9A-Z]{16}', '<REDACTED:aws_key>'),
         (r'ghp_[a-zA-Z0-9]{36}', '<REDACTED:github_token>'),
         (r'gho_[a-zA-Z0-9]{36}', '<REDACTED:github_oauth>'),

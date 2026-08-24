@@ -13,7 +13,7 @@ needs to enforce structural invariants, not the schema itself.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Self
 from uuid import UUID
 
@@ -33,7 +33,7 @@ _CANARY_RE = re.compile(r"^[0-9a-f]{16,128}$")
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class ValidationJob(BaseModel):

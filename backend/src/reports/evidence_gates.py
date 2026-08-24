@@ -1,6 +1,6 @@
-from typing import Literal, Optional
-from pydantic import BaseModel
+from typing import Literal
 
+from pydantic import BaseModel
 
 EvidenceGate = Literal["validated", "observed", "candidate", "inconclusive"]
 
@@ -13,36 +13,36 @@ class EvidenceQuality(BaseModel):
 
 
 class XssPocValidation(BaseModel):
-    reflection_context: Optional[str] = None
-    payload_entered: Optional[str] = None
-    payload_reflected: Optional[str] = None
-    verified_via_browser: Optional[bool] = None
-    browser_alert_text: Optional[str] = None
-    affected_parameter: Optional[str] = None
-    negative_control: Optional[str] = None
+    reflection_context: str | None = None
+    payload_entered: str | None = None
+    payload_reflected: str | None = None
+    verified_via_browser: bool | None = None
+    browser_alert_text: str | None = None
+    affected_parameter: str | None = None
+    negative_control: str | None = None
 
 
 class CsrfPocValidation(BaseModel):
-    raw_html_form: Optional[str] = None
-    raw_post: Optional[str] = None
-    cookies: Optional[dict] = None
-    origin_referer: Optional[str] = None
-    csrftoken_status: Optional[Literal["missing", "weak", "absent", "present"]] = None
-    state_changing: Optional[bool] = None
-    negative_control: Optional[str] = None
+    raw_html_form: str | None = None
+    raw_post: str | None = None
+    cookies: dict | None = None
+    origin_referer: str | None = None
+    csrftoken_status: Literal["missing", "weak", "absent", "present"] | None = None
+    state_changing: bool | None = None
+    negative_control: str | None = None
 
 
 class CmdiPocValidation(BaseModel):
-    harmless_marker: Optional[str] = None
-    controlled_output: Optional[str] = None
-    server_proof: Optional[str] = None
-    negative_control: Optional[str] = None
+    harmless_marker: str | None = None
+    controlled_output: str | None = None
+    server_proof: str | None = None
+    negative_control: str | None = None
 
 
 def validate_xss_evidence(proof_of_concept: dict) -> EvidenceQuality:
     poc = proof_of_concept.get("proof_of_concept", proof_of_concept)
     xss = poc.get("xss", {})
-    
+
     required = [
         ("reflection_context", "reflection_context"),
         ("payload_entered", "payload_entered"),
@@ -52,13 +52,13 @@ def validate_xss_evidence(proof_of_concept: dict) -> EvidenceQuality:
         ("affected_parameter", "affected_parameter"),
         ("negative_control", "negative_control"),
     ]
-    
+
     found = []
     for field_name, model_field in required:
         value = xss.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
-    
+
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),
@@ -71,7 +71,7 @@ def validate_xss_evidence(proof_of_concept: dict) -> EvidenceQuality:
 def validate_csrf_evidence(proof_of_concept: dict) -> EvidenceQuality:
     poc = proof_of_concept.get("proof_of_concept", proof_of_concept)
     csrf = poc.get("csrf", {})
-    
+
     required = [
         ("raw_html_form", "raw_html_form"),
         ("raw_post", "raw_post"),
@@ -81,13 +81,13 @@ def validate_csrf_evidence(proof_of_concept: dict) -> EvidenceQuality:
         ("state_changing", "state_changing"),
         ("negative_control", "negative_control"),
     ]
-    
+
     found = []
     for field_name, model_field in required:
         value = csrf.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
-    
+
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),
@@ -100,20 +100,20 @@ def validate_csrf_evidence(proof_of_concept: dict) -> EvidenceQuality:
 def validate_cmdi_evidence(proof_of_concept: dict) -> EvidenceQuality:
     poc = proof_of_concept.get("proof_of_concept", proof_of_concept)
     cmdi = poc.get("command_injection", {})
-    
+
     required = [
         ("harmless_marker", "harmless_marker"),
         ("controlled_output", "controlled_output"),
         ("server_proof", "server_proof"),
         ("negative_control", "negative_control"),
     ]
-    
+
     found = []
     for field_name, model_field in required:
         value = cmdi.get(model_field, poc.get(model_field))
         if value is not None:
             found.append(field_name)
-    
+
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),

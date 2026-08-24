@@ -11,8 +11,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.core.llm_config import get_llm_client, get_llm_provider_info, has_any_llm_key
-from src.recon.mcp.audit import build_mcp_trace_from_audit, mcp_audit_context, write_mcp_audit_meta
-from src.recon.reporting.raw_outputs_builder import RAW_OUTPUTS_DIR, aggregate_raw_tool_outputs
+from src.recon.mcp.audit import (
+    build_mcp_trace_from_audit,
+    mcp_audit_context,
+    write_mcp_audit_meta,
+)
+from src.recon.reporting.raw_outputs_builder import (
+    RAW_OUTPUTS_DIR,
+    aggregate_raw_tool_outputs,
+)
 from src.recon.reporting.stage1_contract import (
     STAGE1_BASELINE_ARTIFACTS,
     build_stage1_contract_snapshot,
@@ -162,7 +169,9 @@ def generate_stage1_report(
 
         # --- Subdomain classification ---
         try:
-            from src.recon.reporting.subdomain_builder import build_subdomain_classification
+            from src.recon.reporting.subdomain_builder import (
+                build_subdomain_classification,
+            )
 
             content = build_subdomain_classification(recon_dir)
             out_path = recon_dir / "subdomain_classification.csv"
@@ -198,7 +207,10 @@ def generate_stage1_report(
 
         # --- Tech profile ---
         try:
-            from src.recon.reporting.tech_builder import build_tech_profile, build_tech_profile_json
+            from src.recon.reporting.tech_builder import (
+                build_tech_profile,
+                build_tech_profile_json,
+            )
 
             http_probe_path = live_dir / "http_probe.csv"
             content = build_tech_profile(http_probe_path=http_probe_path)
@@ -238,7 +250,9 @@ def generate_stage1_report(
         stage1_live_hosts: list[str] = []
         if http_probe_path.exists():
             try:
-                from src.recon.reporting.endpoint_builder import extract_live_hosts_from_http_probe
+                from src.recon.reporting.endpoint_builder import (
+                    extract_live_hosts_from_http_probe,
+                )
 
                 stage1_live_hosts = extract_live_hosts_from_http_probe(http_probe_path)
             except Exception:

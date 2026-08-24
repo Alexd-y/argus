@@ -14,7 +14,7 @@ The string values must stay in lock-step so the two enums interoperate transpare
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Self
 from uuid import UUID
@@ -54,7 +54,7 @@ _PHASE_INDEX: dict[ScanPhase, int] = {phase: idx for idx, phase in enumerate(PHA
 
 def _utcnow() -> datetime:
     """Return current UTC time with timezone info (Pydantic-friendly default factory)."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class PhaseInput(BaseModel):

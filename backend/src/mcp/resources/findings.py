@@ -20,7 +20,7 @@ _MAX_LIMIT = 200
 _VALID_SCAN_ID = (8, 64)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the findings resource template to ``mcp``."""
 
     @mcp.resource(

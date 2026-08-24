@@ -30,7 +30,6 @@ from src.evidence.redaction import RedactedContent, Redactor
 from src.pipeline.contracts.finding_dto import EvidenceDTO, EvidenceKind
 from src.policy.audit import AuditEventType, AuditLogger
 
-
 _logger = logging.getLogger(__name__)
 
 

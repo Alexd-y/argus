@@ -25,16 +25,16 @@ Security
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Final
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth.admin_sessions import resolve_session
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE as _SESSION_COOKIE_NAME
+from src.auth.admin_sessions import resolve_session
 from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.db.models import AdminSession, AdminUser
@@ -156,7 +156,7 @@ async def list_admin_sessions(
         except ValueError:
             pass
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     stmt = (
         select(AdminSession)
         .where(
@@ -214,7 +214,7 @@ async def revoke_admin_session(
     if not prefix:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid session identifier")
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     stmt = (
         select(AdminSession)
         .where(

@@ -42,7 +42,6 @@ from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, ToolJob
 from src.sandbox.templating import render_argv, validate_template
 
-
 _logger = logging.getLogger(__name__)
 
 

@@ -17,7 +17,11 @@ from src.mcp.schemas.finding import (
 )
 from src.mcp.services.finding_service import (
     get_finding as svc_get_finding,
+)
+from src.mcp.services.finding_service import (
     list_findings as svc_list_findings,
+)
+from src.mcp.services.finding_service import (
     mark_false_positive as svc_mark_false_positive,
 )
 from src.mcp.tools._runtime import run_tool
@@ -28,7 +32,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _logger = logging.getLogger(__name__)
 
 
-def register(mcp: "FastMCP") -> None:
+def register(mcp: FastMCP) -> None:
     """Bind the ``findings.*`` tools to ``mcp``."""
 
     @mcp.tool(

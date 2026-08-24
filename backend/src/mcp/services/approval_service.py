@@ -17,7 +17,7 @@ import logging
 import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 from src.mcp.exceptions import (
@@ -275,7 +275,7 @@ def make_test_approval(
     target: str = "https://example.com",
 ) -> StoredApproval:
     """Convenience helper for tests / stdio demos."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return StoredApproval(
         request_id=f"req-{tool_id}-{int(now.timestamp())}",
         tenant_id=tenant_id,

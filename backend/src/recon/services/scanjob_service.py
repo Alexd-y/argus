@@ -1,7 +1,7 @@
 """Scan job service - lifecycle management for recon tool runs."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,7 +129,7 @@ async def update_job_status(
     if result_summary is not None:
         job.result_summary = result_summary
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if status == "running" and not job.started_at:
         job.started_at = now
     if status in ("completed", "failed", "cancelled"):
@@ -151,7 +151,7 @@ async def cancel_job(
         raise ScanJobStateError(f"Cannot cancel job in status: {job.status}")
 
     job.status = "cancelled"
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     await db.flush()
     logger.info("Job cancelled", extra={"job_id": job_id})
     return job

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
@@ -557,7 +557,7 @@ async def admin_create_share_link(
         raise HTTPException(status_code=422, detail="Invalid report_id")
 
     token = secrets.token_urlsafe(48)[:64]
-    expires_at = datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
+    expires_at = datetime.now(UTC) + timedelta(days=body.expires_in_days)
 
     async with async_session_factory() as session:
         await set_session_tenant(session, effective_tenant or query_tid)

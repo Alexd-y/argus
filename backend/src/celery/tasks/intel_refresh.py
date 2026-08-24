@@ -30,7 +30,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
 from typing import Any, Final
 from uuid import uuid4
 
@@ -370,10 +370,10 @@ def _build_kev_client() -> Any | None:
 # ---------------------------------------------------------------------------
 
 
-def _utcnow() -> "datetime":  # noqa: F821 — forward reference for runtime
-    from datetime import datetime, timezone
+def _utcnow() -> datetime:  # noqa: F821 — forward reference for runtime
+    from datetime import datetime
 
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _today_minus(days: int) -> date:

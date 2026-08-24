@@ -12,9 +12,9 @@ import logging
 import time
 from typing import Any
 
-from celery import Celery
 from celery.signals import beat_init, task_failure, task_postrun, task_prerun
 
+from celery import Celery
 from src.core.config import settings
 from src.core.observability import record_celery_task
 

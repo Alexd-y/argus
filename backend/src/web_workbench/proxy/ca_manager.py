@@ -40,7 +40,7 @@ class CaError(Exception):
 
 
 def _utcnow() -> _dt.datetime:
-    return _dt.datetime.now(tz=_dt.timezone.utc)
+    return _dt.datetime.now(tz=_dt.UTC)
 
 
 def _san_for_host(host: str) -> x509.GeneralName:

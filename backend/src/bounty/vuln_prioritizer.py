@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from src.bounty.schemas import BountyScope, VulnPriority
 
-
 VULN_PRIORITY: list[VulnPriority] = [
     VulnPriority(vuln="RCE", score=10, owasp="A05", test_module="api_checks"),
     VulnPriority(vuln="SQL Injection", score=10, owasp="A05", test_module="quick_fuzz"),

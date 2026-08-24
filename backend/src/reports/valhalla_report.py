@@ -20,7 +20,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config import settings
+from src.llm.facade import call_llm_sync
+from src.llm.task_router import LLMTask
 from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_ATTACK_SCENARIOS,
     REPORT_AI_SECTION_BUSINESS_RISK,
@@ -30,34 +31,24 @@ from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY_VALHALLA,
     REPORT_AI_SECTION_EXPLOIT_CHAINS,
     REPORT_AI_SECTION_HARDENING_RECOMMENDATIONS,
+    REPORT_AI_SECTION_KEYS,
     REPORT_AI_SECTION_PRIORITIZATION_ROADMAP,
     REPORT_AI_SECTION_REMEDIATION_STAGES,
     REPORT_AI_SECTION_REMEDIATION_STEP,
     REPORT_AI_SECTION_VULNERABILITY_DESCRIPTION,
     REPORT_AI_SECTION_ZERO_DAY_POTENTIAL,
-    REPORT_AI_SECTION_KEYS,
     get_report_ai_section_prompt,
+)
+from src.owasp_top10_2025 import (
+    OWASP_TOP10_2025_CATEGORY_IDS,
 )
 from src.reports.ai_text_generation import (
     REPORT_AI_SKIPPED_GENERATION_FAILED,
     REPORT_AI_SKIPPED_NO_LLM,
     AITextDeduplicator,
-    build_ai_text_cache_key,
-    canonical_payload_hash,
-)
-from src.llm.facade import call_llm_sync
-from src.llm.task_router import LLMTask
-from src.owasp_top10_2025 import (
-    OWASP_TOP10_2025_CATEGORY_IDS,
-    OWASP_TOP10_2025_CATEGORY_TITLES,
-    parse_owasp_category,
 )
 from src.reports.generators import (
     build_owasp_compliance_rows,
-)
-from src.reports.report_quality_gate import (
-    ReportQualityGate,
-    build_report_quality_gate,
 )
 from src.reports.report_text_sanitizer import (
     contains_ai_stub_output,
@@ -176,7 +167,7 @@ class ValhallaReportContext(BaseModel):
     retest_plan: dict[str, Any] = Field(default_factory=dict)
     zero_day_assessment: dict[str, Any] = Field(default_factory=dict)
     cost_summary: dict[str, Any] = Field(default_factory=dict)
-    
+
     # Evidence quality
     evidence_gate: dict[str, Any] = Field(default_factory=dict)
     csrf_structured: list[dict[str, Any]] = Field(default_factory=list)
@@ -1258,7 +1249,7 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             for i, f in enumerate(top, 1):
                 if isinstance(f, dict):
                     lines.append(f"  {i}. [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
-        lines.append(f"Limitations: WSTG coverage below 70% means many categories were not assessed.")
+        lines.append("Limitations: WSTG coverage below 70% means many categories were not assessed.")
         return "\n".join(lines)
 
     if section_key == "executive_summary":
@@ -1341,7 +1332,7 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
                 if isinstance(c, dict):
                     lines.append(f"- {c.get('title', 'untitled')}: status={c.get('status', 'unknown')}, impact={c.get('impact', 'unknown')}")
             return "\n".join(lines)
-        return "No validated exploit chain was demonstrated. Multi-step chains require multiple validated findings with scope-appropriate impact. WSTG coverage: {0:.0f}%.".format(wstg_pct)
+        return f"No validated exploit chain was demonstrated. Multi-step chains require multiple validated findings with scope-appropriate impact. WSTG coverage: {wstg_pct:.0f}%."
 
     if section_key == "remediation_stages":
         stages = context.remediation_stages or {}
@@ -1361,7 +1352,7 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
     if section_key == "cost_summary":
         cost = context.cost_summary or {}
         lines = [
-            f"Scan cost summary:",
+            "Scan cost summary:",
             f"- Total API calls: {cost.get('total_calls', 0)}",
             f"- Total tokens: {cost.get('total_tokens', 0)}",
             f"- Total cost: ${cost.get('total_cost_usd', 0):.4f}",
@@ -2525,7 +2516,7 @@ def _render_valhalla_markdown(context: ValhallaReportContext) -> bytes:
         "",
         f"**Target:** {context.target_url}",
         f"**Scan ID:** {context.scan_id}",
-        f"**Tier:** Valhalla",
+        "**Tier:** Valhalla",
         f"**Report prepared by:** {brand.name}",
         f"**Generated:** {context.generated_at}",
         "",

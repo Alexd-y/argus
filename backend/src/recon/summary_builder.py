@@ -166,9 +166,7 @@ def _collect_ports(tr: dict[str, Any]) -> list[int]:
     def add_p(p: object) -> None:
         if isinstance(p, int) and 0 < p <= 65535:
             found.add(p)
-        elif isinstance(p, float) and p == int(p):
-            add_p(int(p))
-        elif isinstance(p, str) and p.isdigit():
+        elif isinstance(p, float) and p == int(p) or isinstance(p, str) and p.isdigit():
             add_p(int(p))
 
     nmap = tr.get("nmap")

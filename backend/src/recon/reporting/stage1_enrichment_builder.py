@@ -25,6 +25,9 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
+
+from src.recon.mcp.client import fetch_url_mcp
+from src.recon.parsers.http_probe_parser import parse_http_probe
 from src.schemas.ai.common import ReconAiTask, build_task_metadata
 from src.schemas.ai.schema_export import (
     RECON_AI_TASKS,
@@ -32,13 +35,10 @@ from src.schemas.ai.schema_export import (
     validate_recon_ai_payload,
 )
 from src.schemas.recon.stage3_readiness import (
-    CoverageScores,
     ROUTE_CLASSIFICATION_CSV_COLUMNS,
+    CoverageScores,
     Stage3ReadinessResult,
 )
-
-from src.recon.mcp.client import fetch_url_mcp
-from src.recon.parsers.http_probe_parser import parse_http_probe
 
 logger = logging.getLogger(__name__)
 

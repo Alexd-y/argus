@@ -22,14 +22,14 @@ from src.api.schemas import (
 )
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
+from src.db.models import Report, ReportObject
+from src.db.session import async_session_factory, set_session_tenant
 from src.owasp_top10_2025 import parse_owasp_category
 from src.reports.finding_metadata import (
     normalize_confidence,
     normalize_evidence_refs,
     normalize_evidence_type,
 )
-from src.db.models import Report, ReportObject
-from src.db.session import async_session_factory, set_session_tenant
 from src.reports.generators import (
     VALHALLA_SECTIONS_CSV_FORMAT,
     generate_csv,
@@ -44,18 +44,25 @@ from src.reports.report_findings_scope import (
     load_findings_for_report,
     scan_id_hint_for_report_findings,
 )
-from src.reports.report_pipeline import _upsert_report_object, resolve_scan_id_for_report
+from src.reports.report_pipeline import (
+    _upsert_report_object,
+    resolve_scan_id_for_report,
+)
 from src.reports.report_service import (
     ReportGenerationError,
     ReportNotFoundError,
     ReportService,
 )
-from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.storage import download as storage_download
-from src.services.reporting import build_report_export_payload
 from src.reports.storage import exists as storage_exists
 from src.reports.storage import get_presigned_url
-from src.storage.s3 import download_by_key, get_presigned_url_by_key, upload_report_artifact
+from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
+from src.services.reporting import build_report_export_payload
+from src.storage.s3 import (
+    download_by_key,
+    get_presigned_url_by_key,
+    upload_report_artifact,
+)
 
 logger = logging.getLogger(__name__)
 

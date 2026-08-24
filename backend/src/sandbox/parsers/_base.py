@@ -43,7 +43,7 @@ import json
 import logging
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 from uuid import UUID
@@ -232,7 +232,7 @@ def safe_load_json(
 
 def _utcnow() -> datetime:
     """Return current UTC time with timezone info (test-friendly seam)."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def make_finding_dto(

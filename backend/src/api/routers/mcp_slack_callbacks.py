@@ -57,8 +57,6 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.core.config import settings
-
 # ARG-048 — Pre-warm the pipeline-contracts package before triggering
 # ``src.policy.__init__``. ``src.policy.approval`` imports
 # ``src.sandbox.signing`` which transitively re-enters ``src.policy.preflight``
@@ -69,6 +67,7 @@ from src.core.config import settings
 # Loading it explicitly here makes this router safe to import in any order
 # (cold pytest collection, ``main.py`` boot, ad-hoc REPL).
 import src.pipeline.contracts  # noqa: E402, F401 — see comment above
+from src.core.config import settings
 from src.policy.audit import AuditEventType, AuditLogger  # noqa: E402
 
 logger = logging.getLogger(__name__)

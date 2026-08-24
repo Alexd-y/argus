@@ -12,7 +12,7 @@ canonical status enum, the transition table, and the immutable
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final, Self
 
@@ -126,7 +126,7 @@ def validate_transition(current: ScenarioStatus, target: ScenarioStatus) -> None
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class ScenarioState(BaseModel):

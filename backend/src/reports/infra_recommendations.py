@@ -160,7 +160,7 @@ def generate_infra_recommendations(
                 result["config_snippets"].append((tech_key, snippet))
                 matched = True
         # If CloudFront detected as CDN, always include CloudFront snippet
-        if "cloudfront" in web_server and not any("cloudfront" == k for k, _ in result["config_snippets"]):
+        if "cloudfront" in web_server and not any(k == "cloudfront" for k, _ in result["config_snippets"]):
             result["config_snippets"].append(("cloudfront", _CLOUDFRONT_HEADERS_SNIPPET))
             matched = True
         # If Next.js detected, always include Next.js snippet

@@ -73,7 +73,6 @@ def generate_wstg_payload_commands(
     target_host: str = "",
 ) -> dict[str, Any]:
     """Generate WRB-powered payload commands for missing WSTG tests."""
-    import asyncio
 
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask
@@ -121,7 +120,6 @@ def generate_credential_testing_commands(
     has_auth_form: bool = False,
 ) -> dict[str, Any]:
     """Generate WRB-powered credential testing commands."""
-    import asyncio
 
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask
@@ -168,7 +166,6 @@ def generate_auth_testing_commands(
     auth_method: str = "",
 ) -> dict[str, Any]:
     """Generate WRB-powered authenticated testing commands."""
-    import asyncio
 
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask
@@ -216,7 +213,6 @@ def generate_missing_evidence_commands(
     target_host: str = "",
 ) -> dict[str, Any]:
     """Generate WRB-powered commands for missing evidence collection."""
-    import asyncio
 
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask

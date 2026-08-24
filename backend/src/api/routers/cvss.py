@@ -8,14 +8,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, select, update
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding
 from src.db.session import async_session_factory, set_session_tenant
-from src.findings.cvss_auto_score import CVSSAutoScorer, CVSSVectorSpec
 from src.findings.cvss import severity_label
+from src.findings.cvss_auto_score import CVSSVectorSpec
 
 logger = logging.getLogger(__name__)
 

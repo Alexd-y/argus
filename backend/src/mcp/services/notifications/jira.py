@@ -207,7 +207,7 @@ class JiraAdapter(NotifierBase):
 
 def _basic_auth_header(*, email: str, api_token: str) -> str:
     """Return the ``Basic <b64>`` Authorization header value."""
-    raw = f"{email}:{api_token}".encode("utf-8")
+    raw = f"{email}:{api_token}".encode()
     encoded = base64.b64encode(raw).decode("ascii")
     return f"Basic {encoded}"
 

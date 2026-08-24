@@ -7,12 +7,11 @@ collect evidence → teardown. Supports profiles: web_app, api, cli, library, bi
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -104,7 +103,7 @@ class ValidationOrchestrator:
             tenant_id=self.tenant_id,
             scan_id=self.scan_id,
             profile=config.profile.value,
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=datetime.now(UTC).isoformat(),
         )
         start = time.monotonic()
 
@@ -136,7 +135,7 @@ class ValidationOrchestrator:
                 finding, result
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             result.status = ValidationStatus.TIMED_OUT
             result.error = f"Validation timed out after {config.timeout_seconds}s"
         except PolicyBreachError as exc:
@@ -152,7 +151,7 @@ class ValidationOrchestrator:
             })
         finally:
             result.duration_ms = int((time.monotonic() - start) * 1000)
-            result.completed_at = datetime.now(timezone.utc).isoformat()
+            result.completed_at = datetime.now(UTC).isoformat()
             await self._teardown_environment(result.id)
 
         return result
@@ -188,11 +187,11 @@ class ValidationOrchestrator:
     def _select_harness(self, profile: ValidationProfile):
         """Select appropriate harness for the validation profile."""
         from src.sandbox.validation.harness.profiles import (
-            WebAppHarness,
             ApiHarness,
+            BinaryHarness,
             CliHarness,
             LibraryHarness,
-            BinaryHarness,
+            WebAppHarness,
         )
         mapping = {
             ValidationProfile.WEB_APP: WebAppHarness,

@@ -56,7 +56,7 @@ import concurrent.futures
 import json
 import logging
 from collections.abc import Callable, Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Any, Final
 from uuid import UUID
@@ -64,7 +64,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.core.observability import user_id_hash
-from src.execution_mode.repository import ExecutionModeRepository, get_execution_mode_repository
+from src.execution_mode.repository import (
+    ExecutionModeRepository,
+    get_execution_mode_repository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +175,7 @@ class KillSwitchStatus(BaseModel):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _to_tenant_str(tenant_id: str | UUID) -> str:
@@ -242,7 +245,7 @@ def _ensure_aware(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)
     return value
 
 

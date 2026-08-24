@@ -40,7 +40,6 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
-from src.oast.correlator import OASTInteraction
 from src.llm_orchestrator.agents import (
     AgentContext,
     CriticAgent,
@@ -61,6 +60,7 @@ from src.llm_orchestrator.retry_loop import (
     RetryLoop,
 )
 from src.llm_orchestrator.schemas.loader import ValidationPlanV1
+from src.oast.correlator import OASTInteraction
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.policy.audit import AuditEventType, AuditLogger
 

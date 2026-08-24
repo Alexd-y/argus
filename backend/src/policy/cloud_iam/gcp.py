@@ -130,7 +130,9 @@ class GoogleAuthIamAdapter:
         def _call() -> JwtClaims:
             try:
                 from google.auth import default as google_default  # noqa: PLC0415
-                from google.auth.transport import requests as google_requests  # noqa: PLC0415
+                from google.auth.transport import (
+                    requests as google_requests,  # noqa: PLC0415
+                )
                 from google.oauth2 import id_token as google_id_token  # noqa: PLC0415
             except ImportError as exc:  # pragma: no cover — declared dep
                 raise OwnershipVerificationError(

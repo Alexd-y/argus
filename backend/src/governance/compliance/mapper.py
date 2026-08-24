@@ -10,8 +10,8 @@ import hashlib
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -120,14 +120,10 @@ def _map_finding_to_controls(
     relevant = []
     for ctrl in all_controls:
         if framework == Framework.ISO27001:
-            if "vulnerability" in ctrl.control_id.lower() and severity in ("critical", "high", "medium"):
-                relevant.append(ctrl)
-            elif "development" in ctrl.control_name.lower() and finding.get("file_path"):
+            if "vulnerability" in ctrl.control_id.lower() and severity in ("critical", "high", "medium") or "development" in ctrl.control_name.lower() and finding.get("file_path"):
                 relevant.append(ctrl)
         elif framework == Framework.SOC2:
-            if "access" in ctrl.control_name.lower() and any(kw in title for kw in ("auth", "bypass", "privilege")):
-                relevant.append(ctrl)
-            elif "incident" in ctrl.control_id.lower():
+            if "access" in ctrl.control_name.lower() and any(kw in title for kw in ("auth", "bypass", "privilege")) or "incident" in ctrl.control_id.lower():
                 relevant.append(ctrl)
         elif framework == Framework.PCI_DSS:
             relevant.append(ctrl)  # All PCI DSS vuln controls apply
@@ -167,7 +163,7 @@ async def map_finding_to_compliance(
                     json.dumps({"finding_id": finding.get("id", ""), "control_id": ctrl.control_id, "fw": fw.value},
                                sort_keys=True).encode(), digest_size=16,
                 ).hexdigest(),
-                generated_at=datetime.now(timezone.utc).isoformat(),
+                generated_at=datetime.now(UTC).isoformat(),
             )
             evidence_records.append(evidence)
     return evidence_records
@@ -214,7 +210,7 @@ def build_audit_report(
     return {
         "report_id": str(uuid.uuid4()),
         "tenant_id": tenant_id,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "frameworks": [fw.value for fw in (frameworks or [Framework.ISO27001, Framework.SOC2])],
         "controls_covered": sorted(controls_covered),
         "total_controls": len(controls_covered),

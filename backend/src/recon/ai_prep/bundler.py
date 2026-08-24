@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
@@ -71,7 +71,7 @@ async def prepare_ai_bundle(
     bundle = {
         "metadata": {
             "engagement_name": engagement.name,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "disclaimer": "Authorized reconnaissance data only. Do not use for unauthorized purposes.",
         },
         "engagement": {

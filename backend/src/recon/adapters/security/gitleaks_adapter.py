@@ -10,8 +10,8 @@ from typing import Any
 
 from src.core.config import settings
 from src.recon.adapters.security.base import SecurityToolAdapter
-from src.tools.executor import execute_command
 from src.recon.schemas.base import FindingType
+from src.tools.executor import execute_command
 
 logger = logging.getLogger(__name__)
 

@@ -39,7 +39,6 @@ from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_report import (
     generate_valhalla_report,
-    generate_valhalla_sections,
     render_valhalla_report,
 )
 from src.services.reporting import ReportGenerator

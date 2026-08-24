@@ -60,7 +60,6 @@ from src.sandbox.network_policies import (
 from src.sandbox.templating import redact_argv_for_logging
 from src.sandbox.tool_registry import ToolRegistry
 
-
 if TYPE_CHECKING:
     # Lazy import to avoid the policy plane dragging k8s SDK paths into its
     # own module load. The runtime constructor accepts any object that
@@ -258,7 +257,7 @@ class KubernetesSandboxAdapter:
         dry_run_artifact_dir: Path | None = None,
         kube_config_path: Path | None = None,
         default_pod_timeout_s: int = _DEFAULT_POD_TIMEOUT_S,
-        preflight_checker: "PreflightChecker | None" = None,
+        preflight_checker: PreflightChecker | None = None,
     ) -> None:
         if not isinstance(mode, SandboxRunMode):
             raise SandboxConfigError(
@@ -606,7 +605,7 @@ class KubernetesSandboxAdapter:
         self,
         *,
         tool_job: ToolJob,
-        decision: "PreflightDecision",
+        decision: PreflightDecision,
         start_monotonic: float,
     ) -> SandboxRunResult:
         """Render a closed-taxonomy result for a preflight-denied job.

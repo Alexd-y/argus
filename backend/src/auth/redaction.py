@@ -67,7 +67,7 @@ def redact_cookie_map(cookies: Mapping[str, str] | None) -> dict[str, str]:
     """Redact a ``name -> value`` cookie mapping (values are secrets)."""
     if not cookies:
         return {}
-    return {name: REDACTED for name in cookies}
+    return dict.fromkeys(cookies, REDACTED)
 
 
 def redact_storage_state(storage_state: Mapping[str, Any] | None) -> dict[str, Any]:

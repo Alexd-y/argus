@@ -37,9 +37,9 @@ import re
 import secrets
 import threading
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Final, Protocol, runtime_checkable
+from typing import Final, Protocol, Self, runtime_checkable
 from uuid import UUID, uuid4
 
 from pydantic import (
@@ -50,8 +50,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from typing_extensions import Self
-
 
 _logger = logging.getLogger(__name__)
 
@@ -116,7 +114,7 @@ class OASTProvisioningError(OASTError):
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class OASTBackendKind(StrEnum):
@@ -299,9 +297,9 @@ class InternalOASTProvisioner:
         self,
         *,
         base_domain: str,
-        clock: "ClockFn | None" = None,
-        id_factory: "IdFactoryFn | None" = None,
-        token_factory: "TokenFactoryFn | None" = None,
+        clock: ClockFn | None = None,
+        id_factory: IdFactoryFn | None = None,
+        token_factory: TokenFactoryFn | None = None,
     ) -> None:
         normalized = base_domain.strip().rstrip(".").lower()
         if not _DNS_DOMAIN_RE.fullmatch(normalized):

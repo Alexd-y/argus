@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Final, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictFloat,
+    StrictStr,
+    model_validator,
+)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class FindingState(StrEnum):
@@ -211,9 +218,7 @@ class FindingLifecycleService:
         if assessment.finding_key != finding.finding_key:
             raise ValueError("assessment_finding_key_mismatch")
         finding.assessments.append(assessment)
-        if finding.state is FindingState.CANDIDATE:
-            finding.state = FindingState.AI_REVIEWED
-        elif finding.state is FindingState.MACHINE_VALIDATED:
+        if finding.state is FindingState.CANDIDATE or finding.state is FindingState.MACHINE_VALIDATED:
             finding.state = FindingState.AI_REVIEWED
         return finding
 

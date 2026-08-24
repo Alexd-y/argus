@@ -39,7 +39,6 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from src.payloads.builder import PayloadBundle
 
-
 _PAYLOAD_MOUNT_PATH: Final[str] = "/in/payloads"
 _PAYLOAD_BUNDLE_FILENAME: Final[str] = "bundle.json"
 _PAYLOAD_VOLUME_NAME: Final[str] = "argus-payloads"
@@ -81,7 +80,7 @@ class PayloadDeliveryConfigMap(BaseModel):
         *,
         namespace: str,
         name_prefix: str = "argus-payloads",
-    ) -> "PayloadDeliveryConfigMap":
+    ) -> PayloadDeliveryConfigMap:
         """Build the ConfigMap descriptor for ``bundle`` in ``namespace``.
 
         ``name_prefix`` defaults to ``argus-payloads``; the final name is

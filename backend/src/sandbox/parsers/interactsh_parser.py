@@ -89,7 +89,7 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, TypeAlias
 
@@ -518,7 +518,7 @@ def _minute_bucket(timestamp: str) -> str:
     if parsed is None:
         return timestamp
     rounded = parsed.replace(second=0, microsecond=0)
-    return rounded.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    return rounded.astimezone(UTC).strftime("%Y-%m-%dT%H:%MZ")
 
 
 def _parse_timestamp(timestamp: str) -> datetime | None:

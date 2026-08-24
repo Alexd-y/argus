@@ -24,7 +24,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID
@@ -62,7 +62,7 @@ def _to_jsonable(value: Any) -> Any:
     if value is None or isinstance(value, bool | int | float | str):
         return value
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     if isinstance(value, UUID):
         return str(value)
     if isinstance(value, StrEnum):

@@ -721,13 +721,13 @@ def build_wstg_coverage_v2(
     that also lack a matching evidence artifact.
     """
     result = build_wstg_coverage(tools_executed, findings)
-    
+
     evidence_set = set()
     if evidence_inventory:
         for ev in evidence_inventory:
             if isinstance(ev, dict) and ev.get("test_id"):
                 evidence_set.add(ev["test_id"])
-    
+
     missing_artifacts = []
     for test in result.tests:
         if test["status"] == "not_covered" and test["id"] not in evidence_set:
@@ -737,7 +737,7 @@ def build_wstg_coverage_v2(
                 "tool_hint": f"tool_{test['tools'][0]}_stdout" if test["tools"] else "unknown",
                 "artifact_hint": f"Not assessed: missing artifact for {test['id']}",
             })
-    
+
     return WstgCoverageV2Result(
         total_tests=result.total_tests,
         covered=result.covered,

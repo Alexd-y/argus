@@ -8,7 +8,9 @@ compatibility. Prometheus registration lives in
 from __future__ import annotations
 
 from src.core import unified_ai_metrics as _metrics
-from src.nuclei.legacy_metrics import get_legacy_argv_total as get_nuclei_legacy_argv_total
+from src.nuclei.legacy_metrics import (
+    get_legacy_argv_total as get_nuclei_legacy_argv_total,
+)
 
 __all__ = [
     "get_lab_boundary_denials_total",

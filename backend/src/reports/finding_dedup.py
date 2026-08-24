@@ -19,7 +19,7 @@ import logging
 import re
 from difflib import SequenceMatcher
 from typing import Any
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from src.reports.report_quality_gate import is_http_header_gap_topic
 

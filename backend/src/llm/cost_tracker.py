@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from src.core.observability import record_llm_tokens
@@ -72,7 +72,7 @@ class LLMCallRecord:
     prompt_tokens: int
     completion_tokens: int
     cost_usd: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     # Phase-aware routing telemetry (optional; populated when routing is active).
     alias: str = ""
     fallback_used: bool = False

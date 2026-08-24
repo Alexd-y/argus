@@ -7,11 +7,10 @@ Outputs: GitHub PR suggestions, patch bundles for review.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -191,7 +190,7 @@ async def validate_patch(result: PatchResult) -> PatchResult:
                 result.validation_output = (
                     (stdout or b"").decode(errors="replace")[:2000]
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 result.tests_passed = False
                 result.validation_output = "Test execution timed out"
             except Exception as exc:

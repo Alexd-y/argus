@@ -229,7 +229,9 @@ async def analyze_robots_sitemap_and_sink(
 
 async def _maybe_run_extended_crawl(origin: str, *, tenant_id: str, scan_id: str) -> None:
     """Shallow gospider + parsero (best-effort). No heavy ffuf by default (see VA task note)."""
-    from src.recon.vulnerability_analysis.active_scan.mcp_runner import run_va_active_scan
+    from src.recon.vulnerability_analysis.active_scan.mcp_runner import (
+        run_va_active_scan,
+    )
 
     job_slug = "robots_ext"
     argv_g = ["gospider", "-s", origin, "-d", "1", "-t", "2", "--json", "-q"]

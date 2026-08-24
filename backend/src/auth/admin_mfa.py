@@ -37,7 +37,7 @@ from __future__ import annotations
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final, cast
 
 import bcrypt
@@ -109,7 +109,7 @@ class _MfaState:
 
 def _utcnow() -> datetime:
     """Return the current UTC ``datetime`` with tz info attached."""
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _normalize_subject(subject: str | None) -> str:

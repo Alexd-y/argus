@@ -46,7 +46,6 @@ from pydantic import (
     ValidationError,
 )
 
-from src.oast.correlator import OASTInteraction
 from src.llm_orchestrator.llm_provider import (
     LLMProvider,
     LLMRequest,
@@ -63,6 +62,7 @@ from src.llm_orchestrator.schemas.loader import (
     ValidationPlanV1,
     validate_validation_plan,
 )
+from src.oast.correlator import OASTInteraction
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.phase_io import ScanPhase
 

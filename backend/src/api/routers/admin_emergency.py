@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final
 from uuid import UUID
 
@@ -74,7 +74,6 @@ from src.api.routers.admin_findings import (
     _admin_role_dep,
     _admin_tenant_dep,
 )
-from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.api.schemas import (
     EmergencyAuditTrailItem,
     EmergencyAuditTrailResponse,
@@ -88,6 +87,7 @@ from src.api.schemas import (
     EmergencyThrottleRequest,
     EmergencyThrottleResponse,
 )
+from src.auth.admin_dependencies import require_admin_mfa_passed
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import AuditLog, Scan, Tenant, gen_uuid
@@ -201,7 +201,7 @@ def _enforce_tenant_scope(
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _now_naive() -> datetime:

@@ -28,7 +28,10 @@ from src.pipeline.contracts.finding_dto import (
     FindingStatus,
     RemediationDTO,
 )
-from src.web_workbench.checks.authorization_analyzer import AuthorizationFinding, AuthzClass
+from src.web_workbench.checks.authorization_analyzer import (
+    AuthorizationFinding,
+    AuthzClass,
+)
 
 
 class _ClassMeta:

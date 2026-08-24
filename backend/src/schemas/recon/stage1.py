@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 # --- DNS record types (whitelist for validation)
 DnsRecordType = Literal["A", "AAAA", "CNAME", "MX", "TXT", "NS"]
 
@@ -36,7 +35,7 @@ class SslCertEntry(BaseModel):
     validity_not_after: datetime
 
     @model_validator(mode="after")
-    def validate_validity_order(self) -> "SslCertEntry":
+    def validate_validity_order(self) -> SslCertEntry:
         if self.validity_not_before >= self.validity_not_after:
             raise ValueError("validity_not_before must be before validity_not_after")
         return self

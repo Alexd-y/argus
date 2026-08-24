@@ -15,16 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from app.prompts.threat_modeling_prompts import get_threat_modeling_prompt
-from src.schemas.ai.common import PriorityLevel, ThreatModelingAiTask, build_tm_task_metadata
-from src.schemas.threat_modeling.schemas import (
-    AIReasoningTrace,
-    MCPInvocationTrace,
-    TestingRoadmapItem,
-    ThreatModelArtifact,
-    ThreatModelInputBundle,
-    ThreatModelRun,
-    ThreatScenario,
-)
 from pydantic import BaseModel
 
 from src.core.llm_config import get_llm_client, has_any_llm_key
@@ -43,6 +33,20 @@ from src.recon.threat_modeling.input_loader import (
     load_threat_model_input_bundle_from_artifacts,
 )
 from src.recon.threat_modeling.mcp_enrichment import enrich_with_mcp
+from src.schemas.ai.common import (
+    PriorityLevel,
+    ThreatModelingAiTask,
+    build_tm_task_metadata,
+)
+from src.schemas.threat_modeling.schemas import (
+    AIReasoningTrace,
+    MCPInvocationTrace,
+    TestingRoadmapItem,
+    ThreatModelArtifact,
+    ThreatModelInputBundle,
+    ThreatModelRun,
+    ThreatScenario,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

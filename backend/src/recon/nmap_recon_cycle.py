@@ -8,7 +8,8 @@ import json
 import logging
 import shlex
 import xml.etree.ElementTree as ET
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from src.core.config import settings
 from src.orchestration.raw_phase_artifacts import RawPhaseSink

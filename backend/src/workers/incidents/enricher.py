@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from src.analysis.cpg import CodePropertyGraph, NodeType
@@ -136,7 +136,7 @@ async def enrich_incident(
         result.remediation_tasks = data.get("remediation_tasks", [])
         result.rollback_hints = data.get("rollback_hints", [])
         result.confidence = float(data.get("confidence", 0.5))
-        result.enriched_at = datetime.now(timezone.utc).isoformat()
+        result.enriched_at = datetime.now(UTC).isoformat()
     except Exception as exc:
         logger.warning("incident_enrichment_failed", extra={"error": str(exc)})
 

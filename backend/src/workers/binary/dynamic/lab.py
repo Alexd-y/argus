@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +68,7 @@ async def run_dynamic_analysis(
         # Analyse output for indicators
         output = ((stdout or b"") + (stderr or b"")).decode(errors="replace")
         result.verdict = _classify_dynamic_output(output, result.exit_code)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         result.verdict = "timed_out"
         result.execution_time_ms = timeout_seconds * 1000
     except Exception as exc:
@@ -123,7 +122,7 @@ async def quarantine_sample(
     record = CustodyRecord(
         id=str(uuid.uuid4()), sample_id=file_path, tenant_id=tenant_id,
         submitted_by=submitted_by,
-        submitted_at=datetime.now(timezone.utc).isoformat(),
+        submitted_at=datetime.now(UTC).isoformat(),
     )
 
     if data is None:
@@ -136,7 +135,7 @@ async def quarantine_sample(
     record.hash_before = hashlib.sha256(data).hexdigest()
     record.custody_chain.append({
         "action": "quarantine", "by": submitted_by,
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
         "hash": record.hash_before,
     })
     record.status = "quarantined"
@@ -155,7 +154,7 @@ def request_export_approval(
         record.custody_chain.append({
             "action": "duplicate_approval_rejected",
             "by": approver_id,
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
         })
         return False
 
@@ -163,12 +162,12 @@ def request_export_approval(
     if len(approvals) < 1:
         record.custody_chain.append({
             "action": "approve", "by": approver_id,
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
         })
         return False  # Need second approval
 
     record.custody_chain.append({
         "action": "export_approved", "by": approver_id,
-        "at": datetime.now(timezone.utc).isoformat(),
+        "at": datetime.now(UTC).isoformat(),
     })
     return True

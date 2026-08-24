@@ -34,7 +34,6 @@ from src.oast.correlator import (
 )
 from src.oast.provisioner import OASTToken
 
-
 _logger = logging.getLogger(__name__)
 
 
@@ -145,7 +144,7 @@ class FakeOASTListener:
         }:
             raise ValueError(f"kind {kind!r} is not a DNS interaction")
         qname_value = qname or token.subdomain
-        raw_bytes = f"{kind.value}:{qname_value}".encode("utf-8")
+        raw_bytes = f"{kind.value}:{qname_value}".encode()
         interaction = OASTInteraction.build(
             id=self._id_factory(),
             token_id=token.id,
@@ -178,7 +177,7 @@ class FakeOASTListener:
         )
         path_value = path or f"/p/{token.path_token}"
         method_normalised = method.upper()
-        raw_bytes = f"{method_normalised} {path_value} HTTP/1.1".encode("utf-8")
+        raw_bytes = f"{method_normalised} {path_value} HTTP/1.1".encode()
         metadata = {
             "method": method_normalised,
             "path": path_value,
@@ -206,7 +205,7 @@ class FakeOASTListener:
     ) -> OASTInteraction:
         """Simulate an SMTP RCPT TO arriving for ``token``."""
         rcpt = f"argus@{token.subdomain}"
-        raw_bytes = f"MAIL FROM:<{envelope_from}>\r\nRCPT TO:<{rcpt}>".encode("utf-8")
+        raw_bytes = f"MAIL FROM:<{envelope_from}>\r\nRCPT TO:<{rcpt}>".encode()
         interaction = OASTInteraction.build(
             id=self._id_factory(),
             token_id=token.id,

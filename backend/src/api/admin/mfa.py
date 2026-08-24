@@ -61,7 +61,7 @@ import logging
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Final, Literal
 
 import pyotp
@@ -268,7 +268,7 @@ class _VerifyRateLimiter:
     _lock: asyncio.Lock
 
     @classmethod
-    def make(cls, per_minute: int) -> "_VerifyRateLimiter":
+    def make(cls, per_minute: int) -> _VerifyRateLimiter:
         if per_minute < 1:
             raise ValueError("per_minute must be >= 1")
         return cls(
@@ -432,7 +432,7 @@ async def _load_session_mfa_passed_at(
     if result is None:
         return None
     if result.tzinfo is None:
-        return result.replace(tzinfo=timezone.utc)
+        return result.replace(tzinfo=UTC)
     return result
 
 
@@ -441,7 +441,7 @@ def _is_session_mfa_fresh(passed_at: datetime | None) -> bool:
     if passed_at is None:
         return False
     window = timedelta(seconds=settings.admin_mfa_reauth_window_seconds)
-    return datetime.now(tz=timezone.utc) - passed_at < window
+    return datetime.now(tz=UTC) - passed_at < window
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +666,7 @@ async def admin_mfa_confirm(
         _raise_internal()
         raise AssertionError("unreachable")  # pragma: no cover
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     logger.info(
         "admin_mfa_confirm",
         extra={
@@ -809,7 +809,7 @@ async def admin_mfa_verify(
         if snapshot is not None:
             remaining = snapshot.backup_codes_count
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     logger.info(
         "admin_mfa_verify_success",
         extra={
@@ -951,7 +951,7 @@ async def admin_mfa_disable(
         _raise_internal()
         raise AssertionError("unreachable")  # pragma: no cover
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     logger.info(
         "admin_mfa_disable",
         extra={
@@ -1031,7 +1031,7 @@ async def admin_mfa_regenerate_backup_codes(
         _raise_internal()
         raise AssertionError("unreachable")  # pragma: no cover
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     logger.info(
         "admin_mfa_backup_regenerate",
         extra={

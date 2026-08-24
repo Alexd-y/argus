@@ -1,4 +1,5 @@
-from typing import Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel
 
 __all__ = [
@@ -43,11 +44,11 @@ def build_remediation_matrix_v2(
     tech_stack: dict
 ) -> list[RemediationMatrixRowV2]:
     matrix = []
-    
+
     for finding in findings:
         row = build_remediation_row(finding, tech_stack)
         matrix.append(row)
-    
+
     return sorted(matrix, key=lambda r: (
         priority_order(r.priority),
         severity_order(r.severity),
@@ -56,7 +57,7 @@ def build_remediation_matrix_v2(
 
 def build_remediation_row(finding: dict, tech_stack: dict) -> RemediationMatrixRowV2:
     layer, team = map_layer_to_owner(finding.get("category", ""), tech_stack)
-    
+
     return RemediationMatrixRowV2(
         finding_id=finding.get("id", "UNKNOWN"),
         title=finding.get("title", "Unknown Vulnerability"),
@@ -95,17 +96,17 @@ def map_layer_to_owner(category: str, tech_stack: dict) -> tuple[str, str]:
         "mysql": ("app/database", "Backend"),
         "redis": ("app/database", "Backend"),
     }
-    
+
     for key, (layer, team) in layer_mapping.items():
         if key in category.lower() or key in tech_stack.get("web_server", "").lower():
             return layer, team
-    
+
     return "app/backend", "Backend"
 
 
 def generate_fix_action(finding: dict) -> str:
     vuln_type = finding.get("type", finding.get("title", "")).lower()
-    
+
     if "xss" in vuln_type:
         return "Implement context-aware output encoding and deploy Content Security Policy"
     elif "sqli" in vuln_type or "sql injection" in vuln_type:
@@ -125,7 +126,7 @@ def generate_fix_action(finding: dict) -> str:
 def generate_verification_command(finding: dict) -> str:
     url = finding.get("url", "<target>")
     vuln_type = finding.get("type", finding.get("title", "")).lower()
-    
+
     if "xss" in vuln_type:
         return f"curl -sS '{url}' | grep -i '<script>' || echo 'XSS mitigated'"
     elif "sqli" in vuln_type:
@@ -138,7 +139,7 @@ def generate_verification_command(finding: dict) -> str:
 
 def generate_acceptance_criteria(finding: dict) -> str:
     vuln_type = finding.get("type", finding.get("title", "")).lower()
-    
+
     if "xss" in vuln_type:
         return "All user input is properly encoded. No script execution in browser. CSP header configured."
     elif "sqli" in vuln_type:
