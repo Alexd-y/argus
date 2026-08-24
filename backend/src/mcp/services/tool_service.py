@@ -14,6 +14,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
+from src.core.config import settings
+from src.core.unified_ai_metrics import record_lab_execution
 from src.mcp.exceptions import (
     ApprovalRequiredError,
     ResourceNotFoundError,
@@ -29,9 +31,13 @@ from src.mcp.schemas.tool_run import (
     ToolRunTriggerInput,
     ToolRunTriggerResult,
 )
-from src.core.unified_ai_metrics import record_lab_execution
 from src.orchestration.execution_mode_context import resolve_tool_policy_from_options
 from src.sandbox.adapter_base import ToolDescriptor
+from src.sandbox.parsers import get_registered_tool_parsers
+from src.sandbox.tool_registrability import (
+    load_known_executables,
+    should_register_mcp_tool,
+)
 from src.sandbox.tool_registry import RegistryLoadError, ToolRegistry
 
 _logger = logging.getLogger(__name__)
@@ -103,6 +109,19 @@ def list_catalog(
     """Return a paginated, filtered view of the tool catalog."""
     registry = get_registry()
     descriptors = registry.all_descriptors()
+
+    # R9.2 — never publish a knowingly-broken tool (missing executable/parser).
+    # Opt-in; the signed descriptor stays the source of truth.
+    if settings.mcp_registrability_gate_enabled:
+        parser_ids = get_registered_tool_parsers()
+        known_execs = load_known_executables()
+        descriptors = [
+            d
+            for d in descriptors
+            if should_register_mcp_tool(
+                d, parser_tool_ids=parser_ids, known_executables=known_execs
+            )
+        ]
 
     if category is not None:
         cat_norm = category.strip().lower()

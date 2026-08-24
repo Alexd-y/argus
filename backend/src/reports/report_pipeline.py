@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import jinja2
 from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.db.models import Finding, Report, ReportObject
 from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
+from src.reports.canonical_bundle import render_canonical_bundle
 from src.reports.generators import (
     VALHALLA_SECTIONS_CSV_FORMAT,
     generate_csv,
@@ -31,6 +35,7 @@ from src.reports.report_data_validation import (
     report_validation_failure_payload,
     validate_report_data,
 )
+from src.reports.snapshot_builder import build_snapshot_from_report_data
 from src.reports.tenant_pdf_format import resolve_tenant_pdf_archival_format
 from src.reports.valhalla_report import (
     generate_valhalla_report,
@@ -40,6 +45,51 @@ from src.reports.valhalla_report import (
 from src.services.reporting import ReportGenerator
 
 logger = logging.getLogger(__name__)
+
+
+_CANONICAL_CONTENT_TYPES: dict[str, str] = {
+    "canonical_json": "application/json",
+    "canonical_md": "text/markdown",
+    "canonical_xml": "application/xml",
+    "canonical_pdf": "application/pdf",
+}
+
+
+def _snapshot_pdf_bytes(html: str, completed_at: str) -> bytes | None:
+    """Best-effort HTML→PDF via the active backend; None if unavailable."""
+    try:
+        from src.reports.pdf_backend import get_active_backend
+
+        backend = get_active_backend()
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "canonical.pdf"
+            ok = backend.render(
+                html_content=html,
+                output_path=out,
+                scan_completed_at=completed_at or "",
+            )
+            if ok and out.exists():
+                return out.read_bytes()
+    except Exception:  # noqa: BLE001 — PDF is best-effort, never break the pipeline
+        return None
+    return None
+
+
+def _scan_meta_for_snapshot(built: Any, report_data: Any, scan_id: str, tenant_id: str) -> dict[str, Any]:
+    """Assemble snapshot scan-meta from ScanReportData.scan (tolerant getattr)."""
+    scan_row = getattr(getattr(built, "scan_report_data", None), "scan", None)
+    return {
+        "scan_id": scan_id,
+        "tenant_id": tenant_id,
+        "target": getattr(report_data, "target", None),
+        "scan_profile": getattr(scan_row, "scan_profile", None),
+        "resolved_scan_mode": getattr(scan_row, "resolved_scan_mode", None)
+        or getattr(scan_row, "scan_mode", None),
+        "execution_mode": getattr(scan_row, "execution_mode", None),
+        "quick_profile": getattr(scan_row, "quick_profile", None),
+        "nuclei_profile": getattr(scan_row, "nuclei_profile", None),
+        "completed_at": getattr(report_data, "created_at", None),
+    }
 
 
 class ReportGenerationError(Exception):
@@ -402,6 +452,63 @@ async def run_generate_report_pipeline(
                         object_key=val_key, size_bytes=len(val_report),
                     )
                     generated["export_validation_report"] = val_key
+
+        # R7 — canonical immutable snapshot: emit JSON/MD/XML(/PDF) companion
+        # artifacts rendered from ONE ReportDocumentV1. Additive + fail-soft:
+        # never breaks the standard tier outputs above (opt-in via flag).
+        if settings.canonical_report_snapshot_enabled:
+            try:
+                snapshot = build_snapshot_from_report_data(
+                    report_data,
+                    scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+                    scan_report_data=getattr(built, "scan_report_data", None),
+                )
+                completed_at = snapshot.completed_at or ""
+                artifacts = render_canonical_bundle(
+                    snapshot,
+                    include_pdf=True,
+                    html_to_pdf=lambda html: _snapshot_pdf_bytes(html, completed_at),
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                )
+                for artifact in artifacts:
+                    canon_fmt = f"canonical_{artifact.format}"
+                    canon_key = upload(
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        canon_fmt,
+                        artifact.content,
+                        content_type=_CANONICAL_CONTENT_TYPES.get(
+                            canon_fmt, artifact.mime_type
+                        ),
+                    )
+                    if canon_key:
+                        await _upsert_report_object(
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt=canon_fmt,
+                            object_key=canon_key,
+                            size_bytes=artifact.size,
+                        )
+                        generated[canon_fmt] = canon_key
+                logger.info(
+                    "canonical_snapshot_emitted",
+                    extra={
+                        "event": "canonical_snapshot_emitted",
+                        "report_id": report_id,
+                        "snapshot_hash": snapshot.snapshot_hash,
+                        "formats": [a.format for a in artifacts],
+                    },
+                )
+            except Exception:  # noqa: BLE001 — canonical snapshot is additive
+                logger.warning(
+                    "canonical_snapshot_failed",
+                    extra={"event": "canonical_snapshot_failed", "report_id": report_id},
+                )
 
         expected_keys = set(fmt_list)
         if tier_str == "valhalla" and "csv" in expected_keys:

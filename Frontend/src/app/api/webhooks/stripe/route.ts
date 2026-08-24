@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { addBonusCredits, attachSubscriptionId, resetPeriodBySubscriptionId } from "@/lib/scan-quota";
 import { getStripe } from "@/lib/stripe";
-import { markScanPaid } from "@/lib/scans";
+import { getScan, markScanPaid } from "@/lib/scans";
 
 export const runtime = "nodejs";
+
+function subscriptionIdFrom(session: Stripe.Checkout.Session): string | null {
+  if (!session.subscription) return null;
+  return typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+}
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -30,9 +36,38 @@ export async function POST(req: NextRequest) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const scanId = session.metadata?.scanId;
+    const kind = session.metadata?.kind;
+    const paid = session.payment_status === "paid";
 
-    if (scanId && session.payment_status === "paid") {
-      markScanPaid(scanId);
+    if (scanId && paid) {
+      const scan = getScan(scanId);
+      if (kind === "extra_scan") {
+        if (scan) {
+          addBonusCredits(scan, 1, session.id);
+        }
+      } else {
+        const subscriptionId = subscriptionIdFrom(session);
+        markScanPaid(scanId, subscriptionId);
+        if (scan && subscriptionId) {
+          attachSubscriptionId(scan.email, scan.target, subscriptionId);
+        }
+      }
+    }
+  }
+
+  if (event.type === "invoice.paid") {
+    const invoice = event.data.object as Stripe.Invoice;
+    const billingReason = invoice.billing_reason;
+    const subscription = invoice.parent?.subscription_details?.subscription;
+    const subscriptionId =
+      typeof subscription === "string"
+        ? subscription
+        : subscription && typeof subscription === "object"
+          ? subscription.id
+          : null;
+
+    if (billingReason === "subscription_cycle" && subscriptionId) {
+      resetPeriodBySubscriptionId(subscriptionId);
     }
   }
 

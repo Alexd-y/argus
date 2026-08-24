@@ -91,6 +91,7 @@ class ScanOptions(BaseModel):
 
 
 ExecutionModeLiteral = Literal["production", "lab_unrestricted", "quick"]
+ScanProfileLiteral = Literal["quick", "light", "deep"]
 QuickProfileLiteral = Literal["compact", "balanced", "extended"]
 QuickSeverityFloorLiteral = Literal["critical", "high", "medium", "low", "info"]
 
@@ -224,20 +225,41 @@ class ScanCreateRequest(BaseModel):
         description="Operator contact email for report delivery",
     )
     options: ScanOptions = Field(default_factory=ScanOptions)
+    scan_profile: ScanProfileLiteral | None = Field(
+        default=None,
+        description=(
+            "Canonical external scan profile: quick | light | deep. When set, the "
+            "backend derives scan_mode/execution_mode/quick_profile/nuclei_profile via "
+            "the Profile Resolver. deep requires engagement_id + lab_lease_id."
+        ),
+    )
     scan_mode: Literal["quick", "standard", "deep", "lab"] = Field(
         default="standard",
-        description="Scan depth: quick, standard, deep, or lab (owned lab maximum profile)",
+        description=(
+            "Legacy scan depth (deprecated when scan_profile is set): quick, standard, "
+            "deep, or lab. Kept for backward compatibility only."
+        ),
     )
     execution_mode: ExecutionModeLiteral | None = Field(
         default=None,
         description=(
-            "Immutable execution profile. Omit for production (backward compatible). "
-            "Distinct from scan_mode / options.scanType (depth)."
+            "Legacy immutable execution profile (deprecated when scan_profile is set). "
+            "Omit for production. Distinct from scan_mode / options.scanType (depth)."
         ),
+    )
+    engagement_id: str | None = Field(
+        default=None,
+        max_length=36,
+        description="Engagement id — required for scan_profile=deep (LAB).",
+    )
+    lab_lease_id: str | None = Field(
+        default=None,
+        max_length=36,
+        description="LAB execution lease id — required for scan_profile=deep.",
     )
     quick: QuickCreateOptions | None = Field(
         default=None,
-        description="Quick options; ignored unless execution_mode=quick",
+        description="Quick options; applied when scan_profile=quick or execution_mode=quick",
     )
     report_language: str = Field(
         default="en",
@@ -266,7 +288,14 @@ class ScanDetailResponse(BaseModel):
     target: str
     email: str | None = None
     created_at: str
+    scan_profile: ScanProfileLiteral | None = None
+    resolved_scan_mode: str | None = None
     execution_mode: ExecutionModeLiteral | None = None
+    nuclei_profile: str | None = None
+    engagement_id: str | None = None
+    lab_lease_id: str | None = None
+    profile_version: str | None = None
+    report_snapshot_version: str | None = None
     deadline_at: str | None = None
     quick_profile: QuickProfileLiteral | None = None
     budget: QuickBudgetView | None = None

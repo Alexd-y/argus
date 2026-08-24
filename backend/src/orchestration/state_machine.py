@@ -888,6 +888,17 @@ async def _detect_resume_plan(
 
     completed_phases = await get_completed_phases(session, scan_id)
     skipped_by_profile = skipped_phases_for_options(options)
+    # R11 — profile-driven phase selection from the frozen ResolvedScanProfile
+    # (light/deep too, not just quick). Opt-in; union with the quick allow-list.
+    if settings.profile_checkpoint_enabled:
+        try:
+            from src.orchestration.checkpoint_persistence import profile_skipped_phases
+
+            profile_skips = profile_skipped_phases(options)
+            if profile_skips:
+                skipped_by_profile = frozenset(skipped_by_profile) | profile_skips
+        except Exception as _pp_exc:  # noqa: BLE001 — never break resume detection
+            logger.debug("profile_phase_plan_failed", extra={"error": str(_pp_exc)})
     resume_plan = compute_resume_plan(
         completed_phases,
         skipped_by_profile=skipped_by_profile,
@@ -1974,6 +1985,22 @@ async def run_scan_state_machine(
 
     if is_quick_execution(options):
         _ensure_quick_budget(scan_id, tenant_id, options)
+
+    # R11 — freeze the resolved profile into a durable checkpoint in scan.options
+    # so resume uses the immutable context (not re-interpreted input). Opt-in.
+    if settings.profile_checkpoint_enabled and isinstance(options, dict):
+        try:
+            from src.orchestration.checkpoint_persistence import init_scan_checkpoint
+
+            await init_scan_checkpoint(
+                session,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                options=options,
+                current_phase=PHASE_ORDER[0].value,
+            )
+        except Exception as _cp_exc:  # noqa: BLE001 — checkpoint must never block a scan
+            logger.debug("scan_checkpoint_init_failed", extra={"error": str(_cp_exc)})
 
     cancelled = False
     # 4. Phase loop

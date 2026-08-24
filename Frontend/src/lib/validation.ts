@@ -4,7 +4,7 @@ export type ValidationResult = {
   message: string;
 };
 
-function isLocalIP(octets: number[]): boolean {
+export function isLocalIP(octets: number[]): boolean {
   if (octets[0] === 10) return true;
   if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
   if (octets[0] === 192 && octets[1] === 168) return true;
@@ -80,6 +80,10 @@ export function normalizeTarget(value: string, selectedProtocol: string = "https
 export function extractHostname(target: string, protocol: string = "https"): string {
   const normalized = normalizeTarget(target, protocol);
   return normalized.replace(/^https?:\/\//, "").split("/")[0];
+}
+
+export function inferProtocol(value: string): "https" | "http" {
+  return value.trim().toLowerCase().startsWith("http://") ? "http" : "https";
 }
 
 export function isValidEmail(email: string): boolean {

@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
@@ -1045,18 +1046,138 @@ def dispatch_parse(
         return []
 
 
+# ---------------------------------------------------------------------------
+# Strict dispatch (R9.3) — NO fabricated INFO finding on a parser gap.
+# ---------------------------------------------------------------------------
+
+
+# Canonical coverage reason codes emitted by the strict dispatcher.
+PARSER_STATUS_PARSED: Final[str] = "parsed"
+PARSER_STATUS_UNPARSED: Final[str] = "unparsed"
+PARSER_STATUS_FAILED: Final[str] = "failed"
+COVERAGE_REASON_PARSER_UNAVAILABLE: Final[str] = "parser_unavailable"
+COVERAGE_REASON_TOOL_FAILED: Final[str] = "tool_failed"
+
+
+@dataclass(frozen=True, slots=True)
+class ParseDispatchResult:
+    """Structured outcome of :func:`dispatch_parse_strict`.
+
+    Unlike the legacy :func:`dispatch_parse`, a missing strategy/parser or a
+    parser crash NEVER yields a synthetic INFO finding. Instead the caller gets
+    an empty ``findings`` list plus a machine-readable ``parser_status`` and
+    ``coverage_reason`` so the coverage engine can record ``parser_unavailable``
+    / ``tool_failed`` against the raw artifact — never a vulnerability without
+    evidence (Requirements R9.3, R6).
+    """
+
+    findings: list[FindingDTO] = field(default_factory=list)
+    parser_status: str = PARSER_STATUS_PARSED
+    coverage_reason: str | None = None
+    raw_available: bool = False
+
+    @property
+    def is_parsed(self) -> bool:
+        return self.parser_status == PARSER_STATUS_PARSED
+
+
+def dispatch_parse_strict(
+    strategy: ParseStrategy,
+    raw_stdout: bytes,
+    raw_stderr: bytes,
+    artifacts_dir: Path,
+    tool_id: str,
+) -> ParseDispatchResult:
+    """Parse tool output without ever fabricating a finding (R9.3).
+
+    * Strategy not registered OR no per-tool parser for ``tool_id`` →
+      ``parser_status=unparsed``, ``coverage_reason=parser_unavailable``,
+      ``findings=[]``. The raw artifact is preserved by the caller.
+    * Parser raised → ``parser_status=failed``, ``coverage_reason=tool_failed``,
+      ``findings=[]``.
+    * Success → ``parser_status=parsed``, findings from the parser.
+    """
+    raw_available = bool(raw_stdout) or bool(raw_stderr)
+
+    handler = _REGISTRY.get(strategy)
+    parser = _TOOL_TO_PARSER.get(tool_id)
+    if handler is None or parser is None:
+        _logger.warning(
+            "parsers.dispatch.parser_unavailable",
+            extra={
+                "event": "parsers_dispatch_parser_unavailable",
+                "parse_strategy": strategy.value,
+                "tool_id": tool_id,
+                "artifacts_dir": str(artifacts_dir),
+                "strategy_registered": handler is not None,
+                "tool_registered": parser is not None,
+            },
+        )
+        return ParseDispatchResult(
+            findings=[],
+            parser_status=PARSER_STATUS_UNPARSED,
+            coverage_reason=COVERAGE_REASON_PARSER_UNAVAILABLE,
+            raw_available=raw_available,
+        )
+    try:
+        findings = parser(raw_stdout, raw_stderr, artifacts_dir, tool_id)
+    except ParseError as exc:
+        _logger.warning(
+            "parsers.dispatch.strict_handler_failed",
+            extra={
+                "event": "parsers_dispatch_strict_handler_failed",
+                "parse_strategy": strategy.value,
+                "tool_id": tool_id,
+                "error_type": type(exc).__name__,
+                "error_message": str(exc)[:200],
+            },
+        )
+        return ParseDispatchResult(
+            findings=[],
+            parser_status=PARSER_STATUS_FAILED,
+            coverage_reason=COVERAGE_REASON_TOOL_FAILED,
+            raw_available=raw_available,
+        )
+    except Exception as exc:  # noqa: BLE001 — fail-soft, no traceback leak
+        _logger.warning(
+            "parsers.dispatch.strict_handler_unexpected_error",
+            extra={
+                "event": "parsers_dispatch_strict_handler_unexpected_error",
+                "parse_strategy": strategy.value,
+                "tool_id": tool_id,
+                "error_type": type(exc).__name__,
+            },
+        )
+        return ParseDispatchResult(
+            findings=[],
+            parser_status=PARSER_STATUS_FAILED,
+            coverage_reason=COVERAGE_REASON_TOOL_FAILED,
+            raw_available=raw_available,
+        )
+    return ParseDispatchResult(
+        findings=list(findings),
+        parser_status=PARSER_STATUS_PARSED,
+        coverage_reason=None,
+        raw_available=raw_available,
+    )
+
+
 __all__ = [
+    "COVERAGE_REASON_PARSER_UNAVAILABLE",
+    "COVERAGE_REASON_TOOL_FAILED",
     "HEARTBEAT_TAG_PREFIX",
     "MAX_STDERR_BYTES",
     "MAX_STDOUT_BYTES",
-    "SENTINEL_CVSS_SCORE",
-    "SENTINEL_CVSS_VECTOR",
-    "SENTINEL_UUID",
+    "PARSER_STATUS_FAILED",
+    "PARSER_STATUS_PARSED",
+    "PARSER_STATUS_UNPARSED",
+    "ParseDispatchResult",
     "ParseError",
     "ParserContext",
     "ParserHandler",
     "ToolParser",
     "dispatch_parse",
+    "dispatch_parse_strict",
     "get_registered_strategies",
     "get_registered_tool_parsers",
     "make_finding_dto",

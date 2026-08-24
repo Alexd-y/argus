@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ScanData } from "@/lib/scan-types";
 import { getTierConfig } from "@/lib/scan-tiers";
 import { SCAN_STAGES } from "@/lib/scan-tiers";
@@ -119,6 +120,16 @@ export function ScanRunning({ scan, scanUrl }: ScanRunningProps) {
           );
         })}
       </div>
+
+      <Link
+        href="/"
+        className="block w-full text-center cursor-pointer bg-[#A655F7] px-4 py-2.5 text-white font-medium hover:bg-[#b875f8] rounded-sm glitch-hover text-sm"
+      >
+        Start another scan
+      </Link>
+      <p className="text-[11px] text-neutral-600 text-center">
+        This scan keeps running in the background. We&apos;ll still email you when it finishes.
+      </p>
     </div>
   );
 }

@@ -50,8 +50,15 @@ from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
 from src.llm.cost_tracker import ScanCostTracker
+from src.nuclei.profile_compiler import default_profile_id_for_mode
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import try_pick_queued_scan
+from src.profiles import (
+    ConflictingProfileFieldsError,
+    detect_legacy_conflict,
+    resolve_scan_profile,
+)
+from src.profiles.lab_preflight import preflight_lab_lease
 from src.quick.cancellation import propagate_scan_cancellation
 from src.quick.create import (
     PLAN_NOT_APPLICABLE,
@@ -403,20 +410,55 @@ async def create_scan(
     """Create scan — persist to DB, queue for execution."""
     scan_id = str(uuid.uuid4())
     options_dict = req.options.model_dump() if req.options else {}
-    try:
-        execution_mode = parse_requested_execution_mode(req.execution_mode)
-        assert_execution_mode_payload(
-            execution_mode,
-            has_quick_payload=req.quick is not None,
-        )
-    except QuickCreateError as exc:
-        raise _quick_http_error(exc) from exc
 
     scan_mode: ScanCreateMode = req.scan_mode
     deadline_at: datetime | None = None
     quick_profile: str | None = None
     quick_config = None
     quick_budget = None
+    resolved_profile = None
+    profile_version: str | None = None
+    engagement_id: str | None = None
+    lab_lease_id: str | None = None
+
+    # Canonical Profile Resolver path (Design §5). When scan_profile is provided
+    # it is the single source of truth; legacy scan_mode/execution_mode are
+    # deprecated and must not conflict with the resolved profile.
+    if req.scan_profile is not None:
+        legacy_scan_mode = req.scan_mode if "scan_mode" in req.model_fields_set else None
+        legacy_execution_mode = (
+            req.execution_mode if "execution_mode" in req.model_fields_set else None
+        )
+        conflicts = detect_legacy_conflict(
+            req.scan_profile,
+            legacy_scan_mode=legacy_scan_mode,
+            legacy_execution_mode=legacy_execution_mode,
+        )
+        if conflicts:
+            raise ConflictingProfileFieldsError(
+                "scan_profile conflicts with legacy scan_mode/execution_mode fields",
+                details={"conflicting_fields": conflicts, "scan_profile": req.scan_profile},
+            )
+        quick_hint = req.quick.profile if req.quick is not None else None
+        resolved_profile = resolve_scan_profile(req.scan_profile, quick_profile=quick_hint)
+        execution_mode = resolved_profile.execution_mode
+        scan_mode = resolved_profile.scan_mode  # type: ignore[assignment]
+        profile_version = resolved_profile.profile_version
+        engagement_id = (req.engagement_id or "").strip() or None
+        lab_lease_id = (req.lab_lease_id or "").strip() or None
+    else:
+        try:
+            execution_mode = parse_requested_execution_mode(req.execution_mode)
+        except QuickCreateError as exc:
+            raise _quick_http_error(exc) from exc
+
+    try:
+        assert_execution_mode_payload(
+            execution_mode,
+            has_quick_payload=req.quick is not None,
+        )
+    except QuickCreateError as exc:
+        raise _quick_http_error(exc) from exc
 
     if execution_mode is ExecutionMode.QUICK:
         scan_mode = "quick"
@@ -444,9 +486,31 @@ async def create_scan(
         options_dict = _sync_scan_depth_options(options_dict, scan_mode, target=req.target)
         if execution_mode is not ExecutionMode.PRODUCTION:
             options_dict["execution_mode"] = execution_mode.value
+        if engagement_id:
+            options_dict["engagement_id"] = engagement_id
+        if lab_lease_id:
+            options_dict["lab_lease_id"] = lab_lease_id
+
+    # Resolved nuclei profile is always populated for observability/reporting.
+    nuclei_profile = (
+        resolved_profile.nuclei_profile
+        if resolved_profile is not None
+        else default_profile_id_for_mode(execution_mode)
+    )
 
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
+
+        # deep profile → server-side LAB lease boundary validation (Design §7).
+        # Raises ArgusProfileError (rendered by the profile error handler).
+        if resolved_profile is not None and resolved_profile.requires_lab_lease:
+            await preflight_lab_lease(
+                session,
+                tenant_id=tenant_id,
+                engagement_id=engagement_id,
+                lab_lease_id=lab_lease_id,
+                target=req.target,
+            )
 
         result = await session.execute(
             select(Tenant).where(cast(Tenant.id, String) == tenant_id)
@@ -478,6 +542,14 @@ async def create_scan(
             deadline_at=deadline_at,
             quick_profile=quick_profile,
             email=req.email,
+            scan_profile=(
+                resolved_profile.external_profile.value if resolved_profile is not None else None
+            ),
+            resolved_scan_mode=scan_mode,
+            nuclei_profile=nuclei_profile,
+            engagement_id=engagement_id,
+            lab_lease_id=lab_lease_id,
+            profile_version=profile_version,
         )
         session.add(scan)
         if quick_config is not None and quick_budget is not None and deadline_at is not None:
@@ -528,6 +600,7 @@ async def get_scan(
         )
         deadline_raw = getattr(scan, "deadline_at", None)
         profile_raw = getattr(scan, "quick_profile", None)
+        scan_profile_raw = getattr(scan, "scan_profile", None)
         return ScanDetailResponse(
             id=scan.id,
             status=scan.status,
@@ -536,6 +609,19 @@ async def get_scan(
             target=scan.target_url,
             email=scan.email,
             created_at=format_created_at_iso_z(scan.created_at),
+            scan_profile=(
+                scan_profile_raw
+                if isinstance(scan_profile_raw, str)
+                and scan_profile_raw in {"quick", "light", "deep"}
+                else None
+            ),
+            resolved_scan_mode=getattr(scan, "resolved_scan_mode", None)
+            or str(getattr(scan, "scan_mode", None) or "") or None,
+            nuclei_profile=getattr(scan, "nuclei_profile", None),
+            engagement_id=getattr(scan, "engagement_id", None),
+            lab_lease_id=getattr(scan, "lab_lease_id", None),
+            profile_version=getattr(scan, "profile_version", None),
+            report_snapshot_version=getattr(scan, "report_snapshot_version", None),
             execution_mode=execution_mode,
             deadline_at=(
                 format_created_at_iso_z(deadline_raw)

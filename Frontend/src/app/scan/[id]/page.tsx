@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, Suspense } from "react";
+import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import type { ScanData } from "@/lib/scan-types";
 import { Header } from "@/components/Header";
@@ -20,6 +21,7 @@ function ScanPageContent() {
   const [loading, setLoading] = useState(true);
   const canceled = searchParams.get("canceled") === "true";
   const justUnlocked = searchParams.get("unlocked") === "true";
+  const extraCredits = searchParams.get("credits") === "1";
 
   const fetchScan = useCallback(async () => {
     try {
@@ -43,20 +45,43 @@ function ScanPageContent() {
   }, [id]);
 
   useEffect(() => {
-    fetchScan();
-  }, [fetchScan]);
+    let cancelled = false;
 
-  useEffect(() => {
-    if (justUnlocked) {
-      fetchScan();
+    async function load() {
+      try {
+        const res = await fetch(`/api/scans/${id}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(res.status === 404 ? "Scan not found" : "Failed to load scan");
+          return;
+        }
+        const data: ScanData = await res.json();
+        if (cancelled) return;
+        setScan(data);
+        setError(null);
+      } catch {
+        if (!cancelled) setError("Failed to load scan");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }, [justUnlocked, fetchScan]);
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, justUnlocked]);
 
   // Drop ?unlocked=true from the URL once we've confirmed payment server-side
   useEffect(() => {
     if (!justUnlocked || !scan?.paid || scan.tier === "free") return;
     window.history.replaceState({}, "", `/scan/${id}`);
   }, [justUnlocked, scan?.paid, scan?.tier, id]);
+
+  useEffect(() => {
+    if (!extraCredits) return;
+    window.history.replaceState({}, "", `/scan/${id}`);
+  }, [extraCredits, id]);
 
   const showUnlockedBanner =
     justUnlocked && scan?.paid === true && scan.tier !== "free";
@@ -85,9 +110,16 @@ function ScanPageContent() {
             </div>
           )}
 
-          {showUnlockedBanner && (
+          {showUnlockedBanner && scan.quota && (
             <div className="mb-4 border border-emerald-500/30 bg-emerald-500/5 rounded p-3 text-xs text-emerald-300">
-              Subscription active. Full results are now unlocked.
+              Subscription active. Full results are now unlocked — {scan.quota.remaining} of{" "}
+              {scan.quota.capacity} scans remaining this period.
+            </div>
+          )}
+
+          {extraCredits && (
+            <div className="mb-4 border border-emerald-500/30 bg-emerald-500/5 rounded p-3 text-xs text-emerald-300">
+              Extra scan added. You can retest this target now.
             </div>
           )}
 
@@ -98,9 +130,9 @@ function ScanPageContent() {
           {error && !loading && (
             <div className="text-center py-16">
               <p className="text-red-400 mb-4">{error}</p>
-              <a href="/" className="text-[#A655F7] hover:text-[#b875f8] underline text-xs">
+              <Link href="/" className="text-[#A655F7] hover:text-[#b875f8] underline text-xs">
                 Back to home
-              </a>
+              </Link>
             </div>
           )}
 

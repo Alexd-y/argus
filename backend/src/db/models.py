@@ -204,6 +204,19 @@ class Scan(Base):
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: compact | balanced | extended when execution_mode=quick; otherwise null.
     quick_profile: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    #: Canonical external scan profile: quick | light | deep. Null for legacy scans
+    #: created before the Profile Resolver (backward compatible).
+    scan_profile: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    #: Mirror of the resolved internal scan_mode (for analytics / idempotent resume).
+    resolved_scan_mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: Resolved nuclei profile id (quick-default | vuln_default | lab_unrestricted).
+    nuclei_profile: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Engagement + LAB lease bindings (deep profile only).
+    engagement_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lab_lease_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Profile Resolver version + report snapshot schema version.
+    profile_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    report_snapshot_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cost_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

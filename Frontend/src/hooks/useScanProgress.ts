@@ -5,7 +5,7 @@ import {
   createScan,
   getScanStatus,
   subscribeScanEvents,
-} from "@/lib/scans";
+} from "@/lib/scanClient";
 import { getSafeErrorMessage } from "@/lib/api";
 import type { CreateScanRequest, SSEEventPayload } from "@/lib/types";
 

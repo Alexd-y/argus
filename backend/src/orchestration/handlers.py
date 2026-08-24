@@ -2227,6 +2227,32 @@ async def run_vuln_analysis(
     )
     assign_stable_finding_ids(llm_output.findings, scan_id=scan_id)
 
+    # R8 defense-in-depth: drop fabricated LLM findings (confirmed/exploitable or
+    # CVE claim without any evidence). Opt-in; never touches evidenced findings.
+    if settings.typed_intent_compiler_enabled:
+        try:
+            from src.orchestration.typed_intent_runner import enforce_finding_evidence
+
+            kept, dropped = enforce_finding_evidence(
+                llm_output.findings,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                phase="vuln_analysis",
+            )
+            if dropped:
+                logger.info(
+                    "typed_intent_evidence_gate",
+                    extra={
+                        "event": "typed_intent_evidence_gate",
+                        "scan_id": scan_id,
+                        "kept": len(kept),
+                        "dropped": len(dropped),
+                    },
+                )
+            llm_output.findings = kept
+        except Exception as _tig_exc:  # noqa: BLE001 — gate must never break VA
+            logger.debug("typed_intent_gate_failed", extra={"error": str(_tig_exc)})
+
     if scan_options.get("aiml_scan") or (source_analysis and hasattr(source_analysis, "frameworks") and any("llm" in str(f).lower() or "ai" in str(f).lower() for f in (getattr(source_analysis, "frameworks", None) or []))):
         try:
             from src.orchestration.aiml_security import AIMLSecurityScanner
@@ -2852,6 +2878,43 @@ async def run_exploit_attempt(
                 _pa._session.stop()
             except Exception as _pw_exc:
                 logger.debug("Playwright screenshot failed (non-fatal): %s", _pw_exc)
+
+    # R8/R6 defense-in-depth: LLM-derived exploits inherently claim exploitability,
+    # so drop any without PoC/evidence. Opt-in; the sandbox executor path (which
+    # returns earlier with real evidence) is never reached here.
+    if settings.typed_intent_compiler_enabled and exploit_out.exploits:
+        try:
+            from src.orchestration.typed_intent_runner import enforce_finding_evidence
+
+            kept, dropped = enforce_finding_evidence(
+                exploit_out.exploits,
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                phase="exploitation",
+                treat_as_provable=True,
+                extra_evidence_keys=(
+                    "poc_url",
+                    "poc_curl",
+                    "browser_evidence",
+                    "screenshot_base64",
+                    "screenshot_path",
+                    "symbolic_execution_proven",
+                    "evidence",
+                ),
+            )
+            if dropped:
+                logger.info(
+                    "typed_intent_exploit_gate",
+                    extra={
+                        "event": "typed_intent_exploit_gate",
+                        "scan_id": scan_id,
+                        "kept": len(kept),
+                        "dropped": len(dropped),
+                    },
+                )
+            exploit_out.exploits = kept
+        except Exception as _eg_exc:  # noqa: BLE001 — gate must never break exploitation
+            logger.debug("typed_intent_exploit_gate_failed", extra={"error": str(_eg_exc)})
 
     return exploit_out
 

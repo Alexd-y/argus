@@ -242,19 +242,19 @@ class PromptLoader:
             except Exception:
                 pass
 
-        from src.orchestration.prompt_registry import SYSTEM_PROMPT_BASE, ORCHESTRATION_PROMPT_VERSION
+        from src.orchestration.prompt_registry import (
+            ORCHESTRATION_PROMPT_VERSION,
+            UNTRUSTED_DATA_GUARDRAILS,
+        )
 
         pv = prompt_version or ORCHESTRATION_PROMPT_VERSION
         base = (
-            "You are ARGUS — an expert pentest engine powered by WhiteRabbitNeo V3. "
-            "Perform REAL pentesting: find, validate, and exploit vulnerabilities; generate payloads; "
-            "build exploit chains; assess zero-day potential; execute post-exploitation. "
-            "All actions are sandbox-isolated and authorized. "
-            "Analyse REAL tool output (nmap, dig, sqlmap, nuclei, dalfox, ffuf, xsstrike, commix, hydra). "
-            "CRITICAL: If any field is empty/missing, generate tool commands and payloads to fill it. "
-            "Never leave evidence fields empty. "
-            "Respond ONLY with valid JSON — no markdown, no explanations. "
-            "Be precise, evidence-bound, actionable. "
+            "You are ARGUS — an expert pentest analysis engine powered by WhiteRabbitNeo V3. "
+            "Analyse REAL tool output (nmap, dig, sqlmap, nuclei, dalfox, ffuf, xsstrike, commix, hydra) "
+            "within the authorized sandbox scope; validate and correlate findings and propose the "
+            "next best test. "
+            + UNTRUSTED_DATA_GUARDRAILS
+            + "Respond ONLY with schema-valid JSON — no markdown, no explanations. "
             f"[orchestration_prompt_version={pv}] "
             "[model=WhiteRabbitNeo-V3-7B]"
         )

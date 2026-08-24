@@ -1,7 +1,14 @@
 import { randomUUID } from "crypto";
 import type { ScanTier } from "./scan-tiers";
-import { SCAN_STAGES } from "./scan-tiers";
-import { getResultsForTier } from "./scan-results";
+import { SCAN_STAGES, includesDarkWebMonitoring, isPaidTier, isScanUnlocked } from "./scan-tiers";
+import { getResultsForTier, lockFindings, localizeResults } from "./scan-results";
+import { fetchDemoFindings, isLiveFindingsTarget, resultsFromCanonical } from "./live-findings";
+import {
+  activateSubscription,
+  getScanQuota,
+  refundCredit,
+  type QuotaSource,
+} from "./scan-quota";
 
 export type ScanStatus = "pending" | "running" | "complete" | "failed";
 
@@ -19,6 +26,8 @@ export interface ScanRecord {
   parentScanId: string | null;
   darkWebMonitoring: boolean;
   paid: boolean;
+  quotaCharged: boolean;
+  quotaSource: QuotaSource | null;
   createdAt: string;
   completedAt: string | null;
 }
@@ -29,6 +38,9 @@ export interface CreateScanInput {
   tier: ScanTier;
   parentScanId?: string;
   darkWebMonitoring?: boolean;
+  paid?: boolean;
+  quotaCharged?: boolean;
+  quotaSource?: QuotaSource | null;
 }
 
 const TIER_STAGE_MS: Record<ScanTier, number> = {
@@ -74,8 +86,10 @@ export function createScan(input: CreateScanInput): ScanRecord {
     error: null,
     results: null,
     parentScanId: input.parentScanId ?? null,
-    darkWebMonitoring: input.darkWebMonitoring ?? false,
-    paid: input.tier === "free",
+    darkWebMonitoring: includesDarkWebMonitoring(input.tier, input.darkWebMonitoring),
+    paid: input.paid ?? input.tier === "free",
+    quotaCharged: input.quotaCharged ?? false,
+    quotaSource: input.quotaSource ?? null,
     createdAt: new Date().toISOString(),
     completedAt: null,
   };
@@ -110,10 +124,16 @@ function startMockScanner(id: string): void {
 
   if (shouldSimulateFailure(scan.target)) {
     setTimeout(() => {
+      const current = getScan(id);
+      if (current?.quotaCharged) {
+        refundCredit(current);
+      }
       updateScan(id, {
         status: "failed",
         error: "Scanner encountered an error while assessing the target. Please retry or contact support.",
         completedAt: new Date().toISOString(),
+        quotaCharged: false,
+        quotaSource: null,
       });
       runners.delete(id);
     }, 3000);
@@ -122,6 +142,9 @@ function startMockScanner(id: string): void {
 
   const stageMs = TIER_STAGE_MS[scan.tier];
   let stageIndex = 0;
+  const liveFindings = isLiveFindingsTarget(scan.target)
+    ? fetchDemoFindings()
+    : Promise.resolve(null);
 
   const advance = () => {
     const current = getScan(id);
@@ -135,15 +158,7 @@ function startMockScanner(id: string): void {
     }
 
     if (stageIndex >= SCAN_STAGES.length) {
-      updateScan(id, {
-        status: "complete",
-        stage: SCAN_STAGES[SCAN_STAGES.length - 1],
-        stageIndex: SCAN_STAGES.length - 1,
-        progress: 100,
-        results: getResultsForTier(current.tier),
-        completedAt: new Date().toISOString(),
-      });
-      runners.delete(id);
+      void finalizeScan(id, liveFindings);
       return;
     }
 
@@ -161,31 +176,68 @@ function startMockScanner(id: string): void {
   setTimeout(advance, 500);
 }
 
-export function markScanPaid(id: string): ScanRecord | null {
-  return updateScan(id, { paid: true });
+async function finalizeScan(
+  id: string,
+  liveFindings: Promise<Awaited<ReturnType<typeof fetchDemoFindings>> | null>
+): Promise<void> {
+  const current = getScan(id);
+  if (!current || current.status === "failed" || current.status === "complete") {
+    getActiveRunners().delete(id);
+    return;
+  }
+
+  try {
+    const payload = await liveFindings;
+    const results = payload
+      ? resultsFromCanonical(payload, current.tier, current.target)
+      : localizeResults(getResultsForTier(current.tier), current.target);
+
+    updateScan(id, {
+      status: "complete",
+      stage: SCAN_STAGES[SCAN_STAGES.length - 1],
+      stageIndex: SCAN_STAGES.length - 1,
+      progress: 100,
+      results,
+      completedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Failed to load scan findings:", error);
+    const failed = getScan(id);
+    if (failed?.quotaCharged) {
+      refundCredit(failed);
+    }
+    updateScan(id, {
+      status: "failed",
+      error: "Could not load scan findings for this target. Please retry.",
+      completedAt: new Date().toISOString(),
+      quotaCharged: false,
+      quotaSource: null,
+    });
+  } finally {
+    getActiveRunners().delete(id);
+  }
 }
 
-/** Whether full report content is available (free tier or subscription paid). */
-export function isScanUnlocked(scan: Pick<ScanRecord, "tier" | "paid">): boolean {
-  return scan.tier === "free" || scan.paid;
+export function markScanPaid(id: string, stripeSubscriptionId?: string | null): ScanRecord | null {
+  const scan = getScan(id);
+  if (!scan) return null;
+  if (scan.paid && isPaidTier(scan.tier)) {
+    activateSubscription({ ...scan, stripeSubscriptionId });
+    return scan;
+  }
+  const updated = updateScan(id, { paid: true, quotaCharged: true, quotaSource: "included" });
+  if (updated && isPaidTier(updated.tier)) {
+    activateSubscription({ ...updated, stripeSubscriptionId });
+  }
+  return updated;
 }
+
+export { isScanUnlocked } from "./scan-tiers";
 
 function sanitizeResultsForResponse(scan: ScanRecord) {
   if (!scan.results) return null;
   if (isScanUnlocked(scan)) return scan.results;
-
-  // Locked paid tier: expose severity counts only — no detailed findings
-  return {
-    critical: scan.results.critical,
-    high: scan.results.high,
-    medium: scan.results.medium,
-    low: scan.results.low,
-    info: scan.results.info,
-    technologies: [],
-    sslIssues: null,
-    headerIssues: null,
-    leaksFound: false,
-  };
+  return lockFindings(scan.results);
 }
 
 export function toScanResponse(scan: ScanRecord) {
@@ -203,6 +255,7 @@ export function toScanResponse(scan: ScanRecord) {
     parentScanId: scan.parentScanId,
     darkWebMonitoring: scan.darkWebMonitoring,
     paid: scan.paid,
+    quota: getScanQuota(scan),
     createdAt: scan.createdAt,
     completedAt: scan.completedAt,
   };

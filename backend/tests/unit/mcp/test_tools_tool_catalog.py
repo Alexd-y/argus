@@ -104,6 +104,16 @@ class _FakeRegistry:
         return self._by_id.get(tool_id)
 
 
+@pytest.fixture(autouse=True)
+def _disable_registrability_gate(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Catalog filter/pagination tests are orthogonal to the R9 registrability
+    gate; disable it so stub tools without registered parsers are not filtered."""
+    from src.core.config import settings
+
+    monkeypatch.setattr(settings, "mcp_registrability_gate_enabled", False)
+    yield
+
+
 @pytest.fixture()
 def registry() -> Iterator[_FakeRegistry]:
     """Fresh fake registry per test, restored on teardown."""

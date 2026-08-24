@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getScan, isScanUnlocked } from "@/lib/scans";
 import { getTierConfig } from "@/lib/scan-tiers";
-import { buildReportText } from "@/lib/report";
+import { buildReportPdf } from "@/lib/report";
+
+export const runtime = "nodejs";
 
 export async function GET(
   _req: NextRequest,
@@ -26,13 +28,13 @@ export async function GET(
   }
 
   const tier = getTierConfig(scan.tier);
-  const body = buildReportText(scan);
+  const body = buildReportPdf(scan);
   const safeTarget = scan.target.replace(/[^a-zA-Z0-9.-]/g, "_");
-  const filename = `ragnarok-${safeTarget}-${tier.name.toLowerCase()}.txt`;
+  const filename = `ragnarok-${safeTarget}-${tier.slug}.pdf`;
 
-  return new NextResponse(body, {
+  return new NextResponse(Buffer.from(body), {
     headers: {
-      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

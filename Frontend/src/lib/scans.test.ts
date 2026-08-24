@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createScan, getScanStatus } from "./scans";
+import {
+  createScan,
+  getFindings,
+  getScanCoverage,
+  getScanStatus,
+  listScans,
+  mapTierToScanProfile,
+  reportDownloadUrl,
+} from "./scanClient";
 import type { CreateScanRequest, CreateScanResponse, ScanStatus } from "./types";
 
 const mockCreateScanResponse: CreateScanResponse = {
@@ -155,6 +163,93 @@ describe("scans", () => {
       } as Response);
 
       await expect(getScanStatus("missing-id")).rejects.toThrow("Scan not found");
+    });
+  });
+
+  describe("mapTierToScanProfile", () => {
+    it("maps free -> quick, standard -> light, premium -> deep", () => {
+      expect(mapTierToScanProfile("free")).toBe("quick");
+      expect(mapTierToScanProfile("standard")).toBe("light");
+      expect(mapTierToScanProfile("premium")).toBe("deep");
+    });
+  });
+
+  describe("createScan payload", () => {
+    it("sends the canonical scan_profile in the request body", async () => {
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve(mockCreateScanResponse),
+      } as Response);
+
+      const req: CreateScanRequest = {
+        ...mockCreateScanRequest,
+        scan_profile: "deep",
+        engagement_id: "eng-1",
+        lab_lease_id: "lease-1",
+      };
+      await createScan(req);
+
+      const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(String(opts.body));
+      expect(body.scan_profile).toBe("deep");
+      expect(body.engagement_id).toBe("eng-1");
+      expect(body.lab_lease_id).toBe("lease-1");
+    });
+  });
+
+  describe("listScans", () => {
+    it("GETs /scans and returns the list", async () => {
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve([{ id: "s-1", status: "queued" }]),
+      } as Response);
+      const rows = await listScans();
+      expect(rows).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/scans"),
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+  });
+
+  describe("getFindings", () => {
+    it("GETs /scans/:id/findings with query filters", async () => {
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve([]),
+      } as Response);
+      await getFindings("scan-1", { severity: "high", validatedOnly: true });
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain("/scans/scan-1/findings");
+      expect(url).toContain("severity=high");
+      expect(url).toContain("validated_only=true");
+    });
+  });
+
+  describe("getScanCoverage", () => {
+    it("GETs /scans/:id/coverage", async () => {
+      const fetchMock = vi.mocked(fetch);
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ scan_id: "scan-1", requirements: [], results: [] }),
+      } as Response);
+      const cov = await getScanCoverage("scan-1");
+      expect(cov.scan_id).toBe("scan-1");
+    });
+  });
+
+  describe("reportDownloadUrl", () => {
+    it("builds a download URL with the format query", () => {
+      const url = reportDownloadUrl("rep-1", "xml");
+      expect(url).toContain("/reports/rep-1/download");
+      expect(url).toContain("format=xml");
     });
   });
 });

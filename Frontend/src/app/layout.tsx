@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ragnarok | Svalbard Security",
-  description: "Advanced penetration testing platform",
+  title: "Ragnarøk | Svalbard Security",
+  description:
+    "Automated external scanning for the domain you own. Prove ownership, see findings in minutes, and subscribe only when you want them unlocked and rescanned. Svalbard's team can fix them for you.",
   icons: {
     icon: [
       { url: "/favicon/favicon.ico", sizes: "any" },

@@ -68,6 +68,7 @@ from src.auth.admin_users import bootstrap_admin_user_if_configured
 from src.cache.scan_knowledge_base import get_knowledge_base
 from src.core.auth import get_required_auth
 from src.core.config import settings
+from src.api.errors import register_profile_error_handler
 from src.core.exception_handlers import register_exception_handlers
 from src.core.logging_config import configure_logging
 from src.core.metrics_middleware import HttpMetricsMiddleware
@@ -250,6 +251,7 @@ def _verify_prompt_catalog() -> int:
 # ---------------------------------------------------------------------------
 
 register_exception_handlers(app)
+register_profile_error_handler(app)
 
 app.add_middleware(HttpMetricsMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ScanData } from "@/lib/scan-types";
 import { getTierConfig } from "@/lib/scan-tiers";
@@ -12,10 +13,12 @@ interface ScanFailedProps {
 export function ScanFailed({ scan }: ScanFailedProps) {
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const tier = getTierConfig(scan.tier);
 
   const handleRetry = async () => {
     setRetrying(true);
+    setError(null);
     try {
       const res = await fetch("/api/scans", {
         method: "POST",
@@ -26,12 +29,19 @@ export function ScanFailed({ scan }: ScanFailedProps) {
           tier: scan.tier,
           parentScanId: scan.id,
           darkWebMonitoring: scan.darkWebMonitoring,
+          retest: scan.paid && scan.tier !== "free",
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not retry scan");
+        return;
+      }
       if (data.url) {
         router.push(data.url);
       }
+    } catch {
+      setError("Could not retry scan. Try again.");
     } finally {
       setRetrying(false);
     }
@@ -60,6 +70,10 @@ export function ScanFailed({ scan }: ScanFailedProps) {
         </div>
       </div>
 
+      {error && (
+        <p className="text-xs text-red-400">{error}</p>
+      )}
+
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-center max-w-md mx-auto">
         <button
           onClick={handleRetry}
@@ -68,12 +82,12 @@ export function ScanFailed({ scan }: ScanFailedProps) {
         >
           {retrying ? "Starting..." : "Retry Scan"}
         </button>
-        <a
+        <Link
           href="/"
           className="flex-1 cursor-pointer px-4 py-2.5 text-neutral-400 border border-neutral-700 hover:border-[#A655F7]/50 hover:text-white rounded-sm text-center"
         >
           Back to Home
-        </a>
+        </Link>
       </div>
 
       <p className="text-xs text-neutral-600">

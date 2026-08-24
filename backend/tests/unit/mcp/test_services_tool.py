@@ -88,6 +88,17 @@ class _StubRegistry:
         return [self._by_id[k] for k in sorted(self._by_id)]
 
 
+@pytest.fixture(autouse=True)
+def _disable_registrability_gate(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """These tests target category/risk/approval filtering + pagination, which are
+    orthogonal to the R9 registrability gate; disable the gate so hand-crafted
+    stub tools (without registered parsers) are not filtered out."""
+    from src.core.config import settings
+
+    monkeypatch.setattr(settings, "mcp_registrability_gate_enabled", False)
+    yield
+
+
 @pytest.fixture()
 def descriptors() -> list[ToolDescriptor]:
     return [

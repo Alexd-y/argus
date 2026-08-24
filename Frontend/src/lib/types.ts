@@ -73,9 +73,18 @@ export interface QuickBudgetView {
   reserve_for_validation_percent?: number;
 }
 
+/** Canonical external scan profile — the only value the UI should select. */
+export type ScanProfile = "quick" | "light" | "deep";
+
 export interface CreateScanRequest {
   target: string;
   email: string;
+  /** Canonical profile (preferred). Backend derives scan_mode/execution_mode. */
+  scan_profile?: ScanProfile;
+  /** Required when scan_profile=deep (LAB). */
+  engagement_id?: string;
+  lab_lease_id?: string;
+  /** Legacy (deprecated when scan_profile is set) — kept for backward compat. */
   scan_mode?: "quick" | "standard" | "deep" | "lab";
   execution_mode?: ExecutionMode;
   quick?: QuickCreateOptions;
@@ -95,7 +104,14 @@ export interface ScanStatus {
   phase: string;
   target: string;
   created_at: string;
+  scan_profile?: ScanProfile;
+  resolved_scan_mode?: string;
   execution_mode?: ExecutionMode;
+  nuclei_profile?: string;
+  engagement_id?: string;
+  lab_lease_id?: string;
+  profile_version?: string;
+  report_snapshot_version?: string;
   deadline_at?: string;
   quick_profile?: "compact" | "balanced" | "extended";
   budget?: QuickBudgetView;
@@ -108,6 +124,46 @@ export interface SSEEventPayload {
   progress?: number;
   message?: string;
   data?: unknown;
+}
+
+export interface ScanListItem {
+  id: string;
+  status: string;
+  progress: number;
+  phase: string;
+  target: string;
+  email?: string;
+  created_at: string;
+  scan_mode?: string;
+}
+
+export interface ScanCoverageResultItem {
+  requirement_id?: string;
+  capability_id?: string;
+  status?: string;
+  reason_code?: string;
+  evidence_ids?: string[];
+  finding_id?: string;
+}
+
+export interface ScanCoverage {
+  scan_id: string;
+  requirements: unknown[];
+  results: ScanCoverageResultItem[];
+}
+
+export interface GenerateReportResponse {
+  report_id: string;
+  task_id?: string;
+}
+
+export interface ReportListItem {
+  report_id: string;
+  scan_id?: string | null;
+  tier?: string;
+  generation_status?: string;
+  created_at?: string;
+  requested_formats?: string[] | null;
 }
 
 export interface ReportSummary {

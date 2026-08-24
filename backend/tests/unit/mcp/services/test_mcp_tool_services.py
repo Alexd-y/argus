@@ -45,6 +45,16 @@ from src.sandbox.adapter_base import (
 from src.orchestration.state_machine import ScanPhase as ToolPhase
 
 
+@pytest.fixture(autouse=True)
+def _disable_registrability_gate(monkeypatch: pytest.MonkeyPatch):
+    """Catalog filter/pagination tests are orthogonal to the R9 registrability
+    gate; disable it so synthetic tools (no registered parser) are not filtered."""
+    from src.core.config import settings
+
+    monkeypatch.setattr(settings, "mcp_registrability_gate_enabled", False)
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Helpers — build synthetic ToolRegistry with known descriptors
 # ---------------------------------------------------------------------------

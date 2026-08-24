@@ -1,77 +1,45 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ScanData } from "@/lib/scan-types";
-import { getTierConfig, getUpgradeTiers } from "@/lib/scan-tiers";
-import { isScanUnlocked } from "@/lib/scans";
-import { PLACEHOLDER_FINDINGS } from "@/lib/scan-results";
+import { getUnlockBody, getUnlockCtaLabel, getUpgradeTiers, includesSubdomainDiscovery, isScanUnlocked } from "@/lib/scan-tiers";
+import type { Finding } from "@/lib/scan-results";
+import { groupFindings } from "@/lib/scan-results";
+import { Reveal } from "@/components/Reveal";
+import { CredentialExposure } from "@/components/scan/CredentialExposure";
+import { FindingDossier } from "@/components/scan/FindingDossier";
+import { ScanExecutiveHeader } from "@/components/scan/ScanExecutiveHeader";
 import { ServicesSection } from "@/components/scan/ServicesSection";
+import { SubdomainsSection } from "@/components/scan/SubdomainsSection";
+
+const FINDINGS_ANCHOR = "findings";
+const LEAKS_ANCHOR = "dark-web";
+const SUBDOMAINS_ANCHOR = "subdomains";
 
 interface ScanSuccessProps {
   scan: ScanData;
+  sample?: boolean;
 }
 
-function AlertGrid({
-  results,
-  locked = false,
-}: {
-  results: NonNullable<ScanData["results"]>;
-  locked?: boolean;
-}) {
-  return (
-    <>
-      <div className={`hidden sm:grid sm:grid-cols-5 gap-3 ${locked ? "opacity-70" : ""}`}>
-        <div className="border border-red-500/30 bg-red-500/5 rounded p-4 text-center">
-          <div className="text-2xl font-bold text-red-400">{results.critical}</div>
-          <div className="text-xs text-red-400/70 uppercase tracking-wider mt-1">Critical</div>
-        </div>
-        <div className="border border-orange-500/30 bg-orange-500/5 rounded p-4 text-center">
-          <div className="text-2xl font-bold text-orange-400">{results.high}</div>
-          <div className="text-xs text-orange-400/70 uppercase tracking-wider mt-1">High</div>
-        </div>
-        <div className="border border-amber-500/30 bg-amber-500/5 rounded p-4 text-center">
-          <div className="text-2xl font-bold text-amber-400">{results.medium}</div>
-          <div className="text-xs text-amber-400/70 uppercase tracking-wider mt-1">Medium</div>
-        </div>
-        <div className="border border-blue-500/30 bg-blue-500/5 rounded p-4 text-center">
-          <div className="text-2xl font-bold text-blue-400">{results.low}</div>
-          <div className="text-xs text-blue-400/70 uppercase tracking-wider mt-1">Low</div>
-        </div>
-        <div className="border border-neutral-700 bg-neutral-900 rounded p-4 text-center">
-          <div className="text-2xl font-bold text-neutral-400">{results.info}</div>
-          <div className="text-xs text-neutral-500 uppercase tracking-wider mt-1">Info</div>
-        </div>
-      </div>
-      <div className={`sm:hidden grid grid-cols-3 gap-2 ${locked ? "opacity-70" : ""}`}>
-        <div className="border border-red-500/30 bg-red-500/5 rounded p-3 text-center">
-          <div className="text-xl font-bold text-red-400">{results.critical}</div>
-          <div className="text-[10px] text-red-400/70 uppercase tracking-wider mt-1">Critical</div>
-        </div>
-        <div className="border border-orange-500/30 bg-orange-500/5 rounded p-3 text-center">
-          <div className="text-xl font-bold text-orange-400">{results.high}</div>
-          <div className="text-[10px] text-orange-400/70 uppercase tracking-wider mt-1">High</div>
-        </div>
-        <div className="border border-amber-500/30 bg-amber-500/5 rounded p-3 text-center">
-          <div className="text-xl font-bold text-amber-400">{results.medium}</div>
-          <div className="text-[10px] text-amber-400/70 uppercase tracking-wider mt-1">Medium</div>
-        </div>
-      </div>
-    </>
-  );
+function defaultOpenIds(findings: Finding[]): string[] {
+  const writeup = findings.find((item) => item.access === "basic" || item.access === "full");
+  const first = writeup ?? findings[0];
+  return first ? [first.id] : [];
 }
 
-export function ScanSuccess({ scan }: ScanSuccessProps) {
+export function ScanSuccess({ scan, sample = false }: ScanSuccessProps) {
   const router = useRouter();
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const tier = getTierConfig(scan.tier);
   const upgradeTiers = getUpgradeTiers(scan.tier);
   const results = scan.results;
-  const needsUnlock = scan.tier !== "free" && !scan.paid;
-  const isUnlocked = isScanUnlocked(scan);
-  const findings = isUnlocked ? results! : PLACEHOLDER_FINDINGS;
+  const needsUnlock = !sample && scan.tier !== "free" && !scan.paid;
+  const isUnlocked = sample || isScanUnlocked(scan);
+  const findings = results?.findings ?? [];
+  const [openIds, setOpenIds] = useState<string[]>(() => defaultOpenIds(findings));
 
   const handleUnlock = async () => {
     setUnlocking(true);
@@ -116,242 +84,178 @@ export function ScanSuccess({ scan }: ScanSuccessProps) {
     }
   };
 
+  const toggleFinding = (id: string) => {
+    setOpenIds((current) =>
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+    );
+  };
+
   if (!results) return null;
+
+  const groups = groupFindings(findings);
+  const leaks = scan.darkWebMonitoring ? (results.leaks ?? []) : [];
 
   return (
     <div className="space-y-8 sm:space-y-10">
-      <div className="border border-emerald-500/30 bg-emerald-500/5 rounded p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-3 w-3 rounded-full bg-emerald-500 pulse-glow glow-emerald flex-shrink-0" />
-              <span className="text-emerald-400 font-medium">Scan Complete</span>
-            </div>
-            <p className="text-white text-base sm:text-lg font-mono truncate">{scan.target}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <span className="text-xs text-neutral-300 border border-neutral-700 bg-neutral-900 px-2.5 py-1 rounded">
-              {tier.name}
-            </span>
-            {scan.paid && scan.tier !== "free" && (
-              <span className="text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 rounded">
-                Unlocked
-              </span>
-            )}
-            {isUnlocked && (
-              <a
-                href={`/api/scans/${scan.id}/report`}
-                download
-                className="text-xs text-white border border-[#A655F7]/50 bg-[#A655F7]/10 hover:bg-[#A655F7]/20 px-2.5 py-1 rounded transition-colors"
-              >
-                Download Report
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
+      <ScanExecutiveHeader
+        scan={scan}
+        results={results}
+        sample={sample}
+        needsUnlock={needsUnlock}
+        isUnlocked={isUnlocked}
+        unlocking={unlocking}
+        onUnlock={handleUnlock}
+        findingsAnchor={FINDINGS_ANCHOR}
+        leaksAnchor={LEAKS_ANCHOR}
+        subdomainsAnchor={SUBDOMAINS_ANCHOR}
+      />
 
-      <section>
-        <h2 className="text-lg text-white mb-4">Security Alerts Found</h2>
-        <AlertGrid results={results} locked={needsUnlock} />
-      </section>
-
-      <section className={`relative ${needsUnlock ? "min-h-[280px]" : ""}`}>
-        {needsUnlock && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-950/90 rounded backdrop-blur-sm border border-[#A655F7]/30">
-            <div className="text-center px-6 sm:px-10 py-6 max-w-md">
-              <p className="text-base text-white font-medium mb-2">Full report locked</p>
-              <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
-                Your {tier.name} scan of <span className="text-neutral-300">{scan.target}</span> is complete.
-                Subscribe to unlock the full report — technologies, SSL/TLS analysis, breach details,
-                remediation steps, and downloadable results.
-              </p>
-              <button
-                onClick={handleUnlock}
-                disabled={unlocking}
-                className="cursor-pointer bg-[#A655F7] px-6 py-3 text-white text-sm font-medium hover:bg-[#b875f8] rounded-sm glitch-hover disabled:opacity-60 mb-3"
-              >
-                {unlocking ? "Redirecting..." : `Buy Report — ${tier.priceLabel}`}
-              </button>
-              <p className="text-[11px] text-neutral-600">Cancel anytime. Billed monthly.</p>
-              {checkoutError && (
-                <p className="text-xs text-red-400 mt-3">{checkoutError}</p>
-              )}
-            </div>
-          </div>
-        )}
-        <h2 className="text-lg text-white mb-4">Findings Summary</h2>
-        {!isUnlocked && (
-          <p className="text-[11px] text-neutral-600 mb-3">
-            Sample layout — your target-specific findings appear after purchase.
+      {needsUnlock && (
+        <Reveal className="border border-[#A655F7]/40 bg-[#A655F7]/5 rounded-sm px-4 py-4 sm:px-5">
+          <p className="text-sm text-white mb-1">Unlock this report and keep rescanning</p>
+          <p className="text-xs text-neutral-400 mb-3 leading-relaxed">
+            {getUnlockBody(scan.tier, scan.target)}
           </p>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-3 sm:p-4">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Technologies</div>
-            <div className="flex flex-wrap gap-2">
-              {findings.technologies.map((tech, i) => (
-                <span key={i} className="text-xs bg-neutral-800 text-neutral-300 px-2 py-1 rounded">
-                  {tech}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-3 sm:p-4">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">SSL/TLS</div>
-            <div className="text-white">
-              {findings.sslIssues === null
-                ? "Not included in Midgard"
-                : `${findings.sslIssues} issues found`}
-            </div>
-          </div>
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-3 sm:p-4">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Data Breaches</div>
-            <div className={findings.leaksFound ? "text-red-400" : "text-emerald-400"}>
-              {findings.leaksFound ? "Detected" : "None found"}
-            </div>
-          </div>
-        </div>
-
-        {findings.headerIssues !== null && findings.headerIssues > 0 && (
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-3 sm:p-4 mb-4">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">HTTP Security Headers</div>
-            <div className="text-white">{findings.headerIssues} issues found</div>
-          </div>
-        )}
-
-        {isUnlocked && findings.leakEmails && findings.leakEmails.length > 0 && (
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-4 mb-4">
-            <div className="text-xs text-neutral-500 uppercase tracking-wider mb-2">Leaked Emails</div>
-            <ul className="space-y-1">
-              {findings.leakEmails.map((e, i) => (
-                <li key={i} className="text-xs text-neutral-400 font-mono">{e}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {isUnlocked && findings.remediationNotes && findings.remediationNotes.length > 0 && (
-          <div className="border border-neutral-800 bg-neutral-900 rounded p-4 sm:p-6">
-            <h3 className="text-white font-medium mb-3">Remediation Highlights</h3>
-            <ul className="space-y-2">
-              {findings.remediationNotes.map((note, i) => (
-                <li key={i} className="text-xs text-neutral-400 flex items-start gap-2">
-                  <span className="text-emerald-400 mt-0.5">✓</span>
-                  {note}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
-      <section className="border border-neutral-800 bg-neutral-900 rounded p-4 sm:p-6">
-        <h2 className="text-white font-medium mb-4">What&apos;s included in your {tier.name} report</h2>
-        <ul className="space-y-2">
-          {tier.features.map((feature, i) => (
-            <li key={i} className="flex items-start gap-2 text-xs">
-              <span className={feature.included ? "text-emerald-400" : "text-neutral-600"}>
-                {feature.included ? "✓" : "×"}
-              </span>
-              <span className={feature.included ? "text-neutral-300" : "text-neutral-600 line-through"}>
-                {feature.text}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {upgradeTiers.length > 0 && (
-        <section>
-          <h2 className="text-lg text-white mb-2">Upgrade to a higher tier</h2>
-          <p className="text-xs text-neutral-500 mb-4">
-            Compare what you get above {tier.name}. Start a new scan at a higher tier — pay only when you unlock results.
-          </p>
-          <div className={`grid grid-cols-1 gap-4 ${upgradeTiers.length > 1 ? "lg:grid-cols-2" : ""}`}>
-            {upgradeTiers.map((upgradeTier) => (
-              <div
-                key={upgradeTier.id}
-                className={`border rounded-lg overflow-hidden ${
-                  upgradeTier.popular
-                    ? "border-[#A655F7] bg-[#A655F7]/5"
-                    : "border-neutral-800 bg-neutral-900"
-                }`}
-              >
-                {upgradeTier.popular && (
-                  <div className="bg-[#A655F7] text-white text-[9px] uppercase tracking-wider text-center py-1 font-medium">
-                    Most popular
-                  </div>
-                )}
-                <div className="p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <h3 className="text-white font-medium">{upgradeTier.name}</h3>
-                      <p className="text-[10px] text-neutral-500 mt-0.5">{upgradeTier.tagline}</p>
-                    </div>
-                    <p className="text-sm font-bold text-white flex-shrink-0">{upgradeTier.priceLabel}</p>
-                  </div>
-                  <ul className="space-y-2 mb-4">
-                    {upgradeTier.features.map((f, i) => (
-                      <li key={i} className="flex items-start gap-2 text-[11px]">
-                        <span className={f.included ? "text-emerald-400" : "text-neutral-600"}>
-                          {f.included ? "✓" : "×"}
-                        </span>
-                        <span className={f.included ? "text-neutral-400" : "text-neutral-600"}>{f.text}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleUpgradeScan(upgradeTier.id as "standard" | "premium")}
-                    disabled={loadingTier === upgradeTier.id}
-                    className={`w-full py-2.5 rounded text-sm font-medium cursor-pointer disabled:opacity-60 ${
-                      upgradeTier.popular
-                        ? "bg-[#A655F7] text-white hover:bg-[#b875f8]"
-                        : "bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700"
-                    }`}
-                  >
-                    {loadingTier === upgradeTier.id
-                      ? "Starting..."
-                      : `Run ${upgradeTier.name} Scan`}
-                  </button>
-                  <p className="text-[10px] text-neutral-600 text-center mt-2">Billed when you unlock results</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+          <button
+            type="button"
+            onClick={handleUnlock}
+            disabled={unlocking}
+            className="cursor-pointer bg-[#A655F7] px-4 py-2 text-white text-sm font-medium hover:bg-[#b875f8] rounded-sm disabled:opacity-60"
+          >
+            {unlocking ? "Redirecting..." : getUnlockCtaLabel(scan.tier)}
+          </button>
+          {checkoutError && <p className="text-xs text-red-400 mt-3">{checkoutError}</p>}
+        </Reveal>
       )}
 
-      <ServicesSection />
+      <section id={FINDINGS_ANCHOR} className="space-y-8 scroll-mt-6">
+        {groups.map((group) => (
+          <div key={group.groupId}>
+            <Reveal>
+              <h2 className="text-white text-base mb-3">
+                {group.groupId}. {group.group}
+              </h2>
+            </Reveal>
+            <div className="space-y-2">
+              {group.findings.map((item, index) => (
+                <Reveal key={item.id} delay={Math.min(index, 4) * 50}>
+                  <FindingDossier
+                    finding={item}
+                    open={openIds.includes(item.id)}
+                    locked={needsUnlock}
+                    tier={scan.tier}
+                    onToggle={() => toggleFinding(item.id)}
+                  />
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
 
-      {isUnlocked && (
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+      <Reveal>
+        <SubdomainsSection
+          target={scan.target}
+          subdomains={results.subdomains}
+          included={includesSubdomainDiscovery(scan.tier)}
+          anchor={SUBDOMAINS_ANCHOR}
+        />
+      </Reveal>
+
+      {leaks.length > 0 && (
+        <Reveal>
+          <CredentialExposure leaks={leaks} anchor={LEAKS_ANCHOR} />
+        </Reveal>
+      )}
+
+      {!sample && upgradeTiers.length > 0 && (
+        <Reveal>
+          <section>
+            <h2 className="text-white text-base mb-1">Scan wider</h2>
+            <p className="text-xs text-neutral-500 mb-4">
+              Run a new scan at a higher level. The scan runs first — you pay only when you unlock
+              that report.
+            </p>
+            <div
+              className={`grid grid-cols-1 gap-4 ${upgradeTiers.length > 1 ? "lg:grid-cols-2" : ""}`}
+            >
+              {upgradeTiers.map((upgradeTier) => (
+                <div
+                  key={upgradeTier.id}
+                  className={`border rounded-sm overflow-hidden ${
+                    upgradeTier.popular
+                      ? "border-[#A655F7] bg-[#A655F7]/5"
+                      : "border-neutral-800 bg-neutral-900"
+                  }`}
+                >
+                  {upgradeTier.popular && (
+                    <div className="bg-[#A655F7] text-white text-[9px] uppercase tracking-wider text-center py-1 font-medium">
+                      Most popular
+                    </div>
+                  )}
+                  <div className="p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <h3 className="text-white font-medium">{upgradeTier.name}</h3>
+                      <p className="text-sm text-white flex-shrink-0">{upgradeTier.priceLabel}</p>
+                    </div>
+                    <ul className="space-y-2 mb-4">
+                      {upgradeTier.features.map((feature) => (
+                        <li key={feature.text} className="flex items-start gap-2 text-[11px]">
+                          <span className={feature.included ? "text-emerald-400" : "text-neutral-600"}>
+                            {feature.included ? "✓" : "×"}
+                          </span>
+                          <span className={feature.included ? "text-neutral-400" : "text-neutral-600"}>{feature.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => handleUpgradeScan(upgradeTier.id as "standard" | "premium")}
+                      disabled={loadingTier === upgradeTier.id}
+                      className={`w-full py-2.5 rounded-sm text-sm font-medium cursor-pointer disabled:opacity-60 ${
+                        upgradeTier.popular
+                          ? "bg-[#A655F7] text-white hover:bg-[#b875f8]"
+                          : "bg-neutral-800 text-white hover:bg-neutral-700 border border-neutral-700"
+                      }`}
+                    >
+                      {loadingTier === upgradeTier.id ? "Starting..." : `Run ${upgradeTier.name} Scan`}
+                    </button>
+                    <p className="text-[10px] text-neutral-600 text-center mt-2">Billed when you unlock the report</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </Reveal>
+      )}
+
+      {!sample && (
+        <Reveal>
+          <ServicesSection
+            target={scan.target}
+            critical={results.critical}
+            important={results.high}
+          />
+        </Reveal>
+      )}
+
+      <Reveal className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+        {isUnlocked && !sample && (
           <a
             href={`/api/scans/${scan.id}/report`}
             download
             className="cursor-pointer border border-neutral-700 bg-neutral-900 px-6 py-2.5 text-white font-medium hover:border-[#A655F7]/50 hover:bg-neutral-800 rounded-sm text-sm text-center"
           >
-            Download Report
+            Download PDF
           </a>
-          <a
-            href="/"
-            className="cursor-pointer bg-[#A655F7] px-6 py-2.5 text-white font-medium hover:bg-[#b875f8] rounded-sm glitch-hover text-sm text-center"
-          >
-            Scan Another Target
-          </a>
-        </div>
-      )}
-
-      {!isUnlocked && (
-        <div className="flex justify-center pt-2">
-          <a
-            href="/"
-            className="cursor-pointer bg-[#A655F7] px-6 py-2.5 text-white font-medium hover:bg-[#b875f8] rounded-sm glitch-hover text-sm"
-          >
-            Scan Another Target
-          </a>
-        </div>
-      )}
+        )}
+        <Link
+          href="/"
+          className="cursor-pointer bg-[#A655F7] px-6 py-2.5 text-white font-medium hover:bg-[#b875f8] rounded-sm glitch-hover text-sm text-center"
+        >
+          {sample ? "Run your own scan" : "Scan Another Target"}
+        </Link>
+      </Reveal>
     </div>
   );
 }

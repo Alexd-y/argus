@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import type { ScanTier } from "@/lib/scan-tiers";
 import { SCAN_TIERS } from "@/lib/scan-tiers";
+import { TierComparisonModal } from "@/components/TierComparisonModal";
 
 interface TierSelectorProps {
   selected: ScanTier;
@@ -9,14 +11,22 @@ interface TierSelectorProps {
 }
 
 export function TierSelector({ selected, onSelect }: TierSelectorProps) {
+  const [comparing, setComparing] = useState(false);
+
   return (
     <div className="mb-5">
-      <label className="text-xs text-neutral-400 uppercase tracking-wider mb-1 block">
-        Choose scan level
-      </label>
-      <p className="text-[11px] text-neutral-600 mb-3">
-        Your scan starts right away. Subscribe only when you&apos;re ready to view full results.
-      </p>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <label className="text-xs text-neutral-400 uppercase tracking-wider">
+          Choose scan level
+        </label>
+        <button
+          type="button"
+          onClick={() => setComparing(true)}
+          className="cursor-pointer text-[11px] text-[#A655F7] underline underline-offset-2 hover:text-[#c996fa]"
+        >
+          Help me choose
+        </button>
+      </div>
       <div className="grid grid-cols-1 gap-2">
         {SCAN_TIERS.map((tier) => {
           const isSelected = selected === tier.id;
@@ -50,12 +60,11 @@ export function TierSelector({ selected, onSelect }: TierSelectorProps) {
                         )}
                       </div>
                       <span className="text-white font-medium text-sm">{tier.name}</span>
-                      <span className="text-neutral-500 text-[10px] hidden sm:inline">{tier.tagline}</span>
                     </div>
                     <p className="text-[11px] text-neutral-500 leading-relaxed pl-5">{tier.description}</p>
                     {tier.id !== "free" && (
                       <p className="text-[10px] text-neutral-600 mt-1.5 pl-5">
-                        {tier.priceLabel} — billed when you unlock results
+                        {tier.priceLabel} — billed when you unlock the program
                       </p>
                     )}
                   </div>
@@ -72,6 +81,13 @@ export function TierSelector({ selected, onSelect }: TierSelectorProps) {
           );
         })}
       </div>
+
+      <TierComparisonModal
+        open={comparing}
+        selected={selected}
+        onSelect={onSelect}
+        onClose={() => setComparing(false)}
+      />
     </div>
   );
 }

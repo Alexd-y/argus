@@ -165,6 +165,43 @@ class Settings(BaseSettings):
             "quick_mode_enabled",
         ),
     )
+    # Profile & orchestration rework (staged rollout — opt-in, additive):
+    #   * canonical_report_snapshot_enabled — emit ReportDocumentV1 + JSON/MD/XML/PDF
+    #     companion artifacts from one immutable snapshot (R7).
+    #   * mcp_registrability_gate_enabled — filter MCP tool catalog through the
+    #     signed-descriptor registrability gate (R9).
+    #   * typed_intent_compiler_enabled — route VA/exploitation LLM output through
+    #     the deterministic typed-intent compiler (R8).
+    #   * profile_checkpoint_enabled — persist a durable ScanCheckpointV1 into
+    #     scan.options and drive phase selection from the frozen profile (R11).
+    canonical_report_snapshot_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_CANONICAL_REPORT_SNAPSHOT",
+            "canonical_report_snapshot_enabled",
+        ),
+    )
+    mcp_registrability_gate_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_MCP_REGISTRABILITY_GATE",
+            "mcp_registrability_gate_enabled",
+        ),
+    )
+    typed_intent_compiler_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_TYPED_INTENT_COMPILER",
+            "typed_intent_compiler_enabled",
+        ),
+    )
+    profile_checkpoint_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ARGUS_PROFILE_CHECKPOINT",
+            "profile_checkpoint_enabled",
+        ),
+    )
     # Quick profile UPPER CLAMPS (not business defaults — those live in
     # backend/config/quick/profiles.yaml). Unset = YAML default is the cap.
     quick_compact_wall_clock_seconds: int | None = Field(

@@ -17,13 +17,32 @@ Base URL: `/api/v1` (или `NEXT_PUBLIC_API_URL`)
 `scan_mode` / `options.scanType` — **глубина** скана, не режим исполнения.  
 `ScanProfile.QUICK` в MCP = глубина, не Quick execution mode.
 
+**Канонический внешний профиль (Profile Resolver, Design §5):** UI отправляет ровно один
+`scan_profile: "quick" | "light" | "deep"`. Backend вычисляет внутренние `scan_mode` /
+`execution_mode` / `quick_profile` / `nuclei_profile` через единый Profile Resolver:
+
+| `scan_profile` | scan_mode | execution_mode | quick_profile | nuclei_profile | LAB lease |
+|----------------|-----------|----------------|---------------|----------------|-----------|
+| `quick` | quick | quick | balanced (default) | quick-default | нет |
+| `light` | standard | production | — | vuln_default | нет |
+| `deep` | lab | lab_unrestricted | — | lab_unrestricted | **обязателен** (`engagement_id` + `lab_lease_id`) |
+
+- `scan_profile` — источник истины; при передаче конфликтующих legacy `scan_mode`/`execution_mode` →
+  `422 conflicting_profile_fields`. Неизвестный профиль → `422 invalid_scan_profile`.
+- `deep` без `engagement_id` → `lab_engagement_required`; без валидного `lab_lease_id` →
+  `lab_lease_required` (`details.required_action = "issue_or_select_lab_lease"`). Прочие LAB-коды:
+  `lab_lease_expired`, `lab_lease_revoked`, `lab_lease_tenant_mismatch`, `lab_scope_required`,
+  `target_out_of_lab_scope`.
+- Legacy-путь без `scan_profile` полностью сохранён (обратная совместимость). `scan_mode=deep` без
+  `scan_profile` остаётся production-deep (deprecated), **не** становится LAB.
+
 Канонический coverage-путь: **`GET /scans/{id}/coverage`** (существующий; не дублировать).  
 Отчёт скана: существующий `GET /scans/{id}/report` (alias к reports pipeline), не второй генератор.
 
 | Endpoint | Method | Request Schema | Response Schema | Error Schema |
 |----------|--------|----------------|-----------------|--------------|
-| `POST /scans` | POST | `{ target: string, email: string, options: ScanOptions, execution_mode?: ExecutionMode, scan_mode?: ScanDepth, quick?: QuickCreateOptions }` | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string, details?: object }` |
-| `GET /scans/:id` | GET | — | `{ id: string, status: string, progress: number, phase: string, target: string, created_at: string, deadline_at?: string, quick_profile?: string, budget?: QuickBudgetView, stage?: string, execution_mode?: ExecutionMode }` | `{ error: string, code?: string }` |
+| `POST /scans` | POST | `{ target: string, email: string, options: ScanOptions, scan_profile?: "quick"\|"light"\|"deep", engagement_id?: string, lab_lease_id?: string, execution_mode?: ExecutionMode, scan_mode?: ScanDepth, quick?: QuickCreateOptions }` | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string, details?: object }` |
+| `GET /scans/:id` | GET | — | `{ id, status, progress, phase, target, created_at, scan_profile?, resolved_scan_mode?, execution_mode?, nuclei_profile?, engagement_id?, lab_lease_id?, profile_version?, report_snapshot_version?, deadline_at?, quick_profile?, budget?, stage? }` | `{ error: string, code?: string }` |
 | `POST /scans/:id/cancel` | POST | — | `{ scan_id: string, status: string, message?: string }` | `{ error: string, code?: string }` |
 | `GET /scans/:id/plan` | GET | — | `QuickScanPlanView` (только `execution_mode=quick`) | 404 `{ error: string, code: "plan_not_applicable" }` для non-quick; 404 scan not found |
 | `GET /scans/:id/coverage` | GET | — | `{ scan_id: string, requirements: object[], results: CoverageResult[] }` — `results[].reason_code` additive | `{ error: string, code?: string }` |
