@@ -136,6 +136,14 @@ _OFFLINE_FILE_NAMES: Final[frozenset[str]] = frozenset(
         # MUST run in dev's default ``pytest -q`` so architectural drift fails the
         # local feedback loop, not just CI.
         "test_docs_code_consistency.py",
+        # XSS-003 — pure context-detector / payload-generator / payload-manager
+        # logic (BeautifulSoup-based HTML parsing). No FastAPI app, DB session,
+        # broker, or network — they must run in dev's default ``pytest -q``.
+        "test_xss_context_detector.py",
+        "test_xss_facade_public_api.py",
+        "test_xss_integration.py",
+        "test_xss_payload_generator.py",
+        "test_xss_payload_manager.py",
     }
 )
 
@@ -351,6 +359,15 @@ def override_auth(request, app):
     verify real authentication behaviour.
     """
     if "no_auth_override" in {m.name for m in request.node.iter_markers()}:
+        yield
+        return
+
+    # Some suites (e.g. tests/unit/mcp) override the ``app`` fixture with a
+    # FastMCP server which has no FastAPI dependency-injection registry. Under
+    # certain cross-module collection orders this autouse fixture can bind to
+    # that ``app``; treat a non-FastAPI app as a no-op instead of raising
+    # ``AttributeError: 'FastMCP' object has no attribute 'dependency_overrides'``.
+    if not hasattr(app, "dependency_overrides"):
         yield
         return
 

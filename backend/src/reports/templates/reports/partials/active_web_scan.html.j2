@@ -42,4 +42,9 @@
         <pre class="ai-slot-body"><code>{{ active_web_scan.curl_xss_example | e }}</code></pre>
     {% endif %}
 </section>
+{% else %}
+<section class="panel active-web-scan" id="active-web-scan">
+    <h2>Active Web Scanning</h2>
+    <p class="empty">Not assessed — no active web-scan phases (vuln_analysis / exploitation) produced data for this run.</p>
+</section>
 {% endif %}

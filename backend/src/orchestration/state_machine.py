@@ -1423,6 +1423,23 @@ async def _dispatch_phase_handler(
                         "exploit_hypothesis_append_failed",
                         extra={"scan_id": scan_id, "error": str(_hyp_exc)},
                     )
+            # G4: consume VA-produced structured exploitation_queues (not just
+            # findings + hypotheses dicts) so typed exploit intents reach the
+            # exploitation phase.
+            _vq = getattr(ctx.vuln_out, "exploitation_queues", None)
+            if isinstance(_vq, dict) and _vq:
+                try:
+                    _merged = exploitation_queue.extend_from_queues(_vq.values())
+                    if _merged:
+                        logger.info(
+                            "exploitation_queues_consumed",
+                            extra={"scan_id": scan_id, "merged_hypotheses": _merged},
+                        )
+                except Exception as _vq_exc:
+                    logger.warning(
+                        "exploitation_queues_merge_failed",
+                        extra={"scan_id": scan_id, "error": str(_vq_exc)},
+                    )
             structured_findings = exploitation_queue.to_exploitation_input()
             logger.info(
                 "ExploitationQueue: %d hypotheses for %s",
@@ -1619,8 +1636,21 @@ async def _dispatch_phase_handler(
             ctx.post_out = PostExploitationOutput()
             return payload
         exploits = ctx.exploit_out.exploits if ctx.exploit_out else []
+        exploit_evidence = ctx.exploit_out.evidence if ctx.exploit_out else []
+        # Evidence-tier map (finding_id -> tier) from exploitation evidence so
+        # post-exploitation stays grounded in proven exploits (chain link G3).
+        evidence_tiers: dict[str, int] = {}
+        for _ev in exploit_evidence or []:
+            if not isinstance(_ev, dict):
+                continue
+            _fid = str(_ev.get("finding_id", "") or "")
+            _tier = _ev.get("evidence_tier") or _ev.get("tier")
+            if _fid and isinstance(_tier, int):
+                evidence_tiers[_fid] = max(evidence_tiers.get(_fid, 0), _tier)
         post_out = await run_post_exploitation(
             exploits,
+            evidence=exploit_evidence,
+            evidence_tiers=evidence_tiers,
             tenant_id=tenant_id,
             scan_id=scan_id,
             scan_options=options,

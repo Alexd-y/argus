@@ -110,6 +110,11 @@ opencode.json
 README-REPORT.md
 REPORT_ENHANCEMENT_PLAN.md
 requirements-test.txt
+
+# Ed25519 signing PRIVATE keys — never commit (dev keys are regenerated locally;
+# production keys are mounted from HSM/Vault/k8s Secret). Verification only needs
+# the .pub files under config/*/_keys/. Blocks pre-commit secret-scanner flags.
+*.ed25519.priv
 Web_interface.md
 z_analyze.md
 Анализ_архитектуры_ARGUS.md

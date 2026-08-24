@@ -156,53 +156,97 @@ async def fuzz_post_json(
     return findings
 
 
+#: Upper bound on how many URLs (target + recon endpoints) a single quick-fuzz
+#: run will probe, so a large recon crawl cannot explode the pre-scan budget.
+_MAX_FUZZ_TARGETS: int = 25
+
+
+def _build_fuzz_targets(target: str, seed_urls: list[str] | None) -> list[str]:
+    """Return a bounded, de-duplicated list of ``target`` + recon endpoint URLs.
+
+    Only http(s) URLs are kept; ``target`` is always first. Deduplication is
+    order-preserving and the result is capped at :data:`_MAX_FUZZ_TARGETS`.
+    """
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for raw in [target, *(seed_urls or [])]:
+        if not isinstance(raw, str):
+            continue
+        url = raw.strip()
+        if not url or not url.lower().startswith(("http://", "https://")):
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        ordered.append(url)
+        if len(ordered) >= _MAX_FUZZ_TARGETS:
+            break
+    return ordered
+
+
 async def run_quick_fuzz(
     target: str,
     categories: tuple[str, ...] | list[str] | None = None,
     custom_wordlist_path: str | None = None,
     delay: float = 0.3,
     console: Any | None = None,
+    seed_urls: list[str] | None = None,
 ) -> dict[str, Any]:
 
     payload_map = load_payloads(categories=categories, custom_wordlist_path=custom_wordlist_path)
 
     total_payloads = sum(len(v) for v in payload_map.values())
 
+    fuzz_targets = _build_fuzz_targets(target, seed_urls)
+    if not fuzz_targets:
+        fuzz_targets = [target]
+
     if console:
         console.print(f"[bold cyan]═══ QUICK FUZZ[/bold cyan] → {target}")
-        console.print(f"[dim]Categories: {list(payload_map.keys())} — {total_payloads} payloads[/dim]")
+        console.print(
+            f"[dim]Targets: {len(fuzz_targets)} URL(s) — "
+            f"Categories: {list(payload_map.keys())} — {total_payloads} payloads[/dim]"
+        )
 
     async with httpx.AsyncClient(
         headers={"User-Agent": "ARGUS-QuickFuzz/1.0"},
         follow_redirects=True,
     ) as client:
-        baseline = await _fetch_baseline(client, target)
-        if baseline is None:
-            if console:
-                console.print("[red]✗ Could not reach target for baseline[/red]")
-            return {"findings": [], "fuzz_results": [], "candidates": []}
-        baseline_body, baseline_status, baseline_is_spa = baseline
-
         all_fuzz_results: list[dict[str, Any]] = []
+        reached_any = False
 
-        for category, payloads in payload_map.items():
+        for scan_url in fuzz_targets:
+            baseline = await _fetch_baseline(client, scan_url)
+            if baseline is None:
+                if console:
+                    console.print(f"[red]✗ Could not reach {scan_url} for baseline[/red]")
+                continue
+            reached_any = True
+            baseline_body, baseline_status, baseline_is_spa = baseline
+
+            for category, payloads in payload_map.items():
+                if console:
+                    console.print(f"[bold]Fuzzing {scan_url}: {category.upper()}[/bold]")
+
+                results = await fuzz_url(
+                    client, scan_url, payloads, category,
+                    baseline_body, baseline_status, baseline_is_spa, delay,
+                )
+                all_fuzz_results.extend(results)
+
+                triggered = [r for r in results if r.get("triggered")]
+                if console and triggered:
+                    for res in triggered:
+                        console.print(
+                            f"  [bold red]⚠ TRIGGERED[/bold red] "
+                            f"{res['category']} — param={res['param']} "
+                            f"payload={res['payload'][:40]}"
+                        )
+
+        if not reached_any:
             if console:
-                console.print(f"[bold]Fuzzing: {category.upper()}[/bold]")
-
-            results = await fuzz_url(
-                client, target, payloads, category,
-                baseline_body, baseline_status, baseline_is_spa, delay,
-            )
-            all_fuzz_results.extend(results)
-
-            triggered = [r for r in results if r.get("triggered")]
-            if console and triggered:
-                for res in triggered:
-                    console.print(
-                        f"  [bold red]⚠ TRIGGERED[/bold red] "
-                        f"{res['category']} — param={res['param']} "
-                        f"payload={res['payload'][:40]}"
-                    )
+                console.print("[red]✗ Could not reach any target for baseline[/red]")
+            return {"findings": [], "fuzz_results": [], "candidates": []}
 
         all_findings: list[dict[str, Any]] = []
         for result in all_fuzz_results:
@@ -224,7 +268,7 @@ async def run_quick_fuzz(
                         f"Response: {result.get('response_snippet', '')[:200]}"
                     ),
                     "fix": "Parameterize queries, validate/sanitize all inputs, use allowlists.",
-                    "url": target,
+                    "url": result.get("url", target),
                 })
 
         candidates = build_candidates_from_fuzz_results(all_fuzz_results)

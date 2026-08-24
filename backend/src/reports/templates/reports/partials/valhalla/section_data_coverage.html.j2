@@ -109,4 +109,9 @@
         <p class="meta"><small>Tool health summary was not generated for this export.</small></p>
     {% endif %}
 </section>
+{% else %}
+<section class="valhalla-coverage panel" id="data-coverage">
+    <h3>Data Completeness and Coverage</h3>
+    <p class="empty">Not assessed — no coverage data was recorded in the report context for this run.</p>
+</section>
 {% endif %}

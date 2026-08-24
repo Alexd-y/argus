@@ -1322,6 +1322,37 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
     return _safe_json(all_cves, 40000) if all_cves else "No CVE data available"
 
 
+def _recon_seed_urls(recon_output: dict[str, Any] | None, target: str) -> list[str]:
+    """Extract http(s) endpoint URLs discovered by recon for quick-fuzz seeding.
+
+    Scans recon output ``assets`` / ``endpoints`` / ``urls`` (whichever are
+    present) for http(s) URLs, order-preserving + de-duplicated. Returns [] when
+    recon produced nothing usable (the fuzzer still probes ``target``).
+    """
+    if not isinstance(recon_output, dict):
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def _add(value: Any) -> None:
+        if isinstance(value, str):
+            url = value.strip()
+            if url.lower().startswith(("http://", "https://")) and url not in seen:
+                seen.add(url)
+                out.append(url)
+        elif isinstance(value, dict):
+            for key in ("url", "endpoint", "location", "target"):
+                if key in value:
+                    _add(value[key])
+
+    for key in ("assets", "endpoints", "urls", "entry_points", "api_endpoints"):
+        items = recon_output.get(key)
+        if isinstance(items, (list, tuple)):
+            for item in items:
+                _add(item)
+    return out
+
+
 async def run_quick_fuzz(
     target: str,
     *,
@@ -1352,6 +1383,10 @@ async def run_quick_fuzz(
     else:
         delay = 0.3
 
+    # Feed recon-discovered endpoint URLs into the fuzzer so quick_fuzz probes
+    # the discovered attack surface, not just the root target (chain link G1).
+    seed_urls = _recon_seed_urls(recon_output, target)
+
     try:
         from src.recon.quick_fuzz.quick_fuzzer import run_quick_fuzz as _run_qf
         fuzz_categories = tuple(categories) if categories else None
@@ -1360,6 +1395,7 @@ async def run_quick_fuzz(
             categories=fuzz_categories,
             custom_wordlist_path=custom_wordlist,
             delay=delay,
+            seed_urls=seed_urls,
         )
     except Exception as qf_exc:
         logger.warning("quick_fuzz_failed: %s", qf_exc, extra={"scan_id": scan_id})
@@ -2959,17 +2995,31 @@ async def run_exploitation(
 async def run_post_exploitation(
     exploits: list[dict],
     *,
+    evidence: list[dict[str, Any]] | None = None,
+    evidence_tiers: dict[str, int] | None = None,
     tenant_id: str | None = None,
     scan_id: str | None = None,
     scan_options: dict[str, Any] | None = None,
 ) -> PostExploitationOutput:
     """Post exploitation: LLM analyzes lateral movement and persistence.
-    
+
     When there are verified exploits, also attempts basic post-exploitation checks:
     - Internal network reachability
     - Service discovery on compromised host
     - Persistence mechanism feasibility assessment
+
+    ``evidence`` / ``evidence_tiers`` are the exploitation-phase artifacts threaded
+    from the pipeline (state machine ``_build_phase_input``). They ground the
+    analysis so post-exploitation only builds on exploits that carry real
+    evidence — no lateral/persistence claim is invented without a proven exploit.
     """
+    evidence = list(evidence or [])
+    evidence_tiers = dict(evidence_tiers or {})
+    # Set of finding ids that carry exploitation evidence (tier >= CONFIRMED=3),
+    # used to keep post-exploitation grounded in proven exploits only.
+    _evidenced_finding_ids = {
+        fid for fid, tier in evidence_tiers.items() if isinstance(tier, int) and tier >= 3
+    }
     scan_opts = dict(scan_options) if isinstance(scan_options, dict) else {}
     if tenant_id and "tenant_id" not in scan_opts:
         scan_opts["tenant_id"] = tenant_id
@@ -2984,7 +3034,24 @@ async def run_post_exploitation(
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "post_exploitation")
     
+    def _has_exploit_evidence(exploit: dict[str, Any]) -> bool:
+        # Grounded when the exploit itself carries evidence, or its finding id is
+        # in the confirmed-evidence set threaded from the exploitation phase.
+        if int(exploit.get("evidence_tier", 0) or 0) >= 3:
+            return True
+        fid = str(exploit.get("finding_id", "") or "")
+        if fid and fid in _evidenced_finding_ids:
+            return True
+        return any(exploit.get(k) for k in ("poc_url", "poc_curl", "browser_evidence", "screenshot_base64"))
+
     verified = [e for e in exploits if e.get("status") == "verified"]
+    # When the pipeline threads exploitation evidence, keep post-exploitation
+    # grounded in exploits that actually carry evidence (R6: no invented lateral
+    # movement / persistence without a proven exploit). Legacy callers that omit
+    # evidence_tiers keep the prior behaviour.
+    if evidence_tiers and verified:
+        grounded = [e for e in verified if _has_exploit_evidence(e)]
+        verified = grounded
     target = verified[0].get("target") or verified[0].get("url") if verified else ""
     
     # Basic post-exploitation checks if we have verified exploits
