@@ -15,13 +15,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import time
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 
-from src.recon.quick_fuzz.candidate_builder import FuzzCandidate, build_candidates_from_fuzz_results
+from src.recon.quick_fuzz.candidate_builder import (
+    build_candidates_from_fuzz_results,
+)
 from src.recon.quick_fuzz.detection_sigs import DETECTION_SIGNATURES
 from src.recon.quick_fuzz.payload_registry import load_payloads
 from src.recon.quick_fuzz.spa_guard import is_same_response, is_spa_shell
@@ -50,7 +51,7 @@ async def _fetch_baseline(client: httpx.AsyncClient, url: str) -> tuple[str, int
     try:
         r = await client.get(url, timeout=_HTTP_TIMEOUT)
         return r.text, r.status_code, is_spa_shell(r.text)
-    except Exception:
+    except Exception:  # noqa: BLE001
         return None
 
 

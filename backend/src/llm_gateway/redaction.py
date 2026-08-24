@@ -15,9 +15,13 @@ def hash_prompt(prompt: str) -> str:
 
 def redact_api_keys(text: str) -> str:
     patterns = [
-        (r'sk-[a-zA-Z0-9]{20,}', '<REDACTED:openai_key>'),
-        (r'sk-or-[a-zA-Z0-9]{20,}', '<REDACTED:openrouter_key>'),
-        (r'pplx-[a-zA-Z0-9]{20,}', '<REDACTED:perplexity_key>'),
+        # OpenRouter (``sk-or-``) is checked before the generic OpenAI ``sk-``
+        # pattern so its more specific label wins. The ``\b`` anchor prevents
+        # false positives inside ordinary words (e.g. "risk-based"), while the
+        # hyphen/underscore char class covers project keys such as ``sk-proj-…``.
+        (r'\bsk-or-[a-zA-Z0-9\-_]{6,}', '<REDACTED:openrouter_key>'),
+        (r'\bsk-[a-zA-Z0-9\-_]{6,}', '<REDACTED:openai_key>'),
+        (r'\bpplx-[a-zA-Z0-9\-_]{6,}', '<REDACTED:perplexity_key>'),
         (r'Bearer\s+[a-zA-Z0-9\-_\.]{20,}', '<REDACTED:bearer_token>'),
         (r'AKIA[0-9A-Z]{16}', '<REDACTED:aws_key>'),
         (r'ghp_[a-zA-Z0-9]{36}', '<REDACTED:github_token>'),
@@ -26,7 +30,9 @@ def redact_api_keys(text: str) -> str:
         (r'(?i)password[=:]\s*\S+', '<REDACTED:password_param>'),
         (r'(?i)secret[=:]\s*\S+', '<REDACTED:secret_param>'),
         (r'(?i)token[=:]\s*\S+', '<REDACTED:token_param>'),
-        (r'-----BEGIN\s+(?:RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----(?s).*?-----END\s+(?:RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----', '<REDACTED:private_key>'),
+        # ``[\s\S]*?`` matches across newlines without an inline ``(?s)`` flag,
+        # which Python 3.11+ rejects when placed mid-pattern (re.error).
+        (r'-----BEGIN\s+(?:RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA|EC|DSA|OPENSSH)\s+PRIVATE\s+KEY-----', '<REDACTED:private_key>'),
     ]
     for pattern, replacement in patterns:
         text = re.sub(pattern, replacement, text)

@@ -17,6 +17,7 @@ from collections.abc import Iterator
 import pytest
 
 from src.core.auth import AuthContext, get_optional_auth, get_required_auth
+from src.core.config import settings
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +27,11 @@ def override_auth(request: pytest.FixtureRequest, app) -> Iterator[None]:
     ``get_optional_auth`` is stubbed alongside the required one because
     ``get_current_tenant_id`` resolves the tenant through it and rejects
     anonymous callers (SEC-001).
+
+    The tenant must be a valid UUID: tenant-scoped routers call
+    ``set_session_tenant`` which validates the id via ``uuid.UUID`` before
+    issuing the RLS ``SET LOCAL`` (injection guard). A non-UUID stub would
+    500 those endpoints, so we use the canonical default tenant.
     """
     if "no_auth_override" in {m.name for m in request.node.iter_markers()}:
         yield
@@ -34,7 +40,7 @@ def override_auth(request: pytest.FixtureRequest, app) -> Iterator[None]:
     async def _mock_auth() -> AuthContext:
         return AuthContext(
             user_id="test-user",
-            tenant_id="test-tenant",
+            tenant_id=settings.default_tenant_id,
             is_api_key=False,
         )
 

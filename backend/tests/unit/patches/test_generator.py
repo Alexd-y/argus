@@ -1,5 +1,7 @@
 """Tests for Patch Generation Worker."""
 
+import json
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -41,14 +43,22 @@ class TestPatchGeneration:
         }
         code = 'query = "SELECT * FROM users WHERE id = " + user_input'
 
-        mock_response = AsyncMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": '{"patched_code": "query = SELECT * FROM users WHERE id = %s", "diff": "- + user_input\\n+ %s", "rationale": "Use parameterized queries", "secure_alternative": "Use ORM", "blast_radius": "Only this function", "backward_compat_risk": "low", "regression_test": "def test(): pass"}'}}],
-            "usage": {"prompt_tokens": 50, "completion_tokens": 40, "total_tokens": 90},
-        }
+        # generate_patch routes through the unified LLM facade, which returns
+        # the model's content string (JSON) — not a raw provider envelope.
+        wrb_content = json.dumps({
+            "patched_code": "query = SELECT * FROM users WHERE id = %s",
+            "diff": "- + user_input\n+ %s",
+            "rationale": "Use parameterized queries",
+            "secure_alternative": "Use ORM",
+            "blast_radius": "Only this function",
+            "backward_compat_risk": "low",
+            "regression_test": "def test(): pass",
+        })
 
-        with patch("httpx.AsyncClient.post", return_value=mock_response):
+        with patch(
+            "src.llm.facade.call_llm_unified",
+            new=AsyncMock(return_value=wrb_content),
+        ):
             result = await generate_patch(finding, code)
 
         assert result.status == PatchStatus.GENERATED

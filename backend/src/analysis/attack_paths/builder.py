@@ -165,12 +165,19 @@ def calculate_risk_score(finding: dict[str, Any], business_context: dict[str, An
         expl_map = {"high": 0.9, "medium": 0.6, "low": 0.3, "unknown": 0.5}
         exploitability = expl_map.get(str(finding.get("exploitability", "unknown")), 0.5)
 
-    cvss_temporal = cvss_base * exploitability
-
     business_impact = _calculate_business_impact(finding, c)
-    cvss_environmental = cvss_temporal * business_impact
 
-    overall = round(cvss_environmental * 10) / 10
+    # Exploitability modestly modulates the base (0.9–1.0) — it must never
+    # collapse a genuinely high CVSS (a 9.8 critical stays critical). Business
+    # context is a boost-only term (0–1.0), so a high-value/exposed asset
+    # escalates priority while a missing/low context leaves base severity
+    # intact. Scores stay on the 0–10 CVSS scale.
+    temporal_factor = 0.9 + 0.1 * min(max(exploitability, 0.0), 1.0)
+    cvss_temporal = round(cvss_base * temporal_factor, 1)
+    business_boost = 0.5 * min(max(business_impact, 0.0), 2.0)
+    cvss_environmental = round(min(cvss_temporal + business_boost, 10.0), 1)
+
+    overall = cvss_environmental
 
     if overall >= 9.0:
         priority = "p1_critical"

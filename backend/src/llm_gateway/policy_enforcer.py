@@ -113,13 +113,17 @@ class PolicyEnforcer:
                 {"reason": "osint_disabled"},
             )
 
-        # Budget enforcement
-        max_cost = budget.get("max_cost_usd", 0)
-        if max_cost <= 0:
-            raise PolicyDeniedError(
-                "LLM budget exhausted",
-                {"reason": "budget_exceeded", "max_cost_usd": max_cost},
-            )
+        # Budget enforcement — only when a budget is explicitly configured.
+        # A policy carrying only compliance/routing flags (no ``budget`` key)
+        # must not be denied as "budget exhausted"; budget is opt-in and also
+        # enforced at runtime by the CostRouter.
+        if budget:
+            max_cost = budget.get("max_cost_usd", 0)
+            if max_cost <= 0:
+                raise PolicyDeniedError(
+                    "LLM budget exhausted",
+                    {"reason": "budget_exceeded", "max_cost_usd": max_cost},
+                )
 
         # Per-role route limits
         role_mapping = {

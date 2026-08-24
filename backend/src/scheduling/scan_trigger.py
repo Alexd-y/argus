@@ -52,6 +52,7 @@ from src.celery_app import app
 from src.core.observability import tenant_hash
 from src.db.models import AuditLog, ScanSchedule, Target, Tenant, gen_uuid
 from src.db.session import (
+    async_session_factory,
     create_task_engine_and_session,
     set_session_tenant,
 )
@@ -263,26 +264,24 @@ async def _emit_skip_audit_standalone(
     """Open a short-lived session and persist a skip-audit row.
 
     Used by the kill-switch skip branch which runs *before* the main
-    DB session is opened. Failures are swallowed + logged so an audit
+    DB session is opened. It uses the shared ``async_session_factory``
+    (not the heavyweight per-task engine) so a skip never provisions a
+    full scan engine. Failures are swallowed + logged so an audit
     persistence outage does not turn a clean skip into a Celery retry
     loop on every beat tick.
     """
     try:
-        engine, session_factory = create_task_engine_and_session()
-        try:
-            async with session_factory() as session:
-                session.add(
-                    _build_skip_audit_row(
-                        action=action,
-                        tenant_id=tenant_id,
-                        schedule_id=schedule_id,
-                        reason=reason,
-                        extra=extra,
-                    )
+        async with async_session_factory() as session:
+            session.add(
+                _build_skip_audit_row(
+                    action=action,
+                    tenant_id=tenant_id,
+                    schedule_id=schedule_id,
+                    reason=reason,
+                    extra=extra,
                 )
-                await session.commit()
-        finally:
-            await engine.dispose()
+            )
+            await session.commit()
     except Exception:
         logger.warning(
             "scan_trigger.skip_audit_persist_failed",

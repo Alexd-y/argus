@@ -340,12 +340,12 @@ def test_patch_updates_last4_get_list_still_masks(
         app.dependency_overrides.pop(get_db, None)
 
     assert r_patch.status_code == 200
-    assert r_patch.json()["api_key_last4"] == "new"
+    assert r_patch.json()["api_key_last4"] == "dnew"
     assert r_patch.json()["config"]["api_key"] == "***"
 
     assert r_get.status_code == 200
     item = r_get.json()[0]
-    assert item["api_key_last4"] == "new"
+    assert item["api_key_last4"] == "dnew"
     assert item["config"]["api_key"] == "***"
     assert "sk-replacement" not in r_get.text
     assert prov.config.get("api_key") == "sk-replacementkeyvaluebrandnew"

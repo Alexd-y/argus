@@ -177,7 +177,12 @@ def _verify_prompt_catalog() -> int:
 
     from src.sandbox.signing import KeyManager, KeyNotFoundError, SignatureError, SignaturesFile
 
-    prompts_dir = Path("backend/config/prompts")
+    # Resolve relative to this module (backend/) so verification works regardless
+    # of the current working directory (repo root in prod, ``backend`` under
+    # pytest). A CWD-relative path broke every full-app-boot test that runs from
+    # ``backend`` (resolved to the non-existent ``backend/backend/config/prompts``).
+    _backend_root = Path(__file__).resolve().parent
+    prompts_dir = _backend_root / "config" / "prompts"
     keys_dir = prompts_dir / "_keys"
     signatures_path = prompts_dir / "SIGNATURES"
 

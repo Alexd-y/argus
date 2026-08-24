@@ -246,7 +246,8 @@ async def test_run_consumer_xreadgroup_ingests_and_xacks(
     async def xread_side_effect(*_a: object, **_kw: object) -> object:
         calls.append(1)
         if len(calls) == 1:
-            return [[("s", [("1-0", {"payload": payload})])]]
+            # redis-py xreadgroup shape: [[stream_name, [(msg_id, fields), ...]], ...]
+            return [["s", [("1-0", {"payload": payload})]]]
         ev = asyncio.Event()
         await ev.wait()
 

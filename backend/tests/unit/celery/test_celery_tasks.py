@@ -43,7 +43,9 @@ class TestCeleryAppConfig:
         assert celery_app.conf.task_track_started is True
 
     def test_task_time_limit(self, celery_app) -> None:
-        assert celery_app.conf.task_time_limit == 3600
+        # 24h hard limit — deep LAB scans legitimately run for many hours
+        # (see commit "scan reliability — Celery timeout 24h").
+        assert celery_app.conf.task_time_limit == 86400
 
     def test_prefetch_multiplier_is_one(self, celery_app) -> None:
         assert celery_app.conf.worker_prefetch_multiplier == 1
@@ -57,6 +59,12 @@ class TestCeleryTaskRouting:
         from src.celery_app import app
 
         return app.conf.task_routes
+
+    @pytest.fixture(scope="module")
+    def celery_app(self):
+        from src.celery_app import app
+
+        return app
 
     def test_scan_task_routes_to_scans_queue(self, routes) -> None:
         assert routes["argus.scan_phase"]["queue"] == "argus.scans"

@@ -143,10 +143,13 @@ async def quarantine_sample(
     return record
 
 
-async def request_export_approval(
+def request_export_approval(
     record: CustodyRecord, approver_id: str,
 ) -> bool:
-    """Dual-approval check for exporting indicators or unpacked payloads."""
+    """Dual-approval check for exporting indicators or unpacked payloads.
+
+    Pure synchronous custody-chain logic (no I/O); callers invoke it directly.
+    """
     existing = [e for e in record.custody_chain if e.get("action") == "approve" and e.get("by") == approver_id]
     if existing:
         record.custody_chain.append({

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -447,7 +448,7 @@ def _parse_forms_from_html(html: str, page_url: str) -> list[dict[str, Any]]:
     parser = _FormHTMLParser()
     try:
         parser.feed(html)
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.debug("html_form_parse_error", extra={"page_url": page_url})
         return []
 
@@ -928,7 +929,7 @@ async def _try_fetch_and_upload_dependency_manifests(target: str, sink: RawPhase
                     url,
                     headers={"User-Agent": _HTTP_CRAWL_USER_AGENT},
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug(
                 "dependency_manifest_fetch_failed",
                 extra={"reason": "http_error", "manifest": artifact_type},
@@ -1092,7 +1093,7 @@ async def _query_crtsh(domain: str, *, raw_sink: RawPhaseSink | None = None) -> 
         if raw_sink is not None and isinstance(results, list) and results:
             try:
                 await asyncio.to_thread(raw_sink.upload_json, "crtsh_api", results)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "crtsh_raw_upload_failed",
                     extra={"event": "crtsh_raw_upload_failed"},
@@ -1109,7 +1110,7 @@ async def _query_crtsh(domain: str, *, raw_sink: RawPhaseSink | None = None) -> 
         cap = max(1, int(getattr(settings, "recon_max_subdomains", 10000)))
         sorted_subs = sorted(subdomains)[:cap]
         return {"success": True, "stdout": json.dumps(sorted_subs)}
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("crtsh_query_failed", extra={"event": "crtsh_query_failed"})
         return {"success": False, "stdout": "", "stderr": "crt.sh query failed"}
 
@@ -1156,7 +1157,7 @@ async def run_source_analysis(
     try:
         result = await analyzer.analyze()
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning("source_analysis handler failed: %s", exc)
         return SourceAnalysisOutput(skipped=True, summary=f"Source analysis failed: {exc}")
 
@@ -1225,7 +1226,7 @@ async def run_recon(
                 raw_sink.upload_recon_summary_stable,
                 tool_results.get("recon_pipeline_summary") or {},
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "recon_summary_stable_upload_failed",
                 extra={"event": "recon_summary_stable_upload_failed"},
@@ -1316,13 +1317,13 @@ async def _query_nvd_for_technologies(assets: list[str]) -> str:
                     "base_score": base_score,
                     "keyword": keyword,
                 })
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("NVD query for '%s' failed", keyword)
 
     return _safe_json(all_cves, 40000) if all_cves else "No CVE data available"
 
 
-def _recon_seed_urls(recon_output: dict[str, Any] | None, target: str) -> list[str]:
+def _recon_seed_urls(recon_output: dict[str, Any] | None) -> list[str]:
     """Extract http(s) endpoint URLs discovered by recon for quick-fuzz seeding.
 
     Scans recon output ``assets`` / ``endpoints`` / ``urls`` (whichever are
@@ -1385,7 +1386,7 @@ async def run_quick_fuzz(
 
     # Feed recon-discovered endpoint URLs into the fuzzer so quick_fuzz probes
     # the discovered attack surface, not just the root target (chain link G1).
-    seed_urls = _recon_seed_urls(recon_output, target)
+    seed_urls = _recon_seed_urls(recon_output)
 
     try:
         from src.recon.quick_fuzz.quick_fuzzer import run_quick_fuzz as _run_qf
@@ -1397,7 +1398,7 @@ async def run_quick_fuzz(
             delay=delay,
             seed_urls=seed_urls,
         )
-    except Exception as qf_exc:
+    except Exception as qf_exc:  # noqa: BLE001
         logger.warning("quick_fuzz_failed: %s", qf_exc, extra={"scan_id": scan_id})
         result = {"findings": [], "fuzz_results": [], "candidates": []}
 
@@ -1467,7 +1468,7 @@ async def run_threat_modeling(
                 "\n\n[Quick Fuzz Pre-Scan Findings]:\n"
                 + "\n".join(_qf_lines)
             )
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
     logger.info(
         "threat_model_recon_context_built",
@@ -1750,7 +1751,7 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
 async def _run_sast_scan(
     repo_path: str,
     *,
-    scan_id: str | None = None,
+    scan_id: str | None = None,  # noqa: ARG001
 ) -> list[dict[str, Any]]:
     """Run SAST + secrets scan on a repository path."""
     findings: list[dict[str, Any]] = []
@@ -1769,7 +1770,7 @@ async def _run_sast_scan(
                 "severity": r.get("extra", {}).get("severity", "medium"),
                 "description": r.get("extra", {}).get("message", ""),
             })
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     try:
@@ -1788,7 +1789,7 @@ async def _run_sast_scan(
                     "severity": "high",
                     "description": f"Secret found: {leak.get('Description', '')}",
                 })
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return findings
@@ -2052,7 +2053,7 @@ async def run_vuln_analysis(
                             "custom_xss_poc_merged",
                             extra={"scan_id": scan_id, "count": len(custom_rows)},
                         )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(
                         "custom_xss_poc_failed",
                         extra={
@@ -2179,7 +2180,7 @@ async def run_vuln_analysis(
             active_scan_findings.extend(sast_findings)
             if sast_findings:
                 active_scan_context = _build_active_scan_context(active_scan_findings)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("sast_scan_failed", extra={"scan_id": scan_id, "error": str(exc)})
 
     quick_fuzz_section = ""
@@ -2197,7 +2198,7 @@ async def run_vuln_analysis(
                 "\n\n[Quick Fuzz Candidates — endpoints flagged for deep testing]:\n"
                 + "\n".join(_qf_lines)
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             quick_fuzz_section = ""
 
     inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
@@ -2208,14 +2209,14 @@ async def run_vuln_analysis(
                 build_code_aware_prompt_section,
             )
             code_aware_section = build_code_aware_prompt_section(source_analysis)
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
     memory_context = ""
     try:
         from src.orchestration.episodic_memory import EpisodicMemory
         _em = EpisodicMemory()
         memory_context = _em.build_context_prompt(f"vuln_analysis {target}", max_entries=3)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     active_scan_combined = active_scan_context
     if quick_fuzz_section:
@@ -2251,7 +2252,7 @@ async def run_vuln_analysis(
                             "source": "quick_fuzz",
                             "url": _qc.get("url", _qc.get("endpoint", "")),
                         })
-        except Exception as _qf_merge_exc:
+        except Exception as _qf_merge_exc:  # noqa: BLE001
             logger.debug("quick_fuzz_merge_failed", extra={"error": str(_qf_merge_exc)})
 
     llm_output.findings = _postprocess_findings_cvss(llm_output.findings)
@@ -2327,7 +2328,7 @@ async def run_vuln_analysis(
                     "cwe": "information-disclosure",
                     "source": "aiml_scanner",
                 })
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
     llm_output.active_injection_coverage = active_injection_coverage
 
@@ -2403,7 +2404,7 @@ async def run_vuln_analysis(
                                             llm_output.hypotheses.append(h)
                                         except (_json.JSONDecodeError, TypeError):
                                             pass
-                    except Exception as _agent_llm_exc:
+                    except Exception as _agent_llm_exc:  # noqa: BLE001
                         logger.debug(
                             "vuln_agent_llm_failed",
                             extra={"domain": domain.value, "error": str(_agent_llm_exc)},
@@ -2424,14 +2425,14 @@ async def run_vuln_analysis(
                         findings=_domain_findings,
                         scan_id=scan_id or "",
                     )
-                except Exception as _queue_exc:
+                except Exception as _queue_exc:  # noqa: BLE001
                     logger.debug(
                         "exploitation_queue_build_failed",
                         extra={"domain": _domain_key, "error": str(_queue_exc)},
                     )
             if typed_queues:
                 llm_output.exploitation_queues = typed_queues
-    except Exception as va_exc:
+    except Exception as va_exc:  # noqa: BLE001
         logger.debug("vuln_agents mapping failed (non-fatal): %s", va_exc)
 
     if scan_options.get("fuzzing_enabled") and source_analysis is not None:
@@ -2473,9 +2474,9 @@ async def run_vuln_analysis(
                             logger.info("fuzzing_crashes_found", extra={"scan_id": scan_id, "target": _ft["file"], "crashes": len(_fresult.crashes)})
                         else:
                             logger.info("fuzzing_campaign_clean", extra={"scan_id": scan_id, "target": _ft["file"], "runs": _fresult.total_runs})
-                    except Exception as _fuzz_exc:
+                    except Exception as _fuzz_exc:  # noqa: BLE001
                         logger.debug("fuzzing_target_failed", extra={"target": _ft["file"], "error": str(_fuzz_exc)})
-        except Exception as _fuzz_outer:
+        except Exception as _fuzz_outer:  # noqa: BLE001
             logger.debug("fuzzing_campaign_failed: %s", _fuzz_outer)
 
     if scan_options.get("binary_analysis_enabled", True) and source_analysis is not None:
@@ -2511,9 +2512,9 @@ async def run_vuln_analysis(
                                     "code_location": _path_ba,
                                 })
                             logger.info("binary_analysis_vulns_found", extra={"scan_id": scan_id, "file": _path_ba, "vulns": len(_ba_result.vulnerabilities)})
-                    except Exception as _ba_exc:
+                    except Exception as _ba_exc:  # noqa: BLE001
                         logger.debug("binary_analysis_target_failed", extra={"scan_id": scan_id, "file": _path_ba, "error": str(_ba_exc)})
-        except Exception as _ba_outer:
+        except Exception as _ba_outer:  # noqa: BLE001
             logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
 
     if agent_findings_map:
@@ -2527,7 +2528,7 @@ async def run_vuln_analysis(
             for _domain, _finds in agent_findings_map.items():
                 _task = SubAgentTask(task_description=f"Analyze {_domain} findings", depth=0)
                 if _spawner.can_spawn(_task):
-                    async def _sub_agent_executor(desc: str, _d=_domain, _f=_finds) -> dict:
+                    async def _sub_agent_executor(desc: str, _d=_domain, _f=_finds) -> dict:  # noqa: ARG001
                         try:
                             _d_inp = VulnAnalysisInput(
                                 threat_model={"domain": _d, "findings_summary": json.dumps(_f[:5], default=str)[:2000]},
@@ -2537,13 +2538,13 @@ async def run_vuln_analysis(
                                 _d_inp, scan_id=scan_id, scan_options=scan_options,
                             )
                             return {"findings_count": len(_d_out.findings)}
-                        except Exception:
+                        except Exception:  # noqa: BLE001
                             return {}
                     _result = await _spawner.aspawn(_task, executor=_sub_agent_executor)
                     _spawned += 1
             if _spawned:
                 logger.info("sub_agents_spawned", extra={"scan_id": scan_id, "count": _spawned})
-        except Exception as _sa_exc:
+        except Exception as _sa_exc:  # noqa: BLE001
             logger.debug("sub_agent_spawn_failed: %s", _sa_exc)
 
     if agent_findings_map:
@@ -2577,7 +2578,7 @@ async def run_vuln_analysis(
                     for _fo_df in _fo_domain_out.findings:
                         _fo_df["source_domain"] = _fo_domain.value
                     return _fo_domain_out.findings
-                except Exception as _fo_dexc:
+                except Exception as _fo_dexc:  # noqa: BLE001
                     logger.debug("fanout_va_domain_failed", extra={"domain": _fo_domain.value, "error": str(_fo_dexc)})
                     return []
 
@@ -2594,7 +2595,7 @@ async def run_vuln_analysis(
                         llm_output.findings.append(_fo_ff)
                         _fo_seen.add(_fo_ff.get("title", "").lower())
                 logger.info("fanout_va_merged", extra={"scan_id": scan_id, "new_findings": len(_fanout_findings)})
-        except Exception as _fo_exc:
+        except Exception as _fo_exc:  # noqa: BLE001
             logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
 
     # Re-assign stable finding ids after ALL late appends (aiml/fuzzing/binary/
@@ -2685,7 +2686,7 @@ async def _maybe_run_phase_reviewer(
                 "findings_reviewed": getattr(result, "findings_reviewed", 0),
             },
         )
-    except Exception as _rev_exc:  # never break the phase
+    except Exception as _rev_exc:  # never break the phase  # noqa: BLE001
         logger.debug("phase_reviewer_failed", extra={"phase": phase, "error": str(_rev_exc)})
 
 
@@ -2813,7 +2814,7 @@ async def run_exploit_attempt(
                     )
                 else:
                     logger.debug("playwright_login_failed", extra={"scan_id": scan_id})
-        except Exception as pa_exc:
+        except Exception as pa_exc:  # noqa: BLE001
             logger.debug(
                 "playwright_auth_failed_non_fatal",
                 extra={"scan_id": scan_id, "error": str(pa_exc)},
@@ -2832,7 +2833,7 @@ async def run_exploit_attempt(
             )
             if exploits:
                 return ExploitationOutput(exploits=exploits, evidence=evidence)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "exploitation_executor_failed",
             extra={"scan_id": scan_id, "error": str(exc)},
@@ -2856,7 +2857,7 @@ async def run_exploit_attempt(
             for _finding in findings[:5]:
                 _react.add_observation(f"Finding: {json.dumps(_finding, default=str)[:500]}")
             logger.info("ReAct exploitation fallback used", extra={"scan_id": scan_id})
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     for _exploit in (exploit_out.exploits or []):
@@ -2880,7 +2881,7 @@ async def run_exploit_attempt(
                     _exploit["symbolic_input_values"] = json.dumps(_sym_result.input_values, default=str)[:1000]
                 _exploit["symbolic_execution_prompt"] = _sym_result.angr_script[:500] if _sym_result.angr_script else ""
                 logger.info("symbolic_execution_result", extra={"scan_id": scan_id, "proven": _sym_result.proven, "error": _sym_result.error[:200] if _sym_result.error else ""})
-            except Exception as _sym_exc:
+            except Exception as _sym_exc:  # noqa: BLE001
                 logger.debug("symbolic_execution_failed", extra={"scan_id": scan_id, "error": str(_sym_exc)})
 
     # Playwright screenshot evidence for browser-verifiable exploits (XSS, auth bypass)
@@ -2912,7 +2913,7 @@ async def run_exploit_attempt(
                         }
                         logger.info("Playwright screenshot captured", extra={"scan_id": scan_id, "url": _poc_url})
                 _pa._session.stop()
-            except Exception as _pw_exc:
+            except Exception as _pw_exc:  # noqa: BLE001
                 logger.debug("Playwright screenshot failed (non-fatal): %s", _pw_exc)
 
     # R8/R6 defense-in-depth: LLM-derived exploits inherently claim exploitability,
@@ -3033,7 +3034,7 @@ async def run_post_exploitation(
     raw_sink: RawPhaseSink | None = None
     if tenant_id and scan_id:
         raw_sink = RawPhaseSink(tenant_id, scan_id, "post_exploitation")
-    
+
     def _has_exploit_evidence(exploit: dict[str, Any]) -> bool:
         # Grounded when the exploit itself carries evidence, or its finding id is
         # in the confirmed-evidence set threaded from the exploitation phase.
@@ -3053,17 +3054,17 @@ async def run_post_exploitation(
         grounded = [e for e in verified if _has_exploit_evidence(e)]
         verified = grounded
     target = verified[0].get("target") or verified[0].get("url") if verified else ""
-    
+
     # Basic post-exploitation checks if we have verified exploits
     post_lateral: list[dict[str, Any]] = []
     post_persistence: list[dict[str, Any]] = []
-    
+
     if verified and target:
         try:
             from urllib.parse import urlparse
             parsed = urlparse(target)
             host = parsed.hostname
-            
+
             # Check internal network — try common internal services
             internal_checks = [
                 ("metadata_service", "http://169.254.169.254/latest/meta-data/"),
@@ -3071,7 +3072,7 @@ async def run_post_exploitation(
                 ("internal_api", f"http://{host}:8080/"),
                 ("internal_admin", f"http://{host}:3000/"),
             ]
-            
+
             import httpx
             async with httpx.AsyncClient(timeout=3.0, follow_redirects=False) as client:
                 for service_name, service_url in internal_checks:
@@ -3083,9 +3084,9 @@ async def run_post_exploitation(
                                 "description": f"Discovered {service_name} at {service_url} (HTTP {resp.status_code})",
                                 "from_exploit": verified[0].get("finding_id", ""),
                             })
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S110
                         pass
-            
+
             # Check common persistence paths
             if post_lateral:
                 post_persistence.append({
@@ -3115,21 +3116,21 @@ async def run_post_exploitation(
                                 "from_exploit": verified[0].get("finding_id", ""),
                                 "tool": "enum4linux_ng",
                             })
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.debug("ad_enum_skipped", extra={"error": str(e)})
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("post_exploitation_checks_failed", extra={"error": str(exc)})
-    
+
     # Combine with LLM analysis
     inp = PostExploitationInput(exploits=exploits)
     ai_result = await ai_post_exploitation(
         inp, raw_sink=raw_sink, scan_id=scan_id, scan_options=scan_opts,
     )
-    
+
     # Merge real checks with AI results
     ai_result.lateral = post_lateral + ai_result.lateral
     ai_result.persistence = post_persistence + ai_result.persistence
-    
+
     return ai_result
 
 
@@ -3184,18 +3185,16 @@ async def run_reporting(
                 _critic_insights.append({"type": "blind_spot", "detail": _bs})
             for _c in (_critic_result.critiques or [])[:5]:
                 _critic_insights.append({"type": "critique", "finding_id": _c.finding_id, "detail": _c.description})
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
     if quick_fuzz is not None:
-        try:
+        with contextlib.suppress(Exception):
             report_context["quick_fuzz_summary"] = {
                 "findings_count": len(quick_fuzz.findings),
                 "candidates_count": len(quick_fuzz.candidates),
                 "categories": list({f.get("category", "unknown") for f in quick_fuzz.findings}),
             }
-        except Exception:
-            pass
 
     inp = ReportingInput(
         target=target,
@@ -3218,7 +3217,7 @@ async def run_reporting(
             _existing = report_out.report.get("ai_insights", [])
             _existing.extend(_critic_insights)
             report_out.report["ai_insights"] = _existing
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         try:
@@ -3241,7 +3240,7 @@ async def run_reporting(
                 for _r in _de_result.rules:
                     _existing.append({"rule_type": _r.rule_type, "title": _r.title, "content": _r.rule_content})
                 report_out.report["detection_rules"] = _existing
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
         if scan_options and scan_options.get("auto_patch_enabled"):
@@ -3290,7 +3289,7 @@ async def run_reporting(
                     report_out.report.setdefault("auto_patches", []).extend(_patches)
                 if _pr_urls:
                     report_out.report.setdefault("patch_prs", []).extend(_pr_urls)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
     return report_out

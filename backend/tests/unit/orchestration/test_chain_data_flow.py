@@ -38,7 +38,7 @@ class TestReconSeedUrls:
             "endpoints": [{"url": "https://x.test/search"}, {"endpoint": "http://x.test/z"}],
             "subdomains": ["x.test"],  # bare host, not http → ignored
         }
-        urls = _recon_seed_urls(recon, "https://x.test")
+        urls = _recon_seed_urls(recon)
         assert "https://x.test/login" in urls
         assert "https://x.test/api" in urls
         assert "https://x.test/search" in urls
@@ -47,11 +47,11 @@ class TestReconSeedUrls:
 
     def test_dedup_preserves_order(self):
         recon = {"assets": ["https://x.test/a", "https://x.test/a", "https://x.test/b"]}
-        assert _recon_seed_urls(recon, "https://x.test") == ["https://x.test/a", "https://x.test/b"]
+        assert _recon_seed_urls(recon) == ["https://x.test/a", "https://x.test/b"]
 
     def test_none_returns_empty(self):
-        assert _recon_seed_urls(None, "https://x.test") == []
-        assert _recon_seed_urls({}, "https://x.test") == []
+        assert _recon_seed_urls(None) == []
+        assert _recon_seed_urls({}) == []
 
 
 def _hyp(finding_id: str, cat: FindingCategory, location: str, conf: float = 0.6) -> ExploitHypothesis:

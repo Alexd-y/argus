@@ -23,7 +23,7 @@ class TestPolicyEnforcer:
         policy = {"compliance": {"airgapped_only": True}}
         request = type("req", (), {"model": "argus-planner-fast", "metadata": {}})()
 
-        with pytest.raises(PolicyDeniedError, match="airgapped.*cloud"):
+        with pytest.raises(PolicyDeniedError, match="(?i)airgapped.*cloud"):
             self.enforcer.evaluate(policy, request)
 
     def test_airgapped_allows_local_alias(self):
@@ -37,7 +37,7 @@ class TestPolicyEnforcer:
         policy = {"compliance": {"no_cloud_llm_for_source_code": True}}
         request = type("req", (), {"model": "argus-planner-fast", "metadata": {"content_class": "source_code"}})()
 
-        with pytest.raises(PolicyDeniedError, match="source.code.*cloud"):
+        with pytest.raises(PolicyDeniedError, match="(?i)source.code.*cloud"):
             self.enforcer.evaluate(policy, request)
 
     def test_no_cloud_for_source_code_allows_wrb(self):
