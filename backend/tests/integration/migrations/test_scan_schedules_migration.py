@@ -350,7 +350,10 @@ def test_026_rls_enabled_and_policy_present(migrated_engine: Engine) -> None:
         )
 
         policy_names = conn.execute(
-            text("SELECT polname FROM pg_policy WHERE polrelid = :table::regclass"),
+            # CAST(:table AS regclass) — avoid mixing a ``:table`` bind with the
+            # ``::regclass`` shorthand, which the psycopg2 paramstyle renders as
+            # a stray ``:`` ("syntax error at or near :").
+            text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:table AS regclass)"),
             {"table": _TABLE},
         ).scalars().all()
         assert _POLICY in policy_names, (

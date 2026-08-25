@@ -1,0 +1,115 @@
+# ARGUS isolated validation stack — dependencies-only tier for local test/CI.
+#
+# Deliberately SEPARATE from the production stack (docker-compose.yml):
+#   * distinct compose project name  -> `argus-validation`
+#   * distinct container names        -> `argus-validation-*`
+#   * distinct host ports             -> 55432 / 56379 / 59000 / 59001
+#   * distinct, DISPOSABLE volumes    -> `argus_validation_*`
+# so it never touches production/user `argus-*` containers or volumes.
+#
+# Usage (PowerShell):
+#   docker compose -p argus-validation -f infra/docker-compose.validation.yml \
+#       --env-file infra/.env.validation up -d
+#   $env:DATABASE_URL = "postgresql+asyncpg://argus:argus_validation@localhost:55432/argus_test"
+#   $env:REDIS_URL    = "redis://localhost:56379/0"
+#   # MinIO S3 API: http://localhost:59000  (console :59001)
+#
+# Teardown (removes ONLY this project's disposable volumes):
+#   docker compose -p argus-validation -f infra/docker-compose.validation.yml down -v
+#
+# Never add real secrets here; values come from infra/.env.validation (gitignored)
+# with dev-only fallbacks below.
+
+name: argus-validation
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: argus-validation-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${VALIDATION_POSTGRES_USER:-argus}
+      POSTGRES_PASSWORD: ${VALIDATION_POSTGRES_PASSWORD:-argus_validation}
+      POSTGRES_DB: ${VALIDATION_POSTGRES_DB:-argus_test}
+    ports:
+      - "${VALIDATION_PG_PORT:-55432}:5432"
+    volumes:
+      - argus_validation_pg:/var/lib/postgresql/data
+    networks:
+      - validation
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 3s
+
+  redis:
+    image: redis:7-alpine
+    container_name: argus-validation-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "${VALIDATION_REDIS_PORT:-56379}:6379"
+    networks:
+      - validation
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: argus-validation-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${VALIDATION_MINIO_ACCESS_KEY:-argus}
+      MINIO_ROOT_PASSWORD: ${VALIDATION_MINIO_SECRET_KEY:-argus_validation_secret}
+    ports:
+      - "${VALIDATION_MINIO_PORT:-59000}:9000"
+      - "${VALIDATION_MINIO_CONSOLE_PORT:-59001}:9001"
+    volumes:
+      - argus_validation_minio:/data
+    networks:
+      - validation
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: argus-validation-minio-init
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set v http://minio:9000 ${VALIDATION_MINIO_ACCESS_KEY:-argus} ${VALIDATION_MINIO_SECRET_KEY:-argus_validation_secret} 2>/dev/null; do
+          echo 'waiting for minio...' && sleep 2;
+        done;
+        mc mb --ignore-existing v/argus;
+        mc mb --ignore-existing v/argus-reports;
+        mc mb --ignore-existing v/stage1-artifacts;
+        mc mb --ignore-existing v/stage2-artifacts;
+        mc mb --ignore-existing v/stage3-artifacts;
+        mc mb --ignore-existing v/stage4-artifacts;
+        mc mb --ignore-existing v/argus-recon;
+        echo 'validation minio buckets ready';
+      "
+    networks:
+      - validation
+    depends_on:
+      minio:
+        condition: service_healthy
+
+volumes:
+  argus_validation_pg:
+  argus_validation_minio:
+
+networks:
+  validation:
+    driver: bridge

@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-_BACKEND_ROOT: Path = Path(__file__).resolve().parents[2]
+_BACKEND_ROOT: Path = Path(__file__).resolve().parents[3]
 
 _PG_URL_RAW: str = os.environ.get("DATABASE_URL", "")
 _HAS_POSTGRES_URL: bool = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))

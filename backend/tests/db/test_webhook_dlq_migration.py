@@ -561,7 +561,7 @@ def test_027_rls_isolation_select_postgres(migrated_pg_engine: Engine) -> None:
 
         policy_names = (
             conn.execute(
-                text("SELECT polname FROM pg_policy WHERE polrelid = :t::regclass"),
+                text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:t AS regclass)"),
                 {"t": _TABLE},
             )
             .scalars()

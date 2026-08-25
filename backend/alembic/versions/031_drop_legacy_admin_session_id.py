@@ -370,17 +370,23 @@ def downgrade() -> None:
             existing_type=sa.String(64),
             nullable=False,
         )
+        # Drop the PK on session_token_hash BEFORE demoting it to nullable.
+        # Postgres rejects ``ALTER COLUMN session_token_hash DROP NOT NULL``
+        # while the column is still part of the primary key
+        # (``column "session_token_hash" is in a primary key``), which would
+        # break ``downgrade base`` and, via the per-test teardown, cascade
+        # into the whole migration suite.
+        if is_postgres:
+            op.execute(
+                f"ALTER TABLE {ADMIN_SESSIONS_TABLE} "
+                "DROP CONSTRAINT IF EXISTS pk_admin_sessions"
+            )
         op.alter_column(
             ADMIN_SESSIONS_TABLE,
             HASH_COL,
             existing_type=sa.String(64),
             nullable=True,
         )
-        if is_postgres:
-            op.execute(
-                f"ALTER TABLE {ADMIN_SESSIONS_TABLE} "
-                "DROP CONSTRAINT IF EXISTS pk_admin_sessions"
-            )
         op.create_primary_key(
             "pk_admin_sessions", ADMIN_SESSIONS_TABLE, [LEGACY_COL]
         )

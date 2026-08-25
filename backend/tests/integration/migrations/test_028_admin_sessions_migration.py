@@ -314,9 +314,14 @@ def test_028_upgrade_creates_admin_users_with_expected_columns(
     )
 
     columns = {c["name"]: c for c in insp.get_columns(_USERS_TABLE)}
-    assert set(columns) == set(_EXPECTED_USERS_COLUMNS), (
-        f"{_USERS_TABLE} columns differ from spec: "
-        f"got={set(columns)} expected={set(_EXPECTED_USERS_COLUMNS)}"
+    # Fixture upgrades to HEAD, so later migrations (030 session hash, 032 MFA)
+    # legitimately add columns to this table — each is covered by its own
+    # migration test. Assert 028's columns are all present rather than an exact
+    # equality that would go stale on every subsequent migration.
+    missing = set(_EXPECTED_USERS_COLUMNS) - set(columns)
+    assert not missing, (
+        f"{_USERS_TABLE} is missing 028-era columns after upgrade head: "
+        f"missing={missing} got={set(columns)}"
     )
     for col_name, expected_nullable in _EXPECTED_USERS_COLUMNS.items():
         assert columns[col_name]["nullable"] is expected_nullable, (
@@ -334,9 +339,12 @@ def test_028_upgrade_creates_admin_sessions_with_expected_columns(
     assert insp.has_table(_SESSIONS_TABLE)
 
     columns = {c["name"]: c for c in insp.get_columns(_SESSIONS_TABLE)}
-    assert set(columns) == set(_EXPECTED_SESSIONS_COLUMNS), (
-        f"{_SESSIONS_TABLE} columns differ from spec: "
-        f"got={set(columns)} expected={set(_EXPECTED_SESSIONS_COLUMNS)}"
+    # HEAD schema: 030 adds session_token_hash, 032 adds mfa_passed_at (both
+    # covered by their own migration tests). Assert 028's columns are present.
+    missing = set(_EXPECTED_SESSIONS_COLUMNS) - set(columns)
+    assert not missing, (
+        f"{_SESSIONS_TABLE} is missing 028-era columns after upgrade head: "
+        f"missing={missing} got={set(columns)}"
     )
     for col_name, expected_nullable in _EXPECTED_SESSIONS_COLUMNS.items():
         assert columns[col_name]["nullable"] is expected_nullable, (
@@ -418,7 +426,7 @@ def test_028_no_policies_attached_to_admin_tables(migrated_engine: Engine) -> No
                 conn.execute(
                     text(
                         "SELECT polname FROM pg_policy "
-                        "WHERE polrelid = :table::regclass"
+                        "WHERE polrelid = CAST(:table AS regclass)"
                     ),
                     {"table": table},
                 )
