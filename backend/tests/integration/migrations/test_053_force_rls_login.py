@@ -41,6 +41,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from tests.integration.migrations._rls_helpers import assume_rls_role, ensure_rls_role
+
 _BACKEND_ROOT: Path = Path(__file__).resolve().parents[3]
 
 _PG_URL_RAW: str = os.environ.get("DATABASE_URL", "")
@@ -81,6 +83,10 @@ def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
 def migrated_db(pg_url: str) -> Iterator[str]:
     cfg = _alembic_config(pg_url)
     command.upgrade(cfg, "head")
+    # RLS isolation must be asserted under a NON-superuser role (the local
+    # ``argus`` connection is a superuser and bypasses RLS). Provision it once
+    # the schema exists; the isolation tests SET LOCAL ROLE to it.
+    ensure_rls_role(pg_url)
     try:
         yield pg_url
     finally:
@@ -191,6 +197,7 @@ async def test_tenant_scoped_session_is_isolated(async_engine: AsyncEngine) -> N
         await _seed_user(s, tenant_b, "iso-b@example.com")
 
     async with sm() as s, s.begin():
+        await assume_rls_role(s)  # enforce RLS (superuser would bypass it)
         await _set_tenant(s, tenant_a)
         count = await s.execute(text("SELECT count(*) FROM users"))
         assert count.scalar_one() == 1, "tenant A must not see tenant B users"
@@ -214,6 +221,7 @@ async def test_write_still_requires_matching_tenant(async_engine: AsyncEngine) -
 
     # Wrong-tenant write: GUC=A, row tenant=B → WITH CHECK violation.
     async with sm() as s, s.begin():
+        await assume_rls_role(s)  # enforce RLS WITH CHECK (superuser bypasses)
         await _set_tenant(s, tenant_a)
         with pytest.raises(sa_exc.DBAPIError):
             await s.execute(
@@ -231,6 +239,7 @@ async def test_write_still_requires_matching_tenant(async_engine: AsyncEngine) -
 
     # No-context write: GUC unset → WITH CHECK on tenant_isolation still fails.
     async with sm() as s, s.begin():
+        await assume_rls_role(s)  # enforce RLS WITH CHECK (superuser bypasses)
         with pytest.raises(sa_exc.DBAPIError):
             await s.execute(
                 text(

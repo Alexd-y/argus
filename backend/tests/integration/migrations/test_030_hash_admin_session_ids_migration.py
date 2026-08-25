@@ -243,7 +243,13 @@ def test_030_has_upgrade_and_downgrade_callables() -> None:
 
 
 def test_030_orm_admin_session_carries_hash_column() -> None:
-    """``AdminSession.session_token_hash`` must exist, be UNIQUE, and indexed."""
+    """``AdminSession.session_token_hash`` exists and is the PK (post-031).
+
+    030 introduced it as a NULL-able UNIQUE column; 031 promoted it to the
+    sole primary key. The ORM model tracks the *head* schema, so at head the
+    column is NOT NULL and part of the primary key (the 030→031 grace window
+    has closed).
+    """
     from src.db.models import AdminSession
 
     table = cast(sa.Table, AdminSession.__table__)
@@ -251,11 +257,11 @@ def test_030_orm_admin_session_carries_hash_column() -> None:
         f"AdminSession ORM missing {_HASH_COLUMN!r} column"
     )
     column = table.columns[_HASH_COLUMN]
-    assert column.nullable is True, (
-        f"{_HASH_COLUMN} must stay NULL-able during the 030 → 031 grace window"
+    assert column.primary_key is True, (
+        f"{_HASH_COLUMN} must be the primary key post-031"
     )
-    assert column.unique is True, (
-        f"{_HASH_COLUMN} must be UNIQUE — primary lookup column post-030"
+    assert column.nullable is False, (
+        f"{_HASH_COLUMN} must be NOT NULL post-031 (PK invariant)"
     )
 
 
@@ -523,9 +529,13 @@ def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
 
 @pytest.fixture()
 def migrated_engine(pg_url: str) -> Iterator[Engine]:
-    """Drive ``upgrade head`` and yield a sync engine for introspection."""
+    """Drive ``upgrade 030`` and yield a sync engine for introspection.
+
+    Pinned to 030 (not head): migration 031 folds the UNIQUE index into the
+    PK, so the 030-era ``ix_admin_sessions_token_hash`` only exists at 030.
+    """
     cfg = _alembic_config(pg_url)
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "030")
 
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
@@ -548,9 +558,13 @@ def test_030_pg_upgrade_creates_unique_index(migrated_engine: Engine) -> None:
 @pytestmark_pg
 @pytest.mark.requires_postgres
 def test_030_pg_downgrade_drops_index_idempotently(pg_url: str) -> None:
-    """``upgrade -> downgrade -1 -> upgrade -> downgrade base`` all succeed."""
+    """``upgrade 030 -> downgrade 029 -> upgrade 030 -> downgrade base`` succeed.
+
+    Pinned to 030: at head the index is folded into the PK by 031, so the
+    round-trip that proves 030 creates/drops the UNIQUE index must run at 030.
+    """
     cfg = _alembic_config(pg_url)
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "030")
 
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
@@ -565,10 +579,10 @@ def test_030_pg_downgrade_drops_index_idempotently(pg_url: str) -> None:
         insp = inspect(engine)
         indexes = {ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE)}
         assert _HASH_INDEX not in indexes, (
-            f"downgrade -1 from {_REVISION} must drop {_HASH_INDEX}"
+            f"downgrade to 029 must drop {_HASH_INDEX} ({_REVISION} downgrade)"
         )
 
-        command.upgrade(cfg, "head")
+        command.upgrade(cfg, "030")
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)
         insp = inspect(engine)

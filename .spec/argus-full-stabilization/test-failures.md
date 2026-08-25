@@ -65,7 +65,23 @@ cd backend && python -m pytest tests/integration/migrations -q
 
 ---
 
-## Оставшиеся падения — root cause по классам (план доработки)
+## РАЗРЕШЕНО (C1–C4) — миграционный набор 94 passed / 0 failed / 0 errors
+
+- **C1 (RLS-superuser)** ✅ — добавлен `tests/integration/migrations/_rls_helpers.py`
+  (NOSUPERUSER-роль `argus_rls_app` + грант + `SET LOCAL ROLE`); RLS-isolation в
+  test_053 / test_scan_schedules теперь исполняется под ограниченной ролью.
+  Assertions не ослаблены.
+- **C2 (стале `downgrade -N from head`)** ✅ — заменено на явные target-revisions
+  (028→027, 029→028, 031→030, 032→031, 026→025); test_030 PG-тесты закреплены на
+  ревизии 030; ORM-тест 030 обновлён на post-031 инвариант; test_029 backfill
+  идёт `upgrade` к 028 из base; test_028 smoke-insert — head-схема (mfa_enabled,
+  session_token_hash).
+- **C3 (dump_alembic_schema)** ✅ — `pg_class.relforcerowsecurity` вместо
+  несуществующей `pg_tables.forcerowsecurity`.
+- **C4 (parser-registry order-dependence)** ✅ — dir-conftest сбрасывает
+  реестр before+after каждого теста; 557 passed при mcp-контаминаторе впереди.
+
+## Историческая диагностика — root cause по классам (до устранения)
 
 ### C1 — RLS-изоляция под суперпользователем (5+ тестов)
 - Тесты: `test_053::test_tenant_scoped_session_is_isolated`,

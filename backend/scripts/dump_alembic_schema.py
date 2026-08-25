@@ -146,13 +146,20 @@ def _serialise_postgres_rls(engine: Engine) -> list[dict[str, Any]]:
         return []
     out: list[dict[str, Any]] = []
     with engine.connect() as conn:
+        # ``forcerowsecurity`` is NOT a column of ``pg_tables`` (that view only
+        # exposes ``rowsecurity``). Both flags live on ``pg_class``
+        # (``relrowsecurity`` / ``relforcerowsecurity``), so read them there.
         rows = conn.execute(
             text(
                 """
-                SELECT schemaname, tablename, rowsecurity, forcerowsecurity
-                FROM pg_tables
-                WHERE schemaname = 'public'
-                ORDER BY tablename
+                SELECT n.nspname AS schemaname,
+                       c.relname AS tablename,
+                       c.relrowsecurity AS rowsecurity,
+                       c.relforcerowsecurity AS forcerowsecurity
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relkind = 'r'
+                ORDER BY c.relname
                 """
             )
         ).all()

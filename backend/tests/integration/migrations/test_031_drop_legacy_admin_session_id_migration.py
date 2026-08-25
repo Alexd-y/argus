@@ -585,10 +585,10 @@ def test_031_pg_downgrade_restores_legacy_pk(pg_url: str) -> None:
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
     try:
-        # Walk the chain back to 030 and confirm the legacy shape returns.
-        # Two ``-1`` hops because 032 sits on top of 031.
-        command.downgrade(cfg, "-1")
-        command.downgrade(cfg, "-1")
+        # Walk the chain back to 030 explicitly. Relative "-1" hops from head
+        # no longer land on 031 now that head has advanced past 032; downgrade
+        # to the concrete revision so 031's own downgrade runs.
+        command.downgrade(cfg, "030")
 
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)

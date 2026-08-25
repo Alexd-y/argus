@@ -767,19 +767,20 @@ def test_032_pg_downgrade_drops_mfa_columns(pg_url: str) -> None:
         user_cols = {c["name"] for c in insp.get_columns(_USERS_TABLE)}
         assert _NEW_USER_COLUMNS.issubset(user_cols)
 
-        command.downgrade(cfg, "-1")
+        # Explicit down_revision (031) — "-1 from head" no longer targets 032.
+        command.downgrade(cfg, "031")
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)
         insp = inspect(engine)
         user_cols = {c["name"] for c in insp.get_columns(_USERS_TABLE)}
         session_cols = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
         assert _NEW_USER_COLUMNS.isdisjoint(user_cols), (
-            f"downgrade -1 from 032 must drop the MFA columns from "
+            f"downgrade to 031 must drop the MFA columns from "
             f"{_USERS_TABLE}; still present: "
             f"{sorted(_NEW_USER_COLUMNS & user_cols)!r}"
         )
         assert _COL_MFA_PASSED_AT not in session_cols, (
-            f"downgrade -1 from 032 must drop {_COL_MFA_PASSED_AT!r}"
+            f"downgrade to 031 must drop {_COL_MFA_PASSED_AT!r}"
         )
 
         command.upgrade(cfg, "head")

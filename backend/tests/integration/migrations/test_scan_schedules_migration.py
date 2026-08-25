@@ -53,6 +53,11 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
+from tests.integration.migrations._rls_helpers import (
+    assume_rls_role_sync,
+    ensure_rls_role,
+)
+
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 _VERSIONS_DIR = _BACKEND_ROOT / "alembic" / "versions"
 _REVISION = "026"
@@ -233,6 +238,9 @@ def migrated_engine(pg_url: str) -> Iterator[Engine]:
     """
     cfg = _alembic_config(pg_url)
     command.upgrade(cfg, "head")
+    # RLS isolation must be asserted under a NON-superuser role (the local
+    # ``argus`` connection is a superuser and bypasses RLS).
+    ensure_rls_role(pg_url)
 
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
@@ -390,6 +398,7 @@ def test_026_rls_isolation_on_select(migrated_engine: Engine) -> None:
 
     # Tenant A session — must see its own row, never B's.
     with migrated_engine.begin() as conn:
+        assume_rls_role_sync(conn)  # enforce RLS (superuser would bypass it)
         _set_tenant(conn, tenant_a)
         rows_a = conn.execute(
             text("SELECT tenant_id FROM scan_schedules")
@@ -400,6 +409,7 @@ def test_026_rls_isolation_on_select(migrated_engine: Engine) -> None:
 
     # Tenant B session — symmetric guarantee.
     with migrated_engine.begin() as conn:
+        assume_rls_role_sync(conn)
         _set_tenant(conn, tenant_b)
         rows_b = conn.execute(
             text("SELECT tenant_id FROM scan_schedules")
@@ -408,6 +418,7 @@ def test_026_rls_isolation_on_select(migrated_engine: Engine) -> None:
 
     # No tenant set at all — policy rejects every row.
     with migrated_engine.begin() as conn:
+        assume_rls_role_sync(conn)
         visible = conn.execute(text("SELECT COUNT(*) FROM scan_schedules")).scalar_one()
         assert visible == 0, (
             "with no app.current_tenant_id set, RLS must hide every row; "
@@ -426,6 +437,7 @@ def test_026_rls_isolation_on_update(migrated_engine: Engine) -> None:
         _insert_schedule(conn, tenant_b, "daily")
 
     with migrated_engine.begin() as conn:
+        assume_rls_role_sync(conn)  # enforce RLS USING + WITH CHECK
         _set_tenant(conn, tenant_a)
         result = conn.execute(
             text(
@@ -443,6 +455,7 @@ def test_026_rls_isolation_on_update(migrated_engine: Engine) -> None:
 
     # Tenant B's row is untouched.
     with migrated_engine.begin() as conn:
+        assume_rls_role_sync(conn)
         _set_tenant(conn, tenant_b)
         still_enabled = conn.execute(
             text(
@@ -493,11 +506,12 @@ def test_026_downgrade_drops_table_idempotently(pg_url: str) -> None:
     try:
         assert inspect(engine).has_table(_TABLE)
 
-        command.downgrade(cfg, "-1")
+        # Explicit down_revision (025) — "-1 from head" no longer targets 026.
+        command.downgrade(cfg, "025")
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)
         assert not inspect(engine).has_table(_TABLE), (
-            "downgrade -1 from 026 must drop scan_schedules"
+            "downgrade to 025 must drop scan_schedules (026 downgrade)"
         )
 
         # Replay upgrade to make sure upgrade() is idempotent-safe against

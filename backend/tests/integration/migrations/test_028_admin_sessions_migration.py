@@ -452,15 +452,18 @@ def test_028_downgrade_drops_tables_idempotently(pg_url: str) -> None:
         assert insp.has_table(_USERS_TABLE)
         assert insp.has_table(_SESSIONS_TABLE)
 
-        command.downgrade(cfg, "-1")
+        # Downgrade to 028's parent (027). Relative "-1 from head" no longer
+        # targets 028 now that head has advanced far past it; walk the chain
+        # down to the explicit down_revision so 028's own downgrade runs.
+        command.downgrade(cfg, "027")
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)
         insp = inspect(engine)
         assert not insp.has_table(_USERS_TABLE), (
-            "downgrade -1 from 028 must drop admin_users"
+            "downgrade to 027 must drop admin_users (028 downgrade)"
         )
         assert not insp.has_table(_SESSIONS_TABLE), (
-            "downgrade -1 from 028 must drop admin_sessions"
+            "downgrade to 027 must drop admin_sessions (028 downgrade)"
         )
 
         command.upgrade(cfg, "head")
@@ -479,11 +482,15 @@ def test_028_downgrade_drops_tables_idempotently(pg_url: str) -> None:
 def test_028_basic_insert_select_roundtrip(migrated_engine: Engine) -> None:
     """Smoke-test the schema by inserting and reading back a session row."""
     with migrated_engine.begin() as conn:
+        # HEAD schema: 032 added ``mfa_enabled`` NOT NULL (server_default dropped
+        # on Postgres — the ORM ``default=False`` is the source of truth — so a
+        # raw INSERT must supply it), and 031 dropped ``session_id`` in favour of
+        # ``session_token_hash`` as the primary key.
         conn.execute(
             text(
                 """
-                INSERT INTO admin_users (subject, password_hash, role)
-                VALUES (:s, :h, :r)
+                INSERT INTO admin_users (subject, password_hash, role, mfa_enabled)
+                VALUES (:s, :h, :r, false)
                 """
             ),
             {
@@ -496,16 +503,16 @@ def test_028_basic_insert_select_roundtrip(migrated_engine: Engine) -> None:
             text(
                 """
                 INSERT INTO admin_sessions (
-                    session_id, subject, role,
+                    session_token_hash, subject, role,
                     expires_at, ip_hash, user_agent_hash
                 ) VALUES (
-                    :sid, :sub, :r,
+                    :sth, :sub, :r,
                     NOW() + INTERVAL '12 hours', :ih, :uh
                 )
                 """
             ),
             {
-                "sid": "x" * 64,
+                "sth": "x" * 64,
                 "sub": "smoke@example.com",
                 "r": "admin",
                 "ih": "0" * 64,

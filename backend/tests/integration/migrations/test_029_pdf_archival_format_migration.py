@@ -309,7 +309,11 @@ def test_029_check_constraint_rejects_unknown_value(migrated_engine: Engine) -> 
 def test_029_existing_rows_backfilled_to_standard(pg_url: str) -> None:
     """Pre-existing tenant rows must get the default ``"standard"`` value."""
     cfg = _alembic_config(pg_url)
-    command.downgrade(cfg, _DOWN_REVISION)
+    # Between tests the DB rests at ``base`` (every fixture downgrades to base
+    # in teardown), so bring the schema UP to 028 — the pre-029 baseline — to
+    # seed a legacy row. A relative ``downgrade`` assumed a head starting point
+    # and failed with RangeNotAncestorError from base.
+    command.upgrade(cfg, _DOWN_REVISION)
 
     sync_url = _to_sync_url(pg_url)
     engine = sa.create_engine(sync_url, future=True)
@@ -359,13 +363,14 @@ def test_029_downgrade_drops_column_idempotently(pg_url: str) -> None:
         columns = {c["name"] for c in insp.get_columns(_TENANTS_TABLE)}
         assert _COLUMN_NAME in columns
 
-        command.downgrade(cfg, "-1")
+        # Explicit down_revision (028) — "-1 from head" no longer targets 029.
+        command.downgrade(cfg, _DOWN_REVISION)
         engine.dispose()
         engine = sa.create_engine(sync_url, future=True)
         insp = inspect(engine)
         columns = {c["name"] for c in insp.get_columns(_TENANTS_TABLE)}
         assert _COLUMN_NAME not in columns, (
-            f"downgrade -1 from {_REVISION} must drop {_COLUMN_NAME}"
+            f"downgrade to {_DOWN_REVISION} must drop {_COLUMN_NAME} ({_REVISION} downgrade)"
         )
 
         command.upgrade(cfg, "head")

@@ -25,22 +25,30 @@ Subtasks:
 - [~] Single-head инвариант в тесте (ранее исправлен в 737c3b9: `len(heads)==1`).
 _Requirements: R2._
 
-## T3. PostgreSQL/RLS тесты реально исполняются — `[~]`
-Result: Layer B миграций запускается против живого PG; setup-errors 23→0.
+## T3. PostgreSQL/RLS тесты реально исполняются — `[x]`
+Result: миграционный набор на живом PG — **94 passed, 0 failed, 0 errors**
+(без PG: 60 passed, 34 корректно skipped).
 Subtasks:
 - [x] psycopg2-binary (sync introspection driver) установлен.
 - [x] `::regclass` синтаксис исправлен (3 файла).
-- [ ] RLS-изоляция под NOSUPERUSER-ролью (класс C1 в test-failures.md).
+- [x] C1: RLS-изоляция под NOSUPERUSER-ролью (`_rls_helpers.py` + `SET LOCAL
+  ROLE`), т.к. `argus` — суперпользователь и обходит RLS. Assertions не
+  ослаблены — RLS впервые реально проверяется.
+- [x] C3: `scripts/dump_alembic_schema` читает `pg_class.relforcerowsecurity`
+  (в `pg_tables` такой колонки нет) → alembic_smoke зелёный.
 _Requirements: R3._
 
-## T4. Изоляция состояния между тестами — `[~]`
-Result: 031-фикс восстановил корректный `downgrade base` в teardown (устранил
-каскад). Остаются: стале-хопы `downgrade -N` (C2) и sandbox-parser registry
-order-dependence (C4).
+## T4. Изоляция состояния между тестами — `[x]`
+Result: 031-фикс восстановил корректный `downgrade base` в teardown; C2/C4
+устранены.
 Subtasks:
-- [x] Teardown downgrade-base снова детерминирован.
-- [ ] Стале-хопы `downgrade -N from head` → явный target revision (C2).
-- [ ] Parser-registry reset/lifecycle (C4).
+- [x] Teardown downgrade-base детерминирован.
+- [x] C2: стале-хопы `downgrade -N from head` → явный target revision
+  (028→027, 029→028, 030 pin, 031→030, 032→031, 026→025); ORM-тест 030 обновлён
+  на post-031 инвариант (PK, NOT NULL).
+- [x] C4: parser-registry изоляция — dir-conftest сбрасывает реестр before+after
+  каждого теста (`tests/integration/sandbox/parsers/conftest.py`); 557 passed
+  после запуска mcp-контаминатора перед парсер-тестами.
 _Requirements: R4._
 
 ## T5. Повторная проверка 7 фиксов + regression tests — `[~]`
