@@ -4,6 +4,7 @@ import {
   isBackendProxyEnabled,
   mapBackendFindingsToResults,
   mapBackendScanToScanData,
+  proxyGetReportByTarget,
   proxyGetScanFindings,
   proxyGetScanStatus,
   type BackendProxyError,
@@ -25,11 +26,15 @@ export async function GET(
       // page receives an unmatched status and renders a blank body.
       const scanData = mapBackendScanToScanData(status);
 
-      // On completion, fetch the real findings and populate `results` — otherwise
-      // ScanSuccess renders `null` (the blank/black screen at the end of a scan).
+      // On completion, fetch the real findings + report summary and populate
+      // `results` — otherwise ScanSuccess renders `null` (the blank/black screen
+      // at the end of a scan). Both fetches are best-effort (never throw).
       if (scanData.status === "complete") {
-        const findings = await proxyGetScanFindings(id, { tenantId });
-        scanData.results = mapBackendFindingsToResults(findings, scanData.tier);
+        const [findings, report] = await Promise.all([
+          proxyGetScanFindings(id, { tenantId }),
+          proxyGetReportByTarget(scanData.target, { tenantId }),
+        ]);
+        scanData.results = mapBackendFindingsToResults(findings, scanData.tier, report);
       }
 
       return NextResponse.json(scanData);

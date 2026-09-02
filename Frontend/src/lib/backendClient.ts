@@ -350,6 +350,46 @@ interface BackendFinding {
   affected_parameter?: string | null;
 }
 
+/** OWASP Top 10:2025 short id → human-readable title (mirror of backend). */
+const OWASP_TOP10_2025_TITLES: Record<string, string> = {
+  A01: "Broken Access Control",
+  A02: "Security Misconfiguration",
+  A03: "Software Supply Chain Failures",
+  A04: "Cryptographic Failures",
+  A05: "Injection",
+  A06: "Insecure Design",
+  A07: "Authentication Failures",
+  A08: "Software or Data Integrity Failures",
+  A09: "Security Logging & Alerting Failures",
+  A10: "Mishandling of Exceptional Conditions",
+};
+
+/** Human-readable group label for a backend `owasp_category` (A01…A10). */
+function owaspGroupLabel(category: unknown): string {
+  const key = String(category ?? "").trim().toUpperCase();
+  if (!key) return "Other Findings";
+  return OWASP_TOP10_2025_TITLES[key] ?? key;
+}
+
+/** Report summary subset the public scan page consumes (mirror of `ReportSummary`). */
+interface BackendReportSummary {
+  critical?: number;
+  high?: number;
+  medium?: number;
+  low?: number;
+  info?: number;
+  technologies?: unknown;
+  sslIssues?: number;
+  headerIssues?: number;
+  leaksFound?: boolean;
+}
+
+/** Subset of `ReportListResponse` we read for scan-result enrichment. */
+interface BackendReport {
+  summary?: BackendReportSummary;
+  technologies?: unknown;
+}
+
 /** Backend severity → Ragnarök finding priority bucket. */
 function severityToPriority(severity: unknown): CheckPriority {
   switch (String(severity ?? "").toLowerCase()) {
@@ -392,6 +432,40 @@ export async function proxyGetScanFindings(
   }
 }
 
+/**
+ * GET backend `/api/v1/reports?target=:target` and return the most recent report
+ * (technologies + severity/ssl/header/leak summary). Returns null on any error so
+ * enrichment is best-effort and never blocks the scan page.
+ */
+export async function proxyGetReportByTarget(
+  target: string,
+  opts?: { tenantId?: string }
+): Promise<BackendReport | null> {
+  const base = getBackendBaseUrl();
+  if (!base || !target.trim()) return null;
+  try {
+    const res = await fetch(`${base}/reports?target=${encodeURIComponent(target)}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...backendAuthHeaders(),
+        ...tenantHeader(opts?.tenantId),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Backend orders reports by created_at DESC, so the first item is newest.
+    return Array.isArray(data) && data.length > 0 ? (data[0] as BackendReport) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Coerce an unknown value into a string[] (drops non-strings). */
+function toStringList(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+}
+
 /** An empty {@link ScanResults} so the completed view renders with zero findings. */
 export function emptyScanResults(): ScanResults {
   return {
@@ -414,18 +488,31 @@ export function emptyScanResults(): ScanResults {
 
 /**
  * Map backend findings into the frontend {@link ScanResults} the public scan
- * page renders. Groups by OWASP category, derives severity counts, and applies
- * tier-based access gating (free = titles + one full writeup, premium = full).
+ * page renders. Groups by OWASP category (human-readable titles), derives
+ * severity counts, applies tier-based access gating (free = titles + one full
+ * writeup, premium = full), and merges the optional report summary
+ * (technologies / SSL / header / leak signals) when available.
  */
 export function mapBackendFindingsToResults(
   raw: BackendFinding[],
-  tier: ScanTier
+  tier: ScanTier,
+  report?: BackendReport | null
 ): ScanResults {
-  if (!Array.isArray(raw) || raw.length === 0) return emptyScanResults();
+  if ((!Array.isArray(raw) || raw.length === 0) && !report) return emptyScanResults();
 
+  const summary = report?.summary;
+  const technologies = toStringList(report?.technologies).length
+    ? toStringList(report?.technologies)
+    : toStringList(summary?.technologies);
+  const sslIssues = typeof summary?.sslIssues === "number" ? summary.sslIssues : null;
+  const headerIssues = typeof summary?.headerIssues === "number" ? summary.headerIssues : null;
+  const leaksFound = Boolean(summary?.leaksFound);
+  const info = typeof summary?.info === "number" ? summary.info : 0;
+
+  const findingsRaw = Array.isArray(raw) ? raw : [];
   const groupIds = new Map<string, string>();
-  const full: Finding[] = raw.map((bf, index) => {
-    const groupLabel = (bf.owasp_category && String(bf.owasp_category)) || "Findings";
+  const full: Finding[] = findingsRaw.map((bf, index) => {
+    const groupLabel = owaspGroupLabel(bf.owasp_category);
     let groupId = groupIds.get(groupLabel);
     if (!groupId) {
       groupId = String(groupIds.size + 1);
@@ -464,13 +551,15 @@ export function mapBackendFindingsToResults(
     high: census.high,
     medium: census.medium,
     low: census.low,
-    info: 0,
+    info,
     passed: census.passed,
-    technologies: [],
-    sslIssues: null,
-    headerIssues: null,
+    technologies,
+    sslIssues,
+    headerIssues,
+    // Subdomains and the detailed credential-leak list are not exposed by the
+    // backend for quick-profile scans; wire dedicated recon endpoints later.
     subdomains: null,
-    leaksFound: false,
+    leaksFound,
     leaks: [],
     findings,
     totalFindings: census.totalFindings,
