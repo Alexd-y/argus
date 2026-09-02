@@ -1,0 +1,19 @@
+# Optional override: mount signed YAML catalogs from the host when the image
+# was built without COPY config/ (legacy images). Prefer baking config/ into the
+# backend image (infra/backend/Dockerfile) for production.
+services:
+  backend:
+    volumes:
+      - ../backend/config:/app/config:ro
+  worker-scans:
+    volumes:
+      - ../backend/config:/app/config:ro
+  worker-general:
+    volumes:
+      - ../backend/config:/app/config:ro
+  worker-reports:
+    volumes:
+      - ../backend/config:/app/config:ro
+  worker-intruder:
+    volumes:
+      - ../backend/config:/app/config:ro

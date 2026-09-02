@@ -51,6 +51,7 @@ COPY --from=docker:26-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY main.py .
 COPY src/ ./src/
 COPY app/ ./app/
+COPY config/ ./config/
 COPY data/ ./data/
 COPY alembic.ini .
 COPY alembic/ ./alembic/
