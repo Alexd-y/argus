@@ -17,6 +17,11 @@ import { Footer } from "@/components/Footer";
 import { TierSelector } from "@/components/TierSelector";
 import { DomainVerification } from "@/components/DomainVerification";
 
+// TEMP: kill switch for the "Verify domain ownership" step during testing.
+// Set NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION=true to skip it; unset to restore.
+const DOMAIN_VERIFICATION_DISABLED =
+  process.env.NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION === "true";
+
 function Tooltip({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -207,6 +212,13 @@ export default function Home() {
     setSubmitError(null);
 
     try {
+      // TEMP: domain ownership verification disabled for testing.
+      // Revert by removing this block (or unsetting the env flag).
+      if (DOMAIN_VERIFICATION_DISABLED) {
+        await startScan();
+        return;
+      }
+
       if (emailMatchesTarget(email, normalizedTarget)) {
         await startScan();
         return;

@@ -664,6 +664,8 @@ services:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
         NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
         NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}
+        # TEMP: disable "Verify domain ownership" during testing. Revert to false.
+        NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION: ${NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION:-false}
         APP_PORT: "5000"
     image: argus-frontend
     container_name: argus-frontend
@@ -681,7 +683,13 @@ services:
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
       NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
       NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}
+      # TEMP: disable "Verify domain ownership" during testing. Revert to false.
+      NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION: ${NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION:-false}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # Server-only key the SSR proxy presents to the backend (X-API-Key). The
+      # public UI talks to the backend directly (bypassing nginx), so it must
+      # authenticate itself. Never exposed to the browser (no NEXT_PUBLIC_ prefix).
+      BACKEND_API_KEY: ${BACKEND_API_KEY:-${ARGUS_GATEWAY_API_KEY:-${ADMIN_API_KEY:-}}}
     ports:
       - "${ARGUS_PUBLIC_PORT:-5000}:5000"
     networks:

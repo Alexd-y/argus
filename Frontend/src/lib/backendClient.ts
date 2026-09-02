@@ -29,6 +29,50 @@ export function tierToScanProfile(tier: ScanTier): ScanProfile {
   }
 }
 
+/**
+ * Resolve the server-only backend API key used to authenticate proxy calls.
+ *
+ * The public frontend talks to the backend directly (not via the nginx gateway
+ * that injects the key), so the Node route handlers must present a valid
+ * `X-API-Key` themselves. Read from server-only env (never `NEXT_PUBLIC_*`), so
+ * the secret is never shipped to the browser. `ARGUS_API_KEYS` may be a
+ * comma-separated list — the first entry (key or `key:tenant`) is used.
+ */
+export function getBackendApiKey(): string | null {
+  const direct =
+    process.env.BACKEND_API_KEY ||
+    process.env.ARGUS_GATEWAY_API_KEY ||
+    process.env.ADMIN_API_KEY ||
+    "";
+  const trimmed = direct.trim();
+  if (trimmed) return trimmed;
+
+  const list = (process.env.ARGUS_API_KEYS || "").split(",");
+  for (const entry of list) {
+    const first = entry.trim();
+    if (first) return first;
+  }
+  return null;
+}
+
+/** Build the auth headers for backend proxy calls (empty when no key set). */
+function backendAuthHeaders(): Record<string, string> {
+  const key = getBackendApiKey();
+  return key ? { "X-API-Key": key } : {};
+}
+
+/**
+ * Build the `X-Tenant-ID` header only when a concrete tenant is known.
+ *
+ * The backend derives the tenant from the authenticated API key and rejects a
+ * mismatching `X-Tenant-ID` (403). A placeholder like `"default"` never matches
+ * the key's bound tenant, so we omit the header unless a real id is supplied.
+ */
+function tenantHeader(explicit?: string): Record<string, string> {
+  const tenant = (explicit || process.env.NEXT_PUBLIC_TENANT_ID || "").trim();
+  return tenant ? { "X-Tenant-ID": tenant } : {};
+}
+
 /** Resolve the server-only backend base URL (never exposed to the browser). */
 export function getBackendBaseUrl(): string | null {
   const raw =
@@ -129,7 +173,11 @@ export async function proxyCreateScan(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Tenant-ID": input.tenantId || process.env.NEXT_PUBLIC_TENANT_ID || "default",
+        ...backendAuthHeaders(),
+        // Only forward X-Tenant-ID when a real tenant is supplied. Sending a
+        // bogus "default" collides with the API key's bound tenant and yields
+        // 403 Tenant mismatch; omitting it lets the backend derive it from the key.
+        ...tenantHeader(input.tenantId),
         "X-Correlation-ID": input.correlationId || randomId(),
         "Idempotency-Key": randomId(),
       },
@@ -174,7 +222,8 @@ export async function proxyGetScanStatus(
   const res = await fetch(`${base}/scans/${encodeURIComponent(scanId)}`, {
     headers: {
       "Content-Type": "application/json",
-      "X-Tenant-ID": opts?.tenantId || process.env.NEXT_PUBLIC_TENANT_ID || "default",
+      ...backendAuthHeaders(),
+      ...tenantHeader(opts?.tenantId),
     },
     cache: "no-store",
   });

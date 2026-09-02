@@ -127,7 +127,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (!emailMatchesTarget(trimmedEmail, trimmedTarget)) {
+    // TEMP: domain ownership verification disabled for testing.
+    // Revert by removing this guard (or unsetting the env flag).
+    const domainVerificationDisabled =
+      process.env.NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION === "true";
+
+    if (!domainVerificationDisabled && !emailMatchesTarget(trimmedEmail, trimmedTarget)) {
       const sessionOk =
         typeof verificationId === "string" &&
         isVerificationValid(verificationId, trimmedTarget, trimmedEmail);
