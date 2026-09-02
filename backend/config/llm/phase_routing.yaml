@@ -63,37 +63,40 @@ phases:
     evidence_contract: report_section_input_v1
     degrade: concise_mode
 
+  # NOTE: quick-profile phases route to cloud reasoners so the free/quick scan
+  # works on GPU-less hosts (no local qwythos/small/WRB model server required).
+  # Revert mode to qwythos/small/wrb once a local model backend is available.
   quick_planner:
-    primary_alias: argus-planner-qwythos
-    mode: qwythos
+    primary_alias: argus-planner-fast
+    mode: cloud
     fallback: none
     evidence_contract: recon_digest_v1
     degrade: deterministic_planner
 
   quick_fingerprint:
-    primary_alias: argus-triage-fast
-    mode: small
+    primary_alias: argus-planner-fast
+    mode: cloud
     fallback: none
     evidence_contract: recon_digest_v1
     degrade: rules
 
   quick_triage:
-    primary_alias: argus-triage-fast
-    mode: small
+    primary_alias: argus-planner-fast
+    mode: cloud
     fallback: none
     evidence_contract: vuln_evidence_pack_v2
     degrade: rules
 
   quick_critic:
-    primary_alias: argus-devsecops-local
-    mode: wrb
+    primary_alias: argus-planner-deep
+    mode: cloud
     fallback: none
     evidence_contract: vuln_evidence_pack_v2
     degrade: needs_verification
 
   quick_reporter:
-    primary_alias: argus-quick-report
-    mode: qwythos
+    primary_alias: argus-report
+    mode: cloud
     fallback: none
     evidence_contract: report_section_input_v1
     degrade: template_renderer
