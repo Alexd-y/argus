@@ -10,10 +10,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@rjsf/core": "^6.0.0",
+    "@rjsf/utils": "^6.0.0",
+    "@rjsf/validator-ajv8": "^6.0.0",
+    "@tanstack/react-query": "^5.90.0",
+    "@tanstack/react-virtual": "^3.13.0",
+    "cron-parser": "^5.3.0",
     "next": "16.3.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "stripe": "^22.5.0"
+    "react-json-view-lite": "^2.5.0",
+    "stripe": "^22.5.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

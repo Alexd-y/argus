@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { LabUnrestrictedBadge } from "@/components/lab/LabUnrestrictedBadge";
 import { LabWorkspace } from "@/components/lab/LabWorkspace";
 
-export default function ScanExecutionPage() {
+export default function LabScanPage() {
   const params = useParams<{ scanId: string }>();
   const scanId = typeof params.scanId === "string" ? params.scanId : "";
 

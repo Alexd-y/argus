@@ -42,7 +42,7 @@
  */
 
 import { useId, useMemo, useState } from "react";
-import { parseExpression } from "cron-parser";
+import { CronExpressionParser } from "cron-parser";
 
 import { SCHEDULE_CRON_MAX } from "@/lib/adminSchedules";
 
@@ -105,9 +105,9 @@ function parseAndPreview(
   const trimmed = expression.trim();
   if (trimmed === "") return { kind: "empty" };
   try {
-    const interval = parseExpression(trimmed, {
+    const interval = CronExpressionParser.parse(trimmed, {
       currentDate: now,
-      utc: true,
+      tz: "UTC",
     });
     const next: Date[] = [];
     for (let i = 0; i < PREVIEW_COUNT; i += 1) {
