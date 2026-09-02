@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getScan, toScanResponse } from "@/lib/scans";
 import {
   isBackendProxyEnabled,
+  mapBackendScanToScanData,
   proxyGetScanStatus,
   type BackendProxyError,
 } from "@/lib/backendClient";
@@ -18,7 +19,10 @@ export async function GET(
       const status = await proxyGetScanStatus(id, {
         tenantId: req.headers.get("x-tenant-id") ?? undefined,
       });
-      return NextResponse.json(status);
+      // Adapt the backend ScanDetailResponse to the frontend ScanData shape the
+      // scan page renders (status enum, tier, stageIndex, …). Without this the
+      // page receives an unmatched status and renders a blank body.
+      return NextResponse.json(mapBackendScanToScanData(status));
     } catch (e) {
       const err = e as BackendProxyError;
       return NextResponse.json(

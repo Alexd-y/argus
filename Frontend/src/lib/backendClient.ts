@@ -11,6 +11,7 @@
 
 import "server-only";
 import type { ScanTier } from "./scan-tiers";
+import type { ScanData, ScanStatus } from "./scan-types";
 import type { ScanProfile } from "./types";
 
 /** Ragnarök billing tier → canonical scan profile. */
@@ -27,6 +28,90 @@ export function tierToScanProfile(tier: ScanTier): ScanProfile {
       return "quick";
     }
   }
+}
+
+/** Canonical scan_profile → Ragnarök billing tier (inverse of tierToScanProfile). */
+function scanProfileToTier(profile: unknown): ScanTier {
+  switch (profile) {
+    case "light":
+      return "standard";
+    case "deep":
+      return "premium";
+    case "quick":
+    default:
+      return "free";
+  }
+}
+
+/**
+ * Map the backend scan `status` enum to the frontend {@link ScanStatus}.
+ *
+ * Backend uses queued/running/completed/failed/cancelled; the public UI models
+ * pending/running/complete/failed. Unknown values fall back to "running" so the
+ * progress view (not a dead end) is shown while we poll.
+ */
+function mapBackendStatus(raw: unknown): ScanStatus {
+  switch (raw) {
+    case "queued":
+    case "pending":
+      return "pending";
+    case "completed":
+    case "complete":
+      return "complete";
+    case "failed":
+    case "error":
+    case "cancelled":
+    case "canceled":
+      return "failed";
+    case "running":
+    default:
+      return "running";
+  }
+}
+
+/** Derive the 0-based stage index from the reported progress (0-100). */
+function stageIndexFromProgress(progress: number, stageCount = 5): number {
+  if (!Number.isFinite(progress) || progress <= 0) return 0;
+  const idx = Math.floor((progress / 100) * stageCount);
+  return Math.min(Math.max(idx, 0), stageCount - 1);
+}
+
+/**
+ * Adapt a backend `ScanDetailResponse` (raw JSON) into the frontend
+ * {@link ScanData} shape the public scan page renders. Missing fields default
+ * safely so the running/pending view never crashes (e.g. `getTierConfig`
+ * throws on an unknown tier).
+ */
+export function mapBackendScanToScanData(raw: Record<string, unknown>): ScanData {
+  const status = mapBackendStatus(raw.status);
+  const progressRaw = typeof raw.progress === "number" ? raw.progress : 0;
+  const progress = status === "complete" ? 100 : Math.min(Math.max(progressRaw, 0), 100);
+  const tier = scanProfileToTier(raw.scan_profile);
+  const createdAt =
+    typeof raw.created_at === "string" ? raw.created_at : new Date().toISOString();
+  const phase =
+    (typeof raw.stage === "string" && raw.stage) ||
+    (typeof raw.phase === "string" && raw.phase) ||
+    "";
+
+  return {
+    id: String(raw.id ?? ""),
+    target: typeof raw.target === "string" ? raw.target : "",
+    email: typeof raw.email === "string" ? raw.email : "",
+    tier,
+    status,
+    stage: phase,
+    stageIndex: status === "complete" ? 5 : stageIndexFromProgress(progress),
+    progress,
+    error: typeof raw.error === "string" ? raw.error : null,
+    results: null,
+    parentScanId: null,
+    darkWebMonitoring: false,
+    paid: tier !== "free",
+    quota: null,
+    createdAt,
+    completedAt: status === "complete" ? createdAt : null,
+  };
 }
 
 /**
