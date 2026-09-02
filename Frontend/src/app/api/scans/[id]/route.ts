@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getScan, toScanResponse } from "@/lib/scans";
 import {
   isBackendProxyEnabled,
+  mapBackendFindingsToResults,
   mapBackendScanToScanData,
+  proxyGetScanFindings,
   proxyGetScanStatus,
   type BackendProxyError,
 } from "@/lib/backendClient";
@@ -16,13 +18,21 @@ export async function GET(
   // Opt-in real backend status passthrough (ARGUS_USE_BACKEND).
   if (isBackendProxyEnabled()) {
     try {
-      const status = await proxyGetScanStatus(id, {
-        tenantId: req.headers.get("x-tenant-id") ?? undefined,
-      });
+      const tenantId = req.headers.get("x-tenant-id") ?? undefined;
+      const status = await proxyGetScanStatus(id, { tenantId });
       // Adapt the backend ScanDetailResponse to the frontend ScanData shape the
       // scan page renders (status enum, tier, stageIndex, …). Without this the
       // page receives an unmatched status and renders a blank body.
-      return NextResponse.json(mapBackendScanToScanData(status));
+      const scanData = mapBackendScanToScanData(status);
+
+      // On completion, fetch the real findings and populate `results` — otherwise
+      // ScanSuccess renders `null` (the blank/black screen at the end of a scan).
+      if (scanData.status === "complete") {
+        const findings = await proxyGetScanFindings(id, { tenantId });
+        scanData.results = mapBackendFindingsToResults(findings, scanData.tier);
+      }
+
+      return NextResponse.json(scanData);
     } catch (e) {
       const err = e as BackendProxyError;
       return NextResponse.json(

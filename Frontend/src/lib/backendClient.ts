@@ -11,6 +11,8 @@
 
 import "server-only";
 import type { ScanTier } from "./scan-tiers";
+import type { CheckPriority, Finding, ScanResults } from "./scan-results";
+import { censusFromFindings, midgardWriteupId, withTierAccess } from "./scan-results";
 import type { ScanData, ScanStatus } from "./scan-types";
 import type { ScanProfile } from "./types";
 
@@ -326,4 +328,151 @@ export async function proxyGetScanStatus(
     };
   }
   return (await res.json()) as Record<string, unknown>;
+}
+
+/** Raw backend finding shape (subset of `api.schemas.Finding` we consume). */
+interface BackendFinding {
+  finding_id?: string | null;
+  severity?: string | null;
+  title?: string | null;
+  description?: string | null;
+  cwe?: string | null;
+  cvss?: number | null;
+  owasp_category?: string | null;
+  confidence?: string | null;
+  evidence_refs?: unknown;
+  reproducible_steps?: string | null;
+  applicability_notes?: string | null;
+  adversarial_score?: number | null;
+  raw_request?: string | null;
+  raw_response?: string | null;
+  affected_endpoint?: string | null;
+  affected_parameter?: string | null;
+}
+
+/** Backend severity → Ragnarök finding priority bucket. */
+function severityToPriority(severity: unknown): CheckPriority {
+  switch (String(severity ?? "").toLowerCase()) {
+    case "critical":
+      return "critical";
+    case "high":
+      return "important";
+    case "medium":
+      return "medium";
+    default:
+      // low / info / unknown
+      return "optional";
+  }
+}
+
+/**
+ * GET backend `/api/v1/scans/:id/findings`. Returns [] on any error so a
+ * completed scan still renders (empty results view) instead of dead-ending.
+ */
+export async function proxyGetScanFindings(
+  scanId: string,
+  opts?: { tenantId?: string }
+): Promise<BackendFinding[]> {
+  const base = getBackendBaseUrl();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/scans/${encodeURIComponent(scanId)}/findings`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...backendAuthHeaders(),
+        ...tenantHeader(opts?.tenantId),
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? (data as BackendFinding[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** An empty {@link ScanResults} so the completed view renders with zero findings. */
+export function emptyScanResults(): ScanResults {
+  return {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    info: 0,
+    passed: 0,
+    technologies: [],
+    sslIssues: null,
+    headerIssues: null,
+    subdomains: null,
+    leaksFound: false,
+    leaks: [],
+    findings: [],
+    totalFindings: 0,
+  };
+}
+
+/**
+ * Map backend findings into the frontend {@link ScanResults} the public scan
+ * page renders. Groups by OWASP category, derives severity counts, and applies
+ * tier-based access gating (free = titles + one full writeup, premium = full).
+ */
+export function mapBackendFindingsToResults(
+  raw: BackendFinding[],
+  tier: ScanTier
+): ScanResults {
+  if (!Array.isArray(raw) || raw.length === 0) return emptyScanResults();
+
+  const groupIds = new Map<string, string>();
+  const full: Finding[] = raw.map((bf, index) => {
+    const groupLabel = (bf.owasp_category && String(bf.owasp_category)) || "Findings";
+    let groupId = groupIds.get(groupLabel);
+    if (!groupId) {
+      groupId = String(groupIds.size + 1);
+      groupIds.set(groupLabel, groupId);
+    }
+    const evidenceParts = [
+      ...(Array.isArray(bf.evidence_refs) ? bf.evidence_refs.map(String) : []),
+      bf.affected_endpoint ? `Endpoint: ${bf.affected_endpoint}` : "",
+      bf.affected_parameter ? `Parameter: ${bf.affected_parameter}` : "",
+      bf.raw_request ? `REQUEST:\n${bf.raw_request}` : "",
+      bf.raw_response ? `RESPONSE:\n${bf.raw_response}` : "",
+    ].filter(Boolean);
+
+    return {
+      id: bf.finding_id || String(index + 1),
+      groupId,
+      group: groupLabel,
+      name: bf.title || "Untitled finding",
+      status: "fail" as const,
+      priority: severityToPriority(bf.severity),
+      headline: bf.title || "",
+      explanation: bf.description || "",
+      evidence: evidenceParts.join("\n\n"),
+      remediation: bf.applicability_notes || bf.reproducible_steps || "",
+      detailLevel: "full" as const,
+      access: "full" as const,
+      riskScore: bf.adversarial_score ?? bf.cvss ?? null,
+    };
+  });
+
+  const census = censusFromFindings(full);
+  const findings = withTierAccess(full, tier, midgardWriteupId(full));
+
+  return {
+    critical: census.critical,
+    high: census.high,
+    medium: census.medium,
+    low: census.low,
+    info: 0,
+    passed: census.passed,
+    technologies: [],
+    sslIssues: null,
+    headerIssues: null,
+    subdomains: null,
+    leaksFound: false,
+    leaks: [],
+    findings,
+    totalFindings: census.totalFindings,
+  };
 }
