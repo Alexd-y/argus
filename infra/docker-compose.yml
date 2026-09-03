@@ -249,7 +249,11 @@ services:
     container_name: argus-worker-scans
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 3
-    user: "1000:${DOCKER_GID:-999}"
+    # Docker default (uid 1000 + docker gid) accesses a root:docker socket. Rootless
+    # Podman remaps the mounted podman.sock to root:root inside the userns, so tool
+    # `docker exec` into argus-sandbox needs container-uid 0 (= the unprivileged host
+    # user that owns the socket). Set ARGUS_WORKER_USER=0:0 on Podman hosts.
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
       resources:
@@ -314,7 +318,7 @@ services:
     image: argus-backend
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
-    user: "1000:${DOCKER_GID:-999}"
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
       resources:
@@ -374,7 +378,7 @@ services:
     container_name: argus-worker-reports
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
-    user: "1000:${DOCKER_GID:-999}"
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
       resources:
@@ -439,7 +443,7 @@ services:
     container_name: argus-worker-intruder
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.intruder.highvol --concurrency 2
-    user: "1000:${DOCKER_GID:-999}"
+    user: "${ARGUS_WORKER_USER:-1000:${DOCKER_GID:-999}}"
     env_file: .env
     deploy:
       resources:
