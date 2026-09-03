@@ -1161,17 +1161,51 @@ async def get_scan_report(
         if not sr.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Scan not found")
 
-        rr = await session.execute(
-            select(ReportModel)
-            .where(
-                cast(ReportModel.scan_id, String) == scan_id,
-                cast(ReportModel.tenant_id, String) == tenant_id,
-                ReportModel.tier == tier_norm,
-            )
-            .order_by(desc(ReportModel.created_at))
-            .limit(1)
+        # Prefer a READY report for the requested tier. Fall back to the newest
+        # READY report of ANY tier so a per-tier validation failure never blocks
+        # download of a report that DID generate — the Valhalla tier legitimately
+        # rejects unproven injection findings (e.g. an XSS finding in a quick scan
+        # that skips active injection assessment), while asgard/midgard succeed.
+        base_where = (
+            cast(ReportModel.scan_id, String) == scan_id,
+            cast(ReportModel.tenant_id, String) == tenant_id,
         )
-        report = rr.scalar_one_or_none()
+
+        async def _newest_report(*extra_where: Any) -> ReportModel | None:
+            stmt = (
+                select(ReportModel)
+                .where(*base_where, *extra_where)
+                .order_by(desc(ReportModel.created_at))
+                .limit(1)
+            )
+            return (await session.execute(stmt)).scalar_one_or_none()
+
+        served_tier = tier_norm
+        report = await _newest_report(
+            ReportModel.tier == tier_norm,
+            ReportModel.generation_status == "ready",
+        )
+        if report is None:
+            report = await _newest_report(ReportModel.generation_status == "ready")
+            if report is not None:
+                served_tier = report.tier
+        # Last resort: newest row for the requested tier so download_report's
+        # on-demand regeneration path still applies for legacy single reports.
+        if report is None:
+            report = await _newest_report(ReportModel.tier == tier_norm)
+
+    if report is not None and served_tier != tier_norm:
+        logger.info(
+            json.dumps(
+                {
+                    "event": "scan_report_tier_fallback",
+                    "scan_id": scan_id,
+                    "requested_tier": tier_norm,
+                    "served_tier": served_tier,
+                },
+                ensure_ascii=False,
+            )
+        )
 
     if not report:
         return JSONResponse(
