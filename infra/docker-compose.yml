@@ -220,7 +220,7 @@ services:
       # exec_create + exec_start are read-only daemon operations.
       # Code in sandbox_tool_runner.py only uses docker exec.
       # K8s deployment should use k8s_adapter.py instead (no socket mount).
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -241,10 +241,11 @@ services:
       start_period: 15s
 
   worker-scans:
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
-    image: argus-worker-scans
+    # Workers = backend image + a different celery command (see `command:` below).
+    # Use the backend image directly instead of a near-empty derived image: this
+    # avoids buildkit failing to resolve the local `argus-backend` base under
+    # Podman/buildx, and workers always run the exact backend code.
+    image: argus-backend
     container_name: argus-worker-scans
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.scans --concurrency 3
@@ -291,7 +292,7 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -310,10 +311,7 @@ services:
       start_period: 30s
 
   worker-general:
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
-    image: argus-worker-general
+    image: argus-backend
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.tools,argus.recon,argus.exploitation,argus.default --concurrency 2
     user: "1000:${DOCKER_GID:-999}"
@@ -359,7 +357,7 @@ services:
       WHITERABBITNEO_URL: ${WHITERABBITNEO_URL-http://whiterabbitneo:8000/v1}
       WHITERABBITNEO_API_KEY: ${WRB_API_KEY:-}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${ARGUS_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
       - backend
       - data
@@ -372,10 +370,7 @@ services:
         condition: service_healthy
 
   worker-reports:
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
-    image: argus-worker-reports
+    image: argus-backend
     container_name: argus-worker-reports
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.reports --concurrency 1
@@ -440,10 +435,7 @@ services:
   # from the signed PayloadRegistry. Reuses the worker image (build backend +
   # worker first).
   worker-intruder:
-    build:
-      context: .
-      dockerfile: worker/Dockerfile
-    image: argus-worker-general
+    image: argus-backend
     container_name: argus-worker-intruder
     restart: unless-stopped
     command: celery -A src.celery_app worker -l INFO -Q argus.intruder.highvol --concurrency 2
