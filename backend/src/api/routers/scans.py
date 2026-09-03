@@ -771,6 +771,7 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     if f.evidence_refs is not None and isinstance(f.evidence_refs, list):
         refs = [str(x) for x in f.evidence_refs]
     return Finding(
+        finding_id=str(f.id) if f.id is not None else None,
         severity=f.severity,
         title=f.title,
         description=f.description or "",

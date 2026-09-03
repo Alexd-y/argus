@@ -187,6 +187,40 @@ def normalize_evidence_refs(raw: Any, *, max_items: int = 32, max_len: int = 500
     return out
 
 
+#: Prefix marking an evidence_ref as a resolvable intra-scan finding pointer.
+FINDING_REF_PREFIX = "finding:"
+
+
+def resolve_finding_cross_refs(
+    refs: list[str],
+    orig_to_pk: dict[str, str],
+    *,
+    self_pk: str | None = None,
+) -> list[str]:
+    """Rewrite intra-scan finding cross-references to a resolvable form.
+
+    The analysis pipeline emits ``evidence_refs`` such as ``finding_3`` that
+    point at another candidate finding by its transient LLM id. Those ids are
+    replaced by stable UUIDs at persist time, which would otherwise orphan the
+    reference. This maps each transient id to ``finding:<uuid>`` so downstream
+    consumers (API/UI) can join it back to the persisted finding. References
+    that do not match a known finding id are preserved verbatim, and a
+    finding's self-reference is dropped to avoid noise.
+    """
+    if not refs:
+        return refs
+    out: list[str] = []
+    for ref in refs:
+        target = orig_to_pk.get(ref)
+        if target is None:
+            out.append(ref)
+            continue
+        if self_pk is not None and target == self_pk:
+            continue  # skip self-reference
+        out.append(f"{FINDING_REF_PREFIX}{target}")
+    return out
+
+
 def clip_optional_text(raw: Any, max_len: int) -> str | None:
     if raw is None:
         return None

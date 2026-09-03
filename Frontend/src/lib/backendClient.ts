@@ -341,13 +341,156 @@ interface BackendFinding {
   owasp_category?: string | null;
   confidence?: string | null;
   evidence_refs?: unknown;
+  evidence_type?: string | null;
+  proof_of_concept?: Record<string, unknown> | null;
   reproducible_steps?: string | null;
   applicability_notes?: string | null;
   adversarial_score?: number | null;
-  raw_request?: string | null;
-  raw_response?: string | null;
+  affected_asset?: string | null;
   affected_endpoint?: string | null;
   affected_parameter?: string | null;
+  raw_request?: string | null;
+  raw_response?: string | null;
+  http_method?: string | null;
+  response_status?: number | null;
+  observed_impact?: string | null;
+  verification_command?: string | null;
+  tool_name?: string | null;
+  tool_version?: string | null;
+  tool_command?: string | null;
+  tool_output_excerpt?: string | null;
+}
+
+/**
+ * Internal cross-reference identifiers (e.g. `finding_3`, `surf_1`, `EV-0001`)
+ * that the analysis pipeline stores in `evidence_refs`. They are opaque join
+ * keys, not human-readable evidence, so unresolvable ones must never be
+ * surfaced verbatim in the public scan report.
+ */
+const OPAQUE_EVIDENCE_REF_RE =
+  /^(?:finding|surf(?:ace)?|ev|evd|evidence|item|row|node)[-_:]?\d+$/i;
+
+/** Resolvable intra-scan finding pointer emitted by the backend persist layer. */
+const FINDING_REF_PREFIX = "finding:";
+
+/** VA evidence-bundle artifact collections → human-readable labels. */
+const ARTIFACT_LABELS: Record<string, string> = {
+  endpoint_inventory: "Endpoint inventory",
+  api_surface: "API surface",
+  intel_findings: "Intel finding",
+  route_inventory: "Route inventory",
+  route_and_workflow: "Route/workflow",
+  params_inventory: "Params inventory",
+  forms_inventory: "Forms inventory",
+  headers_tls: "Headers/TLS",
+  js_findings: "JS finding",
+  anomalies: "Anomaly",
+  live_hosts: "Live host",
+  dns_summary: "DNS summary",
+  threat_scenarios: "Threat scenario",
+  trust_boundaries: "Trust boundary",
+  entry_points: "Entry point",
+  application_flows: "Application flow",
+  critical_assets: "Critical asset",
+};
+
+/** Prettify a bundle-artifact locator: `row_3` → `row 3`, `path_/api` → `/api`, `item_0` → `#0`. */
+function prettyArtifactLocator(locator: string): string {
+  const row = /^row_(\d+)$/i.exec(locator);
+  if (row) return `row ${row[1]}`;
+  const item = /^item_(\d+)$/i.exec(locator);
+  if (item) return `#${item[1]}`;
+  const path = /^path_(.+)$/i.exec(locator);
+  if (path) return path[1];
+  return locator.replace(/_/g, " ");
+}
+
+/**
+ * Prettify an `evidence_ref`, resolving intra-scan finding pointers to the
+ * referenced finding's title, or return `null` when it is an opaque internal id
+ * with no presentable form.
+ */
+function formatEvidenceRef(ref: string, findingsById: Map<string, BackendFinding>): string | null {
+  const trimmed = ref.trim();
+  if (!trimmed) return null;
+  // "finding:<uuid>" → resolve to the referenced finding's title.
+  if (trimmed.toLowerCase().startsWith(FINDING_REF_PREFIX)) {
+    const target = findingsById.get(trimmed.slice(FINDING_REF_PREFIX.length));
+    return target?.title ? `Related finding: ${target.title}` : null;
+  }
+  // "tool:nuclei" → "Detected by: nuclei".
+  const toolMatch = /^tool:(.+)$/i.exec(trimmed);
+  if (toolMatch) return `Detected by: ${toolMatch[1].trim()}`;
+  // "<collection>:<locator>" bundle artifact → readable label.
+  const artifactMatch = /^([a-z_]+):(.+)$/i.exec(trimmed);
+  if (artifactMatch) {
+    const label = ARTIFACT_LABELS[artifactMatch[1].toLowerCase()];
+    if (label) return `${label} (${prettyArtifactLocator(artifactMatch[2])})`;
+  }
+  // Drop remaining opaque identifiers.
+  if (OPAQUE_EVIDENCE_REF_RE.test(trimmed)) return null;
+  if (/[:_](?:row|item)_?\d+$/i.test(trimmed)) return null;
+  // A bare single token with no whitespace, URL, or dotted host is almost
+  // certainly an internal id rather than presentable evidence.
+  if (!/\s/.test(trimmed) && !/^https?:\/\//i.test(trimmed) && !trimmed.includes(".")) {
+    return null;
+  }
+  return trimmed;
+}
+
+/** Extract readable lines from a structured `proof_of_concept` payload. */
+function pocLines(poc: Record<string, unknown> | null | undefined): string[] {
+  if (!poc || typeof poc !== "object") return [];
+  const str = (key: string): string => (typeof poc[key] === "string" ? (poc[key] as string).trim() : "");
+  const lines: string[] = [];
+  const parameter = str("parameter");
+  const payload = str("payload");
+  const curl = str("curl_command") || str("curl");
+  const javascript = str("javascript_code");
+  const request = str("request");
+  const response = str("response");
+  if (parameter) lines.push(`Parameter: ${parameter}`);
+  if (payload) lines.push(`Payload: ${payload}`);
+  if (curl) lines.push(`cURL:\n${curl}`);
+  if (javascript) lines.push(`Script:\n${javascript}`);
+  if (request) lines.push(`REQUEST:\n${request}`);
+  if (response) lines.push(`RESPONSE:\n${response}`);
+  return lines;
+}
+
+/**
+ * Build a human-readable Evidence block for a finding from the meaningful
+ * backend fields (endpoint, tool, proof-of-concept, raw request/response,
+ * scanner output). Opaque `evidence_refs` ids are filtered out so the UI never
+ * shows raw join keys like `finding_3`.
+ */
+function buildEvidence(bf: BackendFinding, findingsById: Map<string, BackendFinding>): string {
+  const lines: string[] = [];
+
+  if (bf.affected_endpoint) lines.push(`Endpoint: ${bf.affected_endpoint}`);
+  else if (bf.affected_asset) lines.push(`Asset: ${bf.affected_asset}`);
+  if (bf.affected_parameter) lines.push(`Parameter: ${bf.affected_parameter}`);
+  if (bf.http_method) lines.push(`Method: ${bf.http_method}`);
+  if (typeof bf.response_status === "number") lines.push(`Response status: ${bf.response_status}`);
+  if (bf.tool_name) {
+    lines.push(`Tool: ${bf.tool_name}${bf.tool_version ? ` ${bf.tool_version}` : ""}`);
+  }
+  if (bf.tool_command) lines.push(`Command:\n${bf.tool_command}`);
+  if (bf.observed_impact) lines.push(`Observed impact: ${bf.observed_impact}`);
+
+  lines.push(...pocLines(bf.proof_of_concept));
+
+  if (bf.raw_request) lines.push(`REQUEST:\n${bf.raw_request}`);
+  if (bf.raw_response) lines.push(`RESPONSE:\n${bf.raw_response}`);
+  if (bf.tool_output_excerpt) lines.push(`Scanner output:\n${bf.tool_output_excerpt}`);
+  if (bf.verification_command) lines.push(`Verify:\n${bf.verification_command}`);
+
+  const refs = (Array.isArray(bf.evidence_refs) ? bf.evidence_refs : [])
+    .map((ref) => formatEvidenceRef(String(ref), findingsById))
+    .filter((ref): ref is string => Boolean(ref));
+  lines.push(...refs);
+
+  return lines.join("\n");
 }
 
 /** OWASP Top 10:2025 short id → human-readable title (mirror of backend). */
@@ -586,6 +729,12 @@ export function mapBackendFindingsToResults(
   const info = typeof summary?.info === "number" ? summary.info : 0;
 
   const findingsRaw = Array.isArray(raw) ? raw : [];
+  // Index findings by their stable id so intra-scan cross-references
+  // (`finding:<uuid>`) in evidence_refs resolve to the referenced finding.
+  const findingsById = new Map<string, BackendFinding>();
+  for (const bf of findingsRaw) {
+    if (bf.finding_id) findingsById.set(String(bf.finding_id), bf);
+  }
   const groupIds = new Map<string, string>();
   const full: Finding[] = findingsRaw.map((bf, index) => {
     const groupLabel = owaspGroupLabel(bf.owasp_category);
@@ -594,14 +743,6 @@ export function mapBackendFindingsToResults(
       groupId = String(groupIds.size + 1);
       groupIds.set(groupLabel, groupId);
     }
-    const evidenceParts = [
-      ...(Array.isArray(bf.evidence_refs) ? bf.evidence_refs.map(String) : []),
-      bf.affected_endpoint ? `Endpoint: ${bf.affected_endpoint}` : "",
-      bf.affected_parameter ? `Parameter: ${bf.affected_parameter}` : "",
-      bf.raw_request ? `REQUEST:\n${bf.raw_request}` : "",
-      bf.raw_response ? `RESPONSE:\n${bf.raw_response}` : "",
-    ].filter(Boolean);
-
     return {
       id: bf.finding_id || String(index + 1),
       groupId,
@@ -611,7 +752,7 @@ export function mapBackendFindingsToResults(
       priority: severityToPriority(bf.severity),
       headline: bf.title || "",
       explanation: bf.description || "",
-      evidence: evidenceParts.join("\n\n"),
+      evidence: buildEvidence(bf, findingsById),
       remediation: bf.applicability_notes || bf.reproducible_steps || "",
       detailLevel: "full" as const,
       access: "full" as const,

@@ -154,6 +154,7 @@ from src.reports.finding_metadata import (
     normalize_confidence,
     normalize_evidence_refs,
     normalize_evidence_type,
+    resolve_finding_cross_refs,
 )
 from src.storage.s3 import upload_finding_poc_json
 
@@ -675,17 +676,15 @@ async def _persist_report_and_findings(
     session.add(report)
     await session.flush()
 
+    # Pass 1 — resolve every finding's stable UUID primary key and build a map
+    # from the transient LLM finding id (e.g. ``finding_3``) to that UUID so
+    # intra-scan cross-references in evidence_refs can be rewritten to a
+    # resolvable ``finding:<uuid>`` form (they are otherwise orphaned once the
+    # original id is replaced below).
     used_finding_pks: set[str] = set()
+    resolved_pks: list[str] = []
+    orig_to_pk: dict[str, str] = {}
     for row_index, f in enumerate(findings_raw):
-        poc_blob = f.get("proof_of_concept")
-        poc_db = poc_blob if isinstance(poc_blob, dict) and poc_blob else None
-        ow_raw = f.get("owasp_category")
-        owasp_val = parse_owasp_category(ow_raw.strip()) if isinstance(ow_raw, str) and ow_raw.strip() else None
-        conf = normalize_confidence(f.get("confidence"), default="likely")
-        ev_type = normalize_evidence_type(f.get("evidence_type"))
-        ev_refs = normalize_evidence_refs(f.get("evidence_refs"))
-        rep_steps = clip_optional_text(f.get("reproducible_steps"), 16_000)
-        app_notes = clip_optional_text(f.get("applicability_notes"), 8_000)
         fid_raw = str(f.get("finding_id") or "").strip()
         try:
             finding_pk = (
@@ -699,6 +698,26 @@ async def _persist_report_and_findings(
             scan_id=scan_id,
             row_index=row_index,
         )
+        resolved_pks.append(finding_pk)
+        if fid_raw:
+            orig_to_pk.setdefault(fid_raw, finding_pk)
+
+    # Pass 2 — persist findings using the precomputed keys and rewritten refs.
+    for row_index, f in enumerate(findings_raw):
+        finding_pk = resolved_pks[row_index]
+        poc_blob = f.get("proof_of_concept")
+        poc_db = poc_blob if isinstance(poc_blob, dict) and poc_blob else None
+        ow_raw = f.get("owasp_category")
+        owasp_val = parse_owasp_category(ow_raw.strip()) if isinstance(ow_raw, str) and ow_raw.strip() else None
+        conf = normalize_confidence(f.get("confidence"), default="likely")
+        ev_type = normalize_evidence_type(f.get("evidence_type"))
+        ev_refs = resolve_finding_cross_refs(
+            normalize_evidence_refs(f.get("evidence_refs")),
+            orig_to_pk,
+            self_pk=finding_pk,
+        )
+        rep_steps = clip_optional_text(f.get("reproducible_steps"), 16_000)
+        app_notes = clip_optional_text(f.get("applicability_notes"), 8_000)
         f["finding_id"] = finding_pk
         _et_raw = f.get("evidence_tier")
         _et = int(_et_raw) if isinstance(_et_raw, (int, float)) and 1 <= int(_et_raw) <= 4 else None
