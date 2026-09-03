@@ -21,6 +21,27 @@ GENERATE_ALL_REPORT_TIERS: tuple[str, ...] = ("midgard", "asgard", "valhalla")
 POST_SCAN_GENERATE_ALL_BUNDLE_OPTION_KEY = "_argus_post_scan_generate_all_bundle_id"
 
 
+def _scan_skips_valhalla_tier(scan: Scan) -> bool:
+    """Quick scans skip the active-injection assessment phase, so the Valhalla
+    tier (``provable findings only``) always fails ``validate_report_data`` for
+    injection findings (``xss_finding_but_injection_not_assessed`` /
+    ``sqli_finding_but_injection_not_assessed``). Enqueuing it produces guaranteed
+    ``generation_status='failed'`` rows and error-log noise for no artifact, so
+    skip it for quick scans and let asgard/midgard represent the results.
+    """
+    for attr in ("execution_mode", "scan_profile", "scan_mode"):
+        if str(getattr(scan, attr, "") or "").strip().lower() == "quick":
+            return True
+    return False
+
+
+def report_tiers_for_scan(scan: Scan) -> tuple[str, ...]:
+    """Tier set to generate for ``scan`` (drops Valhalla for quick scans)."""
+    if _scan_skips_valhalla_tier(scan):
+        return tuple(t for t in GENERATE_ALL_REPORT_TIERS if t != "valhalla")
+    return GENERATE_ALL_REPORT_TIERS
+
+
 async def enqueue_generate_all_bundle(
     session: AsyncSession,
     tenant_id: str,
@@ -58,7 +79,7 @@ async def enqueue_generate_all_bundle(
 
     report_ids: list[str] = []
     meta_extra = "post_scan_complete" if set_post_scan_idempotency_flag else None
-    for tier in GENERATE_ALL_REPORT_TIERS:
+    for tier in report_tiers_for_scan(scan):
         for fmt in formats:
             rid = str(uuid.uuid4())
             report_ids.append(rid)
