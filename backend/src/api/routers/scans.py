@@ -46,6 +46,7 @@ from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
+from src.db.models import ReportObject
 from src.db.models import Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
@@ -1161,11 +1162,16 @@ async def get_scan_report(
         if not sr.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Scan not found")
 
-        # Prefer a READY report for the requested tier. Fall back to the newest
-        # READY report of ANY tier so a per-tier validation failure never blocks
-        # download of a report that DID generate — the Valhalla tier legitimately
+        # Report selection with tier fallback. The Valhalla tier legitimately
         # rejects unproven injection findings (e.g. an XSS finding in a quick scan
-        # that skips active injection assessment), while asgard/midgard succeed.
+        # that skips active injection assessment => generation_status='failed'),
+        # while asgard/midgard succeed. So when the requested tier has no usable
+        # report we fall back to another tier instead of returning 404/502/503.
+        #
+        # Preference order favours a report that ALREADY has a stored artifact for
+        # the requested format: download_report then streams cached bytes from
+        # MinIO instead of running a heavy synchronous on-demand render (WeasyPrint
+        # PDF) inside the request path, which can OOM/reset the connection (502).
         base_where = (
             cast(ReportModel.scan_id, String) == scan_id,
             cast(ReportModel.tenant_id, String) == tenant_id,
@@ -1180,17 +1186,42 @@ async def get_scan_report(
             )
             return (await session.execute(stmt)).scalar_one_or_none()
 
+        async def _newest_report_with_artifact(prefer_requested_tier: bool) -> ReportModel | None:
+            conds = [*base_where, ReportObject.format == fmt]
+            if prefer_requested_tier:
+                conds.append(ReportModel.tier == tier_norm)
+            stmt = (
+                select(ReportModel)
+                .join(
+                    ReportObject,
+                    cast(ReportObject.report_id, String) == cast(ReportModel.id, String),
+                )
+                .where(*conds)
+                .order_by(desc(ReportObject.created_at))
+                .limit(1)
+            )
+            return (await session.execute(stmt)).scalar_one_or_none()
+
         served_tier = tier_norm
-        report = await _newest_report(
-            ReportModel.tier == tier_norm,
-            ReportModel.generation_status == "ready",
-        )
+        # 1) cached artifact for the requested tier + format (fast, no regen)
+        report = await _newest_report_with_artifact(prefer_requested_tier=True)
+        # 2) cached artifact of the same format in ANY tier
+        if report is None:
+            report = await _newest_report_with_artifact(prefer_requested_tier=False)
+            if report is not None:
+                served_tier = report.tier
+        # 3) READY report in the requested tier (on-demand regen for this format)
+        if report is None:
+            report = await _newest_report(
+                ReportModel.tier == tier_norm,
+                ReportModel.generation_status == "ready",
+            )
+        # 4) READY report in ANY tier (Valhalla fails validation in quick scans)
         if report is None:
             report = await _newest_report(ReportModel.generation_status == "ready")
             if report is not None:
                 served_tier = report.tier
-        # Last resort: newest row for the requested tier so download_report's
-        # on-demand regeneration path still applies for legacy single reports.
+        # 5) legacy: newest row for the requested tier (last-resort on-demand regen)
         if report is None:
             report = await _newest_report(ReportModel.tier == tier_norm)
 
