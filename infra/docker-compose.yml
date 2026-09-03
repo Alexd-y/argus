@@ -616,6 +616,9 @@ services:
       context: ../Frontend
       dockerfile: Dockerfile
       args:
+        # Internal rewrite target baked into the bundle — always docker DNS,
+        # never a public IP/domain (see Frontend/next.config.ts).
+        BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
         NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
         NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}
@@ -657,6 +660,9 @@ services:
       context: ../Frontend
       dockerfile: Dockerfile
       args:
+        # Internal rewrite target baked into the bundle — always docker DNS,
+        # never a public IP/domain (see Frontend/next.config.ts).
+        BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
         NEXT_PUBLIC_MCP_ENABLED: ${NEXT_PUBLIC_MCP_ENABLED:-false}
         NEXT_PUBLIC_ADMIN_AUTH_MODE: ${NEXT_PUBLIC_ADMIN_AUTH_MODE:-session}

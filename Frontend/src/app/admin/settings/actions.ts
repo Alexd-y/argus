@@ -2,7 +2,14 @@
 
 import { getServerAdminSession } from "@/services/admin/serverSession";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+// Server-side only: prefer the internal backend URL (docker DNS). The public
+// NEXT_PUBLIC_* value is a last-resort fallback and must never be required for
+// server→backend calls (keeps admin actions working after IP/domain changes).
+const BACKEND_URL =
+  process.env.BACKEND_URL?.trim() ||
+  process.env.ARGUS_BACKEND_URL?.trim() ||
+  process.env.NEXT_PUBLIC_BACKEND_URL?.trim() ||
+  "http://backend:8000";
 
 function apiUrl(path: string): string {
   return `${BACKEND_URL.replace(/\/$/, "")}/api/v1${path}`;

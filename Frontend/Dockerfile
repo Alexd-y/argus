@@ -1,4 +1,7 @@
 ARG NODE_VERSION=22
+# Server-side rewrite target baked into the standalone bundle (next.config.ts).
+# Internal docker DNS only — independent of the host's public IP/domain.
+ARG BACKEND_URL=http://backend:8000
 ARG NEXT_PUBLIC_BACKEND_URL=http://backend:8000
 ARG NEXT_PUBLIC_MCP_ENABLED=false
 ARG NEXT_PUBLIC_ADMIN_AUTH_MODE=session
@@ -14,12 +17,14 @@ WORKDIR /app
 # would expand to empty strings — baking a hostless rewrite destination and
 # an unset NEXT_PUBLIC_ADMIN_AUTH_MODE into the bundle (admin → 500 via the
 # instrumentation guard, /api/v1/* → 404). Defaults mirror the global ARGs.
+ARG BACKEND_URL=http://backend:8000
 ARG NEXT_PUBLIC_BACKEND_URL=http://backend:8000
 ARG NEXT_PUBLIC_MCP_ENABLED=false
 ARG NEXT_PUBLIC_ADMIN_AUTH_MODE=session
 ARG NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION=false
 
-ENV NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL} \
+ENV BACKEND_URL=${BACKEND_URL} \
+    NEXT_PUBLIC_BACKEND_URL=${NEXT_PUBLIC_BACKEND_URL} \
     NEXT_PUBLIC_MCP_ENABLED=${NEXT_PUBLIC_MCP_ENABLED} \
     NEXT_PUBLIC_ADMIN_AUTH_MODE=${NEXT_PUBLIC_ADMIN_AUTH_MODE} \
     NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION=${NEXT_PUBLIC_DISABLE_DOMAIN_VERIFICATION}
