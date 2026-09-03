@@ -760,6 +760,11 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      # nginx resolves upstream hostnames at config load; admin-frontend must be
+      # started first, otherwise `nginx -t` fails ("host not found in upstream
+      # admin-frontend:6100") and takes the whole gateway (incl. public API) down.
+      admin-frontend:
+        condition: service_started
     healthcheck:
       # Use IPv4 explicitly: BusyBox wget on Alpine resolves "localhost" to ::1
       # first and fails with "Connection refused" because nginx only binds
