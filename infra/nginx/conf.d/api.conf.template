@@ -11,25 +11,16 @@
 #   - Health-check endpoint for docker healthcheck
 #   - Commented SSL block for production TLS termination with HSTS
 
-upstream argus_backend {
-    server backend:8000;
-    keepalive 32;
-}
-
-# Admin console (Next.js standalone). Reached only over the TLS server block
-# below: the admin session cookie is Secure, so the browser persists it solely
-# on an HTTPS origin.
-#
-# NOTE: nginx resolves upstream hostnames once at config load. If admin-frontend
-# is not running when nginx starts, `nginx -t` fails with "host not found in
-# upstream" and the whole gateway (incl. the public API) goes down. The compose
-# `nginx` service therefore declares `depends_on: admin-frontend` so the name is
-# always resolvable at startup. (Runtime `resolver 127.0.0.11` was tried but the
-# Docker embedded DNS refused connections in this environment.)
-upstream argus_admin_frontend {
-    server admin-frontend:6100;
-    keepalive 32;
-}
+# Upstreams are resolved per-request via the runtime DNS server (see the
+# `resolver` + `set $upstream_* ...` directives in each server block below),
+# NOT via static `upstream {}` blocks. Rationale:
+#   - A recreated container (new IP after `docker compose up -d backend`) is
+#     picked up automatically — no stale-IP 502/504 until an nginx reload.
+#   - An absent/optional upstream (e.g. admin-frontend not started) never fails
+#     `nginx -t`, so a down admin console can't take the public API gateway down
+#     (previously: "host not found in upstream admin-frontend:6100").
+# The resolver IP is injected by docker-entrypoint.sh from the container's own
+# /etc/resolv.conf (Docker: 127.0.0.11, rootless Podman: the network gateway).
 
 limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=auth:10m rate=5r/s;
@@ -55,6 +46,10 @@ server {
     server_name _;
 
     client_max_body_size 50m;
+
+    # Per-request upstream resolution (see upstream note at top).
+    resolver ${ARGUS_RESOLVER} valid=10s ipv6=off;
+    set $upstream_backend "backend:8000";
 
     # ── Security headers ─────────────────────────────────────────────
     add_header X-Frame-Options        "SAMEORIGIN"  always;
@@ -85,7 +80,7 @@ server {
             return 204;
         }
 
-        proxy_pass         http://argus_backend;
+        proxy_pass         http://$upstream_backend;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -114,7 +109,7 @@ ${ARGUS_PROXY_API_KEY_HEADER}
             return 204;
         }
 
-        proxy_pass         http://argus_backend;
+        proxy_pass         http://$upstream_backend;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -142,7 +137,7 @@ ${ARGUS_PROXY_API_KEY_HEADER}
             return 204;
         }
 
-        proxy_pass         http://argus_backend;
+        proxy_pass         http://$upstream_backend;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -165,7 +160,7 @@ ${ARGUS_PROXY_API_KEY_HEADER}
             return 204;
         }
 
-        proxy_pass         http://argus_backend;
+        proxy_pass         http://$upstream_backend;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;
         proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -177,7 +172,7 @@ ${ARGUS_PROXY_API_KEY_HEADER}
 
     # ── Health check (docker healthcheck: wget http://localhost/health) ─
     location /health {
-        proxy_pass http://argus_backend/api/v1/health;
+        proxy_pass http://$upstream_backend/api/v1/health;
         proxy_set_header Host $host;
     }
 
@@ -209,6 +204,10 @@ server {
 
     client_max_body_size 50m;
 
+    # Per-request upstream resolution (see upstream note at top).
+    resolver ${ARGUS_RESOLVER} valid=10s ipv6=off;
+    set $upstream_admin "admin-frontend:6100";
+
     ssl_certificate     /etc/nginx/ssl/fullchain.pem;
     ssl_certificate_key /etc/nginx/ssl/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
@@ -227,7 +226,7 @@ server {
     error_log  /var/log/nginx/argus_tls_error.log warn;
 
     location / {
-        proxy_pass         http://argus_admin_frontend;
+        proxy_pass         http://$upstream_admin;
         proxy_http_version 1.1;
         proxy_set_header   Host              $host;
         proxy_set_header   X-Real-IP         $remote_addr;

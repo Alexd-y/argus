@@ -81,7 +81,18 @@ else
     API_KEY_INJECTION_STATUS="disabled"
 fi
 
-envsubst '${ARGUS_CORS_MAP_ENTRIES} ${ARGUS_PROXY_API_KEY_HEADER}' \
+# Resolver for per-request (lazy) upstream resolution. nginx resolves upstream
+# hostnames in `proxy_pass http://$var` at request time via this resolver, so a
+# recreated backend (new IP) is picked up without an nginx reload, and an absent
+# optional upstream never fails `nginx -t`. The DNS server differs per runtime
+# (Docker: 127.0.0.11, rootless Podman: the network gateway, e.g. 10.89.x.1), so
+# read it from the container's own resolv.conf instead of hardcoding.
+ARGUS_RESOLVER="$(awk '/^nameserver[ \t]/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)"
+[ -z "$ARGUS_RESOLVER" ] && ARGUS_RESOLVER="127.0.0.11"
+export ARGUS_RESOLVER
+echo "[entrypoint] Upstream DNS resolver: ${ARGUS_RESOLVER}"
+
+envsubst '${ARGUS_CORS_MAP_ENTRIES} ${ARGUS_PROXY_API_KEY_HEADER} ${ARGUS_RESOLVER}' \
     < /etc/nginx/conf.d/api.conf.template \
     > /etc/nginx/conf.d/api.conf
 
