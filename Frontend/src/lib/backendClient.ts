@@ -461,6 +461,82 @@ export async function proxyGetReportByTarget(
   }
 }
 
+/** Successful backend report download (bytes + passthrough headers). */
+export interface ProxyReportDownload {
+  ok: true;
+  status: number;
+  contentType: string;
+  contentDisposition: string | null;
+  body: ArrayBuffer;
+}
+
+/** Normalized backend report-download failure (never a stack trace or secret). */
+export interface ProxyReportError {
+  ok: false;
+  status: number;
+  code: string;
+  error: string;
+}
+
+/**
+ * GET backend `/api/v1/scans/:id/report?format=&tier=` and return the rendered
+ * artifact bytes with the backend's `Content-Type`/`Content-Disposition` so the
+ * Next route can stream a real PDF instead of the in-memory demo builder.
+ *
+ * The backend already applies tier fallback + on-demand regeneration, so a
+ * completed scan yields a downloadable report even when the requested tier
+ * legitimately has no artifact (e.g. Valhalla for quick scans).
+ */
+export async function proxyDownloadScanReport(
+  scanId: string,
+  opts?: { format?: string; tier?: string; tenantId?: string }
+): Promise<ProxyReportDownload | ProxyReportError> {
+  const base = getBackendBaseUrl();
+  if (!base) {
+    return { ok: false, status: 503, code: "backend_unavailable", error: "Backend not configured" };
+  }
+  const format = (opts?.format || "pdf").trim();
+  const tier = (opts?.tier || "midgard").trim();
+  const url =
+    `${base}/scans/${encodeURIComponent(scanId)}/report` +
+    `?format=${encodeURIComponent(format)}&tier=${encodeURIComponent(tier)}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: {
+        ...backendAuthHeaders(),
+        ...tenantHeader(opts?.tenantId),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, status: 502, code: "backend_unreachable", error: "Could not reach the report backend" };
+  }
+
+  if (!res.ok) {
+    let code = "report_unavailable";
+    let error = `Report unavailable (${res.status})`;
+    try {
+      const parsed = (await res.json()) as { error?: string; code?: string; message?: string };
+      if (parsed?.error) error = String(parsed.error);
+      if (parsed?.message) error = String(parsed.message);
+      if (parsed?.code) code = String(parsed.code);
+    } catch {
+      // non-JSON backend error — keep the generic message
+    }
+    return { ok: false, status: res.status, code, error };
+  }
+
+  return {
+    ok: true,
+    status: res.status,
+    contentType: res.headers.get("content-type") || "application/octet-stream",
+    contentDisposition: res.headers.get("content-disposition"),
+    body: await res.arrayBuffer(),
+  };
+}
+
 /** Coerce an unknown value into a string[] (drops non-strings). */
 function toStringList(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];

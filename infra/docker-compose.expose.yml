@@ -1,0 +1,18 @@
+# ARGUS host-port exposure for single-host deployments (e.g. the EC2 box).
+#
+# Unlike docker-compose.dev.yml this override ONLY publishes host ports. It does
+# NOT bind-mount source (../backend:/app) or force LOG_LEVEL=DEBUG, so it is safe
+# to keep enabled alongside the production image — it never shadows the built
+# code. Include it on every command so MinIO's console/API ports survive any
+# `docker compose up` that reconciles the minio service:
+#
+#   export COMPOSE_FILE=infra/docker-compose.yml:infra/docker-compose.expose.yml
+#   docker compose --profile frontend up -d
+#
+# The public frontend keeps its own :5000 mapping (base compose, profile
+# `frontend`); it is started by the `--profile frontend` flag, not by this file.
+services:
+  minio:
+    ports:
+      - "${MINIO_PORT:-19000}:9000"
+      - "${MINIO_CONSOLE_PORT:-12701}:9001"
