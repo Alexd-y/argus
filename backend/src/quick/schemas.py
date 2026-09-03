@@ -6,6 +6,7 @@ Immutable frozen models reject extra fields. Credentials never appear here —
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -18,6 +19,7 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    ValidationError,
 )
 
 
@@ -122,6 +124,24 @@ class QuickScanConfig(_Frozen):
     authenticated_context_id: StrictStr | None = Field(default=None, max_length=36)
     template_policy_id: StrictStr = Field(default="quick-default", min_length=1, max_length=128)
     cloud_llm_allowed: StrictBool = False
+
+
+def coerce_quick_config(value: Any) -> QuickScanConfig | None:
+    """Return a QuickScanConfig from an instance or a serialized mapping, else None.
+
+    scan.options is persisted as JSON, so the resolved config must be stored as a
+    plain dict (via model_dump(mode="json")). This helper reconstructs the typed
+    object on read, so callers keep the user's real profile instead of silently
+    falling back to defaults.
+    """
+    if isinstance(value, QuickScanConfig):
+        return value
+    if isinstance(value, Mapping):
+        try:
+            return QuickScanConfig.model_validate(dict(value))
+        except ValidationError:
+            return None
+    return None
 
 
 class QuickTask(_Frozen):

@@ -128,7 +128,7 @@ from src.quick.scheduler import (
     quick_deadline_reached,
     quick_should_stop_discovery,
 )
-from src.quick.schemas import QuickScanConfig
+from src.quick.schemas import coerce_quick_config
 from src.quick.workflow import (
     DISCOVERY_PHASES,
     SKIPPED_BY_QUICK_PROFILE,
@@ -226,8 +226,8 @@ def _ensure_quick_budget(scan_id: str, tenant_id: str, options: dict) -> None:
     manager = get_quick_budget_manager()
     if manager.is_open(scan_id):
         return
-    config = options.get("quick_config")
-    if not isinstance(config, QuickScanConfig):
+    config = coerce_quick_config(options.get("quick_config"))
+    if config is None:
         profile_raw = str(options.get("quick_profile") or "balanced")
         resolver = QuickProfileResolver()
         try:
@@ -245,7 +245,9 @@ def _ensure_quick_budget(scan_id: str, tenant_id: str, options: dict) -> None:
             started_at=started,
         )
         options["deadline_at"] = snapshot.deadline_at.isoformat()
-        options["quick_config"] = config
+        # Persist as a JSON-serializable dict: scan.options is stored in a JSON
+        # column, so a raw QuickScanConfig here breaks SQLAlchemy serialization.
+        options["quick_config"] = config.model_dump(mode="json")
     except QuickBudgetError as exc:
         if getattr(exc, "code", "") != "scan_budget_already_open":
             logger.warning(

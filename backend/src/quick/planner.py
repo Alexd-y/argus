@@ -53,6 +53,7 @@ from src.quick.schemas import (
     QuickTaskStage,
     QuickTaskStatus,
     SeverityFloor,
+    coerce_quick_config,
 )
 from src.quick.scoring import (
     DEFAULT_SCORING_WEIGHTS,
@@ -519,8 +520,8 @@ def plan_for_va_target(
     asset_id = str(options.get("asset_id") or "").strip()[:36] or _stable_uuid(
         "va-quick-asset", target_url
     )
-    config = options.get("quick_config")
-    if not isinstance(config, QuickScanConfig):
+    config = coerce_quick_config(options.get("quick_config"))
+    if config is None:
         config = QuickScanConfig(
             profile=QuickProfileName.BALANCED,
             wall_clock_budget_seconds=900,
