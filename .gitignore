@@ -115,6 +115,14 @@ requirements-test.txt
 # production keys are mounted from HSM/Vault/k8s Secret). Verification only needs
 # the .pub files under config/*/_keys/. Blocks pre-commit secret-scanner flags.
 *.ed25519.priv
+
+# nginx api.conf is generated at container start by docker-entrypoint.sh from
+# api.conf.template (envsubst of CORS map + gateway API key). Tracking the
+# rendered output causes drift and `git pull` conflicts on servers where the
+# entrypoint rewrites it in-place (bind-mounted conf.d). The template is the
+# single source of truth.
+infra/nginx/conf.d/api.conf
+
 Web_interface.md
 z_analyze.md
 Анализ_архитектуры_ARGUS.md
