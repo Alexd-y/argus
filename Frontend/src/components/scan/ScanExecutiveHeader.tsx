@@ -186,6 +186,31 @@ export function ScanExecutiveHeader({
     />
   );
 
+  const baseline = results.baseline ?? null;
+  const passedTile: Tile = baseline
+    ? {
+        label: "Baseline pass rate",
+        value: Math.round(baseline.passRate * 100),
+        sub: `${Math.round(baseline.coverage * 100)}% coverage · ${baseline.passed}/${baseline.total} controls`,
+        tone: {
+          border: "border-emerald-500/30 bg-emerald-500/[0.06]",
+          label: "text-emerald-300",
+          value: "text-emerald-400",
+        },
+        wide: true,
+      }
+    : {
+        label: "Passed",
+        value: results.passed,
+        sub: `${pct(results.passed, total)}% pass rate`,
+        tone: {
+          border: "border-emerald-500/30 bg-emerald-500/[0.06]",
+          label: "text-emerald-300",
+          value: "text-emerald-400",
+        },
+        wide: true,
+      };
+
   const tiles: Tile[] = [
     {
       label: "Total findings",
@@ -227,17 +252,7 @@ export function ScanExecutiveHeader({
         value: "text-amber-400",
       },
     },
-    {
-      label: "Passed",
-      value: results.passed,
-      sub: `${pct(results.passed, total)}% pass rate`,
-      tone: {
-        border: "border-emerald-500/30 bg-emerald-500/[0.06]",
-        label: "text-emerald-300",
-        value: "text-emerald-400",
-      },
-      wide: true,
-    },
+    passedTile,
   ];
 
   return (

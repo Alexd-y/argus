@@ -53,6 +53,27 @@ export interface CredentialLeak {
 
 export type LeakSeed = Omit<CredentialLeak, "access">;
 
+export interface ScanBaselineControl {
+  id: string;
+  title: string;
+  category: string;
+  executed: boolean;
+  passed: boolean;
+  status: "pass" | "fail" | "not_assessed";
+}
+
+/** Baseline scoring (Block 3): coverage = executed/total, passRate = passed/total. */
+export interface ScanBaseline {
+  total: number;
+  executed: number;
+  passed: number;
+  /** Fraction 0..1 of baseline controls that actually ran. */
+  coverage: number;
+  /** Fraction 0..1 of baseline controls that ran AND passed. */
+  passRate: number;
+  controls: ScanBaselineControl[];
+}
+
 export interface ScanResults {
   critical: number;
   high: number;
@@ -69,6 +90,8 @@ export interface ScanResults {
   leaks?: CredentialLeak[];
   findings: Finding[];
   totalFindings: number;
+  /** Baseline coverage/pass-rate scoring. Null when the backend did not emit it. */
+  baseline?: ScanBaseline | null;
 }
 
 const ALLEKSY_IP = "172.67.204.159";

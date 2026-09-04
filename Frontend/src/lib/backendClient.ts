@@ -11,7 +11,13 @@
 
 import "server-only";
 import type { ScanTier } from "./scan-tiers";
-import type { CheckPriority, Finding, ScanResults } from "./scan-results";
+import type {
+  CheckPriority,
+  Finding,
+  ScanBaseline,
+  ScanBaselineControl,
+  ScanResults,
+} from "./scan-results";
 import { censusFromFindings, midgardWriteupId, withTierAccess } from "./scan-results";
 import type { ScanData, ScanStatus } from "./scan-types";
 import type { ScanProfile } from "./types";
@@ -531,6 +537,37 @@ interface BackendReportSummary {
 interface BackendReport {
   summary?: BackendReportSummary;
   technologies?: unknown;
+  baseline?: unknown;
+}
+
+/** Map the backend `report.baseline` dict into the typed {@link ScanBaseline}. */
+function mapBaseline(raw: unknown): ScanBaseline | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as Record<string, unknown>;
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const controlsRaw = Array.isArray(b.controls) ? b.controls : [];
+  const controls: ScanBaselineControl[] = controlsRaw
+    .filter((c): c is Record<string, unknown> => Boolean(c) && typeof c === "object")
+    .map((c) => {
+      const status = c.status === "pass" || c.status === "fail" ? c.status : "not_assessed";
+      return {
+        id: String(c.id ?? ""),
+        title: String(c.title ?? c.id ?? ""),
+        category: String(c.category ?? ""),
+        executed: Boolean(c.executed),
+        passed: Boolean(c.passed),
+        status,
+      };
+    });
+  if (controls.length === 0) return null;
+  return {
+    total: num(b.total),
+    executed: num(b.executed),
+    passed: num(b.passed),
+    coverage: num(b.coverage),
+    passRate: num(b.pass_rate),
+    controls,
+  };
 }
 
 /** Backend severity → Ragnarök finding priority bucket. */
@@ -702,6 +739,7 @@ export function emptyScanResults(): ScanResults {
     leaks: [],
     findings: [],
     totalFindings: 0,
+    baseline: null,
   };
 }
 
@@ -780,5 +818,6 @@ export function mapBackendFindingsToResults(
     leaks: [],
     findings,
     totalFindings: census.totalFindings,
+    baseline: mapBaseline(report?.baseline),
   };
 }
