@@ -185,6 +185,25 @@ class SourceAnalysisOutput(BaseModel):
     )
 
 
+# --- Attack Surface (unified recon output / vuln_analysis input, Block 1.1) ---
+class AttackSurface(BaseModel):
+    """Single structured hand-off between recon and vuln_analysis.
+
+    Replaces threading assets/ports/params/forms as separate loose arguments.
+    ``endpoints`` and ``injection_points`` are derived by the builder in
+    ``src.recon.attack_surface`` so exploitation targeting has explicit inputs.
+    """
+
+    assets: list[str] = Field(default_factory=list)
+    subdomains: list[str] = Field(default_factory=list)
+    open_ports: list[int] = Field(default_factory=list)
+    urls: list[str] = Field(default_factory=list)
+    params: list[dict[str, Any]] = Field(default_factory=list)
+    forms: list[dict[str, Any]] = Field(default_factory=list)
+    endpoints: list[str] = Field(default_factory=list)
+    injection_points: list[dict[str, Any]] = Field(default_factory=list)
+
+
 # --- Recon ---
 class ReconInput(BaseModel):
     """Input for recon phase."""
@@ -209,6 +228,10 @@ class ReconOutput(BaseModel):
             "Detected technology stack (WhatWeb/httpx), reconciled deterministically "
             "from raw tool output so it is not lost when the LLM omits it (Block 1.1)."
         ),
+    )
+    attack_surface: AttackSurface | None = Field(
+        default=None,
+        description="Unified recon surface (Block 1.1); single input to vuln_analysis.",
     )
     tool_results: dict[str, Any] = Field(default_factory=dict, exclude=True)
     crawl_params: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
@@ -269,6 +292,10 @@ class VulnAnalysisInput(BaseModel):
 
     threat_model: dict[str, Any] = Field(default_factory=dict)
     assets: list[str] = Field(default_factory=list)
+    attack_surface: AttackSurface | None = Field(
+        default=None,
+        description="Unified recon surface (Block 1.1); replaces loose assets threading.",
+    )
 
 
 class VulnAnalysisOutput(BaseModel):

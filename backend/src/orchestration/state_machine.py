@@ -1408,6 +1408,7 @@ async def _dispatch_phase_handler(
             recon_context=ctx.recon_out.tool_results if ctx.recon_out else None,
             source_analysis=ctx.source_out,
             quick_fuzz_candidates=ctx.quick_fuzz_out.candidates if ctx.quick_fuzz_out else None,
+            attack_surface=ctx.recon_out.attack_surface if ctx.recon_out else None,
         )
         ctx.vuln_out = vuln_out
         output_data = vuln_out.model_dump()

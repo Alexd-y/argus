@@ -95,6 +95,7 @@ from src.recon.vulnerability_analysis.active_scan.web_vuln_heuristics import (
 from src.recon.vulnerability_analysis.finding_normalizer import (
     normalize_active_scan_intel_findings,
 )
+from src.recon.attack_surface import build_attack_surface
 from src.recon.surface_reconcile import parse_technologies, reconcile_ports
 from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
@@ -1259,6 +1260,17 @@ async def run_recon(
     if not recon_out.technologies:
         recon_out.technologies = parse_technologies(tool_results)
 
+    # Block 1.1 unified contract: emit one AttackSurface as recon's structured
+    # output (single input to vuln_analysis) instead of loose assets/ports/params.
+    recon_out.attack_surface = build_attack_surface(
+        assets=recon_out.assets,
+        subdomains=recon_out.subdomains,
+        open_ports=recon_out.ports,
+        urls=[target] if target else [],
+        params=crawl_params,
+        forms=crawl_forms,
+    )
+
     if is_quick_execution(options):
         _record_quick_circuit_outcomes(tool_results, target=target)
     recon_out.coverage_results = attach_phase_coverage(
@@ -1871,6 +1883,7 @@ async def run_vuln_analysis(
     recon_context: dict[str, Any] | None = None,
     source_analysis: Any | None = None,
     quick_fuzz_candidates: list[dict[str, Any]] | None = None,
+    attack_surface: Any | None = None,
 ) -> VulnAnalysisOutput:
     """Production vuln analysis: optional active scan + LLM analysis.
 
@@ -2214,7 +2227,9 @@ async def run_vuln_analysis(
         except Exception:  # noqa: BLE001
             quick_fuzz_section = ""
 
-    inp = VulnAnalysisInput(threat_model=threat_model, assets=assets)
+    inp = VulnAnalysisInput(
+        threat_model=threat_model, assets=assets, attack_surface=attack_surface
+    )
     code_aware_section = ""
     if source_analysis is not None:
         try:
