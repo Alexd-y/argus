@@ -394,7 +394,20 @@ export default function Home() {
                   <TierSelector selected={tier} onSelect={handleTierSelect} />
 
                   {tier === "premium" && (
-                    <div className="mb-5">
+                    <div className="mb-5 space-y-2">
+                      {/* Informational: what Full Surface actually does (separate from consent). */}
+                      <div className="border border-[#A655F7]/40 bg-[#A655F7]/5 rounded-sm px-3 py-2.5">
+                        <div className="text-xs uppercase tracking-wider text-[#E3CAFE]">
+                          {getTierConfig("premium").name} — full penetration test
+                        </div>
+                        <div className="text-[11px] mt-1 text-neutral-400">
+                          Actively exploits findings (SQL injection, XSS, SSRF, path traversal,
+                          command injection, and more) and attaches proof-of-concept evidence —
+                          confirmed or exploited — for Critical and High issues, not just passive
+                          detection.
+                        </div>
+                      </div>
+                      {/* Consent gate: required because domain ownership verification is disabled. */}
                       <label
                         className={`flex items-start gap-3 cursor-pointer border px-3 py-2.5 rounded-sm transition-all ${
                           aggressiveConsent
@@ -421,55 +434,55 @@ export default function Home() {
                             Authorize aggressive testing
                           </div>
                           <div className="text-[11px] mt-0.5 text-neutral-400">
-                            {getTierConfig("premium").name} runs active exploitation (SQLi, XSS,
-                            path traversal, and more) against the target to prove Critical/High
-                            findings. I confirm I own this target or am authorized to test it.
+                            I own this target or am explicitly authorized to run active
+                            exploitation against it.
                           </div>
                         </div>
                       </label>
                     </div>
                   )}
 
+                  {/* Standalone add-on (all tiers), separate from the scan level.
+                      This is the hidden-network exposure search, rolling out soon. */}
                   <div className="mb-5">
                     <label
                       className={`flex items-start gap-3 cursor-pointer border px-3 py-2.5 rounded-sm transition-all ${
-                        darkWebMonitoring || tier !== "free"
+                        darkWebMonitoring
                           ? "border-[#A655F7]/50 bg-[#A655F7]/5"
                           : "border-neutral-700 bg-neutral-950 hover:border-neutral-600 hover:bg-neutral-900"
                       }`}
-                      onClick={() => {
-                        if (tier === "free") setDarkWebMonitoring(!darkWebMonitoring);
-                      }}
+                      onClick={() => setDarkWebMonitoring(!darkWebMonitoring)}
                     >
                       <div
                         className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-                          darkWebMonitoring || tier !== "free"
+                          darkWebMonitoring
                             ? "border-[#A655F7] bg-[#A655F7]"
                             : "border-neutral-600 bg-neutral-900"
                         }`}
                       >
-                        {(darkWebMonitoring || tier !== "free") && (
+                        {darkWebMonitoring && (
                           <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
                       </div>
                       <div>
-                        <div
-                          className={`text-xs uppercase tracking-wider transition-colors ${
-                            darkWebMonitoring || tier !== "free" ? "text-[#E3CAFE]" : "text-neutral-400"
-                          }`}
-                        >
-                          Dark Web Monitoring
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs uppercase tracking-wider transition-colors ${
+                              darkWebMonitoring ? "text-[#E3CAFE]" : "text-neutral-400"
+                            }`}
+                          >
+                            Dark Web Monitoring
+                          </span>
+                          <span className="text-[9px] uppercase tracking-wider text-neutral-500 border border-neutral-700 rounded px-1 py-[1px]">
+                            Soon
+                          </span>
                         </div>
-                        <div
-                          className={`text-[11px] mt-0.5 transition-colors ${
-                            darkWebMonitoring || tier !== "free" ? "text-neutral-500" : "text-neutral-600"
-                          }`}
-                        >
-                          {tier === "free"
-                            ? "Scan the Dark Web for exposed data related to your target"
-                            : `Included on ${getTierConfig("standard").name} and ${getTierConfig("premium").name}`}
+                        <div className="text-[11px] mt-0.5 text-neutral-500">
+                          Searches hidden networks — Tor, I2P, closed hacker forums, and Telegram
+                          channels — for your target&apos;s leaked or compromised assets
+                          (credentials, exposed data, mentions). Rolling out soon.
                         </div>
                       </div>
                     </label>
