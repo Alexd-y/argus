@@ -1004,6 +1004,7 @@ class Finding(BaseModel):
     exploit_demonstrated: bool = False
     exploit_summary: str | None = Field(default=None, max_length=8000)
     owasp_category: OwaspTop102025CategoryId | None = None
+    compliance: list[dict[str, str]] | None = None
     proof_of_concept: dict[str, Any] | None = None
     confidence: FindingConfidenceLiteral = "likely"
     validation_status: FindingValidationStatusLiteral = "unverified"
@@ -1069,6 +1070,7 @@ class FindingDetailResponse(BaseModel):
     exploit_demonstrated: bool = False
     exploit_summary: str | None = Field(default=None, max_length=8000)
     owasp_category: OwaspTop102025CategoryId | None = None
+    compliance: list[dict[str, str]] | None = None
     proof_of_concept: dict[str, Any] | None = None
     confidence: FindingConfidenceLiteral = "likely"
     validation_status: FindingValidationStatusLiteral = "unverified"

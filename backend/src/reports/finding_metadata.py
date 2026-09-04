@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from src.findings.cvss import parse_cvss_vector
+from src.reports.framework_mapping import map_finding_frameworks
 
 FindingConfidence = Literal["confirmed", "likely", "possible", "advisory"]
 FindingEvidenceType = Literal[
@@ -340,3 +341,11 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
                 f["cvss_vector"] = cv.vector_string
                 if f.get("cvss_score") is None:
                     f["cvss_score"] = cv.base_score
+
+    # Block 4.2: annotate the finding with ISO 27001 / SOC 2 controls it maps to
+    # (CWE/vuln_type driven, config-based) so the report can show compliance
+    # coverage alongside CWE/OWASP. Never overwrites an explicit mapping.
+    if not f.get("compliance"):
+        mapped = map_finding_frameworks(f)
+        if mapped:
+            f["compliance"] = mapped

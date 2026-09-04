@@ -168,6 +168,7 @@ def _findings_to_schema(findings: list[FindingModel]) -> list[Finding]:
             evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
             reproducible_steps=getattr(f, "reproducible_steps", None),
             applicability_notes=getattr(f, "applicability_notes", None),
+            compliance=f.compliance if isinstance(getattr(f, "compliance", None), list) else None,
         )
         for f in findings
     ]

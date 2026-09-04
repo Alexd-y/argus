@@ -529,6 +529,9 @@ class Finding(Base):
     verdict: Mapped[str | None] = mapped_column(String(32), nullable=True)
     hypothesis: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     provenance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: ISO 27001 / SOC 2 control mappings (Block 4.2): list of
+    #: {framework, control_id, control_name}. Populated by framework_mapping.
+    compliance: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

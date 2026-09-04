@@ -762,6 +762,7 @@ async def _persist_report_and_findings(
             exploit_summary=_es,
             cvss_vector=_cvss_vec,
             dedup_status=_dedup,
+            compliance=f.get("compliance") if isinstance(f.get("compliance"), list) else None,
         )
         session.add(finding)
         if poc_db:

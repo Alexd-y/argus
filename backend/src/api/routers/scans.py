@@ -811,6 +811,7 @@ def _finding_to_schema(f: FindingModel) -> Finding:
         applicability_notes=f.applicability_notes,
         adversarial_score=f.adversarial_score,
         dedup_status=f.dedup_status,
+        compliance=f.compliance if isinstance(f.compliance, list) else None,
     )
 
 

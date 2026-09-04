@@ -1,0 +1,47 @@
+# Framework control mappings (Block 4.2): CWE / vuln_type -> ISO 27001 + SOC 2.
+#
+# Each finding is annotated with the compliance controls it maps to, so the
+# report can show ISO 27001 (Annex A) and SOC 2 (Trust Services Criteria)
+# alongside the existing CWE/OWASP. Extend `cwe` / `vuln_type` to grow coverage;
+# every referenced control id must exist in `controls`.
+version: 1
+
+controls:
+  iso27001:
+    A.5.34: Privacy and protection of PII
+    A.8.8: Technical vulnerability management
+    A.8.9: Configuration management
+    A.8.23: Web filtering
+    A.8.24: Use of cryptography
+    A.8.25: Secure development life cycle
+    A.8.28: Secure coding
+  soc2:
+    CC6.1: Logical access security controls
+    CC6.6: Boundary protection (network/transmission)
+    CC6.7: Confidentiality of data in transit
+    CC7.1: Detection and monitoring of security events
+
+# Primary mapping: CWE id (bare number) -> control ids per framework.
+cwe:
+  "16": { iso27001: [A.8.9], soc2: [CC6.1] }          # Configuration
+  "79": { iso27001: [A.8.25, A.8.28], soc2: [CC6.1] } # XSS
+  "89": { iso27001: [A.8.25, A.8.28], soc2: [CC6.1] } # SQLi
+  "200": { iso27001: [A.8.8], soc2: [CC7.1] }         # Information exposure
+  "295": { iso27001: [A.8.24], soc2: [CC6.7] }        # Improper cert validation
+  "319": { iso27001: [A.8.24], soc2: [CC6.7] }        # Cleartext transmission
+  "326": { iso27001: [A.8.24], soc2: [CC6.7] }        # Weak encryption / TLS
+  "350": { iso27001: [A.8.9], soc2: [CC6.6] }         # DNS trust (DNSSEC)
+  "359": { iso27001: [A.5.34], soc2: [CC6.1] }        # PII / credential exposure
+  "538": { iso27001: [A.8.9], soc2: [CC6.6] }         # File/info exposure (AXFR)
+  "693": { iso27001: [A.8.9], soc2: [CC6.6] }         # Protection mechanism failure (headers)
+
+# Fallback mapping by vuln_type when no CWE is present.
+vuln_type:
+  dns_misconfiguration: { iso27001: [A.8.9], soc2: [CC6.6] }
+  dnssec_missing: { iso27001: [A.8.9], soc2: [CC6.6] }
+  zone_transfer: { iso27001: [A.8.9], soc2: [CC6.6] }
+  caa_missing: { iso27001: [A.8.24], soc2: [CC6.7] }
+  credential_exposure: { iso27001: [A.5.34], soc2: [CC6.1] }
+
+# Last-resort default when neither CWE nor vuln_type matches.
+default: { iso27001: [A.8.8], soc2: [CC7.1] }
