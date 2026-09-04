@@ -868,6 +868,10 @@ class Settings(BaseSettings):
     active_scan_max_capture_bytes: int = 4 * 1024 * 1024
     # OWASP-004 — VA active scan phase (dalfox/ffuf/sqlmap); sqlmap off by default
     sqlmap_va_enabled: bool = False
+    # Block 1.2/1.3 — gate evidence-less placeholder findings ("unknown finding",
+    # fingerprint-only hits) and collapse duplicates before reporting. Env:
+    # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
+    finding_evidence_gate_enabled: bool = True
     # Aggressive argv merge from ``data/tool_configs.json`` (extra flags / payload wordlists).
     # Default false so unit tests and CI keep stable argv; set VA_AGGRESSIVE_SCAN=true in prod.
     va_aggressive_scan: bool = False

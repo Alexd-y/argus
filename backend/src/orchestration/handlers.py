@@ -49,6 +49,7 @@ from src.orchestration.execution_mode_context import (
     resolve_tool_policy_from_options,
 )
 from src.orchestration.exploit_verify import verify_exploit_poc_async
+from src.orchestration.finding_gate import gate_and_dedupe_findings
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
@@ -2597,6 +2598,18 @@ async def run_vuln_analysis(
                 logger.info("fanout_va_merged", extra={"scan_id": scan_id, "new_findings": len(_fanout_findings)})
         except Exception as _fo_exc:  # noqa: BLE001
             logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
+
+    # Evidence gate (Block 1.2) + deduplication (Block 1.3). Drops evidence-less
+    # placeholder records ("unknown finding", fingerprint-only WhatWeb hits) and
+    # collapses exact duplicates (e.g. two TLS_PROBE, two rate-limiting) before
+    # ids are assigned, so the report is built from a clean, non-inflated set.
+    # Guarded by settings.finding_evidence_gate_enabled (default True) per the
+    # "never remove behavior silently" rule; every drop/merge is logged.
+    llm_output.findings = gate_and_dedupe_findings(
+        llm_output.findings,
+        scan_id=scan_id,
+        enabled=bool(getattr(settings, "finding_evidence_gate_enabled", True)),
+    )
 
     # Re-assign stable finding ids after ALL late appends (aiml/fuzzing/binary/
     # sub-agent/fanout). The first pass at line ~1830 runs before these appends,
