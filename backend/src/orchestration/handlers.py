@@ -95,6 +95,7 @@ from src.recon.vulnerability_analysis.active_scan.web_vuln_heuristics import (
 from src.recon.vulnerability_analysis.finding_normalizer import (
     normalize_active_scan_intel_findings,
 )
+from src.recon.surface_reconcile import parse_technologies, reconcile_ports
 from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.finding_metadata import apply_default_finding_metadata
@@ -1247,6 +1248,17 @@ async def run_recon(
     recon_out.tool_results = tool_results
     recon_out.crawl_params = crawl_params
     recon_out.crawl_forms = crawl_forms
+
+    # Block 1.1 recon plumbing: the LLM alone under-reports the surface (naabu
+    # empty / omitted ports). Deterministically reconcile ports from raw tool
+    # output, enforce the 443-on-live-TLS sanity check, and fall back to
+    # scheme-default ports so downstream phases are never starved on a live host.
+    recon_out.ports = reconcile_ports(
+        recon_out.ports, tool_results, target, scan_id=scan_id
+    )
+    if not recon_out.technologies:
+        recon_out.technologies = parse_technologies(tool_results)
+
     if is_quick_execution(options):
         _record_quick_circuit_outcomes(tool_results, target=target)
     recon_out.coverage_results = attach_phase_coverage(

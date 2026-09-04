@@ -203,6 +203,13 @@ class ReconOutput(BaseModel):
     assets: list[str] = Field(default_factory=list)
     subdomains: list[str] = Field(default_factory=list)
     ports: list[int] = Field(default_factory=list)
+    technologies: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Detected technology stack (WhatWeb/httpx), reconciled deterministically "
+            "from raw tool output so it is not lost when the LLM omits it (Block 1.1)."
+        ),
+    )
     tool_results: dict[str, Any] = Field(default_factory=dict, exclude=True)
     crawl_params: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
     crawl_forms: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
