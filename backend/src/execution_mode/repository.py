@@ -501,12 +501,58 @@ def set_execution_mode_repository(repo: ExecutionModeRepository) -> None:
     _default_repository = repo
 
 
+async def load_lease_scope_storage(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    lab_lease_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Load ``(lab_lease, lab_scope_manifest)`` storage dicts for scan options.
+
+    The worker's phase preflight resolves the LAB lease ONLY from scan options
+    (it is passed no DB ``lease_lookup``); a deep scan must therefore carry the
+    serialized lease + manifest in its options, otherwise every phase fails
+    closed with ``lab_lease_required``. ``session`` must already have the tenant
+    bound. Returns ``(None, None)`` when the lease row is absent.
+    """
+    lease_row = (
+        await session.execute(
+            select(LabExecutionLeaseRow).where(
+                LabExecutionLeaseRow.id == str(lab_lease_id),
+                LabExecutionLeaseRow.tenant_id == str(tenant_id),
+            )
+        )
+    ).scalar_one_or_none()
+    if lease_row is None:
+        return None, None
+
+    lease_dict = LabExecutionLease.from_storage_dict(
+        lease_payload_for_domain(_lease_row_to_payload(lease_row))
+    ).to_storage_dict()
+
+    manifest_dict: dict[str, Any] | None = None
+    if lease_row.manifest_id:
+        manifest_row = (
+            await session.execute(
+                select(LabScopeManifestRow).where(
+                    LabScopeManifestRow.id == str(lease_row.manifest_id),
+                    LabScopeManifestRow.tenant_id == str(tenant_id),
+                )
+            )
+        ).scalar_one_or_none()
+        if manifest_row is not None:
+            manifest_dict = _manifest_row_to_domain(manifest_row).to_storage_dict()
+
+    return lease_dict, manifest_dict
+
+
 __all__ = [
     "ExecutionModeRepository",
     "InMemoryExecutionModeRepository",
     "SqlAlchemyExecutionModeRepository",
     "get_execution_mode_repository",
     "lease_payload_for_domain",
+    "load_lease_scope_storage",
     "set_execution_mode_repository",
     "strip_lease_storage_meta",
 ]

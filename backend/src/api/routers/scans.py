@@ -46,10 +46,10 @@ from src.core.observability import record_scan_started
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
-from src.db.models import ReportObject
-from src.db.models import Scan, ScanEvent, Target, Tenant
+from src.db.models import ReportObject, Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
+from src.execution_mode.repository import load_lease_scope_storage
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
 from src.owasp_top10_2025 import parse_owasp_category
@@ -526,6 +526,17 @@ async def create_scan(
                 lab_lease_id=lab_lease_id,
                 target=req.target,
             )
+            # The worker's phase preflight resolves the LAB lease ONLY from scan
+            # options (it is passed no DB lease_lookup). Carry the validated lease
+            # + scope manifest into options, or every phase in worker-scans fails
+            # closed with lab_lease_required even though the lease exists in the DB.
+            lease_opt, manifest_opt = await load_lease_scope_storage(
+                session, tenant_id=tenant_id, lab_lease_id=lab_lease_id or ""
+            )
+            if lease_opt is not None:
+                options_dict["lab_lease"] = lease_opt
+            if manifest_opt is not None:
+                options_dict["lab_scope_manifest"] = manifest_opt
 
         result = await session.execute(
             select(Tenant).where(cast(Tenant.id, String) == tenant_id)
