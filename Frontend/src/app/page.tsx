@@ -72,6 +72,10 @@ export default function Home() {
   const [email, setEmail] = useState("");
   const [tier, setTier] = useState<ScanTier>("free");
   const [darkWebMonitoring, setDarkWebMonitoring] = useState(false);
+  // Full Surface (premium) runs aggressive active testing + exploitation against
+  // the submitted target. Require an explicit, per-session consent gate; kept out
+  // of localStorage on purpose so consent is re-affirmed each visit.
+  const [aggressiveConsent, setAggressiveConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [verification, setVerification] = useState<VerificationChallenge | null>(null);
@@ -163,6 +167,11 @@ export default function Home() {
     verifiedId,
   ]);
 
+  const handleTierSelect = (next: ScanTier) => {
+    setTier(next);
+    if (next !== "premium") setAggressiveConsent(false);
+  };
+
   const validation = useMemo(() => validateTarget(target), [target]);
   const emailValid = isValidEmail(email);
   const normalizedTarget = useMemo(
@@ -207,6 +216,7 @@ export default function Home() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validation.valid || !emailValid) return;
+    if (tier === "premium" && !aggressiveConsent) return;
 
     setSubmitting(true);
     setSubmitError(null);
@@ -295,6 +305,7 @@ export default function Home() {
     setTier("free");
     setProtocol("https");
     setDarkWebMonitoring(false);
+    setAggressiveConsent(false);
     setSubmitError(null);
     setVerification(null);
     setChallenge(null);
@@ -380,7 +391,44 @@ export default function Home() {
                       />
                   </div>
 
-                  <TierSelector selected={tier} onSelect={setTier} />
+                  <TierSelector selected={tier} onSelect={handleTierSelect} />
+
+                  {tier === "premium" && (
+                    <div className="mb-5">
+                      <label
+                        className={`flex items-start gap-3 cursor-pointer border px-3 py-2.5 rounded-sm transition-all ${
+                          aggressiveConsent
+                            ? "border-amber-500/60 bg-amber-500/5"
+                            : "border-amber-500/40 bg-amber-500/[0.03] hover:border-amber-500/60"
+                        }`}
+                        onClick={() => setAggressiveConsent((prev) => !prev)}
+                      >
+                        <div
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+                            aggressiveConsent
+                              ? "border-amber-500 bg-amber-500"
+                              : "border-amber-500/60 bg-neutral-900"
+                          }`}
+                        >
+                          {aggressiveConsent && (
+                            <svg className="h-3 w-3 text-neutral-950" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                        <div>
+                          <div className="text-xs uppercase tracking-wider text-amber-300">
+                            Authorize aggressive testing
+                          </div>
+                          <div className="text-[11px] mt-0.5 text-neutral-400">
+                            {getTierConfig("premium").name} runs active exploitation (SQLi, XSS,
+                            path traversal, and more) against the target to prove Critical/High
+                            findings. I confirm I own this target or am authorized to test it.
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  )}
 
                   <div className="mb-5">
                     <label
@@ -466,7 +514,12 @@ export default function Home() {
                   <div className="flex items-center gap-3">
                     <button
                       type="submit"
-                      disabled={!validation.valid || !emailValid || submitting}
+                      disabled={
+                        !validation.valid ||
+                        !emailValid ||
+                        submitting ||
+                        (tier === "premium" && !aggressiveConsent)
+                      }
                       className="flex-1 cursor-pointer bg-[#A655F7] px-4 py-2.5 text-white font-medium hover:bg-[#b875f8] disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed rounded-sm glitch-hover"
                     >
                       {submitting ? "Starting..." : getScanCtaLabel(tier)}
