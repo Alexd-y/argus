@@ -338,6 +338,14 @@ class ExploitationOutput(BaseModel):
             "exploitation. Keys are finding IDs, values are tier integers (1-4)."
         ),
     )
+    status: str = Field(
+        default="",
+        description=(
+            "Phase status. 'skipped: no actionable hypotheses' when vuln_analysis "
+            "produced no exploitable (non-informational) hypothesis, so the phase "
+            "honestly did not run rather than emitting empty results (Block 1.4)."
+        ),
+    )
 
 
 # --- Post Exploitation ---

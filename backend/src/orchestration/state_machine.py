@@ -1419,6 +1419,13 @@ async def _dispatch_phase_handler(
             return payload
         findings = ctx.vuln_out.findings if ctx.vuln_out else []
 
+        # Block 1.4: whether the queue holds at least one actionable (exploitable,
+        # non-informational) hypothesis. Informational hardening findings (TLS,
+        # security headers, rate-limiting) map to vuln_class=None and are NOT
+        # actionable — if that is all we have, exploitation is honestly skipped.
+        _has_actionable_hypotheses = False
+        _queue_built = False
+
         try:
             exploitation_queue = ExploitationQueue.from_vuln_analysis_output(
                 target=target or "",
@@ -1461,10 +1468,16 @@ async def _dispatch_phase_handler(
                         "exploitation_queues_merge_failed",
                         extra={"scan_id": scan_id, "error": str(_vq_exc)},
                     )
+            _has_actionable_hypotheses = any(
+                getattr(h, "vuln_class", None) is not None
+                for h in exploitation_queue.hypotheses
+            )
+            _queue_built = True
             structured_findings = exploitation_queue.to_exploitation_input()
             logger.info(
-                "ExploitationQueue: %d hypotheses for %s",
+                "ExploitationQueue: %d hypotheses (%s actionable) for %s",
                 len(exploitation_queue.hypotheses),
+                "some" if _has_actionable_hypotheses else "none",
                 scan_id,
             )
         except Exception as eq_exc:
@@ -1473,6 +1486,27 @@ async def _dispatch_phase_handler(
                 extra={"scan_id": scan_id},
             )
             structured_findings = None
+
+        # Block 1.4 honest outcome: when the queue was built successfully but holds
+        # no actionable hypothesis, exploitation does not pretend to run — it
+        # records an explicit skipped status instead of emitting evidence=0.
+        if _queue_built and not _has_actionable_hypotheses:
+            logger.info(
+                "exploitation_skipped_no_actionable_hypotheses",
+                extra={"scan_id": scan_id},
+            )
+            ctx.exploit_out = ExploitationOutput(
+                exploits=[],
+                evidence=[],
+                status="skipped: no actionable hypotheses",
+            )
+            await _record_event(
+                session, tenant_id, scan_id, "progress", phase_str, progress,
+                message="Exploitation skipped: no actionable hypotheses",
+                data={"status": "skipped_no_actionable_hypotheses"},
+            )
+            await session.commit()
+            return ctx.exploit_out.model_dump()
 
         try:
             auth_cfg = TargetConfig.from_scan_options(options) if options else None
