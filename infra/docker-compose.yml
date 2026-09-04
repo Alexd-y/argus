@@ -555,9 +555,14 @@ services:
       - data
     deploy:
       resources:
+        # Workers `docker exec` active-scan tools (nuclei, dalfox, sqlmap, …) into
+        # THIS container, so every concurrent tool shares this cgroup. In LAB mode
+        # nuclei runs uncapped (+ headless chromium), so a 2G cap OOM-killed nuclei
+        # mid-scan and dropped findings. Default raised to 8G (host has ample RAM);
+        # override with SANDBOX_MEMORY_LIMIT.
         limits:
-          cpus: "2.0"
-          memory: 2048M
+          cpus: "${SANDBOX_CPU_LIMIT:-2.0}"
+          memory: ${SANDBOX_MEMORY_LIMIT:-8192M}
         reservations:
           cpus: "0.5"
           memory: 512M
@@ -592,9 +597,12 @@ services:
       - data
     deploy:
       resources:
+        # Ephemeral per-scan tool runner (fuzzing / symbolic / heavy exploitation).
+        # Raised from 4G → 8G default so nuclei/afl/angr are not memcg-OOM-killed
+        # mid-run; override with KALI_RUNNER_MEMORY_LIMIT.
         limits:
-          cpus: "2.0"
-          memory: 4096M
+          cpus: "${KALI_RUNNER_CPU_LIMIT:-2.0}"
+          memory: ${KALI_RUNNER_MEMORY_LIMIT:-8192M}
         reservations:
           cpus: "0.5"
           memory: 1024M
