@@ -79,6 +79,30 @@ class Settings(BaseSettings):
             "whiterabbitneo_timeout_seconds",
         ),
     )
+    # Sampling temperature for WRB pentest analysis. Default 0.0 (greedy decoding)
+    # makes threat-modeling / vuln-analysis / tool-planning / dedup reproducible
+    # run-to-run for the same input, eliminating the primary source of
+    # "same target → different findings" variance. Raise (e.g. 0.3) to trade
+    # reproducibility for answer diversity.
+    whiterabbitneo_temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        validation_alias=AliasChoices(
+            "WHITERABBITNEO_TEMPERATURE",
+            "whiterabbitneo_temperature",
+        ),
+    )
+    # Deterministic sampling seed forwarded to the vLLM server. Negative value
+    # disables the seed (server picks its own). Only affects output when
+    # temperature > 0; harmless at temperature 0.
+    whiterabbitneo_seed: int = Field(
+        default=42,
+        validation_alias=AliasChoices(
+            "WHITERABBITNEO_SEED",
+            "whiterabbitneo_seed",
+        ),
+    )
     # External LLM Gateway URL (optional — uses in-process routing when unset)
     llm_gateway_url: str = Field(
         default="",

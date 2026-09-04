@@ -50,11 +50,17 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         *,
         timeout_sec: float = WRB_DEFAULT_TIMEOUT,
         max_context_tokens: int = WRB_DEFAULT_MAX_CONTEXT_TOKENS,
+        temperature: float = WRB_DEFAULT_TEMPERATURE,
+        seed: int | None = None,
     ) -> None:
         self._base_url: str = base_url.rstrip("/") if base_url else ""
         self._api_key: str = api_key
         self._timeout_sec: float = max(10.0, float(timeout_sec))
         self._max_context_tokens: int = max(2048, int(max_context_tokens))
+        #: Default sampling temperature; 0.0 → deterministic greedy decoding.
+        self._temperature: float = max(0.0, float(temperature))
+        #: Deterministic sampling seed forwarded to vLLM (None → server default).
+        self._seed: int | None = seed if (seed is not None and seed >= 0) else None
 
     def _httpx_timeout(self) -> httpx.Timeout:
         return httpx.Timeout(
@@ -86,6 +92,27 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         usable_tokens = max(_MIN_PROMPT_TOKENS, self._max_context_tokens - max(0, max_tokens))
         return usable_tokens * _CHARS_PER_TOKEN
 
+    def _build_payload(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        model: str | None,
+        max_tokens: int,
+        temperature: float | None,
+    ) -> dict[str, Any]:
+        """Assemble the chat-completions payload, applying deterministic
+        temperature/seed defaults so pentest analysis is reproducible.
+        """
+        payload: dict[str, Any] = {
+            "model": model or WRB_DEFAULT_MODEL,
+            "messages": messages,
+            "temperature": self._temperature if temperature is None else max(0.0, float(temperature)),
+            "max_tokens": max_tokens,
+        }
+        if self._seed is not None:
+            payload["seed"] = self._seed
+        return payload
+
     async def call(
         self,
         prompt: str,
@@ -93,7 +120,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         system_prompt: str | None = None,
         model: str | None = None,
         max_tokens: int = WRB_DEFAULT_MAX_TOKENS,
-        temperature: float = WRB_DEFAULT_TEMPERATURE,
+        temperature: float | None = None,
     ) -> str:
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
@@ -103,12 +130,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        payload: dict[str, Any] = {
-            "model": model or WRB_DEFAULT_MODEL,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
+        payload = self._build_payload(
+            messages, model=model, max_tokens=max_tokens, temperature=temperature
+        )
 
         url = f"{self._base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
@@ -147,7 +171,7 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         system_prompt: str | None = None,
         model: str | None = None,
         max_tokens: int = WRB_DEFAULT_MAX_TOKENS,
-        temperature: float = WRB_DEFAULT_TEMPERATURE,
+        temperature: float | None = None,
     ) -> tuple[str, dict[str, int]]:
         """Call and return (text, usage_dict) with token counts."""
         if not self._base_url:
@@ -169,12 +193,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        payload: dict[str, Any] = {
-            "model": model or WRB_DEFAULT_MODEL,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
+        payload = self._build_payload(
+            messages, model=model, max_tokens=max_tokens, temperature=temperature
+        )
 
         url = f"{self._base_url}/chat/completions"
         headers = {"Content-Type": "application/json"}
@@ -257,6 +278,8 @@ def get_whiterabbitneo_adapter() -> WhiteRabbitNeoAdapter:
             api_key=settings.whiterabbitneo_api_key,
             timeout_sec=float(settings.whiterabbitneo_timeout_seconds),
             max_context_tokens=_resolve_wrb_max_context(),
+            temperature=float(settings.whiterabbitneo_temperature),
+            seed=int(settings.whiterabbitneo_seed),
         )
     return _wrb_adapter
 

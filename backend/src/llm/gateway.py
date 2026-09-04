@@ -451,6 +451,8 @@ class UnifiedLlmGateway:
             adapter = WhiteRabbitNeoAdapter(
                 base_url=record.base_url,
                 api_key=os.environ.get(record.env_key, ""),
+                temperature=float(settings.whiterabbitneo_temperature),
+                seed=int(settings.whiterabbitneo_seed),
             )
         if not adapter.is_configured:
             raise ProviderCallError("wrb_not_configured", "provider_unavailable")
