@@ -670,7 +670,11 @@ async def _persist_report_and_findings(
         tenant_id=tenant_id,
         scan_id=scan_id,
         target=target,
-        summary={**summary.model_dump(), "ai_insights": report_dict.get("ai_insights") or []},
+        summary={
+            **summary.model_dump(),
+            "ai_insights": report_dict.get("ai_insights") or [],
+            "baseline": report_dict.get("baseline"),
+        },
         technologies=technologies if technologies else None,
     )
     session.add(report)

@@ -29,6 +29,22 @@ _BASELINE_PATH = Path(__file__).resolve().parents[2] / "config" / "baseline.yaml
 
 _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
+# Tokens that identify an HTTP security-header finding (matched in the finding
+# blob). Broad enough to catch per-header findings that omit the word "security".
+_SECURITY_HEADER_NEEDLES = (
+    "security header",
+    "security http",
+    "hsts",
+    "strict-transport",
+    "content-security-policy",
+    "content security policy",
+    "x-frame-options",
+    "x-content-type-options",
+    "referrer-policy",
+    "permissions-policy",
+    "clickjacking",
+)
+
 
 @lru_cache(maxsize=1)
 def load_baseline_controls() -> tuple[dict[str, Any], ...]:
@@ -86,8 +102,10 @@ def _control_status(
         return executed, executed and not weak
 
     if control_id == "open_ports":
+        # "Passed" means the port scan ran successfully; a host with zero open
+        # ports is good posture, not a failure. Coverage tracks that it ran.
         executed = forced or bool(ports)
-        return executed, executed and len(ports) >= 1
+        return executed, executed
 
     if control_id == "dns":
         dns_findings = _matches(findings, "dns", "zone transfer", "axfr", "caa", "dnssec")
@@ -102,10 +120,7 @@ def _control_status(
         return executed, executed and not mail_findings
 
     if control_id == "security_headers":
-        header_findings = [
-            f for f in findings
-            if isinstance(f, dict) and "header" in _blob(f) and "security" in _blob(f)
-        ]
+        header_findings = _matches(findings, *_SECURITY_HEADER_NEEDLES)
         executed = forced or bool(header_findings)
         return executed, executed and not header_findings
 

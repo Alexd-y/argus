@@ -1243,6 +1243,10 @@ class ReportListResponse(BaseModel):
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
     )
+    baseline: dict[str, Any] | None = Field(
+        default=None,
+        description="Block 3 baseline coverage/pass_rate scoring (coverage, pass_rate, controls).",
+    )
 
 
 class ReportDetailResponse(BaseModel):
@@ -1265,6 +1269,10 @@ class ReportDetailResponse(BaseModel):
     requested_formats: list[str] | None = Field(
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
+    )
+    baseline: dict[str, Any] | None = Field(
+        default=None,
+        description="Block 3 baseline coverage/pass_rate scoring (coverage, pass_rate, controls).",
     )
 
 

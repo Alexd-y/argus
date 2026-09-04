@@ -77,3 +77,16 @@ def test_tls_info_probe_only_is_pass():
     findings = [{"title": "TLS_PROBE finding", "source_tool": "testssl", "severity": "info"}]
     r = evaluate_baseline(findings, {"ports": [443]})
     assert _by_id(r)["tls"]["status"] == "pass"
+
+
+def test_security_header_finding_without_security_token_still_fails():
+    # Per-header finding that omits the word "security" (review fix #2).
+    findings = [{"title": "Missing HSTS header", "severity": "low"}]
+    r = evaluate_baseline(findings, {}, executed_overrides={"security_headers"})
+    assert _by_id(r)["security_headers"]["status"] == "fail"
+
+
+def test_open_ports_zero_ports_is_pass_when_scan_ran():
+    # A host with no open ports is good posture, not a failure (review fix #3).
+    r = evaluate_baseline([], {"ports": []}, executed_overrides={"open_ports"})
+    assert _by_id(r)["open_ports"]["status"] == "pass"

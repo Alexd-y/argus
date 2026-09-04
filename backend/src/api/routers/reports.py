@@ -237,6 +237,7 @@ async def list_reports(
                     generation_status=report.generation_status or "ready",
                     tier=report.tier or "midgard",
                     requested_formats=_serialize_requested_formats(report.requested_formats),
+                    baseline=(report.summary or {}).get("baseline"),
                 )
             )
         return out
@@ -288,6 +289,7 @@ async def get_report(
             generation_status=report.generation_status or "ready",
             tier=report.tier or "midgard",
             requested_formats=_serialize_requested_formats(report.requested_formats),
+            baseline=(report.summary or {}).get("baseline"),
         )
 
 
