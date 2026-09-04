@@ -6,7 +6,7 @@ import shlex
 ALLOWED_TOOLS = frozenset({
     "nmap", "nuclei", "nikto", "gobuster", "sqlmap", "dig", "whois", "host", "curl",
     "gitleaks", "trivy", "semgrep", "trufflehog", "prowler", "scout", "checkov", "terrascan",
-    "searchsploit",
+    "searchsploit", "subfinder", "dnsx", "amass",
 })
 
 # Tool -> (flag, tool_name for validate_target_for_tool)

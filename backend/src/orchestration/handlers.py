@@ -1166,6 +1166,31 @@ async def run_source_analysis(
         return SourceAnalysisOutput(skipped=True, summary=f"Source analysis failed: {exc}")
 
 
+_EMAIL_RE = re.compile(r"\b[a-zA-Z0-9._%+-]+@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b")
+
+
+def _harvest_emails(tool_results: dict[str, Any], domain: str) -> list[str]:
+    """Extract in-scope email addresses from recon tool outputs (for breach check).
+
+    Scans stdout of tools that commonly surface addresses (whois, whatweb,
+    http_crawl). Only returns addresses whose host matches the target domain to
+    avoid feeding unrelated third-party addresses to breach lookups.
+    """
+    d = (domain or "").lower().lstrip(".")
+    emails: set[str] = set()
+    if not isinstance(tool_results, dict) or not d:
+        return []
+    for res in tool_results.values():
+        stdout = res.get("stdout") if isinstance(res, dict) else None
+        if not isinstance(stdout, str):
+            continue
+        for match in _EMAIL_RE.finditer(stdout):
+            host = match.group(1).lower()
+            if host == d or host.endswith("." + d):
+                emails.add(match.group(0).lower())
+    return sorted(emails)
+
+
 async def run_recon(
     target: str,
     options: dict,
@@ -1285,7 +1310,7 @@ async def run_recon(
                 )
 
             dns_subdomains, dns_findings = await collect_dns_security_findings(
-                domain, run_cmd=_dns_run_cmd
+                domain, run_cmd=_dns_run_cmd, emails=_harvest_emails(tool_results, domain)
             )
             if dns_findings:
                 tool_results["dns_security_findings"] = dns_findings

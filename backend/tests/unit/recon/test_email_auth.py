@@ -39,6 +39,15 @@ class TestSPF:
         f = analyze_spf(D, ["v=spf1 include:example.com ~all"])
         assert f and f[0]["severity"] == "low"
 
+    def test_all_substring_not_false_positive(self):
+        # "install"/"installer" contain "all" but are not the 'all' mechanism.
+        f = analyze_spf(D, ["v=spf1 include:mail.installer.com redirect=install.example -all"])
+        assert f == []  # terminal -all => clean, no false +all HIGH
+
+    def test_bare_all_among_includes(self):
+        f = analyze_spf(D, ["v=spf1 include:x.com all"])
+        assert f and f[0]["severity"] == "high"
+
     def test_multiple_spf(self):
         f = analyze_spf(D, ["v=spf1 -all", "v=spf1 include:x -all"])
         assert any("Multiple SPF" in t for t in _titles(f))

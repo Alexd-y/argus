@@ -17,9 +17,24 @@ from src.recon.dns_security import build_dns_finding
 # --- SPF ------------------------------------------------------------------
 
 _SPF_RE = re.compile(r"^\s*v=spf1\b", re.IGNORECASE)
-# Trailing "all" mechanism qualifier: -all (fail), ~all (softfail), ?all
-# (neutral), +all / all (pass = anyone may send).
-_ALL_MECH_RE = re.compile(r"([-~?+]?)all\b", re.IGNORECASE)
+# The SPF "all" mechanism is a standalone space-delimited token with an optional
+# qualifier: -all (fail) / ~all (softfail) / ?all (neutral) / +all|all (pass).
+# Matching a whole token avoids false hits on substrings like "install".
+_ALL_TOKEN_RE = re.compile(r"^([-~?+]?)all$", re.IGNORECASE)
+
+
+def _spf_all_qualifier(record: str) -> str | None:
+    """Return the qualifier of the terminal 'all' mechanism, or None if absent.
+
+    Scans tokens left-to-right and keeps the last matching 'all' mechanism (the
+    terminal one wins per RFC 7208 first-match evaluation semantics).
+    """
+    qualifier: str | None = None
+    for token in record.split():
+        m = _ALL_TOKEN_RE.match(token)
+        if m:
+            qualifier = m.group(1) or "+"
+    return qualifier
 
 _SPF_CWE = "CWE-16"
 _SPF_OWASP = "A05:2021-Security Misconfiguration"
@@ -74,8 +89,7 @@ def analyze_spf(domain: str, txt_records: list[str]) -> list[dict[str, Any]]:
         )
 
     record = spf[0]
-    qualifier_match = _ALL_MECH_RE.search(record)
-    qualifier = (qualifier_match.group(1) or "+") if qualifier_match else None
+    qualifier = _spf_all_qualifier(record)
 
     if qualifier in ("+", ""):
         findings.append(
