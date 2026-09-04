@@ -1,0 +1,32 @@
+# Baseline security controls (Block 3).
+#
+# The mandatory checklist a scan MUST cover to be considered complete. Each
+# control is evaluated as executed (was the check actually run?) and passed
+# (did it meet the bar?). Two separate metrics are derived:
+#   coverage  = executed / total      (how much of the baseline was checked)
+#   pass_rate = passed   / total      (how much of the baseline actually passed)
+#
+# A control that did not run is a COVERAGE failure (not_assessed) — it is never
+# silently counted as "0 findings = OK". Extend this list to grow the baseline.
+version: 1
+controls:
+  - id: tls
+    title: Transport Security (TLS)
+    category: cryptography
+    description: TLS/SSL configuration on exposed HTTPS services (protocols, ciphers).
+  - id: open_ports
+    title: Open Ports / Port Scan
+    category: attack_surface
+    description: Enumeration of exposed TCP services on the target host.
+  - id: dns
+    title: DNS Enumeration
+    category: attack_surface
+    description: Resolution of core DNS records and zone-transfer exposure.
+  - id: mail_headers
+    title: Email Authentication (SPF/DMARC/DKIM)
+    category: email_security
+    description: Presence and strength of SPF, DMARC and DKIM mail-auth records.
+  - id: security_headers
+    title: HTTP Security Headers
+    category: hardening
+    description: Presence of key HTTP response security headers (CSP, HSTS, etc.).

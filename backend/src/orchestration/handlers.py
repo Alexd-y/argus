@@ -74,11 +74,14 @@ from src.quick.circuit_breaker import default_circuit_breaker
 from src.quick.scheduler import QuickScheduler
 from src.quick.schemas import QuickTaskStage
 from src.quick.workflow import QuickWorkflow, is_quick_execution, resolve_quick_plan
+from src.recon.attack_surface import build_attack_surface
+from src.recon.dns_security.coordinator import collect_dns_security_findings
 from src.recon.exploitation.custom_xss_poc import run_custom_xss_poc
 from src.recon.pipeline import run_recon_planned_tool_gather
 from src.recon.recon_runtime import build_recon_runtime_config
 from src.recon.step_registry import ReconStepId, plan_recon_steps
 from src.recon.summary_builder import build_recon_summary_document
+from src.recon.surface_reconcile import parse_technologies, reconcile_ports
 from src.recon.vulnerability_analysis.active_scan.input_surface_inventory import (
     build_input_surface_inventory,
 )
@@ -95,11 +98,9 @@ from src.recon.vulnerability_analysis.active_scan.web_vuln_heuristics import (
 from src.recon.vulnerability_analysis.finding_normalizer import (
     normalize_active_scan_intel_findings,
 )
-from src.recon.attack_surface import build_attack_surface
-from src.recon.dns_security.coordinator import collect_dns_security_findings
-from src.recon.surface_reconcile import parse_technologies, reconcile_ports
 from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
+from src.reports.baseline import evaluate_baseline
 from src.reports.finding_metadata import apply_default_finding_metadata
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.tools.executor import execute_command
@@ -3343,6 +3344,30 @@ async def run_reporting(
     report_out.coverage_results = snapshot_coverage_dicts(scan_id)
     if report_out.coverage_results:
         report_out.report["coverage_results"] = report_out.coverage_results
+
+    # Block 3: baseline coverage vs pass_rate. Assert which mandatory controls
+    # actually ran (recon always runs port scan; DNS/mail ran when dns-security
+    # recon is enabled and non-quick; security headers when the target is web),
+    # so a silently-passing control is counted as covered rather than skipped.
+    try:
+        _bl_findings = list(vuln_analysis.findings) if vuln_analysis else []
+        _bl_recon = (
+            {"ports": recon.ports, "subdomains": recon.subdomains} if recon else {}
+        )
+        _bl_overrides: set[str] = set()
+        if recon is not None:
+            _bl_overrides.add("open_ports")
+        if target and str(target).lower().startswith(("http://", "https://")):
+            _bl_overrides.add("security_headers")
+        if not is_quick_execution(scan_options) and getattr(
+            settings, "dns_security_recon_enabled", True
+        ):
+            _bl_overrides.update({"dns", "mail_headers"})
+        report_out.report["baseline"] = evaluate_baseline(
+            _bl_findings, _bl_recon, executed_overrides=_bl_overrides
+        )
+    except Exception as _bl_exc:  # noqa: BLE001 — baseline scoring must not break reporting
+        logger.warning("baseline_scoring_failed", extra={"scan_id": scan_id, "error": str(_bl_exc)})
 
     if _critic_insights:
         try:
