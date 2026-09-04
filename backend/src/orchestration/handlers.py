@@ -96,6 +96,7 @@ from src.recon.vulnerability_analysis.finding_normalizer import (
     normalize_active_scan_intel_findings,
 )
 from src.recon.attack_surface import build_attack_surface
+from src.recon.dns_security.coordinator import collect_dns_security_findings
 from src.recon.surface_reconcile import parse_technologies, reconcile_ports
 from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_finding_ids
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
@@ -1270,6 +1271,42 @@ async def run_recon(
         params=crawl_params,
         forms=crawl_forms,
     )
+
+    # Block 2: DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR, CAA,
+    # subdomain enum, breach). Findings are stashed for vuln_analysis to merge;
+    # discovered subdomains extend the surface. Skipped in quick mode.
+    if not is_quick_execution(options) and getattr(
+        settings, "dns_security_recon_enabled", True
+    ):
+        try:
+            async def _dns_run_cmd(cmd: str, use_sandbox: bool = False) -> dict[str, Any]:
+                return await asyncio.to_thread(
+                    execute_command, cmd, use_sandbox=use_sandbox
+                )
+
+            dns_subdomains, dns_findings = await collect_dns_security_findings(
+                domain, run_cmd=_dns_run_cmd
+            )
+            if dns_findings:
+                tool_results["dns_security_findings"] = dns_findings
+            if dns_subdomains:
+                merged_subs = sorted(set(recon_out.subdomains) | set(dns_subdomains))
+                recon_out.subdomains = merged_subs
+                if recon_out.attack_surface is not None:
+                    recon_out.attack_surface.subdomains = merged_subs
+            logger.info(
+                "dns_security_recon_done",
+                extra={
+                    "scan_id": scan_id,
+                    "findings": len(dns_findings),
+                    "subdomains": len(dns_subdomains),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — never break recon on DNS probes
+            logger.warning(
+                "dns_security_recon_failed",
+                extra={"scan_id": scan_id, "error": str(exc)},
+            )
 
     if is_quick_execution(options):
         _record_quick_circuit_outcomes(tool_results, target=target)
@@ -2625,6 +2662,16 @@ async def run_vuln_analysis(
                 logger.info("fanout_va_merged", extra={"scan_id": scan_id, "new_findings": len(_fanout_findings)})
         except Exception as _fo_exc:  # noqa: BLE001
             logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
+
+    # Block 2: merge DNS/email-security findings produced during recon (stashed
+    # in recon_context) so they pass through the same gate/dedup/metadata path.
+    _dns_sec = (recon_context or {}).get("dns_security_findings")
+    if isinstance(_dns_sec, list) and _dns_sec:
+        llm_output.findings.extend(_dns_sec)
+        logger.info(
+            "dns_security_findings_merged",
+            extra={"scan_id": scan_id, "count": len(_dns_sec)},
+        )
 
     # Evidence gate (Block 1.2) + deduplication (Block 1.3). Drops evidence-less
     # placeholder records ("unknown finding", fingerprint-only WhatWeb hits) and

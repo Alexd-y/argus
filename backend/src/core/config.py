@@ -872,6 +872,9 @@ class Settings(BaseSettings):
     # fingerprint-only hits) and collapse duplicates before reporting. Env:
     # FINDING_EVIDENCE_GATE_ENABLED. Disable only to debug raw producer output.
     finding_evidence_gate_enabled: bool = True
+    # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
+    # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
+    dns_security_recon_enabled: bool = True
     # Aggressive argv merge from ``data/tool_configs.json`` (extra flags / payload wordlists).
     # Default false so unit tests and CI keep stable argv; set VA_AGGRESSIVE_SCAN=true in prod.
     va_aggressive_scan: bool = False
