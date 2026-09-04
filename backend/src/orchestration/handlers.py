@@ -3140,9 +3140,29 @@ async def run_post_exploitation(
         inp, raw_sink=raw_sink, scan_id=scan_id, scan_options=scan_opts,
     )
 
-    # Merge real checks with AI results
-    ai_result.lateral = post_lateral + ai_result.lateral
-    ai_result.persistence = post_persistence + ai_result.persistence
+    # Block 1.5 anti-hallucination: post-exploitation may claim lateral movement
+    # or persistence ONLY when there is confirmed access (a verified,
+    # evidence-bearing exploit). Without it, the LLM's speculative output is
+    # discarded and the phase reports honestly that it is not applicable, rather
+    # than inventing lateral=1/persistence=1 on top of exploits=0.
+    if verified:
+        ai_result.lateral = post_lateral + ai_result.lateral
+        ai_result.persistence = post_persistence + ai_result.persistence
+        ai_result.status = "analyzed"
+    else:
+        _suppressed = len(ai_result.lateral) + len(ai_result.persistence)
+        if _suppressed:
+            logger.warning(
+                "post_exploitation_hallucination_suppressed",
+                extra={
+                    "scan_id": scan_id,
+                    "suppressed_lateral": len(ai_result.lateral),
+                    "suppressed_persistence": len(ai_result.persistence),
+                },
+            )
+        ai_result.lateral = []
+        ai_result.persistence = []
+        ai_result.status = "not applicable (no confirmed access)"
 
     return ai_result
 

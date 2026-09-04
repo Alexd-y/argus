@@ -360,6 +360,15 @@ class PostExploitationOutput(BaseModel):
 
     lateral: list[dict[str, Any]] = Field(default_factory=list)
     persistence: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = Field(
+        default="",
+        description=(
+            "Phase status. 'analyzed' when grounded in a confirmed exploit; "
+            "'not applicable (no confirmed access)' when there is no verified "
+            "exploit — in which case lateral/persistence are forced empty "
+            "(Block 1.5 anti-hallucination)."
+        ),
+    )
 
 
 # --- Reporting ---
