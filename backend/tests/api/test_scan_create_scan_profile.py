@@ -141,9 +141,44 @@ def test_scan_profile_light_resolves_standard_production():
 
 
 def test_scan_profile_deep_without_engagement_denied():
+    # Secure default: auto-provision OFF → deep without a lease is denied.
     response, _ = _post({"target": _TARGET, "email": _EMAIL, "scan_profile": "deep"})
     assert response.status_code == 422
     assert _code(response) == "lab_engagement_required"
+
+
+def test_scan_profile_deep_autoprovisions_lease_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Full Surface self-service: with the flag ON, deep auto-issues a lab lease
+    and the scan is created (201) as scan_mode=lab / execution_mode=lab_unrestricted."""
+    monkeypatch.setattr(settings, "deep_profile_autoprovision_lab_lease", True)
+
+    autoprov = AsyncMock(return_value=("engagement-auto", "lease-auto"))
+    factory, session = _mock_db_session_create()
+    with (
+        patch("src.api.routers.scans.async_session_factory", factory),
+        patch("src.api.routers.scans.autoprovision_deep_lab_lease", autoprov),
+        patch(
+            "src.api.routers.scans.preflight_lab_lease",
+            new_callable=AsyncMock,
+        ) as preflight,
+        patch("src.api.routers.scans.try_pick_queued_scan", new_callable=AsyncMock),
+        patch("src.api.routers.scans.record_scan_started"),
+    ):
+        response = _api_client().post(
+            "/api/v1/scans", json={"target": _TARGET, "email": _EMAIL, "scan_profile": "deep"}
+        )
+
+    assert response.status_code == 201, response.text
+    autoprov.assert_awaited_once()
+    preflight.assert_awaited_once()
+    scan = _added_scans(session)[0]
+    assert scan.scan_profile == "deep"
+    assert scan.scan_mode == "lab"
+    assert scan.execution_mode == "lab_unrestricted"
+    assert scan.engagement_id == "engagement-auto"
+    assert scan.lab_lease_id == "lease-auto"
 
 
 def test_scan_profile_deep_without_lease_denied():

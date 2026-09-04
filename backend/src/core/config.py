@@ -466,6 +466,31 @@ class Settings(BaseSettings):
             "lab_script_capture_max_bytes",
         ),
     )
+    # Full Surface (scan_profile=deep) self-service: when a deep scan arrives
+    # without an engagement_id/lab_lease_id, the backend auto-provisions a
+    # short-lived, TARGET-SCOPED lab_unrestricted lease so the deep/lab active
+    # scan + exploitation pipeline can run and produce CONFIRMED/EXPLOITED PoC.
+    # The lease scope is bounded to the requested target host only.
+    # Secure default: OFF. Auto-issuing an unrestricted-exploitation lease is a
+    # privileged action, so it is opt-in — enable per deployment (infra/.env)
+    # once the operator accepts that Full Surface runs aggressive tests against
+    # the submitted target.
+    deep_profile_autoprovision_lab_lease: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "DEEP_PROFILE_AUTOPROVISION_LAB_LEASE",
+            "deep_profile_autoprovision_lab_lease",
+        ),
+    )
+    deep_profile_autoprovision_ttl_hours: int = Field(
+        default=8,
+        ge=1,
+        le=168,
+        validation_alias=AliasChoices(
+            "DEEP_PROFILE_AUTOPROVISION_TTL_HOURS",
+            "deep_profile_autoprovision_ttl_hours",
+        ),
+    )
     qwythos_url: str = Field(
         default="",
         validation_alias=AliasChoices("QWYTHOS_URL", "qwythos_url"),

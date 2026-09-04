@@ -59,6 +59,7 @@ from src.profiles import (
     detect_legacy_conflict,
     resolve_scan_profile,
 )
+from src.profiles.lab_autoprovision import autoprovision_deep_lab_lease
 from src.profiles.lab_preflight import preflight_lab_lease
 from src.quick.cancellation import propagate_scan_cancellation
 from src.quick.create import (
@@ -447,6 +448,19 @@ async def create_scan(
         profile_version = resolved_profile.profile_version
         engagement_id = (req.engagement_id or "").strip() or None
         lab_lease_id = (req.lab_lease_id or "").strip() or None
+        # Full Surface self-service: deep profile requires a lab lease. When the
+        # caller did not supply one (public UI), auto-provision a short-lived,
+        # target-scoped lab_unrestricted lease so the deep/lab active scan +
+        # exploitation pipeline can run. preflight_lab_lease still validates it.
+        if (
+            resolved_profile.requires_lab_lease
+            and not (engagement_id and lab_lease_id)
+            and settings.deep_profile_autoprovision_lab_lease
+        ):
+            engagement_id, lab_lease_id = await autoprovision_deep_lab_lease(
+                tenant_id=tenant_id,
+                target=req.target,
+            )
     else:
         try:
             execution_mode = parse_requested_execution_mode(req.execution_mode)
