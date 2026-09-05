@@ -717,6 +717,39 @@ export function censusFromFindings(
   };
 }
 
+/** Hardening posture breakdown (Block 4.5): counts of failed TLS / security-header
+ * / DNSSEC / email-auth (SPF/DMARC/DKIM) findings, derived from findings so the
+ * Hardening tile is populated whenever such findings exist (not reliant on a
+ * possibly-null backend summary). */
+export interface HardeningBreakdown {
+  tls: number;
+  headers: number;
+  dnssec: number;
+  email: number;
+  total: number;
+}
+
+const _TLS_NAME_RE = /\b(tls|ssl|cipher|certificate|hsts)\b/i;
+const _HEADER_NAME_RE = /header|content-security-policy|x-frame-options|clickjacking/i;
+const _DNSSEC_NAME_RE = /dnssec/i;
+const _EMAIL_NAME_RE = /\b(spf|dmarc|dkim)\b/i;
+
+export function hardeningBreakdown(findings: Finding[]): HardeningBreakdown {
+  let tls = 0;
+  let headers = 0;
+  let dnssec = 0;
+  let email = 0;
+  for (const f of findings) {
+    if (f.status !== "fail") continue;
+    const blob = `${f.group} ${f.name} ${f.headline}`;
+    if (f.group === "Transport Security" || _TLS_NAME_RE.test(blob)) tls += 1;
+    else if (_HEADER_NAME_RE.test(blob)) headers += 1;
+    else if (_DNSSEC_NAME_RE.test(blob)) dnssec += 1;
+    else if (_EMAIL_NAME_RE.test(blob)) email += 1;
+  }
+  return { tls, headers, dnssec, email, total: tls + headers + dnssec + email };
+}
+
 function findingsForTier(tier: ScanTier): Finding[] {
   const full: Finding[] = ALLEKSY_CHECKS.map((check) => ({
     ...check,

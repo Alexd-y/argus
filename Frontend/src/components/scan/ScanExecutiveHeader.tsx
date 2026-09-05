@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import type { ScanData } from "@/lib/scan-types";
 import type { ScanResults } from "@/lib/scan-results";
-import { summarizeLeaks } from "@/lib/scan-results";
+import { hardeningBreakdown, summarizeLeaks } from "@/lib/scan-results";
 import { getTierConfig, getUnlockCtaLabel } from "@/lib/scan-tiers";
 import {
   categoryBreakdown,
@@ -156,6 +156,7 @@ export function ScanExecutiveHeader({
   const priorities = topPriorityFindings(results.findings);
   const leaks = scan.darkWebMonitoring ? (results.leaks ?? []) : [];
   const leakSummary = summarizeLeaks(leaks);
+  const hardening = hardeningBreakdown(results.findings);
   const showQuota = Boolean(scan.quota) && isUnlocked;
   const metaCells = 2 + (scan.darkWebMonitoring ? 1 : 0) + (showQuota ? 1 : 0);
   // Past this width the target no longer fits beside the date and payment
@@ -385,6 +386,19 @@ export function ScanExecutiveHeader({
             </div>
             {scan.tier === "free" ? (
               <p className="text-xs text-neutral-600">Included on {getTierConfig("standard").name}</p>
+            ) : hardening.total > 0 ? (
+              <p className="text-xs text-neutral-300">
+                {[
+                  hardening.tls > 0 ? `${hardening.tls} TLS` : null,
+                  hardening.headers > 0 ? `${hardening.headers} header${hardening.headers === 1 ? "" : "s"}` : null,
+                  hardening.dnssec > 0 ? `${hardening.dnssec} DNSSEC` : null,
+                  hardening.email > 0 ? `${hardening.email} mail-auth` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {" issue"}
+                {hardening.total === 1 ? "" : "s"}
+              </p>
             ) : (
               <p className="text-xs text-neutral-300">
                 TLS 1.2 / 1.3
