@@ -537,11 +537,38 @@ function severityRank(severity: unknown): number {
 const _TLS_GROUP = "Transport Security";
 const _TLS_RE = /\b(tls|ssl|cipher|certificate|hsts)\b/i;
 
-/** Group label with transport-security unification: all TLS/SSL findings land
- * in a single "Transport Security" group regardless of their OWASP bucket, so
- * TLS never splits across info/medium sections. */
+// Block 4d — dedicated recon sections. Findings from the DNS/email-security
+// recon (Block 2) otherwise fall into the generic OWASP "Security
+// Misconfiguration" bucket; classify them into their own named groups so the
+// report renders distinct DNS / DNSSEC / Email Security / Data Exposure sections.
+const _DATA_EXPOSURE_GROUP = "Data Exposure";
+const _EMAIL_GROUP = "Email Security";
+const _DNSSEC_GROUP = "DNSSEC";
+const _DNS_GROUP = "DNS";
+const _DATA_EXPOSURE_RE = /exposed credentials|known breach|data breach|cwe-359/i;
+const _EMAIL_RE = /\b(spf|dmarc|dkim)\b/i;
+const _DNSSEC_RE = /dnssec|cwe-350/i;
+const _DNS_RE = /zone transfer|\baxfr\b|\bcaa\b|dns record|dns zone|cwe-538/i;
+
+/** Dedicated recon-section group for a finding, or null if it is not one. Ordered
+ * by specificity so, e.g., a CAA finding (mentions "certificates") lands in DNS
+ * rather than Transport Security. */
+function reconSectionGroup(blob: string): string | null {
+  if (_DATA_EXPOSURE_RE.test(blob)) return _DATA_EXPOSURE_GROUP;
+  if (_EMAIL_RE.test(blob)) return _EMAIL_GROUP;
+  if (_DNSSEC_RE.test(blob)) return _DNSSEC_GROUP;
+  if (_DNS_RE.test(blob)) return _DNS_GROUP;
+  return null;
+}
+
+/** Group label with transport-security unification and dedicated recon sections
+ * (Block 4.2/4d): DNS/DNSSEC/Email/Data-Exposure findings get their own named
+ * group; all TLS/SSL findings collapse into a single "Transport Security" group;
+ * everything else falls back to the OWASP bucket. */
 function groupLabelForFinding(bf: BackendFinding): string {
-  const blob = `${bf.title ?? ""} ${bf.description ?? ""}`;
+  const blob = `${bf.title ?? ""} ${bf.description ?? ""} ${bf.cwe ?? ""}`;
+  const section = reconSectionGroup(blob);
+  if (section) return section;
   if (_TLS_RE.test(blob)) return _TLS_GROUP;
   return owaspGroupLabel(bf.owasp_category);
 }
