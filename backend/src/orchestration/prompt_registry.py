@@ -484,6 +484,54 @@ CLOUD_FALLBACK_PHASE_PROMPTS: dict[str, tuple[str, str]] = {
 }
 
 
+# --- Block 5: strict anti-hallucination evidence contract (all phases) ---
+# Appended to every phase system prompt so the model cannot invent findings,
+# CWE/CVSS, exploits, lateral movement or persistence. Source of truth for
+# findings is the tool parsers/evidence, not the model.
+ANTI_HALLUCINATION_CONTRACT: str = (
+    "\n\nSTRICT EVIDENCE CONTRACT (non-negotiable):\n"
+    "- You do NOT create findings. Use ONLY facts present in the provided "
+    'tool_output/evidence. If a fact is absent, write "no evidence" — never '
+    "invent CWE, CVSS, exploits, lateral movement, or persistence.\n"
+    "- Output MUST be strictly valid JSON matching the required schema, with no "
+    "prose outside the JSON. A finding is invalid unless it carries concrete "
+    "evidence.\n"
+)
+
+_PHASE_CONTRACT: dict[str, str] = {
+    "vuln_analysis": (
+        "- Return a `hypotheses` array (it MAY be empty). Each hypothesis must "
+        "reference a finding with evidence_quality >= weak and include an "
+        "explicit justification. Findings lacking evidence are informational "
+        "only, never exploitable claims.\n"
+    ),
+    "exploitation": (
+        "- For each hypothesis, attach a PoC artifact (command + request + "
+        "response/proof) or set status 'unconfirmed'. NEVER report 'exploited' "
+        "without attached evidence.\n"
+    ),
+    "post_exploitation": (
+        "- Report lateral movement or persistence ONLY when backed by a "
+        "confirmed exploit artifact (a verified exploit with evidence). "
+        "Otherwise return empty arrays and do not speculate.\n"
+    ),
+    "reporting": (
+        "- Make no claim of access, compromise, or movement without a reference "
+        "to a confirmed exploit artifact. Ground every statement in the "
+        "structured findings/evidence provided.\n"
+    ),
+}
+
+
+def _apply_evidence_contract(phase: str, system: str) -> str:
+    """Append the anti-hallucination contract (+ phase clause) to a system prompt."""
+    contract = ANTI_HALLUCINATION_CONTRACT
+    extra = _PHASE_CONTRACT.get(phase)
+    if extra:
+        contract = f"{contract}{extra}"
+    return f"{system}{contract}"
+
+
 def get_cloud_fallback_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     """Return (system_prompt, user_prompt) for cloud-model fallback of a given phase."""
     if phase not in CLOUD_FALLBACK_PHASE_PROMPTS:
@@ -492,7 +540,7 @@ def get_cloud_fallback_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     sanitized = _sanitize_kwargs_for_prompt(kwargs)
     merged = {**_TEMPLATE_DEFAULTS, **sanitized}
     user = template.format(**merged)
-    return system, user
+    return _apply_evidence_contract(phase, system), user
 
 
 # Default values for optional template placeholders (avoids KeyError when not passed)
@@ -512,7 +560,7 @@ def get_prompt(phase: str, **kwargs: Any) -> tuple[str, str]:
     sanitized = _sanitize_kwargs_for_prompt(kwargs)
     merged = {**_TEMPLATE_DEFAULTS, **sanitized}
     user = template.format(**merged)
-    return system, user
+    return _apply_evidence_contract(phase, system), user
 
 
 def get_fixer_prompt(invalid_json: str, expected_schema: dict[str, Any]) -> tuple[str, str]:
