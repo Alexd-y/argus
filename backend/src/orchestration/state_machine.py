@@ -41,6 +41,7 @@ from src.mcp.services.notifications import (
     NotificationEvent,
     NotificationSeverity,
 )
+from src.notifications.resend import notify_report_ready
 from src.orchestration.adaptive_phase import adaptive_coverage_snapshot
 from src.orchestration.aggressive_exploit_tools import (
     maybe_run_aggressive_exploit_tools,
@@ -2016,6 +2017,22 @@ async def _finalize_scan(
         logger.warning(
             "scan_notification_dispatch_failed",
             extra={"scan_id": scan_id, "error": str(_notify_exc)},
+        )
+
+    # Block 4.7: send the customer "report ready" email via Resend
+    # (fire-and-forget; gated on RESEND_API_KEY, never breaks completion).
+    try:
+        _recipient = (
+            await session.execute(
+                select(Scan.email).where(cast(Scan.id, String) == scan_id)
+            )
+        ).scalar_one_or_none()
+        if _recipient:
+            await notify_report_ready(to_email=_recipient, target=target, scan_id=scan_id)
+    except Exception as _mail_exc:  # noqa: BLE001 — email must never break scan completion
+        logger.warning(
+            "report_ready_email_failed",
+            extra={"scan_id": scan_id, "error": str(_mail_exc)},
         )
 
     await _update_scan_phase_status(session, scan_id, "complete", "completed", 100)

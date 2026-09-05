@@ -848,6 +848,23 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("SMTP_USE_TLS", "smtp_use_tls"),
     )
+    # ── Resend (transactional customer email — Block 4.7) ─────────────────────
+    # Report-ready / quota-low / purchase-confirmation emails via Resend HTTP API.
+    # When RESEND_API_KEY is empty, sending is disabled (no-op + log).
+    resend_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("RESEND_API_KEY", "resend_api_key"),
+    )
+    resend_from_email: str = Field(
+        default="Ragnarok <noreply@svalbard.ca>",
+        validation_alias=AliasChoices("RESEND_FROM_EMAIL", "resend_from_email"),
+    )
+    # Public base URL used to build report view links in emails (falls back to
+    # VERCEL_FRONTEND_URL). E.g. https://ragnarok.svalbard.ca
+    public_report_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("PUBLIC_REPORT_BASE_URL", "public_report_base_url"),
+    )
     # Password-reset token TTL in minutes (default 30).
     admin_reset_token_ttl_minutes: int = Field(
         default=30,
