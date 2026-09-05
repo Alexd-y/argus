@@ -865,6 +865,21 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("PUBLIC_REPORT_BASE_URL", "public_report_base_url"),
     )
+    # ── Stripe (scan-credit purchase — Block 4.6) ─────────────────────────────
+    # When STRIPE_SECRET_KEY is empty, checkout returns a stub route (no charge).
+    stripe_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_SECRET_KEY", "stripe_secret_key"),
+    )
+    stripe_webhook_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET", "stripe_webhook_secret"),
+    )
+    # Stripe Price id for one extra scan credit (recurring or one-time price).
+    stripe_extra_scan_price_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_EXTRA_SCAN_PRICE_ID", "stripe_extra_scan_price_id"),
+    )
     # Password-reset token TTL in minutes (default 30).
     admin_reset_token_ttl_minutes: int = Field(
         default=30,

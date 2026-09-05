@@ -14,11 +14,13 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, select
 
+from src.core.config import settings
 from src.core.tenant import get_current_tenant_id
 from src.db.models import Subscription
 from src.db.session import async_session_factory, set_session_tenant
 from src.quota.repository import get_quota_snapshot
 from src.quota.service import TIER_SCANS
+from src.quota.stripe_client import create_checkout_session
 
 logger = logging.getLogger(__name__)
 
@@ -66,3 +68,48 @@ async def get_quota(
         snapshot = await get_quota_snapshot(session, tenant_id, resolved_tier)
         await session.commit()
     return QuotaResponse(**snapshot)
+
+
+class CheckoutRequest(BaseModel):
+    """Buy-more-scans request."""
+
+    quantity: int = Field(1, ge=1, le=3, description="Number of extra scans to purchase.")
+    tier: str | None = Field(None, description="Override tier for the entitlement.")
+
+
+class CheckoutResponse(BaseModel):
+    """Checkout result. ``url`` redirects to Stripe; ``stubbed`` when unconfigured."""
+
+    url: str | None = None
+    stubbed: bool = False
+    reason: str | None = None
+
+
+def _purchase_base_url() -> str:
+    return (settings.public_report_base_url or settings.vercel_frontend_url or "").rstrip("/")
+
+
+@router.post("/checkout", response_model=CheckoutResponse)
+async def create_checkout(
+    body: CheckoutRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+) -> CheckoutResponse:
+    """Start a Stripe Checkout Session to buy extra scans.
+
+    When Stripe is not configured, returns ``stubbed=True`` with the intended
+    route/reason so the frontend can still wire the flow without a live charge.
+    """
+    async with async_session_factory() as session:
+        await set_session_tenant(session, tenant_id)
+        resolved_tier = await _resolve_tier(session, tenant_id, body.tier)
+    base = _purchase_base_url()
+    url = await create_checkout_session(
+        tenant_id=tenant_id,
+        tier=resolved_tier,
+        quantity=body.quantity,
+        success_url=f"{base}/?purchase=success" if base else "/?purchase=success",
+        cancel_url=f"{base}/?purchase=cancel" if base else "/?purchase=cancel",
+    )
+    if url:
+        return CheckoutResponse(url=url)
+    return CheckoutResponse(stubbed=True, reason="stripe_not_configured")
