@@ -40,6 +40,7 @@ from src.api.routers import (
     providers_health,
     queues_health,
     quick,
+    quota,
     reports,
     sandbox,
     scans,
@@ -289,6 +290,7 @@ app.include_router(admin_profile.router, prefix="/api/v1")
 app.include_router(admin_mfa_router.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(quick.router, prefix="/api/v1", dependencies=tenant_auth)
+app.include_router(quota.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(execution_mode.router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(unified_ai_lab.nuclei_router, prefix="/api/v1", dependencies=tenant_auth)
 app.include_router(unified_ai_lab.lab_router, prefix="/api/v1", dependencies=tenant_auth)
