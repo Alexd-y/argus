@@ -14,6 +14,13 @@ export interface FindingProbe {
   extractedResults: string[];
 }
 
+/** ISO 27001 / SOC 2 control a finding maps to (Block 4.2). */
+export interface FindingCompliance {
+  framework: string;
+  controlId: string;
+  controlName: string;
+}
+
 export interface Finding {
   id: string;
   groupId: string;
@@ -29,6 +36,8 @@ export interface Finding {
   access: "title" | "summary" | "basic" | "full";
   probe?: FindingProbe;
   riskScore?: number | null;
+  /** ISO 27001 / SOC 2 controls this finding maps to. */
+  compliance?: FindingCompliance[];
 }
 
 export type LeakSecretKind = "plaintext" | "hash";

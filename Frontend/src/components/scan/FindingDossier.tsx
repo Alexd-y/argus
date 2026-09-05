@@ -19,6 +19,13 @@ const PRIORITY_PILL: Record<CheckPriority, string> = {
   optional: "border-neutral-700 text-neutral-400 bg-neutral-900",
 };
 
+const FRAMEWORK_LABELS: Record<string, string> = {
+  iso27001: "ISO 27001",
+  soc2: "SOC 2",
+  pci_dss: "PCI DSS",
+  gdpr: "GDPR",
+};
+
 function ProbeField({
   label,
   children,
@@ -127,7 +134,12 @@ export function FindingDossier({ finding, open, locked, tier, onToggle }: Findin
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
-        <span className="text-[11px] text-neutral-500 font-mono flex-shrink-0 pt-0.5">{finding.id}</span>
+        <span
+          className="text-[11px] text-neutral-500 font-mono flex-shrink-0 pt-0.5"
+          title={finding.id}
+        >
+          {finding.id.slice(0, 8)}
+        </span>
         <span className="text-sm text-white min-w-0 flex-1">{finding.name}</span>
         <span
           className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm border flex-shrink-0 ${PRIORITY_PILL[finding.priority]}`}
@@ -169,6 +181,24 @@ export function FindingDossier({ finding, open, locked, tier, onToggle }: Findin
               </div>
               <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-wrap">{finding.remediation}</p>
             </div>
+            {finding.compliance && finding.compliance.length > 0 && (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
+                  Compliance mapping
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {finding.compliance.map((c) => (
+                    <span
+                      key={`${c.framework}-${c.controlId}`}
+                      title={c.controlName}
+                      className="text-[10px] text-neutral-300 border border-neutral-700 bg-neutral-950 rounded-sm px-1.5 py-0.5"
+                    >
+                      {FRAMEWORK_LABELS[c.framework] ?? c.framework} {c.controlId}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         ) : null}
       </Collapse>

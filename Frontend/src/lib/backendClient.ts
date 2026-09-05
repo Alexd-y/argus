@@ -14,6 +14,7 @@ import type { ScanTier } from "./scan-tiers";
 import type {
   CheckPriority,
   Finding,
+  FindingCompliance,
   ScanBaseline,
   ScanBaselineControl,
   ScanResults,
@@ -365,6 +366,7 @@ interface BackendFinding {
   tool_version?: string | null;
   tool_command?: string | null;
   tool_output_excerpt?: string | null;
+  compliance?: Array<{ framework?: string | null; control_id?: string | null; control_name?: string | null }> | null;
 }
 
 /**
@@ -518,6 +520,43 @@ function owaspGroupLabel(category: unknown): string {
   const key = String(category ?? "").trim().toUpperCase();
   if (!key) return "Other Findings";
   return OWASP_TOP10_2025_TITLES[key] ?? key;
+}
+
+const _SEVERITY_RANK: Record<string, number> = {
+  critical: 4,
+  high: 3,
+  medium: 2,
+  low: 1,
+  info: 0,
+};
+
+function severityRank(severity: unknown): number {
+  return _SEVERITY_RANK[String(severity ?? "").toLowerCase()] ?? 0;
+}
+
+const _TLS_GROUP = "Transport Security";
+const _TLS_RE = /\b(tls|ssl|cipher|certificate|hsts)\b/i;
+
+/** Group label with transport-security unification: all TLS/SSL findings land
+ * in a single "Transport Security" group regardless of their OWASP bucket, so
+ * TLS never splits across info/medium sections. */
+function groupLabelForFinding(bf: BackendFinding): string {
+  const blob = `${bf.title ?? ""} ${bf.description ?? ""}`;
+  if (_TLS_RE.test(blob)) return _TLS_GROUP;
+  return owaspGroupLabel(bf.owasp_category);
+}
+
+/** Map backend `compliance` (snake_case) into typed {@link FindingCompliance}. */
+function mapFindingCompliance(bf: BackendFinding): FindingCompliance[] | undefined {
+  if (!Array.isArray(bf.compliance) || bf.compliance.length === 0) return undefined;
+  const out = bf.compliance
+    .filter((c): c is NonNullable<typeof c> => Boolean(c) && Boolean(c.control_id || c.framework))
+    .map((c) => ({
+      framework: String(c.framework ?? ""),
+      controlId: String(c.control_id ?? ""),
+      controlName: String(c.control_name ?? ""),
+    }));
+  return out.length ? out : undefined;
 }
 
 /** Report summary subset the public scan page consumes (mirror of `ReportSummary`). */
@@ -774,8 +813,15 @@ export function mapBackendFindingsToResults(
     if (bf.finding_id) findingsById.set(String(bf.finding_id), bf);
   }
   const groupIds = new Map<string, string>();
-  const full: Finding[] = findingsRaw.map((bf, index) => {
-    const groupLabel = owaspGroupLabel(bf.owasp_category);
+  // Block 4.3: sort by severity (critical→info), then CVSS desc, so the report
+  // leads with the most impactful findings.
+  const sortedRaw = [...findingsRaw].sort(
+    (a, b) =>
+      severityRank(b.severity) - severityRank(a.severity) ||
+      (b.cvss ?? 0) - (a.cvss ?? 0)
+  );
+  const full: Finding[] = sortedRaw.map((bf, index) => {
+    const groupLabel = groupLabelForFinding(bf);
     let groupId = groupIds.get(groupLabel);
     if (!groupId) {
       groupId = String(groupIds.size + 1);
@@ -795,6 +841,7 @@ export function mapBackendFindingsToResults(
       detailLevel: "full" as const,
       access: "full" as const,
       riskScore: bf.adversarial_score ?? bf.cvss ?? null,
+      compliance: mapFindingCompliance(bf),
     };
   });
 
