@@ -149,7 +149,7 @@ class TestRoutingTable:
         assert route.fallback_env_key == "OPENAI_API_KEY"
         assert route.fallback_model == "gpt-4o"
         assert route.max_tokens == 1500
-        assert route.temperature == 0.3
+        assert route.temperature == 0.1  # Block 5: lowered for deterministic reporting
 
     def test_threat_modeling_route(self):
         route = ROUTING_TABLE[LLMTask.THREAT_MODELING]

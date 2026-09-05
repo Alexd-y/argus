@@ -145,7 +145,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_base_url="https://api.openai.com",
         fallback_model="gpt-4o",
         max_tokens=1500,
-        temperature=0.3,
+        temperature=0.1,
     ),
     LLMTask.THREAT_MODELING: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
@@ -165,7 +165,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_base_url="https://openrouter.ai/api",
         fallback_model="anthropic/claude-3.5-sonnet",
         max_tokens=2000,
-        temperature=0.3,
+        temperature=0.2,
     ),
     LLMTask.EXPLOIT_GENERATION: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
@@ -195,7 +195,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_base_url="https://api.deepseek.com",
         fallback_model="deepseek-chat",
         max_tokens=2000,
-        temperature=0.2,
+        temperature=0.1,
     ),
     LLMTask.ZERO_DAY_ANALYSIS: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
@@ -235,7 +235,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_base_url="https://api.openai.com",
         fallback_model="gpt-4o-mini",
         max_tokens=2000,
-        temperature=0.3,
+        temperature=0.1,
     ),
     LLMTask.ORCHESTRATION: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
@@ -265,7 +265,7 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         fallback_base_url="https://api.openai.com",
         fallback_model="gpt-4o-mini",
         max_tokens=500,
-        temperature=0.2,
+        temperature=0.1,
     ),
     LLMTask.QUICK_PLANNER: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
