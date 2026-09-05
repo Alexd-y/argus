@@ -31,7 +31,7 @@ def _report_view_url(scan_id: str) -> str:
     return f"{base}/scan/{scan_id}" if base else f"/scan/{scan_id}"
 
 
-def _buy_url(target: str) -> str:
+def _buy_url() -> str:
     base = (settings.public_report_base_url or settings.vercel_frontend_url or "").rstrip("/")
     return f"{base}/?buy=1" if base else "/?buy=1"
 
@@ -102,7 +102,7 @@ async def notify_quota_low(*, to_email: str | None, target: str, remaining: int)
     """Send the 'quota running low' email (fire-and-forget)."""
     if not to_email:
         return False
-    subject, html, text = quota_low_email(target, remaining, _buy_url(target))
+    subject, html, text = quota_low_email(target, remaining, _buy_url())
     return await send_email(to_email, subject, html, text=text)
 
 

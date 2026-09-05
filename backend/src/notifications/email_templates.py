@@ -74,10 +74,11 @@ def purchase_confirmation_email(
     """Email confirming a scan-credit purchase."""
     safe_target = escape(target)
     subject = f"Purchase confirmed — {credits} scan credit(s)"
+    # Only allow http(s) receipt links (defense-in-depth against javascript:/data:).
     receipt_html = (
         f'<p style="margin:24px 0"><a href="{escape(receipt_url, quote=True)}" '
         'style="color:#6d28d9">View receipt</a></p>'
-        if receipt_url
+        if receipt_url and receipt_url.startswith(("https://", "http://"))
         else ""
     )
     html = _wrap(

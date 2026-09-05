@@ -35,6 +35,11 @@ class TestTemplates:
         _s2, html_yes, _t2 = purchase_confirmation_email("alleksy.com", 5, "https://x/receipt")
         assert "View receipt" in html_yes
 
+    def test_purchase_receipt_rejects_javascript_scheme(self):
+        _s, html, _t = purchase_confirmation_email("alleksy.com", 5, "javascript:alert(1)")
+        assert "View receipt" not in html
+        assert "javascript:" not in html
+
 
 class _FakeResp:
     def __init__(self, status_code: int) -> None:
