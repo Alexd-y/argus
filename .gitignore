@@ -128,3 +128,6 @@ z_analyze.md
 Анализ_архитектуры_ARGUS.md
 Развитие.md
 Развитие2.md
+# Scratch / scan artifacts (never commit)
+_mig*.txt
+backend/nuclei_raw_matches.jsonl
