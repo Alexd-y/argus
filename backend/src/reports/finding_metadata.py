@@ -349,3 +349,71 @@ def apply_default_finding_metadata(f: dict[str, Any]) -> None:
         mapped = map_finding_frameworks(f)
         if mapped:
             f["compliance"] = mapped
+
+    _ensure_report_fields(f)
+
+
+# Block 4.4 — how-to-fix defaults for key finding classes (filled only when the
+# producer left remediation empty). Concrete, copy-pasteable guidance.
+_REMEDIATION_DEFAULTS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (
+        (
+            "missing security header", "security http header", "content-security-policy",
+            "x-frame-options", "hsts", "strict-transport", "clickjacking", "cwe-693", "cwe-1021",
+        ),
+        (
+            "Add the missing HTTP security headers at the edge/app, e.g.:\n"
+            "  Content-Security-Policy: default-src 'self'\n"
+            "  Strict-Transport-Security: max-age=31536000; includeSubDomains\n"
+            "  X-Frame-Options: DENY\n"
+            "  X-Content-Type-Options: nosniff\n"
+            "  Referrer-Policy: strict-origin-when-cross-origin"
+        ),
+    ),
+    (
+        ("tls", "ssl", "cipher", "cwe-326", "cwe-327", "weak protocol", "outdated protocol"),
+        (
+            "Disable TLS < 1.2 and weak/legacy cipher suites; prefer TLS 1.3 with "
+            "forward-secret AEAD ciphers. Verify with: sslscan <host>:443 or testssl.sh."
+        ),
+    ),
+    (
+        ("rate limit", "rate-limit", "429", "brute", "cwe-307", "cwe-799"),
+        (
+            "Enforce rate limiting / account lockout on authentication and other "
+            "sensitive endpoints (e.g. per-IP + per-account throttling, exponential "
+            "backoff, and CAPTCHA after repeated failures)."
+        ),
+    ),
+)
+
+
+def _ensure_report_fields(f: dict[str, Any]) -> None:
+    """Guarantee a human-readable description + how-to-fix reach the report (4.3/4.4).
+
+    - Fills an empty ``description`` from the title so medium/low findings are
+      never blank in the UI.
+    - Fills ``remediation`` for key classes (security headers, TLS, rate
+      limiting) when the producer left it empty.
+    - Bridges ``remediation`` -> ``applicability_notes`` (the field the report
+      renders as remediation) when the latter is empty, so how-to-fix shows.
+    """
+    title = str(f.get("title") or "").strip()
+    if not str(f.get("description") or "").strip() and title:
+        f["description"] = (
+            f"{title}. Observed on the target during scanning; review the evidence "
+            "and apply the recommended remediation."
+        )
+
+    if not str(f.get("remediation") or "").strip():
+        blob = " ".join(
+            str(f.get(k, "")) for k in ("title", "description", "cwe")
+        ).lower()
+        for needles, fix in _REMEDIATION_DEFAULTS:
+            if any(n in blob for n in needles):
+                f["remediation"] = fix
+                break
+
+    remediation = str(f.get("remediation") or "").strip()
+    if remediation and not str(f.get("applicability_notes") or "").strip():
+        f["applicability_notes"] = remediation[:8000]
