@@ -191,19 +191,51 @@ class ReportDocumentV1(BaseModel):
         return self.model_copy(update={"snapshot_hash": digest, "generated_at": ts})
 
 
-def apply_evidence_gate(findings: list[ReportFinding]) -> tuple[list[ReportFinding], list[ReportValidationError]]:
-    """Downgrade provable findings that lack evidence (Requirements R7.4/P5).
+def apply_evidence_gate(
+    findings: list[ReportFinding],
+    *,
+    known_evidence_ids: set[str] | None = None,
+    known_tool_run_ids: set[str] | None = None,
+) -> tuple[list[ReportFinding], list[ReportValidationError]]:
+    """Downgrade provable findings that lack a *verifiable* evidence chain.
 
-    A finding may keep ``confirmed``/``exploitable`` only if it has at least one
-    evidence id AND a tool_run_id or validator_id. Otherwise it is downgraded to
-    ``insufficient_evidence`` and a validation error is recorded.
+    A finding may keep ``confirmed``/``exploitable`` only if:
+
+    * it references verifiable evidence — an ``evidence_id`` that resolves to a
+      real ``evidence_reference`` (or object key) in the snapshot, OR a concrete
+      ``raw_artifact_ref``; AND
+    * it names a producer — a ``tool_run_id`` that resolves to a real tool run,
+      OR a ``validator_id``.
+
+    When ``known_evidence_ids`` / ``known_tool_run_ids`` are provided the check
+    is *referential* (Requirements §5: "finding → evidence → run/session;
+    confirmed запрещён при непроверяемых связях") — opaque, unresolvable refs
+    such as ``finding-3`` no longer satisfy the gate. When they are omitted the
+    check falls back to the historical non-empty test (backward compatible).
+
+    Otherwise the status is downgraded to ``insufficient_evidence`` and a
+    validation error is recorded.
     """
+    enforce_refs = known_evidence_ids is not None or known_tool_run_ids is not None
+    ev_set = known_evidence_ids or set()
+    run_set = known_tool_run_ids or set()
+
     gated: list[ReportFinding] = []
     errors: list[ReportValidationError] = []
     for finding in findings:
         if finding.verification_status in _PROVABLE_STATUSES:
-            has_evidence = bool(finding.evidence_ids)
-            has_source = bool(finding.tool_run_id or finding.validator_id)
+            if enforce_refs:
+                has_evidence = (
+                    any(e in ev_set for e in finding.evidence_ids)
+                    or bool(finding.raw_artifact_ref)
+                )
+                has_source = (
+                    (finding.tool_run_id in run_set if finding.tool_run_id else False)
+                    or bool(finding.validator_id)
+                )
+            else:
+                has_evidence = bool(finding.evidence_ids)
+                has_source = bool(finding.tool_run_id or finding.validator_id)
             if not (has_evidence and has_source):
                 errors.append(
                     ReportValidationError(
@@ -211,7 +243,8 @@ def apply_evidence_gate(findings: list[ReportFinding]) -> tuple[list[ReportFindi
                         code="insufficient_evidence",
                         message=(
                             f"Finding {finding.finding_id!r} claimed "
-                            f"{finding.verification_status!r} without evidence refs; downgraded."
+                            f"{finding.verification_status!r} without a verifiable "
+                            "evidence chain (evidence→run/session); downgraded."
                         ),
                     )
                 )
@@ -251,7 +284,21 @@ def build_report_document(
     generated_at: datetime | None = None,
 ) -> ReportDocumentV1:
     """Assemble + finalize a canonical snapshot with the evidence gate applied."""
-    gated_findings, gate_errors = apply_evidence_gate(list(findings or []))
+    _evidence_refs = list(evidence_references or [])
+    _tool_runs = list(tool_runs or [])
+    # Referential-integrity sets: an evidence id / tool_run id is "verifiable"
+    # only if it resolves to a real reference/run in this snapshot.
+    known_evidence_ids: set[str] = set()
+    for _ref in _evidence_refs:
+        known_evidence_ids.add(_ref.evidence_id)
+        if _ref.object_key:
+            known_evidence_ids.add(_ref.object_key)
+    known_tool_run_ids: set[str] = {t.tool_run_id for t in _tool_runs}
+    gated_findings, gate_errors = apply_evidence_gate(
+        list(findings or []),
+        known_evidence_ids=known_evidence_ids,
+        known_tool_run_ids=known_tool_run_ids,
+    )
     doc = ReportDocumentV1(
         scan_id=scan_id,
         tenant_id=tenant_id,
