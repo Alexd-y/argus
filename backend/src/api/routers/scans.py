@@ -52,6 +52,7 @@ from src.execution_mode.mode import ExecutionMode
 from src.execution_mode.repository import load_lease_scope_storage
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
+from src.orchestration.finding_gate import gate_and_dedupe_findings
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import try_pick_queued_scan
 from src.profiles import (
@@ -815,6 +816,45 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     )
 
 
+def _finding_row_to_gate_dict(f: FindingModel, index: int) -> dict[str, Any]:
+    """Project a DB finding row onto the dict shape the finding gate reads.
+
+    Kept intentionally close to the pipeline finding dict so the read-time gate
+    on the UI path (``get_scan_findings``) applies the *same* evidence-quality
+    and dedup rules as the canonical snapshot — a single source of truth for
+    which findings count (fixes the historical UI-vs-export divergence).
+    """
+    poc = f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None
+    return {
+        "_row_index": index,
+        "title": f.title or "",
+        "cwe": f.cwe or "",
+        "description": f.description or "",
+        "severity": f.severity or "info",
+        "cvss": f.cvss,
+        "source_tool": getattr(f, "source_tool", None) or getattr(f, "source", None) or "",
+        "proof_of_concept": poc,
+        "evidence_refs": list(f.evidence_refs) if isinstance(f.evidence_refs, list) else [],
+    }
+
+
+def _gate_finding_rows(rows: list[FindingModel]) -> list[FindingModel]:
+    """Return the gated + deduped subset of DB finding rows (order preserved).
+
+    Uses the shared :func:`gate_and_dedupe_findings` so the UI list matches the
+    canonical report snapshot. Guarded by ``finding_evidence_gate_enabled``
+    (when disabled, all rows pass through unchanged).
+    """
+    if not rows:
+        return rows
+    dicts = [_finding_row_to_gate_dict(f, i) for i, f in enumerate(rows)]
+    kept = gate_and_dedupe_findings(
+        dicts, enabled=settings.finding_evidence_gate_enabled
+    )
+    surviving = [d["_row_index"] for d in kept if isinstance(d.get("_row_index"), int)]
+    return [rows[i] for i in surviving]
+
+
 @router.get("/{scan_id}/findings/top", response_model=list[Finding])
 async def get_scan_findings_top(
     scan_id: str,
@@ -972,7 +1012,7 @@ async def get_scan_findings(
         if validated_only:
             fq = fq.where(FindingModel.confidence == "confirmed")
         result = await session.execute(fq)
-        findings = list(result.scalars().all())
+        findings = _gate_finding_rows(list(result.scalars().all()))
         return [_finding_to_schema(f) for f in findings]
 
 
