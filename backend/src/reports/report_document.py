@@ -163,6 +163,10 @@ class ReportDocumentV1(BaseModel):
     budget_usage: dict[str, Any] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
 
+    # Strict WSTG v4.2 coverage report (Track B) — evidence-based coverage +
+    # gate decision (src/reports/wstg_gate). None when the strict gate is off.
+    wstg: dict[str, Any] | None = None
+
     # Validation of the evidence gate (populated during build)
     validation_errors: list[ReportValidationError] = Field(default_factory=list)
 
@@ -281,6 +285,7 @@ def build_report_document(
     limitations: list[str] | None = None,
     prompt_model_versions: dict[str, Any] | None = None,
     registry_versions: dict[str, Any] | None = None,
+    wstg: dict[str, Any] | None = None,
     generated_at: datetime | None = None,
 ) -> ReportDocumentV1:
     """Assemble + finalize a canonical snapshot with the evidence gate applied."""
@@ -326,6 +331,7 @@ def build_report_document(
         validation_errors=gate_errors,
         prompt_model_versions=prompt_model_versions or {},
         registry_versions=registry_versions or {},
+        wstg=wstg,
     )
     return doc.finalized(generated_at=generated_at)
 

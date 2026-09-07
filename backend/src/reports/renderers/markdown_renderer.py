@@ -67,6 +67,26 @@ def render_markdown(doc: ReportDocumentV1) -> str:
         lines.append(f"- `{t.tool_run_id}` {t.tool_name}: `{t.status}`{ps}")
     lines.append("")
 
+    if doc.wstg:
+        w = doc.wstg
+        lines.append("## WSTG v4.2 Coverage (strict)")
+        lines.append("")
+        lines.append(f"- coverage: `{w.get('coverage_pct')}%` (threshold `{w.get('threshold')}%`)")
+        lines.append(f"- gate_passed: `{w.get('gate_passed')}`")
+        lines.append(
+            f"- counted: `{w.get('counted')}` / applicable `{w.get('applicable')}` "
+            f"(catalog `{w.get('catalog_size')}`)"
+        )
+        lines.append(
+            f"- completed_pass: `{w.get('completed_pass')}`, "
+            f"completed_fail: `{w.get('completed_fail')}`, "
+            f"partial: `{w.get('partial')}`, blocked: `{w.get('blocked')}`, "
+            f"not_started: `{w.get('not_started')}`"
+        )
+        for err in w.get("exclusion_errors") or []:
+            lines.append(f"- exclusion_error: {err}")
+        lines.append("")
+
     lines.append("## Limitations")
     lines.append("")
     if not doc.limitations:

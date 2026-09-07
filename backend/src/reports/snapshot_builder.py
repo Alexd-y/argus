@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.core.config import settings
 from src.reports.report_document import (
     ReportCoverageItem,
     ReportDocumentV1,
@@ -20,6 +21,8 @@ from src.reports.report_document import (
     ReportToolRun,
     build_report_document,
 )
+from src.reports.wstg_gate import compute_wstg_coverage
+from src.reports.wstg_plan import derive_wstg_states
 
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
@@ -207,6 +210,46 @@ def _map_evidence(report_data: Any) -> list[ReportEvidenceRef]:
     return out
 
 
+def _tools_executed(scan_report_data: Any) -> list[str]:
+    runs = getattr(scan_report_data, "tool_runs", None) or []
+    out: list[str] = []
+    for run in runs:
+        get = run.get if isinstance(run, dict) else (lambda k, d=None, r=run: getattr(r, k, d))
+        name = str(get("tool_name", "") or get("tool", "") or "").strip()
+        if name:
+            out.append(name)
+    return out
+
+
+def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for f in getattr(report_data, "findings", None) or []:
+        get = f.get if isinstance(f, dict) else (lambda k, d=None, o=f: getattr(o, k, d))
+        out.append(
+            {
+                "title": get("title", "") or "",
+                "description": get("description", "") or "",
+                "tags": get("tags"),
+                "references": get("references"),
+                "ref": get("ref"),
+                "wstg": get("wstg"),
+                "owasp_wstg": get("owasp_wstg"),
+            }
+        )
+    return out
+
+
+def _build_wstg_block(report_data: Any, scan_report_data: Any) -> dict[str, Any] | None:
+    """Strict, evidence-based WSTG coverage report (Track B), or None when off."""
+    if not settings.wstg_strict_gate_enabled:
+        return None
+    states = derive_wstg_states(
+        _tools_executed(scan_report_data),
+        _finding_dicts_for_wstg(report_data),
+    )
+    return compute_wstg_coverage(states, catalog_size=len(states)).as_dict()
+
+
 def build_snapshot_from_report_data(
     report_data: Any,
     *,
@@ -268,6 +311,7 @@ def build_snapshot_from_report_data(
         evidence_references=evidence_refs,
         limitations=list(meta.get("limitations") or []),
         registry_versions=registry_versions or meta.get("registry_versions") or {},
+        wstg=_build_wstg_block(report_data, scan_report_data),
         generated_at=generated_at,
     )
 

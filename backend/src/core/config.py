@@ -907,6 +907,11 @@ class Settings(BaseSettings):
     # Block 2 — run DNS/email-security recon (SPF/DMARC/DKIM, DNSSEC, AXFR,
     # subdomains, breach) in the recon phase. Env: DNS_SECURITY_RECON_ENABLED.
     dns_security_recon_enabled: bool = True
+    # Track B — attach the strict, evidence-based WSTG v4.2 coverage report
+    # (src/reports/wstg_gate + wstg_plan) to the canonical snapshot, alongside
+    # the legacy tool-heuristic coverage. Additive/opt-in.
+    # Env: WSTG_STRICT_GATE_ENABLED.
+    wstg_strict_gate_enabled: bool = False
     # Aggressive argv merge from ``data/tool_configs.json`` (extra flags / payload wordlists).
     # Default false so unit tests and CI keep stable argv; set VA_AGGRESSIVE_SCAN=true in prod.
     va_aggressive_scan: bool = False
