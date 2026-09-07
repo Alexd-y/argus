@@ -912,6 +912,10 @@ class Settings(BaseSettings):
     # the legacy tool-heuristic coverage. Additive/opt-in.
     # Env: WSTG_STRICT_GATE_ENABLED.
     wstg_strict_gate_enabled: bool = False
+    # Query XposedOrNot (free, keyless breach API) for collected emails during
+    # recon, alongside HIBP. Off by default to avoid unexpected external calls.
+    # Env: XPOSEDORNOT_ENABLED.
+    xposedornot_enabled: bool = False
     # Aggressive argv merge from ``data/tool_configs.json`` (extra flags / payload wordlists).
     # Default false so unit tests and CI keep stable argv; set VA_AGGRESSIVE_SCAN=true in prod.
     va_aggressive_scan: bool = False

@@ -20,6 +20,7 @@ from src.recon.dns_security.dns_records import analyze_axfr, analyze_caa
 from src.recon.dns_security.dnssec import analyze_dnssec
 from src.recon.dns_security.email_auth import analyze_dkim, analyze_dmarc, analyze_spf
 from src.recon.dns_security.subdomains import parse_subdomains
+from src.recon.dns_security.xposed_exposure import collect_xposed_exposure
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,11 @@ async def collect_dns_security_findings(
             findings.extend(await collect_breach_exposure(domain, emails))
         except Exception as exc:  # noqa: BLE001 — HIBP failure must not break recon
             logger.debug("breach_check_failed", extra={"error": str(exc)})
+        # XposedOrNot (keyless, gated on settings.xposedornot_enabled).
+        try:
+            findings.extend(await collect_xposed_exposure(domain, emails))
+        except Exception as exc:  # noqa: BLE001 — XoN failure must not break recon
+            logger.debug("xposed_check_failed", extra={"error": str(exc)})
 
     return subdomains, findings
 
