@@ -129,11 +129,25 @@ def _map_tool_runs(scan_report_data: Any) -> list[ReportToolRun]:
 
 
 def _map_coverage(scan_report_data: Any) -> list[ReportCoverageItem]:
-    coverage = getattr(scan_report_data, "coverage_occurrence", None) or []
+    """Map capability coverage into snapshot items.
+
+    ``ScanReportData.coverage_occurrence`` is a *dict* (CONT-009 schema) whose
+    ``coverage_by_capability`` maps ``capability_id -> serialized result``. The
+    earlier implementation iterated it as a list, so real coverage was silently
+    dropped and the snapshot rendered ``Coverage: not_assessed``. Handle the
+    dict schema and keep the legacy list form for lightweight test doubles.
+    """
+    coverage = getattr(scan_report_data, "coverage_occurrence", None)
+    items: list[dict[str, Any]] = []
+    if isinstance(coverage, dict):
+        by_cap = coverage.get("coverage_by_capability")
+        if isinstance(by_cap, dict):
+            items = [v for v in by_cap.values() if isinstance(v, dict)]
+    elif isinstance(coverage, list):
+        items = [v for v in coverage if isinstance(v, dict)]
+
     out: list[ReportCoverageItem] = []
-    for item in coverage:
-        if not isinstance(item, dict):
-            continue
+    for item in items:
         cap = item.get("capability_id") or item.get("requirement_id")
         if not cap:
             continue

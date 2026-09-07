@@ -54,3 +54,52 @@ def test_missing_provenance_stays_none():
     f = doc.findings[0]
     assert f.validator_id is None
     assert f.raw_artifact_ref is None
+
+
+# --- A3: coverage_occurrence (dict schema) maps into snapshot coverage --------
+
+
+class _ScanReportData:
+    scan = None
+    tool_runs: ClassVar[list] = []
+    coverage_occurrence: ClassVar[dict] = {
+        "coverage_by_capability": {
+            "WSTG-INFO-01": {
+                "capability_id": "WSTG-INFO-01",
+                "status": "covered_with_finding",
+                "reason_code": None,
+                "evidence_ids": ["e1", "e2"],
+            },
+            "WSTG-CONF-01": {
+                "capability_id": "WSTG-CONF-01",
+                "status": "not_tested",
+                "reason_code": "no_tool",
+            },
+        }
+    }
+
+
+def test_coverage_dict_schema_populates_snapshot():
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_ScanReportData()
+    )
+    caps = {c.capability_id: c for c in doc.coverage}
+    assert set(caps) == {"WSTG-INFO-01", "WSTG-CONF-01"}
+    assert caps["WSTG-CONF-01"].status == "not_tested"
+    assert caps["WSTG-CONF-01"].reason_code == "no_tool"
+    assert caps["WSTG-INFO-01"].evidence_ids == ["e1", "e2"]
+
+
+class _LegacyListSRD:
+    scan = None
+    tool_runs: ClassVar[list] = []
+    coverage_occurrence: ClassVar[list] = [
+        {"capability_id": "WSTG-SESS-01", "status": "tested", "evidence_ids": []},
+    ]
+
+
+def test_coverage_legacy_list_form_still_maps():
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_LegacyListSRD()
+    )
+    assert [c.capability_id for c in doc.coverage] == ["WSTG-SESS-01"]
