@@ -1,0 +1,3 @@
+# Fetched remote wordlists are cached here (never committed — large corpora).
+.cache/
+*.cache/

@@ -1,0 +1,84 @@
+# ARGUS wordlist source catalog (schema wordlist_catalog_v1).
+#
+# Metadata-only registry of external credential/username wordlist sources plus a
+# tiny curated built-in default-credentials list. Large corpora (SecLists is
+# 350GB+; upstream README explicitly warns against storing the full set on a
+# server) are NEVER committed here — only their canonical source, the specific
+# raw file, its license and approximate size. The WordlistRegistry loader
+# fetches a referenced file on demand into WORDLIST_CACHE_DIR (gitignored),
+# verifies size/sha256 when provided, and hands the local path to the
+# brute-force adapters (hydra/medusa/patator/ncrack) via {in_dir}/pass.txt etc.
+#
+# Categories: password | username | credential_pair | default_credentials
+#
+# Sources requested for ARGUS:
+#   - https://github.com/danielmiessler/SecLists          (MIT)
+#   - https://github.com/berzerk0/Probable-Wordlists      (CC-BY-SA-4.0)
+#   - https://github.com/xajkep/wordlists                 (see repo)
+#
+# Use only against authorized targets; auth brute-force is policy-gated
+# (requires_approval) and rate/lockout aware in the pipeline.
+
+schema_version: wordlist_catalog_v1
+
+wordlists:
+  # ── Built-in curated default credentials (committed, tiny, offline) ────────
+  - id: argus-default-credentials
+    name: "ARGUS curated default credentials"
+    category: default_credentials
+    builtin: true
+    path: default-credentials.txt
+    license: "ARGUS internal"
+    description: >
+      Small hand-curated user:pass list of well-known vendor/app defaults for
+      WSTG-ATHN-02 (default credentials) checks without any network fetch.
+
+  # ── SecLists (MIT) ─────────────────────────────────────────────────────────
+  - id: seclists-passwords-top10k
+    name: "SecLists — 10M password list, top 10000"
+    category: password
+    source: "https://github.com/danielmiessler/SecLists"
+    fetch_url: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10-million-password-list-top-10000.txt"
+    license: "MIT"
+    approx_lines: 10000
+
+  - id: seclists-passwords-top1000
+    name: "SecLists — 10M password list, top 1000"
+    category: password
+    source: "https://github.com/danielmiessler/SecLists"
+    fetch_url: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10-million-password-list-top-1000.txt"
+    license: "MIT"
+    approx_lines: 1000
+
+  - id: seclists-usernames-top
+    name: "SecLists — top usernames shortlist"
+    category: username
+    source: "https://github.com/danielmiessler/SecLists"
+    fetch_url: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Usernames/top-usernames-shortlist.txt"
+    license: "MIT"
+    approx_lines: 17
+
+  - id: seclists-default-passwords
+    name: "SecLists — default credentials (DefaultCreds)"
+    category: default_credentials
+    source: "https://github.com/danielmiessler/SecLists"
+    fetch_url: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Default-Credentials/default-passwords.csv"
+    license: "MIT"
+
+  # ── Probable-Wordlists (CC-BY-SA-4.0) ──────────────────────────────────────
+  - id: probable-v2-top1575
+    name: "Probable-Wordlists — Top 1575 probable passwords"
+    category: password
+    source: "https://github.com/berzerk0/Probable-Wordlists"
+    fetch_url: "https://raw.githubusercontent.com/berzerk0/Probable-Wordlists/master/Real-Passwords/Top12Thousand-probable-v2.txt"
+    license: "CC-BY-SA-4.0"
+    approx_lines: 12000
+
+  # ── xajkep/wordlists ───────────────────────────────────────────────────────
+  - id: xajkep-user-field-names
+    name: "xajkep — user field names"
+    category: username
+    source: "https://github.com/xajkep/wordlists"
+    fetch_url: "https://raw.githubusercontent.com/xajkep/wordlists/master/discovery/user_field_names.txt"
+    license: "see-source"
+    approx_lines: 228
