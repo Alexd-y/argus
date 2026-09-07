@@ -1,0 +1,69 @@
+{
+  "description": "OWASP Juice Shop v17.0.0 — local authorized e2e stand (Track B WSTG demo). Multi-principal engagement: authenticated owner (admin) + lower-trust attacker + anonymous baseline for authz/IDOR/session testing.",
+  "principals": [
+    {
+      "principal_id": "owner",
+      "role": "owner",
+      "credentials": {
+        "username": "admin@juice-sh.op",
+        "password": "admin123"
+      },
+      "login": {
+        "login_type": "form",
+        "login_url": "http://juice-shop:3000/#/login",
+        "credentials": {
+          "username": "admin@juice-sh.op",
+          "password": "admin123"
+        },
+        "login_flow": [
+          {"instruction": "Type the admin email into the email field", "selector": "#email", "value": "$username"},
+          {"instruction": "Type the admin password into the password field", "selector": "#password", "value": "$password"},
+          {"instruction": "Click the Log in button", "selector": "#loginButton"}
+        ],
+        "success_condition": {"type": "cookie_exists", "value": "token"}
+      }
+    },
+    {
+      "principal_id": "attacker",
+      "role": "attacker",
+      "credentials": {
+        "username": "jim@juice-sh.op",
+        "password": "ncc-1701"
+      },
+      "login": {
+        "login_type": "form",
+        "login_url": "http://juice-shop:3000/#/login",
+        "credentials": {
+          "username": "jim@juice-sh.op",
+          "password": "ncc-1701"
+        },
+        "login_flow": [
+          {"instruction": "Type the attacker email into the email field", "selector": "#email", "value": "$username"},
+          {"instruction": "Type the attacker password into the password field", "selector": "#password", "value": "$password"},
+          {"instruction": "Click the Log in button", "selector": "#loginButton"}
+        ],
+        "success_condition": {"type": "cookie_exists", "value": "token"}
+      }
+    },
+    {
+      "principal_id": "anon",
+      "role": "anonymous"
+    }
+  ],
+  "rules": {
+    "description": "Local authorized OWASP Juice Shop stand. Full active testing and impact confirmation permitted on test data only; destructive/DoS operations excluded.",
+    "focus": [
+      {"description": "REST API surface", "type": "url_path", "value": "/rest"},
+      {"description": "Legacy API surface", "type": "url_path", "value": "/api"},
+      {"description": "Product search (SQLi/XSS entry point)", "type": "url_path", "value": "/rest/products/search"}
+    ],
+    "avoid": [
+      {"description": "Do not exercise logout during authenticated crawl", "type": "url_path", "value": "/#/logout"}
+    ],
+    "max_rps": 20,
+    "max_concurrent": 5,
+    "rules_text": "Authorized local engagement against a disposable Juice Shop container. Credentials are the well-known Juice Shop test accounts (public). No production data."
+  },
+  "vuln_classes": [],
+  "exploit": true
+}
