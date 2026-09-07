@@ -76,6 +76,32 @@ def render_xml(doc: ReportDocumentV1) -> str:
         ee.set("kind", e.kind)
         _text(ee, "object_key", e.object_key)
 
+    if doc.wstg:
+        w = doc.wstg
+        we = SubElement(root, "wstg")
+        we.set("version", str(w.get("wstg_version", "")))
+        we.set("coverage_pct", str(w.get("coverage_pct", "")))
+        we.set("gate_passed", str(w.get("gate_passed", "")))
+        for tag in (
+            "threshold",
+            "catalog_size",
+            "applicable",
+            "not_applicable",
+            "counted",
+            "completed_pass",
+            "completed_fail",
+            "partial",
+            "blocked",
+            "failed",
+            "running",
+            "not_started",
+            "inconclusive",
+        ):
+            _text(we, tag, w.get(tag))
+        errs_el = SubElement(we, "exclusion_errors")
+        for err in w.get("exclusion_errors") or []:
+            _text(errs_el, "error", err)
+
     fails = SubElement(root, "failures")
     for fl in doc.failures:
         fle = SubElement(fails, "failure")

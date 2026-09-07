@@ -92,6 +92,34 @@ def render_html(doc: ReportDocumentV1) -> str:
             )
         parts.append("</ul>")
 
+    if doc.wstg:
+        w = doc.wstg
+        parts.append("<h2>WSTG v4.2 Coverage (strict)</h2>")
+        parts.append("<ul>")
+        parts.append(
+            f"<li>coverage: <code>{_na(w.get('coverage_pct'))}%</code> "
+            f"(threshold <code>{_na(w.get('threshold'))}%</code>)</li>"
+        )
+        parts.append(f"<li>gate_passed: <code>{_na(w.get('gate_passed'))}</code></li>")
+        parts.append(
+            f"<li>counted: <code>{_na(w.get('counted'))}</code> / applicable "
+            f"<code>{_na(w.get('applicable'))}</code> "
+            f"(catalog <code>{_na(w.get('catalog_size'))}</code>)</li>"
+        )
+        parts.append(
+            f"<li>completed_pass: <code>{_na(w.get('completed_pass'))}</code>, "
+            f"completed_fail: <code>{_na(w.get('completed_fail'))}</code>, "
+            f"partial: <code>{_na(w.get('partial'))}</code>, "
+            f"not_started: <code>{_na(w.get('not_started'))}</code></li>"
+        )
+        parts.append("</ul>")
+        errs = w.get("exclusion_errors") or []
+        if errs:
+            parts.append("<ul>")
+            for err in errs:
+                parts.append(f"<li>exclusion_error: {escape(str(err))}</li>")
+            parts.append("</ul>")
+
     parts.append("<h2>Limitations</h2>")
     if not doc.limitations:
         parts.append("<p><em>none</em></p>")

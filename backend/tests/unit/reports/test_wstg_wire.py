@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import ClassVar
+from xml.etree.ElementTree import fromstring
 
 import pytest
 from src.core.config import settings
-from src.reports.renderers import render_markdown
+from src.reports.renderers import render_html, render_markdown, render_xml
 from src.reports.snapshot_builder import build_snapshot_from_report_data
 
 
@@ -95,3 +96,39 @@ def test_markdown_omits_wstg_section_when_absent(_flag_off):
     )
     md = render_markdown(doc)
     assert "WSTG v4.2 Coverage (strict)" not in md
+
+
+def test_xml_contains_wstg_element_when_present(_flag_on):
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap", "nuclei"])
+    )
+    root = fromstring(render_xml(doc))
+    we = root.find("wstg")
+    assert we is not None
+    assert we.get("version") == "4.2"
+    assert we.get("gate_passed") is not None
+
+
+def test_xml_omits_wstg_element_when_absent(_flag_off):
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
+    )
+    root = fromstring(render_xml(doc))
+    assert root.find("wstg") is None
+
+
+def test_html_contains_wstg_section_when_present(_flag_on):
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap", "nuclei"])
+    )
+    html = render_html(doc)
+    assert "WSTG v4.2 Coverage (strict)" in html
+    assert "gate_passed" in html
+
+
+def test_html_omits_wstg_section_when_absent(_flag_off):
+    doc = build_snapshot_from_report_data(
+        _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
+    )
+    html = render_html(doc)
+    assert "WSTG v4.2 Coverage (strict)" not in html
