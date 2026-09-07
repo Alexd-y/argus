@@ -52,7 +52,8 @@ from src.execution_mode.mode import ExecutionMode
 from src.execution_mode.repository import load_lease_scope_storage
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
-from src.orchestration.auth_config import TargetConfig
+from src.orchestration.auth_config import CredentialTestConfig, TargetConfig
+from src.orchestration.credential_testing_policy import resolve_credential_testing
 from src.orchestration.finding_gate import gate_and_dedupe_findings
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import try_pick_queued_scan
@@ -521,6 +522,32 @@ async def create_scan(
                 status_code=422, detail=f"invalid auth_config: {exc}"
             ) from exc
         options_dict["auth_config"] = req.auth_config
+
+    # Full-Surface credential-testing authorization: brute-force is authorized
+    # automatically only for the deep/LAB (Full Surface) profile and is force-
+    # disabled otherwise. When Full Surface and no explicit config is supplied,
+    # ARGUS attaches its own bounded default set (from its wordlist base).
+    _existing_auth = (
+        options_dict.get("auth_config")
+        if isinstance(options_dict.get("auth_config"), dict)
+        else {}
+    )
+    _ct_in: CredentialTestConfig | None = None
+    _raw_ct = (_existing_auth or {}).get("credential_testing")
+    if isinstance(_raw_ct, dict):
+        try:
+            _ct_in = CredentialTestConfig.model_validate(_raw_ct)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=f"invalid credential_testing: {exc}"
+            ) from exc
+    _ct_out = resolve_credential_testing(
+        _ct_in, scan_profile=req.scan_profile, execution_mode=execution_mode.value
+    )
+    if _ct_out is not None:
+        _merged_auth = dict(_existing_auth or {})
+        _merged_auth["credential_testing"] = _ct_out.model_dump()
+        options_dict["auth_config"] = _merged_auth
 
     # Resolved nuclei profile is always populated for observability/reporting.
     nuclei_profile = (
