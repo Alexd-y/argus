@@ -1497,8 +1497,14 @@ async def run_quick_fuzz(
     tech_stack: dict[str, Any] = {}
     baseline_responses: dict[str, Any] = {}
     if recon_output and isinstance(recon_output, dict):
-        tech_stack = recon_output.get("tech_stack", recon_output.get("technologies", {}))
-        baseline_responses = recon_output.get("baseline_responses", {})
+        # ``tech_stack`` is a dict; ``technologies`` (Block 1.1) is a list of
+        # names — never conflate them, or QuickFuzzOutput validation fails.
+        _ts = recon_output.get("tech_stack")
+        if isinstance(_ts, dict):
+            tech_stack = _ts
+        _br = recon_output.get("baseline_responses")
+        if isinstance(_br, dict):
+            baseline_responses = _br
 
     return QuickFuzzOutput(
         findings=findings,
