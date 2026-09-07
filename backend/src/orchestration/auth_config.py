@@ -191,7 +191,7 @@ def _generate_totp(secret: str | None) -> str | None:
     if secret is None:
         return None
     try:
-        import pyotp  # noqa: PLC0415 — optional dependency, imported lazily on purpose
+        import pyotp
     except ImportError:
         return None
     return pyotp.TOTP(secret).now()
@@ -385,6 +385,70 @@ class RulesOfEngagement(BaseModel):
     )
 
 
+#: A wordlist catalog id (``src.tools.wordlists.registry``). Kept as a plain,
+#: validated string so this module stays decoupled from the registry — the
+#: brute-force adapters resolve the id to a file at run time.
+WordlistId = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9_\-]{0,63}$"),
+]
+
+
+class CredentialTestConfig(BaseModel):
+    """Large-scale credential testing config (WSTG-ATHN-02 / ATHN-03).
+
+    References wordlist catalog ids (resolved to files by the brute-force
+    adapters). Bounded + lockout/rate aware by construction so a run cannot
+    silently turn into an unbounded, account-locking flood. Authenticated
+    brute-force is policy-gated (``requires_approval``) — use only against
+    authorized targets.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: StrictBool = Field(
+        default=False,
+        description="Master switch — credential testing runs only when true.",
+    )
+    username_wordlist: WordlistId | None = Field(
+        default=None,
+        description="Catalog id of a username list (category=username).",
+    )
+    password_wordlist: WordlistId | None = Field(
+        default=None,
+        description="Catalog id of a password list (category=password).",
+    )
+    credential_pair_wordlist: WordlistId | None = Field(
+        default=None,
+        description="Catalog id of a user:pass default-credentials list (category=default_credentials).",
+    )
+    usernames: list[StrictStr] = Field(
+        default_factory=list,
+        max_length=256,
+        description="Inline usernames (small, in addition to any username_wordlist).",
+    )
+    max_attempts: StrictInt = Field(
+        default=200,
+        ge=1,
+        le=1_000_000,
+        description="Hard cap on total login attempts across all candidates.",
+    )
+    rate_per_minute: StrictInt = Field(
+        default=60,
+        ge=1,
+        le=6000,
+        description="Attempt rate ceiling per minute (IDS/lockout hygiene).",
+    )
+    lockout_aware: StrictBool = Field(
+        default=True,
+        description="Stop early on observed account-lockout / throttle signals.",
+    )
+    stop_on_success: StrictBool = Field(
+        default=True,
+        description="Stop testing a principal once valid credentials are found.",
+    )
+
+
 class TargetConfig(BaseModel):
     """Top-level configuration combining auth, scope, and scan settings.
 
@@ -436,6 +500,10 @@ class TargetConfig(BaseModel):
     rules: RulesOfEngagement = Field(
         default_factory=RulesOfEngagement,
         description="Rules of engagement governing scan behavior.",
+    )
+    credential_testing: CredentialTestConfig | None = Field(
+        default=None,
+        description="Optional large-scale credential testing (WSTG-ATHN-02/03) config.",
     )
     vuln_classes: list[StrictStr] = Field(
         default_factory=list,
@@ -533,6 +601,7 @@ class TargetConfig(BaseModel):
 __all__ = [
     "AuthConfig",
     "AuthCredentials",
+    "CredentialTestConfig",
     "EmailLoginConfig",
     "LoginFlowStep",
     "LoginType",
@@ -544,4 +613,5 @@ __all__ = [
     "SuccessCondition",
     "SuccessConditionType",
     "TargetConfig",
+    "WordlistId",
 ]
