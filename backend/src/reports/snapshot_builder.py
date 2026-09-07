@@ -73,6 +73,23 @@ def _map_finding(finding: Any, index: int) -> ReportFinding:
     finding_id = str(getattr(finding, "finding_id", None) or f"F-{index + 1}")
     evidence_refs = list(getattr(finding, "evidence_refs", None) or [])
     cwe = getattr(finding, "cwe", None)
+    # Evidence-contract provenance (A2): populate validator + raw artifact ref so
+    # findings trace to a producer and a stored artifact instead of being blank.
+    validator = (
+        getattr(finding, "validator_id", None)
+        or getattr(finding, "tool_name", None)
+        or getattr(finding, "source_tool", None)
+    )
+    raw_ref = getattr(finding, "raw_artifact_ref", None)
+    if not raw_ref:
+        poc = getattr(finding, "proof_of_concept", None)
+        if isinstance(poc, dict):
+            raw_ref = (
+                poc.get("screenshot_key")
+                or poc.get("artifact_key")
+                or poc.get("object_key")
+                or poc.get("raw_response_key")
+            )
     return ReportFinding(
         finding_id=finding_id,
         title=str(getattr(finding, "title", "") or "Untitled finding"),
@@ -86,6 +103,8 @@ def _map_finding(finding: Any, index: int) -> ReportFinding:
         tool_run_id=(str(getattr(finding, "tool_run_id", "")) or None)
         if getattr(finding, "tool_run_id", None)
         else None,
+        validator_id=str(validator) if validator else None,
+        raw_artifact_ref=str(raw_ref) if raw_ref else None,
     )
 
 
