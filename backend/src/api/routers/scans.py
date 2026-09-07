@@ -52,6 +52,7 @@ from src.execution_mode.mode import ExecutionMode
 from src.execution_mode.repository import load_lease_scope_storage
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
+from src.orchestration.auth_config import TargetConfig
 from src.orchestration.finding_gate import gate_and_dedupe_findings
 from src.owasp_top10_2025 import parse_owasp_category
 from src.policy.scan_queue import try_pick_queued_scan
@@ -506,6 +507,20 @@ async def create_scan(
             options_dict["engagement_id"] = engagement_id
         if lab_lease_id:
             options_dict["lab_lease_id"] = lab_lease_id
+
+    # Authenticated engagement config (auth-passthrough): validate as a
+    # TargetConfig and embed into scan options under the key the pipeline reads
+    # (TargetConfig.from_scan_options → options["auth_config"]). Without this the
+    # public API drops it (ScanOptions has extra="ignore"), so authenticated
+    # multi-principal testing never activates.
+    if req.auth_config:
+        try:
+            TargetConfig.from_json(req.auth_config)
+        except Exception as exc:  # invalid engagement config → 422 (re-raised)
+            raise HTTPException(
+                status_code=422, detail=f"invalid auth_config: {exc}"
+            ) from exc
+        options_dict["auth_config"] = req.auth_config
 
     # Resolved nuclei profile is always populated for observability/reporting.
     nuclei_profile = (

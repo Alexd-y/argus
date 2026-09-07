@@ -261,6 +261,15 @@ class ScanCreateRequest(BaseModel):
         default=None,
         description="Quick options; applied when scan_profile=quick or execution_mode=quick",
     )
+    auth_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Authenticated engagement config (multi-principal roles + login flows), "
+            "validated as orchestration.auth_config.TargetConfig and embedded into scan "
+            "options so the pipeline runs authenticated tests. Credentials are never "
+            "logged; use only for authorized targets."
+        ),
+    )
     report_language: str = Field(
         default="en",
         min_length=2,
