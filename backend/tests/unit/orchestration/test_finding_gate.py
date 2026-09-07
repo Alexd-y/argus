@@ -137,6 +137,68 @@ class TestDedupe:
         assert result[0]["severity"] == "high"
 
 
+class TestMetaNoiseAndSemantic:
+    def test_meta_unknown_with_description_is_dropped(self):
+        findings = [
+            {
+                "title": "Unknown finding with insufficient evidence",
+                "severity": "info",
+                "description": "Ten findings labeled unknown with no details.",
+            },
+            {
+                "title": "Insufficient evidence for unknown informational findings",
+                "severity": "info",
+                "description": "Multiple informational findings without detail.",
+            },
+            _real_xss(),
+        ]
+        kept = gate_and_dedupe_findings(findings, scan_id="t")
+        titles = [f["title"] for f in kept]
+        assert len(kept) == 1
+        assert titles[0].startswith("Reflected XSS")
+
+    def test_paraphrased_rate_limit_collapse_to_one(self):
+        findings = [
+            {"title": "No HTTP 429 observed on rapid login-path requests", "severity": "high",
+             "source_tool": "web_vuln_heuristics", "proof_of_concept": {"url": "https://alleksy.com/login"}},
+            {"title": "No Rate Limiting on Login Path", "severity": "medium",
+             "description": "Rapid requests to /login did not trigger 429.",
+             "proof_of_concept": {"url": "https://alleksy.com/login"}},
+            {"title": "Missing rate limiting on login endpoint", "severity": "low",
+             "description": "brute-force possible", "proof_of_concept": {"url": "https://alleksy.com/login"}},
+        ]
+        kept = gate_and_dedupe_findings(findings, scan_id="t")
+        assert len(kept) == 1
+        assert kept[0]["occurrences"] == 3
+        assert kept[0]["severity"] == "high"  # strongest kept
+
+    def test_paraphrased_tls_collapse_to_one(self):
+        findings = [
+            _tls_probe(),
+            {"title": "TLS Configuration Probe", "severity": "medium",
+             "description": "weak TLS config", "proof_of_concept": {"url": "https://alleksy.com/"}},
+            {"title": "TLS configuration weakness detected", "severity": "low",
+             "description": "ssl/tls potential issue", "proof_of_concept": {"url": "https://alleksy.com/"}},
+        ]
+        kept = gate_and_dedupe_findings(findings, scan_id="t")
+        assert len(kept) == 1
+
+    def test_distinct_email_findings_not_merged(self):
+        findings = [
+            {"title": "SPF not enforced (~all) — alleksy.com", "severity": "low",
+             "source_tool": "dns_recon", "description": "SPF record uses ~all (softfail).",
+             "evidence": "v=spf1 include:_spf.google.com ~all"},
+            {"title": "DMARC has no aggregate reporting (rua) — alleksy.com", "severity": "low",
+             "source_tool": "dns_recon", "description": "DMARC defines no rua= address.",
+             "evidence": "v=DMARC1; p=reject"},
+            {"title": "DKIM not detected — alleksy.com", "severity": "low",
+             "source_tool": "dns_recon", "description": "No DKIM key across probed selectors.",
+             "evidence": "probed: default, google, k1"},
+        ]
+        kept = gate_and_dedupe_findings(findings, scan_id="t")
+        assert len(kept) == 3  # SPF/DMARC/DKIM are distinct, not a semantic class
+
+
 class TestComposed:
     def test_real_scan_noise_reduced(self):
         """The 91dfff21 case: 10 unknown + 2 TLS + 2 rate-limit + 1 xss -> 3 clean."""

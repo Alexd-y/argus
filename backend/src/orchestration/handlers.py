@@ -2699,6 +2699,11 @@ async def run_vuln_analysis(
     # in recon_context) so they pass through the same gate/dedup/metadata path.
     _dns_sec = (recon_context or {}).get("dns_security_findings")
     if isinstance(_dns_sec, list) and _dns_sec:
+        # These merge AFTER _postprocess_findings_cvss ran, so enrich them here
+        # too (compliance + OWASP + remediation->applicability_notes bridge).
+        for _dnsf in _dns_sec:
+            if isinstance(_dnsf, dict):
+                apply_default_finding_metadata(_dnsf)
         llm_output.findings.extend(_dns_sec)
         logger.info(
             "dns_security_findings_merged",

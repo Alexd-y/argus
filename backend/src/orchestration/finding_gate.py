@@ -81,9 +81,52 @@ _MIN_MEANINGFUL_DESC = 15
 # records that differ only by their rendered target collapse together.
 _TITLE_SUFFIX_RE = re.compile(r"\s+(?:—|-|on|for|at)\s+https?://\S+.*$", re.IGNORECASE)
 
+# LLM meta-commentary titles ABOUT missing/insufficient evidence — never real
+# findings; drop regardless of description (they slip past the placeholder set).
+_META_NOISE_RE = re.compile(
+    r"insufficient evidence|unknown finding|cannot be (?:characteriz|validat)|"
+    r"no actionable|informational finding.*insufficient|unsubstantiated|"
+    r"without (?:sufficient|specific) (?:detail|evidence)",
+    re.IGNORECASE,
+)
+
+# Narrow semantic classes for noisy check families so paraphrased duplicates
+# (differently-worded titles for the same host-level issue) collapse into one.
+_SEMANTIC_CLASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("rate_limit", re.compile(r"rate.?limit|http\s*429|brute.?force", re.IGNORECASE)),
+    (
+        "security_headers",
+        re.compile(
+            r"security (?:http )?(?:response )?header|missing.*header|"
+            r"content-security-policy|\bhsts\b|x-frame-options|x-content-type",
+            re.IGNORECASE,
+        ),
+    ),
+    ("whatweb", re.compile(r"whatweb", re.IGNORECASE)),
+    (
+        "tls_probe",
+        re.compile(r"tls[_\s]?probe|tls configuration|ssl/tls|tls weakness", re.IGNORECASE),
+    ),
+)
+
 
 def _s(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _semantic_class(finding: dict[str, Any]) -> str | None:
+    """Return a coarse class for noisy check families, else None.
+
+    Only the narrow families below collapse across paraphrased titles; every
+    other finding keeps its precise title-based dedup key.
+    """
+    blob = " ".join(
+        _s(finding.get(k)) for k in ("title", "vuln_type", "source_tool")
+    ).lower()
+    for name, rx in _SEMANTIC_CLASSES:
+        if rx.search(blob):
+            return name
+    return None
 
 
 def _normalize_title(title: Any) -> str:
@@ -137,6 +180,9 @@ def evidence_quality_of(finding: dict[str, Any]) -> EvidenceQuality:
 
     title_norm = _normalize_title(finding.get("title"))
     if title_norm in _PLACEHOLDER_TITLES:
+        return EvidenceQuality.NONE
+    # LLM meta-commentary about missing evidence is never a real finding.
+    if _META_NOISE_RE.search(_s(finding.get("title"))):
         return EvidenceQuality.NONE
     # Fingerprint/coverage signal (e.g. WhatWeb plugin hit): only real evidence
     # keeps it as a finding; otherwise it is coverage, not a vulnerability.
@@ -207,7 +253,13 @@ def finding_key(finding: dict[str, Any]) -> str:
     host = target.split("/")[0] if target else ""
     port = _finding_port(finding)
     param = _finding_param(finding)
-    basis = f"{title}|{cwe}|{host}|{port}|{param}"
+    # Noisy check families (rate-limit, security headers, whatweb, TLS probe)
+    # collapse per host regardless of the exact (often LLM-paraphrased) wording.
+    semantic = _semantic_class(finding)
+    if semantic:
+        basis = f"class:{semantic}|{host}"
+    else:
+        basis = f"{title}|{cwe}|{host}|{port}|{param}"
     return hashlib.sha256(basis.encode("utf-8", "replace")).hexdigest()[:16]
 
 
