@@ -103,3 +103,46 @@ def test_coverage_legacy_list_form_still_maps():
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_LegacyListSRD()
     )
     assert [c.capability_id for c in doc.coverage] == ["WSTG-SESS-01"]
+
+
+# --- A2-populate: cross-link findings to persisted Evidence artifacts ---------
+
+
+class _RDWithEvidence:
+    def __init__(self, findings, evidence):
+        self.scan_id = "s1"
+        self.tenant_id = "t1"
+        self.target = "example.com"
+        self.findings = findings
+        self.evidence = evidence
+
+
+def test_finding_cross_linked_to_evidence_passes_gate():
+    rd = _RDWithEvidence(
+        findings=[
+            _Finding(finding_id="F-1", title="SQL injection", severity="high", cwe="CWE-89",
+                     description="sqli confirmed via sqlmap", validation_status="validated",
+                     confidence="confirmed", evidence_refs=[], source_tool="sqlmap"),
+        ],
+        evidence=[{"finding_id": "F-1", "object_key": "argus/poc/F-1.json", "kind": "artifact"}],
+    )
+    doc = build_snapshot_from_report_data(rd, scan_meta={"scan_id": "s1"})
+    f = doc.findings[0]
+    assert "argus/poc/F-1.json" in f.evidence_ids
+    assert f.raw_artifact_ref == "argus/poc/F-1.json"
+    assert f.validator_id == "sqlmap"
+    # Resolvable evidence + producer → confirmed survives the referential gate.
+    assert f.verification_status == "confirmed"
+
+
+def test_confirmed_without_persisted_evidence_is_downgraded():
+    rd = _RDWithEvidence(
+        findings=[
+            _Finding(finding_id="F-2", title="Reflected XSS", severity="high", cwe="CWE-79",
+                     description="xss", validation_status="validated",
+                     confidence="confirmed", evidence_refs=[], source_tool="dalfox"),
+        ],
+        evidence=[],
+    )
+    doc = build_snapshot_from_report_data(rd, scan_meta={"scan_id": "s1"})
+    assert doc.findings[0].verification_status == "insufficient_evidence"

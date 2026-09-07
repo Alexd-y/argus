@@ -69,9 +69,18 @@ def _verification_status(finding: Any) -> str:
     return "not_assessed"
 
 
-def _map_finding(finding: Any, index: int) -> ReportFinding:
+def _map_finding(
+    finding: Any, index: int, *, evidence_keys: list[str] | None = None
+) -> ReportFinding:
     finding_id = str(getattr(finding, "finding_id", None) or f"F-{index + 1}")
     evidence_refs = list(getattr(finding, "evidence_refs", None) or [])
+    # A2-populate: fold in resolvable artifact keys from persisted Evidence rows
+    # so the finding's evidence_ids reference real, gate-verifiable artifacts
+    # (finding → evidence → run/session) instead of only opaque refs.
+    resolvable = [k for k in (evidence_keys or []) if k]
+    for key in resolvable:
+        if key not in evidence_refs:
+            evidence_refs.append(key)
     cwe = getattr(finding, "cwe", None)
     # Evidence-contract provenance (A2): populate validator + raw artifact ref so
     # findings trace to a producer and a stored artifact instead of being blank.
@@ -90,6 +99,8 @@ def _map_finding(finding: Any, index: int) -> ReportFinding:
                 or poc.get("object_key")
                 or poc.get("raw_response_key")
             )
+    if not raw_ref and resolvable:
+        raw_ref = resolvable[0]
     return ReportFinding(
         finding_id=finding_id,
         title=str(getattr(finding, "title", "") or "Untitled finding"),
@@ -162,6 +173,22 @@ def _map_coverage(scan_report_data: Any) -> list[ReportCoverageItem]:
     return out
 
 
+def _evidence_keys_by_finding(report_data: Any) -> dict[str, list[str]]:
+    """Map ``finding_id -> [object_key]`` from persisted Evidence entries.
+
+    Used to cross-link findings to their stored raw artifacts so the evidence
+    gate can verify ``finding → evidence`` referential integrity.
+    """
+    out: dict[str, list[str]] = {}
+    for entry in getattr(report_data, "evidence", None) or []:
+        get = entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        fid = get("finding_id")
+        key = get("object_key")
+        if fid and key:
+            out.setdefault(str(fid), []).append(str(key))
+    return out
+
+
 def _map_evidence(report_data: Any) -> list[ReportEvidenceRef]:
     out: list[ReportEvidenceRef] = []
     for entry in getattr(report_data, "evidence", None) or []:
@@ -201,8 +228,16 @@ def build_snapshot_from_report_data(
                 return value
         return None
 
+    evidence_by_finding = _evidence_keys_by_finding(report_data)
     findings = [
-        _map_finding(f, i) for i, f in enumerate(getattr(report_data, "findings", None) or [])
+        _map_finding(
+            f,
+            i,
+            evidence_keys=evidence_by_finding.get(
+                str(getattr(f, "finding_id", None) or f"F-{i + 1}")
+            ),
+        )
+        for i, f in enumerate(getattr(report_data, "findings", None) or [])
     ]
 
     tool_runs = _map_tool_runs(scan_report_data) if scan_report_data is not None else []
