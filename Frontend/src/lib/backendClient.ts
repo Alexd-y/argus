@@ -18,6 +18,7 @@ import type {
   ScanBaseline,
   ScanBaselineControl,
   ScanResults,
+  ScanWstg,
 } from "./scan-results";
 import { censusFromFindings, midgardWriteupId, withTierAccess } from "./scan-results";
 import type { ScanData, ScanStatus } from "./scan-types";
@@ -604,6 +605,22 @@ interface BackendReport {
   summary?: BackendReportSummary;
   technologies?: unknown;
   baseline?: unknown;
+  wstg?: unknown;
+}
+
+/** Map the backend `report.wstg` dict into the typed {@link ScanWstg}. */
+function mapWstg(raw: unknown): ScanWstg | null {
+  if (!raw || typeof raw !== "object") return null;
+  const w = raw as Record<string, unknown>;
+  const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    version: String(w.wstg_version ?? "4.2"),
+    coveragePct: num(w.coverage_pct),
+    gatePassed: Boolean(w.gate_passed),
+    counted: num(w.counted),
+    applicable: num(w.applicable),
+    catalogSize: num(w.catalog_size),
+  };
 }
 
 /** Map the backend `report.baseline` dict into the typed {@link ScanBaseline}. */
@@ -806,6 +823,7 @@ export function emptyScanResults(): ScanResults {
     findings: [],
     totalFindings: 0,
     baseline: null,
+    wstg: null,
   };
 }
 
@@ -893,5 +911,6 @@ export function mapBackendFindingsToResults(
     findings,
     totalFindings: census.totalFindings,
     baseline: mapBaseline(report?.baseline),
+    wstg: mapWstg(report?.wstg),
   };
 }

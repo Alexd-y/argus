@@ -1249,6 +1249,10 @@ class ReportListResponse(BaseModel):
         default=None,
         description="Block 3 baseline coverage/pass_rate scoring (coverage, pass_rate, controls).",
     )
+    wstg: dict[str, Any] | None = Field(
+        default=None,
+        description="Strict WSTG v4.2 coverage report (Track B): coverage_pct, gate_passed, counts.",
+    )
 
 
 class ReportDetailResponse(BaseModel):
@@ -1275,6 +1279,10 @@ class ReportDetailResponse(BaseModel):
     baseline: dict[str, Any] | None = Field(
         default=None,
         description="Block 3 baseline coverage/pass_rate scoring (coverage, pass_rate, controls).",
+    )
+    wstg: dict[str, Any] | None = Field(
+        default=None,
+        description="Strict WSTG v4.2 coverage report (Track B): coverage_pct, gate_passed, counts.",
     )
 
 

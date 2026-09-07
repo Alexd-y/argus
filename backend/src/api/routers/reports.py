@@ -239,6 +239,7 @@ async def list_reports(
                     tier=report.tier or "midgard",
                     requested_formats=_serialize_requested_formats(report.requested_formats),
                     baseline=(report.summary or {}).get("baseline"),
+                    wstg=(report.summary or {}).get("wstg"),
                 )
             )
         return out
@@ -291,6 +292,7 @@ async def get_report(
             tier=report.tier or "midgard",
             requested_formats=_serialize_requested_formats(report.requested_formats),
             baseline=(report.summary or {}).get("baseline"),
+            wstg=(report.summary or {}).get("wstg"),
         )
 
 

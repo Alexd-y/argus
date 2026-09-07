@@ -675,6 +675,7 @@ async def _persist_report_and_findings(
             **summary.model_dump(),
             "ai_insights": report_dict.get("ai_insights") or [],
             "baseline": report_dict.get("baseline"),
+            "wstg": report_dict.get("wstg"),
         },
         technologies=technologies if technologies else None,
     )

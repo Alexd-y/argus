@@ -256,6 +256,27 @@ export function ScanExecutiveHeader({
     passedTile,
   ];
 
+  const wstg = results.wstg ?? null;
+  if (wstg) {
+    tiles.push({
+      label: "WSTG v4.2 coverage",
+      value: Math.round(wstg.coveragePct),
+      sub: `${wstg.gatePassed ? "gate passed" : "below gate"} · ${wstg.counted}/${wstg.applicable} tests`,
+      tone: wstg.gatePassed
+        ? {
+            border: "border-emerald-500/30 bg-emerald-500/[0.06]",
+            label: "text-emerald-300",
+            value: "text-emerald-400",
+          }
+        : {
+            border: "border-amber-500/30 bg-amber-500/[0.05]",
+            label: "text-amber-300",
+            value: "text-amber-400",
+          },
+      wide: true,
+    });
+  }
+
   return (
     <section className="space-y-2 sm:space-y-3">
       <div className="border border-neutral-800 bg-neutral-900 rounded-sm px-4 sm:px-5 py-4 rise-in">

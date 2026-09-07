@@ -83,6 +83,18 @@ export interface ScanBaseline {
   controls: ScanBaselineControl[];
 }
 
+/** Strict WSTG v4.2 coverage (Track B). Null when the backend did not emit it. */
+export interface ScanWstg {
+  version: string;
+  /** Coverage percentage 0..100 (completed_evidenced_applicable / applicable). */
+  coveragePct: number;
+  /** True only when coverage is strictly above the gate threshold. */
+  gatePassed: boolean;
+  counted: number;
+  applicable: number;
+  catalogSize: number;
+}
+
 export interface ScanResults {
   critical: number;
   high: number;
@@ -101,6 +113,8 @@ export interface ScanResults {
   totalFindings: number;
   /** Baseline coverage/pass-rate scoring. Null when the backend did not emit it. */
   baseline?: ScanBaseline | null;
+  /** Strict WSTG v4.2 coverage. Null when the backend did not emit it. */
+  wstg?: ScanWstg | null;
 }
 
 const ALLEKSY_IP = "172.67.204.159";

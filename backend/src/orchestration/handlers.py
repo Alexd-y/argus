@@ -102,6 +102,8 @@ from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_fin
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.baseline import evaluate_baseline
 from src.reports.finding_metadata import apply_default_finding_metadata
+from src.reports.wstg_gate import compute_wstg_coverage
+from src.reports.wstg_plan import derive_wstg_states
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.tools.executor import execute_command
 
@@ -3379,6 +3381,38 @@ async def run_reporting(
         )
     except Exception as _bl_exc:  # noqa: BLE001 — baseline scoring must not break reporting
         logger.warning("baseline_scoring_failed", extra={"scan_id": scan_id, "error": str(_bl_exc)})
+
+    # Track B — strict, evidence-based WSTG v4.2 coverage (opt-in). Additive to
+    # the legacy tool-heuristic coverage; never breaks reporting.
+    if getattr(settings, "wstg_strict_gate_enabled", False):
+        try:
+            _wstg_findings = [
+                {
+                    "title": str(getattr(f, "title", "") or ""),
+                    "description": str(getattr(f, "description", "") or ""),
+                    "tags": getattr(f, "tags", None),
+                    "references": getattr(f, "references", None),
+                    "wstg": getattr(f, "wstg", None),
+                    "owasp_wstg": getattr(f, "owasp_wstg", None),
+                }
+                for f in _bl_findings
+            ]
+            _wstg_tools = sorted(
+                {
+                    str(getattr(f, "source_tool", "") or "")
+                    for f in _bl_findings
+                    if getattr(f, "source_tool", None)
+                }
+            )
+            _wstg_states = derive_wstg_states(_wstg_tools, _wstg_findings)
+            report_out.report["wstg"] = compute_wstg_coverage(
+                _wstg_states, catalog_size=len(_wstg_states)
+            ).as_dict()
+        except Exception as _wstg_exc:  # noqa: BLE001 — WSTG scoring must not break reporting
+            logger.warning(
+                "wstg_strict_scoring_failed",
+                extra={"scan_id": scan_id, "error": str(_wstg_exc)},
+            )
 
     if _critic_insights:
         try:
