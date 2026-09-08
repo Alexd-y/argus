@@ -97,3 +97,14 @@ class TestCombined:
     def test_all_findings_carry_evidence_and_remediation(self):
         f = analyze_email_auth(D, txt_records=[], dmarc_txt_records=[])
         assert all(x["evidence"] and x["remediation"] for x in f)
+
+    def test_evidence_and_remediation_routed_to_persisted_fields(self):
+        # Persistence only maps proof_of_concept / applicability_notes onto the
+        # Finding row; the bare evidence/remediation keys are dropped. Assert the
+        # analyzers mirror them into fields that actually survive to the UI.
+        record = "v=spf1 include:example.com ~all"
+        f = analyze_spf(D, [record])
+        assert len(f) == 1
+        finding = f[0]
+        assert finding["proof_of_concept"]["observed_record"] == record
+        assert finding["applicability_notes"] == finding["remediation"]

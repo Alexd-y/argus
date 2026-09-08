@@ -49,6 +49,8 @@ def build_dns_finding(
     sev = severity.lower().strip()
     if sev not in _SEVERITY_CVSS:
         sev = "info"
+    evidence = evidence[:5000]
+    remediation = remediation[:5000]
     finding: dict[str, Any] = {
         "title": title[:500],
         "severity": sev,
@@ -57,9 +59,18 @@ def build_dns_finding(
         "source": "recon",
         "source_tool": source_tool,
         "vuln_type": vuln_type,
-        "evidence": evidence[:5000],
-        "remediation": remediation[:5000],
+        "evidence": evidence,
+        "remediation": remediation,
     }
+    # Persistence (state_machine._persist_report_and_findings) only maps
+    # proof_of_concept / applicability_notes / reproducible_steps onto the
+    # Finding row — the bare ``evidence`` / ``remediation`` keys are dropped.
+    # Mirror them into persisted fields so DNS/email findings keep their raw
+    # record as evidence (rendered via pocLines) and their how-to-fix in the UI.
+    if evidence:
+        finding["proof_of_concept"] = {"observed_record": evidence}
+    if remediation:
+        finding["applicability_notes"] = remediation
     if cwe:
         finding["cwe"] = cwe
     if owasp_category:

@@ -458,12 +458,15 @@ function pocLines(poc: Record<string, unknown> | null | undefined): string[] {
   const javascript = str("javascript_code");
   const request = str("request");
   const response = str("response");
+  // DNS/email-security findings (Block 2) carry the observed record here.
+  const observedRecord = str("observed_record");
   if (parameter) lines.push(`Parameter: ${parameter}`);
   if (payload) lines.push(`Payload: ${payload}`);
   if (curl) lines.push(`cURL:\n${curl}`);
   if (javascript) lines.push(`Script:\n${javascript}`);
   if (request) lines.push(`REQUEST:\n${request}`);
   if (response) lines.push(`RESPONSE:\n${response}`);
+  if (observedRecord) lines.push(`Observed record:\n${observedRecord}`);
   return lines;
 }
 
@@ -536,7 +539,11 @@ function severityRank(severity: unknown): number {
 }
 
 const _TLS_GROUP = "Transport Security";
-const _TLS_RE = /\b(tls|ssl|cipher|certificate|hsts)\b/i;
+// Boundaries exclude adjacent alphanumerics but treat "_" as a separator so
+// tool-style titles like "TLS_PROBE finding" still classify as Transport
+// Security (plain \b fails there: "_" is a word char, so there is no boundary
+// between "TLS" and "_", and the finding leaks into the OWASP crypto bucket).
+const _TLS_RE = /(?<![a-z0-9])(tls|ssl|cipher|certificate|hsts)(?![a-z0-9])/i;
 
 // Block 4d — dedicated recon sections. Findings from the DNS/email-security
 // recon (Block 2) otherwise fall into the generic OWASP "Security
