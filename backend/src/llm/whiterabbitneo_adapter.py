@@ -154,7 +154,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
                         "prompt_bytes_total": len(json.dumps(payload)),
                     },
                 )
-            resp.raise_for_status()
+                raise RuntimeError(
+                    f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}"
+                )
             data = resp.json()
 
         choices = data.get("choices", [])
@@ -217,7 +219,9 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
                         "prompt_bytes_total": len(json.dumps(payload)),
                     },
                 )
-            resp.raise_for_status()
+                raise RuntimeError(
+                    f"WhiteRabbitNeo HTTP {resp.status_code}: {body[:500]}"
+                )
             data = resp.json()
 
         choices = data.get("choices", [])
@@ -250,13 +254,24 @@ _wrb_adapter: WhiteRabbitNeoAdapter | None = None
 
 
 def _resolve_wrb_max_context() -> int:
-    """Read WRB's context window from the unified model registry (fail-safe).
+    """Resolve WRB's context window (tokens), fail-safe.
 
-    Lazily imported to keep this low-level adapter module decoupled from the
-    registry at import time (mirrors the lazy ``settings`` import below and
-    avoids an import cycle). Falls back to
-    :data:`WRB_DEFAULT_MAX_CONTEXT_TOKENS` if the registry is unavailable.
+    Priority: explicit ``WHITERABBITNEO_MAX_CONTEXT_TOKENS`` setting (so an
+    operator can match the backing server's real ``n_ctx`` and stop large
+    prompts overflowing → HTTP 400) → model registry ``local_wrb`` capability →
+    :data:`WRB_DEFAULT_MAX_CONTEXT_TOKENS`.
+
+    Lazily imported to keep this low-level adapter module decoupled at import
+    time and avoid an import cycle.
     """
+    try:
+        from src.core.config import settings
+
+        configured = int(getattr(settings, "whiterabbitneo_max_context_tokens", 0) or 0)
+        if configured > 0:
+            return configured
+    except (ImportError, AttributeError, TypeError, ValueError):
+        pass
     try:
         from src.llm.registry import ProviderRegistry
 

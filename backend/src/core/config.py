@@ -103,6 +103,18 @@ class Settings(BaseSettings):
             "whiterabbitneo_seed",
         ),
     )
+    # Real context window (tokens) of the served WhiteRabbitNeo model. Set this
+    # to the backing server's actual n_ctx (e.g. a Q4_K_M gguf served with
+    # n_ctx=8192) so the adapter trims prompts to fit and large pentest prompts
+    # do not overflow the window and get rejected with HTTP 400. 0 → fall back to
+    # the model registry value. Env: WHITERABBITNEO_MAX_CONTEXT_TOKENS.
+    whiterabbitneo_max_context_tokens: int = Field(
+        default=0,
+        validation_alias=AliasChoices(
+            "WHITERABBITNEO_MAX_CONTEXT_TOKENS",
+            "whiterabbitneo_max_context_tokens",
+        ),
+    )
     # External LLM Gateway URL (optional — uses in-process routing when unset)
     llm_gateway_url: str = Field(
         default="",
