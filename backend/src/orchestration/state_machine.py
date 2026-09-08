@@ -766,7 +766,11 @@ async def _persist_report_and_findings(
             dedup_status=_dedup,
             compliance=f.get("compliance") if isinstance(f.get("compliance"), list) else None,
         )
-        session.add(finding)
+        # Idempotent persist: stable UUID5 finding ids mean a phase retry / resume
+        # can re-run this persist with the same ids. merge() upserts by primary
+        # key (insert-or-update) so a re-run never raises a duplicate findings_pkey
+        # IntegrityError that would fail an otherwise-complete scan.
+        await session.merge(finding)
         if poc_db:
             await asyncio.to_thread(
                 upload_finding_poc_json,
