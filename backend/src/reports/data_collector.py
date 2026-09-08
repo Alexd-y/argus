@@ -57,7 +57,7 @@ from src.recon.stage_object_download import StageObjectFetchError
 from src.reports.evidence_partition import partition_findings
 from src.reports.finding_dedup import deduplicate_findings
 from src.reports.finding_quality_filter import filter_valid_findings
-from src.reports.finding_severity_normalizer import normalize_findings_severity
+from src.reports.finding_severity_normalizer import reconcile_findings_cvss
 from src.reports.report_quality_gate import (
     apply_security_header_table_gap_to_findings,
     normalize_findings_for_report,
@@ -774,7 +774,10 @@ class ReportDataCollector:
         findings = filter_valid_findings(findings)
         findings = retain_findings_despite_ai_classification(findings)
         findings = normalize_findings_for_report(findings)
-        findings = normalize_findings_severity(findings)
+        # Reconcile severity/cvss/cvss_score/cvss_vector into a single consistent
+        # value (drops contradicting auto-generated vectors) before the report
+        # snapshot is built — supersedes the score→severity-only pass.
+        findings = reconcile_findings_cvss(findings)
         # VHL-PROVABLE-001: tag each finding as provable-from-raw or unconfirmed. Nothing
         # is dropped — the report routes provable findings to the main body and the rest
         # to the "Unconfirmed — requires manual verification" section.

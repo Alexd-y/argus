@@ -1657,11 +1657,24 @@ def _intel_data_suggests_xss_via_poc(data: dict[str, Any]) -> bool:
 
 
 def _generate_poc(finding_data: dict[str, Any]) -> str:
-    """Generate a safe PoC curl command or URL string from finding data."""
+    """Generate a safe PoC command from finding data.
+
+    ``poc`` is frequently already a complete, runnable command (e.g.
+    ``curl -sI '...'`` or a bash loop). Wrapping such a command in
+    ``curl -v '<command>'`` produced nonsensical output like
+    ``curl -v 'for i in ...; do curl ...; done'``. Only synthesise a
+    ``curl -v`` invocation when ``poc`` is a bare URL (or absent, falling back
+    to ``url``); otherwise return the existing command verbatim.
+    """
     poc = str(finding_data.get("poc") or "").strip()
     url = str(finding_data.get("url") or "").strip()
     param = str(finding_data.get("param") or "").strip()
-    target = poc or url
+
+    # Already a runnable command — do not re-wrap.
+    if poc and not _is_bare_url(poc):
+        return poc
+
+    target = poc or url  # ``poc`` here is a bare URL or empty
     if not target:
         return ""
     safe_target = target.replace("'", "'\\''")
@@ -1669,6 +1682,14 @@ def _generate_poc(finding_data: dict[str, Any]) -> str:
     if param:
         cmd += f"  # parameter: {param}"
     return cmd
+
+
+def _is_bare_url(text: str) -> bool:
+    """True when ``text`` is a single http(s) URL token (no embedded command)."""
+    s = text.strip()
+    if " " in s or "\t" in s or "\n" in s:
+        return False
+    return s.startswith(("http://", "https://"))
 
 
 def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
@@ -1719,9 +1740,12 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
     description_parts = [data.get("type", "")]
     if data.get("param"):
         description_parts.append(f"Parameter: {data['param']}")
-    if data.get("poc"):
-        description_parts.append(f"Payload: {data['poc']}")
-    if poc_cmd:
+    raw_poc = str(data.get("poc") or "").strip()
+    if raw_poc:
+        description_parts.append(f"Payload: {raw_poc}")
+    # Avoid the redundant "Payload: X; PoC: X" pair now that _generate_poc returns
+    # command-style PoCs verbatim instead of re-wrapping them.
+    if poc_cmd and poc_cmd.strip() != raw_poc:
         description_parts.append(f"PoC: {poc_cmd}")
     if data.get("matched_at"):
         description_parts.append(f"Matched: {data['matched_at']}")
