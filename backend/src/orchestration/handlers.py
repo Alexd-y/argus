@@ -102,6 +102,7 @@ from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_fin
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.baseline import evaluate_baseline
 from src.reports.finding_metadata import apply_default_finding_metadata
+from src.reports.finding_title_normalizer import humanize_finding_title
 from src.reports.wstg_coverage import wstg_ids_for_finding
 from src.reports.wstg_gate import compute_wstg_coverage
 from src.reports.wstg_plan import derive_wstg_states
@@ -1698,7 +1699,14 @@ def _normalize_intel_finding(raw: dict[str, Any]) -> dict[str, Any]:
     data = raw.get("data") or {}
     vuln_type = data.get("type") or data.get("template_id") or "unknown"
     vuln_type_lower = str(vuln_type).lower().strip()
-    title = data.get("name") or f"{vuln_type} finding"
+    # VHL-TITLE-001: humanize the raw-token fallback so internal producer tokens
+    # (WHATWEB_PLUGIN, TLS_PROBE, …) never surface as "<TOKEN> finding".
+    raw_name = data.get("name")
+    title = (
+        str(raw_name)
+        if raw_name
+        else humanize_finding_title(f"{vuln_type} finding", str(vuln_type))
+    )
     if data.get("url"):
         title = f"{title} — {data['url']}"
     severity = (data.get("severity") or "info").lower()

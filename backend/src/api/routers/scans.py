@@ -79,6 +79,8 @@ from src.quick.create import (
 from src.quick.models import QuickScanConfigRow, QuickScanPlanRow
 from src.quick.resolver import UnknownQuickProfileError
 from src.reports.bundle_enqueue import enqueue_generate_all_bundle
+from src.reports.evidence_partition import reconcile_finding_evidence_view
+from src.reports.finding_title_normalizer import humanize_finding_title
 from src.reports.generators import build_report_data_from_scan_findings
 from src.reports.junit_generator import generate_junit
 from src.reports.report_bundle import ReportFormat, mime_type_for
@@ -838,16 +840,29 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     refs: list[str] = []
     if f.evidence_refs is not None and isinstance(f.evidence_refs, list):
         refs = [str(x) for x in f.evidence_refs]
+    # VHL-PROVABLE-001: reconcile the evidence view so confidence / is_provable /
+    # validation_status / evidence_quality never contradict one another. Without
+    # this the API served schema defaults (is_provable=True, evidence_quality=
+    # "none") next to a DB confidence of "confirmed" — a finding with no evidence
+    # quality wrongly rendered as provable/confirmed.
+    view = reconcile_finding_evidence_view(f)
     return Finding(
         finding_id=str(f.id) if f.id is not None else None,
         severity=f.severity,
-        title=f.title,
+        # VHL-TITLE-001: humanize raw producer tokens (e.g. "WHATWEB_PLUGIN
+        # finding" → "Technology fingerprint (WhatWeb)") for the customer view.
+        title=humanize_finding_title(f.title),
         description=f.description or "",
         cwe=f.cwe,
         cvss=f.cvss,
         owasp_category=parse_owasp_category(f.owasp_category),
         proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
-        confidence=f.confidence or "likely",  # type: ignore[arg-type]
+        confidence=view["confidence"],  # type: ignore[arg-type]
+        validation_status=view["validation_status"],  # type: ignore[arg-type]
+        evidence_quality=view["evidence_quality"],  # type: ignore[arg-type]
+        evidence_classification=view["evidence_classification"],  # type: ignore[arg-type]
+        is_provable=view["is_provable"],
+        unconfirmed_reason=view["unconfirmed_reason"],
         evidence_type=f.evidence_type,  # type: ignore[arg-type]
         evidence_refs=refs,
         reproducible_steps=f.reproducible_steps,
