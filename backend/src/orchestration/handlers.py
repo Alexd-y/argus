@@ -102,6 +102,7 @@ from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_fin
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.baseline import evaluate_baseline
 from src.reports.finding_metadata import apply_default_finding_metadata
+from src.reports.wstg_coverage import wstg_ids_for_finding
 from src.reports.wstg_gate import compute_wstg_coverage
 from src.reports.wstg_plan import derive_wstg_states
 from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
@@ -3440,6 +3441,11 @@ async def run_reporting(
                     "references": getattr(f, "references", None),
                     "wstg": getattr(f, "wstg", None),
                     "owasp_wstg": getattr(f, "owasp_wstg", None),
+                    # Enable CWE / vuln_type → WSTG derivation so findings that
+                    # carry only a CWE still count toward coverage.
+                    "cwe": getattr(f, "cwe", None) or getattr(f, "cwe_id", None),
+                    "vuln_type": getattr(f, "vuln_type", None) or getattr(f, "type", None),
+                    "category": getattr(f, "category", None),
                 }
                 for f in _bl_findings
             ]
@@ -3450,7 +3456,31 @@ async def run_reporting(
                     if getattr(f, "source_tool", None)
                 }
             )
-            _wstg_states = derive_wstg_states(_wstg_tools, _wstg_findings)
+            # Attach each finding's own evidence to the WSTG test it exercises, so
+            # a completed/fail test counts toward coverage (the finding IS the
+            # control-failure evidence). Findings without any evidence contribute
+            # no evidence id and therefore do not inflate coverage (spec §4).
+            _evidence_by_test: dict[str, list[str]] = {}
+            for _f, _wf in zip(_bl_findings, _wstg_findings, strict=False):
+                _ev_id = str(
+                    getattr(_f, "finding_id", "")
+                    or getattr(_f, "stable_id", "")
+                    or getattr(_f, "id", "")
+                    or ""
+                )
+                _has_evidence = bool(
+                    (getattr(_f, "evidence_refs", None) or [])
+                    or getattr(_f, "proof_of_concept", None)
+                    or str(getattr(_f, "evidence_quality", "") or "").lower()
+                    in {"weak", "moderate", "strong"}
+                )
+                if not (_ev_id and _has_evidence):
+                    continue
+                for _wid in wstg_ids_for_finding(_wf):
+                    _evidence_by_test.setdefault(_wid, []).append(f"FINDING:{_ev_id}")
+            _wstg_states = derive_wstg_states(
+                _wstg_tools, _wstg_findings, evidence_by_test=_evidence_by_test
+            )
             report_out.report["wstg"] = compute_wstg_coverage(
                 _wstg_states, catalog_size=len(_wstg_states)
             ).as_dict()

@@ -451,29 +451,129 @@ def _determine_test_status(
     return "not_covered"
 
 
-def _extract_wstg_ids_from_findings(findings: list[dict[str, Any]]) -> set[str]:
-    """Pull WSTG-* references from finding tags, references, or descriptions."""
+# CWE → WSTG v4.2 test id. Only unambiguous, catalog-verified mappings are
+# listed; deliberately omits over-broad CWEs (e.g. CWE-200 "information
+# exposure") whose inclusion would falsely inflate coverage. Lets a finding that
+# carries a CWE but no explicit WSTG tag still count toward the control it
+# exercises, so coverage reflects what was actually tested.
+_CWE_TO_WSTG: dict[str, str] = {
+    "CWE-79": "WSTG-INPV-01",     # Reflected XSS
+    "CWE-89": "WSTG-INPV-05",     # SQL Injection
+    "CWE-90": "WSTG-INPV-06",     # LDAP Injection
+    "CWE-943": "WSTG-INPV-05",    # NoSQL (SQLi family)
+    "CWE-77": "WSTG-INPV-12",     # Command Injection
+    "CWE-78": "WSTG-INPV-12",
+    "CWE-94": "WSTG-INPV-11",     # Code Injection
+    "CWE-1336": "WSTG-INPV-18",   # SSTI
+    "CWE-918": "WSTG-INPV-19",    # SSRF
+    "CWE-352": "WSTG-SESS-05",    # CSRF
+    "CWE-601": "WSTG-CLNT-04",    # Open Redirect
+    "CWE-22": "WSTG-ATHZ-01",     # Path Traversal
+    "CWE-98": "WSTG-ATHZ-01",     # LFI/RFI
+    "CWE-639": "WSTG-ATHZ-04",    # IDOR
+    "CWE-285": "WSTG-ATHZ-02",    # Authorization bypass
+    "CWE-863": "WSTG-ATHZ-02",
+    "CWE-269": "WSTG-ATHZ-03",    # Privilege escalation
+    "CWE-307": "WSTG-ATHN-03",    # Weak lockout / brute force
+    "CWE-521": "WSTG-ATHN-07",    # Weak password policy
+    "CWE-798": "WSTG-ATHN-02",    # Default credentials
+    "CWE-319": "WSTG-CRYP-01",    # Cleartext transmission / TLS
+    "CWE-311": "WSTG-CRYP-01",
+    "CWE-326": "WSTG-CRYP-04",    # Inadequate encryption strength
+    "CWE-327": "WSTG-CRYP-04",    # Weak crypto
+    "CWE-757": "WSTG-CRYP-01",    # Downgrade
+    "CWE-693": "WSTG-CONF-07",    # Missing protection mechanism / security headers
+    "CWE-16": "WSTG-CONF-02",     # Configuration
+    "CWE-209": "WSTG-ERRH-01",    # Error handling / info in errors
+    "CWE-614": "WSTG-SESS-02",    # Cookie without Secure
+    "CWE-1004": "WSTG-SESS-02",   # Cookie without HttpOnly
+    "CWE-113": "WSTG-INPV-15",    # HTTP response splitting
+}
+
+# Coarse vuln_type/keyword → WSTG for findings that carry a type but no CWE.
+_VULNTYPE_TO_WSTG: dict[str, str] = {
+    "reflected_xss": "WSTG-INPV-01",
+    "stored_xss": "WSTG-INPV-02",
+    "dom_xss": "WSTG-CLNT-01",
+    "xss": "WSTG-INPV-01",
+    "sqli": "WSTG-INPV-05",
+    "sql_injection": "WSTG-INPV-05",
+    "nosqli": "WSTG-INPV-05",
+    "ldap_injection": "WSTG-INPV-06",
+    "csrf": "WSTG-SESS-05",
+    "open_redirect": "WSTG-CLNT-04",
+    "ssrf": "WSTG-INPV-19",
+    "idor": "WSTG-ATHZ-04",
+    "lfi": "WSTG-ATHZ-01",
+    "rfi": "WSTG-ATHZ-01",
+    "path_traversal": "WSTG-ATHZ-01",
+    "command_injection": "WSTG-INPV-12",
+    "rce": "WSTG-INPV-12",
+    "ssti": "WSTG-INPV-18",
+    "rate_limit": "WSTG-ATHN-03",
+    "security_headers": "WSTG-CONF-07",
+    "missing_security_headers": "WSTG-CONF-07",
+    "tls": "WSTG-CRYP-01",
+    "ssl": "WSTG-CRYP-01",
+    "tls_probe": "WSTG-CRYP-01",
+    "weak_crypto": "WSTG-CRYP-04",
+    "cookie": "WSTG-SESS-02",
+}
+
+
+def _wstg_id_from_cwe(value: Any) -> str | None:
+    """Normalise a CWE reference (``CWE-79``/``79``/``cwe_79``) to a WSTG id."""
+    s = str(value or "").strip().upper()
+    if not s:
+        return None
+    if s.isdigit():
+        s = f"CWE-{s}"
+    else:
+        digits = "".join(ch for ch in s if ch.isdigit())
+        if digits and not s.startswith("CWE-"):
+            s = f"CWE-{digits}"
+    return _CWE_TO_WSTG.get(s)
+
+
+def _wstg_id_from_vuln_type(value: Any) -> str | None:
+    key = str(value or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return _VULNTYPE_TO_WSTG.get(key)
+
+
+def wstg_ids_for_finding(finding: dict[str, Any]) -> set[str]:
+    """All WSTG-* ids a single finding maps to (explicit tags + CWE/type derivation)."""
     result: set[str] = set()
-    if not findings:
-        return result
-    for f in findings:
-        for field_name in ("tags", "references", "ref", "wstg", "owasp_wstg"):
-            val = f.get(field_name)
-            if isinstance(val, list):
-                for item in val:
-                    s = str(item).upper()
-                    if s.startswith("WSTG-"):
-                        result.add(s)
-            elif isinstance(val, str):
-                for token in val.upper().replace(",", " ").split():
-                    if token.startswith("WSTG-"):
-                        result.add(token)
-        desc = str(f.get("description") or "")
-        title = str(f.get("title") or "")
-        for text in (desc, title):
-            for token in text.upper().replace(",", " ").split():
-                if token.startswith("WSTG-") and len(token) <= 16:
+    for field_name in ("tags", "references", "ref", "wstg", "owasp_wstg"):
+        val = finding.get(field_name)
+        if isinstance(val, list):
+            for item in val:
+                s = str(item).upper()
+                if s.startswith("WSTG-"):
+                    result.add(s)
+        elif isinstance(val, str):
+            for token in val.upper().replace(",", " ").split():
+                if token.startswith("WSTG-"):
                     result.add(token)
+    for text in (str(finding.get("description") or ""), str(finding.get("title") or "")):
+        for token in text.upper().replace(",", " ").split():
+            if token.startswith("WSTG-") and len(token) <= 16:
+                result.add(token)
+    for cwe_field in ("cwe", "cwe_id"):
+        wid = _wstg_id_from_cwe(finding.get(cwe_field))
+        if wid:
+            result.add(wid)
+    for type_field in ("type", "vuln_type", "category"):
+        wid = _wstg_id_from_vuln_type(finding.get(type_field))
+        if wid:
+            result.add(wid)
+    return result
+
+
+def _extract_wstg_ids_from_findings(findings: list[dict[str, Any]]) -> set[str]:
+    """Union of WSTG-* ids across findings (explicit tags + CWE/type derivation)."""
+    result: set[str] = set()
+    for f in findings or []:
+        result |= wstg_ids_for_finding(f)
     return result
 
 
