@@ -98,6 +98,22 @@ def test_thin_llm_and_rich_tool_rows_collapse_via_scan_target():
     # 3 pairs → 3 findings (one per issue).
     assert len(kept) == 3
 
+    # Same collapse even when the scan carries NO target (prod case for
+    # d20384ed): the shared host is derived from the URL-bearing records.
+    kept_no_target = _gate_finding_rows(rows, default_target="")
+    assert len(kept_no_target) == 3
+
+
+def test_multi_host_findings_do_not_over_collapse():
+    """Distinct hosts must NOT collapse even within a semantic class."""
+    rows = [
+        _Row("a", "Incomplete security HTTP response headers", severity="low",
+             source_tool="httpx", proof_of_concept={"url": "https://a.example/"}),
+        _Row("b", "Incomplete security HTTP response headers", severity="low",
+             source_tool="httpx", proof_of_concept={"url": "https://b.example/"}),
+    ]
+    assert len(_gate_finding_rows(rows, default_target="")) == 2
+
 
 def test_host_of_normalizes_scheme_and_port():
     from src.orchestration.finding_gate import _host_of

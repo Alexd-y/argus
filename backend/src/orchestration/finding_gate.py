@@ -381,16 +381,41 @@ def dedupe_findings(
     return [by_key[k] for k in order]
 
 
+def _dominant_host(findings: list[dict[str, Any]]) -> str:
+    """Return the single non-empty host shared by the findings, else ``""``.
+
+    Host-level check families (TLS/headers/rate-limit) are emitted twice: once
+    by the tool parser (URL in ``proof_of_concept``) and once as an
+    LLM-normalized record with no URL. When every URL-bearing finding points at
+    the same host, that host is a safe fallback for the URL-less records so both
+    collapse. If findings span multiple hosts (multi-host engagements) there is
+    no safe single fallback and ``""`` is returned to avoid over-collapsing.
+    """
+    hosts = {
+        _host_of(_finding_target(f))
+        for f in findings
+        if isinstance(f, dict)
+    }
+    hosts.discard("")
+    return next(iter(hosts)) if len(hosts) == 1 else ""
+
+
 def gate_and_dedupe_findings(
     findings: list[dict[str, Any]],
     *,
     scan_id: str | None = None,
     enabled: bool = True,
+    default_host: str = "",
 ) -> list[dict[str, Any]]:
     """Compose evidence gating (1.2) and deduplication (1.3).
 
     When ``enabled`` is ``False`` the findings are returned unchanged (each
     still annotated with ``evidence_quality`` for downstream consumers).
+
+    ``default_host`` is an explicit fallback host for URL-less findings; when
+    empty it is derived from the findings themselves (see :func:`_dominant_host`)
+    so tool/LLM duplicates of the same host-level issue collapse even when no
+    scan target is threaded in.
     """
     if not findings:
         return findings
@@ -402,6 +427,11 @@ def gate_and_dedupe_findings(
                 )
         return findings
     kept, _dropped = gate_findings(findings, scan_id=scan_id)
+    fallback_host = _host_of(default_host) or _dominant_host(kept)
+    if fallback_host:
+        for finding in kept:
+            if not _host_of(_finding_target(finding)):
+                finding["target"] = fallback_host
     return dedupe_findings(kept, scan_id=scan_id)
 
 

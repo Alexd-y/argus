@@ -905,7 +905,9 @@ def _gate_finding_rows(
         for i, f in enumerate(rows)
     ]
     kept = gate_and_dedupe_findings(
-        dicts, enabled=settings.finding_evidence_gate_enabled
+        dicts,
+        enabled=settings.finding_evidence_gate_enabled,
+        default_host=default_target,
     )
     surviving = [d["_row_index"] for d in kept if isinstance(d.get("_row_index"), int)]
     return [rows[i] for i in surviving]
