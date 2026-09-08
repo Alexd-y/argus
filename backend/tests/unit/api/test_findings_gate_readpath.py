@@ -104,6 +104,20 @@ def test_thin_llm_and_rich_tool_rows_collapse_via_scan_target():
     assert len(kept_no_target) == 3
 
 
+def test_dedupe_survivor_is_the_evidence_bearing_row():
+    """The retained row must be the tool record with evidence, not the LLM
+    paraphrase — otherwise the UI shows a finding with no proof."""
+    thin = _Row("thin", "TLS configuration probe indicates potential weakness",
+                description="x" * 30, severity="medium", source_tool="llm")
+    rich = _Row("rich", "TLS_PROBE finding — https://alleksy.com/", severity="medium",
+                source_tool="testssl", proof_of_concept={"url": "https://alleksy.com/"},
+                evidence_refs=[{"object_key": "k", "sha256": "s"}])
+    # thin first in iteration order — survivor must still be the rich row.
+    kept = _gate_finding_rows([thin, rich], default_target="")
+    assert len(kept) == 1
+    assert kept[0].id == "rich"
+
+
 def test_multi_host_findings_do_not_over_collapse():
     """Distinct hosts must NOT collapse even within a semantic class."""
     rows = [

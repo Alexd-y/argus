@@ -321,10 +321,12 @@ def gate_findings(
     return kept, dropped
 
 
-def _merge_duplicate(primary: dict[str, Any], other: dict[str, Any]) -> None:
-    """Fold ``other`` into ``primary``: bump occurrences, keep strongest data."""
-    primary["occurrences"] = int(primary.get("occurrences", 1)) + 1
+def _fold_into(primary: dict[str, Any], other: dict[str, Any]) -> None:
+    """Fold ``other`` into ``primary`` (evidence, strongest severity/CVSS/PoC).
 
+    Occurrence counting is handled by the caller so the survivor can be chosen
+    independently of iteration order.
+    """
     occ_evidence = primary.setdefault("evidence_occurrences", [])
     other_evidence = _s(other.get("evidence")) or _s(other.get("description"))
     if other_evidence:
@@ -335,7 +337,7 @@ def _merge_duplicate(primary: dict[str, Any], other: dict[str, Any]) -> None:
             }
         )
 
-    # Keep the strongest severity / CVSS / evidence quality across duplicates.
+    # Keep the strongest severity / CVSS / PoC across duplicates.
     _severity_rank = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
     if _severity_rank.get(_s(other.get("severity")).lower(), -1) > _severity_rank.get(
         _s(primary.get("severity")).lower(), -1
@@ -354,31 +356,44 @@ def dedupe_findings(
 ) -> list[dict[str, Any]]:
     """Collapse duplicate findings by :func:`finding_key`.
 
-    The first occurrence is kept and annotated with ``occurrences: n`` and an
-    ``evidence_occurrences`` list holding the merged evidence of the folded
-    duplicates.
+    Among duplicates the **survivor is the record with the strongest evidence**
+    (ties keep the earliest), so the retained finding carries the tool-produced
+    evidence/PoC rather than an evidence-less LLM paraphrase of the same issue.
+    The survivor is annotated with ``occurrences: n`` and an
+    ``evidence_occurrences`` list holding the folded duplicates' evidence.
     """
-    by_key: dict[str, dict[str, Any]] = {}
+    groups: dict[str, list[dict[str, Any]]] = {}
     order: list[str] = []
-    collapsed = 0
     for finding in findings:
         if not isinstance(finding, dict):
             continue
         key = finding_key(finding)
-        primary = by_key.get(key)
-        if primary is None:
-            finding.setdefault("occurrences", 1)
-            by_key[key] = finding
+        if key not in groups:
+            groups[key] = []
             order.append(key)
-        else:
-            _merge_duplicate(primary, finding)
-            collapsed += 1
+        groups[key].append(finding)
+
+    result: list[dict[str, Any]] = []
+    collapsed = 0
+    for key in order:
+        members = groups[key]
+        primary = members[0]
+        for candidate in members[1:]:
+            if evidence_quality_of(candidate) > evidence_quality_of(primary):
+                primary = candidate
+        primary["occurrences"] = len(members)
+        for member in members:
+            if member is not primary:
+                _fold_into(primary, member)
+        collapsed += len(members) - 1
+        result.append(primary)
+
     if collapsed:
         logger.info(
             "finding_dedupe_collapsed",
             extra={"scan_id": scan_id, "collapsed": collapsed, "unique": len(order)},
         )
-    return [by_key[k] for k in order]
+    return result
 
 
 def _dominant_host(findings: list[dict[str, Any]]) -> str:
