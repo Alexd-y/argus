@@ -22,8 +22,12 @@ been blocking ARG-028.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import AsyncGenerator
+from datetime import date, datetime
+from decimal import Decimal
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import text
@@ -48,6 +52,35 @@ def _validate_tenant_id(tenant_id: str) -> str:
     return tenant_id
 
 
+def _json_default(obj: Any) -> Any:
+    """JSON fallback for values Postgres JSONB columns may receive.
+
+    Pipeline phase outputs can embed rich objects (e.g. an ExploitationQueue
+    with a ``created_at`` datetime). The stdlib encoder raises TypeError on
+    those, which previously killed a whole scan at the phase_outputs INSERT.
+    Encode the common non-JSON types deterministically; fall back to ``str``
+    so a stray object degrades to a string rather than aborting the scan.
+    """
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, Enum):
+        return obj.value
+    if isinstance(obj, (set, frozenset)):
+        return sorted(obj, key=str)
+    if isinstance(obj, bytes):
+        return obj.decode("utf-8", "replace")
+    return str(obj)
+
+
+def _json_serializer(value: Any) -> str:
+    """JSONB serializer that tolerates datetime/UUID/Decimal/Enum/etc."""
+    return json.dumps(value, default=_json_default)
+
+
 def _is_sqlite_url(database_url: str) -> bool:
     """True when the DSN targets SQLite (sync or aiosqlite driver)."""
     return database_url.startswith("sqlite")
@@ -67,12 +100,14 @@ def _engine_kwargs_for(database_url: str) -> dict[str, Any]:
             "echo": False,
             "poolclass": StaticPool,
             "connect_args": {"check_same_thread": False},
+            "json_serializer": _json_serializer,
         }
     return {
         "echo": False,
         "pool_pre_ping": True,
         "pool_size": 5,
         "max_overflow": 10,
+        "json_serializer": _json_serializer,
     }
 
 
