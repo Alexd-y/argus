@@ -3280,6 +3280,22 @@ async def run_post_exploitation(
     return ai_result
 
 
+def _coerce_scope_config(value: Any) -> dict[str, Any] | None:
+    """Normalize a scope_config into the dict ReportingInput expects.
+
+    ``rules_of_engagement_to_prompt_context`` renders a human-readable *string*;
+    when an auth_config is present that string reaches ``run_reporting`` and
+    would fail ``ReportingInput.scope_config`` (dict). Wrap a non-empty string
+    under ``rules_of_engagement``; pass dicts through; drop everything else.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        return {"rules_of_engagement": text} if text else None
+    return None
+
+
 async def run_reporting(
     target: str,
     recon: ReconOutput | None,
@@ -3341,6 +3357,12 @@ async def run_reporting(
                 "candidates_count": len(quick_fuzz.candidates),
                 "categories": list({f.get("category", "unknown") for f in quick_fuzz.findings}),
             }
+
+    # scope_config may arrive as a rendered rules-of-engagement *string* (from
+    # rules_of_engagement_to_prompt_context, populated once an auth_config is
+    # present), but ReportingInput requires a dict. Coerce so a non-empty scope
+    # context never fails reporting validation.
+    scope_config = _coerce_scope_config(scope_config)
 
     inp = ReportingInput(
         target=target,
