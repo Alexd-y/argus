@@ -172,6 +172,15 @@ VA_ACTIVE_SCAN_ALLOWED_TOOLS = frozenset({
     "dig",
     "openssl",
     "testssl.sh",
+    # Web app active-scan binaries scheduled by the deep/Full-Surface planner
+    # (param discovery, WAF fingerprinting, CORS misconfig). Their sandbox
+    # availability is already gated by ``check_tool_available`` in the planner;
+    # they must also be on this allowlist so the MCP runner does not deny them
+    # with ``active_scan_tool_not_allowlisted``.
+    "arjun",
+    "wafw00f",
+    "whatwaf",
+    "cors",
 })
 
 VA_ACTIVE_SCAN_MCP_OPERATIONS = frozenset({
@@ -201,6 +210,20 @@ def _normalize_va_active_scan_tool_identifier(raw: str) -> str:
 
 _VA_ACTIVE_SCAN_TOOL_ALIASES: dict[str, str] = {
     "testsslsh": "testssl",
+    # Deep/Full-Surface planner schedules template-scoped nuclei / ffuf variants
+    # under profile tool_ids (e.g. ``nuclei_ssrf``, ``ffuf_lfi``). After
+    # separator stripping these normalise to ``nucleissrf`` / ``ffuflfi`` and
+    # would otherwise miss the allowlist even though the underlying binary
+    # (``nuclei`` / ``ffuf``) is allowed. Collapse them to the base binary so the
+    # policy keys on the real executable, not the scan-profile label.
+    "nucleissrf": "nuclei",
+    "nucleicsrf": "nuclei",
+    "nucleisqli": "nuclei",
+    "nucleirce": "nuclei",
+    "nucleiidor": "nuclei",
+    "ffuflfi": "ffuf",
+    "curlcors": "curl",
+    "corscanner": "cors",
 }
 
 

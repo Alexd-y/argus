@@ -14,7 +14,40 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.llm.json_extract import extract_json_object
+
 logger = logging.getLogger(__name__)
+
+# Only the fields the critic needs to reason about a finding. Sending the full
+# finding dicts (with embedded PoC HTML, response snippets, evidence bundles)
+# bloats the prompt and pushes the model's JSON answer past its output-token
+# budget — the classic cause of the "parse_error: could not extract JSON"
+# review status. Trimming keeps the prompt lean and the answer complete.
+_CRITIC_FINDING_FIELDS = (
+    "finding_id",
+    "title",
+    "severity",
+    "vuln_type",
+    "cwe",
+    "owasp_category",
+    "confidence",
+    "evidence_quality",
+)
+_CRITIC_MAX_FINDINGS = 30
+
+
+def _slim_findings_for_critic(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project findings onto the lightweight fields the critic consumes."""
+    slim: list[dict[str, Any]] = []
+    for f in findings[:_CRITIC_MAX_FINDINGS]:
+        if not isinstance(f, dict):
+            continue
+        row = {k: f.get(k) for k in _CRITIC_FINDING_FIELDS if f.get(k) is not None}
+        desc = f.get("description")
+        if isinstance(desc, str) and desc.strip():
+            row["description"] = desc.strip()[:500]
+        slim.append(row)
+    return slim
 
 
 @dataclass
@@ -66,7 +99,9 @@ def build_critic_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
 
     Returns (system_prompt, user_prompt).
     """
-    findings_json = json.dumps(findings, default=str, ensure_ascii=False)
+    findings_json = json.dumps(
+        _slim_findings_for_critic(findings), default=str, ensure_ascii=False
+    )
     try:
         from src.orchestration.prompt_loader import get_loader
         loader = get_loader()
@@ -152,17 +187,20 @@ async def run_adversarial_critic(
         response_text = result
 
     if not response_text:
-        return AdversarialCritiqueResult(findings_reviewed=len(findings))
-
-    try:
-        start = response_text.index("{")
-        end = response_text.rindex("}") + 1
-        parsed = json.loads(response_text[start:end])
-    except (ValueError, json.JSONDecodeError):
-        logger.warning("adversarial_critic_parse_failed")
         return AdversarialCritiqueResult(
             findings_reviewed=len(findings),
-            overall_assessment="parse_error: could not extract JSON from LLM response",
+            overall_assessment="review_unavailable: empty model response",
+        )
+
+    parsed = extract_json_object(response_text)
+    if parsed is None:
+        logger.warning("adversarial_critic_parse_failed")
+        # Graceful degrade: the review is advisory (it never creates findings),
+        # so a malformed model answer must not surface as a report defect. Report
+        # an honest, non-alarming status instead of a raw parse error.
+        return AdversarialCritiqueResult(
+            findings_reviewed=len(findings),
+            overall_assessment="review_unavailable: model response was not valid JSON",
         )
 
     return parse_critic_response(parsed)

@@ -967,6 +967,21 @@ class Settings(BaseSettings):
     # VA-002 — append LLM-suggested active-scan argv after deterministic plan (requires LLM keys)
     va_ai_plan_enabled: bool = False
     va_active_scan_tool_timeout_sec: float = 120.0
+    # Slow-CPU headroom: a single global multiplier applied to every active-scan
+    # tool timeout (and the MCP runner's default injection timeout). On CPU-only
+    # WhiteRabbitNeo / sandbox hosts, tools such as sqlmap/nuclei/testssl need
+    # far more wall-clock than the base defaults, and a premature kill surfaces as
+    # a ``timeout`` tool-health failure. Raise this (e.g. 4.0) so phases finish
+    # instead of erroring on time. Env: TOOL_TIMEOUT_MULTIPLIER.
+    tool_timeout_multiplier: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=100.0,
+        validation_alias=AliasChoices(
+            "TOOL_TIMEOUT_MULTIPLIER",
+            "tool_timeout_multiplier",
+        ),
+    )
     # KAL-004 — recon hooks (whatweb / nikto / TLS probe); ssl probe needs headroom
     va_whatweb_timeout_sec: float = 90.0
     va_nikto_timeout_sec: float = 180.0
