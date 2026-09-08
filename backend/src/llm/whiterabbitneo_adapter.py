@@ -92,6 +92,17 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         usable_tokens = max(_MIN_PROMPT_TOKENS, self._max_context_tokens - max(0, max_tokens))
         return usable_tokens * _CHARS_PER_TOKEN
 
+    def _effective_max_tokens(self, max_tokens: int) -> int:
+        """Clamp completion tokens so prompt_floor + completion never exceeds n_ctx.
+
+        With a small server ``n_ctx`` (e.g. a gguf started with ``--ctx-size 4096``)
+        a default ``max_tokens`` of 4096 leaves no room for the prompt and the
+        request is rejected with HTTP 400. Reserve at least ``_MIN_PROMPT_TOKENS``
+        for the prompt so the combined request always fits the window.
+        """
+        ceiling = max(256, self._max_context_tokens - _MIN_PROMPT_TOKENS)
+        return max(1, min(int(max_tokens), ceiling))
+
     def _build_payload(
         self,
         messages: list[dict[str, str]],
@@ -124,6 +135,16 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
     ) -> str:
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
+
+        # Clamp completion + trim prompt so prompt+completion fit the real n_ctx.
+        max_tokens = self._effective_max_tokens(max_tokens)
+        budget = self._prompt_char_budget(max_tokens)
+        system_prompt = system_prompt or ""
+        if len(system_prompt) > budget // 2:
+            system_prompt = system_prompt[: budget // 2]
+        remaining = max(0, budget - len(system_prompt))
+        if len(prompt) > remaining:
+            prompt = prompt[:remaining]
 
         messages: list[dict[str, str]] = []
         if system_prompt:
@@ -179,9 +200,10 @@ class WhiteRabbitNeoAdapter(LLMAdapter):
         if not self._base_url:
             raise RuntimeError("WhiteRabbitNeo not configured: WHITERABBITNEO_URL is empty")
 
-        # Trim to the REAL WRB context window (registry-driven) instead of a blunt
-        # fixed byte cut. The system prompt may take up to half the budget; the
-        # user prompt takes the remainder.
+        # Clamp completion tokens to the real n_ctx first, then trim the prompt to
+        # the remaining budget. The system prompt may take up to half the budget;
+        # the user prompt takes the remainder.
+        max_tokens = self._effective_max_tokens(max_tokens)
         budget = self._prompt_char_budget(max_tokens)
         system_prompt = system_prompt or ""
         if len(system_prompt) > budget // 2:
