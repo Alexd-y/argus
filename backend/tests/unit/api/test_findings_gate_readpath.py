@@ -60,3 +60,49 @@ def test_real_finding_with_poc_is_kept():
 
 def test_empty_input_returns_empty():
     assert _gate_finding_rows([]) == []
+
+
+def test_thin_llm_and_rich_tool_rows_collapse_via_scan_target():
+    """Regression (scan d20384ed): an LLM-normalized host-level finding (no
+    per-finding URL) and the tool-produced record for the same issue (URL in
+    ``proof_of_concept``) must collapse into one.
+
+    The previous host derivation (``target.split('/')[0]``) yielded ``"https:"``
+    for the tool record and ``""`` for the URL-less LLM record, so same-class
+    findings kept distinct ``finding_key``s and survived dedup. The scan target
+    is passed as a fallback host so both resolve to ``alleksy.com``.
+    """
+    pairs = [
+        ("TLS configuration probe indicates potential weakness",
+         "TLS_PROBE finding — https://alleksy.com/", "https://alleksy.com/"),
+        ("Incomplete security HTTP response headers",
+         "Security HTTP response headers missing or incomplete — https://alleksy.com",
+         "https://alleksy.com"),
+        ("Missing rate limiting on login endpoint",
+         "No HTTP 429 observed on rapid login-path requests (rate limit signal)",
+         "https://alleksy.com/login"),
+    ]
+    rows: list[_Row] = []
+    for i, (thin_title, rich_title, url) in enumerate(pairs):
+        rows.append(
+            _Row(f"thin{i}", thin_title, description="x" * 30, severity="medium",
+                 source_tool="llm")
+        )
+        rows.append(
+            _Row(f"rich{i}", rich_title, severity="medium", source_tool="testssl",
+                 proof_of_concept={"url": url},
+                 evidence_refs=[{"object_key": "k", "sha256": "s"}])
+        )
+
+    kept = _gate_finding_rows(rows, default_target="alleksy.com")
+    # 3 pairs → 3 findings (one per issue).
+    assert len(kept) == 3
+
+
+def test_host_of_normalizes_scheme_and_port():
+    from src.orchestration.finding_gate import _host_of
+
+    assert _host_of("https://alleksy.com/") == "alleksy.com"
+    assert _host_of("https://alleksy.com:443/login") == "alleksy.com"
+    assert _host_of("alleksy.com") == "alleksy.com"
+    assert _host_of("") == ""

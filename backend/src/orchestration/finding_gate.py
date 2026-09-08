@@ -34,6 +34,7 @@ import logging
 import re
 from enum import IntEnum
 from typing import Any
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,27 @@ def evidence_quality_of(finding: dict[str, Any]) -> EvidenceQuality:
     return EvidenceQuality.NONE
 
 
+def _host_of(target: str) -> str:
+    """Extract a bare hostname from a URL/host string for dedup grouping.
+
+    ``https://alleksy.com/path`` → ``alleksy.com`` and ``alleksy.com:443`` →
+    ``alleksy.com``. Returns ``""`` for empty input. This replaces the previous
+    ``target.split("/")[0]`` which produced ``"https:"`` for scheme-prefixed
+    URLs and thus never matched schemeless host fallbacks — the root cause of
+    same-class findings (TLS/headers/rate-limit) failing to collapse.
+    """
+    t = _s(target).lower()
+    if not t:
+        return ""
+    if "://" not in t:
+        t = "//" + t
+    split = urlsplit(t)
+    netloc = split.netloc or split.path
+    # Drop any userinfo and port; keep the bare host.
+    host = netloc.split("@")[-1].split(":")[0]
+    return host.strip("/")
+
+
 def _finding_target(finding: dict[str, Any]) -> str:
     poc = finding.get("proof_of_concept")
     if isinstance(poc, dict):
@@ -250,7 +272,7 @@ def finding_key(finding: dict[str, Any]) -> str:
     title = _normalize_title(finding.get("title"))
     cwe = _s(finding.get("cwe")).upper()
     target = _finding_target(finding)
-    host = target.split("/")[0] if target else ""
+    host = _host_of(target)
     port = _finding_port(finding)
     param = _finding_param(finding)
     # Noisy check families (rate-limit, security headers, whatweb, TLS probe)

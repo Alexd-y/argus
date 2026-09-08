@@ -858,13 +858,20 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     )
 
 
-def _finding_row_to_gate_dict(f: FindingModel, index: int) -> dict[str, Any]:
+def _finding_row_to_gate_dict(
+    f: FindingModel, index: int, *, default_target: str = ""
+) -> dict[str, Any]:
     """Project a DB finding row onto the dict shape the finding gate reads.
 
     Kept intentionally close to the pipeline finding dict so the read-time gate
     on the UI path (``get_scan_findings``) applies the *same* evidence-quality
     and dedup rules as the canonical snapshot — a single source of truth for
     which findings count (fixes the historical UI-vs-export divergence).
+
+    ``default_target`` (the scan target) is passed as a fallback ``target`` so
+    findings that carry no per-finding URL (e.g. LLM-normalized host-level
+    findings) still resolve to the scan host and collapse against the
+    tool-produced record for the same issue.
     """
     poc = f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None
     return {
@@ -877,10 +884,14 @@ def _finding_row_to_gate_dict(f: FindingModel, index: int) -> dict[str, Any]:
         "source_tool": getattr(f, "source_tool", None) or getattr(f, "source", None) or "",
         "proof_of_concept": poc,
         "evidence_refs": list(f.evidence_refs) if isinstance(f.evidence_refs, list) else [],
+        # Fallback host for URL-less findings; the gate prefers poc.url when set.
+        "target": default_target or "",
     }
 
 
-def _gate_finding_rows(rows: list[FindingModel]) -> list[FindingModel]:
+def _gate_finding_rows(
+    rows: list[FindingModel], *, default_target: str = ""
+) -> list[FindingModel]:
     """Return the gated + deduped subset of DB finding rows (order preserved).
 
     Uses the shared :func:`gate_and_dedupe_findings` so the UI list matches the
@@ -889,7 +900,10 @@ def _gate_finding_rows(rows: list[FindingModel]) -> list[FindingModel]:
     """
     if not rows:
         return rows
-    dicts = [_finding_row_to_gate_dict(f, i) for i, f in enumerate(rows)]
+    dicts = [
+        _finding_row_to_gate_dict(f, i, default_target=default_target)
+        for i, f in enumerate(rows)
+    ]
     kept = gate_and_dedupe_findings(
         dicts, enabled=settings.finding_evidence_gate_enabled
     )
@@ -1046,7 +1060,8 @@ async def get_scan_findings(
                 cast(Scan.tenant_id, String) == tenant_id,
             )
         )
-        if not result.scalar_one_or_none():
+        scan_row = result.scalar_one_or_none()
+        if not scan_row:
             raise HTTPException(status_code=404, detail="Scan not found")
         fq = select(FindingModel).where(cast(FindingModel.scan_id, String) == scan_id)
         if severity and severity.strip():
@@ -1054,7 +1069,10 @@ async def get_scan_findings(
         if validated_only:
             fq = fq.where(FindingModel.confidence == "confirmed")
         result = await session.execute(fq)
-        findings = _gate_finding_rows(list(result.scalars().all()))
+        findings = _gate_finding_rows(
+            list(result.scalars().all()),
+            default_target=getattr(scan_row, "target", "") or "",
+        )
         return [_finding_to_schema(f) for f in findings]
 
 
