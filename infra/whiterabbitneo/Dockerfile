@@ -36,8 +36,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 ENV MODEL_PATH=/models/WhiteRabbitNeo_WhiteRabbitNeo-V3-7B-Q4_K_M.gguf
 ENTRYPOINT ["python3", "/opt/argus/entrypoint_cpu.py"]
+# --n_ctx intentionally omitted here: entrypoint_cpu.py injects it from WRB_N_CTX
+# (default 8192) so the context window is env-tunable without rebuilding.
 CMD ["--model", "/models/WhiteRabbitNeo_WhiteRabbitNeo-V3-7B-Q4_K_M.gguf", \
-     "--n_ctx", "4096", \
      "--host", "0.0.0.0", \
      "--port", "8000"]
 
