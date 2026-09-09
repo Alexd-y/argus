@@ -163,13 +163,43 @@ def collect_hosts_for_deep_scan(
     return hosts[: max(1, int(max_hosts))]
 
 
+def naabu_top_ports_preset(top_ports: int) -> str:
+    """naabu ``-top-ports`` accepts only ``100``, ``1000`` or ``full``.
+
+    Snap an arbitrary configured N up to the nearest valid preset, preserving the
+    "wider = more ports" intent (an arbitrary value like 500 makes naabu abort
+    with ``invalid top ports option``).
+    """
+    tp = max(1, int(top_ports))
+    if tp <= 100:
+        return "100"
+    if tp <= 1000:
+        return "1000"
+    return "full"
+
+
 def build_naabu_argv(host: str, top_ports: int) -> list[str]:
-    tp = max(1, min(65535, int(top_ports)))
-    return ["naabu", "-host", host, "-top-ports", str(tp), "-silent", "-no-color"]
+    # ``-s c`` (CONNECT scan) — the default SYN scan needs CAP_NET_RAW, which the
+    # non-root sandbox user lacks; CONNECT works unprivileged.
+    preset = naabu_top_ports_preset(top_ports)
+    return [
+        "naabu",
+        "-host",
+        host,
+        "-top-ports",
+        preset,
+        "-s",
+        "c",
+        "-silent",
+        "-no-color",
+    ]
 
 
 def build_deep_nmap_sv_argv(host: str, port_csv: str) -> list[str]:
-    return ["nmap", "-sV", "-T4", "--open", "-oX", "-", "-p", port_csv, host]
+    # ``-sT`` (TCP connect) + ``-Pn`` (skip host discovery) avoid raw sockets,
+    # which are unavailable to the non-root sandbox user (raw socket / dnet
+    # eth0 open fails with "Operation not permitted").
+    return ["nmap", "-sT", "-Pn", "-sV", "-T4", "--open", "-oX", "-", "-p", port_csv, host]
 
 
 def _kal_target_url(host: str) -> str:
@@ -190,7 +220,11 @@ def merge_deep_ports_into_nmap_tool_result(
     agg = deep_structured.get("aggregate_tcp_ports")
     if not isinstance(agg, list):
         return
-    extra_tcp = {int(x) for x in agg if isinstance(x, (int, float)) or (isinstance(x, str) and str(x).isdigit())}
+    extra_tcp = {
+        int(x)
+        for x in agg
+        if isinstance(x, (int, float)) or (isinstance(x, str) and str(x).isdigit())
+    }
     extra_tcp = {p for p in extra_tcp if 1 <= p <= 65535}
     if not extra_tcp:
         return
@@ -209,7 +243,11 @@ def merge_deep_ports_into_nmap_tool_result(
             except (TypeError, ValueError):
                 continue
     cur |= extra_tcp
-    st = {**st, "open_tcp_ports": sorted(str(p) for p in cur), "deep_port_enrichment": deep_structured}
+    st = {
+        **st,
+        "open_tcp_ports": sorted(str(p) for p in cur),
+        "deep_port_enrichment": deep_structured,
+    }
     n["structured"] = st
     tool_results["nmap"] = n
 
@@ -272,7 +310,9 @@ async def run_recon_deep_port_scan_bundle(
                 server_password_audit_enabled=bool(s.kal_allow_password_audit),
             )
             if not pol.allowed:
-                naabu_summaries.append({"host": host, "naabu": "policy_denied", "reason": pol.reason})
+                naabu_summaries.append(
+                    {"host": host, "naabu": "policy_denied", "reason": pol.reason}
+                )
                 continue
             tgt = _kal_target_url(host)
             nb_r = await asyncio.to_thread(
@@ -310,7 +350,13 @@ async def run_recon_deep_port_scan_bundle(
                     except Exception:
                         pass
             parsed_nb = parse_naabu_host_port_lines(stdout)
-            naabu_summaries.append({"host": host, "naabu_ok": bool(nb_r.get("success")), "lines": len(stdout.splitlines())})
+            naabu_summaries.append(
+                {
+                    "host": host,
+                    "naabu_ok": bool(nb_r.get("success")),
+                    "lines": len(stdout.splitlines()),
+                }
+            )
             for _hk, ports in parsed_nb.items():
                 host_ports.setdefault(host, set()).update(ports)
 
@@ -357,13 +403,15 @@ async def run_recon_deep_port_scan_bundle(
         t_tcp, _t_udp = merge_open_ports(parsed)
         if nm_r.get("success"):
             any_ok = True
-        nmap_phases.append({
-            "host": host,
-            "success": bool(nm_r.get("success")),
-            "return_code": nm_r.get("return_code"),
-            "parsed": parsed,
-            "open_tcp": sorted(t_tcp, key=lambda x: int(x) if str(x).isdigit() else 0),
-        })
+        nmap_phases.append(
+            {
+                "host": host,
+                "success": bool(nm_r.get("success")),
+                "return_code": nm_r.get("return_code"),
+                "parsed": parsed,
+                "open_tcp": sorted(t_tcp, key=lambda x: int(x) if str(x).isdigit() else 0),
+            }
+        )
         if raw_sink is not None:
             try:
                 await asyncio.to_thread(
@@ -413,7 +461,10 @@ async def run_recon_deep_port_scan_bundle(
         "hosts_scanned": hosts,
         "naabu": naabu_summaries,
         "nmap_phases": nmap_phases,
-        "open_ports_by_host": {k: sorted({int(p["portid"]) for p in v if str(p.get("portid", "")).isdigit()}) for k, v in by_host_out.items()},
+        "open_ports_by_host": {
+            k: sorted({int(p["portid"]) for p in v if str(p.get("portid", "")).isdigit()})
+            for k, v in by_host_out.items()
+        },
         "aggregate_tcp_ports": sorted(aggregate_tcp),
     }
 
@@ -421,7 +472,9 @@ async def run_recon_deep_port_scan_bundle(
 
     if raw_sink is not None:
         try:
-            await asyncio.to_thread(raw_sink.upload_json, "deep_port_scan_structured", deep_structured)
+            await asyncio.to_thread(
+                raw_sink.upload_json, "deep_port_scan_structured", deep_structured
+            )
         except Exception:
             logger.warning(
                 "recon_deep_structured_upload_failed",

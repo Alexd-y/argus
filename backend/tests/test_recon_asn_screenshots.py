@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.core.config import Settings
 from src.recon.recon_asn_screenshots import (
     build_recon_asnmap_argv,
@@ -30,7 +29,9 @@ def test_build_asnmap_argv_rejects_invalid_apex() -> None:
 
 
 def test_parse_asnmap_json_object() -> None:
-    blob = '{"as_number": "15169","as_name":"Google","input":"example.com","as_range":["8.8.8.0/24"]}'
+    blob = (
+        '{"as_number": "15169","as_name":"Google","input":"example.com","as_range":["8.8.8.0/24"]}'
+    )
     s = parse_asnmap_stdout_structured(blob)
     assert s["row_count"] >= 1
     assert any(x.get("as_number") == "15169" for x in s["unique_asns"])
@@ -106,12 +107,42 @@ async def test_run_recon_asnmap_bundle_merges_summary() -> None:
             raw_sink=sink,
             tenant_id="t1",
             scan_id="s1",
-            app_settings=Settings(sandbox_enabled=True),
+            app_settings=Settings(sandbox_enabled=True, recon_pdcp_api_key="test-key"),
         )
     assert "asnmap" in out
     assert "asn_summary" in out
     assert out["asn_summary"]["row_count"] >= 1
     sink.upload_json.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_run_recon_asnmap_bundle_skips_without_pdcp_key() -> None:
+    cfg = ReconRuntimeConfig(
+        mode="full",
+        active_depth=1,
+        enable_content_discovery=False,
+        deep_port_scan=False,
+        js_analysis=False,
+        screenshots=False,
+        tool_selection=None,
+        wordlist_path="",
+        rate_limit_rps=10,
+        asnmap_enabled=True,
+    )
+    # No PDCP key configured → asnmap must be skipped without invoking the runner.
+    with patch(
+        "src.recon.recon_asn_screenshots.run_kal_mcp_tool",
+        side_effect=AssertionError("asnmap must not run without a PDCP key"),
+    ):
+        out = await run_recon_asnmap_bundle(
+            "example.com",
+            cfg,
+            raw_sink=None,
+            tenant_id="t1",
+            scan_id="s1",
+            app_settings=Settings(sandbox_enabled=True, recon_pdcp_api_key=""),
+        )
+    assert out == {}
 
 
 @pytest.mark.asyncio

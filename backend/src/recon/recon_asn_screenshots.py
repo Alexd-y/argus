@@ -288,7 +288,11 @@ def _run_gowitness_one_sync(
                 "url": url,
                 "success": False,
                 "minio_key": None,
-                "error": "no_screenshot_file" if ok else str(exec_out.get("stderr") or "run_failed")[:200],
+                "error": (
+                    "no_screenshot_file"
+                    if ok
+                    else str(exec_out.get("stderr") or "run_failed")[:200]
+                ),
             }
 
         path = imgs[0][0]
@@ -329,13 +333,28 @@ async def run_recon_asnmap_bundle(
     if not cfg.asnmap_enabled:
         return out
 
+    # asnmap requires a ProjectDiscovery Cloud (PDCP) API key; without one it
+    # prompts on /dev/tty and aborts in the non-interactive sandbox. Skip cleanly
+    # instead of recording a guaranteed-failing tool run.
+    if not str(getattr(s, "recon_pdcp_api_key", "") or "").strip():
+        logger.info(
+            "recon_asnmap_skipped",
+            extra={"event": "recon_asnmap_skipped", "reason": "no_pdcp_api_key"},
+        )
+        return out
+
     argv = build_recon_asnmap_argv(domain)
     if not argv:
-        logger.info("recon_asnmap_skipped", extra={"event": "recon_asnmap_skipped", "reason": "bad_domain"})
+        logger.info(
+            "recon_asnmap_skipped", extra={"event": "recon_asnmap_skipped", "reason": "bad_domain"}
+        )
         return out
 
     if not _tool_binary_visible(argv[0], s):
-        logger.info("recon_asnmap_skipped", extra={"event": "recon_asnmap_skipped", "reason": "binary_missing"})
+        logger.info(
+            "recon_asnmap_skipped",
+            extra={"event": "recon_asnmap_skipped", "reason": "binary_missing"},
+        )
         return out
 
     target_url = f"https://{_normalize_apex_domain(domain)}/"
@@ -361,7 +380,9 @@ async def run_recon_asnmap_bundle(
         try:
             await asyncio.to_thread(raw_sink.upload_json, "asn_summary", summary)
         except Exception:
-            logger.warning("asn_summary_upload_failed", extra={"event": "asn_summary_upload_failed"})
+            logger.warning(
+                "asn_summary_upload_failed", extra={"event": "asn_summary_upload_failed"}
+            )
 
     return out
 
@@ -382,7 +403,10 @@ async def run_recon_gowitness_bundle(
         return out
 
     if not _tool_binary_visible("gowitness", s):
-        logger.info("recon_gowitness_skipped", extra={"event": "recon_gowitness_skipped", "reason": "binary_missing"})
+        logger.info(
+            "recon_gowitness_skipped",
+            extra={"event": "recon_gowitness_skipped", "reason": "binary_missing"},
+        )
         out["gowitness"] = {
             "success": False,
             "stdout": "",
@@ -456,7 +480,9 @@ async def run_recon_gowitness_bundle(
                 out["gowitness_screenshots"],
             )
         except Exception:
-            logger.warning("gowitness_index_upload_failed", extra={"event": "gowitness_index_upload_failed"})
+            logger.warning(
+                "gowitness_index_upload_failed", extra={"event": "gowitness_index_upload_failed"}
+            )
 
     out["gowitness"] = {
         "success": uploaded > 0 or len(urls) == 0,

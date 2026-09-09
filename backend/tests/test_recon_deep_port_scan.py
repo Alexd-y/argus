@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, patch
 
-import asyncio
-
 import pytest
-
 from src.recon.recon_deep_port_scan import (
+    build_deep_nmap_sv_argv,
+    build_naabu_argv,
     collect_hosts_for_deep_scan,
     merge_deep_ports_into_nmap_tool_result,
+    naabu_top_ports_preset,
     parse_naabu_host_port_lines,
     parse_user_ports_csv,
     run_recon_deep_port_scan_bundle,
@@ -24,6 +25,38 @@ def test_parse_naabu_host_port_lines() -> None:
     m = parse_naabu_host_port_lines(text)
     assert m["10.0.0.1"] == {80}
     assert m["sub.example.com"] == {443}
+
+
+def test_naabu_top_ports_preset_snaps_to_valid_values() -> None:
+    # naabu only accepts 100 / 1000 / full — arbitrary N must snap up.
+    assert naabu_top_ports_preset(50) == "100"
+    assert naabu_top_ports_preset(100) == "100"
+    assert naabu_top_ports_preset(500) == "1000"  # the config default that broke
+    assert naabu_top_ports_preset(1000) == "1000"
+    assert naabu_top_ports_preset(5000) == "full"
+    assert naabu_top_ports_preset(0) == "100"
+
+
+def test_build_naabu_argv_uses_preset_and_connect_scan() -> None:
+    argv = build_naabu_argv("example.com", 500)
+    assert argv[:3] == ["naabu", "-host", "example.com"]
+    # valid preset, never the raw integer
+    assert "-top-ports" in argv and "1000" in argv
+    assert "500" not in argv
+    # CONNECT scan so it runs unprivileged in the sandbox
+    tp = argv.index("-top-ports")
+    assert argv[tp + 1] in {"100", "1000", "full"}
+    assert argv[argv.index("-s") + 1] == "c"
+
+
+def test_build_deep_nmap_sv_argv_is_unprivileged() -> None:
+    argv = build_deep_nmap_sv_argv("example.com", "80,443")
+    # connect scan + no host discovery → no raw socket needed
+    assert "-sT" in argv
+    assert "-Pn" in argv
+    assert "-sV" in argv
+    assert argv[-1] == "example.com"
+    assert argv[argv.index("-p") + 1] == "80,443"
 
 
 def test_parse_user_ports_csv_caps() -> None:

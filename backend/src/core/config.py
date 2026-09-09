@@ -1041,6 +1041,9 @@ class Settings(BaseSettings):
     recon_screenshots: bool = False
     # RECON-008 — asnmap (apex) + gowitness caps (full mode + flags; passive has no optional steps)
     recon_asnmap_enabled: bool = True
+    # asnmap requires a ProjectDiscovery Cloud (PDCP) API key; without it the tool
+    # prompts on /dev/tty and aborts in the non-interactive sandbox. Empty → skip asnmap.
+    recon_pdcp_api_key: str = ""
     recon_gowitness_max_urls: int = 25
     recon_gowitness_timeout_sec: int | None = None
     recon_gowitness_concurrency: int = 3
@@ -1780,7 +1783,9 @@ def lab_destructive_execution_allowed(
         return False
     if not (settings.argus_lab_signed_approval_id or "").strip():
         return False
-    global_targets = [p.strip() for p in (settings.argus_lab_allowed_targets or "").split(",") if p.strip()]
+    global_targets = [
+        p.strip() for p in (settings.argus_lab_allowed_targets or "").split(",") if p.strip()
+    ]
     extra_targets = [str(t).strip() for t in (extra_allowed_targets or []) if str(t).strip()]
     if not global_targets and not extra_targets:
         return False
