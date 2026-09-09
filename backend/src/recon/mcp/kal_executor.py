@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import time
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -13,11 +15,21 @@ from src.pipeline.contracts.tool_job import TargetKind
 from src.recon.mcp.policy import evaluate_kal_mcp_policy, normalize_kal_binary
 from src.recon.raw_artifact_sink import sink_raw_text, slug_for_artifact_type_component
 from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simple_sync
+from src.tools.executor import record_tool_run
 from src.tools.guardrails import validate_target_for_tool
 
 logger = logging.getLogger(__name__)
 
 KAL_MCP_RAW_PHASE = "recon"
+
+_TOOL_RUN_COMMAND_MAX_CHARS = 2000
+
+
+def _command_str(argv: list[str]) -> str:
+    """Render argv as a shell-safe provenance string (capped)."""
+    if not argv:
+        return ""
+    return shlex.join(str(a) for a in argv)[:_TOOL_RUN_COMMAND_MAX_CHARS]
 
 
 def _host_from_target(raw: str) -> str:
@@ -86,6 +98,7 @@ def run_kal_mcp_tool(
 ) -> dict[str, Any]:
     """Evaluate KAL policy, optional target guardrails, subprocess (or sandbox exec), MinIO upload."""
     start = time.perf_counter()
+    started_dt = datetime.now(UTC)
     tid = (tenant_id or "").strip() or None
     sid = (scan_id or "").strip() or None
     bin_name = normalize_kal_binary(argv[0]) if argv else ""
@@ -210,7 +223,7 @@ def run_kal_mcp_tool(
                     "tool": bin_name,
                 },
             )
-            return {
+            signed_result = {
                 "success": s_rc == 0,
                 "stdout": s_out,
                 "stderr": s_err,
@@ -219,6 +232,16 @@ def run_kal_mcp_tool(
                 "policy_reason": None,
                 "minio_keys": keys,
             }
+            record_tool_run(
+                tid,
+                sid,
+                bin_name or "kal_mcp",
+                signed_result,
+                started_dt,
+                datetime.now(UTC),
+                _command_str(argv),
+            )
+            return signed_result
 
     run_parts = build_sandbox_exec_argv(argv, use_sandbox=settings.sandbox_enabled)
 
@@ -254,7 +277,7 @@ def run_kal_mcp_tool(
         },
     )
 
-    return {
+    legacy_result = {
         "success": success,
         "stdout": stdout,
         "stderr": stderr,
@@ -263,3 +286,13 @@ def run_kal_mcp_tool(
         "policy_reason": None,
         "minio_keys": minio_keys,
     }
+    record_tool_run(
+        tid,
+        sid,
+        bin_name or "kal_mcp",
+        legacy_result,
+        started_dt,
+        datetime.now(UTC),
+        _command_str(argv),
+    )
+    return legacy_result

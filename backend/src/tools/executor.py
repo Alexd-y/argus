@@ -79,6 +79,28 @@ def _schedule_tool_run_record(
         _PENDING_TOOL_RUNS.setdefault(scan_id, []).append(record)
 
 
+def record_tool_run(
+    tenant_id: str | None,
+    scan_id: str | None,
+    tool_name: str,
+    result: dict[str, Any],
+    started_at: datetime,
+    finished_at: datetime,
+    command: str,
+) -> None:
+    """Public seam for non-``execute_command`` runners (e.g. the recon MCP kal
+    executor) to buffer a ToolRun record for the phase-boundary flush.
+
+    Semantics are identical to the internal ``execute_command`` path so tool
+    provenance is uniform across runners: ``result`` supplies ``stdout`` and
+    ``success``; the record is drained + persisted by :func:`flush_tool_runs`.
+    No-op when scan context is missing.
+    """
+    _schedule_tool_run_record(
+        tenant_id, scan_id, tool_name, result, started_at, finished_at, command
+    )
+
+
 def drain_pending_tool_runs(scan_id: str) -> list[dict[str, Any]]:
     """Atomically remove and return buffered ToolRun records for a scan."""
     with _PENDING_TOOL_RUNS_LOCK:
@@ -196,11 +218,19 @@ def execute_command(
         if scan_id:
             try:
                 from src.orchestration.mcp_allowlist import MCPAllowlist
+
                 _phase = _current_scan_phase(scan_id) if scan_id else ""
                 if _phase:
                     _guard_result = MCPAllowlist().guard_tool_call(tool_name, _phase)
                     if _guard_result:
-                        logger.warning("mcp_allowlist_denied", extra={"tool": tool_name, "phase": _phase, "reason": _guard_result.reason})
+                        logger.warning(
+                            "mcp_allowlist_denied",
+                            extra={
+                                "tool": tool_name,
+                                "phase": _phase,
+                                "reason": _guard_result.reason,
+                            },
+                        )
             except Exception:
                 pass
 
@@ -340,7 +370,9 @@ def execute_command_with_recovery(
     _append_attempt(original_tool, result)
 
     if result.get("success") or not original_tool or recovery.is_stateful(original_tool):
-        info = recovery.build_recovery_info(original_tool, original_tool, attempts, from_cache=False)
+        info = recovery.build_recovery_info(
+            original_tool, original_tool, attempts, from_cache=False
+        )
         return result, info
 
     allowed_alts = [a for a in recovery.get_alternatives(original_tool) if a in ALLOWED_TOOLS][
@@ -371,7 +403,9 @@ def execute_command_with_recovery(
     return result, info
 
 
-def _result(success: bool, stdout: str, stderr: str, return_code: int, execution_time: float) -> dict[str, Any]:
+def _result(
+    success: bool, stdout: str, stderr: str, return_code: int, execution_time: float
+) -> dict[str, Any]:
     return {
         "success": success,
         "stdout": stdout,
