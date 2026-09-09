@@ -628,6 +628,93 @@ def _build_summary_from_findings(findings: list[dict]) -> ReportSummary:
     )
 
 
+async def _materialise_finding_evidence(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    scan_id: str,
+    finding_id: str,
+    poc_db: dict[str, Any] | None,
+    evidence_refs: list[str] | None,
+    description: str | None,
+    reproducible_steps: str | None,
+) -> None:
+    """Best-effort materialisation of a finding's Evidence rows (ARGUS-WSTG-COV-1
+    §Evidence).
+
+    Evidence is *auxiliary provenance* for store-backed WSTG coverage — it must
+    NEVER fail finding/report persistence or the scan. Two honest sources, in
+    priority order: (1) a structured ``proof_of_concept`` (interactive PoC +
+    screenshot), else (2) a passive observation backed by real ``evidence_refs``
+    (TLS/headers/DNS checks whose result is a stored observation). No artifact →
+    no Evidence row → not counted (never fabricated).
+
+    Isolation contract: MinIO uploads are non-transactional side-effects wrapped
+    in try/except; Evidence inserts run inside a SAVEPOINT so a DB error rolls
+    back only the evidence, leaving the already-flushed finding intact. Ids are
+    deterministic so a phase retry/resume upserts idempotently.
+    """
+    poc_key: str | None = None
+    screenshot_key: str | None = None
+    try:
+        if poc_db:
+            poc_key = await asyncio.to_thread(
+                upload_finding_poc_json, tenant_id, scan_id, finding_id, poc_db
+            )
+            screenshot_key = (
+                str(poc_db.get("screenshot_key") or "").strip()
+                if isinstance(poc_db, dict)
+                else ""
+            ) or None
+        elif evidence_refs:
+            observation_poc = build_observation_poc(
+                description=description,
+                evidence_refs=evidence_refs,
+                reproducible_steps=reproducible_steps,
+            )
+            if observation_poc:
+                poc_key = await asyncio.to_thread(
+                    upload_finding_poc_json, tenant_id, scan_id, finding_id, observation_poc
+                )
+    except Exception:
+        logger.warning(
+            "finding_evidence_upload_failed",
+            extra={"scan_id": scan_id, "finding_id": finding_id},
+            exc_info=True,
+        )
+        return
+
+    rows = build_finding_evidence_rows(
+        tenant_id=tenant_id,
+        scan_id=scan_id,
+        finding_id=finding_id,
+        poc_object_key=poc_key,
+        screenshot_object_key=screenshot_key,
+    )
+    if not rows:
+        return
+    try:
+        async with session.begin_nested():
+            for _row in rows:
+                await session.merge(
+                    Evidence(
+                        id=_row.id,
+                        tenant_id=_row.tenant_id,
+                        scan_id=_row.scan_id,
+                        finding_id=_row.finding_id,
+                        object_key=_row.object_key,
+                        content_type=_row.content_type,
+                        description=_row.description,
+                    )
+                )
+    except Exception:
+        logger.warning(
+            "finding_evidence_persist_failed",
+            extra={"scan_id": scan_id, "finding_id": finding_id},
+            exc_info=True,
+        )
+
+
 async def _persist_report_and_findings(
     session: AsyncSession,
     tenant_id: str,
@@ -777,61 +864,21 @@ async def _persist_report_and_findings(
         # key (insert-or-update) so a re-run never raises a duplicate findings_pkey
         # IntegrityError that would fail an otherwise-complete scan.
         await session.merge(finding)
-        # ARGUS-WSTG-COV-1 §Evidence: materialise a real Evidence row from the
-        # finding's captured artifacts so store-backed coverage can validate
-        # ``finding → artifact``. Two honest sources, in priority order:
-        #   1) a structured proof_of_concept (interactive PoC + screenshots), or
-        #   2) a passive observation backed by real evidence_refs (TLS/headers/
-        #      DNS checks whose result is a stored observation, not a live PoC).
-        # No artifact → no Evidence row → not counted (never fabricated).
-        # Idempotent: deterministic ids upsert on phase retry/resume.
-        poc_key: str | None = None
-        screenshot_key: str | None = None
-        if poc_db:
-            poc_key = await asyncio.to_thread(
-                upload_finding_poc_json,
-                tenant_id,
-                scan_id,
-                finding.id,
-                poc_db,
-            )
-            screenshot_key = (
-                str(poc_db.get("screenshot_key") or "").strip()
-                if isinstance(poc_db, dict)
-                else ""
-            ) or None
-        elif ev_refs:
-            observation_poc = build_observation_poc(
-                description=f.get("description"),
-                evidence_refs=ev_refs,
-                reproducible_steps=rep_steps,
-            )
-            if observation_poc:
-                poc_key = await asyncio.to_thread(
-                    upload_finding_poc_json,
-                    tenant_id,
-                    scan_id,
-                    finding.id,
-                    observation_poc,
-                )
-        for _row in build_finding_evidence_rows(
+        # Flush the finding into the OUTER transaction now so its row is durable
+        # before we attempt the (best-effort) evidence rows below. This makes the
+        # subsequent SAVEPOINT roll back *only* the evidence on failure — never
+        # the finding — and guarantees the FK ``evidence.finding_id`` resolves.
+        await session.flush()
+        await _materialise_finding_evidence(
+            session,
             tenant_id=tenant_id,
             scan_id=scan_id,
             finding_id=finding.id,
-            poc_object_key=poc_key,
-            screenshot_object_key=screenshot_key,
-        ):
-            await session.merge(
-                Evidence(
-                    id=_row.id,
-                    tenant_id=_row.tenant_id,
-                    scan_id=_row.scan_id,
-                    finding_id=_row.finding_id,
-                    object_key=_row.object_key,
-                    content_type=_row.content_type,
-                    description=_row.description,
-                )
-            )
+            poc_db=poc_db,
+            evidence_refs=ev_refs,
+            description=f.get("description"),
+            reproducible_steps=rep_steps,
+        )
         await _record_event(
             session,
             tenant_id,
