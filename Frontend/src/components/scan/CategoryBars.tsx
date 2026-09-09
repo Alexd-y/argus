@@ -3,8 +3,11 @@ import type { CategorySlice, SeverityKey } from "@/lib/scan-summary";
 
 const SEGMENT: Array<{ key: SeverityKey; className: string }> = [
   { key: "critical", className: "bg-red-500" },
-  { key: "important", className: "bg-orange-400" },
-  { key: "optional", className: "bg-amber-400" },
+  { key: "high", className: "bg-orange-400" },
+  { key: "medium", className: "bg-amber-400" },
+  { key: "low", className: "bg-yellow-400" },
+  { key: "informational", className: "bg-sky-400" },
+  { key: "unknown", className: "bg-neutral-400" },
 ];
 
 interface CategoryBarsProps {

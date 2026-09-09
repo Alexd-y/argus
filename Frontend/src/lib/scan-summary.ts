@@ -1,13 +1,14 @@
-import type { CheckPriority, Finding, ScanResults } from "./scan-results";
+import type { CheckPriority, Finding, ScanResults, SeverityKey } from "./scan-results";
+import { severityBandOf } from "./scan-results";
 
-export type SeverityKey = "critical" | "important" | "optional";
+export type { SeverityKey } from "./scan-results";
 
 export interface SeveritySlice {
   key: SeverityKey;
   label: string;
   count: number;
-  pctOfTotal: number;
-  pctOfOpen: number;
+  /** Percentage of the single canonical population denominator (total findings). */
+  pct: number;
 }
 
 export interface CategorySlice {
@@ -18,10 +19,18 @@ export interface CategorySlice {
   bySeverity: Record<SeverityKey, number>;
 }
 
-function severityOf(priority: CheckPriority): SeverityKey {
-  if (priority === "critical") return "critical";
-  if (priority === "important") return "important";
-  return "optional";
+/** Ordered severity bands shown in the donut / legend (severity-descending). */
+const SEVERITY_DISPLAY: ReadonlyArray<{ key: SeverityKey; label: string }> = [
+  { key: "critical", label: "Critical" },
+  { key: "high", label: "High" },
+  { key: "medium", label: "Medium" },
+  { key: "low", label: "Low" },
+  { key: "informational", label: "Informational" },
+  { key: "unknown", label: "Unknown" },
+];
+
+function emptyBands(): Record<SeverityKey, number> {
+  return { critical: 0, high: 0, medium: 0, low: 0, informational: 0, unknown: 0 };
 }
 
 const PRIORITY_RANK: Record<CheckPriority, number> = {
@@ -36,22 +45,39 @@ export function pct(part: number, whole: number): number {
   return Math.round((part / whole) * 100);
 }
 
+/** Active-risk findings (critical→low). Informational/unknown are shown but not "open". */
 export function openFindingCount(results: ScanResults): number {
   return results.critical + results.high + results.medium + results.low;
 }
 
+/** Count for one band, read from the single backend-provided aggregate. */
+export function severityCount(results: ScanResults, key: SeverityKey): number {
+  switch (key) {
+    case "critical":
+      return results.critical;
+    case "high":
+      return results.high;
+    case "medium":
+      return results.medium;
+    case "low":
+      return results.low;
+    case "informational":
+      return results.info;
+    case "unknown":
+      return results.unknown;
+    default: {
+      const _exhaustive: never = key;
+      return _exhaustive;
+    }
+  }
+}
+
 export function severityBreakdown(results: ScanResults): SeveritySlice[] {
-  const open = openFindingCount(results);
-  const raw: Array<{ key: SeverityKey; label: string; count: number }> = [
-    { key: "critical", label: "Critical", count: results.critical },
-    { key: "important", label: "Important", count: results.high },
-    { key: "optional", label: "Optional", count: results.medium + results.low },
-  ];
-  return raw.map((slice) => ({
-    ...slice,
-    pctOfTotal: pct(slice.count, results.totalFindings),
-    pctOfOpen: pct(slice.count, open),
-  }));
+  const total = results.totalFindings;
+  return SEVERITY_DISPLAY.map(({ key, label }) => {
+    const count = severityCount(results, key);
+    return { key, label, count, pct: pct(count, total) };
+  });
 }
 
 export function categoryBreakdown(findings: Finding[], limit = 6): CategorySlice[] {
@@ -64,12 +90,12 @@ export function categoryBreakdown(findings: Finding[], limit = 6): CategorySlice
         group: finding.group,
         open: 0,
         checks: 0,
-        bySeverity: { critical: 0, important: 0, optional: 0 },
+        bySeverity: emptyBands(),
       };
     entry.checks += 1;
     if (finding.status === "fail") {
       entry.open += 1;
-      entry.bySeverity[severityOf(finding.priority)] += 1;
+      entry.bySeverity[severityBandOf(finding)] += 1;
     }
     byGroup.set(finding.groupId, entry);
   }

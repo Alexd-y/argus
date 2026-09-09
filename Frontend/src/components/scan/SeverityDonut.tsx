@@ -3,14 +3,20 @@ import type { SeverityKey, SeveritySlice } from "@/lib/scan-summary";
 
 const ARC_COLOR: Record<SeverityKey, string> = {
   critical: "#ef4444",
-  important: "#fb923c",
-  optional: "#fbbf24",
+  high: "#fb923c",
+  medium: "#fbbf24",
+  low: "#facc15",
+  informational: "#38bdf8",
+  unknown: "#a3a3a3",
 };
 
 const LEGEND_DOT: Record<SeverityKey, string> = {
   critical: "bg-red-500",
-  important: "bg-orange-400",
-  optional: "bg-amber-400",
+  high: "bg-orange-400",
+  medium: "bg-amber-400",
+  low: "bg-yellow-400",
+  informational: "bg-sky-400",
+  unknown: "bg-neutral-400",
 };
 
 const RADIUS = 52;
@@ -18,16 +24,17 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface SeverityDonutProps {
   slices: SeveritySlice[];
-  open: number;
+  /** Single canonical denominator: total findings (all bands, incl. info/unknown). */
+  total: number;
 }
 
-export function SeverityDonut({ slices, open }: SeverityDonutProps) {
+export function SeverityDonut({ slices, total }: SeverityDonutProps) {
   const drawn = slices.filter((slice) => slice.count > 0);
   const gap = drawn.length > 1 ? 3 : 0;
 
   let cursor = 0;
   const arcs = drawn.map((slice) => {
-    const span = (slice.count / open) * CIRCUMFERENCE;
+    const span = total > 0 ? (slice.count / total) * CIRCUMFERENCE : 0;
     const arc = { key: slice.key, offset: cursor, length: Math.max(span - gap, 1) };
     cursor += span;
     return arc;
@@ -61,9 +68,9 @@ export function SeverityDonut({ slices, open }: SeverityDonutProps) {
           ))}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl text-white tabular-nums leading-none">{open}</span>
+          <span className="text-4xl text-white tabular-nums leading-none">{total}</span>
           <span className="text-[10px] uppercase tracking-wider text-neutral-500 mt-1.5">
-            {open === 1 ? "Open finding" : "Open findings"}
+            {total === 1 ? "Finding" : "Findings"}
           </span>
         </div>
       </div>
@@ -75,7 +82,7 @@ export function SeverityDonut({ slices, open }: SeverityDonutProps) {
             <span className="text-neutral-300 flex-1 truncate">{slice.label}</span>
             <span className="text-white tabular-nums">{slice.count}</span>
             <span className="w-10 text-right text-neutral-500 tabular-nums">
-              {open > 0 ? `${slice.pctOfOpen}%` : "—"}
+              {total > 0 ? `${slice.pct}%` : "—"}
             </span>
           </li>
         ))}

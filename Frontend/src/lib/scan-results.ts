@@ -1,7 +1,53 @@
 import type { ScanTier } from "./scan-tiers";
 
 export type CheckStatus = "fail" | "pass" | "warning";
+/** Remediation-priority bucket for a check (an axis SEPARATE from severity). */
 export type CheckPriority = "critical" | "important" | "medium" | "optional";
+
+/**
+ * Canonical qualitative severity band — mirrors the backend
+ * ``SeverityBand`` taxonomy. This is the impact axis and is kept strictly
+ * separate from {@link CheckPriority} (remediation ordering), validation
+ * status, and lifecycle. ``informational`` and ``unknown`` are first-class
+ * bands and are never folded into ``low``.
+ */
+export type SeverityKey = "critical" | "high" | "medium" | "low" | "informational" | "unknown";
+
+const PRIORITY_TO_BAND: Record<CheckPriority, SeverityKey> = {
+  critical: "critical",
+  important: "high",
+  medium: "medium",
+  optional: "low",
+};
+
+/** Severity band of a finding: an explicit band wins; else derived from priority. */
+export function severityBandOf(finding: { severity?: SeverityKey; priority: CheckPriority }): SeverityKey {
+  return finding.severity ?? PRIORITY_TO_BAND[finding.priority];
+}
+
+/**
+ * Map a backend severity string to a canonical band. Blank / unrecognised
+ * values become ``unknown`` — never silently coerced to ``low`` or ``info``.
+ * A CVSS "None" (0.0) surfaces as ``informational`` (documented display).
+ */
+export function backendSeverityToBand(severity: unknown): SeverityKey {
+  switch (String(severity ?? "").toLowerCase()) {
+    case "critical":
+      return "critical";
+    case "high":
+      return "high";
+    case "medium":
+      return "medium";
+    case "low":
+      return "low";
+    case "info":
+    case "informational":
+    case "none":
+      return "informational";
+    default:
+      return "unknown";
+  }
+}
 
 export interface FindingProbe {
   port: number;
@@ -28,6 +74,8 @@ export interface Finding {
   name: string;
   status: CheckStatus;
   priority: CheckPriority;
+  /** Canonical severity band (impact). Optional: demo checks derive it from priority. */
+  severity?: SeverityKey;
   headline: string;
   explanation: string;
   evidence: string;
@@ -113,8 +161,16 @@ export interface ScanResults {
   high: number;
   medium: number;
   low: number;
+  /** Informational observations (CVSS "None"/info). Distinct from unknown. */
   info: number;
+  /** Findings whose severity could not be determined. Never folded into low/info. */
+  unknown: number;
   passed: number;
+  /**
+   * Load state so an API error is not rendered as a clean "0 findings" scan.
+   * ``empty`` = loaded with no findings; ``error`` = fetch failed; absent/``loaded`` = data present.
+   */
+  dataStatus?: "loaded" | "empty" | "error";
   technologies: string[];
   sslIssues: number | null;
   headerIssues: number | null;
@@ -731,16 +787,24 @@ export function withTierAccess(findings: Finding[], tier: ScanTier, writeupId: s
 }
 
 export function censusFromFindings(
-  findings: Array<{ status: CheckStatus; priority: CheckPriority }>
-): Pick<ScanResults, "critical" | "high" | "medium" | "low" | "passed" | "totalFindings"> {
+  findings: Array<{ status: CheckStatus; priority: CheckPriority; severity?: SeverityKey }>
+): Pick<
+  ScanResults,
+  "critical" | "high" | "medium" | "low" | "info" | "unknown" | "passed" | "totalFindings"
+> {
   const failed = findings.filter((item) => item.status === "fail");
+  const inBand = (band: SeverityKey) =>
+    failed.filter((item) => severityBandOf(item) === band).length;
   return {
-    critical: failed.filter((item) => item.priority === "critical").length,
-    high: failed.filter((item) => item.priority === "important").length,
-    medium: failed.filter((item) => item.priority === "medium").length,
-    low: failed.filter((item) => item.priority === "optional").length,
+    critical: inBand("critical"),
+    high: inBand("high"),
+    medium: inBand("medium"),
+    low: inBand("low"),
+    info: inBand("informational"),
+    unknown: inBand("unknown"),
     passed: findings.filter((item) => item.status === "pass").length,
-    totalFindings: findings.length,
+    // Total findings excludes passed checks (a passed check is not a finding).
+    totalFindings: failed.length,
   };
 }
 

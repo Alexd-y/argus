@@ -3,6 +3,7 @@ import type { ScanTier } from "./scan-tiers";
 import type { CheckPriority, CheckStatus, Finding, FindingProbe, ScanResults } from "./scan-results";
 import {
   apexHostname,
+  backendSeverityToBand,
   censusFromFindings,
   midgardWriteupId,
   sampleSubdomainsFor,
@@ -354,6 +355,7 @@ function mapCanonicalToFindings(findings: CanonicalFinding[]): Finding[] {
           name: displayName(item, titleCounts.get(item.ragnarok.title) ?? 1),
           status: statusFromCanonical(item),
           priority: priorityFromSeverity(item.ragnarok.severity),
+          severity: backendSeverityToBand(item.ragnarok.severity),
           headline: description,
           explanation: explanationText(item),
           evidence: evidenceText(item),
@@ -432,7 +434,10 @@ export function resultsFromCanonical(
 
   return {
     ...census,
-    info: payload.summary?.bySeverity?.info ?? all.filter((item) => item.status === "pass").length,
+    // Population-consistent info count (informational findings), NOT a fallback
+    // to the passed-checks count — a passed check is not an informational finding.
+    info: census.info,
+    dataStatus: "loaded",
     technologies: technologiesFromPayload(payload, isFree),
     sslIssues: isFree
       ? null

@@ -20,7 +20,12 @@ import type {
   ScanResults,
   ScanWstg,
 } from "./scan-results";
-import { censusFromFindings, midgardWriteupId, withTierAccess } from "./scan-results";
+import {
+  backendSeverityToBand,
+  censusFromFindings,
+  midgardWriteupId,
+  withTierAccess,
+} from "./scan-results";
 import type { ScanData, ScanStatus } from "./scan-types";
 import type { ScanProfile } from "./types";
 
@@ -835,6 +840,8 @@ export function emptyScanResults(): ScanResults {
     medium: 0,
     low: 0,
     info: 0,
+    unknown: 0,
+    dataStatus: "empty",
     passed: 0,
     technologies: [],
     sslIssues: null,
@@ -870,7 +877,6 @@ export function mapBackendFindingsToResults(
   const sslIssues = typeof summary?.sslIssues === "number" ? summary.sslIssues : null;
   const headerIssues = typeof summary?.headerIssues === "number" ? summary.headerIssues : null;
   const leaksFound = Boolean(summary?.leaksFound);
-  const info = typeof summary?.info === "number" ? summary.info : 0;
 
   const findingsRaw = Array.isArray(raw) ? raw : [];
   // Index findings by their stable id so intra-scan cross-references
@@ -901,6 +907,7 @@ export function mapBackendFindingsToResults(
       name: bf.title || "Untitled finding",
       status: "fail" as const,
       priority: severityToPriority(bf.severity),
+      severity: backendSeverityToBand(bf.severity),
       headline: bf.title || "",
       explanation: bf.description || "",
       evidence: buildEvidence(bf, findingsById),
@@ -920,7 +927,11 @@ export function mapBackendFindingsToResults(
     high: census.high,
     medium: census.medium,
     low: census.low,
-    info,
+    // Population-consistent: buckets are derived from the same findings list so
+    // critical+high+medium+low+info+unknown === totalFindings.
+    info: census.info,
+    unknown: census.unknown,
+    dataStatus: "loaded",
     passed: census.passed,
     technologies,
     sslIssues,

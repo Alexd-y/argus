@@ -7,7 +7,6 @@ import { hardeningBreakdown, summarizeLeaks } from "@/lib/scan-results";
 import { getTierConfig, getUnlockCtaLabel } from "@/lib/scan-tiers";
 import {
   categoryBreakdown,
-  openFindingCount,
   pct,
   severityBreakdown,
   topPriorityFindings,
@@ -150,7 +149,6 @@ export function ScanExecutiveHeader({
 }: ScanExecutiveHeaderProps) {
   const tier = getTierConfig(scan.tier);
   const total = results.totalFindings;
-  const open = openFindingCount(results);
   const severity = severityBreakdown(results);
   const categories = categoryBreakdown(results.findings);
   const priorities = topPriorityFindings(results.findings);
@@ -234,7 +232,7 @@ export function ScanExecutiveHeader({
       },
     },
     {
-      label: "Important",
+      label: "High",
       value: results.high,
       sub: `${pct(results.high, total)}% of total`,
       tone: {
@@ -244,13 +242,23 @@ export function ScanExecutiveHeader({
       },
     },
     {
-      label: "Optional",
-      value: results.medium + results.low,
-      sub: `${pct(results.medium + results.low, total)}% of total`,
+      label: "Medium",
+      value: results.medium,
+      sub: `${pct(results.medium, total)}% of total`,
       tone: {
         border: "border-amber-500/30 bg-amber-500/[0.05]",
         label: "text-amber-300",
         value: "text-amber-400",
+      },
+    },
+    {
+      label: "Low",
+      value: results.low,
+      sub: `${pct(results.low, total)}% of total`,
+      tone: {
+        border: "border-yellow-500/30 bg-yellow-500/[0.05]",
+        label: "text-yellow-300",
+        value: "text-yellow-400",
       },
     },
     passedTile,
@@ -359,7 +367,7 @@ export function ScanExecutiveHeader({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-3">
         <Panel title="Findings by severity" delay={360}>
-          <SeverityDonut slices={severity} open={open} />
+          <SeverityDonut slices={severity} total={total} />
         </Panel>
         <Panel title="Findings by category" delay={420}>
           <CategoryBars rows={categories} />
