@@ -65,11 +65,20 @@ def _schedule_tool_run_record(
     """Buffer a ToolRun record for later flush (no-op when scan context is missing)."""
     if not tenant_id or not scan_id:
         return
-    output_raw = str(result.get("stdout") or "")
+    success = bool(result.get("success"))
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    # On failure the actionable reason lives in ``stderr`` (stdout is typically
+    # empty for a crashed/denied tool). Persist stderr into ``output_raw`` so the
+    # cause is visible directly in ``tool_runs`` instead of only worker logs.
+    if success:
+        output_raw = stdout
+    else:
+        output_raw = "\n".join(part for part in (stderr, stdout) if part)
     record = {
         "tenant_id": tenant_id,
         "tool_name": tool_name,
-        "status": "success" if result.get("success") else "error",
+        "status": "success" if success else "error",
         "input_params": {"command": command},
         "output_raw": output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else "",
         "started_at": started_at,
@@ -232,7 +241,8 @@ def execute_command(
                             },
                         )
             except Exception:
-                pass
+                # Allowlist guard is advisory — never fatal to command execution.
+                logger.debug("mcp_allowlist_guard_skipped", exc_info=True)
 
         if use_cache:
             cache = get_tool_cache()

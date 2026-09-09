@@ -80,6 +80,35 @@ async def test_flush_persists_buffered_records_to_session():
     assert await flush_tool_runs(session, "t1", scan_id) == 0
 
 
+def test_error_captures_stderr_reason():
+    scan_id = "scan-stderr-1"
+    _clear(scan_id)
+    result = {"success": False, "stdout": "", "stderr": "naabu: operation not permitted"}
+    _schedule_tool_run_record("t1", scan_id, "naabu", result, _now(), _now(), "naabu -host t")
+    records = drain_pending_tool_runs(scan_id)
+    assert len(records) == 1
+    assert records[0]["status"] == "error"
+    assert "operation not permitted" in records[0]["output_raw"]
+
+
+def test_error_combines_stdout_and_stderr():
+    scan_id = "scan-stderr-2"
+    _clear(scan_id)
+    result = {"success": False, "stdout": "partial out", "stderr": "boom"}
+    _schedule_tool_run_record("t1", scan_id, "nmap", result, _now(), _now(), "nmap t")
+    out = drain_pending_tool_runs(scan_id)[0]["output_raw"]
+    # stderr first (the actionable reason), then any stdout.
+    assert out == "boom\npartial out"
+
+
+def test_success_ignores_stderr():
+    scan_id = "scan-stderr-3"
+    _clear(scan_id)
+    result = {"success": True, "stdout": "ok-out", "stderr": "noise"}
+    _schedule_tool_run_record("t1", scan_id, "nmap", result, _now(), _now(), "nmap t")
+    assert drain_pending_tool_runs(scan_id)[0]["output_raw"] == "ok-out"
+
+
 async def test_output_truncated_to_cap():
     scan_id = "scan-trunc-1"
     _clear(scan_id)
