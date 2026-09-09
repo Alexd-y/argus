@@ -30,11 +30,18 @@ export async function GET(
       // `results` — otherwise ScanSuccess renders `null` (the blank/black screen
       // at the end of a scan). Both fetches are best-effort (never throw).
       if (scanData.status === "complete") {
-        const [findings, report] = await Promise.all([
+        const [findingsFetch, report] = await Promise.all([
           proxyGetScanFindings(id, { tenantId }),
           proxyGetReportByTarget(scanData.target, { tenantId }),
         ]);
-        scanData.results = mapBackendFindingsToResults(findings, scanData.tier, report);
+        // Propagate a findings-fetch failure as dataStatus="error" so the page
+        // never renders a failed load as a clean "0 findings" scan.
+        scanData.results = mapBackendFindingsToResults(
+          findingsFetch.findings,
+          scanData.tier,
+          report,
+          { fetchError: !findingsFetch.ok }
+        );
       }
 
       return NextResponse.json(scanData);

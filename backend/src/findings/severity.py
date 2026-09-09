@@ -164,6 +164,24 @@ def aggregate_severity(labels: Iterable[object]) -> SeverityCounts:
     acc: dict[SeverityBand, int] = dict.fromkeys(SEVERITY_BANDS, 0)
     for raw in labels:
         acc[normalize_severity(raw)] += 1
+    return _counts_from_acc(acc)
+
+
+def aggregate_counts(pairs: Iterable[tuple[object, int]]) -> SeverityCounts:
+    """Sum pre-grouped ``(label, count)`` pairs into canonical bands.
+
+    Use when the population is already aggregated in SQL
+    (``GROUP BY severity``) — several raw labels (e.g. ``"info"`` / ``"none"``)
+    fold into the same canonical band, and ``NULL`` / unrecognised labels land
+    in ``unknown`` instead of being dropped.
+    """
+    acc: dict[SeverityBand, int] = dict.fromkeys(SEVERITY_BANDS, 0)
+    for raw, count in pairs:
+        acc[normalize_severity(raw)] += int(count)
+    return _counts_from_acc(acc)
+
+
+def _counts_from_acc(acc: dict[SeverityBand, int]) -> SeverityCounts:
     return SeverityCounts(
         critical=acc[SeverityBand.CRITICAL],
         high=acc[SeverityBand.HIGH],
@@ -178,6 +196,7 @@ __all__ = [
     "SEVERITY_BANDS",
     "SeverityBand",
     "SeverityCounts",
+    "aggregate_counts",
     "aggregate_severity",
     "band_from_cvss_score",
     "normalize_severity",

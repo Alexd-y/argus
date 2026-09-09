@@ -50,6 +50,7 @@ from src.db.models import ReportObject, Scan, ScanEvent, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
 from src.execution_mode.repository import load_lease_scope_storage
+from src.findings.severity import aggregate_counts
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
 from src.orchestration.auth_config import CredentialTestConfig, TargetConfig
@@ -979,7 +980,11 @@ async def get_scan_findings_statistics(
                 .group_by(FindingModel.severity)
             )
         ).all()
-        by_severity = {str(row[0]): int(row[1]) for row in sev_rows if row[0]}
+        # Canonical 6-band counts (matches MCP / reports / frontend). Blank /
+        # unrecognised labels fold into ``unknown`` rather than being dropped.
+        by_severity = aggregate_counts(
+            (row[0], int(row[1])) for row in sev_rows
+        ).as_dict()
 
         owasp_rows = (
             await session.execute(
@@ -1538,7 +1543,11 @@ async def get_scan_memory_summary(
                 .group_by(FindingModel.severity)
             )
         ).all()
-        by_severity = {str(row[0]): int(row[1]) for row in sev_rows if row[0]}
+        # Canonical 6-band counts (matches MCP / reports / frontend). Blank /
+        # unrecognised labels fold into ``unknown`` rather than being dropped.
+        by_severity = aggregate_counts(
+            (row[0], int(row[1])) for row in sev_rows
+        ).as_dict()
 
         owasp_rows = (
             await session.execute(

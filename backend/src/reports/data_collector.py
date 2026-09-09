@@ -242,15 +242,34 @@ def executive_severity_totals_from_finding_rows(findings: list[FindingRow]) -> d
     return executive_severity_totals_from_severity_strings(f.severity for f in findings)
 
 
+def confirmed_only_population(findings: list[Any]) -> list[Any]:
+    """Named population: findings provable from raw evidence (``is_provable``).
+
+    This is the single definition of the "confirmed-only" set. Valhalla's
+    headline counts are this population by policy — it is a *population*, not a
+    tier quirk, so any consumer can request the same set explicitly. A finding
+    without an ``is_provable`` flag defaults to provable (True) for
+    back-compat with producers that predate the flag.
+    """
+    return [f for f in findings if getattr(f, "is_provable", True)]
+
+
+#: Report tiers whose headline population is the confirmed-only set. Named so
+#: the policy is explicit and testable rather than an inline string check.
+_CONFIRMED_ONLY_HEADLINE_TIERS: frozenset[str] = frozenset({"valhalla"})
+
+
 def headline_findings(findings: list[Any], tier: str | None) -> list[Any]:
     """Findings that drive the headline severity counts (single source of truth).
 
-    Valhalla reports only headline findings that are provable from raw evidence;
-    unconfirmed findings are rendered in a separate section and excluded from the
-    headline risk counts. Other tiers count every in-scope finding.
+    The headline population is defined by *name*, not by an ad-hoc tier rule:
+    tiers in :data:`_CONFIRMED_ONLY_HEADLINE_TIERS` use
+    :func:`confirmed_only_population` (confirmed/provable findings only);
+    unconfirmed findings are rendered in a separate section and excluded from
+    the headline risk counts. Every other tier counts every in-scope finding.
     """
-    if str(tier or "").strip().lower() == "valhalla":
-        return [f for f in findings if getattr(f, "is_provable", True)]
+    if str(tier or "").strip().lower() in _CONFIRMED_ONLY_HEADLINE_TIERS:
+        return confirmed_only_population(findings)
     return list(findings)
 
 

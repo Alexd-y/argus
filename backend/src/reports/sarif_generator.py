@@ -45,6 +45,7 @@ import re
 from typing import Any, Final
 
 from src.api.schemas import Finding
+from src.findings.severity import SeverityBand, normalize_severity
 from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_TITLES,
     parse_owasp_category,
@@ -66,25 +67,28 @@ PRIMARY_FINGERPRINT_KEY: Final[str] = "primaryFinding/v1"
 
 # Severity → SARIF level (per spec §3.27.10). ``critical``/``high`` → error
 # so they fail the CI gate; ``medium`` → warning; everything else → note.
+# Keyed by canonical :class:`SeverityBand` values (input is normalised first),
+# so synonyms like ``important`` / ``moderate`` / ``none`` map correctly rather
+# than silently falling to the default.
 _SEVERITY_TO_LEVEL: Final[dict[str, str]] = {
-    "critical": "error",
-    "high": "error",
-    "medium": "warning",
-    "low": "note",
-    "info": "note",
-    "informational": "note",
+    SeverityBand.CRITICAL: "error",
+    SeverityBand.HIGH: "error",
+    SeverityBand.MEDIUM: "warning",
+    SeverityBand.LOW: "note",
+    SeverityBand.INFORMATIONAL: "note",
+    SeverityBand.UNKNOWN: "note",
 }
 
 # Mapping reused by tier_classifier — kept in sync deliberately. SARIF spec
 # does not define a "rank" for non-numeric severities, so we surface CVSS
 # (when available) via ``properties`` instead.
 _SEVERITY_RANK: Final[dict[str, int]] = {
-    "critical": 0,
-    "high": 1,
-    "medium": 2,
-    "low": 3,
-    "info": 4,
-    "informational": 4,
+    SeverityBand.CRITICAL: 0,
+    SeverityBand.HIGH: 1,
+    SeverityBand.MEDIUM: 2,
+    SeverityBand.LOW: 3,
+    SeverityBand.INFORMATIONAL: 4,
+    SeverityBand.UNKNOWN: 5,
 }
 
 # Conservative regex for valid SARIF rule ids (no whitespace, no slashes).
@@ -96,13 +100,13 @@ _DEFAULT_RULE_ID: Final[str] = "ARGUS-FINDING"
 
 
 def _severity_level(sev: str | None) -> str:
-    """Map an internal severity string to a SARIF level."""
-    return _SEVERITY_TO_LEVEL.get((sev or "").strip().lower(), "warning")
+    """Map an internal severity string to a SARIF level (canonical-normalised)."""
+    return _SEVERITY_TO_LEVEL[normalize_severity(sev)]
 
 
 def _severity_rank(sev: str | None) -> int:
-    """Stable rank for sorting (lower → more urgent)."""
-    return _SEVERITY_RANK.get((sev or "").strip().lower(), 99)
+    """Stable rank for sorting (lower → more urgent), canonical-normalised."""
+    return _SEVERITY_RANK[normalize_severity(sev)]
 
 
 def _truncate(value: str | None, limit: int) -> str:

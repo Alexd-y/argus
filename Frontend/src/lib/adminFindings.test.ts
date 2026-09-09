@@ -5,6 +5,7 @@ import {
   AdminFindingsListResponseSchema,
   adminFindingsErrorMessage,
   compareFindings,
+  filterFindingsByAxes,
   isFindingStatusMode,
   sortFindings,
   statusToAdminFindingsCode,
@@ -111,6 +112,9 @@ describe("sortFindings / compareFindings", () => {
     epss_score: over.epss_score ?? null,
     kev_listed: null,
     ssvc_action: over.ssvc_action ?? null,
+    validation: over.validation ?? null,
+    lifecycle: over.lifecycle ?? null,
+    remediation_priority: over.remediation_priority ?? null,
     discovered_at: null,
     updated_at: over.updated_at ?? null,
   });
@@ -185,5 +189,99 @@ describe("sortFindings / compareFindings", () => {
     expect(compareFindings(goodNew, ancient)).toBeLessThan(0);
     // malformed (ts=0) is older than ancient (ts=946684800000) → strictly positive.
     expect(compareFindings(malformed, ancient)).toBeGreaterThan(0);
+  });
+});
+
+describe("adminFindings — canonical axis fields", () => {
+  it("normalizes case and rejects out-of-enum axis values to null", () => {
+    const out = AdminFindingsListResponseSchema.parse({
+      findings: [
+        {
+          id: "f-1",
+          tenant_id: SAMPLE_TENANT,
+          scan_id: "scan-1",
+          severity: "high",
+          title: "SQLi",
+          validation: "CONFIRMED",
+          lifecycle: "Open",
+          remediation_priority: "p1",
+        },
+        {
+          id: "f-2",
+          tenant_id: SAMPLE_TENANT,
+          scan_id: "scan-1",
+          severity: "low",
+          title: "bogus axes",
+          validation: "made-up",
+          lifecycle: "made-up",
+          remediation_priority: "P9",
+        },
+      ],
+    });
+    expect(out.items[0].validation).toBe("confirmed");
+    expect(out.items[0].lifecycle).toBe("open");
+    expect(out.items[0].remediation_priority).toBe("P1");
+    // Unknown enum members degrade to null rather than throwing.
+    expect(out.items[1].validation).toBeNull();
+    expect(out.items[1].lifecycle).toBeNull();
+    expect(out.items[1].remediation_priority).toBeNull();
+  });
+});
+
+describe("filterFindingsByAxes", () => {
+  const make = (over: Partial<AdminFindingItem>): AdminFindingItem => ({
+    id: over.id ?? "f",
+    tenant_id: SAMPLE_TENANT,
+    scan_id: "s",
+    severity: over.severity ?? "low",
+    status: null,
+    target: null,
+    title: "t",
+    cve_ids: null,
+    cvss_score: null,
+    epss_score: null,
+    kev_listed: null,
+    ssvc_action: null,
+    validation: over.validation ?? null,
+    lifecycle: over.lifecycle ?? null,
+    remediation_priority: over.remediation_priority ?? null,
+    discovered_at: null,
+    updated_at: null,
+  });
+
+  const rows = [
+    make({ id: "a", validation: "confirmed", lifecycle: "open", remediation_priority: "P0" }),
+    make({ id: "b", validation: "suspected", lifecycle: "open", remediation_priority: "P2" }),
+    make({ id: "c", validation: "confirmed", lifecycle: "fixed", remediation_priority: "P1" }),
+    make({ id: "d" }), // all axes null
+  ];
+
+  it("returns a copy unchanged when no axis is constrained", () => {
+    const out = filterFindingsByAxes(rows, {});
+    expect(out).toHaveLength(rows.length);
+    expect(out).not.toBe(rows);
+  });
+
+  it("OR-combines values within an axis", () => {
+    const out = filterFindingsByAxes(rows, { validation: ["confirmed", "suspected"] });
+    expect(out.map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("AND-combines across axes", () => {
+    const out = filterFindingsByAxes(rows, {
+      validation: ["confirmed"],
+      lifecycle: ["open"],
+    });
+    expect(out.map((r) => r.id)).toEqual(["a"]);
+  });
+
+  it("filters by remediation priority", () => {
+    const out = filterFindingsByAxes(rows, { remediationPriority: ["P0", "P1"] });
+    expect(out.map((r) => r.id)).toEqual(["a", "c"]);
+  });
+
+  it("excludes null-axis rows whenever that axis is constrained", () => {
+    const out = filterFindingsByAxes(rows, { lifecycle: ["open", "fixed"] });
+    expect(out.map((r) => r.id)).not.toContain("d");
   });
 });

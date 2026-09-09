@@ -52,6 +52,7 @@ from xml.dom import (
 )
 
 from src.api.schemas import Finding
+from src.findings.severity import SeverityBand, normalize_severity
 from src.reports.generators import ReportData
 
 # Default JUnit XML attributes that downstream parsers expect.
@@ -59,16 +60,19 @@ JUNIT_TESTSUITE_NAME: Final[str] = "ARGUS Findings"
 JUNIT_HOSTNAME: Final[str] = "argus-pentest"
 
 # Severities that should trigger a CI failure (`<failure>` element).
-_FAILING_SEVERITIES: Final[frozenset[str]] = frozenset({"critical", "high", "medium"})
+_FAILING_SEVERITIES: Final[frozenset[SeverityBand]] = frozenset(
+    {SeverityBand.CRITICAL, SeverityBand.HIGH, SeverityBand.MEDIUM}
+)
 
 # Severity rank used for stable ordering — matches sarif/tier_classifier.
+# Keyed by canonical :class:`SeverityBand` values (input normalised first).
 _SEVERITY_RANK: Final[dict[str, int]] = {
-    "critical": 0,
-    "high": 1,
-    "medium": 2,
-    "low": 3,
-    "info": 4,
-    "informational": 4,
+    SeverityBand.CRITICAL: 0,
+    SeverityBand.HIGH: 1,
+    SeverityBand.MEDIUM: 2,
+    SeverityBand.LOW: 3,
+    SeverityBand.INFORMATIONAL: 4,
+    SeverityBand.UNKNOWN: 5,
 }
 
 # Bound XML attribute / text payloads to avoid pathological reports.
@@ -95,11 +99,11 @@ def _xml_safe(value: str | None, *, limit: int) -> str:
 
 
 def _severity_rank(sev: str | None) -> int:
-    return _SEVERITY_RANK.get((sev or "").strip().lower(), 99)
+    return _SEVERITY_RANK[normalize_severity(sev)]
 
 
 def _is_failing(sev: str | None) -> bool:
-    return (sev or "").strip().lower() in _FAILING_SEVERITIES
+    return normalize_severity(sev) in _FAILING_SEVERITIES
 
 
 def _finding_priority_key(f: Finding) -> tuple[int, float, str, str]:
@@ -111,9 +115,8 @@ def _finding_priority_key(f: Finding) -> tuple[int, float, str, str]:
 
 
 def _classname_for(severity: str | None) -> str:
-    """Return ``argus.findings.<severity>`` (or ``unknown``) for testcase classname."""
-    sev = (severity or "").strip().lower() or "unknown"
-    return f"argus.findings.{sev}"
+    """Return ``argus.findings.<band>`` for testcase classname (canonical band)."""
+    return f"argus.findings.{normalize_severity(severity).value}"
 
 
 def _failure_type(cwe: str | None) -> str:

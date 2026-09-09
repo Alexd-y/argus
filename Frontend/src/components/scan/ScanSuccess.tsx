@@ -97,6 +97,17 @@ export function ScanSuccess({ scan, sample = false }: ScanSuccessProps) {
 
   return (
     <div className="space-y-8 sm:space-y-10">
+      {results.dataStatus === "error" && (
+        <Reveal className="border border-red-500/40 bg-red-500/5 rounded-sm px-4 py-4 sm:px-5">
+          <p className="text-sm text-white mb-1">Findings couldn&rsquo;t be loaded</p>
+          <p className="text-xs text-neutral-400 leading-relaxed">
+            The scan completed, but its findings could not be retrieved just now. This is a
+            temporary loading error &mdash; not a clean &ldquo;0 findings&rdquo; result. Refresh to
+            try again.
+          </p>
+        </Reveal>
+      )}
+
       <ScanExecutiveHeader
         scan={scan}
         results={results}

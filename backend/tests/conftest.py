@@ -372,11 +372,16 @@ def override_auth(request, app):
         return
 
     from src.core.auth import AuthContext, get_optional_auth, get_required_auth
+    from src.core.config import settings
 
     async def _mock_auth():
+        # Tenant must be a valid UUID: tenant-scoped routers call
+        # ``set_session_tenant`` → ``_validate_tenant_id`` which rejects
+        # non-UUID values to prevent SET LOCAL injection (SEC). Use the
+        # canonical default tenant so mocked DB sessions stay consistent.
         return AuthContext(
             user_id="test-user",
-            tenant_id="test-tenant",
+            tenant_id=settings.default_tenant_id,
             is_api_key=False,
         )
 

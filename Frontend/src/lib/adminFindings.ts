@@ -38,9 +38,36 @@ const STATUS_VALUES = [
 ] as const;
 const SSVC_ACTION_VALUES = ["track", "track-star", "attend", "act"] as const;
 
+// ── Canonical orthogonal taxonomy axes (mirror backend `Finding` columns:
+// validation / lifecycle / remediation_priority). These are distinct from
+// `severity` (impact) and from SSVC (decision). Backend emits them as of the
+// severity-assessment migration; older rows / endpoints leave them null and
+// the UI degrades to "—".
+const VALIDATION_VALUES = [
+  "confirmed",
+  "suspected",
+  "inconclusive",
+  "rejected",
+] as const;
+const LIFECYCLE_VALUES = [
+  "open",
+  "fixed",
+  "accepted_risk",
+  "false_positive",
+] as const;
+const REMEDIATION_PRIORITY_VALUES = ["P0", "P1", "P2", "P3", "P4"] as const;
+
 export type FindingSeverity = (typeof SEVERITY_VALUES)[number];
 export type FindingStatus = (typeof STATUS_VALUES)[number];
 export type SsvcAction = (typeof SSVC_ACTION_VALUES)[number];
+export type FindingValidation = (typeof VALIDATION_VALUES)[number];
+export type FindingLifecycle = (typeof LIFECYCLE_VALUES)[number];
+export type FindingRemediationPriority = (typeof REMEDIATION_PRIORITY_VALUES)[number];
+
+export const FINDING_VALIDATIONS: ReadonlyArray<FindingValidation> = VALIDATION_VALUES;
+export const FINDING_LIFECYCLES: ReadonlyArray<FindingLifecycle> = LIFECYCLE_VALUES;
+export const FINDING_REMEDIATION_PRIORITIES: ReadonlyArray<FindingRemediationPriority> =
+  REMEDIATION_PRIORITY_VALUES;
 
 export const FINDING_SEVERITIES: ReadonlyArray<FindingSeverity> = SEVERITY_VALUES;
 export const FINDING_STATUSES: ReadonlyArray<FindingStatus> = STATUS_VALUES;
@@ -142,6 +169,25 @@ const SsvcActionSchema = z
   .transform((v) => (v == null ? null : v.toLowerCase()))
   .pipe(z.enum(SSVC_ACTION_VALUES).nullable());
 
+const ValidationSchema = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => (v == null ? null : v.toLowerCase()))
+  .pipe(z.enum(VALIDATION_VALUES).nullable());
+
+const LifecycleSchema = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => (v == null ? null : v.toLowerCase()))
+  .pipe(z.enum(LIFECYCLE_VALUES).nullable());
+
+// Remediation priority is upper-case (P0–P4); normalize case, keep null on miss.
+const RemediationPrioritySchema = z
+  .union([z.string(), z.null()])
+  .optional()
+  .transform((v) => (v == null ? null : v.toUpperCase()))
+  .pipe(z.enum(REMEDIATION_PRIORITY_VALUES).nullable());
+
 const NullableBoolSchema = z
   .union([z.boolean(), z.null()])
   .optional()
@@ -167,6 +213,9 @@ export const AdminFindingItemSchema = z
     epss_score: NullableNumberSchema,
     kev_listed: NullableBoolSchema,
     ssvc_action: SsvcActionSchema.optional(),
+    validation: ValidationSchema.optional(),
+    lifecycle: LifecycleSchema.optional(),
+    remediation_priority: RemediationPrioritySchema.optional(),
     discovered_at: NullableStringSchema,
     updated_at: NullableStringSchema,
     created_at: NullableStringSchema,
@@ -188,6 +237,9 @@ export const AdminFindingItemSchema = z
       epss_score: raw.epss_score,
       kev_listed: raw.kev_listed,
       ssvc_action: raw.ssvc_action ?? null,
+      validation: raw.validation ?? null,
+      lifecycle: raw.lifecycle ?? null,
+      remediation_priority: raw.remediation_priority ?? null,
       discovered_at: discoveredAt,
       updated_at: updatedAt,
     };
@@ -364,6 +416,49 @@ function safeTimestamp(iso: string | null): number {
 
 export function sortFindings(items: ReadonlyArray<AdminFindingItem>): AdminFindingItem[] {
   return [...items].sort(compareFindings);
+}
+
+/**
+ * Client-side filter over the canonical taxonomy axes (validation / lifecycle
+ * / remediation_priority). Operates on already-loaded rows only — it never
+ * touches the wire, so it is honest even while the backend join is partial:
+ * a row whose axis is `null` is only kept when that axis has no active filter.
+ *
+ * An empty (or omitted) set for an axis means "no constraint" on that axis.
+ * All provided axes are AND-combined; values within an axis are OR-combined.
+ */
+export type FindingAxisFilter = {
+  readonly validation?: ReadonlyArray<FindingValidation>;
+  readonly lifecycle?: ReadonlyArray<FindingLifecycle>;
+  readonly remediationPriority?: ReadonlyArray<FindingRemediationPriority>;
+};
+
+function axisMatches<T extends string>(
+  value: T | null,
+  selected: ReadonlyArray<T> | undefined,
+): boolean {
+  if (!selected || selected.length === 0) return true;
+  return value != null && selected.includes(value);
+}
+
+export function filterFindingsByAxes(
+  items: ReadonlyArray<AdminFindingItem>,
+  filter: FindingAxisFilter,
+): AdminFindingItem[] {
+  const { validation, lifecycle, remediationPriority } = filter;
+  if (
+    (!validation || validation.length === 0) &&
+    (!lifecycle || lifecycle.length === 0) &&
+    (!remediationPriority || remediationPriority.length === 0)
+  ) {
+    return [...items];
+  }
+  return items.filter(
+    (item) =>
+      axisMatches(item.validation, validation) &&
+      axisMatches(item.lifecycle, lifecycle) &&
+      axisMatches(item.remediation_priority, remediationPriority),
+  );
 }
 
 // ────────────────────────────────────────────────────────────────────────────

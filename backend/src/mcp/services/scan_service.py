@@ -24,6 +24,7 @@ from src.db.models import Finding as FindingModel
 from src.db.models import Scan, Target, Tenant
 from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
+from src.findings.severity import aggregate_severity
 from src.mcp.exceptions import (
     ResourceNotFoundError,
     UpstreamServiceError,
@@ -443,20 +444,20 @@ async def cancel_scan(*, tenant_id: str, scan_id: str, reason: str) -> ScanStatu
 async def _severity_counts(
     session: AsyncSession, scan_id: str, tenant_id: str
 ) -> dict[str, int]:
-    """Aggregate findings by severity for the scan."""
+    """Aggregate findings by severity for the scan (canonical 6-band counts).
+
+    Routes through :func:`src.findings.severity.aggregate_severity` so the MCP
+    surface reports the exact same bands/counts as the API, reports and
+    frontend — including ``unknown`` for blank / unrecognised labels, which are
+    never silently dropped.
+    """
     rows = await session.execute(
         select(FindingModel.severity).where(
             cast(FindingModel.scan_id, String) == scan_id,
             cast(FindingModel.tenant_id, String) == tenant_id,
         )
     )
-    counts: dict[str, int] = {}
-    for severity in rows.scalars():
-        if not severity:
-            continue
-        key = str(severity).lower()
-        counts[key] = counts.get(key, 0) + 1
-    return counts
+    return aggregate_severity(rows.scalars()).as_dict()
 
 
 def _extract_timestamps(scan: Scan) -> tuple[datetime | None, datetime | None]:

@@ -364,6 +364,7 @@ function mapCanonicalToFindings(findings: CanonicalFinding[]): Finding[] {
           access: "full",
           probe: probeFromCanonical(item),
           riskScore: item.ragnarok.riskScore ?? null,
+          adversarialScore: item.ragnarok.riskScore ?? null,
         });
       });
   });

@@ -699,12 +699,24 @@ function severityToPriority(severity: unknown): CheckPriority {
  * GET backend `/api/v1/scans/:id/findings`. Returns [] on any error so a
  * completed scan still renders (empty results view) instead of dead-ending.
  */
+/**
+ * Outcome of a findings fetch. ``ok:false`` means the request FAILED (network
+ * error or non-2xx) — distinct from a successful fetch that returned an empty
+ * list. The scan page uses this to render "couldn't load findings" instead of
+ * a misleading clean "0 findings" (see {@link ScanResults.dataStatus}).
+ */
+export interface ScanFindingsFetch {
+  ok: boolean;
+  findings: BackendFinding[];
+}
+
 export async function proxyGetScanFindings(
   scanId: string,
   opts?: { tenantId?: string }
-): Promise<BackendFinding[]> {
+): Promise<ScanFindingsFetch> {
   const base = getBackendBaseUrl();
-  if (!base) return [];
+  // No backend configured is not a failure — it is the demo/empty path.
+  if (!base) return { ok: true, findings: [] };
   try {
     const res = await fetch(`${base}/scans/${encodeURIComponent(scanId)}/findings`, {
       headers: {
@@ -714,11 +726,11 @@ export async function proxyGetScanFindings(
       },
       cache: "no-store",
     });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, findings: [] };
     const data = await res.json();
-    return Array.isArray(data) ? (data as BackendFinding[]) : [];
+    return { ok: true, findings: Array.isArray(data) ? (data as BackendFinding[]) : [] };
   } catch {
-    return [];
+    return { ok: false, findings: [] };
   }
 }
 
@@ -866,9 +878,14 @@ export function emptyScanResults(): ScanResults {
 export function mapBackendFindingsToResults(
   raw: BackendFinding[],
   tier: ScanTier,
-  report?: BackendReport | null
+  report?: BackendReport | null,
+  opts?: { fetchError?: boolean }
 ): ScanResults {
-  if ((!Array.isArray(raw) || raw.length === 0) && !report) return emptyScanResults();
+  // A failed findings fetch must NOT masquerade as a clean empty scan: surface
+  // ``dataStatus="error"`` so the UI can distinguish "load failed" from "0 findings".
+  if ((!Array.isArray(raw) || raw.length === 0) && !report) {
+    return { ...emptyScanResults(), dataStatus: opts?.fetchError ? "error" : "empty" };
+  }
 
   const summary = report?.summary;
   const technologies = toStringList(report?.technologies).length
@@ -914,7 +931,11 @@ export function mapBackendFindingsToResults(
       remediation: bf.applicability_notes || bf.reproducible_steps || "",
       detailLevel: "full" as const,
       access: "full" as const,
+      // Ordering key (legacy). The two axes below are kept on SEPARATE scales
+      // so the UI never presents an adversarial 0–100 value as if it were CVSS.
       riskScore: bf.adversarial_score ?? bf.cvss ?? null,
+      adversarialScore: bf.adversarial_score ?? null,
+      cvssScore: bf.cvss ?? null,
       compliance: mapFindingCompliance(bf),
     };
   });
@@ -931,7 +952,7 @@ export function mapBackendFindingsToResults(
     // critical+high+medium+low+info+unknown === totalFindings.
     info: census.info,
     unknown: census.unknown,
-    dataStatus: "loaded",
+    dataStatus: opts?.fetchError ? "error" : "loaded",
     passed: census.passed,
     technologies,
     sslIssues,

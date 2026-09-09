@@ -89,6 +89,9 @@ function makeItem(over: Partial<AdminFindingItem> = {}): AdminFindingItem {
     epss_score: over.epss_score ?? null,
     kev_listed: over.kev_listed ?? null,
     ssvc_action: over.ssvc_action ?? null,
+    validation: over.validation ?? null,
+    lifecycle: over.lifecycle ?? null,
+    remediation_priority: over.remediation_priority ?? null,
     discovered_at: over.discovered_at ?? null,
     updated_at: over.updated_at ?? "2026-04-21T08:00:00Z",
   };

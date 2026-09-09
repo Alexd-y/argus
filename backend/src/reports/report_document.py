@@ -64,7 +64,11 @@ class ReportFinding(BaseModel):
 
     finding_id: str
     title: str
-    severity: Literal["critical", "high", "medium", "low", "info"] = "info"
+    # ``unknown`` is a first-class band (finding whose severity could not be
+    # determined) — it is NEVER folded into ``info`` or ``low``. ``info`` is a
+    # CVSS "None"/informational observation and is distinct. Additive to the v1
+    # schema: no pre-existing snapshot used ``unknown``, so hashes are stable.
+    severity: Literal["critical", "high", "medium", "low", "info", "unknown"] = "info"
     category: str | None = None
     cwe: str | None = None
     description: str = ""

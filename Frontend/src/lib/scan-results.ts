@@ -83,7 +83,18 @@ export interface Finding {
   detailLevel: "summary" | "full";
   access: "title" | "summary" | "basic" | "full";
   probe?: FindingProbe;
+  /**
+   * Legacy single ordering key. Kept ONLY for stable sort of the public scan
+   * list; it must not be shown as a labelled score because it silently mixes
+   * two different scales. Use {@link Finding.adversarialScore} /
+   * {@link Finding.cvssScore} for display — they are kept on separate scales.
+   * @deprecated Prefer the explicit, separately-scaled scores below.
+   */
   riskScore?: number | null;
+  /** ARGUS adversarial score (0–100 scale). Distinct axis from CVSS. */
+  adversarialScore?: number | null;
+  /** CVSS base score (0.0–10.0 scale). Distinct axis from the adversarial score. */
+  cvssScore?: number | null;
   /** ISO 27001 / SOC 2 controls this finding maps to. */
   compliance?: FindingCompliance[];
 }

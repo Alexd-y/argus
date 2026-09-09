@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.core.config import settings
+from src.findings.severity import SeverityBand, normalize_severity
 from src.reports.report_document import (
     ReportCoverageItem,
     ReportDocumentV1,
@@ -40,12 +41,27 @@ _VALIDATION_TO_VERIFICATION: dict[str, str] = {
     "missing": "not_assessed",
 }
 
-_ALLOWED_SEVERITY = frozenset({"critical", "high", "medium", "low", "info"})
+#: Snapshot band → canonical band mapping. ``informational`` collapses to the
+#: snapshot's ``info`` bucket; ``unknown`` stays ``unknown`` (never folded into
+#: ``info`` or ``low``, per docs/finding-severity-and-counting.md).
+_BAND_TO_SNAPSHOT: dict[SeverityBand, str] = {
+    SeverityBand.CRITICAL: "critical",
+    SeverityBand.HIGH: "high",
+    SeverityBand.MEDIUM: "medium",
+    SeverityBand.LOW: "low",
+    SeverityBand.INFORMATIONAL: "info",
+    SeverityBand.UNKNOWN: "unknown",
+}
 
 
 def _severity(value: Any) -> str:
-    s = str(value or "info").strip().lower()
-    return s if s in _ALLOWED_SEVERITY else "info"
+    """Canonical snapshot severity — single source of truth (no silent folding).
+
+    Routes through :func:`src.findings.severity.normalize_severity` so a blank
+    or unrecognised label becomes ``unknown`` (surfaced honestly) instead of a
+    fabricated ``info``.
+    """
+    return _BAND_TO_SNAPSHOT[normalize_severity(value)]
 
 
 def _confidence_float(value: Any) -> float:

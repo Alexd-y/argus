@@ -224,7 +224,7 @@ def derive_ssvc_inputs(
 
     technical_impact = (
         TechnicalImpact.TOTAL
-        if finding.cvss_v3_score >= 7.0
+        if (finding.cvss_v3_score or 0.0) >= 7.0
         else TechnicalImpact.PARTIAL
     )
 

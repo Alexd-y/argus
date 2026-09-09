@@ -561,12 +561,82 @@ class Finding(Base):
     #: ISO 27001 / SOC 2 control mappings (Block 4.2): list of
     #: {framework, control_id, control_name}. Populated by framework_mapping.
     compliance: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Canonical taxonomy axes (single source of truth in
+    #: ``src/findings/taxonomy.py``). Additive & nullable so legacy rows keep
+    #: their semantics; readers derive the value from ``confidence`` /
+    #: ``status`` / ``false_positive`` when NULL. These are STRICTLY separate
+    #: from ``severity`` (impact).
+    #: vulnerability | hardening | informational.
+    record_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: confirmed | suspected | inconclusive | rejected (evidence strength).
+    validation: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: open | fixed | accepted_risk | false_positive (operational state).
+    lifecycle: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    #: P0–P4 fix-queue ordering (distinct from severity).
+    remediation_priority: Mapped[str | None] = mapped_column(String(4), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_findings_scan_id", "scan_id"),
         Index("ix_findings_report_id", "report_id"),
         CheckConstraint(findings_owasp_category_check_sql(), name="ck_findings_owasp_category"),
+    )
+
+
+class SeverityAssessment(Base):
+    """Provenance record for *one* severity opinion about a finding.
+
+    A finding can accrue several severity assessments over its life — the
+    tool's native rating, a CVSS-vector computation, an EPSS/KEV-adjusted
+    view, and analyst manual overrides. Rather than silently overwriting
+    ``Finding.severity`` (destroying the audit trail and making the same data
+    yield different numbers depending on write order), every opinion is
+    persisted here with its method, source, policy version and rationale. The
+    *effective* severity is selected deterministically from these rows by
+    :func:`src.findings.severity_assessment.select_effective_assessment`.
+    Tenant-scoped; RLS applies.
+    """
+
+    __tablename__ = "severity_assessments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    finding_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("findings.id", ondelete="CASCADE"), nullable=False
+    )
+    #: How this opinion was formed — matches ``AssessmentMethod`` values
+    #: (cvss_v3 | tool_native | heuristic | epss_adjusted | manual_override …).
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: Canonical severity band assigned by THIS assessment.
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    cvss_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cvss_vector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    #: Free-form origin ref: CVE id, tool run id, analyst handle, rule id.
+    source_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: Version of the scoring policy that produced this opinion (reproducibility).
+    policy_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Evidence pointers (list of evidence ids / S3 keys).
+    evidence_ref: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    #: The assessment id this one supersedes (chain of revisions).
+    supersedes: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: Assessment ids this opinion is known to conflict with (different band).
+    conflicts_with: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
+    is_manual_override: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    #: Manual-override audit trail (author / reason). ``created_at`` records time.
+    override_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_severity_assessments_finding_id", "finding_id"),
+        Index("ix_severity_assessments_tenant_id", "tenant_id"),
     )
 
 

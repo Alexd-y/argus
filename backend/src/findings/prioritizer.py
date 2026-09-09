@@ -135,7 +135,7 @@ class Prioritizer:
         )
 
 
-def _component_cvss(cvss_score: float) -> float:
+def _component_cvss(cvss_score: float | None) -> float:
     """CVSS base contribution to the 0-100 priority score; max ``40``.
 
     The CVSS v3 base score is on a 0-10 scale, but the priority weight
@@ -147,8 +147,10 @@ def _component_cvss(cvss_score: float) -> float:
     the documented cap. Without the ``× 10`` factor the CVSS axis would
     silently account for only 4/100 instead of the 40/100 documented in
     Backlog/dev1_md §11.
+    ``None`` (no CVSS on the finding) contributes ``0`` — the CVSS axis is
+    simply absent, it is not treated as a 0.0 base score.
     """
-    if cvss_score < 0.0:
+    if cvss_score is None or cvss_score < 0.0:
         return 0.0
     capped = min(cvss_score, 10.0)
     return _W_CVSS * capped * 10.0

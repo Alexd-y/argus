@@ -31,6 +31,7 @@ from src.api.schemas import (
 from src.core.datetime_format import format_created_at_iso_z
 from src.db.models import Finding, Report, ReportObject, ReportShareLink
 from src.db.session import async_session_factory, set_session_tenant
+from src.findings.severity import aggregate_counts
 
 logger = logging.getLogger(__name__)
 
@@ -190,11 +191,15 @@ async def admin_list_reports(
                 .group_by(Finding.report_id, Finding.severity)
             )
             sev_rows = (await session.execute(sev_stmt)).all()
+            # Canonical 6-band counts per report (matches API / reports /
+            # frontend); blank/unrecognised labels fold into ``unknown``.
+            pairs_by_report: dict[str, list[tuple[object, int]]] = {}
             for rid, sev, cnt in sev_rows:
-                rid_key = str(rid)
-                if rid_key not in severity_map:
-                    severity_map[rid_key] = {}
-                severity_map[rid_key][sev.lower()] = cnt
+                pairs_by_report.setdefault(str(rid), []).append((sev, int(cnt)))
+            severity_map = {
+                rid: aggregate_counts(pairs).as_dict()
+                for rid, pairs in pairs_by_report.items()
+            }
 
     items = []
     for r in rows:
@@ -266,7 +271,13 @@ async def admin_get_report_detail(
             .group_by(Finding.severity)
         )
         severity_rows = (await session.execute(severity_stmt)).all()
-        severity_map: dict[str, int] = {row[0].lower(): row[1] for row in severity_rows}
+        # Canonical 6-band counts (matches API / reports / frontend); an empty
+        # report stays ``None`` (no findings) rather than an all-zero dict.
+        severity_map: dict[str, int] = (
+            aggregate_counts((row[0], int(row[1])) for row in severity_rows).as_dict()
+            if severity_rows
+            else {}
+        )
 
     available_formats = list({o.format for o in obj_rows})
 

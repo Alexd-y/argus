@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 from src.core.config import settings
@@ -208,12 +207,14 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         out["valhalla_appendix_phase_inputs_excerpt"] = None
         tl_rows: list[dict[str, Any]] = []
         for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_VALHALLA_TIMELINE_LIMIT]:
-            snippet = ""
-            if t.entry is not None:
-                try:
-                    snippet = json.dumps(t.entry, ensure_ascii=False)[:_VALHALLA_SNIPPET_CHARS]
-                except (TypeError, ValueError):
-                    snippet = str(t.entry)[:800]
+            # Leak-safe projection only — the raw entry body carries internal
+            # addresses/secrets (e.g. 169.254.169.254, AWS keys). Never dump it
+            # verbatim into the Valhalla JSON appendix (regression: RPT-008).
+            snippet = (
+                gen.safe_phase_summary_text(t.entry)[:_VALHALLA_SNIPPET_CHARS]
+                if t.entry is not None
+                else ""
+            )
             tl_rows.append({
                 "phase": t.phase or "",
                 "order_index": t.order_index,

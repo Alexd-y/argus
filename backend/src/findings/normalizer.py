@@ -88,7 +88,7 @@ def _emit_finding_metric(dto: FindingDTO) -> None:
     """
     try:
         kev = bool(getattr(dto, "kev_listed", False))
-        severity = _severity_from_cvss(float(getattr(dto, "cvss_v3_score", 0.0)))
+        severity = _severity_from_cvss(float(getattr(dto, "cvss_v3_score", 0.0) or 0.0))
         record_finding_emitted(tier="midgard", severity=severity, kev_listed=kev)
     except Exception:  # pragma: no cover — defensive
         _logger.debug("normalizer.metrics_emit_failed", exc_info=True)

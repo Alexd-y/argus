@@ -115,6 +115,45 @@ class SSVCDecision(StrEnum):
     ACT = "Act"
 
 
+class RecordKind(StrEnum):
+    """What kind of record this is — orthogonal to severity (impact).
+
+    See ``src/findings/taxonomy.py`` and ``docs/finding-severity-and-counting.md``.
+    """
+
+    VULNERABILITY = "vulnerability"
+    HARDENING = "hardening"
+    INFORMATIONAL = "informational"
+
+
+class ValidationState(StrEnum):
+    """Evidence strength — how strongly the finding is proven."""
+
+    CONFIRMED = "confirmed"
+    SUSPECTED = "suspected"
+    INCONCLUSIVE = "inconclusive"
+    REJECTED = "rejected"
+
+
+class Lifecycle(StrEnum):
+    """Operational state of the finding (distinct from validation)."""
+
+    OPEN = "open"
+    FIXED = "fixed"
+    ACCEPTED_RISK = "accepted_risk"
+    FALSE_POSITIVE = "false_positive"
+
+
+class RemediationPriority(StrEnum):
+    """Fix-queue ordering (distinct from severity). ``P0`` most urgent."""
+
+    P0 = "P0"
+    P1 = "P1"
+    P2 = "P2"
+    P3 = "P3"
+    P4 = "P4"
+
+
 class RemediationDTO(BaseModel):
     """Remediation hint attached to a finding."""
 
@@ -213,8 +252,12 @@ class FindingDTO(BaseModel):
     tool_run_id: UUID
     category: FindingCategory
     cwe: list[StrictInt] = Field(min_length=1, max_length=16)
-    cvss_v3_vector: StrictStr = Field(min_length=8, max_length=128)
-    cvss_v3_score: StrictFloat = Field(ge=0.0, le=10.0)
+    # CVSS is genuinely optional: a finding may carry only a severity band, or
+    # no numeric score at all. ``None`` means "no CVSS" — NOT a fabricated 0.0
+    # or a sentinel vector. When a vector IS present it must be well-formed
+    # (validated below); a score without a vector, or vice-versa, is allowed.
+    cvss_v3_vector: StrictStr | None = Field(default=None, max_length=128)
+    cvss_v3_score: StrictFloat | None = Field(default=None, ge=0.0, le=10.0)
     # ARG-044 — intel-tier enrichment. All five fields are optional /
     # default to a "no signal" value so the DTO stays backward-compatible
     # with Cycle 1-3 producers that only populate the CVSS axis.
@@ -265,13 +308,35 @@ class FindingDTO(BaseModel):
     # finding is backed by a confirmed playbook scenario. Optional/default None
     # so all Cycle 1-3 producers stay valid (SI-7, back-compat).
     scenario_context: ScenarioContextDTO | None = Field(default=None)
+    # Canonical taxonomy axes (see src/findings/taxonomy.py). All optional so
+    # existing producers stay valid; when absent, consumers derive them from
+    # the legacy ``confidence`` / ``status`` fields via the taxonomy helpers.
+    # These are STRICTLY separate axes — impact (severity) is elsewhere.
+    record_kind: RecordKind | None = Field(
+        default=None,
+        description="vulnerability | hardening | informational (orthogonal to severity).",
+    )
+    validation: ValidationState | None = Field(
+        default=None,
+        description="Evidence strength: confirmed | suspected | inconclusive | rejected.",
+    )
+    lifecycle: Lifecycle | None = Field(
+        default=None,
+        description="Operational state: open | fixed | accepted_risk | false_positive.",
+    )
+    remediation_priority: RemediationPriority | None = Field(
+        default=None,
+        description="Fix-queue ordering P0–P4 (distinct from severity).",
+    )
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
         for cwe_id in self.cwe:
             if cwe_id <= 0:
                 raise ValueError(f"CWE id must be positive, got {cwe_id}")
-        if not _CVSS_VECTOR_RE.fullmatch(self.cvss_v3_vector):
+        if self.cvss_v3_vector is not None and not _CVSS_VECTOR_RE.fullmatch(
+            self.cvss_v3_vector
+        ):
             raise ValueError(
                 "cvss_v3_vector must look like 'CVSS:3.x/AV:.../...' or 'CVSS:4.0/...'"
             )
