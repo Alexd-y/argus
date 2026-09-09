@@ -1043,7 +1043,16 @@ class Settings(BaseSettings):
     recon_asnmap_enabled: bool = True
     # asnmap requires a ProjectDiscovery Cloud (PDCP) API key; without it the tool
     # prompts on /dev/tty and aborts in the non-interactive sandbox. Empty → skip asnmap.
-    recon_pdcp_api_key: str = ""
+    # Reads the same PDCP_API_KEY that the sandbox container exposes to asnmap, so a
+    # single env var both opens the gate (here) and authenticates the tool (sandbox).
+    recon_pdcp_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "RECON_PDCP_API_KEY",
+            "PDCP_API_KEY",
+            "recon_pdcp_api_key",
+        ),
+    )
     recon_gowitness_max_urls: int = 25
     recon_gowitness_timeout_sec: int | None = None
     recon_gowitness_concurrency: int = 3

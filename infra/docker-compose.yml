@@ -544,6 +544,12 @@ services:
     image: argus-sandbox
     container_name: argus-sandbox
     restart: unless-stopped
+    # asnmap authenticates to ProjectDiscovery Cloud via PDCP_API_KEY; tools run
+    # through `docker exec` inherit the container env, so exposing just this one
+    # secret here (rather than the full .env) keeps the tool container
+    # least-privileged. Empty → asnmap is gated off upstream (recon_pdcp_api_key).
+    environment:
+      PDCP_API_KEY: ${PDCP_API_KEY:-}
     # Long-lived idle container: workers run tools inside it via `docker exec`.
     # The image inherits Kali's default `bash` CMD which exits immediately without a
     # TTY, so the container would crash-loop — keep it alive explicitly.
