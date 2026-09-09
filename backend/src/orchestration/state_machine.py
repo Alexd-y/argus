@@ -649,10 +649,11 @@ async def _materialise_finding_evidence(
     (TLS/headers/DNS checks whose result is a stored observation). No artifact →
     no Evidence row → not counted (never fabricated).
 
-    Isolation contract: MinIO uploads are non-transactional side-effects wrapped
-    in try/except; Evidence inserts run inside a SAVEPOINT so a DB error rolls
-    back only the evidence, leaving the already-flushed finding intact. Ids are
-    deterministic so a phase retry/resume upserts idempotently.
+    Isolation contract: called post-commit against a durable finding. MinIO
+    uploads are non-transactional side-effects wrapped in try/except; Evidence
+    inserts run inside a SAVEPOINT so a DB error rolls back only the evidence,
+    never the finding. Ids are deterministic so a retry/resume upserts
+    idempotently and re-uploads overwrite the same key (no orphan accumulation).
     """
     poc_key: str | None = None
     screenshot_key: str | None = None
@@ -713,6 +714,55 @@ async def _materialise_finding_evidence(
             extra={"scan_id": scan_id, "finding_id": finding_id},
             exc_info=True,
         )
+
+
+async def _materialise_scan_evidence(
+    session: AsyncSession,
+    tenant_id: str,
+    scan_id: str,
+) -> int:
+    """Post-commit, best-effort Evidence materialisation for a scan's findings
+    (ARGUS-WSTG-COV-1 §Evidence).
+
+    Runs AFTER findings are committed so MinIO artifacts are only ever written
+    for durable findings — orphan-free by construction (deterministic keys also
+    make re-runs overwrite rather than accumulate). Reads ``proof_of_concept`` /
+    ``evidence_refs`` back from the committed Finding rows. Never raises; a
+    failure here can never affect scan completion.
+
+    Returns the number of findings processed (for logging/tests).
+    """
+    result = await session.execute(
+        select(Finding).where(
+            cast(Finding.scan_id, String) == scan_id,
+            cast(Finding.tenant_id, String) == tenant_id,
+        )
+    )
+    findings = list(result.scalars().all())
+    for finding in findings:
+        poc = finding.proof_of_concept if isinstance(finding.proof_of_concept, dict) else None
+        refs = finding.evidence_refs if isinstance(finding.evidence_refs, list) else None
+        await _materialise_finding_evidence(
+            session,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            finding_id=finding.id,
+            poc_db=poc,
+            evidence_refs=refs,
+            description=finding.description,
+            reproducible_steps=finding.reproducible_steps,
+        )
+    try:
+        await session.commit()
+    except Exception:
+        logger.warning(
+            "scan_evidence_commit_failed",
+            extra={"scan_id": scan_id},
+            exc_info=True,
+        )
+        with suppress(Exception):
+            await session.rollback()
+    return len(findings)
 
 
 async def _persist_report_and_findings(
@@ -863,22 +913,12 @@ async def _persist_report_and_findings(
         # can re-run this persist with the same ids. merge() upserts by primary
         # key (insert-or-update) so a re-run never raises a duplicate findings_pkey
         # IntegrityError that would fail an otherwise-complete scan.
+        # Pure DB write: no MinIO side-effects live in this transaction, so a
+        # rollback can never orphan uploaded artifacts. Evidence artifacts are
+        # materialised post-commit in ``_materialise_scan_evidence`` against the
+        # durable findings (proof_of_concept / evidence_refs are persisted on the
+        # Finding row and re-read there). Idempotent via stable UUID5 ids.
         await session.merge(finding)
-        # Flush the finding into the OUTER transaction now so its row is durable
-        # before we attempt the (best-effort) evidence rows below. This makes the
-        # subsequent SAVEPOINT roll back *only* the evidence on failure — never
-        # the finding — and guarantees the FK ``evidence.finding_id`` resolves.
-        await session.flush()
-        await _materialise_finding_evidence(
-            session,
-            tenant_id=tenant_id,
-            scan_id=scan_id,
-            finding_id=finding.id,
-            poc_db=poc_db,
-            evidence_refs=ev_refs,
-            description=f.get("description"),
-            reproducible_steps=rep_steps,
-        )
         await _record_event(
             session,
             tenant_id,
@@ -2088,6 +2128,14 @@ async def _finalize_scan(
         session, tenant_id, scan_id, target,
         ctx.report_out, ctx.vuln_out, ctx.recon_out,
     )
+    # Commit Report + Findings + Events FIRST so they are durable independent of
+    # the (best-effort) evidence artifacts and the post-scan report bundle. This
+    # transaction now holds NO non-transactional side-effects (no MinIO uploads),
+    # so a rollback can never orphan objects. Only after findings are durable do
+    # we upload artifacts and link Evidence rows — orphan-free by construction.
+    await session.commit()
+    with suppress(Exception):
+        await _materialise_scan_evidence(session, tenant_id, scan_id)
 
     # Notification dispatch
     try:
