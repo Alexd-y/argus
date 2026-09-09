@@ -481,7 +481,15 @@ def build_report_data_from_scan_report(
         ai_insights=final_ai_list,
         timeline=timeline,
         phase_outputs=phase_outputs,
-        evidence=[],
+        evidence=[
+            EvidenceEntry(
+                finding_id=str(e.finding_id),
+                object_key=str(e.object_key),
+                description=getattr(e, "description", None),
+            )
+            for e in getattr(data, "evidence", None) or []
+            if getattr(e, "finding_id", None) and getattr(e, "object_key", None)
+        ],
         screenshots=[],
         executive_summary=exec_s,
         remediation=rem,

@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.datetime_format import format_created_at_iso_z
 from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_report
+from src.db.models import Evidence as EvidenceModel
 from src.db.models import Finding as FindingModel
 from src.db.models import PhaseInput as PhaseInputModel
 from src.db.models import PhaseOutput as PhaseOutputModel
@@ -149,6 +150,20 @@ class ToolRunRow(BaseModel):
     status: str
     started_at: Any = None
     finished_at: Any = None
+
+
+class EvidenceRowData(BaseModel):
+    """Persisted Evidence artifact (finding_id + MinIO object_key).
+
+    Sourced from the ``evidence`` table; feeds store-backed WSTG coverage
+    validation and the report evidence sections (ARGUS-WSTG-COV-1 §Evidence).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    finding_id: str
+    object_key: str
+    description: str | None = None
 
 
 def _first_sentence(text: str) -> str:
@@ -392,6 +407,9 @@ class ScanReportData(BaseModel):
     leaked_emails_masked: list[str] = Field(default_factory=list)
     robots_sitemap_analysis: RobotsSitemapMergedSummaryModel | None = None
     tool_runs: list[ToolRunRow] = Field(default_factory=list)
+    #: Persisted Evidence artifacts (ARGUS-WSTG-COV-1 §Evidence); store-backed WSTG
+    #: coverage counts a finding only when the store holds an artifact for it.
+    evidence: list[EvidenceRowData] = Field(default_factory=list)
     #: HIBP Pwned Passwords aggregate (opt-in); same dict as AI payload and Valhalla appendix.
     hibp_pwned_password_summary: dict[str, Any] | None = None
     #: CONT-009 — honest coverage statuses + occurrence key references for export/AI.
@@ -756,6 +774,23 @@ class ReportDataCollector:
             )
             for row in tr_orm_rows
         ]
+
+        ev_result = await session.execute(
+            select(EvidenceModel)
+            .where(
+                cast(EvidenceModel.scan_id, String) == sid,
+                cast(EvidenceModel.tenant_id, String) == tid,
+            )
+            .order_by(EvidenceModel.created_at.asc().nullsfirst(), EvidenceModel.id.asc())
+        )
+        evidence_rows = [
+            EvidenceRowData(
+                finding_id=str(row.finding_id),
+                object_key=str(row.object_key),
+                description=row.description,
+            )
+            for row in ev_result.scalars().all()
+        ]
         tool_run_rows: list[tuple[str, dict[str, Any] | None]] = [
             (
                 str(row.tool_name or "").strip(),
@@ -931,6 +966,7 @@ class ReportDataCollector:
             leaked_emails_masked=list(valhalla_ctx.leaked_emails or []),
             robots_sitemap_analysis=valhalla_ctx.robots_sitemap_merged,
             tool_runs=tool_runs,
+            evidence=evidence_rows,
             hibp_pwned_password_summary=hibp_pwned_password_summary,
             coverage_occurrence=valhalla_ctx.coverage_occurrence,
         )

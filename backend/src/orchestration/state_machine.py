@@ -23,6 +23,7 @@ from src.core.observability import (
     trace_phase,
 )
 from src.db.models import (
+    Evidence,
     Finding,
     PhaseInput,
     PhaseOutput,
@@ -150,6 +151,7 @@ from src.reports.bundle_enqueue import (
     enqueue_generate_all_bundle,
     schedule_generate_all_reports_task_safe,
 )
+from src.reports.evidence_materializer import build_finding_evidence_rows
 from src.reports.finding_metadata import (
     clip_optional_text,
     normalize_confidence,
@@ -158,6 +160,7 @@ from src.reports.finding_metadata import (
     resolve_finding_cross_refs,
 )
 from src.storage.s3 import upload_finding_poc_json
+from src.tools.executor import flush_tool_runs
 
 logger = logging.getLogger(__name__)
 
@@ -772,13 +775,41 @@ async def _persist_report_and_findings(
         # IntegrityError that would fail an otherwise-complete scan.
         await session.merge(finding)
         if poc_db:
-            await asyncio.to_thread(
+            poc_key = await asyncio.to_thread(
                 upload_finding_poc_json,
                 tenant_id,
                 scan_id,
                 finding.id,
                 poc_db,
             )
+            # ARGUS-WSTG-COV-1 §Evidence: materialise a real Evidence row for the
+            # uploaded PoC (and screenshot, if enrichment produced one) so
+            # store-backed coverage can validate ``finding → artifact``. Without
+            # this row the finding's control-failure never counts. Idempotent:
+            # deterministic id upserts on phase retry/resume.
+            screenshot_key = (
+                str(poc_db.get("screenshot_key") or "").strip()
+                if isinstance(poc_db, dict)
+                else ""
+            ) or None
+            for _row in build_finding_evidence_rows(
+                tenant_id=tenant_id,
+                scan_id=scan_id,
+                finding_id=finding.id,
+                poc_object_key=poc_key,
+                screenshot_object_key=screenshot_key,
+            ):
+                await session.merge(
+                    Evidence(
+                        id=_row.id,
+                        tenant_id=_row.tenant_id,
+                        scan_id=_row.scan_id,
+                        finding_id=_row.finding_id,
+                        object_key=_row.object_key,
+                        content_type=_row.content_type,
+                        description=_row.description,
+                    )
+                )
         await _record_event(
             session,
             tenant_id,
@@ -1248,9 +1279,17 @@ async def _execute_phase(
             session, tenant_id, scan_id, "error", phase_str, progress,
             message=err_message, data=err_data,
         )
+        # Persist any tool-run provenance buffered before the failure.
+        with suppress(Exception):
+            await flush_tool_runs(session, tenant_id, scan_id)
         await _update_scan_phase_status(session, scan_id, phase_str, "failed", progress)
         await session.commit()
         raise
+
+    # Persist buffered ToolRun provenance within this phase's transaction; the
+    # caller commits downstream. Best-effort — never fail a completed phase.
+    with suppress(Exception):
+        await flush_tool_runs(session, tenant_id, scan_id)
 
     return output_data
 

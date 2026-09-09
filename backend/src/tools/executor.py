@@ -1,8 +1,8 @@
 """Command executor — subprocess-based execution for allowlisted tools only."""
 
-import asyncio
 import logging
 import shlex
+import threading
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -42,42 +42,15 @@ def _current_scan_phase(scan_id: str) -> str:
     return _PHASE_CACHE.get(scan_id, "")
 
 
-async def _persist_tool_run(
-    tenant_id: str,
-    scan_id: str,
-    tool_name: str,
-    run_status: str,
-    input_params: dict[str, Any] | None,
-    output_raw: str,
-    started_at: datetime,
-    finished_at: datetime,
-) -> None:
-    """Best-effort ToolRun persistence — fire-and-forget from sync executor."""
-    try:
-        from src.db.models import ToolRun
-        from src.db.session import async_session_factory, set_session_tenant
-
-        truncated = output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else ""
-        async with async_session_factory() as session:
-            await set_session_tenant(session, tenant_id)
-            run = ToolRun(
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                tool_name=tool_name,
-                status=run_status,
-                input_params=input_params,
-                output_raw=truncated,
-                started_at=started_at,
-                finished_at=finished_at,
-            )
-            session.add(run)
-            await session.commit()
-    except Exception:
-        logger.warning(
-            "tool_run_persist_failed",
-            extra={"event": "argus.tool_run.persist_failed", "tool": tool_name},
-            exc_info=True,
-        )
+# Reliable ToolRun persistence: ``execute_command`` is synchronous and is called
+# from mixed contexts (worker thread via ``asyncio.to_thread`` or directly). The
+# previous ``loop.create_task`` fire-and-forget was silently dropped when the
+# per-phase event loop was torn down (``asyncio.run`` cancels pending tasks),
+# leaving ``tool_runs`` empty. Instead we buffer records per scan (thread-safe)
+# and flush them synchronously at the phase boundary via :func:`flush_tool_runs`,
+# which runs inside the phase's committed transaction.
+_PENDING_TOOL_RUNS: dict[str, list[dict[str, Any]]] = {}
+_PENDING_TOOL_RUNS_LOCK = threading.Lock()
 
 
 def _schedule_tool_run_record(
@@ -89,28 +62,59 @@ def _schedule_tool_run_record(
     finished_at: datetime,
     command: str,
 ) -> None:
-    """Schedule ToolRun DB write on the running event loop (no-op when context is missing)."""
+    """Buffer a ToolRun record for later flush (no-op when scan context is missing)."""
     if not tenant_id or not scan_id:
         return
-    run_status = "success" if result.get("success") else "error"
-    input_params = {"command": command}
     output_raw = str(result.get("stdout") or "")
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            _persist_tool_run(
-                tenant_id=tenant_id,
+    record = {
+        "tenant_id": tenant_id,
+        "tool_name": tool_name,
+        "status": "success" if result.get("success") else "error",
+        "input_params": {"command": command},
+        "output_raw": output_raw[:_TOOL_RUN_OUTPUT_MAX_CHARS] if output_raw else "",
+        "started_at": started_at,
+        "finished_at": finished_at,
+    }
+    with _PENDING_TOOL_RUNS_LOCK:
+        _PENDING_TOOL_RUNS.setdefault(scan_id, []).append(record)
+
+
+def drain_pending_tool_runs(scan_id: str) -> list[dict[str, Any]]:
+    """Atomically remove and return buffered ToolRun records for a scan."""
+    with _PENDING_TOOL_RUNS_LOCK:
+        return _PENDING_TOOL_RUNS.pop(scan_id, [])
+
+
+async def flush_tool_runs(session: Any, tenant_id: str, scan_id: str) -> int:
+    """Persist buffered ToolRun records for a scan using the caller's session.
+
+    Best-effort and idempotent-safe: rows are added to ``session`` but not
+    committed here — the caller (phase runner) owns the transaction boundary.
+    Returns the number of records flushed.
+    """
+    records = drain_pending_tool_runs(scan_id)
+    if not records:
+        return 0
+    from src.db.models import ToolRun
+
+    for rec in records:
+        session.add(
+            ToolRun(
+                tenant_id=str(rec.get("tenant_id") or tenant_id),
                 scan_id=scan_id,
-                tool_name=tool_name,
-                run_status=run_status,
-                input_params=input_params,
-                output_raw=output_raw,
-                started_at=started_at,
-                finished_at=finished_at,
+                tool_name=str(rec.get("tool_name") or "unknown")[:100],
+                status=str(rec.get("status") or "success")[:50],
+                input_params=rec.get("input_params"),
+                output_raw=rec.get("output_raw") or "",
+                started_at=rec.get("started_at"),
+                finished_at=rec.get("finished_at"),
             )
         )
-    except RuntimeError as exc:
-        logger.debug("tool_run persist skipped (no event loop)", exc_info=exc)
+    logger.info(
+        "tool_runs_flushed",
+        extra={"event": "argus.tool_run.flushed", "count": len(records)},
+    )
+    return len(records)
 
 
 def _lease_gate_target(

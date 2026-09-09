@@ -1,0 +1,25 @@
+# ARGUS — public MinIO exposure override (operator opt-in).
+#
+# Publishes the MinIO Console UI and S3 API on the host so MinIO is reachable at
+#   Console (browser): http://<public-ip>:12701/
+#   S3 API (mc / SDK): http://<public-ip>:12700/
+#
+# SECURITY (read before use):
+#   - This makes MinIO internet-facing. Restrict the ports to trusted source IPs
+#     in the cloud security group / firewall — do NOT open 0.0.0.0/0 in prod.
+#   - Use a strong, unique MINIO_SECRET_KEY (openssl rand -hex 32). The console
+#     login uses MINIO_ACCESS_KEY / MINIO_SECRET_KEY.
+#   - Do NOT combine with docker-compose.dev.yml (both map MinIO ports → clash).
+#
+# Usage (on the host, alongside the base compose):
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.minio-public.yml up -d minio
+#
+# The console redirect URL must match the externally-visible console URL, else
+# the MinIO console refuses the request when reached via NAT / public IP.
+services:
+  minio:
+    environment:
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_PUBLIC_URL:-http://34.220.253.106:12701}
+    ports:
+      - "${MINIO_PUBLIC_CONSOLE_PORT:-12701}:9001" # Console UI (browser)
+      - "${MINIO_PUBLIC_API_PORT:-12700}:9000" # S3 API (mc / presigned / SDK)
