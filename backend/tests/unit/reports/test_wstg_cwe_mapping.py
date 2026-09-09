@@ -1,16 +1,38 @@
 """WSTG coverage must reflect findings that carry only a CWE / vuln_type.
 
-Before this fix ``derive_wstg_states`` scored 0% whenever findings lacked an
-explicit ``WSTG-*`` tag (the common case), because nothing mapped CWE →
-WSTG. These tests lock in the CWE / vuln_type derivation and the evidence
-linkage that lets a completed/fail test count toward coverage.
+Findings frequently lack an explicit ``WSTG-*`` tag, so the CWE / vuln_type →
+WSTG mapping (``wstg_ids_for_finding``) is what lets a control-failure count.
+These tests lock in that mapping and the evidence gate: a completed/fail test
+counts only when its evidence validated (ARGUS-WSTG-COV-1).
 """
 
 from __future__ import annotations
 
+from src.reports.wstg_applicability import decide_applicability
 from src.reports.wstg_coverage import wstg_ids_for_finding
+from src.reports.wstg_execution import aggregate_executions
 from src.reports.wstg_gate import compute_wstg_coverage
-from src.reports.wstg_plan import derive_wstg_states
+from src.reports.wstg_plan import build_wstg_states, catalog_ids
+from src.reports.wstg_producers import findings_to_executions
+
+
+def _coverage_from_findings(findings, *, evidence_validated: bool):
+    execs = findings_to_executions(
+        findings,
+        scan_id="scan-1",
+        target="https://t.example",
+        wstg_ids_for_finding=wstg_ids_for_finding,
+    )
+    aggregated = aggregate_executions(execs)
+    finding_test_ids = frozenset(
+        wid for f in findings if f.get("_has_evidence") for wid in wstg_ids_for_finding(f)
+    )
+    decisions = decide_applicability(finding_test_ids=finding_test_ids)
+    ev = {tid: evidence_validated for tid in aggregated}
+    states = build_wstg_states(
+        decisions=decisions, aggregated=aggregated, evidence_validated_by_test=ev
+    )
+    return compute_wstg_coverage(states, catalog_ids=catalog_ids())
 
 
 class TestWstgIdsForFinding:
@@ -32,20 +54,24 @@ class TestWstgIdsForFinding:
         assert wstg_ids_for_finding({"cwe": "CWE-200"}) == set()
 
 
-class TestDeriveStatesCoverageFromFindings:
-    def test_finding_with_evidence_counts(self) -> None:
-        findings = [{"title": "TLS weak", "cwe": "CWE-319", "vuln_type": "tls_probe"}]
-        evidence = {"WSTG-CRYP-01": ["FINDING:tls-1"]}
-        states = derive_wstg_states([], findings, evidence_by_test=evidence)
-        report = compute_wstg_coverage(states, catalog_size=len(states))
+class TestCoverageFromFindings:
+    def test_finding_with_validated_evidence_counts(self) -> None:
+        findings = [
+            {
+                "id": "tls-1",
+                "title": "TLS weak",
+                "cwe": "CWE-319",
+                "vuln_type": "tls_probe",
+                "_has_evidence": True,
+            }
+        ]
+        report = _coverage_from_findings(findings, evidence_validated=True)
         assert report.counted >= 1
         assert report.completed_fail >= 1
-        assert report.coverage_pct > 0.0
+        assert report.coverage_pct is not None and report.coverage_pct > 0.0
 
     def test_finding_without_evidence_does_not_count(self) -> None:
-        findings = [{"title": "TLS weak", "cwe": "CWE-319"}]
-        states = derive_wstg_states([], findings, evidence_by_test={})
-        report = compute_wstg_coverage(states, catalog_size=len(states))
-        # Marked completed/fail but no evidence → excluded from numerator (spec §4).
+        findings = [{"id": "tls-1", "title": "TLS weak", "cwe": "CWE-319", "_has_evidence": False}]
+        report = _coverage_from_findings(findings, evidence_validated=False)
+        # Producer emits a partial (evidence_present=False) → never counts (§3.5).
         assert report.counted == 0
-        assert report.coverage_pct == 0.0

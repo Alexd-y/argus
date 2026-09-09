@@ -620,13 +620,28 @@ function mapWstg(raw: unknown): ScanWstg | null {
   if (!raw || typeof raw !== "object") return null;
   const w = raw as Record<string, unknown>;
   const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  // coverage_pct is null when undefined (zero denominator or integrity violation).
+  const coveragePct =
+    typeof w.coverage_pct === "number" && Number.isFinite(w.coverage_pct)
+      ? (w.coverage_pct as number)
+      : null;
+  const assessment = String(w.assessment_status ?? "");
   return {
     version: String(w.wstg_version ?? "4.2"),
-    coveragePct: num(w.coverage_pct),
+    coveragePct,
     gatePassed: Boolean(w.gate_passed),
+    coverageGatePassed: Boolean(w.coverage_gate_passed),
+    evidenceIntegrityPassed: Boolean(w.evidence_integrity_passed),
+    assessmentStatus:
+      assessment === "complete" ||
+      assessment === "limited" ||
+      assessment === "incomplete" ||
+      assessment === "invalid"
+        ? assessment
+        : null,
     counted: num(w.counted),
-    applicable: num(w.applicable),
-    catalogSize: num(w.catalog_size),
+    applicable: num(w.denominator ?? w.applicable),
+    catalogSize: num(w.catalog_total ?? w.catalog_size),
   };
 }
 

@@ -69,22 +69,57 @@ def render_markdown(doc: ReportDocumentV1) -> str:
 
     if doc.wstg:
         w = doc.wstg
-        lines.append("## WSTG v4.2 Coverage (strict)")
+        cov = w.get("coverage_pct")
+        cov_txt = "n/a (undefined)" if cov is None else f"{cov}%"
+        denom = w.get("denominator", w.get("applicable"))
+        catalog = w.get("catalog_total", w.get("catalog_size"))
+        lines.append("## WSTG v4.2 Coverage")
         lines.append("")
-        lines.append(f"- coverage: `{w.get('coverage_pct')}%` (threshold `{w.get('threshold')}%`)")
-        lines.append(f"- gate_passed: `{w.get('gate_passed')}`")
+        if w.get("schema_version") is None:
+            lines.append(
+                "> **legacy / unverified:** this snapshot predates evidence-based "
+                "coverage (ARGUS-WSTG-COV-1); figures were not re-validated."
+            )
+            lines.append("")
+        else:
+            lines.append(
+                f"- versions: policy `{w.get('policy_version')}`, rules "
+                f"`{w.get('applicability_rules_version')}`, scenarios "
+                f"`{w.get('scenario_registry_version')}`"
+            )
         lines.append(
-            f"- counted: `{w.get('counted')}` / applicable `{w.get('applicable')}` "
-            f"(catalog `{w.get('catalog_size')}`)"
+            "> pass/fail is a control's security result; the percentage is "
+            "execution completeness, not application security."
+        )
+        lines.append("")
+        lines.append(f"- assessment: `{w.get('assessment_status')}`")
+        lines.append(
+            f"- completed X of applicable: `{w.get('counted')}` / `{denom}` = "
+            f"`{cov_txt}` (threshold `{w.get('threshold')}%`)"
+        )
+        lines.append(f"- completed X of catalog: `{w.get('counted')}` / `{catalog}`")
+        lines.append(
+            f"- coverage_gate_passed: `{w.get('coverage_gate_passed')}`, "
+            f"evidence_integrity_passed: `{w.get('evidence_integrity_passed')}`"
+        )
+        lines.append(
+            f"- not_applicable: `{w.get('validated_not_applicable')}`, "
+            f"out_of_scope: `{w.get('out_of_scope')}`, "
+            f"unknown: `{w.get('unknown_applicability')}`, blocked: `{w.get('blocked')}`"
         )
         lines.append(
             f"- completed_pass: `{w.get('completed_pass')}`, "
             f"completed_fail: `{w.get('completed_fail')}`, "
-            f"partial: `{w.get('partial')}`, blocked: `{w.get('blocked')}`, "
-            f"not_started: `{w.get('not_started')}`"
+            f"partial: `{w.get('partial')}`, not_started: `{w.get('not_started')}`"
         )
-        for err in w.get("exclusion_errors") or []:
-            lines.append(f"- exclusion_error: {err}")
+        for err in w.get("integrity_errors") or []:
+            if isinstance(err, dict):
+                lines.append(
+                    f"- integrity_error: `{err.get('code')}` "
+                    f"{err.get('test_id')}: {err.get('detail')}"
+                )
+            else:
+                lines.append(f"- integrity_error: {err}")
         lines.append("")
 
     lines.append("## Limitations")

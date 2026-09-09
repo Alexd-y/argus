@@ -78,7 +78,7 @@ const ICONS = {
 
 interface Tile {
   label: string;
-  value: number;
+  value: number | string;
   sub: string;
   tone: { border: string; label: string; value: string };
   wide?: boolean;
@@ -258,11 +258,12 @@ export function ScanExecutiveHeader({
 
   const wstg = results.wstg ?? null;
   if (wstg) {
+    const coverageOk = wstg.coverageGatePassed && wstg.evidenceIntegrityPassed;
     tiles.push({
       label: "WSTG v4.2 coverage",
-      value: Math.round(wstg.coveragePct),
-      sub: `${wstg.gatePassed ? "gate passed" : "below gate"} · ${wstg.counted}/${wstg.applicable} tests`,
-      tone: wstg.gatePassed
+      value: wstg.coveragePct === null ? "n/a" : Math.round(wstg.coveragePct),
+      sub: `${coverageOk ? "gate passed" : "below gate"} · ${wstg.counted}/${wstg.applicable} applicable`,
+      tone: coverageOk
         ? {
             border: "border-emerald-500/30 bg-emerald-500/[0.06]",
             label: "text-emerald-300",

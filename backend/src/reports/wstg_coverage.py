@@ -625,12 +625,17 @@ def build_wstg_coverage(
     *,
     scenario_coverage: dict[str, Any] | None = None,
 ) -> WstgCoverageResult:
-    """Calculate WSTG coverage based on executed tools and findings.
+    """Legacy **capability** heuristic: which WSTG tests a tool *could* touch.
+
+    .. warning::
+        This is NOT the evidence-based coverage headline. It maps executed tool
+        names to WSTG tests and is retained only for the Valhalla-tier capability
+        table. The authoritative, evidence-gated coverage (ARGUS-WSTG-COV-1) is
+        computed by :func:`src.reports.wstg_report.build_wstg_block` and must be
+        read for completion/gate decisions. See ``docs/wstg-coverage.md``.
 
     ``scenario_coverage`` is an optional, additive block built by
-    :mod:`src.reports.scenario_coverage` from executed playbook scenarios. When
-    provided it is attached verbatim to the result (fix G-4: single coverage
-    output, executed-scenario coverage layered on top of tool coverage).
+    :mod:`src.reports.scenario_coverage` from executed playbook scenarios.
     """
     normalized_tools = {_normalize_tool_name(t) for t in tools_executed if t}
     finding_wstg_ids = _extract_wstg_ids_from_findings(findings or [])

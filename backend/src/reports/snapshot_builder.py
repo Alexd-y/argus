@@ -21,10 +21,7 @@ from src.reports.report_document import (
     ReportToolRun,
     build_report_document,
 )
-from src.reports.wstg_applicability import infer_wstg_applicability
-from src.reports.wstg_coverage import wstg_ids_for_finding
-from src.reports.wstg_gate import compute_wstg_coverage
-from src.reports.wstg_plan import build_engagement_test_plan, derive_wstg_states
+from src.reports.wstg_report import build_wstg_block
 
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
@@ -116,9 +113,11 @@ def _map_finding(
         verification_status=_verification_status(finding),
         confidence=_confidence_float(getattr(finding, "confidence", None)),
         evidence_ids=[str(e) for e in evidence_refs],
-        tool_run_id=(str(getattr(finding, "tool_run_id", "")) or None)
-        if getattr(finding, "tool_run_id", None)
-        else None,
+        tool_run_id=(
+            (str(getattr(finding, "tool_run_id", "")) or None)
+            if getattr(finding, "tool_run_id", None)
+            else None
+        ),
         validator_id=str(validator) if validator else None,
         raw_artifact_ref=str(raw_ref) if raw_ref else None,
     )
@@ -186,7 +185,9 @@ def _evidence_keys_by_finding(report_data: Any) -> dict[str, list[str]]:
     """
     out: dict[str, list[str]] = {}
     for entry in getattr(report_data, "evidence", None) or []:
-        get = entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        get = (
+            entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        )
         fid = get("finding_id")
         key = get("object_key")
         if fid and key:
@@ -197,7 +198,9 @@ def _evidence_keys_by_finding(report_data: Any) -> dict[str, list[str]]:
 def _map_evidence(report_data: Any) -> list[ReportEvidenceRef]:
     out: list[ReportEvidenceRef] = []
     for entry in getattr(report_data, "evidence", None) or []:
-        get = entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        get = (
+            entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        )
         object_key = get("object_key", None)
         finding_id = get("finding_id", None)
         eid = str(object_key or finding_id or f"E-{len(out) + 1}")
@@ -243,7 +246,7 @@ def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
                 "vuln_type": get("vuln_type", None) or get("type", None),
                 "category": get("category", None),
                 # Evidence presence gates whether a finding's control-failure
-                # counts toward coverage (spec §4: no evidence → uncounted).
+                # counts toward coverage (ARGUS-WSTG-COV-1: no evidence → uncounted).
                 "_has_evidence": bool(
                     (get("evidence_refs", None) or [])
                     or get("proof_of_concept", None)
@@ -255,112 +258,55 @@ def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _wstg_evidence_by_test(findings: list[dict[str, Any]]) -> dict[str, list[str]]:
-    """Link each evidenced finding to the WSTG tests it exercises.
-
-    A finding is the control-failure evidence for its test; only findings that
-    actually carry evidence contribute an id, so empty findings never inflate
-    coverage.
-    """
-    ev_map: dict[str, list[str]] = {}
-    for f in findings:
-        if not f.get("_has_evidence"):
-            continue
-        fid = str(f.get("id") or "").strip()
-        if not fid:
-            continue
-        for wid in wstg_ids_for_finding(f):
-            ev_map.setdefault(wid, []).append(f"FINDING:{fid}")
-    return ev_map
-
-
-# Tools whose execution implies an injectable parameter/form was discovered.
-_INPUT_SURFACE_TOOLS: frozenset[str] = frozenset(
-    {"dalfox", "sqlmap", "xsstrike", "commix", "arjun", "tplmap"}
-)
-# Tools whose execution implies session/cookie or authenticated testing.
-_SESSION_TOOLS: frozenset[str] = frozenset({"cookie_probe", "jwt_tool"})
-_AUTH_TOOLS: frozenset[str] = frozenset({"hydra", "patator"})
-
-
-def _derive_wstg_surface_signals(
-    findings: list[dict[str, Any]],
-    tools_executed: list[str],
-    scan_meta: dict[str, Any] | None,
-) -> tuple[bool, bool, bool]:
-    """Return ``(authenticated, has_input_surface, has_cookies)`` conservatively.
-
-    Signals come from scan metadata plus the *facts* of the run (which tools ran,
-    which findings were produced), so applicability tracks what was genuinely
-    exercised rather than an operator assertion.
-    """
-    meta = scan_meta or {}
-    tool_set = {str(t).strip().lower() for t in tools_executed if t}
-
-    authenticated = bool(
-        meta.get("authenticated")
-        or meta.get("auth_testing_enabled")
-        or meta.get("credentials")
-        or meta.get("auth_config")
-        or (tool_set & (_AUTH_TOOLS | _SESSION_TOOLS))
-    )
-
-    has_input_surface = bool(tool_set & _INPUT_SURFACE_TOOLS)
-    has_cookies = bool(tool_set & _SESSION_TOOLS)
-    blob_types = {
-        str(f.get("vuln_type") or f.get("type") or "").lower() for f in findings
-    }
-    if not has_input_surface and any(
-        t in blob_types
-        for t in ("xss", "sqli", "sql_injection", "lfi", "rfi", "ssti", "ssrf", "idor")
-    ):
-        has_input_surface = True
-    if not has_cookies and any(
-        "cookie" in str(f.get("title") or "").lower()
-        or "cookie" in str(f.get("description") or "").lower()
-        for f in findings
-    ):
-        has_cookies = True
-
-    return authenticated, has_input_surface, has_cookies
-
-
 def _build_wstg_block(
     report_data: Any,
     scan_report_data: Any,
     *,
     scan_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Strict, evidence-based WSTG coverage report (Track B), or None when off.
+    """Evidence-based WSTG coverage snapshot (ARGUS-WSTG-COV-1), or None when off.
 
-    Coverage is scored over the *applicable* catalog: genuinely-out-of-scope
-    tests (no auth session / no input surface / no cookies / manual-only) are
-    excluded with an audited rationale, and each evidenced finding is linked to
-    the control it exercises so real coverage — not a tool-execution heuristic —
-    is reported.
+    Delegates to the single shared assembler (:func:`build_wstg_block`) so the
+    snapshot, legacy pipeline dict, renderers and frontend all read one computed
+    coverage. End-to-end path: findings → executions → evidence validation →
+    per-test states → gate → snapshot.
     """
     if not settings.wstg_strict_gate_enabled:
         return None
-    tools = _tools_executed(scan_report_data)
+    meta = scan_meta or {}
+    scan_id = str(meta.get("scan_id") or getattr(report_data, "scan_id", "") or "unknown")
+    target = str(meta.get("target") or getattr(report_data, "target", "") or "") or None
+    scope_version = str(meta.get("scope_version") or "default")
     findings = _finding_dicts_for_wstg(report_data)
-    authenticated, has_input_surface, has_cookies = _derive_wstg_surface_signals(
-        findings, tools, scan_meta
-    )
-    applicability, rationale = infer_wstg_applicability(
-        authenticated=authenticated,
-        has_input_surface=has_input_surface,
-        has_cookies=has_cookies,
-    )
-    base_plan = build_engagement_test_plan(
-        applicability=applicability, exclusion_rationale=rationale
-    )
-    states = derive_wstg_states(
-        tools,
+    evidence_entries = _evidence_entries_for_wstg(report_data)
+    return build_wstg_block(
         findings,
-        base_plan=base_plan,
-        evidence_by_test=_wstg_evidence_by_test(findings),
+        scan_id=scan_id,
+        target=target,
+        scope_version=scope_version,
+        evidence_entries=evidence_entries,
     )
-    return compute_wstg_coverage(states, catalog_size=len(states)).as_dict()
+
+
+def _evidence_entries_for_wstg(report_data: Any) -> list[dict[str, Any]]:
+    """Persisted evidence rows (finding_id + object_key + kind) for store-backed
+    evidence validation (ARGUS-WSTG-COV-1 §Evidence)."""
+    out: list[dict[str, Any]] = []
+    for entry in getattr(report_data, "evidence", None) or []:
+        get = (
+            entry.get if isinstance(entry, dict) else (lambda k, d=None, e=entry: getattr(e, k, d))
+        )
+        fid = get("finding_id")
+        object_key = get("object_key")
+        if fid and object_key:
+            out.append(
+                {
+                    "finding_id": str(fid),
+                    "object_key": str(object_key),
+                    "kind": str(get("kind", "") or ""),
+                }
+            )
+    return out
 
 
 def build_snapshot_from_report_data(

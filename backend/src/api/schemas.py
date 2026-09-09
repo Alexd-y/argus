@@ -1260,7 +1260,7 @@ class ReportListResponse(BaseModel):
     )
     wstg: dict[str, Any] | None = Field(
         default=None,
-        description="Strict WSTG v4.2 coverage report (Track B): coverage_pct, gate_passed, counts.",
+        description="Evidence-based WSTG v4.2 coverage (ARGUS-WSTG-COV-1). Nullable coverage_pct (null when the denominator is 0 or integrity errors exist), assessment_status, coverage_gate_passed, evidence_integrity_passed, per-test table, applicability decisions, integrity_errors and versions. Legacy gate_passed retained (deprecated) as a coverage-only signal, never a security assurance.",
     )
 
 
@@ -1291,7 +1291,7 @@ class ReportDetailResponse(BaseModel):
     )
     wstg: dict[str, Any] | None = Field(
         default=None,
-        description="Strict WSTG v4.2 coverage report (Track B): coverage_pct, gate_passed, counts.",
+        description="Evidence-based WSTG v4.2 coverage (ARGUS-WSTG-COV-1). Nullable coverage_pct (null when the denominator is 0 or integrity errors exist), assessment_status, coverage_gate_passed, evidence_integrity_passed, per-test table, applicability decisions, integrity_errors and versions. Legacy gate_passed retained (deprecated) as a coverage-only signal, never a security assurance.",
     )
 
 

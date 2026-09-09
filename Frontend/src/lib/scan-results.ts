@@ -83,14 +83,27 @@ export interface ScanBaseline {
   controls: ScanBaselineControl[];
 }
 
-/** Strict WSTG v4.2 coverage (Track B). Null when the backend did not emit it. */
+/** Overall WSTG assessment verdict (ARGUS-WSTG-COV-1 §Verdict). */
+export type WstgAssessmentStatus = "complete" | "limited" | "incomplete" | "invalid";
+
+/** Evidence-based WSTG v4.2 coverage. Null when the backend did not emit it. */
 export interface ScanWstg {
   version: string;
-  /** Coverage percentage 0..100 (completed_evidenced_applicable / applicable). */
-  coveragePct: number;
-  /** True only when coverage is strictly above the gate threshold. */
+  /**
+   * Coverage percentage of completed, evidence-validated tests over the
+   * applicable denominator. Null when undefined (zero denominator or an
+   * integrity violation) — never a plausible-but-unverified number.
+   */
+  coveragePct: number | null;
+  /** @deprecated Legacy combined signal; use coverageGatePassed + evidenceIntegrityPassed. */
   gatePassed: boolean;
+  /** Coverage strictly above the threshold. Not a security assurance. */
+  coverageGatePassed: boolean;
+  /** No data-integrity violations were detected. */
+  evidenceIntegrityPassed: boolean;
+  assessmentStatus: WstgAssessmentStatus | null;
   counted: number;
+  /** Applicable denominator (in-scope minus validated not-applicable). */
   applicable: number;
   catalogSize: number;
 }

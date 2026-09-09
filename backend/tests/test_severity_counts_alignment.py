@@ -48,6 +48,7 @@ def test_executive_severity_totals_empty_findings() -> None:
         "medium": 0,
         "low": 0,
         "info": 0,
+        "unknown": 0,
     }
     assert severity_histogram_from_finding_rows([]) == {}
 
@@ -61,10 +62,17 @@ def test_informational_maps_to_info_executive_histogram_keeps_label() -> None:
     assert hist.get("informational") == 2
 
 
-def test_executive_skips_empty_and_unknown_severity_histogram_counts_unknown() -> None:
+def test_executive_counts_unknown_bucket_sum_equals_population() -> None:
+    """Empty / blank / non-standard labels land in ``unknown`` — never dropped.
+
+    The bucket sum must equal the population size so a severity donut can never
+    silently lose findings (regression guard for the "unknown dropped" defect).
+    """
     rows = [_row("a", ""), _row("b", "   "), _row("c", "not_a_bucket")]
     ex = executive_severity_totals_from_finding_rows(rows)
-    assert sum(ex.values()) == 0
+    assert ex["unknown"] == 3
+    assert ex["critical"] == ex["high"] == ex["medium"] == ex["low"] == ex["info"] == 0
+    assert sum(ex.values()) == 3
     hist = severity_histogram_from_finding_rows(rows)
     assert hist.get("unknown") == 2
     assert hist.get("not_a_bucket") == 1
@@ -169,6 +177,6 @@ def test_minimal_jinja_recon_summary_and_severity_match_findings() -> None:
         technologies=[],
     )
     ctx = minimal_jinja_context_from_report_data(rd, "midgard")
-    want = {"critical": 0, "high": 0, "medium": 0, "low": 1, "info": 1}
+    want = {"critical": 0, "high": 0, "medium": 0, "low": 1, "info": 1, "unknown": 0}
     assert ctx["severity_counts"] == want
     assert ctx["recon_summary"]["summary_counts"] == want

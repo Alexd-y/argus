@@ -163,8 +163,10 @@ class ReportDocumentV1(BaseModel):
     budget_usage: dict[str, Any] = Field(default_factory=dict)
     limitations: list[str] = Field(default_factory=list)
 
-    # Strict WSTG v4.2 coverage report (Track B) — evidence-based coverage +
-    # gate decision (src/reports/wstg_gate). None when the strict gate is off.
+    # Evidence-based WSTG v4.2 coverage (ARGUS-WSTG-COV-1) — per-test states,
+    # applicability decisions, executions, integrity errors, verdict and versions
+    # (see docs/wstg-coverage.md, built by src/reports/wstg_report.build_wstg_block).
+    # None when the coverage subsystem is disabled.
     wstg: dict[str, Any] | None = None
 
     # Validation of the evidence gate (populated during build)

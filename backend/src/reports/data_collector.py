@@ -43,6 +43,7 @@ from src.db.models import ScanTimeline as ScanTimelineModel
 from src.db.models import ToolRun as ToolRunModel
 from src.findings.lifecycle_bridge import retain_findings_despite_ai_classification
 from src.findings.repository import get_findings_repository
+from src.findings.severity import aggregate_severity
 from src.owasp.owasp_loader import get_owasp_category_info
 from src.owasp_top10_2025 import (
     OWASP_TOP10_2025_CATEGORY_IDS,
@@ -210,17 +211,27 @@ def severity_histogram_from_severity_strings(severities: Iterable[str | None]) -
 def executive_severity_totals_from_severity_strings(
     severities: Iterable[str | None],
 ) -> dict[str, int]:
-    """Top-5 buckets used in executive table and ``ReportSummary`` (``informational`` → ``info``)."""
-    totals = dict.fromkeys(("critical", "high", "medium", "low", "info"), 0)
-    alias = {"informational": "info"}
-    for raw in severities:
-        s = (raw or "").strip().lower()
-        if not s:
-            continue
-        s = alias.get(s, s)
-        if s in totals:
-            totals[s] += 1
-    return totals
+    """Canonical severity buckets for the executive table / ``ReportSummary``.
+
+    Delegates to :func:`src.findings.severity.aggregate_severity` — the single
+    source of truth. Differences vs. the historical implementation (all
+    intentional; see docs/finding-severity-and-counting.md):
+
+    * ``informational`` (and CVSS "None") map to the ``info`` bucket for
+      template back-compat, but ``unknown`` is now a **first-class bucket**
+      instead of being silently dropped;
+    * an unrecognised label counts as ``unknown`` rather than vanishing, so
+      ``sum(totals.values())`` equals the number of findings in the population.
+    """
+    counts = aggregate_severity(severities)
+    return {
+        "critical": counts.critical,
+        "high": counts.high,
+        "medium": counts.medium,
+        "low": counts.low,
+        "info": counts.informational,
+        "unknown": counts.unknown,
+    }
 
 
 def severity_histogram_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:

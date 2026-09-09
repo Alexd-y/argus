@@ -80,13 +80,27 @@ def render_xml(doc: ReportDocumentV1) -> str:
         w = doc.wstg
         we = SubElement(root, "wstg")
         we.set("version", str(w.get("wstg_version", "")))
-        we.set("coverage_pct", str(w.get("coverage_pct", "")))
-        we.set("gate_passed", str(w.get("gate_passed", "")))
+        we.set("policy_version", str(w.get("policy_version", "")))
+        we.set(
+            "schema_version",
+            "" if w.get("schema_version") is None else str(w.get("schema_version")),
+        )
+        we.set("legacy_unverified", "true" if w.get("schema_version") is None else "false")
+        we.set("applicability_rules_version", str(w.get("applicability_rules_version", "")))
+        we.set("scenario_registry_version", str(w.get("scenario_registry_version", "")))
+        we.set("coverage_pct", "" if w.get("coverage_pct") is None else str(w.get("coverage_pct")))
+        we.set("assessment_status", str(w.get("assessment_status", "")))
+        we.set("coverage_gate_passed", str(w.get("coverage_gate_passed", "")))
+        we.set("evidence_integrity_passed", str(w.get("evidence_integrity_passed", "")))
+        we.set("gate_passed", str(w.get("gate_passed", "")))  # deprecated
         for tag in (
             "threshold",
-            "catalog_size",
-            "applicable",
-            "not_applicable",
+            "catalog_total",
+            "in_scope_total",
+            "denominator",
+            "validated_not_applicable",
+            "out_of_scope",
+            "unknown_applicability",
             "counted",
             "completed_pass",
             "completed_fail",
@@ -98,9 +112,15 @@ def render_xml(doc: ReportDocumentV1) -> str:
             "inconclusive",
         ):
             _text(we, tag, w.get(tag))
-        errs_el = SubElement(we, "exclusion_errors")
-        for err in w.get("exclusion_errors") or []:
-            _text(errs_el, "error", err)
+        ierrs_el = SubElement(we, "integrity_errors")
+        for err in w.get("integrity_errors") or []:
+            if isinstance(err, dict):
+                iee = SubElement(ierrs_el, "integrity_error")
+                iee.set("code", str(err.get("code", "")))
+                iee.set("test_id", str(err.get("test_id", "")))
+                _text(iee, "detail", err.get("detail"))
+            else:
+                _text(ierrs_el, "integrity_error", err)
 
     fails = SubElement(root, "failures")
     for fl in doc.failures:

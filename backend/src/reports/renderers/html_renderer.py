@@ -50,8 +50,10 @@ def render_html(doc: ReportDocumentV1) -> str:
     if not doc.findings:
         parts.append("<p><em>not_assessed — no findings in this snapshot.</em></p>")
     for f in doc.findings:
-        parts.append(f'<h3 class="sev-{escape(f.severity)}">{escape(f.title)} '
-                     f"— <code>{escape(f.finding_id)}</code></h3>")
+        parts.append(
+            f'<h3 class="sev-{escape(f.severity)}">{escape(f.title)} '
+            f"— <code>{escape(f.finding_id)}</code></h3>"
+        )
         parts.append("<ul>")
         parts.append(f"<li>severity: <code>{escape(f.severity)}</code></li>")
         parts.append(f"<li>verification_status: <code>{escape(f.verification_status)}</code></li>")
@@ -94,17 +96,49 @@ def render_html(doc: ReportDocumentV1) -> str:
 
     if doc.wstg:
         w = doc.wstg
-        parts.append("<h2>WSTG v4.2 Coverage (strict)</h2>")
-        parts.append("<ul>")
+        cov = w.get("coverage_pct")
+        cov_txt = "n/a (undefined)" if cov is None else f"{cov}%"
+        parts.append("<h2>WSTG v4.2 Coverage</h2>")
+        # Historical snapshots predate the evidence-based schema — never present
+        # their numbers as newly validated (spec §13).
+        if w.get("schema_version") is None:
+            parts.append(
+                "<p><strong>legacy / unverified:</strong> this snapshot predates "
+                "evidence-based coverage (ARGUS-WSTG-COV-1); figures are shown as "
+                "recorded and were not re-validated.</p>"
+            )
+        else:
+            parts.append(
+                f"<p><small>policy <code>{_na(w.get('policy_version'))}</code>, "
+                f"rules <code>{_na(w.get('applicability_rules_version'))}</code>, "
+                f"scenarios <code>{_na(w.get('scenario_registry_version'))}</code>, "
+                f"catalog <code>{_na(w.get('catalog_checksum'))}</code></small></p>"
+            )
         parts.append(
-            f"<li>coverage: <code>{_na(w.get('coverage_pct'))}%</code> "
-            f"(threshold <code>{_na(w.get('threshold'))}%</code>)</li>"
+            "<p><em>pass/fail reflects a control's security result; the "
+            "percentage reflects execution completeness, not application "
+            "security.</em></p>"
         )
-        parts.append(f"<li>gate_passed: <code>{_na(w.get('gate_passed'))}</code></li>")
+        parts.append("<ul>")
+        parts.append(f"<li>assessment: <code>{_na(w.get('assessment_status'))}</code></li>")
         parts.append(
-            f"<li>counted: <code>{_na(w.get('counted'))}</code> / applicable "
-            f"<code>{_na(w.get('applicable'))}</code> "
-            f"(catalog <code>{_na(w.get('catalog_size'))}</code>)</li>"
+            f"<li>completed X of applicable: <code>{_na(w.get('counted'))}</code> / "
+            f"<code>{_na(w.get('denominator', w.get('applicable')))}</code> "
+            f"= <code>{cov_txt}</code> (threshold <code>{_na(w.get('threshold'))}%</code>)</li>"
+        )
+        parts.append(
+            f"<li>completed X of catalog: <code>{_na(w.get('counted'))}</code> / "
+            f"<code>{_na(w.get('catalog_total', w.get('catalog_size')))}</code></li>"
+        )
+        parts.append(
+            f"<li>coverage_gate_passed: <code>{_na(w.get('coverage_gate_passed'))}</code>, "
+            f"evidence_integrity_passed: <code>{_na(w.get('evidence_integrity_passed'))}</code></li>"
+        )
+        parts.append(
+            f"<li>not_applicable: <code>{_na(w.get('validated_not_applicable'))}</code>, "
+            f"out_of_scope: <code>{_na(w.get('out_of_scope'))}</code>, "
+            f"unknown: <code>{_na(w.get('unknown_applicability'))}</code>, "
+            f"blocked: <code>{_na(w.get('blocked'))}</code></li>"
         )
         parts.append(
             f"<li>completed_pass: <code>{_na(w.get('completed_pass'))}</code>, "
@@ -113,11 +147,17 @@ def render_html(doc: ReportDocumentV1) -> str:
             f"not_started: <code>{_na(w.get('not_started'))}</code></li>"
         )
         parts.append("</ul>")
-        errs = w.get("exclusion_errors") or []
-        if errs:
-            parts.append("<ul>")
-            for err in errs:
-                parts.append(f"<li>exclusion_error: {escape(str(err))}</li>")
+        ierrs = w.get("integrity_errors") or []
+        if ierrs:
+            parts.append("<h3>Integrity errors</h3><ul>")
+            for err in ierrs:
+                code = err.get("code") if isinstance(err, dict) else str(err)
+                tid = err.get("test_id") if isinstance(err, dict) else ""
+                detail = err.get("detail") if isinstance(err, dict) else ""
+                parts.append(
+                    f"<li><code>{escape(str(code))}</code> "
+                    f"{escape(str(tid))}: {escape(str(detail))}</li>"
+                )
             parts.append("</ul>")
 
     parts.append("<h2>Limitations</h2>")

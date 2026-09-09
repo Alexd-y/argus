@@ -73,11 +73,13 @@ def test_wstg_present_when_flag_on(_flag_on):
     assert doc.wstg["catalog_size"] > 0
 
 
-def test_empty_scan_wstg_is_zero_and_gate_false(_flag_on):
+def test_empty_scan_wstg_is_undefined_and_gate_false(_flag_on):
     doc = build_snapshot_from_report_data(
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD([])
     )
-    assert doc.wstg["coverage_pct"] == 0.0
+    # No evidenced findings → nothing counted, coverage < threshold, gate false.
+    assert doc.wstg["counted"] == 0
+    assert doc.wstg["coverage_gate_passed"] is False
     assert doc.wstg["gate_passed"] is False
 
 
@@ -86,8 +88,8 @@ def test_markdown_renders_wstg_section_when_present(_flag_on):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap", "nuclei"])
     )
     md = render_markdown(doc)
-    assert "WSTG v4.2 Coverage (strict)" in md
-    assert "gate_passed" in md
+    assert "WSTG v4.2 Coverage" in md
+    assert "assessment" in md
 
 
 def test_markdown_omits_wstg_section_when_absent(_flag_off):
@@ -95,7 +97,7 @@ def test_markdown_omits_wstg_section_when_absent(_flag_off):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
     )
     md = render_markdown(doc)
-    assert "WSTG v4.2 Coverage (strict)" not in md
+    assert "WSTG v4.2 Coverage" not in md
 
 
 def test_xml_contains_wstg_element_when_present(_flag_on):
@@ -122,8 +124,8 @@ def test_html_contains_wstg_section_when_present(_flag_on):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap", "nuclei"])
     )
     html = render_html(doc)
-    assert "WSTG v4.2 Coverage (strict)" in html
-    assert "gate_passed" in html
+    assert "WSTG v4.2 Coverage" in html
+    assert "assessment" in html
 
 
 def test_html_omits_wstg_section_when_absent(_flag_off):
@@ -131,4 +133,4 @@ def test_html_omits_wstg_section_when_absent(_flag_off):
         _ReportData([]), scan_meta={"scan_id": "s1"}, scan_report_data=_SRD(["nmap"])
     )
     html = render_html(doc)
-    assert "WSTG v4.2 Coverage (strict)" not in html
+    assert "WSTG v4.2 Coverage" not in html

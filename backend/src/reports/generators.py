@@ -1160,9 +1160,12 @@ def _verify_cross_format(
     # computed here must equal what the renderers (Jinja context) used.
     if expected_severity_totals is not None:
         computed_totals = headline_severity_totals(findings, tier)
+        # Normalise both sides to the canonical band set (including ``unknown``)
+        # so a renderer that emits the legacy 5-bucket dict still matches — the
+        # gate must not fire just because the ``unknown`` bucket was added.
         normalized_expected = {
             k: int(expected_severity_totals.get(k, 0))
-            for k in ("critical", "high", "medium", "low", "info")
+            for k in ("critical", "high", "medium", "low", "info", "unknown")
         }
         if computed_totals != normalized_expected:
             issues.append(

@@ -1,149 +1,259 @@
-"""Engagement-scoped WSTG v4.2 applicability (Track B, spec §4).
+"""Structured, surface-driven WSTG applicability (ARGUS-WSTG-COV-1 §Applicability).
 
-The strict gate (:mod:`src.reports.wstg_gate`) scores
-``coverage = counted / applicable``. Every WSTG test starts applicable and is
-only removed from the denominator with a **written rationale** that is audited
-(so exclusions can never silently inflate the score).
+This replaces the previous heuristic that excluded whole test groups whenever the
+scanner happened to run unauthenticated. That was wrong:
 
-This module derives those rationale-backed exclusions from the *engagement
-surface* actually observed:
+* the *scanner* lacking a session does not prove the *application* lacks an auth
+  mechanism (spec §3.1);
+* ``manual_required`` / ``unsupported`` mean "we could not automate it", not "the
+  target is out of applicability scope" (spec §3.2).
 
-* No authenticated session in scope → identity / authentication-flow /
-  authorization / session / business-logic tests have no account context to
-  exercise and are excluded.
-* No injectable parameter or form discovered → parameter-injection tests have no
-  entry point.
-* No session cookie issued → cookie-attribute testing is not applicable.
-* A fixed set of interactive / manual-only / obsolete tests that an automated,
-  unauthenticated assessment structurally does not evidence.
+The honest model: a test's applicability derives from **structured surface
+observations** (:mod:`src.reports.wstg_surface`), and defaults to ``unknown``
+(which stays in the denominator) whenever the required feature has not been
+positively observed. A test is excluded (``not_applicable``) only when the
+required feature is *confirmed absent in scope* with evidence.
 
-The result feeds :func:`src.reports.wstg_plan.build_engagement_test_plan` so the
-denominator reflects what was genuinely in scope for the run. Every excluded
-test carries a customer-safe English rationale (no secrets/PII).
+A confirmed finding mapped to a test always forces ``applicable`` and, if a prior
+N/A existed, records a contradiction for the gate to surface.
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from src.reports.wstg_coverage import _WSTG_TESTS
+from src.reports.wstg_model import Applicability, ApplicabilityDecision, ReasonCode
+from src.reports.wstg_surface import (
+    SurfaceFeature,
+    SurfaceObservation,
+    build_surface_index,
+)
 
-# Require an authenticated session / application account (or a login credential
-# submission channel) to exercise.
-_AUTH_DEPENDENT: frozenset[str] = frozenset(
+RULE_VERSION = "argus-wstg-cov-1"
+
+# Categories whose tests apply to essentially any reachable web target and thus
+# carry no surface precondition (they are never blanket-excluded).
+_UNIVERSAL_CATEGORIES: frozenset[str] = frozenset(
     {
-        "WSTG-IDNT-01", "WSTG-IDNT-02", "WSTG-IDNT-03", "WSTG-IDNT-04", "WSTG-IDNT-05",
-        "WSTG-ATHN-01",  # credentials over encrypted channel — needs a login submission
-        "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-05", "WSTG-ATHN-06",
-        "WSTG-ATHN-07", "WSTG-ATHN-09",
-        "WSTG-ATHZ-02", "WSTG-ATHZ-03", "WSTG-ATHZ-04",
-        "WSTG-SESS-01", "WSTG-SESS-03", "WSTG-SESS-04", "WSTG-SESS-05",
-        "WSTG-SESS-06", "WSTG-SESS-07", "WSTG-SESS-08", "WSTG-SESS-09",
-        "WSTG-BUSL-01", "WSTG-BUSL-02", "WSTG-BUSL-03", "WSTG-BUSL-04",
-        "WSTG-BUSL-05", "WSTG-BUSL-06", "WSTG-BUSL-07",
+        "Information Gathering",
+        "Configuration and Deployment",
+        "Error Handling",
+        "Cryptography",
     }
 )
 
-# Require host-level / cloud-provider context not available to an external,
-# unauthenticated automated assessment.
-_ENV_DEPENDENT: frozenset[str] = frozenset(
+# Category → the surface features a test needs (any-of). Absence of *all* of them
+# (confirmed) makes the test not-applicable; an unknown feature keeps it unknown.
+_CATEGORY_REQUIREMENTS: dict[str, tuple[SurfaceFeature, ...]] = {
+    "Identity Management": (SurfaceFeature.AUTH_MECHANISM,),
+    "Authentication": (SurfaceFeature.AUTH_MECHANISM,),
+    "Authorization": (SurfaceFeature.AUTH_MECHANISM, SurfaceFeature.CONFIRMED_ROLES),
+    "Session Management": (SurfaceFeature.AUTH_MECHANISM, SurfaceFeature.COOKIES),
+    "Input Validation": (
+        SurfaceFeature.FORMS,
+        SurfaceFeature.QUERY_PARAMS,
+        SurfaceFeature.BODY_INPUTS,
+    ),
+    "Business Logic Testing": (
+        SurfaceFeature.FORMS,
+        SurfaceFeature.BODY_INPUTS,
+        SurfaceFeature.API,
+    ),
+    "Client-side Testing": (SurfaceFeature.CLIENT_INPUT,),
+    "API Testing": (SurfaceFeature.API,),
+}
+
+# Per-test overrides for tests whose requirement differs from their category.
+_TEST_REQUIREMENTS: dict[str, tuple[SurfaceFeature, ...]] = {
+    "WSTG-SESS-02": (SurfaceFeature.COOKIES,),  # cookie attributes need a cookie
+    "WSTG-ATHZ-01": (SurfaceFeature.QUERY_PARAMS, SurfaceFeature.PATH_PARAMS),
+    "WSTG-BUSL-08": (SurfaceFeature.FILE_UPLOAD,),
+    "WSTG-BUSL-09": (SurfaceFeature.FILE_UPLOAD,),
+    "WSTG-CLNT-10": (SurfaceFeature.WEBSOCKETS,),
+}
+
+# Tests that need human judgement and cannot be fully automated by ARGUS today.
+# CRITICAL (spec §3.2, §16): ``manual_required`` is NOT ``not_applicable`` — these
+# stay ``unknown`` and remain in the denominator; the reason_code just makes the
+# limitation explicit in the report instead of silently excluding them.
+_MANUAL_REQUIRED_TESTS: frozenset[str] = frozenset(
     {
-        "WSTG-CONF-09",  # file permission — needs host/file-system access
-        "WSTG-CONF-11",  # cloud storage — needs a cloud-provider context
+        "WSTG-IDNT-02",  # user registration process — workflow judgement
+        "WSTG-IDNT-03",  # account provisioning — workflow judgement
+        "WSTG-ATHN-08",  # weak security question answers — content judgement
+        "WSTG-BUSL-01",  # business logic data validation
+        "WSTG-BUSL-02",  # ability to forge requests
+        "WSTG-BUSL-03",  # integrity checks
+        "WSTG-BUSL-04",  # process timing
+        "WSTG-BUSL-05",  # function-use limits
+        "WSTG-BUSL-06",  # circumvention of workflows
+        "WSTG-BUSL-07",  # defenses against application misuse
     }
 )
 
-# Require an injectable parameter / form / path to exercise.
-_INPUT_DEPENDENT: frozenset[str] = frozenset(
+# Tests with no automated executor wired in the current toolset. Still in scope
+# and in the denominator; surfaced with an ``unsupported`` reason_code.
+_UNSUPPORTED_TESTS: frozenset[str] = frozenset(
     {
-        "WSTG-ATHZ-01",  # directory traversal — needs a file/path parameter
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-04", "WSTG-INPV-05",
-        "WSTG-INPV-06", "WSTG-INPV-07", "WSTG-INPV-08", "WSTG-INPV-09",
-        "WSTG-INPV-10", "WSTG-INPV-11", "WSTG-INPV-12", "WSTG-INPV-13",
-        "WSTG-INPV-15", "WSTG-INPV-17", "WSTG-INPV-18", "WSTG-INPV-19",
-        "WSTG-CLNT-01", "WSTG-CLNT-03", "WSTG-CLNT-04", "WSTG-CLNT-05",
-        "WSTG-CLNT-06",
+        "WSTG-INPV-13",  # format string injection — no automated executor
+        "WSTG-INPV-14",  # incubated vulnerabilities — no automated executor
+        "WSTG-INPV-16",  # HTTP incoming requests — no automated executor
+        "WSTG-CRYP-02",  # padding oracle — no automated executor
     }
 )
 
-# Require a server-issued session cookie to exercise.
-_COOKIE_DEPENDENT: frozenset[str] = frozenset({"WSTG-SESS-02"})
 
-# Interactive / manual-only / obsolete tests an automated unauthenticated run
-# does not evidence. Excluded regardless of surface signals.
-_MANUAL_OR_OBSOLETE: frozenset[str] = frozenset(
-    {
-        "WSTG-INFO-07",   # map execution paths — manual analysis
-        "WSTG-INPV-03",   # HTTP verb tampering — manual verification
-        "WSTG-INPV-14",   # incubated vulnerabilities — manual
-        "WSTG-INPV-16",   # incoming HTTP requests inspection — manual
-        "WSTG-ATHN-08",   # weak security-question answer — manual, account-bound
-        "WSTG-ATHN-10",   # weaker auth in alternative channel — manual
-        "WSTG-BUSL-08",   # upload of unexpected file types — needs upload feature
-        "WSTG-BUSL-09",   # upload of malicious files — needs upload feature
-        "WSTG-CLNT-08",   # cross-site flashing — Adobe Flash obsolete
-        "WSTG-CLNT-10",   # WebSockets — interactive
-        "WSTG-CLNT-11",   # web messaging — interactive
-    }
-)
-
-_RATIONALE_AUTH = (
-    "No authenticated application session was in scope for this run; this control "
-    "requires an account/role context to exercise. Recommend an authenticated "
-    "re-test to cover it."
-)
-_RATIONALE_INPUT = (
-    "No injectable parameter, form, or file/path entry point was discovered on the "
-    "target; this parameter-injection test has no entry point to exercise."
-)
-_RATIONALE_COOKIE = (
-    "The target issued no session cookie; cookie-attribute controls are not "
-    "applicable to this engagement."
-)
-_RATIONALE_MANUAL = (
-    "Interactive/manual-only or obsolete test not evidenced by the automated "
-    "unauthenticated assessment; flagged for manual review rather than counted."
-)
-_RATIONALE_ENV = (
-    "Requires host-level or cloud-provider context that is not available in an "
-    "external unauthenticated automated assessment."
-)
+def _requirements_for(test_id: str, category: str) -> tuple[SurfaceFeature, ...]:
+    if test_id in _TEST_REQUIREMENTS:
+        return _TEST_REQUIREMENTS[test_id]
+    if category in _UNIVERSAL_CATEGORIES:
+        return ()
+    return _CATEGORY_REQUIREMENTS.get(category, ())
 
 
-def infer_wstg_applicability(
-    *,
-    authenticated: bool,
-    has_input_surface: bool,
-    has_cookies: bool,
-) -> tuple[dict[str, bool], dict[str, str]]:
-    """Derive ``(applicability, exclusion_rationale)`` from engagement surface.
+def _execution_limitation(test_id: str) -> tuple[ReasonCode, str] | None:
+    """Return an execution-limitation ``reason_code`` for manual/unsupported tests.
 
-    A test is marked not-applicable (``applicability[id] = False``) only together
-    with a written ``exclusion_rationale[id]`` so the strict gate honours the
-    exclusion; otherwise it stays applicable (fail-closed).
+    Returns ``None`` for tests ARGUS can automate. The limitation never changes
+    applicability (it stays ``unknown``/``applicable`` and in the denominator) —
+    it only records *why* the test is unlikely to auto-complete.
     """
-    applicability: dict[str, bool] = {}
-    rationale: dict[str, str] = {}
-    valid_ids = {t.id for t in _WSTG_TESTS}
-
-    def exclude(test_id: str, why: str) -> None:
-        if test_id in valid_ids:
-            applicability[test_id] = False
-            rationale[test_id] = why
-
-    if not authenticated:
-        for tid in _AUTH_DEPENDENT:
-            exclude(tid, _RATIONALE_AUTH)
-    if not has_input_surface:
-        for tid in _INPUT_DEPENDENT:
-            exclude(tid, _RATIONALE_INPUT)
-    if not has_cookies:
-        for tid in _COOKIE_DEPENDENT:
-            exclude(tid, _RATIONALE_COOKIE)
-    for tid in _MANUAL_OR_OBSOLETE:
-        exclude(tid, _RATIONALE_MANUAL)
-    for tid in _ENV_DEPENDENT:
-        exclude(tid, _RATIONALE_ENV)
-
-    return applicability, rationale
+    if test_id in _MANUAL_REQUIRED_TESTS:
+        return (
+            ReasonCode.MANUAL_REQUIRED,
+            "Requires manual analyst execution; not fully automatable by ARGUS.",
+        )
+    if test_id in _UNSUPPORTED_TESTS:
+        return (
+            ReasonCode.UNSUPPORTED,
+            "No automated executor is wired for this test in the current toolset.",
+        )
+    return None
 
 
-__all__ = ["infer_wstg_applicability"]
+def decide_applicability(
+    *,
+    surface: list[SurfaceObservation] | None = None,
+    finding_test_ids: frozenset[str] = frozenset(),
+    scope_version: str | None = None,
+    now: str | None = None,
+) -> dict[str, ApplicabilityDecision]:
+    """Produce one :class:`ApplicabilityDecision` per catalog test.
+
+    ``finding_test_ids`` are tests with a confirmed finding — they are always
+    applicable (a finding proves the surface exists) and override any N/A.
+    """
+    index = build_surface_index(surface or [])
+    decided_at = now or datetime.now(UTC).isoformat()
+    out: dict[str, ApplicabilityDecision] = {}
+
+    for tc in _WSTG_TESTS:
+        reqs = _requirements_for(tc.id, tc.category)
+        rule_id = f"req:{tc.id}" if tc.id in _TEST_REQUIREMENTS else f"cat:{tc.category}"
+        limitation = _execution_limitation(tc.id)
+
+        if tc.id in finding_test_ids:
+            out[tc.id] = ApplicabilityDecision(
+                test_id=tc.id,
+                state=Applicability.APPLICABLE,
+                rationale="A confirmed finding maps to this test; the feature exists.",
+                rule_id=rule_id,
+                rule_version=RULE_VERSION,
+                scope_version=scope_version,
+                decided_at=decided_at,
+                source="finding_reconsideration",
+            )
+            continue
+
+        if not reqs:
+            reason = limitation[0] if limitation else None
+            rationale = (
+                limitation[1]
+                if limitation
+                else "Applies to any reachable web target (no surface precondition)."
+            )
+            out[tc.id] = ApplicabilityDecision(
+                test_id=tc.id,
+                state=Applicability.APPLICABLE,
+                reason_code=reason,
+                rationale=rationale,
+                rule_id=rule_id,
+                rule_version=RULE_VERSION,
+                scope_version=scope_version,
+                decided_at=decided_at,
+                source="catalog_rule",
+            )
+            continue
+
+        observed = [index.get(f) for f in reqs]
+        if any(o is not None and o.confirms_present() for o in observed):
+            state, reason, rationale, ev = (
+                Applicability.APPLICABLE,
+                limitation[0] if limitation else None,
+                (
+                    limitation[1]
+                    if limitation
+                    else "A required input/feature was positively observed on the target."
+                ),
+                _collect_evidence(observed, present=True),
+            )
+        elif observed and all(o is not None and o.confirms_absent() for o in observed):
+            feats = ", ".join(f.value for f in reqs)
+            state, reason, rationale, ev = (
+                Applicability.NOT_APPLICABLE,
+                ReasonCode.FEATURE_ABSENT,
+                f"Required feature(s) confirmed absent in scope by completed discovery: {feats}.",
+                _collect_evidence(observed, present=False),
+            )
+        elif limitation is not None:
+            # No conclusive surface, but the test is known-manual/unsupported:
+            # keep it in the denominator (unknown) and surface the real reason.
+            state, reason, rationale, ev = (
+                Applicability.UNKNOWN,
+                limitation[0],
+                limitation[1],
+                (),
+            )
+        else:
+            feats = ", ".join(f.value for f in reqs)
+            state, reason, rationale, ev = (
+                Applicability.UNKNOWN,
+                ReasonCode.DISCOVERY_INCOMPLETE,
+                f"Required feature(s) not conclusively observed ({feats}); kept in scope.",
+                (),
+            )
+
+        out[tc.id] = ApplicabilityDecision(
+            test_id=tc.id,
+            state=state,
+            reason_code=reason,
+            rationale=rationale,
+            evidence_refs=ev,
+            rule_id=rule_id,
+            rule_version=RULE_VERSION,
+            scope_version=scope_version,
+            decided_at=decided_at,
+            source="surface_rule",
+        )
+    return out
+
+
+def _collect_evidence(
+    observed: list[SurfaceObservation | None], *, present: bool
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    for o in observed:
+        if o is None:
+            continue
+        if (present and o.confirms_present()) or (not present and o.confirms_absent()):
+            refs.extend(o.evidence_refs)
+    return tuple(dict.fromkeys(refs))
+
+
+__all__ = [
+    "RULE_VERSION",
+    "_MANUAL_REQUIRED_TESTS",
+    "_UNSUPPORTED_TESTS",
+    "decide_applicability",
+]

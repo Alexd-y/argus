@@ -13,6 +13,7 @@ warnings on parse failure (which surface to the caller as ``ValueError``).
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal
 from typing import Final, Literal
 
@@ -100,8 +101,14 @@ def severity_label(score: float | None) -> str:
     """
     if score is None:
         return "None"
-    if not isinstance(score, (int, float)):
+    # ``bool`` is a subclass of ``int`` — reject it explicitly so ``True``
+    # cannot masquerade as the score ``1.0``.
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
         raise TypeError(f"severity_label expects float, got {type(score).__name__}")
+    # NaN slips through naive range checks (``nan < 0`` and ``nan > 10`` are
+    # both ``False``); reject any non-finite value up front.
+    if not math.isfinite(score):
+        raise ValueError(f"severity_label score must be finite; got {score}")
     if score < 0.0 or score > 10.0:
         raise ValueError(f"severity_label score must be in [0.0, 10.0]; got {score}")
     if score == 0.0:

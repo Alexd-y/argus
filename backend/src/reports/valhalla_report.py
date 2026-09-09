@@ -82,7 +82,12 @@ _VALHALLA_AI_SECTION_ORDER: tuple[str, ...] = (
 )
 
 _SEVERITY_RANK: dict[str, int] = {
-    "critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "informational": 4,
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+    "info": 4,
+    "informational": 4,
 }
 
 _FIRST_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z\u0410-\u042f\u0401])")
@@ -333,13 +338,22 @@ def _build_xss_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any]
                 "finding_id": str(f.get("id") or f.get("finding_id") or ""),
                 "title": _truncate(str(f.get("title") or ""), 300),
                 "parameter": _truncate(str(poc.get("parameter") or ""), 256) or None,
-                "payload_entered": _truncate(str(poc.get("payload_entered") or poc.get("payload") or ""), 600) or None,
-                "payload_reflected": _truncate(str(poc.get("payload_reflected") or ""), 600) or None,
+                "payload_entered": _truncate(
+                    str(poc.get("payload_entered") or poc.get("payload") or ""), 600
+                )
+                or None,
+                "payload_reflected": _truncate(str(poc.get("payload_reflected") or ""), 600)
+                or None,
                 "payload_used": _truncate(str(poc.get("payload_used") or ""), 600) or None,
-                "reflection_context": _truncate(str(poc.get("reflection_context") or poc.get("context") or ""), 400) or None,
-                "verification_method": _truncate(str(poc.get("verification_method") or ""), 128) or None,
+                "reflection_context": _truncate(
+                    str(poc.get("reflection_context") or poc.get("context") or ""), 400
+                )
+                or None,
+                "verification_method": _truncate(str(poc.get("verification_method") or ""), 128)
+                or None,
                 "verified_via_browser": poc.get("verified_via_browser"),
-                "browser_alert_text": _truncate(str(poc.get("browser_alert_text") or ""), 400) or None,
+                "browser_alert_text": _truncate(str(poc.get("browser_alert_text") or ""), 400)
+                or None,
                 "artifact_keys": [str(k)[:512] for k in poc.get("artifact_keys", []) if k][:16],
                 "artifact_urls": [str(u)[:1024] for u in poc.get("artifact_urls", []) if u][:8],
             }
@@ -363,16 +377,19 @@ def _build_csrf_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any
             {
                 "finding_id": str(f.get("id") or f.get("finding_id") or ""),
                 "title": _truncate(str(f.get("title") or ""), 300),
-                "endpoint": _truncate(str(poc.get("url") or poc.get("endpoint") or ""), 512) or None,
+                "endpoint": _truncate(str(poc.get("url") or poc.get("endpoint") or ""), 512)
+                or None,
                 "method": str(poc.get("method") or "POST"),
                 "state_changing": poc.get("state_changing"),
                 "token_status": str(poc.get("csrf_token_status") or "missing"),
                 "raw_html_form": _truncate(str(poc.get("raw_html_form") or ""), 1024) or None,
-                "raw_post": _truncate(str(poc.get("raw_post") or poc.get("payload") or ""), 512) or None,
+                "raw_post": _truncate(str(poc.get("raw_post") or poc.get("payload") or ""), 512)
+                or None,
                 "cookies": str(poc.get("cookies") or ""),
                 "origin_referer": str(poc.get("origin") or poc.get("referer") or ""),
                 "negative_control": _truncate(str(poc.get("negative_control") or ""), 256) or None,
-                "verified": bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated")),
+                "verified": bool(poc.get("verified_via_browser"))
+                or bool(poc.get("exploit_demonstrated")),
             }
         )
         if len(out) >= 40:
@@ -395,14 +412,22 @@ def _build_cmdi_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any
             {
                 "finding_id": str(f.get("id") or f.get("finding_id") or ""),
                 "title": _truncate(str(f.get("title") or ""), 300),
-                "parameter": _truncate(str(poc.get("parameter") or poc.get("input") or ""), 256) or None,
+                "parameter": _truncate(str(poc.get("parameter") or poc.get("input") or ""), 256)
+                or None,
                 "payload": _truncate(str(poc.get("payload") or ""), 512) or None,
                 "harmless_marker": _truncate(str(poc.get("harmless_marker") or ""), 256) or None,
-                "controlled_output": _truncate(str(poc.get("controlled_output") or poc.get("command_output") or ""), 512) or None,
-                "server_proof": _truncate(str(poc.get("server_proof") or poc.get("log_entry") or ""), 512) or None,
+                "controlled_output": _truncate(
+                    str(poc.get("controlled_output") or poc.get("command_output") or ""), 512
+                )
+                or None,
+                "server_proof": _truncate(
+                    str(poc.get("server_proof") or poc.get("log_entry") or ""), 512
+                )
+                or None,
                 "output_source": str(poc.get("output_source") or "stdout"),
                 "negative_control": _truncate(str(poc.get("negative_control") or ""), 256) or None,
-                "verified": bool(poc.get("verified_via_browser")) or bool(poc.get("exploit_demonstrated")),
+                "verified": bool(poc.get("verified_via_browser"))
+                or bool(poc.get("exploit_demonstrated")),
             }
         )
         if len(out) >= 40:
@@ -411,8 +436,12 @@ def _build_cmdi_structured(findings: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def _build_attack_scenarios(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    validated = [f for f in findings if f.get("confidence") in ("confirmed", "likely")
-                 and f.get("evidence_quality") in ("strong", "moderate")]
+    validated = [
+        f
+        for f in findings
+        if f.get("confidence") in ("confirmed", "likely")
+        and f.get("evidence_quality") in ("strong", "moderate")
+    ]
     if len(validated) < 2:
         return []
     critical = [f for f in validated if (f.get("severity") or "").lower() in ("critical", "high")]
@@ -439,12 +468,16 @@ def _build_attack_scenarios(findings: list[dict[str, Any]]) -> list[dict[str, An
     return scenarios
 
 
-def _build_exploit_chains(exploits: list[dict[str, Any]], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _build_exploit_chains(
+    exploits: list[dict[str, Any]], findings: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     verified = [e for e in exploits if e.get("status") in ("verified", "executed")]
     chains: list[dict[str, Any]] = []
     for i, ex in enumerate(verified[:4], 1):
         fid = ex.get("finding_id", "")
-        matched = next((f for f in findings if f.get("id") == fid or f.get("finding_id") == fid), None)
+        matched = next(
+            (f for f in findings if f.get("id") == fid or f.get("finding_id") == fid), None
+        )
         chains.append(
             {
                 "index": i,
@@ -461,16 +494,21 @@ def _build_exploit_chains(exploits: list[dict[str, Any]], findings: list[dict[st
     return chains
 
 
-def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[str, Any] | None = None) -> dict[str, Any]:
+def _build_remediation_stages(
+    findings: list[dict[str, Any]], tech_stack: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """VHL-REMEDIATION-001 — Remediation matrix with full traceability.
 
     Each finding maps to: affected layer, owner team, config/component, fix,
     priority, rollback risk, verification step, acceptance criteria.
     """
     critical = [f for f in findings if (f.get("severity") or "").lower() in ("critical", "high")]
-    high_cvss = [f for f in findings
-                 if isinstance((f.get("cvss") or f.get("cvss_score")), (int, float))
-                 and float(f.get("cvss") or f.get("cvss_score") or 0) >= 7.0]
+    high_cvss = [
+        f
+        for f in findings
+        if isinstance((f.get("cvss") or f.get("cvss_score")), (int, float))
+        and float(f.get("cvss") or f.get("cvss_score") or 0) >= 7.0
+    ]
     medium = [f for f in findings if (f.get("severity") or "").lower() == "medium"]
     low = [f for f in findings if (f.get("severity") or "").lower() == "low"]
 
@@ -577,13 +615,17 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
         "security": "Security team",
     }
 
-    def _contextual_fallback(f: dict[str, Any], field: str, tech_stack: dict[str, Any] | None = None) -> str:
+    def _contextual_fallback(
+        f: dict[str, Any], field: str, tech_stack: dict[str, Any] | None = None
+    ) -> str:
         poc = f.get("proof_of_concept") or {}
         if not isinstance(poc, dict):
             poc = {}
         cwe = str(f.get("cwe") or "").upper()
         title = str(f.get("title") or "").lower()
-        affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")
+        affected_url = str(
+            poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or ""
+        )
         affected_parameter = str(poc.get("parameter") or "")
         severity = str(f.get("severity") or "info").lower()
         ts = tech_stack or {}
@@ -591,7 +633,11 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
         frameworks = str(ts.get("frameworks") or "").lower()
 
         if field == "owner":
-            layer = str(f.get("data", {}).get("affected_layer") or "").lower() if isinstance(f.get("data"), dict) else ""
+            layer = (
+                str(f.get("data", {}).get("affected_layer") or "").lower()
+                if isinstance(f.get("data"), dict)
+                else ""
+            )
             if not layer:
                 if "cloudfront" in web_server:
                     return "CloudFront / CDN team"
@@ -605,7 +651,9 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
                 return "CloudFront / CDN team"
             if "next" in frameworks or "nextjs" in frameworks:
                 return "Frontend development team (Next.js)"
-            return _OWNER_BY_LAYER.get(layer, "Relevant development team (assign per endpoint ownership)")
+            return _OWNER_BY_LAYER.get(
+                layer, "Relevant development team (assign per endpoint ownership)"
+            )
 
         if field == "component":
             if "cloudfront" in web_server:
@@ -621,11 +669,19 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
             if "rate" in title:
                 return "Rate limiter middleware / reverse proxy"
             if "command" in title or "injection" in title:
-                part = f"Parameter: {affected_parameter}" if affected_parameter else "Input handling layer"
+                part = (
+                    f"Parameter: {affected_parameter}"
+                    if affected_parameter
+                    else "Input handling layer"
+                )
                 return part
             if "disclosure" in title or "info" in title:
                 return "Error handling / server configuration"
-            return f"Component at {affected_url}" if affected_url else "Affected endpoint (specify after investigation)"
+            return (
+                f"Component at {affected_url}"
+                if affected_url
+                else "Affected endpoint (specify after investigation)"
+            )
 
         if field == "fix":
             if "xss" in title or "cross-site" in title:
@@ -637,7 +693,9 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
             if "header" in title or "csp" in title or "hsts" in title:
                 if "cloudfront" in web_server:
                     return "Add Response Headers Policy in CloudFront Distribution with: Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy"
-                return "Configure missing HTTP security headers at reverse proxy or application level."
+                return (
+                    "Configure missing HTTP security headers at reverse proxy or application level."
+                )
             if "rate" in title or "limit" in title:
                 return "Implement per-IP and per-account rate limiting with exponential backoff and CAPTCHA."
             if "command" in title or "injection" in title:
@@ -645,7 +703,11 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
                 return f"Eliminate OS command execution from user input{param_hint}. Use language-native APIs or strict allowlist validation."
             if "disclosure" in title or "info" in title:
                 return "Remove information-leaking endpoints; disable verbose error messages in production."
-            return f"Review and remediate: {title}. Affected URL: {affected_url}" if affected_url else f"Review and remediate: {title}"
+            return (
+                f"Review and remediate: {title}. Affected URL: {affected_url}"
+                if affected_url
+                else f"Review and remediate: {title}"
+            )
 
         if field == "rollback_risk":
             if "header" in title or "csp" in title or "hsts" in title:
@@ -656,7 +718,13 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
 
         return ""
 
-    def _build_matrix_entry(f: dict[str, Any], priority: str, deadline: str, effort: str, tech_stack: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _build_matrix_entry(
+        f: dict[str, Any],
+        priority: str,
+        deadline: str,
+        effort: str,
+        tech_stack: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         f_type = str(f.get("type") or f.get("data", {}).get("type") or "").upper()
         remediation = None
         for key, rem in _REMEDIATION_MATRIX.items():
@@ -673,7 +741,9 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
                     break
 
         poc = f.get("proof_of_concept") or {}
-        affected_url = str(poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or "")[:512]
+        affected_url = str(
+            poc.get("request_url") or poc.get("affected_url") or f.get("affected_url") or ""
+        )[:512]
         affected_parameter = str(poc.get("parameter") or poc.get("affected_parameter") or "")[:256]
 
         return {
@@ -686,19 +756,58 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
             "deadline": deadline,
             "effort": effort,
             "affected_layer": remediation["affected_layer"] if remediation else "app/unknown",
-            "owner_team": remediation["owner"] if remediation else _contextual_fallback(f, "owner", tech_stack=tech_stack),
-            "config_component": remediation["component"] if remediation else _contextual_fallback(f, "component", tech_stack=tech_stack),
+            "owner_team": (
+                remediation["owner"]
+                if remediation
+                else _contextual_fallback(f, "owner", tech_stack=tech_stack)
+            ),
+            "config_component": (
+                remediation["component"]
+                if remediation
+                else _contextual_fallback(f, "component", tech_stack=tech_stack)
+            ),
             "affected_url": affected_url,
             "affected_parameter": affected_parameter,
-            "fix": remediation["action"] if remediation else _contextual_fallback(f, "fix", tech_stack=tech_stack),
-            "rollback_risk": remediation["rollback_risk"] if remediation else (_contextual_fallback(f, "rollback_risk", tech_stack=tech_stack) or "Assess before deployment"),
-            "verification_step": remediation["verification"] if remediation else "Re-test the affected endpoint after applying the fix",
-            "acceptance_criteria": remediation["acceptance_criteria"] if remediation else "Finding no longer reproducible; re-scan confirms absence",
+            "fix": (
+                remediation["action"]
+                if remediation
+                else _contextual_fallback(f, "fix", tech_stack=tech_stack)
+            ),
+            "rollback_risk": (
+                remediation["rollback_risk"]
+                if remediation
+                else (
+                    _contextual_fallback(f, "rollback_risk", tech_stack=tech_stack)
+                    or "Assess before deployment"
+                )
+            ),
+            "verification_step": (
+                remediation["verification"]
+                if remediation
+                else "Re-test the affected endpoint after applying the fix"
+            ),
+            "acceptance_criteria": (
+                remediation["acceptance_criteria"]
+                if remediation
+                else "Finding no longer reproducible; re-scan confirms absence"
+            ),
         }
 
     tier1: list[dict[str, Any]] = []
     for f in (critical + [h for h in high_cvss if h not in critical])[:8]:
-        tier1.append(_build_matrix_entry(f, "P0", "48 hours", "Complex Refactor" if f.get("description") and len(str(f.get("description") or "")) > 800 else "Moderate", tech_stack=tech_stack))
+        tier1.append(
+            _build_matrix_entry(
+                f,
+                "P0",
+                "48 hours",
+                (
+                    "Complex Refactor"
+                    if f.get("description") and len(str(f.get("description") or "")) > 800
+                    else "Moderate"
+                ),
+                tech_stack=tech_stack,
+            )
+        )
 
     tier2: list[dict[str, Any]] = []
     for f in medium[:6]:
@@ -708,9 +817,39 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
         tier2.append(_build_matrix_entry(f, "P2", "1 month", "Quick Fix", tech_stack=tech_stack))
 
     tier3: list[dict[str, Any]] = [
-        {"category": "SDLC", "action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team", "affected_layer": "CI/CD", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Medium", "acceptance_criteria": "Security gates in CI/CD pipeline"},
-        {"category": "Monitoring", "action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team", "affected_layer": "infrastructure", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Low", "acceptance_criteria": "WAF rules active; logs centralized"},
-        {"category": "Dependencies", "action": "Implement automated dependency scanning and SBOM generation", "effort": "Moderate", "owner": "Development team", "affected_layer": "CI/CD", "priority": "P3", "deadline": "1 quarter", "rollback_risk": "Low", "acceptance_criteria": "SBOM generated per build; dependency scan passes"},
+        {
+            "category": "SDLC",
+            "action": "Integrate security testing into CI/CD pipeline",
+            "effort": "Complex Refactor",
+            "owner": "DevOps / Security team",
+            "affected_layer": "CI/CD",
+            "priority": "P3",
+            "deadline": "1 quarter",
+            "rollback_risk": "Medium",
+            "acceptance_criteria": "Security gates in CI/CD pipeline",
+        },
+        {
+            "category": "Monitoring",
+            "action": "Deploy WAF and centralized logging",
+            "effort": "Moderate",
+            "owner": "Infrastructure team",
+            "affected_layer": "infrastructure",
+            "priority": "P3",
+            "deadline": "1 quarter",
+            "rollback_risk": "Low",
+            "acceptance_criteria": "WAF rules active; logs centralized",
+        },
+        {
+            "category": "Dependencies",
+            "action": "Implement automated dependency scanning and SBOM generation",
+            "effort": "Moderate",
+            "owner": "Development team",
+            "affected_layer": "CI/CD",
+            "priority": "P3",
+            "deadline": "1 quarter",
+            "rollback_risk": "Low",
+            "acceptance_criteria": "SBOM generated per build; dependency scan passes",
+        },
     ]
 
     return {
@@ -719,6 +858,7 @@ def _build_remediation_stages(findings: list[dict[str, Any]], tech_stack: dict[s
         "tier_3_architectural": tier3,
         "remediation_matrix": tier1 + tier2,
     }
+
 
 def _build_zero_day_assessment(findings: list[dict[str, Any]]) -> dict[str, Any]:
     non_standard = 0
@@ -761,25 +901,39 @@ def _build_retest_plan(findings: list[dict[str, Any]]) -> dict[str, Any]:
     """Build a retest-after-remediation plan with per-finding verification commands."""
     items: list[dict[str, Any]] = []
     f_type = ""
-    for f in sorted(findings, key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(str(x.get("severity", "info")).lower(), 5)):
+    for f in sorted(
+        findings,
+        key=lambda x: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(
+            str(x.get("severity", "info")).lower(), 5
+        ),
+    ):
         if not isinstance(f, dict):
             continue
-        f_type = str(f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "") or "").upper()
-        affected_url = str(f.get("affected_url") or (f.get("proof_of_concept") or {}).get("request_url") or "")
+        f_type = str(
+            f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "")
+            or ""
+        ).upper()
+        affected_url = str(
+            f.get("affected_url") or (f.get("proof_of_concept") or {}).get("request_url") or ""
+        )
         for key, cmd_template in _RETEST_VERIFICATION_COMMANDS.items():
             if key in f_type:
-                verification = cmd_template.format(url=affected_url, payload_fragment="", header_name=key.lower())
+                verification = cmd_template.format(
+                    url=affected_url, payload_fragment="", header_name=key.lower()
+                )
                 break
         else:
             verification = f"curl -sS -D- -o /dev/null '{affected_url}'"
-        items.append({
-            "finding_id": str(f.get("id", f.get("finding_id", "")))[:64],
-            "title": str(f.get("title", ""))[:256],
-            "severity": str(f.get("severity", "info")).lower(),
-            "verification_command": verification,
-            "expected_result": f"Finding {f.get('id', '?')} no longer reproducible",
-            "retest_status": "pending",
-        })
+        items.append(
+            {
+                "finding_id": str(f.get("id", f.get("finding_id", "")))[:64],
+                "title": str(f.get("title", ""))[:256],
+                "severity": str(f.get("severity", "info")).lower(),
+                "verification_command": verification,
+                "expected_result": f"Finding {f.get('id', '?')} no longer reproducible",
+                "retest_status": "pending",
+            }
+        )
     return {
         "retest_scope": items[:25],
         "retest_timeline": "14-30 days after remediation",
@@ -799,7 +953,9 @@ def _extract_recon_from_findings(findings: list[dict[str, Any]]) -> dict[str, An
             continue
         data = f.get("data") or f
         poc = data.get("proof_of_concept") or {}
-        tool = str(data.get("tool") or data.get("evidence_type") or data.get("scanner") or "").lower()
+        tool = str(
+            data.get("tool") or data.get("evidence_type") or data.get("scanner") or ""
+        ).lower()
         title = str(data.get("title") or "").lower()
         if "whatweb" in tool or "tech" in title or "technology" in title:
             tech_entries.append({"tool": tool, "title": data.get("title", ""), "data": data})
@@ -831,8 +987,13 @@ def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[
         if isinstance(obj, dict):
             cleaned = {}
             for k, v in obj.items():
-                if isinstance(v, str) and "|" in v and any(
-                    t in v.lower() for t in ("high|medium|low", "low|medium|high", "medium|high|low")
+                if (
+                    isinstance(v, str)
+                    and "|" in v
+                    and any(
+                        t in v.lower()
+                        for t in ("high|medium|low", "low|medium|high", "medium|high|low")
+                    )
                 ):
                     cleaned[k] = "unknown"
                 else:
@@ -842,12 +1003,16 @@ def _extract_threat_model_from_findings(findings: list[dict[str, Any]]) -> dict[
             return [_clean_placeholder_values(item) for item in obj]
         return obj
 
-    excerpt = f"Threat model derived from {len(findings)} findings across {len(categories)} categories."
-    return _clean_placeholder_values({
-        "threat_categories": categories,
-        "finding_count": len(findings),
-        "excerpt": excerpt,
-    })
+    excerpt = (
+        f"Threat model derived from {len(findings)} findings across {len(categories)} categories."
+    )
+    return _clean_placeholder_values(
+        {
+            "threat_categories": categories,
+            "finding_count": len(findings),
+            "excerpt": excerpt,
+        }
+    )
 
 
 def _extract_exploitation_from_findings(findings: list[dict[str, Any]]) -> dict[str, Any]:
@@ -858,12 +1023,14 @@ def _extract_exploitation_from_findings(findings: list[dict[str, Any]]) -> dict[
             continue
         poc = f.get("proof_of_concept") or f.get("data", {}).get("proof_of_concept") or {}
         if poc:
-            exploits.append({
-                "finding_id": f.get("id", f.get("finding_id", "")),
-                "title": f.get("title", "untitled"),
-                "severity": f.get("severity", "info"),
-                "poc_summary": str(poc)[:500],
-            })
+            exploits.append(
+                {
+                    "finding_id": f.get("id", f.get("finding_id", "")),
+                    "title": f.get("title", "untitled"),
+                    "severity": f.get("severity", "info"),
+                    "poc_summary": str(poc)[:500],
+                }
+            )
     return {"exploits": exploits, "exploit_count": len(exploits)}
 
 
@@ -893,6 +1060,7 @@ async def build_valhalla_report_context(
     if session is not None and isinstance(session, AsyncSession):
         try:
             from src.db.models import Scan as ScanModel
+
             scan_result = await session.execute(
                 select(ScanModel).where(
                     cast(ScanModel.id, String) == str(scan_id),
@@ -910,6 +1078,7 @@ async def build_valhalla_report_context(
             )
         try:
             from src.db.models import Finding as FindingModel
+
             result = await session.execute(
                 select(FindingModel).where(
                     cast(FindingModel.scan_id, String) == str(scan_id),
@@ -927,13 +1096,9 @@ async def build_valhalla_report_context(
                         "description": getattr(f, "description", ""),
                         "cwe": getattr(f, "cwe", None),
                         "cvss": getattr(f, "cvss", None),
-                        "cvss_score": getattr(
-                            f, "cvss_score", getattr(f, "cvss", None)
-                        ),
+                        "cvss_score": getattr(f, "cvss_score", getattr(f, "cvss", None)),
                         "cvss_vector": getattr(f, "cvss_vector", None),
-                        "exploit_demonstrated": bool(
-                            getattr(f, "exploit_demonstrated", False)
-                        ),
+                        "exploit_demonstrated": bool(getattr(f, "exploit_demonstrated", False)),
                         "exploit_summary": getattr(f, "exploit_summary", None),
                         "owasp_category": getattr(f, "owasp_category", None),
                         "proof_of_concept": (
@@ -951,9 +1116,7 @@ async def build_valhalla_report_context(
                         "taint_path": list(getattr(f, "taint_path", []) or []),
                         "code_location": getattr(f, "code_location", None),
                         "adversarial_score": getattr(f, "adversarial_score", None),
-                        "evidence_refs": list(
-                            getattr(f, "evidence_refs", []) or []
-                        ),
+                        "evidence_refs": list(getattr(f, "evidence_refs", []) or []),
                         "reproducible_steps": getattr(f, "reproducible_steps", None),
                         "applicability_notes": getattr(f, "applicability_notes", None),
                     }
@@ -1005,12 +1168,18 @@ async def build_valhalla_report_context(
         oc = f.get("owasp_category")
         if isinstance(oc, str) and oc in owasp_counts:
             owasp_counts[oc] += 1
-    ow_sum = {"counts": owasp_counts, "gap_categories": [
-        c for c in OWASP_TOP10_2025_CATEGORY_IDS if owasp_counts.get(c, 0) == 0
-    ], "classified_finding_count": sum(1 for f in resolved_findings
-                                       if f.get("owasp_category") in OWASP_TOP10_2025_CATEGORY_IDS),
-       "unclassified_finding_count": sum(1 for f in resolved_findings
-                                         if f.get("owasp_category") not in OWASP_TOP10_2025_CATEGORY_IDS)}
+    ow_sum = {
+        "counts": owasp_counts,
+        "gap_categories": [c for c in OWASP_TOP10_2025_CATEGORY_IDS if owasp_counts.get(c, 0) == 0],
+        "classified_finding_count": sum(
+            1 for f in resolved_findings if f.get("owasp_category") in OWASP_TOP10_2025_CATEGORY_IDS
+        ),
+        "unclassified_finding_count": sum(
+            1
+            for f in resolved_findings
+            if f.get("owasp_category") not in OWASP_TOP10_2025_CATEGORY_IDS
+        ),
+    }
 
     risk_m = _build_risk_matrix(resolved_findings)
     crit_v = _collect_critical_vulns(resolved_findings)
@@ -1040,9 +1209,13 @@ async def build_valhalla_report_context(
             if _ex.get("screenshot_path") and not _cur.get("screenshot_path"):
                 _cur["screenshot_path"] = _ex["screenshot_path"]
             if _ex.get("payload_attempted"):
-                _cur.setdefault("payload_attempted_from_exploit", []).extend(_ex["payload_attempted"])
+                _cur.setdefault("payload_attempted_from_exploit", []).extend(
+                    _ex["payload_attempted"]
+                )
             if _ex.get("payload_successful"):
-                _cur.setdefault("payload_successful_from_exploit", []).extend(_ex["payload_successful"])
+                _cur.setdefault("payload_successful_from_exploit", []).extend(
+                    _ex["payload_successful"]
+                )
             if _ex.get("payload_used"):
                 _cur.setdefault("payload_used_from_exploit", []).append(_ex["payload_used"])
 
@@ -1102,15 +1275,21 @@ async def build_valhalla_report_context(
             hibp_checks = hibp_raw.get("checks_run", 0)
             if isinstance(hibp_checks, (int, float)) and hibp_checks == 0:
                 hibp_summary["inconclusive"] = True
-                hibp_summary["inconclusive_reason"] = "HIBP check was not run (checks_run=0); no conclusion about credential exposure is possible"
+                hibp_summary["inconclusive_reason"] = (
+                    "HIBP check was not run (checks_run=0); no conclusion about credential exposure is possible"
+                )
 
     tool_list: list[str] = sorted(
-        {str(f.get("evidence_type") or "").lower()
-         for f in resolved_findings if f.get("evidence_type")}
+        {
+            str(f.get("evidence_type") or "").lower()
+            for f in resolved_findings
+            if f.get("evidence_type")
+        }
     )
 
     # Compute WSTG coverage from tools_executed + findings
     from src.reports.wstg_coverage import build_wstg_coverage
+
     wstg_result = build_wstg_coverage(tool_list, resolved_findings)
     wstg_coverage_pct = wstg_result.coverage_percentage
     wstg_low = wstg_coverage_pct < 70.0
@@ -1206,10 +1385,9 @@ async def build_valhalla_report_context(
             {
                 "findings_count": len(quick_fuzz_output.get("findings", [])),
                 "candidates_count": len(quick_fuzz_output.get("candidates", [])),
-                "by_category": list({
-                    f.get("category", "unknown")
-                    for f in quick_fuzz_output.get("findings", [])
-                }),
+                "by_category": list(
+                    {f.get("category", "unknown") for f in quick_fuzz_output.get("findings", [])}
+                ),
             }
             if quick_fuzz_output
             else {}
@@ -1228,7 +1406,11 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
     findings = context.findings or []
     sev = context.severity_counts or {}
     total = sum(sev.values()) if isinstance(sev, dict) else len(findings)
-    wstg_pct = context.report_quality_gate.get("wstg_coverage_pct", 0) if isinstance(context.report_quality_gate, dict) else 0
+    wstg_pct = (
+        context.report_quality_gate.get("wstg_coverage_pct", 0)
+        if isinstance(context.report_quality_gate, dict)
+        else 0
+    )
     qg = context.report_quality_gate if isinstance(context.report_quality_gate, dict) else {}
 
     if section_key == "executive_summary_valhalla":
@@ -1248,8 +1430,12 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             lines.append("Top findings by severity:")
             for i, f in enumerate(top, 1):
                 if isinstance(f, dict):
-                    lines.append(f"  {i}. [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
-        lines.append("Limitations: WSTG coverage below 70% means many categories were not assessed.")
+                    lines.append(
+                        f"  {i}. [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}"
+                    )
+        lines.append(
+            "Limitations: WSTG coverage below 70% means many categories were not assessed."
+        )
         return "\n".join(lines)
 
     if section_key == "executive_summary":
@@ -1261,7 +1447,9 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
         lines = ["Vulnerability findings summary:"]
         for f in findings[:10]:
             if isinstance(f, dict):
-                lines.append(f"- [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}: {f.get('description', 'No description')[:200]}")
+                lines.append(
+                    f"- [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}: {f.get('description', 'No description')[:200]}"
+                )
         if len(findings) > 10:
             lines.append(f"... and {len(findings) - 10} more findings.")
         return "\n".join(lines)
@@ -1273,7 +1461,9 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
         for f in findings[:10]:
             if isinstance(f, dict):
                 sev_val = f.get("severity", "info")
-                lines.append(f"- [{sev_val.upper()}] {f.get('title', 'untitled')}: Review and apply fix per finding details.")
+                lines.append(
+                    f"- [{sev_val.upper()}] {f.get('title', 'untitled')}: Review and apply fix per finding details."
+                )
         return "\n".join(lines)
 
     if section_key == "business_risk":
@@ -1290,19 +1480,32 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
         if not findings:
             return "No findings to prioritize."
         lines = ["Prioritization roadmap:"]
-        for tier, sev_label in [("Immediate (48h)", "critical"), ("Short-term (2 weeks)", "high"), ("Medium-term (1 month)", "medium"), ("Long-term (quarter)", "low")]:
-            tier_findings = [f for f in findings if isinstance(f, dict) and f.get("severity") == sev_label]
+        for tier, sev_label in [
+            ("Immediate (48h)", "critical"),
+            ("Short-term (2 weeks)", "high"),
+            ("Medium-term (1 month)", "medium"),
+            ("Long-term (quarter)", "low"),
+        ]:
+            tier_findings = [
+                f for f in findings if isinstance(f, dict) and f.get("severity") == sev_label
+            ]
             if tier_findings:
-                lines.append(f"- {tier}: {len(tier_findings)} finding(s) — {', '.join(f.get('title', 'untitled')[:50] for f in tier_findings[:3])}")
+                lines.append(
+                    f"- {tier}: {len(tier_findings)} finding(s) — {', '.join(f.get('title', 'untitled')[:50] for f in tier_findings[:3])}"
+                )
         return "\n".join(lines)
 
     if section_key == "hardening_recommendations":
         tech = context.tech_stack_structured or {}
         lines = ["Hardening recommendations:"]
         if tech.get("web_server"):
-            lines.append(f"- Web server: {tech['web_server']} — ensure latest stable version, disable unnecessary modules")
+            lines.append(
+                f"- Web server: {tech['web_server']} — ensure latest stable version, disable unnecessary modules"
+            )
         if tech.get("cms"):
-            lines.append(f"- CMS: {tech['cms']} — apply all security patches, review plugin inventory")
+            lines.append(
+                f"- CMS: {tech['cms']} — apply all security patches, review plugin inventory"
+            )
         headers = context.security_headers_analysis or {}
         missing = headers.get("missing_recommended", [])
         if missing:
@@ -1320,7 +1523,9 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             lines = ["Attack scenarios:"]
             for s in scenarios[:5]:
                 if isinstance(s, dict):
-                    lines.append(f"- {s.get('title', 'untitled')}: likelihood={s.get('likelihood', 'unknown')}, persona={s.get('persona', 'unknown')}")
+                    lines.append(
+                        f"- {s.get('title', 'untitled')}: likelihood={s.get('likelihood', 'unknown')}, persona={s.get('persona', 'unknown')}"
+                    )
             return "\n".join(lines)
         return "No validated attack scenarios. Findings do not form a complete attack chain. Additional testing required for scenario validation."
 
@@ -1330,21 +1535,31 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             lines = ["Exploit chains:"]
             for c in chains[:5]:
                 if isinstance(c, dict):
-                    lines.append(f"- {c.get('title', 'untitled')}: status={c.get('status', 'unknown')}, impact={c.get('impact', 'unknown')}")
+                    lines.append(
+                        f"- {c.get('title', 'untitled')}: status={c.get('status', 'unknown')}, impact={c.get('impact', 'unknown')}"
+                    )
             return "\n".join(lines)
         return f"No validated exploit chain was demonstrated. Multi-step chains require multiple validated findings with scope-appropriate impact. WSTG coverage: {wstg_pct:.0f}%."
 
     if section_key == "remediation_stages":
         stages = context.remediation_stages or {}
         lines = ["Remediation stages:"]
-        for tier_name, tier_label in [("tier_1_immediate", "Tier 1 — Immediate (48h)"), ("tier_2_short_term", "Tier 2 — Short-Term (2 weeks)"), ("tier_3_architectural", "Tier 3 — Architectural (SDLC)")]:
+        for tier_name, tier_label in [
+            ("tier_1_immediate", "Tier 1 — Immediate (48h)"),
+            ("tier_2_short_term", "Tier 2 — Short-Term (2 weeks)"),
+            ("tier_3_architectural", "Tier 3 — Architectural (SDLC)"),
+        ]:
             items = stages.get(tier_name, [])
             if items:
                 lines.append(f"{tier_label}:")
                 for item in items[:5]:
                     if isinstance(item, dict):
                         lines.append(f"  - {item.get('title') or item.get('action', 'untitled')}")
-        return "\n".join(lines) if len(lines) > 1 else "No remediation stages generated — no findings recorded."
+        return (
+            "\n".join(lines)
+            if len(lines) > 1
+            else "No remediation stages generated — no findings recorded."
+        )
 
     if section_key == "zero_day_potential":
         return f"Novel vulnerability indication: Not indicated. The {total} finding(s) reflect known vulnerability patterns and no novel vulnerability class was observed. WSTG coverage: {wstg_pct:.0f}%. Evidence confidence: {qg.get('evidence_confidence', 'unknown')}."
@@ -1359,7 +1574,9 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
         ]
         by_provider = cost.get("by_provider", {})
         if by_provider:
-            lines.append(f"- By provider: {', '.join(f'{k}: ${v:.4f}' for k, v in by_provider.items())}")
+            lines.append(
+                f"- By provider: {', '.join(f'{k}: ${v:.4f}' for k, v in by_provider.items())}"
+            )
         return "\n".join(lines)
 
     if section_key == "bounty_hunter_tactics":
@@ -1371,7 +1588,9 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
                 lines.append(f"- {len(surfaces)} attack surface(s) classified")
                 for s in surfaces[:5]:
                     if isinstance(s, dict):
-                        lines.append(f"  - {s.get('surface_type', 'unknown')}: {s.get('priority', 'medium')} priority")
+                        lines.append(
+                            f"  - {s.get('surface_type', 'unknown')}: {s.get('priority', 'medium')} priority"
+                        )
             prioritized = bounty.get("prioritized_vulns", [])
             if prioritized:
                 lines.append(f"- {len(prioritized)} vulnerability type(s) prioritized for bounty")
@@ -1393,22 +1612,46 @@ def _build_structured_fallback(section_key: str, context: ValhallaReportContext)
             if cats:
                 lines.append(f"- Categories: {', '.join(str(c) for c in cats[:10])}")
             return "\n".join(lines)
-        findings_qf = [f for f in findings if f.get("source") == "quick_fuzz" or f.get("category", "").lower() == "quick_fuzz"]
+        findings_qf = [
+            f
+            for f in findings
+            if f.get("source") == "quick_fuzz" or f.get("category", "").lower() == "quick_fuzz"
+        ]
         if findings_qf:
-            lines = [f"Quick Fuzz: {len(findings_qf)} quick-win finding(s) detected during pre-scan:"]
+            lines = [
+                f"Quick Fuzz: {len(findings_qf)} quick-win finding(s) detected during pre-scan:"
+            ]
             for f in findings_qf[:5]:
-                lines.append(f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
+                lines.append(
+                    f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}"
+                )
             return "\n".join(lines)
         return "Quick fuzz pre-scan did not identify quick-win vulnerabilities."
 
     if section_key == "ai_security_findings":
-        ai_findings = [f for f in findings if f.get("owasp_category", "").upper().startswith("A05")
-                       and any(kw in f.get("title", "").lower() + f.get("description", "").lower()
-                               for kw in ("prompt injection", "system prompt", "llm", "ai endpoint", "rag poisoning"))]
+        ai_findings = [
+            f
+            for f in findings
+            if f.get("owasp_category", "").upper().startswith("A05")
+            and any(
+                kw in f.get("title", "").lower() + f.get("description", "").lower()
+                for kw in (
+                    "prompt injection",
+                    "system prompt",
+                    "llm",
+                    "ai endpoint",
+                    "rag poisoning",
+                )
+            )
+        ]
         if ai_findings:
-            lines = [f"AI/LLM Security Assessment: {len(ai_findings)} finding(s) related to AI-specific vulnerabilities:"]
+            lines = [
+                f"AI/LLM Security Assessment: {len(ai_findings)} finding(s) related to AI-specific vulnerabilities:"
+            ]
             for f in ai_findings[:5]:
-                lines.append(f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}")
+                lines.append(
+                    f"  - [{f.get('severity', 'info').upper()}] {f.get('title', 'untitled')}"
+                )
                 ev = f.get("evidence_type", "")
                 if ev:
                     lines.append(f"    Evidence tier: {f.get('evidence_tier', 'N/A')}, type: {ev}")
@@ -1526,7 +1769,9 @@ async def generate_valhalla_sections(
         try:
             if llm_callable is not None:
                 combined = f"{system_prompt}\n\n{user_prompt}"
-                text = (llm_callable(combined, {"task": section_key, "tier": "valhalla"}) or "").strip()
+                text = (
+                    llm_callable(combined, {"task": section_key, "tier": "valhalla"}) or ""
+                ).strip()
             else:
                 text = call_llm_sync(
                     system_prompt,
@@ -1591,7 +1836,13 @@ async def generate_valhalla_sections(
 def _css_severity_bar_chart(sev_counts: dict[str, int]) -> str:
     """Inline CSS bar chart for severity distribution."""
     total = max(1, sum(sev_counts.values()))
-    order = [("critical", "#dc3545"), ("high", "#fd7e14"), ("medium", "#ffc107"), ("low", "#28a745"), ("info", "#17a2b8")]
+    order = [
+        ("critical", "#dc3545"),
+        ("high", "#fd7e14"),
+        ("medium", "#ffc107"),
+        ("low", "#28a745"),
+        ("info", "#17a2b8"),
+    ]
     bars: list[str] = []
     for label, color in order:
         count = sev_counts.get(label, 0)
@@ -1608,7 +1859,9 @@ def _css_severity_bar_chart(sev_counts: dict[str, int]) -> str:
 
 def _findings_table_html(findings: list[dict[str, Any]]) -> str:
     """Sortable findings table for Valhalla HTML report."""
-    sorted_f = sorted(findings, key=lambda f: _SEVERITY_RANK.get((f.get("severity") or "").lower(), 99))
+    sorted_f = sorted(
+        findings, key=lambda f: _SEVERITY_RANK.get((f.get("severity") or "").lower(), 99)
+    )
     rows: list[str] = []
     badge: dict[str, str] = {
         "critical": '<span class="badge badge-critical">CRITICAL</span>',
@@ -1655,44 +1908,57 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
         tp = f.get("taint_path") or []
         cl = f.get("code_location") or ""
         rs = f.get("reproducible_steps") or ""
-        screenshots = f.get("screenshots") or f.get("screenshot_base64") or f.get("screenshot_path") or ""
+        screenshots = (
+            f.get("screenshots") or f.get("screenshot_base64") or f.get("screenshot_path") or ""
+        )
         adv_score = f.get("adversarial_score")
         cvss_vector = f.get("cvss_vector") or ""
 
-        if not pa and not ps and not tp and not cl and not rs and not screenshots and not adv_score and not cvss_vector:
+        if (
+            not pa
+            and not ps
+            and not tp
+            and not cl
+            and not rs
+            and not screenshots
+            and not adv_score
+            and not cvss_vector
+        ):
             continue
 
         parts: list[str] = [f'<div class="card finding-detail-card"><h3>{title}</h3>']
 
         if adv_score is not None:
-            parts.append(f'<p><strong>Adversarial Score:</strong> {adv_score}</p>')
+            parts.append(f"<p><strong>Adversarial Score:</strong> {adv_score}</p>")
 
         if cvss_vector:
-            parts.append(f'<p><strong>CVSS Vector:</strong> <code>{cvss_vector}</code></p>')
+            parts.append(f"<p><strong>CVSS Vector:</strong> <code>{cvss_vector}</code></p>")
 
         if cl:
-            parts.append(f'<p><strong>Code Location:</strong> <code>{cl}</code></p>')
+            parts.append(f"<p><strong>Code Location:</strong> <code>{cl}</code></p>")
 
         if tp:
-            tp_html = " → ".join(f'<code>{s}</code>' for s in tp[:10])
-            parts.append(f'<p><strong>Taint Path:</strong> {tp_html}</p>')
+            tp_html = " → ".join(f"<code>{s}</code>" for s in tp[:10])
+            parts.append(f"<p><strong>Taint Path:</strong> {tp_html}</p>")
 
         if pa:
             pa_items = "".join(f"<li><code>{p[:200]}</code></li>" for p in pa[:10])
-            parts.append(f'<p><strong>Payloads Attempted:</strong></p><ul>{pa_items}</ul>')
+            parts.append(f"<p><strong>Payloads Attempted:</strong></p><ul>{pa_items}</ul>")
 
         if ps:
             ps_items = "".join(f"<li><code>{p[:200]}</code></li>" for p in ps[:10])
-            parts.append(f'<p><strong>Payloads Successful:</strong></p><ul>{ps_items}</ul>')
+            parts.append(f"<p><strong>Payloads Successful:</strong></p><ul>{ps_items}</ul>")
 
         if rs:
-            parts.append(f'<p><strong>Reproducible Steps:</strong></p><pre>{rs[:2000]}</pre>')
+            parts.append(f"<p><strong>Reproducible Steps:</strong></p><pre>{rs[:2000]}</pre>")
 
         if screenshots:
             if isinstance(screenshots, str) and screenshots.startswith("data:image"):
-                parts.append(f'<p><strong>Screenshot:</strong></p><img src="{screenshots}" alt="Evidence screenshot" style="max-width:100%;border:1px solid var(--border);">')
+                parts.append(
+                    f'<p><strong>Screenshot:</strong></p><img src="{screenshots}" alt="Evidence screenshot" style="max-width:100%;border:1px solid var(--border);">'
+                )
             elif isinstance(screenshots, str) and screenshots.startswith("/"):
-                parts.append(f'<p><strong>Screenshot:</strong> <code>{screenshots}</code></p>')
+                parts.append(f"<p><strong>Screenshot:</strong> <code>{screenshots}</code></p>")
             elif isinstance(screenshots, list):
                 for idx, sc in enumerate(screenshots[:5]):
                     if isinstance(sc, dict):
@@ -1700,16 +1966,24 @@ def _findings_detail_html(findings: list[dict[str, Any]]) -> str:
                         sc_alt = sc.get("alt", f"Screenshot {idx+1}")
                         if sc_data:
                             if sc_data.startswith("data:image") or sc_data.startswith("http"):
-                                parts.append(f'<p><strong>{sc_alt}:</strong></p><img src="{sc_data}" alt="{sc_alt}" style="max-width:100%;border:1px solid var(--border);">')
+                                parts.append(
+                                    f'<p><strong>{sc_alt}:</strong></p><img src="{sc_data}" alt="{sc_alt}" style="max-width:100%;border:1px solid var(--border);">'
+                                )
                             else:
-                                parts.append(f'<p><strong>{sc_alt}:</strong> <code>{sc_data[:200]}</code></p>')
+                                parts.append(
+                                    f"<p><strong>{sc_alt}:</strong> <code>{sc_data[:200]}</code></p>"
+                                )
                     elif isinstance(sc, str):
                         if sc.startswith("data:image") or sc.startswith("http"):
-                            parts.append(f'<img src="{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">')
+                            parts.append(
+                                f'<img src="{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">'
+                            )
                         elif len(sc) > 100:
-                            parts.append(f'<img src="data:image/png;base64,{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">')
+                            parts.append(
+                                f'<img src="data:image/png;base64,{sc}" alt="Screenshot {idx+1}" style="max-width:100%;border:1px solid var(--border);">'
+                            )
                         else:
-                            parts.append(f'<p><strong>Screenshot:</strong> <code>{sc}</code></p>')
+                            parts.append(f"<p><strong>Screenshot:</strong> <code>{sc}</code></p>")
 
         parts.append("</div>")
         sections.append("\n".join(parts))
@@ -1730,9 +2004,20 @@ def _wstg_coverage_matrix_html(context: ValhallaReportContext) -> str:
     not_covered = wstg.get("not_covered", 0)
     by_category = wstg.get("by_category", {})
 
+    _caption = (
+        '<p style="margin-bottom:8px;color:var(--text-secondary);font-style:italic;">'
+        "Tool-capability matrix (which WSTG tests the executed tools <em>could</em> "
+        "touch) — NOT the authoritative evidence-based coverage. See the "
+        "evidence-gated WSTG coverage (ARGUS-WSTG-COV-1) for completion/gate "
+        "decisions.</p>"
+    )
+    _reach = (
+        f'<p style="margin-bottom:12px;">Tool-capability WSTG reach: <strong>{pct:.0f}%</strong> '
+        f"({covered} covered, {partial} partial, {not_covered} not assessed of {total} tests)</p>"
+    )
     rows = [
-        f'<p style="margin-bottom:12px;">Overall WSTG coverage: <strong>{pct:.0f}%</strong> '
-        f'({covered} covered, {partial} partial, {not_covered} not assessed of {total} tests)</p>',
+        _caption,
+        _reach,
         '<table class="data-table"><thead><tr><th>Category</th><th>Covered</th><th>Partial</th><th>Not Assessed</th><th>Total</th><th>%</th></tr></thead><tbody>',
     ]
     for cat_name, counts in sorted(by_category.items()):
@@ -1753,7 +2038,8 @@ def _unverified_items_html(context: ValhallaReportContext) -> str:
     """Render unverified/follow-up items from findings with low confidence."""
     findings = context.findings or []
     unverified = [
-        f for f in findings
+        f
+        for f in findings
         if isinstance(f, dict) and f.get("confidence") in ("possible", "likely", "advisory")
     ]
     if not unverified:
@@ -1763,13 +2049,23 @@ def _unverified_items_html(context: ValhallaReportContext) -> str:
         f'<p style="margin-bottom:12px;">{len(unverified)} finding(s) require additional validation:</p>',
         '<table class="data-table"><thead><tr><th>Severity</th><th>Title</th><th>Confidence</th><th>Evidence Quality</th><th>Required for Validation</th></tr></thead><tbody>',
     ]
-    for f in sorted(unverified, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)):
+    for f in sorted(
+        unverified, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)
+    ):
         sev = (f.get("severity") or "info").lower()
-        badge = f'<span class="badge badge-{sev}">{sev.upper()}</span>' if sev in _SEVERITY_RANK else sev
+        badge = (
+            f'<span class="badge badge-{sev}">{sev.upper()}</span>'
+            if sev in _SEVERITY_RANK
+            else sev
+        )
         conf = f.get("confidence", "unknown")
         eq = f.get("evidence_quality", "none")
         data = f.get("data") or {}
-        notes = data.get("applicability_notes") or f.get("applicability_notes") or "Additional testing required"
+        notes = (
+            data.get("applicability_notes")
+            or f.get("applicability_notes")
+            or "Additional testing required"
+        )
         rows.append(
             f"<tr><td>{badge}</td>"
             f"<td>{f.get('title', 'untitled')}</td>"
@@ -1806,7 +2102,7 @@ def _render_ai_section(key: str, context: ValhallaReportContext) -> str:
         "AI generation skipped",
         "AI generation skipped: no LLM provider available",
         "AI generation skipped: could not generate content",
-        "See \"Vulnerability Description\"",
+        'See "Vulnerability Description"',
         "See Vulnerability Description",
         "To be determined based on organizational priorities",
         "To be determined",
@@ -1824,7 +2120,7 @@ def _render_ai_section(key: str, context: ValhallaReportContext) -> str:
     return (
         f'<section id="section-{key}" class="ai-section">'
         f"<h2>{label}</h2>"
-        f"<div class=\"ai-content\"><p>{text_html}</p></div>"
+        f'<div class="ai-content"><p>{text_html}</p></div>'
         f"</section>"
     )
 
@@ -1839,9 +2135,7 @@ def _retest_plan_html(context: ValhallaReportContext) -> str:
         vt = item.get("vuln_type", "unknown")
         cmd = item.get("verification_command", "")
         fid = item.get("finding_id", "")
-        rows.append(
-            f"<tr><td>{vt}</td><td>{fid}</td><td><code>{cmd[:300]}</code></td></tr>"
-        )
+        rows.append(f"<tr><td>{vt}</td><td>{fid}</td><td><code>{cmd[:300]}</code></td></tr>")
     return (
         '<table class="data-table"><thead><tr><th>Vuln Type</th><th>Finding ID</th><th>Verification Command</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
@@ -1904,7 +2198,7 @@ def render_valhalla_report(
     for v in context.critical_vulns[:24]:
         crit_rows_html += (
             "<tr>"
-            f"<td><span class=\"badge badge-critical\">CRITICAL</span></td>"
+            f'<td><span class="badge badge-critical">CRITICAL</span></td>'
             f"<td>{v.get('title', '')}</td>"
             f"<td>{v.get('cvss', '—')}</td>"
             f"<td>{'Yes' if v.get('exploit_available') else '—'}</td>"
@@ -1943,15 +2237,31 @@ def render_valhalla_report(
 
     # Remediation tiers
     rem_html = ""
-    for tier_name, tier_label in [("tier_1_immediate", "Tier 1 — Immediate (48h)"), ("tier_2_short_term", "Tier 2 — Short-Term (2 weeks)"), ("tier_3_architectural", "Tier 3 — Architectural (SDLC)")]:
+    for tier_name, tier_label in [
+        ("tier_1_immediate", "Tier 1 — Immediate (48h)"),
+        ("tier_2_short_term", "Tier 2 — Short-Term (2 weeks)"),
+        ("tier_3_architectural", "Tier 3 — Architectural (SDLC)"),
+    ]:
         items = context.remediation_stages.get(tier_name, [])
         if not items and tier_name == "tier_3_architectural":
             items = [
-                {"action": "Integrate security testing into CI/CD pipeline", "effort": "Complex Refactor", "owner": "DevOps / Security team"},
-                {"action": "Deploy WAF and centralized logging", "effort": "Moderate", "owner": "Infrastructure team"},
-                {"action": "Implement automated dependency scanning", "effort": "Moderate", "owner": "Development team"},
+                {
+                    "action": "Integrate security testing into CI/CD pipeline",
+                    "effort": "Complex Refactor",
+                    "owner": "DevOps / Security team",
+                },
+                {
+                    "action": "Deploy WAF and centralized logging",
+                    "effort": "Moderate",
+                    "owner": "Infrastructure team",
+                },
+                {
+                    "action": "Implement automated dependency scanning",
+                    "effort": "Moderate",
+                    "owner": "Development team",
+                },
             ]
-        rem_html += f"<h3>{tier_label}</h3><table class=\"data-table\"><thead><tr><th>Finding</th><th>Remediation Action</th><th>Verification</th><th>Owner</th><th>Effort</th></tr></thead><tbody>"
+        rem_html += f'<h3>{tier_label}</h3><table class="data-table"><thead><tr><th>Finding</th><th>Remediation Action</th><th>Verification</th><th>Owner</th><th>Effort</th></tr></thead><tbody>'
         for item in (items if isinstance(items, list) else []):
             if isinstance(item, dict):
                 title = item.get("title") or item.get("action", "—")
@@ -1987,7 +2297,7 @@ def render_valhalla_report(
         hibp_block = (
             '<section id="section-hibp" class="ai-section">'
             "<h2>HIBP Pwned Password Analysis</h2>"
-            "<table class=\"data-table\"><tbody>"
+            '<table class="data-table"><tbody>'
             f"<tr><td>Checks Run</td><td>{hibp.get('checks_run', '—')}</td></tr>"
             f"<tr><td>Pwned Count</td><td>{hibp.get('pwned_count', '—')}</td></tr>"
             f"<tr><td>Exposure Signal</td><td>{hibp.get('data_breach_password_exposure', hibp.get('breach_signal_note', '—'))}</td></tr>"
@@ -2000,7 +2310,7 @@ def render_valhalla_report(
         tech_stack_html = (
             '<section id="section-techstack" class="structured-section">'
             "<h2>Technology Stack</h2>"
-            "<table class=\"data-table\"><tbody>"
+            '<table class="data-table"><tbody>'
             f"<tr><td>Web Server</td><td>{ts.get('web_server', '—')}</td></tr>"
             f"<tr><td>Operating System</td><td>{ts.get('os', '—')}</td></tr>"
             f"<tr><td>CMS</td><td>{ts.get('cms', '—')}</td></tr>"
@@ -2015,7 +2325,7 @@ def render_valhalla_report(
         ssl_html = (
             '<section id="section-ssltls" class="structured-section">'
             "<h2>SSL/TLS Configuration</h2>"
-            "<table class=\"data-table\"><tbody>"
+            '<table class="data-table"><tbody>'
             f"<tr><td>Issuer</td><td>{s.get('issuer', '—')}</td></tr>"
             f"<tr><td>Validity</td><td>{s.get('validity', '—')}</td></tr>"
             f"<tr><td>HSTS</td><td>{s.get('hsts', '—')}</td></tr>"
@@ -2032,13 +2342,14 @@ def render_valhalla_report(
         headers_html = (
             '<section id="section-headers" class="structured-section">'
             "<h2>HTTP Security Headers</h2>"
-            "<table class=\"data-table\"><tbody>"
+            '<table class="data-table"><tbody>'
             f"<tr><td>Summary</td><td>{h.get('summary', '—')}</td></tr>"
             f"<tr><td>Missing Recommended</td><td>{', '.join(missing[:8]) if missing else 'None'}</td></tr>"
             "</tbody></table></section>"
         )
 
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     logo_b64 = brand.logo_base64_svg
 
@@ -2506,6 +2817,7 @@ def render_valhalla_report(
 def _render_valhalla_markdown(context: ValhallaReportContext) -> bytes:
     """Render Valhalla report as Markdown with Svalbard Security Inc. branding."""
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     lines: list[str] = [
         f"![{brand.alt_text}](./logo.svg)",
@@ -2531,7 +2843,9 @@ def _render_valhalla_markdown(context: ValhallaReportContext) -> bytes:
     lines.append(f"\n**Total Findings:** {context.finding_count}\n")
 
     lines.append("---\n\n## Findings\n")
-    for f in sorted(context.findings, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)):
+    for f in sorted(
+        context.findings, key=lambda x: _SEVERITY_RANK.get((x.get("severity") or "").lower(), 99)
+    ):
         lines.append(f"### {f.get('title', 'Untitled')}")
         lines.append(f"- **Severity:** {f.get('severity', 'info')}")
         lines.append(f"- **CWE:** {f.get('cwe', '—')}")
@@ -2598,8 +2912,10 @@ async def generate_valhalla_report(
     html_bytes = render_valhalla_report(built_context, format="html")
 
     # Determine status
-    has_llm_text = any(v and v not in (REPORT_AI_SKIPPED_NO_LLM, REPORT_AI_SKIPPED_GENERATION_FAILED)
-                       for v in sections.values())
+    has_llm_text = any(
+        v and v not in (REPORT_AI_SKIPPED_NO_LLM, REPORT_AI_SKIPPED_GENERATION_FAILED)
+        for v in sections.values()
+    )
     status = "completed" if has_llm_text else "partial_no_llm"
 
     return {

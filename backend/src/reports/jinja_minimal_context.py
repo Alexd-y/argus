@@ -86,7 +86,9 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
     recon_summary = {
         "target_url": data.target or "",
         "scan": {},
-        "summary_counts": {k: aligned_counts[k] for k in ("critical", "high", "medium", "low", "info")},
+        "summary_counts": {
+            k: aligned_counts[k] for k in ("critical", "high", "medium", "low", "info", "unknown")
+        },
         "technologies": list(data.technologies or []),
         "timeline_preview": timeline_preview,
         "phase_inputs_count": 0,

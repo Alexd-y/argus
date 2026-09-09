@@ -1,10 +1,19 @@
-"""CVSS v3.1 auto-scoring from OWASP category and vulnerability keywords.
+"""Provisional CVSS *suggestions* from OWASP category and vulnerability keywords.
 
 When a finding reaches the pipeline without an explicit CVSS vector, this
-module derives a reasonable default from the OWASP Top 10:2025 category ID
-combined with a keyword scan of the finding title/category. The result is
-a (score, severity_label, vector_string) triple that can be back-filled
-into the finding dict before persistence.
+module can derive a heuristic suggestion from the OWASP Top 10:2025 category
+ID combined with a keyword scan of the finding title/category.
+
+IMPORTANT — this is advisory only (ARGUS policy §7):
+
+* The suggestion is written to dedicated ``cvss_suggested_*`` fields and is
+  flagged ``cvss_provisional=True``. It **never** overwrites an authoritative
+  ``severity`` / ``cvss`` / ``cvss_vector``.
+* Keyword matching is not evidence: SQLi is not automatically Critical, a
+  missing CSP header is not a proven XSS. Analysts confirm the real impact.
+* When no heuristic matches, the finding is left untouched — its severity
+  stays whatever the source reported (or ``unknown``); we do **not** fabricate
+  a ``0.0`` / template vector.
 
 Pure-Python CVSS v3.1 base-score calculator — no external dependencies
 beyond stdlib and the project's own ``severity_label`` helper.
@@ -107,13 +116,13 @@ OWASP_CVSS_MAP: list[tuple[tuple[str, str], CVSSVectorSpec]] = [
     (("A09", "logging"), CVSSVectorSpec(av="N", ac="L", pr="N", ui="N", s="U", c="L", i="N", a="N")),
 ]
 
-_FALLBACK_VECTOR = CVSSVectorSpec()
+def auto_score_finding(finding: dict[str, Any]) -> tuple[float, str, str] | None:
+    """Derive a *provisional* CVSS v3.1 suggestion from OWASP category + title.
 
-
-def auto_score_finding(finding: dict[str, Any]) -> tuple[float, str, str]:
-    """Derive a CVSS v3.1 base score and vector from OWASP category + title.
-
-    Returns (score, severity_label, vector_string).
+    Returns ``(score, severity_label, vector_string)`` when a heuristic
+    matches, or ``None`` when no confident mapping exists. There is no
+    catch-all fallback — an unknown finding stays unknown rather than being
+    stamped with a synthetic ``0.0`` vector.
     """
     owasp_id = str(finding.get("owasp_category", "") or "").upper()
     title = str(finding.get("title", "") or "").lower()
@@ -130,30 +139,43 @@ def auto_score_finding(finding: dict[str, Any]) -> tuple[float, str, str]:
             score = spec.compute_score()
             return score, severity_label(score), spec.to_vector_string()
 
-    score = _FALLBACK_VECTOR.compute_score()
-    return score, severity_label(score), _FALLBACK_VECTOR.to_vector_string()
+    return None
 
 
 class CVSSAutoScorer:
-    """Stateless service that back-fills CVSS vectors into finding dicts."""
+    """Stateless service that attaches *provisional* CVSS suggestions.
+
+    Never mutates authoritative ``severity`` / ``cvss`` / ``cvss_vector``.
+    Suggestions land in ``cvss_suggested_{score,vector,severity}`` and are
+    flagged ``cvss_provisional=True`` so a reviewer (or the UI) can promote
+    them explicitly — an audited, authorised action, not an automatic one.
+    """
 
     def score_finding(self, finding: dict[str, Any]) -> dict[str, Any]:
-        has_vector = bool(finding.get("cvss_vector") or finding.get("cvss_v3_vector"))
-        if has_vector:
-            finding.setdefault("cvss_auto_scored", False)
-            finding.setdefault("cvss_overridden", False)
+        finding.setdefault("cvss_overridden", False)
+
+        # A real, source-provided vector is authoritative: record provenance
+        # and never override or suggest over it.
+        if finding.get("cvss_vector") or finding.get("cvss_v3_vector"):
+            finding["cvss_auto_scored"] = False
             return finding
 
-        score, sev_label, vector = auto_score_finding(finding)
-        finding["cvss"] = score
-        finding["cvss_vector"] = vector
-        finding["cvss_v3_vector"] = vector
-        finding["cvss_v3_score"] = score
-        finding["severity"] = sev_label.lower() if sev_label.lower() in (
-            "critical", "high", "medium", "low", "none", "info", "informational",
-        ) else finding.get("severity", "info")
+        suggestion = auto_score_finding(finding)
+        if suggestion is None:
+            # No confident heuristic — leave the source severity intact; do
+            # not invent a score, vector, or downgrade to info/0.0.
+            finding["cvss_auto_scored"] = False
+            finding.setdefault("cvss_suggested_score", None)
+            finding.setdefault("cvss_suggested_vector", None)
+            finding.setdefault("cvss_suggested_severity", None)
+            return finding
+
+        score, sev_label, vector = suggestion
+        finding["cvss_suggested_score"] = score
+        finding["cvss_suggested_vector"] = vector
+        finding["cvss_suggested_severity"] = sev_label.lower()
         finding["cvss_auto_scored"] = True
-        finding["cvss_overridden"] = False
+        finding["cvss_provisional"] = True
         return finding
 
     def score_all_findings(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:

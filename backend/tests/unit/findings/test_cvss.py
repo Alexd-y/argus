@@ -93,3 +93,15 @@ class TestSeverityLabel:
     def test_non_numeric_raises(self) -> None:
         with pytest.raises(TypeError):
             severity_label("nope")  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("score", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_raises(self, score: float) -> None:
+        # NaN slips through naive range comparisons; it must be rejected.
+        with pytest.raises(ValueError):
+            severity_label(score)
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_bool_rejected(self, value: bool) -> None:
+        # ``bool`` is an ``int`` subclass — ``True`` must not score as 1.0.
+        with pytest.raises(TypeError):
+            severity_label(value)  # type: ignore[arg-type]
