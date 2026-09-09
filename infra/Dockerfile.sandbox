@@ -92,11 +92,16 @@ RUN ARCH=$(uname -m) && \
 ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}" GOBIN=/usr/local/bin
 
 # Recon tools compiled from Go source (not packaged in Kali apt).
+# asnmap (asn_mapping), dnsx (dns_enumeration), unfurl (js_analysis URL parsing)
+# were previously MISSING → the KAL-MCP executor recorded them as errored tool_runs.
 RUN go install -v github.com/projectdiscovery/katana/cmd/katana@latest && \
     go install -v github.com/lc/gau/v2/cmd/gau@latest && \
     go install -v github.com/tomnomnom/waybackurls@latest && \
     go install -v github.com/tomnomnom/assetfinder@latest && \
-    go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest
+    go install -v github.com/tomnomnom/unfurl@latest && \
+    go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
+    go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest && \
+    go install -v github.com/projectdiscovery/asnmap/cmd/asnmap@latest
 
 # findomain — subdomain enumeration (pre-built Rust binary, not in Kali apt).
 RUN FINDOMAIN_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/Findomain/Findomain/releases/latest | grep -oP '"tag_name":\s*"\K[^"]+' | head -1) && \
@@ -105,6 +110,16 @@ RUN FINDOMAIN_VERSION=$(curl -sL --retry 5 https://api.github.com/repos/Findomai
 
 # xsstrike (Python tool — not in Kali apt)
 RUN pip3 install --no-cache-dir --break-system-packages xsstrike
+
+# linkfinder (js_analysis endpoint extraction) — Python tool not published to PyPI.
+# ARGUS invokes it as `linkfinder -i <file> -o cli`. Clone source, install runtime
+# deps, and expose a thin launcher on PATH. HOME is anchored under /tmp because the
+# sandbox rootfs is read-only at runtime (only /tmp and /workspace are writable).
+RUN git clone --depth 1 https://github.com/GerbenJavado/LinkFinder.git /opt/linkfinder \
+    && pip3 install --no-cache-dir --break-system-packages -r /opt/linkfinder/requirements.txt \
+    && printf '#!/bin/sh\nexport HOME=/tmp/linkfinder-home\nmkdir -p "$HOME" 2>/dev/null || true\nexec python3 /opt/linkfinder/linkfinder.py "$@"\n' > /usr/local/bin/linkfinder \
+    && chmod +x /usr/local/bin/linkfinder \
+    && command -v linkfinder >/dev/null 2>&1 || { echo "ERROR: linkfinder launcher not on PATH"; exit 1; }
 
 # ARGUS invokes the ProjectDiscovery HTTP prober as `httpx` and the TLS auditor as
 # `testssl.sh` (see backend/config/tools/{httpx,testssl}.yaml). Kali ships them under
@@ -133,7 +148,7 @@ RUN set -e; \
 RUN printf '%s\n' \
     '#!/bin/sh' \
     "echo '=== ARGUS Sandbox tool check (web/recon) ==='" \
-     'for t in nmap masscan subfinder amass katana gau waybackurls assetfinder findomain naabu dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx sqlmap nikto wpscan dirsearch commix whatweb wafw00f whatwaf cors arjun theharvester sslscan testssl.sh hydra medusa crackmapexec; do' \
+     'for t in nmap masscan subfinder amass katana gau waybackurls assetfinder findomain naabu dnsx asnmap unfurl linkfinder dnsrecon gobuster ffuf feroxbuster wfuzz nuclei httpx sqlmap nikto wpscan dirsearch commix whatweb wafw00f whatwaf cors arjun theharvester sslscan testssl.sh hydra medusa crackmapexec; do' \
     '  if command -v "$t" >/dev/null 2>&1; then echo "$t: OK"; else echo "$t: MISSING"; fi' \
     'done' \
     > /usr/local/bin/argus-tool-check \
