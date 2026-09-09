@@ -21,8 +21,10 @@ from src.reports.report_document import (
     ReportToolRun,
     build_report_document,
 )
+from src.reports.wstg_applicability import infer_wstg_applicability
+from src.reports.wstg_coverage import wstg_ids_for_finding
 from src.reports.wstg_gate import compute_wstg_coverage
-from src.reports.wstg_plan import derive_wstg_states
+from src.reports.wstg_plan import build_engagement_test_plan, derive_wstg_states
 
 _CONFIDENCE_FLOAT: dict[str, float] = {
     "confirmed": 0.95,
@@ -227,6 +229,7 @@ def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
         get = f.get if isinstance(f, dict) else (lambda k, d=None, o=f: getattr(o, k, d))
         out.append(
             {
+                "id": get("finding_id", None) or get("id", None) or get("stable_id", None),
                 "title": get("title", "") or "",
                 "description": get("description", "") or "",
                 "tags": get("tags"),
@@ -234,18 +237,128 @@ def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
                 "ref": get("ref"),
                 "wstg": get("wstg"),
                 "owasp_wstg": get("owasp_wstg"),
+                # Enable CWE / vuln_type → WSTG derivation so a finding that only
+                # carries a CWE still counts toward the control it exercises.
+                "cwe": get("cwe", None) or get("cwe_id", None),
+                "vuln_type": get("vuln_type", None) or get("type", None),
+                "category": get("category", None),
+                # Evidence presence gates whether a finding's control-failure
+                # counts toward coverage (spec §4: no evidence → uncounted).
+                "_has_evidence": bool(
+                    (get("evidence_refs", None) or [])
+                    or get("proof_of_concept", None)
+                    or str(get("evidence_quality", "") or "").lower()
+                    in {"weak", "moderate", "strong"}
+                ),
             }
         )
     return out
 
 
-def _build_wstg_block(report_data: Any, scan_report_data: Any) -> dict[str, Any] | None:
-    """Strict, evidence-based WSTG coverage report (Track B), or None when off."""
+def _wstg_evidence_by_test(findings: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Link each evidenced finding to the WSTG tests it exercises.
+
+    A finding is the control-failure evidence for its test; only findings that
+    actually carry evidence contribute an id, so empty findings never inflate
+    coverage.
+    """
+    ev_map: dict[str, list[str]] = {}
+    for f in findings:
+        if not f.get("_has_evidence"):
+            continue
+        fid = str(f.get("id") or "").strip()
+        if not fid:
+            continue
+        for wid in wstg_ids_for_finding(f):
+            ev_map.setdefault(wid, []).append(f"FINDING:{fid}")
+    return ev_map
+
+
+# Tools whose execution implies an injectable parameter/form was discovered.
+_INPUT_SURFACE_TOOLS: frozenset[str] = frozenset(
+    {"dalfox", "sqlmap", "xsstrike", "commix", "arjun", "tplmap"}
+)
+# Tools whose execution implies session/cookie or authenticated testing.
+_SESSION_TOOLS: frozenset[str] = frozenset({"cookie_probe", "jwt_tool"})
+_AUTH_TOOLS: frozenset[str] = frozenset({"hydra", "patator"})
+
+
+def _derive_wstg_surface_signals(
+    findings: list[dict[str, Any]],
+    tools_executed: list[str],
+    scan_meta: dict[str, Any] | None,
+) -> tuple[bool, bool, bool]:
+    """Return ``(authenticated, has_input_surface, has_cookies)`` conservatively.
+
+    Signals come from scan metadata plus the *facts* of the run (which tools ran,
+    which findings were produced), so applicability tracks what was genuinely
+    exercised rather than an operator assertion.
+    """
+    meta = scan_meta or {}
+    tool_set = {str(t).strip().lower() for t in tools_executed if t}
+
+    authenticated = bool(
+        meta.get("authenticated")
+        or meta.get("auth_testing_enabled")
+        or meta.get("credentials")
+        or meta.get("auth_config")
+        or (tool_set & (_AUTH_TOOLS | _SESSION_TOOLS))
+    )
+
+    has_input_surface = bool(tool_set & _INPUT_SURFACE_TOOLS)
+    has_cookies = bool(tool_set & _SESSION_TOOLS)
+    blob_types = {
+        str(f.get("vuln_type") or f.get("type") or "").lower() for f in findings
+    }
+    if not has_input_surface and any(
+        t in blob_types
+        for t in ("xss", "sqli", "sql_injection", "lfi", "rfi", "ssti", "ssrf", "idor")
+    ):
+        has_input_surface = True
+    if not has_cookies and any(
+        "cookie" in str(f.get("title") or "").lower()
+        or "cookie" in str(f.get("description") or "").lower()
+        for f in findings
+    ):
+        has_cookies = True
+
+    return authenticated, has_input_surface, has_cookies
+
+
+def _build_wstg_block(
+    report_data: Any,
+    scan_report_data: Any,
+    *,
+    scan_meta: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Strict, evidence-based WSTG coverage report (Track B), or None when off.
+
+    Coverage is scored over the *applicable* catalog: genuinely-out-of-scope
+    tests (no auth session / no input surface / no cookies / manual-only) are
+    excluded with an audited rationale, and each evidenced finding is linked to
+    the control it exercises so real coverage — not a tool-execution heuristic —
+    is reported.
+    """
     if not settings.wstg_strict_gate_enabled:
         return None
+    tools = _tools_executed(scan_report_data)
+    findings = _finding_dicts_for_wstg(report_data)
+    authenticated, has_input_surface, has_cookies = _derive_wstg_surface_signals(
+        findings, tools, scan_meta
+    )
+    applicability, rationale = infer_wstg_applicability(
+        authenticated=authenticated,
+        has_input_surface=has_input_surface,
+        has_cookies=has_cookies,
+    )
+    base_plan = build_engagement_test_plan(
+        applicability=applicability, exclusion_rationale=rationale
+    )
     states = derive_wstg_states(
-        _tools_executed(scan_report_data),
-        _finding_dicts_for_wstg(report_data),
+        tools,
+        findings,
+        base_plan=base_plan,
+        evidence_by_test=_wstg_evidence_by_test(findings),
     )
     return compute_wstg_coverage(states, catalog_size=len(states)).as_dict()
 
@@ -311,7 +424,7 @@ def build_snapshot_from_report_data(
         evidence_references=evidence_refs,
         limitations=list(meta.get("limitations") or []),
         registry_versions=registry_versions or meta.get("registry_versions") or {},
-        wstg=_build_wstg_block(report_data, scan_report_data),
+        wstg=_build_wstg_block(report_data, scan_report_data, scan_meta=meta),
         generated_at=generated_at,
     )
 

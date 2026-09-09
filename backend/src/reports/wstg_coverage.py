@@ -189,7 +189,7 @@ _WSTG_TESTS: list[WstgTestCase] = [
 
 _TOOL_TO_WSTG: dict[str, list[str]] = {
     "nmap": [
-        "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04",
+        "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-INFO-10",
         "WSTG-CONF-01", "WSTG-CONF-06",
     ],
     "nikto": [
@@ -197,10 +197,10 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CONF-04", "WSTG-CONF-06", "WSTG-ERRH-01",
     ],
     "nuclei": [
-        "WSTG-INFO-08", "WSTG-CONF-02", "WSTG-CONF-07",
+        "WSTG-INFO-08", "WSTG-CONF-02", "WSTG-CONF-07", "WSTG-CONF-08",
         "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
         "WSTG-INPV-18", "WSTG-INPV-19", "WSTG-CRYP-01",
-        "WSTG-ERRH-01", "WSTG-ERRH-02",
+        "WSTG-ERRH-01", "WSTG-ERRH-02", "WSTG-CLNT-09",
     ],
     "dalfox": [
         "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-CLNT-01",
@@ -209,16 +209,17 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-INPV-05",
     ],
     "testssl": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CONF-07",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04", "WSTG-CONF-07",
     ],
     "testssl.sh": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CONF-07",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04", "WSTG-CONF-07",
     ],
     "whatweb": [
-        "WSTG-INFO-02", "WSTG-INFO-08", "WSTG-INFO-09",
+        "WSTG-INFO-02", "WSTG-INFO-05", "WSTG-INFO-08", "WSTG-INFO-09",
     ],
     "httpx": [
-        "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-CONF-07",
+        "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-INFO-05", "WSTG-INFO-10",
+        "WSTG-CONF-07", "WSTG-CLNT-09",
     ],
     "gobuster": [
         "WSTG-CONF-03", "WSTG-CONF-04", "WSTG-CONF-05",
@@ -271,7 +272,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
     ],
     "curl": [
-        "WSTG-INFO-03", "WSTG-CONF-06",
+        "WSTG-INFO-03", "WSTG-CONF-06", "WSTG-CLNT-09",
     ],
     "theharvester": [
         "WSTG-INFO-01", "WSTG-INFO-05",
@@ -311,7 +312,7 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CLNT-12", "WSTG-CLNT-13",
     ],
     "sslscan": [
-        "WSTG-CRYP-01",
+        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04",
     ],
     "hydra": [
         "WSTG-ATHN-01", "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-07",
@@ -406,21 +407,62 @@ _TOOL_ALIASES: dict[str, str] = {
 }
 
 _TOOL_EVIDENCE_IDS: dict[str, str] = {
+    # Technology / fingerprint
     "whatweb": "EV-TECH-001",
     "wappalyzer": "EV-TECH-001",
+    "wappalyzer_cli": "EV-TECH-001",
+    "webanalyze": "EV-TECH-001",
+    "retire.js": "EV-TECH-002",
+    # Headers / HTTP surface
     "httpx": "EV-HDR-001",
+    "httpx_tool": "EV-HDR-001",
     "curl": "EV-HDR-001",
     "nikto": "EV-HDR-001",
+    # TLS / crypto
     "testssl": "EV-TLS-001",
     "testssl.sh": "EV-TLS-001",
     "sslscan": "EV-TLS-001",
     "sslyze": "EV-TLS-001",
+    # Ports / network
     "nmap": "EV-PORT-001",
     "naabu": "EV-PORT-001",
     "masscan": "EV-PORT-001",
+    # Content discovery / crawl (evidence: request/response captures)
+    "ffuf": "EV-DISC-001",
+    "gobuster": "EV-DISC-001",
+    "feroxbuster": "EV-DISC-001",
+    "dirsearch": "EV-DISC-001",
+    "katana": "EV-DISC-001",
+    "waybackurls": "EV-DISC-001",
+    "gau": "EV-DISC-001",
+    # Parameter / entry-point discovery
+    "arjun": "EV-PARAM-001",
+    # Vulnerability scanners (template/plugin match evidence)
+    "nuclei": "EV-VULN-001",
+    "dalfox": "EV-VULN-002",
+    "xsstrike": "EV-VULN-002",
+    "sqlmap": "EV-VULN-003",
+    "commix": "EV-VULN-004",
+    # Subdomain / takeover
+    "subfinder": "EV-SUB-001",
+    "amass": "EV-SUB-001",
+    "subjack": "EV-SUB-002",
+    "dnsrecon": "EV-DNS-001",
+    "dig": "EV-DNS-001",
+    # WAF / client-side
+    "wafw00f": "EV-WAF-001",
+    "playwright": "EV-CLNT-001",
+    "cookie_probe": "EV-SESS-001",
+    "jwt_tool": "EV-SESS-002",
+    # Email / OSINT / SCA
     "theharvester": "EV-EMAIL-001",
     "trivy": "EV-SCA-001",
+    "gitleaks": "EV-SECRET-001",
+    "trufflehog": "EV-SECRET-001",
     "rate_limit_signal": "EV-AUTH-001",
+    # ARGUS aggregate producers
+    "argus_recon": "EV-RECON-001",
+    "argus_active_scan": "EV-ASCAN-001",
 }
 
 _MIN_TOOLS_FULL_COVERAGE = 2

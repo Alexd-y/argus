@@ -50,6 +50,7 @@ from src.orchestration.execution_mode_context import (
 )
 from src.orchestration.exploit_verify import verify_exploit_poc_async
 from src.orchestration.finding_gate import gate_and_dedupe_findings
+from src.orchestration.progress import emit_scan_subprogress
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
@@ -102,7 +103,9 @@ from src.recon.vulnerability_analysis.finding_stable_id import assign_stable_fin
 from src.recon.vulnerability_analysis.owasp_category_map import resolve_owasp_category
 from src.reports.baseline import evaluate_baseline
 from src.reports.finding_metadata import apply_default_finding_metadata
+from src.reports.finding_severity_normalizer import severity_from_cvss
 from src.reports.finding_title_normalizer import humanize_finding_title
+from src.reports.tls_severity_gate import gate_tls_finding
 from src.reports.wstg_coverage import wstg_ids_for_finding
 from src.reports.wstg_gate import compute_wstg_coverage
 from src.reports.wstg_plan import derive_wstg_states
@@ -1625,6 +1628,16 @@ _CVSS_DEFAULTS: dict[str, float] = {
 _MIN_CONFIRMED_XSS_CVSS = 7.0
 _MIN_CONFIRMED_ACTIVE_CVSS = 7.0
 
+# Severity ordering for CVSS→severity reconciliation (VHL-SEV-001, upgrade-only).
+_SEVERITY_RANK: dict[str, int] = {
+    "info": 0,
+    "informational": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
+
 _CWE_MAP: dict[str, str] = {
     "xss": "CWE-79",
     "sqli": "CWE-89",
@@ -1828,6 +1841,10 @@ def _build_active_scan_context(findings: list[dict[str, Any]]) -> str:
 def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Post-process LLM + active-scan findings: assign default CVSS, enforce floors, sort desc."""
     for f in findings:
+        # VHL-TLS-001: cap non-evidenced TLS/SSL probes to info before any CVSS
+        # floor is applied, so a healthy handshake is never scored as weak crypto.
+        gate_tls_finding(f)
+
         title_lower = (f.get("title") or "").lower()
         desc_lower = (f.get("description") or "").lower()
         severity = (f.get("severity") or "").lower()
@@ -1870,6 +1887,17 @@ def _postprocess_findings_cvss(findings: list[dict[str, Any]]) -> list[dict[str,
             f["owasp_category"] = oc
         elif "owasp_category" in f:
             del f["owasp_category"]
+
+        # VHL-SEV-001: surface Critical/High findings by reconciling the severity
+        # label UP to the band its CVSS justifies (SQLi 9.8 → critical, XSS 7.2 →
+        # high). Only upgrades — an honest low-severity tool hit is never inflated,
+        # but a high-impact finding can no longer hide behind a stale label.
+        cvss_now = f.get("cvss")
+        if isinstance(cvss_now, (int, float)) and cvss_now > 0:
+            band = severity_from_cvss(float(cvss_now))
+            cur = (f.get("severity") or "").lower()
+            if band and _SEVERITY_RANK.get(band, 0) > _SEVERITY_RANK.get(cur, 0):
+                f["severity"] = band
 
         apply_default_finding_metadata(f)
 
@@ -2331,6 +2359,14 @@ async def run_vuln_analysis(
         except Exception:  # noqa: BLE001
             quick_fuzz_section = ""
 
+    await emit_scan_subprogress(
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        phase="vuln_analysis",
+        progress=60,
+        message=f"Active scan complete — {len(active_scan_findings)} raw findings; starting AI analysis",
+    )
+
     inp = VulnAnalysisInput(
         threat_model=threat_model, assets=assets, attack_surface=attack_surface
     )
@@ -2359,6 +2395,14 @@ async def run_vuln_analysis(
         code_aware_section=code_aware_section, memory_context=memory_context,
         use_react=scan_options.get("use_react", False),
         scan_options=scan_options,
+    )
+
+    await emit_scan_subprogress(
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        phase="vuln_analysis",
+        progress=64,
+        message="AI analysis complete; normalizing and gating findings",
     )
 
     if active_scan_findings:
@@ -2755,6 +2799,14 @@ async def run_vuln_analysis(
         llm_output.findings,
         scan_id=scan_id,
         enabled=bool(getattr(settings, "finding_evidence_gate_enabled", True)),
+    )
+
+    await emit_scan_subprogress(
+        scan_id=scan_id,
+        tenant_id=tenant_id,
+        phase="vuln_analysis",
+        progress=68,
+        message=f"Findings gated & deduped — {len(llm_output.findings)} retained",
     )
 
     # Re-assign stable finding ids after ALL late appends (aiml/fuzzing/binary/

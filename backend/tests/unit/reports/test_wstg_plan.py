@@ -66,12 +66,22 @@ def test_finding_reference_without_evidence_does_not_count():
     assert s.counts_toward_coverage() is False  # missing evidence blocks the count
 
 
-def test_single_weak_tool_is_partial_not_counted():
-    # Pick a test that a single mapped tool covers; assert it becomes partial.
-    states = derive_wstg_states(tools_executed=["whatweb"], findings=[])
+def test_single_covering_tool_without_evidence_is_partial_not_counted():
+    # A tool with no evidence id (wpscan) covers tests but proves nothing on its
+    # own → partial, contributes zero (spec §4: evidence is the gate).
+    states = derive_wstg_states(tools_executed=["wpscan"], findings=[])
     partials = [s for s in states if s.execution_status == ExecutionStatus.PARTIAL]
-    assert partials, "expected at least one partial from a single covering tool"
+    assert partials, "expected at least one partial from an evidence-less covering tool"
     assert all(not s.counts_toward_coverage() for s in partials)
+
+
+def test_single_covering_tool_with_evidence_is_completed_pass():
+    # A single covering tool that produces a captured evidence artifact (whatweb →
+    # EV-TECH-001) completes the control with pass and counts toward coverage.
+    states = derive_wstg_states(tools_executed=["whatweb"], findings=[])
+    counted = [s for s in states if s.counts_toward_coverage()]
+    assert counted, "expected an evidenced single-tool coverage to count"
+    assert all(s.execution_status == ExecutionStatus.COMPLETED for s in counted)
 
 
 def test_uncovered_tests_stay_not_started():

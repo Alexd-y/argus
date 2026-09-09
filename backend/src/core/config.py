@@ -922,8 +922,10 @@ class Settings(BaseSettings):
     # Track B — attach the strict, evidence-based WSTG v4.2 coverage report
     # (src/reports/wstg_gate + wstg_plan) to the canonical snapshot, alongside
     # the legacy tool-heuristic coverage. Additive/opt-in.
-    # Env: WSTG_STRICT_GATE_ENABLED.
-    wstg_strict_gate_enabled: bool = False
+    # Env: WSTG_STRICT_GATE_ENABLED. Enabled by default so every report carries a
+    # methodology-versioned WSTG v4.2 coverage block (fixes the historical
+    # ``wstg: null`` — the block was silently skipped when this defaulted off).
+    wstg_strict_gate_enabled: bool = True
     # Query XposedOrNot (free, keyless breach API) for collected emails during
     # recon, alongside HIBP. Off by default to avoid unexpected external calls.
     # Env: XPOSEDORNOT_ENABLED.

@@ -29,7 +29,6 @@ import hashlib
 from dataclasses import dataclass, field
 
 from src.reports.wstg_coverage import (
-    _MIN_TOOLS_FULL_COVERAGE,
     _TOOL_EVIDENCE_IDS,
     _TOOL_TO_WSTG,
     _WSTG_TESTS,
@@ -163,7 +162,11 @@ def derive_wstg_states(
 
         if tc.id in finding_ids:
             status, result = ExecutionStatus.COMPLETED, TestResult.FAIL
-        elif len(covering) >= _MIN_TOOLS_FULL_COVERAGE and evidence:
+        elif covering and evidence:
+            # A control exercised by at least one tool that produced a captured
+            # evidence artifact is completed/pass — evidence, not an arbitrary
+            # two-tool count, is the spec gate (§4). A covering tool with no
+            # evidence id stays partial (uncounted).
             status, result = ExecutionStatus.COMPLETED, TestResult.PASS
         elif covering:
             status, result = ExecutionStatus.PARTIAL, TestResult.NOT_EVALUATED
