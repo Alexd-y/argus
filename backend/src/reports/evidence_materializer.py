@@ -15,7 +15,9 @@ a bare ``evidence_refs`` list of ids/hashes is not sufficient.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 # Stable namespace for deterministic Evidence ids. A fixed namespace makes
 # ``build_evidence_id`` a pure function of (scan_id, finding_id, object_key), so
@@ -28,6 +30,10 @@ SCREENSHOT_CONTENT_TYPE = "image/png"
 
 _POC_DESCRIPTION = "Finding PoC JSON"
 _SCREENSHOT_DESCRIPTION = "Finding PoC screenshot"
+
+# Cap for serialised observation text so a stored evidence artifact stays small.
+_MAX_OBSERVATION_LEN = 4000
+_MAX_OBSERVATION_REFS = 64
 
 
 @dataclass(frozen=True)
@@ -86,10 +92,40 @@ def build_finding_evidence_rows(
     return rows
 
 
+def build_observation_poc(
+    *,
+    description: str | None,
+    evidence_refs: Sequence[str] | None,
+    reproducible_steps: str | None = None,
+) -> dict[str, Any] | None:
+    """Build a minimal, honest evidence artifact from a finding's *captured*
+    observation (ARGUS-WSTG-COV-1 §Evidence).
+
+    Intended for passive checks (TLS/headers/DNS) whose result is a stored
+    observation rather than an interactive PoC. It NEVER fabricates from a bare
+    finding: it returns ``None`` unless the finding carries at least one real
+    captured evidence reference *and* an observed fact (a description or a
+    reproduction). The returned dict is uploaded as the finding's evidence
+    artifact and linked via :func:`build_finding_evidence_rows`.
+    """
+    refs = [str(r).strip() for r in (evidence_refs or []) if str(r or "").strip()]
+    observation = (description or "").strip()
+    steps = (reproducible_steps or "").strip()
+    if not refs or (not observation and not steps):
+        return None
+    poc: dict[str, Any] = {"kind": "observation", "evidence_refs": refs[:_MAX_OBSERVATION_REFS]}
+    if observation:
+        poc["observation"] = observation[:_MAX_OBSERVATION_LEN]
+    if steps:
+        poc["reproducible_steps"] = steps[:_MAX_OBSERVATION_LEN]
+    return poc
+
+
 __all__ = [
     "POC_CONTENT_TYPE",
     "SCREENSHOT_CONTENT_TYPE",
     "EvidenceRow",
     "build_evidence_id",
     "build_finding_evidence_rows",
+    "build_observation_poc",
 ]

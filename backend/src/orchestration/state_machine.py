@@ -151,7 +151,10 @@ from src.reports.bundle_enqueue import (
     enqueue_generate_all_bundle,
     schedule_generate_all_reports_task_safe,
 )
-from src.reports.evidence_materializer import build_finding_evidence_rows
+from src.reports.evidence_materializer import (
+    build_finding_evidence_rows,
+    build_observation_poc,
+)
 from src.reports.finding_metadata import (
     clip_optional_text,
     normalize_confidence,
@@ -774,6 +777,16 @@ async def _persist_report_and_findings(
         # key (insert-or-update) so a re-run never raises a duplicate findings_pkey
         # IntegrityError that would fail an otherwise-complete scan.
         await session.merge(finding)
+        # ARGUS-WSTG-COV-1 §Evidence: materialise a real Evidence row from the
+        # finding's captured artifacts so store-backed coverage can validate
+        # ``finding → artifact``. Two honest sources, in priority order:
+        #   1) a structured proof_of_concept (interactive PoC + screenshots), or
+        #   2) a passive observation backed by real evidence_refs (TLS/headers/
+        #      DNS checks whose result is a stored observation, not a live PoC).
+        # No artifact → no Evidence row → not counted (never fabricated).
+        # Idempotent: deterministic ids upsert on phase retry/resume.
+        poc_key: str | None = None
+        screenshot_key: str | None = None
         if poc_db:
             poc_key = await asyncio.to_thread(
                 upload_finding_poc_json,
@@ -782,34 +795,43 @@ async def _persist_report_and_findings(
                 finding.id,
                 poc_db,
             )
-            # ARGUS-WSTG-COV-1 §Evidence: materialise a real Evidence row for the
-            # uploaded PoC (and screenshot, if enrichment produced one) so
-            # store-backed coverage can validate ``finding → artifact``. Without
-            # this row the finding's control-failure never counts. Idempotent:
-            # deterministic id upserts on phase retry/resume.
             screenshot_key = (
                 str(poc_db.get("screenshot_key") or "").strip()
                 if isinstance(poc_db, dict)
                 else ""
             ) or None
-            for _row in build_finding_evidence_rows(
-                tenant_id=tenant_id,
-                scan_id=scan_id,
-                finding_id=finding.id,
-                poc_object_key=poc_key,
-                screenshot_object_key=screenshot_key,
-            ):
-                await session.merge(
-                    Evidence(
-                        id=_row.id,
-                        tenant_id=_row.tenant_id,
-                        scan_id=_row.scan_id,
-                        finding_id=_row.finding_id,
-                        object_key=_row.object_key,
-                        content_type=_row.content_type,
-                        description=_row.description,
-                    )
+        elif ev_refs:
+            observation_poc = build_observation_poc(
+                description=f.get("description"),
+                evidence_refs=ev_refs,
+                reproducible_steps=rep_steps,
+            )
+            if observation_poc:
+                poc_key = await asyncio.to_thread(
+                    upload_finding_poc_json,
+                    tenant_id,
+                    scan_id,
+                    finding.id,
+                    observation_poc,
                 )
+        for _row in build_finding_evidence_rows(
+            tenant_id=tenant_id,
+            scan_id=scan_id,
+            finding_id=finding.id,
+            poc_object_key=poc_key,
+            screenshot_object_key=screenshot_key,
+        ):
+            await session.merge(
+                Evidence(
+                    id=_row.id,
+                    tenant_id=_row.tenant_id,
+                    scan_id=_row.scan_id,
+                    finding_id=_row.finding_id,
+                    object_key=_row.object_key,
+                    content_type=_row.content_type,
+                    description=_row.description,
+                )
+            )
         await _record_event(
             session,
             tenant_id,
