@@ -82,6 +82,65 @@ class TestScanModeWiring:
 
 
 # ---------------------------------------------------------------------------
+# Class 1b: TestDeepReconFeatureSet
+# ---------------------------------------------------------------------------
+
+class TestDeepReconFeatureSet:
+    """Lab = Lab + deep: the deep tier (``deep`` + ``lab``) enables the full-depth
+    recon feature set; lab additionally keeps its lab-injection semantics."""
+
+    @staticmethod
+    def _sync(options: dict | None, scan_mode: str, target: str | None = None) -> dict:
+        from src.api.routers.scans import _sync_scan_depth_options
+
+        return _sync_scan_depth_options(options or {}, scan_mode, target=target)
+
+    _DEEP_KNOBS = (
+        ("recon_mode", "full"),
+        ("recon_deep_port_scan", True),
+        ("recon_enable_content_discovery", True),
+        ("recon_js_analysis", True),
+        ("recon_screenshots", True),
+    )
+
+    def test_lab_enables_deep_recon_feature_set(self) -> None:
+        result = self._sync({}, "lab", target="https://example.com")
+        for key, expected in self._DEEP_KNOBS:
+            assert result[key] == expected, f"lab must enable {key}={expected}"
+
+    def test_lab_keeps_lab_injection_semantics(self) -> None:
+        result = self._sync({}, "lab", target="https://example.com")
+        assert result["active_injection_mode"] == "lab"
+        assert result["intentional_vulnerable_lab"] is True
+        assert result["scan_approval_flags"]["sqlmap"] is True
+
+    def test_deep_enables_deep_recon_but_no_lab_injection(self) -> None:
+        result = self._sync({}, "deep", target="https://example.com")
+        for key, expected in self._DEEP_KNOBS:
+            assert result[key] == expected
+        # Production deep must not gain lab-injection privileges.
+        assert "active_injection_mode" not in result
+        assert "intentional_vulnerable_lab" not in result
+
+    def test_standard_does_not_enable_deep_recon(self) -> None:
+        result = self._sync({}, "standard", target="https://example.com")
+        for key, _ in self._DEEP_KNOBS:
+            assert key not in result
+
+    def test_explicit_recon_override_is_authoritative(self) -> None:
+        result = self._sync(
+            {"recon_deep_port_scan": False, "recon_screenshots": False},
+            "lab",
+            target="https://example.com",
+        )
+        assert result["recon_deep_port_scan"] is False
+        assert result["recon_screenshots"] is False
+        # Non-overridden knobs still default on.
+        assert result["recon_mode"] == "full"
+        assert result["recon_js_analysis"] is True
+
+
+# ---------------------------------------------------------------------------
 # Class 2: TestVulnFlagMapping
 # ---------------------------------------------------------------------------
 

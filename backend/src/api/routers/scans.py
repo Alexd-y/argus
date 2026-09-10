@@ -149,6 +149,17 @@ def _sync_scan_depth_options(
     options_dict = dict(options_dict)
     options_dict["scan_mode"] = scan_mode
     options_dict["scanType"] = scan_mode
+    # Deep tier (``deep`` + ``lab``) runs the full-depth recon feature set. Lab is
+    # "Lab + deep": lab capabilities layered on top of deep-depth recon/VA. The
+    # public ``deep`` profile also resolves to scan_mode ``lab``, so both entry
+    # points are covered here. ``setdefault`` keeps any explicit per-scan
+    # ``recon_*`` override authoritative.
+    if scan_mode in ("deep", "lab"):
+        options_dict.setdefault("recon_mode", "full")
+        options_dict.setdefault("recon_deep_port_scan", True)
+        options_dict.setdefault("recon_enable_content_discovery", True)
+        options_dict.setdefault("recon_js_analysis", True)
+        options_dict.setdefault("recon_screenshots", True)
     if scan_mode == "lab":
         options_dict.setdefault("active_injection_mode", "lab")
         options_dict.setdefault("intentional_vulnerable_lab", True)
