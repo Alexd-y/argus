@@ -22,6 +22,7 @@ from src.data_sources.hibp_pwned_passwords import summarize_pwned_passwords_for_
 from src.data_sources.nvd_client import NVDClient
 from src.data_sources.shodan_client import ShodanClient
 from src.execution_mode.mode import ExecutionMode
+from src.findings.severity_policy import apply_floor_to_findings
 from src.llm import facade as llm_facade
 from src.llm.task_router import LLMTask
 from src.orchestration.adaptive_driver import (
@@ -50,7 +51,6 @@ from src.orchestration.execution_mode_context import (
 )
 from src.orchestration.exploit_verify import verify_exploit_poc_async
 from src.orchestration.finding_gate import gate_and_dedupe_findings
-from src.orchestration.progress import emit_scan_subprogress
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
@@ -68,6 +68,7 @@ from src.orchestration.phases import (
     VulnAnalysisInput,
     VulnAnalysisOutput,
 )
+from src.orchestration.progress import emit_scan_subprogress
 from src.orchestration.raw_phase_artifacts import RawPhaseSink
 from src.owasp_top10_2025 import parse_owasp_category
 from src.quick.cancellation import is_scan_cancelled
@@ -2798,6 +2799,13 @@ async def run_vuln_analysis(
         scan_id=scan_id,
         enabled=bool(getattr(settings, "finding_evidence_gate_enabled", True)),
     )
+
+    # Severity floor (product policy): raise a small, unambiguous set of
+    # under-rated hardening findings (missing security headers, DNSSEC not
+    # enabled, DKIM not detected) to the band declared by the Frontend curated
+    # model. Raise-only, evidence-gated (the gate above already ran), so the
+    # stored record matches the customer-facing report.
+    apply_floor_to_findings(llm_output.findings)
 
     await emit_scan_subprogress(
         scan_id=scan_id,

@@ -51,6 +51,7 @@ from src.db.session import async_session_factory, set_session_tenant
 from src.execution_mode.mode import ExecutionMode
 from src.execution_mode.repository import load_lease_scope_storage
 from src.findings.severity import aggregate_counts
+from src.findings.severity_policy import resolve_display_severity
 from src.llm.cost_tracker import ScanCostTracker
 from src.nuclei.profile_compiler import default_profile_id_for_mode
 from src.orchestration.auth_config import CredentialTestConfig, TargetConfig
@@ -847,15 +848,20 @@ def _finding_to_schema(f: FindingModel) -> Finding:
     # "none") next to a DB confidence of "confirmed" — a finding with no evidence
     # quality wrongly rendered as provable/confirmed.
     view = reconcile_finding_evidence_view(f)
+    # Severity floor (product policy): raise a small, unambiguous set of
+    # under-rated hardening findings to the band declared by the Frontend
+    # curated model. Raise-only; applied here so existing scans reflect the
+    # policy without a re-scan, consistent with the persist-path floor.
+    severity, cvss = resolve_display_severity(f.severity, f.cwe, f.title, f.cvss)
     return Finding(
         finding_id=str(f.id) if f.id is not None else None,
-        severity=f.severity,
+        severity=severity,
         # VHL-TITLE-001: humanize raw producer tokens (e.g. "WHATWEB_PLUGIN
         # finding" → "Technology fingerprint (WhatWeb)") for the customer view.
         title=humanize_finding_title(f.title),
         description=f.description or "",
         cwe=f.cwe,
-        cvss=f.cvss,
+        cvss=cvss,
         owasp_category=parse_owasp_category(f.owasp_category),
         proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
         confidence=view["confidence"],  # type: ignore[arg-type]

@@ -87,9 +87,18 @@ _TITLE_SUFFIX_RE = re.compile(r"\s+(?:—|-|on|for|at)\s+https?://\S+.*$", re.IG
 _META_NOISE_RE = re.compile(
     r"insufficient evidence|unknown finding|cannot be (?:characteriz|validat)|"
     r"no actionable|informational finding.*insufficient|unsubstantiated|"
-    r"without (?:sufficient|specific) (?:detail|evidence)",
+    r"without (?:sufficient|specific) (?:detail|evidence)|unclassified observation",
     re.IGNORECASE,
 )
+
+#: Severity ordering shared by dedup survivor selection and evidence folding.
+_SEVERITY_RANK: dict[str, int] = {
+    "info": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "critical": 4,
+}
 
 # Narrow semantic classes for noisy check families so paraphrased duplicates
 # (differently-worded titles for the same host-level issue) collapse into one.
@@ -103,11 +112,29 @@ _SEMANTIC_CLASSES: tuple[tuple[str, re.Pattern[str]], ...] = (
             re.IGNORECASE,
         ),
     ),
-    ("whatweb", re.compile(r"whatweb", re.IGNORECASE)),
+    # Technology fingerprint / coverage signal (WhatWeb + LLM paraphrases):
+    # collapse "Technology fingerprint (WhatWeb)" and "Technology fingerprinting
+    # reveals web server ..." into one record per host.
+    (
+        "tech_fingerprint",
+        re.compile(r"whatweb|technology fingerprint|fingerprinting", re.IGNORECASE),
+    ),
+    # TLS/SSL configuration family. The "/" in "TLS/SSL" broke the old literal
+    # "tls configuration", so paraphrases ("TLS/SSL configuration observation",
+    # "... weakness", spanning CWE-326 and CWE-310) never collapsed and inflated
+    # the medium/info buckets. Match tls/ssl followed by a config/weakness token.
     (
         "tls_probe",
-        re.compile(r"tls[_\s]?probe|tls configuration|ssl/tls|tls weakness", re.IGNORECASE),
+        re.compile(
+            r"tls[_\s]?probe|weak\s*cipher|"
+            r"(?:tls|ssl)[\s/].{0,12}(?:config|weak|observation|cipher|certificate|protocol)",
+            re.IGNORECASE,
+        ),
     ),
+    # LinkFinder "line finding" family: many paraphrases of the same JS/HTTP
+    # line-extraction signal ("Line findings in HTTP response", "HTTP response
+    # line findings may expose internal paths ...").
+    ("line_finding", re.compile(r"line finding", re.IGNORECASE)),
 )
 
 
@@ -121,9 +148,7 @@ def _semantic_class(finding: dict[str, Any]) -> str | None:
     Only the narrow families below collapse across paraphrased titles; every
     other finding keeps its precise title-based dedup key.
     """
-    blob = " ".join(
-        _s(finding.get(k)) for k in ("title", "vuln_type", "source_tool")
-    ).lower()
+    blob = " ".join(_s(finding.get(k)) for k in ("title", "vuln_type", "source_tool")).lower()
     for name, rx in _SEMANTIC_CLASSES:
         if rx.search(blob):
             return name
@@ -338,8 +363,7 @@ def _fold_into(primary: dict[str, Any], other: dict[str, Any]) -> None:
         )
 
     # Keep the strongest severity / CVSS / PoC across duplicates.
-    _severity_rank = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
-    if _severity_rank.get(_s(other.get("severity")).lower(), -1) > _severity_rank.get(
+    if _SEVERITY_RANK.get(_s(other.get("severity")).lower(), -1) > _SEVERITY_RANK.get(
         _s(primary.get("severity")).lower(), -1
     ):
         primary["severity"] = other.get("severity")
@@ -347,6 +371,14 @@ def _fold_into(primary: dict[str, Any], other: dict[str, Any]) -> None:
         primary["cvss"] = other.get("cvss")
     if not _has_proof_of_concept(primary) and _has_proof_of_concept(other):
         primary["proof_of_concept"] = other.get("proof_of_concept")
+
+
+def _survivor_sort_key(finding: dict[str, Any]) -> tuple[int, int]:
+    """Rank a duplicate for survivor selection: (evidence_quality, severity)."""
+    return (
+        int(evidence_quality_of(finding)),
+        _SEVERITY_RANK.get(_s(finding.get("severity")).lower(), -1),
+    )
 
 
 def dedupe_findings(
@@ -379,7 +411,10 @@ def dedupe_findings(
         members = groups[key]
         primary = members[0]
         for candidate in members[1:]:
-            if evidence_quality_of(candidate) > evidence_quality_of(primary):
+            # Survivor = strongest evidence, then highest severity (so a
+            # collapsed family keeps its most impactful representative row —
+            # the read path returns the survivor's DB row, not the folded dict).
+            if _survivor_sort_key(candidate) > _survivor_sort_key(primary):
                 primary = candidate
         primary["occurrences"] = len(members)
         for member in members:
@@ -406,11 +441,7 @@ def _dominant_host(findings: list[dict[str, Any]]) -> str:
     collapse. If findings span multiple hosts (multi-host engagements) there is
     no safe single fallback and ``""`` is returned to avoid over-collapsing.
     """
-    hosts = {
-        _host_of(_finding_target(f))
-        for f in findings
-        if isinstance(f, dict)
-    }
+    hosts = {_host_of(_finding_target(f)) for f in findings if isinstance(f, dict)}
     hosts.discard("")
     return next(iter(hosts)) if len(hosts) == 1 else ""
 
@@ -437,9 +468,7 @@ def gate_and_dedupe_findings(
     if not enabled:
         for finding in findings:
             if isinstance(finding, dict):
-                finding.setdefault(
-                    "evidence_quality", evidence_quality_of(finding).name.lower()
-                )
+                finding.setdefault("evidence_quality", evidence_quality_of(finding).name.lower())
         return findings
     kept, _dropped = gate_findings(findings, scan_id=scan_id)
     fallback_host = _host_of(default_host) or _dominant_host(kept)
