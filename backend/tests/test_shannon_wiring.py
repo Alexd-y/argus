@@ -962,12 +962,20 @@ class TestPipelineWiringIntegration:
             content = f.read()
         assert "symbolic_execution" in content
 
-    def test_sub_agent_spawner_in_handlers_file(self):
-        import os
-        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
-        with open(path, encoding="utf-8") as f:
-            content = f.read()
-        assert "sub_agent_spawner" in content
+    def test_vuln_analysis_has_no_redundant_subagent_reanalysis(self):
+        # Platform-hardening A (3.1/5): run_vuln_analysis must NOT re-run a full
+        # per-domain ai_vuln_analysis via a throwaway SubAgentSpawner pass. This
+        # guards against reintroducing the duplicate (paid twice, result dropped
+        # as findings_count) path. The spawner module itself still exists and is
+        # unit-tested separately.
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_vuln_analysis)
+        # Assert no instantiation / dispatch of the throwaway spawner pass
+        # (substring guards against the code, not the explanatory comment).
+        assert "SubAgentSpawner(" not in source
+        assert "sub_agents_spawned" not in source
+        assert ".aspawn(" not in source
 
     def test_self_pentest_in_state_machine_file(self):
         import os
@@ -1023,13 +1031,16 @@ class TestPipelineWiringIntegration:
 
 class TestNewWiringP1ToP12:
 
-    def test_fanout_va_in_handlers(self):
-        import os
-        path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "src", "orchestration", "handlers.py"))
-        with open(path, encoding="utf-8") as f:
-            content = f.read()
-        assert "_fanout_domain" in content
-        assert "fanout_va_merged" in content
+    def test_vuln_analysis_has_no_redundant_fanout_reanalysis(self):
+        # Platform-hardening A (3.1/5): the asyncio.gather fan-out that re-ran a
+        # full ai_vuln_analysis per domain and merged results back by title only
+        # was removed. Domain specialisation is the single gated pass that
+        # produces typed hypotheses/queues. Guard against reintroduction.
+        import inspect
+        from src.orchestration import handlers
+        source = inspect.getsource(handlers.run_vuln_analysis)
+        assert "_fanout_domain" not in source
+        assert "fanout_va_merged" not in source
 
     def test_ephemeral_worker_in_state_machine(self):
         import os
@@ -1554,8 +1565,12 @@ class TestPipelineGapWiring:
         assert len(received) == 1
         assert received[0].event_type == "test"
 
-    def test_handlers_fanout_uses_asyncio_gather(self):
+    def test_handlers_no_reentrant_va_fanout(self):
+        # Platform-hardening A (3.1/5): run_vuln_analysis must not re-enter the
+        # full VA per domain via an asyncio.gather fan-out. The single specialist
+        # pass uses call_llm_with_escalation, not a recursive ai_vuln_analysis
+        # gather. Guard against the duplicate paid path returning.
         import inspect
         from src.orchestration import handlers
         source = inspect.getsource(handlers.run_vuln_analysis)
-        assert "asyncio.gather" in source or "_asyncio.gather" in source
+        assert "_asyncio.gather" not in source

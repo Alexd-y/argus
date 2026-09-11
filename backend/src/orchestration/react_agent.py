@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -21,12 +23,25 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_ITERATIONS = 10
 DEFAULT_TOOL_TIMEOUT_SECONDS = 120
+DEFAULT_MAX_MALFORMED_REPAIRS = 2
 
 
 class ReActStepType(StrEnum):
     THOUGHT = "thought"
     ACTION = "action"
     OBSERVATION = "observation"
+
+
+class ReActStopReason(StrEnum):
+    """Why the ReAct loop stopped — makes non-answers explicit and auditable."""
+
+    FINAL_ANSWER = "final_answer"
+    MAX_ITERATIONS = "max_iterations"
+    MALFORMED_OUTPUT = "malformed_output"
+    REPEATED_ACTION = "repeated_action"
+    NO_EXECUTOR = "no_executor"
+    NO_LLM = "no_llm"
+    LLM_ERROR = "llm_error"
 
 
 @dataclass
@@ -51,6 +66,12 @@ class ReActResult:
     tools_used: list[str] = field(default_factory=list)
     confidence: float = 0.0
     total_duration_seconds: float = 0.0
+    stop_reason: str = ReActStopReason.MAX_ITERATIONS.value
+    # True only when at least one real tool observation was produced. Model
+    # confidence alone MUST NOT be treated as proof — the caller uses this to
+    # decide whether a finding may be confirmed.
+    evidence_backed: bool = False
+    error: str = ""
 
 
 class ReActAgent:
@@ -125,9 +146,7 @@ class ReActAgent:
     def should_continue(self, current_confidence: float) -> bool:
         if len(self._steps) >= self.max_iterations * 3:
             return False
-        if current_confidence >= self.confidence_threshold:
-            return False
-        return True
+        return current_confidence < self.confidence_threshold
 
     async def run(
         self,
@@ -135,15 +154,57 @@ class ReActAgent:
         llm_caller: Any = None,
         tool_executor: Any = None,
         scan_id: str | None = None,
+        *,
+        require_tools: bool = False,
+        max_malformed_repairs: int = DEFAULT_MAX_MALFORMED_REPAIRS,
     ) -> ReActResult:
-        """Execute the full ReAct loop with LLM calls and tool invocations."""
-        import time
+        """Execute the ReAct loop with bounded, auditable stopping conditions.
+
+        ``require_tools=True`` marks tool-execution mode: a missing
+        ``tool_executor`` is a configuration error (the loop stops immediately
+        with ``NO_EXECUTOR`` rather than pretending to act). With
+        ``require_tools=False`` the loop is analysis-only and never claims to
+        have executed actions.
+
+        Guarantees:
+        * malformed LLM output is repaired at most ``max_malformed_repairs``
+          times, then the loop stops (no infinite JSON-repair loops);
+        * repeating the same action without a new observation stops the loop;
+        * ``evidence_backed`` is True only if a real tool observation occurred —
+          model confidence alone never confirms a finding.
+        """
         start = time.monotonic()
         confidence = 0.0
         answer = ""
+        stop_reason = ReActStopReason.MAX_ITERATIONS
+        error = ""
+        evidence_backed = False
+        malformed_count = 0
+        prev_action_key: str | None = None
+
+        if require_tools and tool_executor is None:
+            duration = time.monotonic() - start
+            return self.finalize(
+                answer="",
+                confidence=0.0,
+                duration=duration,
+                stop_reason=ReActStopReason.NO_EXECUTOR,
+                evidence_backed=False,
+                error="tool_executor is required for tool-execution mode",
+            )
+
+        if llm_caller is None:
+            duration = time.monotonic() - start
+            return self.finalize(
+                answer="",
+                confidence=0.0,
+                duration=duration,
+                stop_reason=ReActStopReason.NO_LLM,
+                evidence_backed=False,
+                error="no llm_caller provided",
+            )
 
         for _iteration in range(self.max_iterations):
-            context = self.build_context_for_prompt()
             prompt = format_react_prompt(
                 system_prompt or "You are a security analysis agent.",
                 self.task_description,
@@ -151,26 +212,26 @@ class ReActAgent:
                 max_iterations=self.max_iterations,
             )
 
-            response_text = ""
-            if llm_caller is not None:
-                try:
-                    response_text = await llm_caller(
-                        system_prompt, prompt, scan_id=scan_id, phase="react_loop"
-                    )
-                except Exception as exc:
-                    self.add_observation(f"LLM call failed: {exc}")
-                    break
-            else:
+            try:
+                response_text = await llm_caller(
+                    system_prompt, prompt, scan_id=scan_id, phase="react_loop"
+                )
+            except Exception as exc:
+                self.add_observation(f"LLM call failed: {exc}")
+                stop_reason = ReActStopReason.LLM_ERROR
+                error = str(exc)
                 break
 
             if not response_text:
-                break
+                malformed_count += 1
+                if malformed_count > max_malformed_repairs:
+                    stop_reason = ReActStopReason.MALFORMED_OUTPUT
+                    error = "empty LLM response after repair attempts"
+                    break
+                continue
 
-            thought_match = None
-            action_match = None
-            import re
             thought_m = re.search(r"Thought:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
-            action_m = re.search(r"Action:\s*(\w+)\((.*?)\)", response_text, re.IGNORECASE)
+            action_m = re.search(r"Action:\s*(\w+)\((.*?)\)", response_text, re.IGNORECASE | re.DOTALL)
             final_m = re.search(r"Final Answer:\s*(.+?)(?:\n|$)", response_text, re.IGNORECASE)
             conf_m = re.search(r"confidence[:\s]+([0-9.]+)", response_text, re.IGNORECASE)
 
@@ -183,7 +244,17 @@ class ReActAgent:
                         confidence = 0.8
                 else:
                     confidence = 0.8
+                stop_reason = ReActStopReason.FINAL_ANSWER
                 break
+
+            # Neither a final answer nor a parseable step -> malformed.
+            if not thought_m and not action_m:
+                malformed_count += 1
+                if malformed_count > max_malformed_repairs:
+                    stop_reason = ReActStopReason.MALFORMED_OUTPUT
+                    error = "unparseable LLM output after repair attempts"
+                    break
+                continue
 
             if thought_m:
                 self.add_thought(thought_m.group(1).strip())
@@ -192,24 +263,45 @@ class ReActAgent:
                 tool_name = action_m.group(1)
                 tool_args_str = action_m.group(2)
                 try:
-                    tool_args = json.loads(tool_args_str) if tool_args_str else {}
+                    tool_args = json.loads(tool_args_str) if tool_args_str.strip() else {}
                 except Exception:
                     tool_args = {}
+
+                action_key = f"{tool_name}:{json.dumps(tool_args, sort_keys=True, default=str)}"
+                if action_key == prev_action_key:
+                    stop_reason = ReActStopReason.REPEATED_ACTION
+                    error = f"repeated action without new data: {tool_name}"
+                    break
+                prev_action_key = action_key
+
                 self.add_action(tool_name, tool_args)
 
-                if tool_executor is not None:
-                    try:
-                        result = await tool_executor(tool_name, tool_args)
-                        self.add_observation(str(result)[:2000], tool_result=result)
-                    except Exception as exc:
-                        self.add_observation(f"Tool error: {exc}")
-                else:
-                    self.add_observation("(tool execution skipped: no executor)")
+                if tool_executor is None:
+                    # Analysis-only mode: we cannot execute, and must not fake an
+                    # observation. Record honestly and stop.
+                    self.add_observation("(analysis-only: no tool executor)")
+                    stop_reason = ReActStopReason.NO_EXECUTOR
+                    error = "action requested in analysis-only mode"
+                    break
+
+                try:
+                    result = await tool_executor(tool_name, tool_args)
+                    self.add_observation(str(result)[:2000], tool_result=result)
+                    evidence_backed = True
+                except Exception as exc:
+                    self.add_observation(f"Tool error: {exc}")
 
         duration = time.monotonic() - start
         if not answer:
             answer = self.build_context_for_prompt()[:2000]
-        return self.finalize(answer, confidence, duration)
+        return self.finalize(
+            answer=answer,
+            confidence=confidence,
+            duration=duration,
+            stop_reason=stop_reason,
+            evidence_backed=evidence_backed,
+            error=error,
+        )
 
     def build_context_for_prompt(self) -> str:
         """Build conversation context from ReAct steps for inclusion in LLM prompt."""
@@ -224,7 +316,15 @@ class ReActAgent:
                 lines.append(f"Observation: {step.content}")
         return "\n".join(lines)
 
-    def finalize(self, answer: str, confidence: float, duration: float = 0.0) -> ReActResult:
+    def finalize(
+        self,
+        answer: str,
+        confidence: float,
+        duration: float = 0.0,
+        stop_reason: ReActStopReason | str = ReActStopReason.MAX_ITERATIONS,
+        evidence_backed: bool = False,
+        error: str = "",
+    ) -> ReActResult:
         return ReActResult(
             answer=answer,
             iterations=(len(self._steps) + 2) // 3,
@@ -232,6 +332,9 @@ class ReActAgent:
             tools_used=self._tools_used,
             confidence=confidence,
             total_duration_seconds=duration,
+            stop_reason=str(stop_reason),
+            evidence_backed=evidence_backed,
+            error=error,
         )
 
 
@@ -274,5 +377,6 @@ __all__ = [
     "ReActResult",
     "ReActStep",
     "ReActStepType",
+    "ReActStopReason",
     "format_react_prompt",
 ]
