@@ -61,6 +61,58 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MAX_COST_PER_SCAN_USD", "max_cost_per_scan_usd"),
     )
 
+    # --- Platform-hardening A (§7 budget ledger / §8 leases) ------------------
+    # Staged rollout: when enabled the per-scan cost tracker also books usage
+    # into the authoritative durable budget ledger. Default OFF keeps existing
+    # behaviour byte-identical until the ledger is validated in the target env.
+    budget_ledger_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("BUDGET_LEDGER_ENABLED", "budget_ledger_enabled"),
+    )
+    # Distributed concurrency leases (§8). Conservative defaults — do NOT raise
+    # target load automatically. 0 = unbounded (lease not enforced for that pool).
+    lease_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LEASE_ENABLED", "lease_enabled"),
+    )
+    lease_ttl_seconds: int = Field(
+        default=120,
+        validation_alias=AliasChoices("LEASE_TTL_SECONDS", "lease_ttl_seconds"),
+    )
+    lease_provider_capacity: int = Field(
+        default=4,
+        validation_alias=AliasChoices("LEASE_PROVIDER_CAPACITY", "lease_provider_capacity"),
+    )
+    lease_tenant_capacity: int = Field(
+        default=6,
+        validation_alias=AliasChoices("LEASE_TENANT_CAPACITY", "lease_tenant_capacity"),
+    )
+    lease_scan_capacity: int = Field(
+        default=4,
+        validation_alias=AliasChoices("LEASE_SCAN_CAPACITY", "lease_scan_capacity"),
+    )
+    lease_browser_capacity: int = Field(
+        default=2,
+        validation_alias=AliasChoices("LEASE_BROWSER_CAPACITY", "lease_browser_capacity"),
+    )
+    lease_tool_capacity: int = Field(
+        default=3,
+        validation_alias=AliasChoices("LEASE_TOOL_CAPACITY", "lease_tool_capacity"),
+    )
+    lease_host_capacity: int = Field(
+        default=1,
+        validation_alias=AliasChoices("LEASE_HOST_CAPACITY", "lease_host_capacity"),
+    )
+    # Durable agent-task claim/lease (§6).
+    agent_task_lease_seconds: int = Field(
+        default=180,
+        validation_alias=AliasChoices("AGENT_TASK_LEASE_SECONDS", "agent_task_lease_seconds"),
+    )
+    agent_task_max_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices("AGENT_TASK_MAX_ATTEMPTS", "agent_task_max_attempts"),
+    )
+
     # WhiteRabbitNeo — primary pentest AI (локально, $0)
     whiterabbitneo_url: str = Field(
         default="",

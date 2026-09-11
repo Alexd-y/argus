@@ -2692,86 +2692,15 @@ async def run_vuln_analysis(
         except Exception as _ba_outer:  # noqa: BLE001
             logger.debug("binary_analysis_campaign_failed: %s", _ba_outer)
 
-    if agent_findings_map:
-        try:
-            from src.orchestration.sub_agent_spawner import (
-                SubAgentSpawner,
-                SubAgentTask,
-            )
-            _spawner = SubAgentSpawner(max_depth=2)
-            _spawned = 0
-            for _domain, _finds in agent_findings_map.items():
-                _task = SubAgentTask(task_description=f"Analyze {_domain} findings", depth=0)
-                if _spawner.can_spawn(_task):
-                    async def _sub_agent_executor(desc: str, _d=_domain, _f=_finds) -> dict:  # noqa: ARG001
-                        try:
-                            _d_inp = VulnAnalysisInput(
-                                threat_model={"domain": _d, "findings_summary": json.dumps(_f[:5], default=str)[:2000]},
-                                assets=assets,
-                            )
-                            _d_out = await ai_vuln_analysis(
-                                _d_inp, scan_id=scan_id, scan_options=scan_options,
-                            )
-                            return {"findings_count": len(_d_out.findings)}
-                        except Exception:  # noqa: BLE001
-                            return {}
-                    _result = await _spawner.aspawn(_task, executor=_sub_agent_executor)
-                    _spawned += 1
-            if _spawned:
-                logger.info("sub_agents_spawned", extra={"scan_id": scan_id, "count": _spawned})
-        except Exception as _sa_exc:  # noqa: BLE001
-            logger.debug("sub_agent_spawn_failed: %s", _sa_exc)
-
-    if agent_findings_map:
-        try:
-            import asyncio as _asyncio
-
-            from src.orchestration.vuln_agents import VULN_AGENT_SPECS, AgentDomain
-
-            async def _fanout_domain(_fo_domain: AgentDomain) -> list[dict[str, Any]]:
-                if _fo_domain.value not in agent_findings_map:
-                    return []
-                _fo_spec = VULN_AGENT_SPECS[_fo_domain]
-                _fo_relevant = agent_findings_map[_fo_domain.value]
-                _fo_domain_inp = VulnAnalysisInput(
-                    threat_model={
-                        "domain": _fo_domain.value,
-                        "focus": _fo_spec.cwe_focus[:5],
-                        "prompt_key": _fo_spec.prompt_key,
-                        "tools": list(_fo_spec.tool_allowlist),
-                    },
-                    assets=assets,
-                )
-                try:
-                    _fo_domain_out = await ai_vuln_analysis(
-                        _fo_domain_inp,
-                        active_scan_context=_build_active_scan_context(_fo_relevant),
-                        scan_id=scan_id,
-                        code_aware_section=code_aware_section,
-                        scan_options=scan_options,
-                    )
-                    for _fo_df in _fo_domain_out.findings:
-                        _fo_df["source_domain"] = _fo_domain.value
-                    return _fo_domain_out.findings
-                except Exception as _fo_dexc:  # noqa: BLE001
-                    logger.debug("fanout_va_domain_failed", extra={"domain": _fo_domain.value, "error": str(_fo_dexc)})
-                    return []
-
-            _fanout_coros = [_fanout_domain(d) for d in AgentDomain]
-            _fanout_results = await _asyncio.gather(*_fanout_coros, return_exceptions=True)
-            _fanout_findings: list[dict[str, Any]] = []
-            for _result in _fanout_results:
-                if isinstance(_result, list):
-                    _fanout_findings.extend(_result)
-            if _fanout_findings:
-                _fo_seen = {f.get("title", "").lower() for f in llm_output.findings}
-                for _fo_ff in _fanout_findings:
-                    if _fo_ff.get("title", "").lower() not in _fo_seen:
-                        llm_output.findings.append(_fo_ff)
-                        _fo_seen.add(_fo_ff.get("title", "").lower())
-                logger.info("fanout_va_merged", extra={"scan_id": scan_id, "new_findings": len(_fanout_findings)})
-        except Exception as _fo_exc:  # noqa: BLE001
-            logger.debug("fanout_va_failed (non-fatal): %s", _fo_exc)
+    # Platform-hardening A (3.1/5): the two redundant per-domain re-analysis
+    # passes that used to live here were removed. They each re-invoked the full
+    # ``ai_vuln_analysis`` once per domain — the first (SubAgentSpawner) threw
+    # its result away as ``findings_count``; the second (asyncio.gather fan-out)
+    # merged findings back by ``title`` only. Together they paid for ~10 extra
+    # equivalent LLM analyses per scan and could accept different-asset findings
+    # under a shared title. Domain specialisation is now the single gated pass
+    # above (``enable_vuln_agents``), which produces typed hypotheses/queues and
+    # goes through the shared evidence gate + normaliser/dedup below.
 
     # Block 2: merge DNS/email-security findings produced during recon (stashed
     # in recon_context) so they pass through the same gate/dedup/metadata path.
@@ -3068,14 +2997,57 @@ async def run_exploit_attempt(
     )
 
     if not exploit_out.exploits and findings:
+        # Analysis-only ReAct fallback. No sandbox tool executor is wired here —
+        # the tool-execution path already ran above via ``execute_exploitation``.
+        # We run the loop in EXPLICIT analysis-only mode (require_tools=False),
+        # so it never claims executed actions and its output is not evidence-
+        # backed; it must not be promoted to a confirmed exploit.
         try:
             from src.orchestration.react_agent import ReActAgent
-            _react = ReActAgent(task="Find exploitable paths for reported vulnerabilities")
+
+            async def _react_llm(
+                system_prompt, user_prompt, scan_id=None, phase=None
+            ):
+                return await llm_facade.call_llm_with_escalation(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    task=LLMTask.EXPLOIT_GENERATION,
+                    scan_id=scan_id,
+                    phase=phase or "react_exploit_fallback",
+                    execution_mode=effective_mode,
+                    scan_options=opts,
+                )
+
+            _react = ReActAgent(
+                task_description="Find exploitable paths for reported vulnerabilities",
+                max_iterations=int((opts or {}).get("react_max_iterations", 5)),
+            )
             for _finding in findings[:5]:
                 _react.add_observation(f"Finding: {json.dumps(_finding, default=str)[:500]}")
-            logger.info("ReAct exploitation fallback used", extra={"scan_id": scan_id})
-        except Exception:  # noqa: BLE001, S110
-            pass
+            _react_result = await _react.run(
+                system_prompt=(
+                    "You are an exploitation analyst. Analyse only; do not claim "
+                    "actions you did not perform."
+                ),
+                llm_caller=_react_llm,
+                tool_executor=None,
+                scan_id=scan_id,
+                require_tools=False,
+            )
+            logger.info(
+                "react_exploit_fallback_completed",
+                extra={
+                    "scan_id": scan_id,
+                    "stop_reason": _react_result.stop_reason,
+                    "evidence_backed": _react_result.evidence_backed,
+                    "iterations": _react_result.iterations,
+                },
+            )
+        except Exception as _react_exc:  # noqa: BLE001
+            logger.warning(
+                "react_exploit_fallback_failed",
+                extra={"scan_id": scan_id, "error": str(_react_exc)},
+            )
 
     for _exploit in (exploit_out.exploits or []):
         _sev = str(_exploit.get("severity", "")).lower()

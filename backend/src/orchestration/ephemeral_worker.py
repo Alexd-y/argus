@@ -90,6 +90,14 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 
+class EphemeralWorkerError(RuntimeError):
+    """Raised when an isolated ephemeral container cannot be provided.
+
+    Signals that no real isolation was established — dependent findings must
+    NOT be marked confirmed and the failure must surface in coverage.
+    """
+
+
 @dataclass
 class ContainerSpec:
     """Specification for an ephemeral task container."""
@@ -131,10 +139,17 @@ class EphemeralWorkerPool:
         max_containers: int = 5,
         default_image: str = "argus-kali-runner:latest",
         prune_interval: int = 120,
+        mock_mode: bool = False,
     ) -> None:
         self._max_containers = max_containers
         self._default_image = default_image
         self._prune_interval = prune_interval
+        # When False (default, the real/working path), Docker unavailability or
+        # a container-creation error is a hard failure — we never hand back a
+        # pseudo container-ID that would let callers mistake "no isolation" for
+        # a successfully isolated run. ``mock_mode=True`` must be selected
+        # explicitly (e.g. by an offline test adapter) to opt into pseudo IDs.
+        self._mock_mode = mock_mode
         self._active: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
@@ -145,9 +160,11 @@ class EphemeralWorkerPool:
     ) -> str:
         """Create and start an ephemeral container for a task.
 
-        Returns the Docker container ID. When Docker SDK is available,
-        creates a real container with resource limits. Otherwise returns
-        a pseudo-ID for tracking.
+        Returns the Docker container ID of a real, running container. When
+        Docker is unavailable or container creation fails, the real path raises
+        ``EphemeralWorkerError`` — callers must treat this as a failed, NON-
+        isolated run (no confirmation status for any dependent finding). Only
+        when ``mock_mode=True`` is a pseudo-ID returned for offline tests.
         """
         if spec is None:
             spec = ContainerSpec(image=self._default_image)
@@ -167,7 +184,7 @@ class EphemeralWorkerPool:
             spec.timeout_seconds,
         )
 
-        container_id = container_name
+        container_id: str | None = None
 
         try:
             import docker
@@ -190,13 +207,24 @@ class EphemeralWorkerPool:
             )
             container_id = container.id
             logger.info("Docker container created: %s", container_id)
-        except ImportError:
-            logger.debug("Docker SDK not available — using pseudo container tracking")
+        except ImportError as exc:
+            if not self._mock_mode:
+                raise EphemeralWorkerError(
+                    "Docker SDK not available — cannot provide an isolated "
+                    "ephemeral container (real isolation required)"
+                ) from exc
+            logger.debug("Docker SDK not available — mock_mode pseudo tracking")
+            container_id = container_name
         except Exception as docker_exc:
+            if not self._mock_mode:
+                raise EphemeralWorkerError(
+                    f"Ephemeral container creation failed: {docker_exc}"
+                ) from docker_exc
             logger.warning(
-                "Docker container creation failed (%s) — using pseudo tracking",
+                "Docker container creation failed (%s) — mock_mode pseudo tracking",
                 docker_exc,
             )
+            container_id = container_name
 
         self._active[container_id] = time.monotonic()
         return container_id
@@ -315,5 +343,6 @@ class EphemeralWorkerPool:
 __all__ = [
     "ContainerResult",
     "ContainerSpec",
+    "EphemeralWorkerError",
     "EphemeralWorkerPool",
 ]
