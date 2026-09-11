@@ -204,3 +204,110 @@ with `alembic upgrade head`. To roll out:
 4. Rollback = `alembic downgrade 063` (drops the new tables) + redeploy the
    previous image + restart workers. Tables are additive and gated off by
    default, so no scan data is affected.
+
+## 8. Deferred follow-ups (implementation guidance)
+
+These three items are intentionally not wired into the hot paths in this pass
+(to avoid unverifiable changes to the live LLM/sandbox flow). Each is a small,
+well-scoped change with a clear test.
+
+### 8.1 Wire `pool_slot` into the hot call sites (§8)
+
+Goal: enforce the distributed pool caps at the real acquisition points, gated by
+`LEASE_ENABLED` (no-op when off).
+
+- **LLM provider** — `backend/src/llm/facade.py`, around the provider dispatch
+  (`call_llm_unified` / the WRB / cloud call). Wrap the provider call:
+
+  ```python
+  from src.orchestration.pool_leases import pool_slot  # top-level import
+  # inside the async call path, offload the blocking lease to a thread so the
+  # event loop is not blocked during backoff:
+  import anyio
+  async with await anyio.to_thread.run_sync(lambda: pool_slot("provider", provider_name).__enter__()):
+      ...
+  ```
+
+  Cleaner: add an **async variant** `apool_slot(pool_type, key)` in
+  `pool_leases.py` that runs `acquire_slot_blocking` via `asyncio.to_thread`
+  (blocking Redis + `time.sleep` backoff must not run on the loop). Prefer this.
+- **Browser** — `backend/src/sandbox/playwright_adapter.py` `_start_session()` /
+  `navigate()`: `pool_slot("browser", scan_id)`.
+- **Target host** — exploitation tool runs (`exploitation_executor.py`):
+  `pool_slot("host", target_host)` so per-host concurrency is capped.
+
+Handle `LeaseContendedError` as **defer/reschedule** (Celery retry with bounded
+backoff + deadline), never as scan failure. Emit `LEASE_EVENTS` (already wired
+in `pool_slot`).
+
+Test: an integration test with real Redis (`requires_redis`) asserting that with
+`capacity=1` two concurrent acquirers of the same key serialise (one waits/defers).
+
+### 8.2 Real hardened Docker/K8s `SandboxAdapter` (§10)
+
+Goal: back `run_in_sandbox` with a real adapter reusing the existing hardened
+flags, so the lifecycle wrapper runs actual tools.
+
+- New `backend/src/sandbox/docker_sandbox_adapter.py`:
+  `class DockerSandboxAdapter(SandboxAdapter)`.
+  - `create(task_id, owner_labels)`: `client.containers.run(image, detach=True,
+    labels={"argus.owner": ..., "argus.task": task_id, "argus.tenant": ...},
+    user="1000:1000", read_only=True, security_opt=["no-new-privileges"],
+    mem_limit=..., nano_cpus=..., tmpfs={"/workspace": "size=2g"})`. Raise
+    `SandboxCreateError` on failure (never a pseudo-ID) — mirrors the
+    `EphemeralWorkerPool` fix.
+  - `exec`: `container.exec_run(argv, demux=True)` → `ExecResult(exit_code,
+    stdout, stderr)`. Run all blocking Docker SDK calls via
+    `asyncio.to_thread(...)` so the event loop is not blocked.
+  - `collect_artifacts`: `get_archive("/workspace/artifacts/")` → MinIO/S3.
+  - `destroy`: `stop(timeout=10)` + `remove(force=True)`.
+  - `list_owned(owner_labels)`: `client.containers.list(all=True,
+    filters={"label": [f"{k}={v}" for k,v in owner_labels.items()]})` returning
+    `(id, age_seconds)` from `container.attrs["Created"]` — so orphan cleanup
+    NEVER touches containers we do not own.
+- K8s variant: same protocol backed by a short-lived Job/Pod with the same
+  security context (non-root, read-only rootfs, no privilege escalation).
+- Wire `run_in_sandbox(DockerSandboxAdapter(), ...)` into the exploitation-verify
+  path; a create failure must leave findings unconfirmed and surface in coverage.
+
+Test: `backend/tests/integration/sandbox/test_docker_sandbox_adapter.py` marked
+`requires_docker` — run `id` / `echo` in `argus-sandbox`, assert `exit_code == 0`,
+artifact capture, cleanup on success/exception/timeout, and that `cleanup_orphans`
+removes only owner-labeled, aged containers. Must run on **ECS-on-EC2**, not
+Fargate (Docker socket required).
+
+### 8.3 Facade reserve-before-call for the budget ledger (§7)
+
+Today the ledger books **actual** usage post-hoc (unified accounting). Target:
+`reserve → call → settle` at the LLM call site so limits are enforced *before*
+spend and in-flight reservations are visible.
+
+- Add a per-scan ledger registry (mirroring `get_cost_tracker`): register a
+  `BudgetLedger(PostgresBudgetStore(session_factory))` for the scan in the state
+  machine when `BUDGET_LEDGER_ENABLED`.
+- In `facade` (async), wrap the provider call:
+
+  ```python
+  scope = BudgetScope(tenant_id=..., scan_id=..., task_id=...)
+  est = input_token_estimate + max_output_tokens          # conservative upper bound
+  async with ledger.budgeted(scope, tokens=est, est_cost_usd=est_cost) as run:
+      run.mark_started()
+      resp = await provider_call(...)
+      run.record_usage(AgentUsage(                       # provider metadata = truth
+          input_tokens=resp.usage.prompt_tokens,
+          output_tokens=resp.usage.completion_tokens,
+          cost_usd=resolved_cost, provider=..., model=..., estimated=False,
+      ))
+  ```
+
+  On `BudgetDeniedError` → stop the call (do NOT proceed unbounded); on an
+  ambiguous failure after `mark_started()` the CM records **uncertain** (not
+  freed). Reserve uses `max_output_tokens` + a reasonable input estimate; settle
+  overwrites with provider-metadata truth.
+- Keep it behind `BUDGET_LEDGER_ENABLED`; when the ledger store is unavailable,
+  deny new paid calls rather than falling back to unbounded local execution.
+
+Test: `requires_postgres` — reserve blocks a call that would exceed the scan cap;
+settle books provider-metadata usage; a simulated post-send failure leaves an
+`uncertain` reservation for reconciliation.
+
