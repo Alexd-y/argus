@@ -103,6 +103,20 @@ class Settings(BaseSettings):
         default=1,
         validation_alias=AliasChoices("LEASE_HOST_CAPACITY", "lease_host_capacity"),
     )
+    # §8.2/§10: route exploitation tool runs through the verifiable ephemeral
+    # sandbox lifecycle (create → exec → collect → destroy, create-fails-closed)
+    # backed by the hardened Docker adapter. Default OFF keeps the existing
+    # shared-container ``docker exec`` path byte-identical until validated.
+    sandbox_lifecycle_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("SANDBOX_LIFECYCLE_ENABLED", "sandbox_lifecycle_enabled"),
+    )
+    # Which hardened lifecycle backend runs the ephemeral sandbox: ``docker``
+    # (default; local daemon / ECS-on-EC2) or ``k8s`` (short-lived hardened Pod).
+    sandbox_lifecycle_backend: str = Field(
+        default="docker",
+        validation_alias=AliasChoices("SANDBOX_LIFECYCLE_BACKEND", "sandbox_lifecycle_backend"),
+    )
     # Durable agent-task claim/lease (§6).
     agent_task_lease_seconds: int = Field(
         default=180,
