@@ -53,6 +53,8 @@ from src.orchestration.binary_analysis import (
     detect_binary_type,
     run_binary_analysis,
 )
+from src.orchestration.budget_scan_registry import unregister_scan_ledger
+from src.orchestration.budget_scan_wiring import register_scan_budget_ledger
 from src.orchestration.cost_aware_reasoning import (
     BudgetEnforcer,
     CostTracker,
@@ -1014,6 +1016,24 @@ async def _init_scan_subsystems(
             logger.warning(
                 "register_cost_tracker_failed",
                 extra={"scan_id": scan_id, "error": str(_reg_exc)},
+            )
+
+    # §8.3 reserve-before-call: register an authoritative Postgres-backed budget
+    # ledger for the scan so the LLM facade enforces caps BEFORE spend. Opt-in
+    # via BUDGET_LEDGER_ENABLED and fail-soft — a store/registration failure
+    # never blocks the scan (the facade simply skips budgeting when unregistered).
+    if settings.budget_ledger_enabled:
+        try:
+            await register_scan_budget_ledger(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                max_cost_usd=_max_cost,
+                max_total_tokens=_max_tokens,
+            )
+        except Exception as _bl_exc:
+            logger.warning(
+                "register_scan_ledger_failed",
+                extra={"scan_id": scan_id, "error": str(_bl_exc)},
             )
 
     try:
@@ -2122,6 +2142,14 @@ async def _finalize_scan(
         logger.warning(
             "unregister_cost_tracker_failed",
             extra={"scan_id": scan_id, "error": str(_unreg_exc)},
+        )
+
+    try:
+        unregister_scan_ledger(scan_id)
+    except Exception as _unreg_led_exc:
+        logger.warning(
+            "unregister_scan_ledger_failed",
+            extra={"scan_id": scan_id, "error": str(_unreg_led_exc)},
         )
 
     await _persist_report_and_findings(

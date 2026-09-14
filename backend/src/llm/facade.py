@@ -39,6 +39,12 @@ from src.governance.safety.monitor import get_safety_monitor
 from src.llm.adapters import _get_key
 from src.llm.gateway import get_unified_llm_gateway
 from src.llm.phase_routing import PhaseRoute, get_phase_route
+from src.llm.provider_guard import (
+    CallScope,
+    provider_guard,
+    reset_call_scope,
+    set_call_scope,
+)
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.schemas import (
     ContentClass,
@@ -49,10 +55,19 @@ from src.llm.schemas import (
 )
 from src.llm.task_router import _TASK_TO_ROLE, LLMTask, check_tier_escalation
 from src.llm.task_router import call_llm_for_task as _task_router_call
+from src.orchestration.agent_contracts import AgentUsage
 
 logger = logging.getLogger(__name__)
 
 _SYNC_TIMEOUT_SECONDS = 1800
+
+# §8.3 reserve-before-call: conservative pre-call budget estimate. Input tokens
+# are approximated at ~4 chars/token; the reservation reserves that plus a fixed
+# max-output headroom. The reservation is overwritten with provider-metadata
+# truth on settle, so these only bound the pre-call reservation, never billing.
+_EST_CHARS_PER_TOKEN = 4
+_EST_MAX_OUTPUT_TOKENS = 4096
+_EST_COST_PER_TOKEN_USD = 0.00001
 
 _tiktoken_enc = None
 
@@ -546,17 +561,30 @@ async def _call_via_local_openai(
     url = f"{base_url}/chat/completions"
     headers = {"Content-Type": "application/json"}
     timeout = httpx.Timeout(connect=10.0, read=timeout_sec, write=30.0, pool=10.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-    choices = data.get("choices", [])
-    if not choices:
-        raise ValueError("Empty response from local OpenAI-compatible model")
-    content = choices[0].get("message", {}).get("content", "")
-    text = (content or "").strip()
-    if scan_id:
+    async with provider_guard("local") as run:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise ValueError("Empty response from local OpenAI-compatible model")
+        content = choices[0].get("message", {}).get("content", "")
+        text = (content or "").strip()
         usage = data.get("usage") or {}
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(usage.get("prompt_tokens") or 0),
+                output_tokens=int(usage.get("completion_tokens") or 0),
+                cost_usd=_usage_cost_usd(
+                    usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0
+                ),
+                provider="local",
+                model=model,
+                estimated=False,
+            )
+        )
+    if scan_id:
         _record_llm_cost(
             scan_id,
             phase,
@@ -664,10 +692,21 @@ async def _call_via_whiterabbitneo(
 ) -> str:
     """Call WhiteRabbitNeo adapter, record cost, return text."""
     wrb = _get_wrb_adapter()
-    text, usage = await wrb.call_with_usage(
-        user_prompt,
-        system_prompt=system_prompt,
-    )
+    async with provider_guard("wrb") as run:
+        text, usage = await wrb.call_with_usage(
+            user_prompt,
+            system_prompt=system_prompt,
+        )
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(usage["prompt_tokens"]),
+                output_tokens=int(usage["completion_tokens"]),
+                cost_usd=_usage_cost_usd(usage["prompt_tokens"], usage["completion_tokens"]),
+                provider="whiterabbitneo",
+                model="taico-ai/WhiteRabbitNeo-v3-7B",
+                estimated=False,
+            )
+        )
     if scan_id:
         _record_llm_cost(
             scan_id,
@@ -689,11 +728,24 @@ async def _call_via_task_router(
     phase: str = "unknown",
 ) -> str:
     """Fallback/legacy: call via task_router (cloud providers)."""
-    response = await _task_router_call(
-        task,
-        user_prompt,
-        system_prompt=system_prompt,
-    )
+    async with provider_guard("cloud") as run:
+        response = await _task_router_call(
+            task,
+            user_prompt,
+            system_prompt=system_prompt,
+        )
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(response.prompt_tokens or 0),
+                output_tokens=int(response.completion_tokens or 0),
+                cost_usd=_usage_cost_usd(
+                    response.prompt_tokens or 0, response.completion_tokens or 0
+                ),
+                provider="cloud",
+                model=str(response.model or ""),
+                estimated=False,
+            )
+        )
     if scan_id:
         prompt_tok = response.prompt_tokens
         completion_tok = response.completion_tokens
@@ -918,7 +970,77 @@ def _safety_check_response(response: str, task: str) -> None:
         logger.warning("SafetyMonitor error during response check", exc_info=True)
 
 
+def _estimate_call_tokens(system_prompt: str, user_prompt: str) -> int:
+    """Conservative pre-call token estimate for the §8.3 budget reservation."""
+    chars = len(system_prompt or "") + len(user_prompt or "")
+    return max(1, chars // _EST_CHARS_PER_TOKEN) + _EST_MAX_OUTPUT_TOKENS
+
+
+def _usage_cost_usd(input_tokens: int, output_tokens: int) -> float:
+    """Resolved per-call cost via the project's flat token cost model.
+
+    Mirrors ``_record_llm_cost`` so the budget ledger settles the same cost the
+    cost tracker books — keeping the two accounting paths consistent (§8.3).
+    """
+    return (int(input_tokens) + int(output_tokens)) * _EST_COST_PER_TOKEN_USD
+
+
 async def call_llm_unified(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    task: LLMTask | None = None,
+    model: str | None = None,
+    scan_id: str | None = None,
+    phase: str = "unknown",
+    response_schema_id: str | None = None,
+    use_unified: bool = False,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
+) -> str:
+    """Public entry point — binds the §8.1/§8.3 call scope, then dispatches.
+
+    The scope (tenant/scan + a conservative pre-call token/cost estimate) is
+    bound for the duration of the call so provider helpers can apply the pool
+    slot + budget reservation without new parameters, and is always cleared
+    afterwards so it never leaks across calls sharing an event-loop task.
+    """
+    est_tokens = _estimate_call_tokens(system_prompt, user_prompt)
+    scope = CallScope(
+        tenant_id=tenant_id or settings.default_tenant_id,
+        scan_id=scan_id or "",
+        est_tokens=est_tokens,
+        est_cost_usd=est_tokens * _EST_COST_PER_TOKEN_USD,
+    )
+    token = set_call_scope(scope)
+    try:
+        return await _call_llm_unified_impl(
+            system_prompt,
+            user_prompt,
+            task=task,
+            model=model,
+            scan_id=scan_id,
+            phase=phase,
+            response_schema_id=response_schema_id,
+            use_unified=use_unified,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            execution_mode=execution_mode,
+            preferred_alias=preferred_alias,
+            content_class=content_class,
+            scan_options=scan_options,
+            prompt_id=prompt_id,
+        )
+    finally:
+        reset_call_scope(token)
+
+
+async def _call_llm_unified_impl(
     system_prompt: str,
     user_prompt: str,
     *,
