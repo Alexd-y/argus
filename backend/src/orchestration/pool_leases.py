@@ -20,7 +20,8 @@ callers should treat it as "defer/reschedule", not "fail the scan".
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+import asyncio
+from contextlib import asynccontextmanager, contextmanager
 
 from src.core.config import settings
 from src.core.redis_client import get_redis
@@ -87,4 +88,41 @@ def pool_slot(pool_type: str, resource_key: str, *, max_wait_seconds: float = 30
         LEASE_EVENTS.labels(**metric_labels(pool=pool_type, outcome="released")).inc()
 
 
-__all__ = ["get_pool_lease", "pool_capacity", "pool_slot"]
+@asynccontextmanager
+async def apool_slot(pool_type: str, resource_key: str, *, max_wait_seconds: float = 30.0):
+    """Async variant of :func:`pool_slot` for hot ``asyncio`` call sites (§8.1).
+
+    The blocking Redis calls and the ``time.sleep`` backoff inside
+    ``acquire_slot_blocking`` MUST NOT run on the event loop, so both the acquire
+    and the release are offloaded to a worker thread via ``asyncio.to_thread``.
+    Yields the ``LeaseHandle`` (or ``None`` when leasing is disabled/unavailable
+    or the pool is unbounded). Raises ``LeaseContendedError`` after the bounded
+    deadline — callers should treat that as *defer/reschedule*, never as failure.
+    """
+    lease = get_pool_lease()
+    capacity = pool_capacity(pool_type)
+    if lease is None or capacity <= 0:
+        yield None
+        return
+
+    pool_name = f"{pool_type}:{resource_key}"
+    handle = await asyncio.to_thread(
+        lease.acquire_slot_blocking,
+        pool_name,
+        capacity,
+        settings.lease_ttl_seconds,
+        max_wait_seconds=max_wait_seconds,
+    )
+    if handle is None:
+        LEASE_EVENTS.labels(**metric_labels(pool=pool_type, outcome="contended")).inc()
+        raise LeaseContendedError(f"pool exhausted: {pool_name} (capacity={capacity})")
+
+    LEASE_EVENTS.labels(**metric_labels(pool=pool_type, outcome="acquired")).inc()
+    try:
+        yield handle
+    finally:
+        await asyncio.to_thread(lease.release, handle)
+        LEASE_EVENTS.labels(**metric_labels(pool=pool_type, outcome="released")).inc()
+
+
+__all__ = ["apool_slot", "get_pool_lease", "pool_capacity", "pool_slot"]

@@ -4,12 +4,14 @@ import asyncio
 import logging
 from typing import Any
 
+from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import String, cast, select, update
 
 from src.celery_app import app
 from src.core.config import settings
 from src.db.models import Report, Scan
 from src.db.session import create_task_engine_and_session, set_session_tenant
+from src.orchestration.distributed_lease import LeaseContendedError
 from src.orchestration.state_machine import (
     ExploitationApprovalRequiredError,
     LabLeaseRequiredError,
@@ -134,6 +136,30 @@ def scan_phase_task(
                     return {"status": "timeout", "scan_id": scan_id}
                 except ExploitationApprovalRequiredError:
                     return {"status": "awaiting_approval", "scan_id": scan_id}
+                except LeaseContendedError as contended:
+                    # §8.1: distributed-pool contention is scheduling backpressure,
+                    # never a scan failure. Defer via a bounded Celery retry with
+                    # backoff; on exhaustion leave the scan un-failed for the queue
+                    # poller to re-dispatch (the deadline bound).
+                    logger.info(
+                        "scan_phase_lease_contended_defer",
+                        extra={
+                            "event": "scan_phase_lease_contended_defer",
+                            "scan_id": scan_id,
+                            "reason": str(contended),
+                        },
+                    )
+                    try:
+                        raise _self.retry(
+                            exc=contended, countdown=15, max_retries=6
+                        ) from contended
+                    except MaxRetriesExceededError:
+                        await notify_scan_finished(tenant_id)
+                        return {
+                            "status": "deferred",
+                            "scan_id": scan_id,
+                            "error": "pool_contended",
+                        }
                 except LabLeaseRequiredError as lease_exc:
                     logger.error(
                         "lab_lease_required",

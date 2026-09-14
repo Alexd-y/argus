@@ -2921,7 +2921,7 @@ async def run_exploit_attempt(
             )
             if owner is not None and owner.login is not None:
                 login = owner.resolve_placeholders().login
-                pa = PlaywrightAdapter()
+                pa = PlaywrightAdapter(scan_id=scan_id or "")
                 await pa._start_session()
                 login_steps = [
                     {
@@ -3084,7 +3084,7 @@ async def run_exploit_attempt(
                 from src.sandbox.playwright_adapter import (
                     PlaywrightAdapter,
                 )
-                _pa = PlaywrightAdapter()
+                _pa = PlaywrightAdapter(scan_id=scan_id or "")
                 await _pa._start_session()
                 _poc_url = _exploit.get("poc_url", target)
                 _nav_resp = await _pa.navigate(_poc_url)

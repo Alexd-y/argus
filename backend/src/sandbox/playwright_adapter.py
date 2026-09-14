@@ -19,6 +19,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from src.orchestration.distributed_lease import LeaseContendedError
+from src.orchestration.pool_leases import apool_slot
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,10 +130,15 @@ class PlaywrightAdapter:
         sandbox_runner: Any | None = None,
         container_name: str = "argus-sandbox",
         session_id: str = "default",
+        scan_id: str = "",
     ) -> None:
         self._runner = sandbox_runner
         self._container = container_name
         self._session = PlaywrightSession(session_id=session_id)
+        # §8.1: the browser pool is capped per scan (doc guidance:
+        # ``pool_slot("browser", scan_id)``). Fall back to the session id when a
+        # scan id is not supplied so standalone/legacy callers keep working.
+        self._scan_id = scan_id
         self._screenshots_dir = tempfile.mkdtemp(prefix="argus_pw_")
 
     async def _start_session(self) -> None:
@@ -372,48 +380,68 @@ class PlaywrightAdapter:
         return "\n".join(lines)
 
     async def _run_in_sandbox(self, script_path: Path, request: BrowserRequest) -> BrowserResponse:
-        """Execute the generated script inside the sandbox container."""
+        """Execute the generated script inside the sandbox container.
+
+        Wrapped in a ``browser`` pool slot (§8.1) keyed by scan id so a shared
+        deployment cannot launch more concurrent browser sessions per scan than
+        the configured capacity. Contention is a *soft* outcome — a deferred
+        response, never a raised error — so the caller can reschedule rather than
+        fail.
+        """
         start = time.monotonic()
+        browser_key = self._scan_id or self._session.session_id
         try:
-            if self._runner is not None:
-                result = await asyncio.to_thread(
-                    self._runner.execute,
-                    "node",
-                    [str(script_path)],
-                    timeout=60,
-                )
-                stdout = result.stdout if hasattr(result, "stdout") else str(result)
-            else:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker",
-                    "exec",
-                    self._container,
-                    "node",
-                    str(script_path),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=60)
-                stdout = stdout_bytes.decode("utf-8", errors="ignore")
+            async with apool_slot("browser", browser_key):
+                if self._runner is not None:
+                    result = await asyncio.to_thread(
+                        self._runner.execute,
+                        "node",
+                        [str(script_path)],
+                        timeout=60,
+                    )
+                    stdout = result.stdout if hasattr(result, "stdout") else str(result)
+                else:
+                    proc = await asyncio.create_subprocess_exec(
+                        "docker",
+                        "exec",
+                        self._container,
+                        "node",
+                        str(script_path),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                        proc.communicate(), timeout=60
+                    )
+                    stdout = stdout_bytes.decode("utf-8", errors="ignore")
 
+                elapsed = (time.monotonic() - start) * 1000
+
+                try:
+                    data = json.loads(stdout.strip().split("\n")[-1])
+                except (json.JSONDecodeError, IndexError):
+                    data = {}
+
+                return BrowserResponse(
+                    success=data.get("success", False),
+                    url=data.get("url", request.url or ""),
+                    title=data.get("title", ""),
+                    body_text=data.get("body_text"),
+                    screenshot_path=data.get("screenshot_path"),
+                    screenshot_base64=data.get("screenshot_base64"),
+                    cookies=data.get("cookies", []),
+                    storage_state=data.get("storage_state"),
+                    js_result=data.get("js_result"),
+                    elapsed_ms=elapsed,
+                )
+        except LeaseContendedError:
             elapsed = (time.monotonic() - start) * 1000
-
-            try:
-                data = json.loads(stdout.strip().split("\n")[-1])
-            except (json.JSONDecodeError, IndexError):
-                data = {}
-
+            logger.info(
+                "browser_pool_contended",
+                extra={"event": "browser_pool_contended", "session": self._session.session_id},
+            )
             return BrowserResponse(
-                success=data.get("success", False),
-                url=data.get("url", request.url or ""),
-                title=data.get("title", ""),
-                body_text=data.get("body_text"),
-                screenshot_path=data.get("screenshot_path"),
-                screenshot_base64=data.get("screenshot_base64"),
-                cookies=data.get("cookies", []),
-                storage_state=data.get("storage_state"),
-                js_result=data.get("js_result"),
-                elapsed_ms=elapsed,
+                success=False, error="browser_pool_contended", elapsed_ms=elapsed
             )
         except TimeoutError:
             elapsed = (time.monotonic() - start) * 1000
