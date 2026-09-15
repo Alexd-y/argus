@@ -506,12 +506,14 @@ class Playbook(BaseModel):
                 )
 
     def _check_approval_gate(self) -> None:
-        if self.risk_level in {PlaybookRiskLevel.HIGH, PlaybookRiskLevel.DESTRUCTIVE}:
-            if not self.requires_approval:
-                raise ValueError(
-                    f"playbook_id={self.playbook_id!r}: risk_level="
-                    f"{self.risk_level.value} requires requires_approval=True"
-                )
+        if (
+            self.risk_level in {PlaybookRiskLevel.HIGH, PlaybookRiskLevel.DESTRUCTIVE}
+            and not self.requires_approval
+        ):
+            raise ValueError(
+                f"playbook_id={self.playbook_id!r}: risk_level="
+                f"{self.risk_level.value} requires requires_approval=True"
+            )
 
 
 def is_valid_playbook_id(value: str) -> bool:

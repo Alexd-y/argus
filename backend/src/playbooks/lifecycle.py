@@ -145,9 +145,10 @@ class ScenarioState(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> Self:
-        if self.status in REASON_REQUIRED_STATUSES:
-            if self.reason is None or not self.reason.strip():
-                raise ValueError(f"status {self.status.value!r} requires a non-empty reason")
+        if self.status in REASON_REQUIRED_STATUSES and (
+            self.reason is None or not self.reason.strip()
+        ):
+            raise ValueError(f"status {self.status.value!r} requires a non-empty reason")
         return self
 
     @classmethod
@@ -162,9 +163,9 @@ class ScenarioState(BaseModel):
 
 
 __all__ = [
-    "InvalidTransitionError",
     "REASON_REQUIRED_STATUSES",
     "TERMINAL_STATUSES",
+    "InvalidTransitionError",
     "ScenarioState",
     "ScenarioStatus",
     "allowed_transitions",

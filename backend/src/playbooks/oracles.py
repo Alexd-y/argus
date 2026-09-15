@@ -588,9 +588,7 @@ class RateLimitOracle(Oracle):
     def _is_throttled(exchange: HttpExchange, cfg: RateLimitOracleParams) -> bool:
         if exchange.response.status == cfg.throttle_status:
             return True
-        if cfg.honor_retry_after and exchange.response.header("Retry-After"):
-            return True
-        return False
+        return bool(cfg.honor_retry_after and exchange.response.header("Retry-After"))
 
 
 class RaceOracle(Oracle):
