@@ -368,6 +368,16 @@ class Settings(BaseSettings):
     securitytrails_api_key: str | None = None
     virustotal_api_key: str | None = None
     hibp_api_key: str | None = None
+    # REM-005: recon/intel provider keys documented in infra/.env.example
+    # (NVD_API_KEY, EXPLOITDB_API_KEY, URLSCAN_API_KEY, ABUSEIPDB_API_KEY,
+    # GREYNOISE_API_KEY, OTX_API_KEY). Reconciled into Settings so the declared
+    # env is actually loaded (pydantic-settings maps field -> UPPERCASE env).
+    nvd_api_key: str | None = None
+    exploitdb_api_key: str | None = None
+    urlscan_api_key: str | None = None
+    abuseipdb_api_key: str | None = None
+    greynoise_api_key: str | None = None
+    otx_api_key: str | None = None
 
     # MinIO/S3 (Phase 7 — reports, screenshots). Env: MINIO_ENDPOINT, MINIO_ACCESS_KEY, etc.
     minio_endpoint: str = "localhost:9000"
