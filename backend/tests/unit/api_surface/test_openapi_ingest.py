@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import pytest
-
 from src.api_surface.openapi_ingest import OpenApiIngestError, ingest_openapi
 from src.execution_mode.mode import ExecutionMode
-
 
 _MINIMAL_OAS3 = """
 openapi: 3.0.0

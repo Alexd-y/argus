@@ -17,11 +17,10 @@ applied (see ``conftest.py``). No HTTP layer involved.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
-
 from src.auth.admin_sessions import (
     SessionPrincipal,
     create_session,
@@ -59,9 +58,7 @@ async def test_create_session_returns_id_and_persisted_row(session) -> None:
     assert row.role == "admin"
     assert row.tenant_id is None
     assert row.revoked_at is None
-    assert row.ip_hash and row.ip_hash != "203.0.113.7", (
-        "raw IP must never reach the database"
-    )
+    assert row.ip_hash and row.ip_hash != "203.0.113.7", "raw IP must never reach the database"
     assert row.user_agent_hash and "argus-tests" not in row.user_agent_hash
 
     fetched = await session.get(AdminSession, expected_hash)
@@ -231,7 +228,7 @@ async def test_resolve_session_returns_none_for_expired(session) -> None:
 
     fetched = await session.get(AdminSession, hash_session_token(sid))
     assert fetched is not None
-    fetched.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    fetched.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await session.commit()
 
     assert await resolve_session(session, session_id=sid) is None
@@ -350,9 +347,7 @@ async def test_resolve_session_does_not_re_validate_ip_or_ua(session) -> None:
     )
     await session.commit()
 
-    principal = await resolve_session(
-        session, session_id=sid, ip="203.0.113.99", user_agent="ua-B"
-    )
+    principal = await resolve_session(session, session_id=sid, ip="203.0.113.99", user_agent="ua-B")
     await session.commit()
     assert principal is not None, (
         "rotating IPs/UAs must NOT log the operator out (legit corporate NAT)"
@@ -388,4 +383,4 @@ async def test_subject_revoked_index_supports_revoke_lookups(session) -> None:
 
 def _ensure_aware(dt: datetime) -> datetime:
     """Promote naive datetimes (SQLite quirk) to UTC for safe comparisons."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)

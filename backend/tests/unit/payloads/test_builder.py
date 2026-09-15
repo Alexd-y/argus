@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from src.payloads.builder import (
     PayloadApprovalRequiredError,
     PayloadBuilder,
@@ -229,7 +230,7 @@ def test_rendered_payload_is_frozen(builder: PayloadBuilder) -> None:
         )
     )
     rendered = bundle.payloads[0]
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         rendered.payload = "tampered"  # type: ignore[misc]
 
 

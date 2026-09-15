@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.engine import Result
-
 from src.db.models import Scan as ScanModel
 from src.recon.stage_object_download import StageObjectFetchError
 from src.reports.data_collector import ReportDataCollector, ScanReportData
@@ -169,7 +168,9 @@ async def test_minio_storage_error_sets_code(sample_scan: ScanModel) -> None:
 
 
 @pytest.mark.asyncio
-async def test_minio_fetch_failed_from_generic_exception(sample_scan: ScanModel) -> None:
+async def test_minio_fetch_failed_from_generic_exception(
+    sample_scan: ScanModel,
+) -> None:
     session = MagicMock()
     n = {"i": 0}
 

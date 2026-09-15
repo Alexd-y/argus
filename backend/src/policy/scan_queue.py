@@ -142,11 +142,7 @@ async def poll_queued_scans() -> list[str]:
     engine, session_factory = create_task_engine_and_session()
     try:
         async with session_factory() as session:
-            stmt = (
-                select(Scan.tenant_id)
-                .where(Scan.status == _QUEUED_STATUS)
-                .distinct()
-            )
+            stmt = select(Scan.tenant_id).where(Scan.status == _QUEUED_STATUS).distinct()
             result = await session.execute(stmt)
             tenant_ids = [str(row[0]) for row in result.all()]
     finally:
@@ -188,9 +184,7 @@ async def _count_running(session: AsyncSession, tenant_id: str) -> int:
     return result.scalar_one()
 
 
-async def _oldest_queued(
-    session: AsyncSession, tenant_id: str
-) -> tuple[Any, ...] | None:
+async def _oldest_queued(session: AsyncSession, tenant_id: str) -> tuple[Any, ...] | None:
     stmt = (
         select(Scan.id, Scan.target_url, Scan.options)
         .where(
@@ -204,9 +198,7 @@ async def _oldest_queued(
     return result.one_or_none()
 
 
-async def _claim_queued(
-    session: AsyncSession, scan_id: str, tenant_id: str
-) -> bool:
+async def _claim_queued(session: AsyncSession, scan_id: str, tenant_id: str) -> bool:
     """Atomically claim a queued scan by setting status to ``running``.
 
     Returns ``True`` iff the row was actually updated (i.e. we won the

@@ -223,9 +223,7 @@ def profile_tool_sets(
                 f"{type(profile_body).__name__})."
             )
         tools = profile_body.get("tools")
-        if not isinstance(tools, list) or not all(
-            isinstance(entry, str) for entry in tools
-        ):
+        if not isinstance(tools, list) or not all(isinstance(entry, str) for entry in tools):
             pytest.fail(
                 f"tool_to_package.json profile {profile_name!r}.tools is "
                 f"not a list[str] (got {type(tools).__name__})."
@@ -252,8 +250,7 @@ def test_arg058_image_pinned_to_network(tool_id: str) -> None:
     """
     yaml_path = _TOOLS_DIR / f"{tool_id}.yaml"
     assert yaml_path.is_file(), (
-        f"{tool_id!r}: YAML descriptor missing at "
-        f"{yaml_path.relative_to(_BACKEND_DIR)}"
+        f"{tool_id!r}: YAML descriptor missing at {yaml_path.relative_to(_BACKEND_DIR)}"
     )
     parsed = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
     assert isinstance(parsed, dict), (

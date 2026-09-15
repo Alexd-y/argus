@@ -2,13 +2,13 @@
 
 from src.analysis.cpg import (
     CodePropertyGraph,
-    GraphNode,
-    GraphEdge,
-    NodeType,
     EdgeType,
-    build_python_cpg,
-    build_cpg,
+    GraphEdge,
+    GraphNode,
+    NodeType,
     _detect_language,
+    build_cpg,
+    build_python_cpg,
 )
 
 

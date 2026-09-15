@@ -9,13 +9,13 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class PathNodeType(str, Enum):
+class PathNodeType(StrEnum):
     ENTRY_POINT = "entry_point"
     AUTH_BYPASS = "auth_bypass"
     DATA_FLOW = "data_flow"
@@ -23,7 +23,7 @@ class PathNodeType(str, Enum):
     IMPACT = "impact"
 
 
-class ImpactCategory(str, Enum):
+class ImpactCategory(StrEnum):
     DATA_BREACH = "data_breach"
     PRIVILEGE_ESCALATION = "privilege_escalation"
     REMOTE_CODE_EXECUTION = "rce"
@@ -87,7 +87,7 @@ class RiskScore:
 
 def build_attack_path(
     finding: dict[str, Any],
-    knowledge_graph_nodes: list[dict[str, Any]] | None = None,
+    knowledge_graph_nodes: list[dict[str, Any]] | None = None,  # noqa: ARG001 - retained for signature/API compatibility
 ) -> AttackPath:
     """Build attack path from finding + knowledge graph context.
 
@@ -104,41 +104,57 @@ def build_attack_path(
     sink = finding.get("sink") or finding.get("description", "")[:100]
 
     if entry:
-        path.nodes.append(PathNode(
-            id="n1", node_type=PathNodeType.ENTRY_POINT,
-            label=f"Entry: {entry[:80]}",
-            file_path=finding.get("file_path", ""),
-            line_start=finding.get("line_start", 0) or 0,
-        ))
+        path.nodes.append(
+            PathNode(
+                id="n1",
+                node_type=PathNodeType.ENTRY_POINT,
+                label=f"Entry: {entry[:80]}",
+                file_path=finding.get("file_path", ""),
+                line_start=finding.get("line_start", 0) or 0,
+            )
+        )
 
     if finding.get("cwe"):
-        path.nodes.append(PathNode(
-            id="n2", node_type=PathNodeType.AUTH_BYPASS if "auth" in str(finding.get("cwe", "")).lower() else PathNodeType.DATA_FLOW,
-            label=f"{finding.get('cwe', '')}: {sink[:80]}",
-            file_path=finding.get("file_path", ""),
-            line_start=(finding.get("line_start", 0) or 0) + 1,
-        ))
+        path.nodes.append(
+            PathNode(
+                id="n2",
+                node_type=PathNodeType.AUTH_BYPASS
+                if "auth" in str(finding.get("cwe", "")).lower()
+                else PathNodeType.DATA_FLOW,
+                label=f"{finding.get('cwe', '')}: {sink[:80]}",
+                file_path=finding.get("file_path", ""),
+                line_start=(finding.get("line_start", 0) or 0) + 1,
+            )
+        )
 
-    path.nodes.append(PathNode(
-        id="n3", node_type=PathNodeType.SINK,
-        label=f"Sink: {sink[:80]}",
-        file_path=finding.get("file_path", ""),
-        line_start=finding.get("line_end", 0) or finding.get("line_start", 0) or 0,
-    ))
+    path.nodes.append(
+        PathNode(
+            id="n3",
+            node_type=PathNodeType.SINK,
+            label=f"Sink: {sink[:80]}",
+            file_path=finding.get("file_path", ""),
+            line_start=finding.get("line_end", 0) or finding.get("line_start", 0) or 0,
+        )
+    )
 
     impact_labels = _classify_impact(finding)
     path.impact_categories = impact_labels
-    path.nodes.append(PathNode(
-        id="n4", node_type=PathNodeType.IMPACT,
-        label=f"Impact: {', '.join(i.value for i in impact_labels)[:80]}",
-    ))
+    path.nodes.append(
+        PathNode(
+            id="n4",
+            node_type=PathNodeType.IMPACT,
+            label=f"Impact: {', '.join(i.value for i in impact_labels)[:80]}",
+        )
+    )
 
     for i in range(len(path.nodes) - 1):
-        path.edges.append(PathEdge(
-            source_id=path.nodes[i].id,
-            target_id=path.nodes[i + 1].id,
-            edge_type="dataflow" if i == 0 else "transform" if i == 1 else "exploit",
-        ))
+        path.edges.append(
+            PathEdge(
+                source_id=path.nodes[i].id,
+                target_id=path.nodes[i + 1].id,
+                edge_type="dataflow" if i == 0 else "transform" if i == 1 else "exploit",
+            )
+        )
 
     path.likelihood = _estimate_likelihood(finding)
     path.impact_score = _estimate_impact(finding)
@@ -148,7 +164,9 @@ def build_attack_path(
     return path
 
 
-def calculate_risk_score(finding: dict[str, Any], business_context: dict[str, Any] | None = None) -> RiskScore:
+def calculate_risk_score(
+    finding: dict[str, Any], business_context: dict[str, Any] | None = None
+) -> RiskScore:
     """Calculate CVSS-like risk score with business context."""
     c = business_context or {}
 
@@ -156,7 +174,13 @@ def calculate_risk_score(finding: dict[str, Any], business_context: dict[str, An
     severity = (finding.get("severity") or "").lower()
 
     if not cvss_base:
-        severity_scores = {"critical": 9.5, "high": 7.5, "medium": 5.0, "low": 2.5, "info": 0.5}
+        severity_scores = {
+            "critical": 9.5,
+            "high": 7.5,
+            "medium": 5.0,
+            "low": 2.5,
+            "info": 0.5,
+        }
         cvss_base = severity_scores.get(severity, 5.0)
 
     exploitability = float(finding.get("exploitability_score", 0.0) or 0.0)
@@ -216,14 +240,17 @@ def to_d3_json(path: AttackPath) -> dict[str, Any]:
     """Convert attack path to D3.js-compatible graph JSON."""
     return {
         "nodes": [
-            {"id": n.id, "label": n.label, "type": n.node_type.value,
-             "file": n.file_path, "line": n.line_start}
+            {
+                "id": n.id,
+                "label": n.label,
+                "type": n.node_type.value,
+                "file": n.file_path,
+                "line": n.line_start,
+            }
             for n in path.nodes
         ],
         "edges": [
-            {"source": e.source_id, "target": e.target_id,
-             "label": e.edge_type}
-            for e in path.edges
+            {"source": e.source_id, "target": e.target_id, "label": e.edge_type} for e in path.edges
         ],
         "metadata": {
             "finding_id": path.finding_id,
@@ -265,18 +292,23 @@ def _estimate_impact(finding: dict[str, Any]) -> float:
     return sev_scores.get(severity, 5.0)
 
 
-def _calculate_business_impact(finding: dict[str, Any], ctx: dict[str, Any]) -> float:
+def _calculate_business_impact(finding: dict[str, Any], ctx: dict[str, Any]) -> float:  # noqa: ARG001 - retained for signature/API compatibility
     data_classification = ctx.get("data_classification", "internal")
     exposure = ctx.get("exposure", "internal")
     user_base = ctx.get("user_base", 1.0)
 
-    data_scores = {"public": 0.3, "internal": 0.6, "confidential": 0.85, "restricted": 1.0}
+    data_scores = {
+        "public": 0.3,
+        "internal": 0.6,
+        "confidential": 0.85,
+        "restricted": 1.0,
+    }
     exp_scores = {"internal": 0.5, "external": 0.75, "internet": 1.0}
 
     return round(
-        data_scores.get(data_classification, 0.6) *
-        exp_scores.get(exposure, 0.75) *
-        min(max(user_base, 0.1), 3.0),
+        data_scores.get(data_classification, 0.6)
+        * exp_scores.get(exposure, 0.75)
+        * min(max(user_base, 0.1), 3.0),
         2,
     )
 

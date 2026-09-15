@@ -31,9 +31,7 @@ Invariants pinned here:
 from __future__ import annotations
 
 import pytest
-
 from src.sandbox.templating import redact_argv_for_logging
-
 
 # ---------------------------------------------------------------------------
 # Happy paths — the canonical §4.17 / §4.18 / §4.19 credential cases
@@ -104,9 +102,7 @@ def test_redact_credentials_passthrough_when_no_creds() -> None:
     correspond to credential placeholder names.
     """
     argv = ["nmap", "-sV", "10.0.0.1"]
-    redacted = redact_argv_for_logging(
-        argv, placeholder_values={"ip": "10.0.0.1", "ports": "443"}
-    )
+    redacted = redact_argv_for_logging(argv, placeholder_values={"ip": "10.0.0.1", "ports": "443"})
     assert redacted == argv
 
 
@@ -237,9 +233,7 @@ def test_redact_credentials_covers_every_credential_placeholder_name(
     ``_CREDENTIAL_PLACEHOLDER_NAMES``.
     """
     argv = ["tool", "--flag", "secret-value"]
-    redacted = redact_argv_for_logging(
-        argv, placeholder_values={credential_name: "secret-value"}
-    )
+    redacted = redact_argv_for_logging(argv, placeholder_values={credential_name: "secret-value"})
     assert redacted == ["tool", "--flag", "[REDACTED]"]
 
 

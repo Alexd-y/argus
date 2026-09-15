@@ -9,6 +9,7 @@ from src.recon.schemas.base import TargetType
 
 class ReconTargetCreate(BaseModel):
     """Create target request."""
+
     domain: str = Field(..., min_length=1, max_length=512)
     target_type: TargetType = TargetType.DOMAIN
     extra_data: dict | None = None
@@ -16,6 +17,7 @@ class ReconTargetCreate(BaseModel):
 
 class ReconTargetResponse(BaseModel):
     """Target response with counts."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str

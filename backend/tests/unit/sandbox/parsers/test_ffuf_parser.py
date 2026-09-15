@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -46,7 +45,6 @@ from src.sandbox.parsers.ffuf_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_ffuf_json,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -377,9 +375,7 @@ def test_output_is_sorted_by_url_then_status(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_records_missing_url_are_skipped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_records_missing_url_are_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """Records without a ``url`` are dropped with a structured warning."""
     stdout = _ffuf_envelope(
         {"status": 200, "length": 100},
@@ -392,7 +388,7 @@ def test_records_missing_url_are_skipped(
     assert len(findings) == 1
     # At least one structured warning about the incomplete record.
     assert any(
-        "ffuf_parser_skip_incomplete_record" == getattr(rec, "event", "")
+        getattr(rec, "event", "") == "ffuf_parser_skip_incomplete_record"
         or "ffuf_parser.skip_incomplete_record" in rec.getMessage()
         for rec in caplog.records
     )
@@ -652,7 +648,7 @@ def test_sidecar_failure_does_not_break_parser(
 
     assert len(findings) == 1
     assert any(
-        "ffuf_parser_evidence_sidecar_write_failed" == getattr(rec, "event", "")
+        getattr(rec, "event", "") == "ffuf_parser_evidence_sidecar_write_failed"
         or "ffuf_parser.evidence_sidecar_write_failed" in rec.getMessage()
         for rec in caplog.records
     )
@@ -666,8 +662,7 @@ def test_sidecar_failure_does_not_break_parser(
 def test_thousand_unique_records_emit_thousand_findings(tmp_path: Path) -> None:
     """A 1k-record payload (all unique) emits 1000 findings without truncation."""
     records = [
-        {"url": f"https://target/path-{i:04d}", "status": 200, "length": i}
-        for i in range(1000)
+        {"url": f"https://target/path-{i:04d}", "status": 200, "length": i} for i in range(1000)
     ]
     stdout = _ffuf_envelope(*records)
 
@@ -704,7 +699,7 @@ def test_cap_on_max_findings_emits_warning_and_truncates(
 
     assert len(findings) == 5
     assert any(
-        "ffuf_parser_cap_reached" == getattr(rec, "event", "")
+        getattr(rec, "event", "") == "ffuf_parser_cap_reached"
         or "ffuf_parser.cap_reached" in rec.getMessage()
         for rec in caplog.records
     )

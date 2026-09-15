@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.services.reporting import TIER_STUBS, ReportGenerator
 
 
@@ -64,10 +63,18 @@ class TestPrepareTemplateContextIncludesTierStubs:
 
     @patch("src.services.reporting.has_any_llm_key", return_value=False)
     @patch("src.services.reporting.build_owasp_compliance_rows", return_value=[])
-    @patch("src.services.reporting.executive_severity_totals_from_finding_rows", return_value={})
+    @patch(
+        "src.services.reporting.executive_severity_totals_from_finding_rows",
+        return_value={},
+    )
     @patch("src.services.reporting.findings_rows_for_jinja", return_value=[])
     def test_context_has_tier_stubs(
-        self, _fr, _es, _owasp, _llm, mock_data: MagicMock,
+        self,
+        _fr,
+        _es,
+        _owasp,
+        _llm,
+        mock_data: MagicMock,
     ) -> None:
         gen = ReportGenerator()
         ctx = gen.prepare_template_context("midgard", mock_data, {})
@@ -76,10 +83,18 @@ class TestPrepareTemplateContextIncludesTierStubs:
 
     @patch("src.services.reporting.has_any_llm_key", return_value=False)
     @patch("src.services.reporting.build_owasp_compliance_rows", return_value=[])
-    @patch("src.services.reporting.executive_severity_totals_from_finding_rows", return_value={})
+    @patch(
+        "src.services.reporting.executive_severity_totals_from_finding_rows",
+        return_value={},
+    )
     @patch("src.services.reporting.findings_rows_for_jinja", return_value=[])
     def test_context_tier_stubs_is_dict(
-        self, _fr, _es, _owasp, _llm, mock_data: MagicMock,
+        self,
+        _fr,
+        _es,
+        _owasp,
+        _llm,
+        mock_data: MagicMock,
     ) -> None:
         gen = ReportGenerator()
         ctx = gen.prepare_template_context("valhalla", mock_data, {})

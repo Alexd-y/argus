@@ -147,8 +147,7 @@ class ExtensionManifest(BaseModel):
                 )
             if check.requires_oast and ExtensionPermission.USE_OAST not in granted:
                 raise ValueError(
-                    f"check {check.check_id!r} requires OAST but manifest lacks "
-                    "use_oast permission"
+                    f"check {check.check_id!r} requires OAST but manifest lacks use_oast permission"
                 )
 
     def _check_egress_attribution(self) -> None:

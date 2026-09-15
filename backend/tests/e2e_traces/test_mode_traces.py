@@ -29,7 +29,6 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-
 from src.execution_mode import (
     ExecutionMode,
     LabBoundaryVerifier,

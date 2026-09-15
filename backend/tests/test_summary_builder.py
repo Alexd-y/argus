@@ -52,7 +52,11 @@ def test_build_recon_summary_document_fixture() -> None:
         "asn_summary": {"asn": "15169", "org": "Test"},
         "gowitness_screenshots": {
             "artifacts": [
-                {"url": "https://example.com/", "minio_key": "t/s/recon/raw/k.png", "success": True},
+                {
+                    "url": "https://example.com/",
+                    "minio_key": "t/s/recon/raw/k.png",
+                    "success": True,
+                },
             ],
         },
         "recon_open_ports_merged": {"stdout": "ports: 443, port 80"},

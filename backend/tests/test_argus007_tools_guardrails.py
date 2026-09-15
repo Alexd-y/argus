@@ -80,7 +80,10 @@ class TestToolsExecuteGuardrails:
             }
             response = client.post(
                 "/api/v1/tools/execute",
-                json={"command": "nuclei -u https://example.com -severity critical", "use_cache": False},
+                json={
+                    "command": "nuclei -u https://example.com -severity critical",
+                    "use_cache": False,
+                },
             )
         assert response.status_code == 200
         mock_exec.assert_called_once()

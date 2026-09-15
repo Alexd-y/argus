@@ -7,9 +7,8 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 BULK_CANCEL = "/api/v1/admin/scans/bulk-cancel"
 BULK_SUPPRESS = "/api/v1/admin/findings/bulk-suppress"
@@ -72,16 +71,18 @@ class TestAdminBulkCancelHappyPath:
         session.commit = AsyncMock()
         factory = _session_factory(session)
 
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_CANCEL,
-                    headers=_ADMIN_HEADERS,
-                    json={"tenant_id": tid, "scan_ids": [sid]},
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_CANCEL,
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": tid, "scan_ids": [sid]},
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["cancelled_count"] == 1
@@ -114,20 +115,22 @@ class TestAdminBulkSuppressHappyPath:
         session.commit = AsyncMock()
         factory = _session_factory(session)
 
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_SUPPRESS,
-                    headers={**_ADMIN_HEADERS, "X-Operator-Subject": "operator-1"},
-                    json={
-                        "tenant_id": tid,
-                        "finding_ids": [fid],
-                        "reason": "Expected WAF behaviour",
-                    },
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_SUPPRESS,
+                headers={**_ADMIN_HEADERS, "X-Operator-Subject": "operator-1"},
+                json={
+                    "tenant_id": tid,
+                    "finding_ids": [fid],
+                    "reason": "Expected WAF behaviour",
+                },
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["suppressed_count"] == 1
@@ -156,9 +159,7 @@ class TestAdminBulkValidation:
         assert isinstance(detail, list)
         assert any("scan_ids" in str(err.get("loc", ())) for err in detail)
 
-    def test_bulk_suppress_422_when_finding_ids_exceeds_100(
-        self, client: TestClient
-    ) -> None:
+    def test_bulk_suppress_422_when_finding_ids_exceeds_100(self, client: TestClient) -> None:
         tid = str(uuid.uuid4())
         ids = [str(uuid.uuid4()) for _ in range(101)]
         with patch.object(settings, "admin_api_key", _ADMIN_KEY):
@@ -227,9 +228,7 @@ class TestAdminBulkValidation:
 
 class TestAdminBulkCancelIdempotencyAndNotFound:
     @pytest.mark.parametrize("terminal_status", ["completed", "failed", "cancelled"])
-    def test_bulk_cancel_skipped_terminal(
-        self, client: TestClient, terminal_status: str
-    ) -> None:
+    def test_bulk_cancel_skipped_terminal(self, client: TestClient, terminal_status: str) -> None:
         tid = str(uuid.uuid4())
         sid = str(uuid.uuid4())
         r_exec = MagicMock()
@@ -242,16 +241,18 @@ class TestAdminBulkCancelIdempotencyAndNotFound:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_CANCEL,
-                    headers=_ADMIN_HEADERS,
-                    json={"tenant_id": tid, "scan_ids": [sid]},
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_CANCEL,
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": tid, "scan_ids": [sid]},
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["cancelled_count"] == 0
@@ -271,16 +272,18 @@ class TestAdminBulkCancelIdempotencyAndNotFound:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_CANCEL,
-                    headers=_ADMIN_HEADERS,
-                    json={"tenant_id": tid, "scan_ids": [sid]},
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_CANCEL,
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": tid, "scan_ids": [sid]},
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["not_found_count"] == 1
@@ -301,16 +304,18 @@ class TestAdminBulkCancelIdempotencyAndNotFound:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_CANCEL,
-                    headers=_ADMIN_HEADERS,
-                    json={"tenant_id": tid, "scan_ids": [sid, sid]},
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_CANCEL,
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": tid, "scan_ids": [sid, sid]},
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["cancelled_count"] == 1
@@ -333,20 +338,22 @@ class TestAdminBulkSuppressIdempotencyAndNotFound:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_SUPPRESS,
-                    headers=_ADMIN_HEADERS,
-                    json={
-                        "tenant_id": tid,
-                        "finding_ids": [fid],
-                        "reason": "already triaged",
-                    },
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_SUPPRESS,
+                headers=_ADMIN_HEADERS,
+                json={
+                    "tenant_id": tid,
+                    "finding_ids": [fid],
+                    "reason": "already triaged",
+                },
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["suppressed_count"] == 0
@@ -365,20 +372,22 @@ class TestAdminBulkSuppressIdempotencyAndNotFound:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                r = client.post(
-                    BULK_SUPPRESS,
-                    headers=_ADMIN_HEADERS,
-                    json={
-                        "tenant_id": tid,
-                        "finding_ids": [fid],
-                        "reason": "missing row",
-                    },
-                )
+            ),
+        ):
+            r = client.post(
+                BULK_SUPPRESS,
+                headers=_ADMIN_HEADERS,
+                json={
+                    "tenant_id": tid,
+                    "finding_ids": [fid],
+                    "reason": "missing row",
+                },
+            )
         assert r.status_code == 202
         data = r.json()
         assert data["not_found_count"] == 1
@@ -404,20 +413,22 @@ class TestAdminBulkTenantScope:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                with patch(
-                    "src.api.routers.admin_bulk_ops.set_session_tenant",
-                    new_callable=AsyncMock,
-                ) as mock_set_tenant:
-                    r = client.post(
-                        BULK_CANCEL,
-                        headers=_ADMIN_HEADERS,
-                        json={"tenant_id": tid, "scan_ids": [sid]},
-                    )
+            ),
+            patch(
+                "src.api.routers.admin_bulk_ops.set_session_tenant",
+                new_callable=AsyncMock,
+            ) as mock_set_tenant,
+        ):
+            r = client.post(
+                BULK_CANCEL,
+                headers=_ADMIN_HEADERS,
+                json={"tenant_id": tid, "scan_ids": [sid]},
+            )
         assert r.status_code == 202
         mock_set_tenant.assert_awaited_once()
         call_session, call_tid = mock_set_tenant.await_args[0]
@@ -439,24 +450,26 @@ class TestAdminBulkTenantScope:
         session.add = MagicMock()
         session.commit = AsyncMock()
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_bulk_ops.async_session_factory",
                 factory,
-            ):
-                with patch(
-                    "src.api.routers.admin_bulk_ops.set_session_tenant",
-                    new_callable=AsyncMock,
-                ) as mock_set_tenant:
-                    r = client.post(
-                        BULK_SUPPRESS,
-                        headers=_ADMIN_HEADERS,
-                        json={
-                            "tenant_id": tid,
-                            "finding_ids": [fid],
-                            "reason": "scope check",
-                        },
-                    )
+            ),
+            patch(
+                "src.api.routers.admin_bulk_ops.set_session_tenant",
+                new_callable=AsyncMock,
+            ) as mock_set_tenant,
+        ):
+            r = client.post(
+                BULK_SUPPRESS,
+                headers=_ADMIN_HEADERS,
+                json={
+                    "tenant_id": tid,
+                    "finding_ids": [fid],
+                    "reason": "scope check",
+                },
+            )
         assert r.status_code == 202
         mock_set_tenant.assert_awaited_once()
         assert mock_set_tenant.await_args[0][1] == tid

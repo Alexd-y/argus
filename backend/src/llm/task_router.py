@@ -40,6 +40,7 @@ class LLMTask(Enum):
     EXPLOIT_GENERATION = "exploit_generation"
     VALIDATION_ONESHOT = "validation_oneshot"
     REMEDIATION_PLAN = "remediation_plan"
+    CLOSURE_ASSESSMENT = "closure_assessment"
     ZERO_DAY_ANALYSIS = "zero_day_analysis"
     DEDUP_ANALYSIS = "dedup_analysis"
     PERPLEXITY_OSINT = "perplexity_osint"
@@ -67,6 +68,7 @@ _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.REPORT_SECTION: "report",
     LLMTask.EXECUTIVE_SUMMARY: "report",
     LLMTask.REMEDIATION_PLAN: "report",
+    LLMTask.CLOSURE_ASSESSMENT: "report",
     LLMTask.COST_SUMMARY: "report",
     LLMTask.QUICK_PLANNER: "planner",
     LLMTask.QUICK_FINGERPRINT: "planner",
@@ -100,7 +102,11 @@ class LLMTaskResponse:
 _OVERRIDE_MAP: dict[str, tuple[str, str, str]] = {
     "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com", "deepseek-chat"),
     "openai": ("OPENAI_API_KEY", "https://api.openai.com", "gpt-4o-mini"),
-    "openrouter": ("OPENROUTER_API_KEY", "https://openrouter.ai/api", "openai/gpt-4o-mini"),
+    "openrouter": (
+        "OPENROUTER_API_KEY",
+        "https://openrouter.ai/api",
+        "openai/gpt-4o-mini",
+    ),
     "kimi": ("KIMI_API_KEY", "https://api.moonshot.cn", "moonshot-v1-8k"),
     "perplexity": ("PERPLEXITY_API_KEY", "https://api.perplexity.ai", "sonar"),
 }
@@ -120,7 +126,9 @@ _GLOBAL_LLM_FALLBACK_CHAIN: tuple[tuple[str, str, str], ...] = (
 )
 
 
-def _merge_route_with_global_chain(route_attempts: list[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+def _merge_route_with_global_chain(
+    route_attempts: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
     """Append universal fallbacks without duplicating env keys already used by the route.
 
     Route-defined attempts may include the same env key twice (e.g. Perplexity sonar-pro → sonar);
@@ -135,6 +143,7 @@ def _merge_route_with_global_chain(route_attempts: list[tuple[str, str, str]]) -
         keys_in_route.add(env_key)
         out.append(entry)
     return out
+
 
 ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
     LLMTask.EXECUTIVE_SUMMARY: LLMRoute(
@@ -188,6 +197,16 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         temperature=0.1,
     ),
     LLMTask.REMEDIATION_PLAN: LLMRoute(
+        provider_env_key="OPENAI_API_KEY",
+        base_url="https://api.openai.com",
+        model="gpt-4o-mini",
+        fallback_env_key="DEEPSEEK_API_KEY",
+        fallback_base_url="https://api.deepseek.com",
+        fallback_model="deepseek-chat",
+        max_tokens=2000,
+        temperature=0.1,
+    ),
+    LLMTask.CLOSURE_ASSESSMENT: LLMRoute(
         provider_env_key="OPENAI_API_KEY",
         base_url="https://api.openai.com",
         model="gpt-4o-mini",
@@ -316,6 +335,7 @@ TASK_TIERS: dict[LLMTask, dict[str, Any]] = {
     LLMTask.EXPLOIT_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
     LLMTask.VALIDATION_ONESHOT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
     LLMTask.REMEDIATION_PLAN: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
+    LLMTask.CLOSURE_ASSESSMENT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.6},
     LLMTask.ZERO_DAY_ANALYSIS: {"tier": LLMTier.LARGE, "escalation_threshold": 0.8},
     LLMTask.DEDUP_ANALYSIS: {"tier": LLMTier.SMALL, "escalation_threshold": 0.4},
     LLMTask.PERPLEXITY_OSINT: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.7},
@@ -437,9 +457,7 @@ def _build_attempts(route: LLMRoute) -> list[tuple[str, str, str]]:
     attempts.append((route.provider_env_key, route.base_url, route.model))
 
     if route.fallback_env_key and route.fallback_base_url and route.fallback_model:
-        attempts.append(
-            (route.fallback_env_key, route.fallback_base_url, route.fallback_model)
-        )
+        attempts.append((route.fallback_env_key, route.fallback_base_url, route.fallback_model))
 
     return attempts
 
@@ -530,7 +548,13 @@ def get_model_for_tier(tier: LLMTier, provider: str | None = None) -> dict[str, 
 class LLMTierEscalationResult:
     """Result of tier-based LLM escalation check."""
 
-    __slots__ = ("escalated", "original_tier", "escalated_tier", "confidence", "threshold")
+    __slots__ = (
+        "confidence",
+        "escalated",
+        "escalated_tier",
+        "original_tier",
+        "threshold",
+    )
 
     def __init__(
         self,

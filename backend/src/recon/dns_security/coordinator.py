@@ -80,9 +80,7 @@ async def collect_dns_security_findings(
         return [ln.strip().strip('"') for ln in text.splitlines() if ln.strip()]
 
     # DNSSEC.
-    dnssec_out, dnssec_ok = await _safe(
-        f"dig {domain} DNSKEY +dnssec +noall +answer +comments"
-    )
+    dnssec_out, dnssec_ok = await _safe(f"dig {domain} DNSKEY +dnssec +noall +answer +comments")
     if dnssec_ok:
         findings.extend(analyze_dnssec(domain, dnssec_out))
 

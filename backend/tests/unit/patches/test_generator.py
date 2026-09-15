@@ -1,16 +1,15 @@
 """Tests for Patch Generation Worker."""
 
 import json
-
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from src.workers.patches.generator import (
+    PatchResult,
+    PatchStatus,
+    PatchType,
     generate_patch,
     validate_patch,
-    PatchResult,
-    PatchType,
-    PatchStatus,
 )
 
 
@@ -37,23 +36,28 @@ class TestPatchGeneration:
     @pytest.mark.asyncio
     async def test_generates_patch_from_wrb(self):
         finding = {
-            "title": "SQL Injection", "severity": "critical",
-            "cwe": "CWE-89", "file_path": "app.py", "line_start": 42,
+            "title": "SQL Injection",
+            "severity": "critical",
+            "cwe": "CWE-89",
+            "file_path": "app.py",
+            "line_start": 42,
             "description": "Unsanitized user input in SQL query",
         }
         code = 'query = "SELECT * FROM users WHERE id = " + user_input'
 
         # generate_patch routes through the unified LLM facade, which returns
         # the model's content string (JSON) — not a raw provider envelope.
-        wrb_content = json.dumps({
-            "patched_code": "query = SELECT * FROM users WHERE id = %s",
-            "diff": "- + user_input\n+ %s",
-            "rationale": "Use parameterized queries",
-            "secure_alternative": "Use ORM",
-            "blast_radius": "Only this function",
-            "backward_compat_risk": "low",
-            "regression_test": "def test(): pass",
-        })
+        wrb_content = json.dumps(
+            {
+                "patched_code": "query = SELECT * FROM users WHERE id = %s",
+                "diff": "- + user_input\n+ %s",
+                "rationale": "Use parameterized queries",
+                "secure_alternative": "Use ORM",
+                "blast_radius": "Only this function",
+                "backward_compat_risk": "low",
+                "regression_test": "def test(): pass",
+            }
+        )
 
         with patch(
             "src.llm.facade.call_llm_unified",

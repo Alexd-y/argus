@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import ast
 import inspect
 from pathlib import Path
-
-import pytest
-
 
 BACKEND_SRC = Path(__file__).resolve().parent.parent / "src"
 
@@ -78,9 +74,7 @@ class TestToolRunRecordingExists:
         path = BACKEND_SRC / "tools" / "executor.py"
         assert path.exists(), "executor.py not found"
         source = path.read_text(encoding="utf-8")
-        assert "_persist_tool_run" in source, (
-            "_persist_tool_run function must exist in executor.py"
-        )
+        assert "_persist_tool_run" in source, "_persist_tool_run function must exist in executor.py"
 
     def test_persist_tool_run_is_async(self) -> None:
         path = BACKEND_SRC / "tools" / "executor.py"

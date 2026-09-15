@@ -195,62 +195,135 @@ _CAP_ALIASES: dict[str, tuple[CapabilityId, str]] = {
 }
 
 _TOOL_DISPLAY_NAMES: dict[str, str] = {
-    "amass": "Amass", "subfinder": "Subfinder", "sublist3r": "Sublist3r",
-    "assetfinder": "Assetfinder", "shuffledns": "ShuffleDNS", "dnsx": "dnsx",
-    "dnsrecon": "DNSRecon", "fierce": "Fierce", "dig": "dig", "host": "host",
-    "whois": "whois", "asnmap": "ASNMap",
-    "theharvester": "theHarvester", "the_harvester": "theHarvester", "harvester": "theHarvester",
-    "hibp": "HIBP Client", "hibp_client": "HIBP Client", "haveibeenpwned": "HIBP",
-    "shodan": "Shodan", "censys": "Censys", "securitytrails": "SecurityTrails",
-    "virustotal": "VirusTotal", "abuseipdb": "AbuseIPDB", "urlscan": "urlscan.io",
-    "httpx": "httpx", "httprobe": "httprobe", "gau": "gau",
-    "waybackurls": "waybackurls", "wayback": "waybackurls",
-    "katana": "Katana", "hakrawler": "Hakrawler", "gospider": "GoSpider",
-    "gowitness": "GoWitness", "eyewitness": "EyeWitness", "aquatone": "Aquatone",
-    "nmap": "Nmap", "naabu": "Naabu", "masscan": "Masscan",
-    "rustscan": "RustScan", "amap": "Amap", "netcat": "netcat",
+    "amass": "Amass",
+    "subfinder": "Subfinder",
+    "sublist3r": "Sublist3r",
+    "assetfinder": "Assetfinder",
+    "shuffledns": "ShuffleDNS",
+    "dnsx": "dnsx",
+    "dnsrecon": "DNSRecon",
+    "fierce": "Fierce",
+    "dig": "dig",
+    "host": "host",
+    "whois": "whois",
+    "asnmap": "ASNMap",
+    "theharvester": "theHarvester",
+    "the_harvester": "theHarvester",
+    "harvester": "theHarvester",
+    "hibp": "HIBP Client",
+    "hibp_client": "HIBP Client",
+    "haveibeenpwned": "HIBP",
+    "shodan": "Shodan",
+    "censys": "Censys",
+    "securitytrails": "SecurityTrails",
+    "virustotal": "VirusTotal",
+    "abuseipdb": "AbuseIPDB",
+    "urlscan": "urlscan.io",
+    "httpx": "httpx",
+    "httprobe": "httprobe",
+    "gau": "gau",
+    "waybackurls": "waybackurls",
+    "wayback": "waybackurls",
+    "katana": "Katana",
+    "hakrawler": "Hakrawler",
+    "gospider": "GoSpider",
+    "gowitness": "GoWitness",
+    "eyewitness": "EyeWitness",
+    "aquatone": "Aquatone",
+    "nmap": "Nmap",
+    "naabu": "Naabu",
+    "masscan": "Masscan",
+    "rustscan": "RustScan",
+    "amap": "Amap",
+    "netcat": "netcat",
     "tlsx": "tlsx",
-    "testssl": "testssl.sh", "sslscan": "sslscan", "sslyze": "SSLyze",
-    "openssl": "OpenSSL", "zgrab2": "ZGrab2", "cfssl": "CFSSL",
-    "wafw00f": "WafW00f", "corsy": "Corsy", "corscanner": "CORScanner",
-    "crlfuzz": "CRLFuzz", "smuggler": "Smuggler", "h2csmuggler": "H2C Smuggler",
-    "nikto": "Nikto", "jaeles": "Jaeles", "interactsh": "Interactsh",
-    "whatweb": "WhatWeb", "wappalyzer": "Wappalyzer", "builtwith": "BuiltWith",
+    "testssl": "testssl.sh",
+    "sslscan": "sslscan",
+    "sslyze": "SSLyze",
+    "openssl": "OpenSSL",
+    "zgrab2": "ZGrab2",
+    "cfssl": "CFSSL",
+    "wafw00f": "WafW00f",
+    "corsy": "Corsy",
+    "corscanner": "CORScanner",
+    "crlfuzz": "CRLFuzz",
+    "smuggler": "Smuggler",
+    "h2csmuggler": "H2C Smuggler",
+    "nikto": "Nikto",
+    "jaeles": "Jaeles",
+    "interactsh": "Interactsh",
+    "whatweb": "WhatWeb",
+    "wappalyzer": "Wappalyzer",
+    "builtwith": "BuiltWith",
     "retire.js": "Retire.js",
-    "nuclei": "Nuclei", "dalfox": "Dalfox", "ffuf": "ffuf",
-    "feroxbuster": "Feroxbuster", "gobuster": "Gobuster", "dirsearch": "Dirsearch",
-    "wfuzz": "Wfuzz", "xsstrike": "XSStrike", "sqlmap": "SQLMap",
-    "commix": "Commix", "tplmap": "Tplmap", "arjun": "Arjun",
-    "paramspider": "ParamSpider", "kxss": "kxss", "gf": "gf",
-    "uro": "uro", "qsreplace": "qsreplace",
-    "trivy": "Trivy", "grype": "Grype", "syft": "Syft",
-    "osv-scanner": "OSV Scanner", "safety": "Safety",
-    "pipaudit": "pip-audit", "npm": "npm audit",
-    "gitleaks": "Gitleaks", "trufflehog": "TruffleHog",
-    "detect-secrets": "Detect Secrets", "git-secrets": "Git Secrets",
+    "nuclei": "Nuclei",
+    "dalfox": "Dalfox",
+    "ffuf": "ffuf",
+    "feroxbuster": "Feroxbuster",
+    "gobuster": "Gobuster",
+    "dirsearch": "Dirsearch",
+    "wfuzz": "Wfuzz",
+    "xsstrike": "XSStrike",
+    "sqlmap": "SQLMap",
+    "commix": "Commix",
+    "tplmap": "Tplmap",
+    "arjun": "Arjun",
+    "paramspider": "ParamSpider",
+    "kxss": "kxss",
+    "gf": "gf",
+    "uro": "uro",
+    "qsreplace": "qsreplace",
+    "trivy": "Trivy",
+    "grype": "Grype",
+    "syft": "Syft",
+    "osv-scanner": "OSV Scanner",
+    "safety": "Safety",
+    "pipaudit": "pip-audit",
+    "npm": "npm audit",
+    "gitleaks": "Gitleaks",
+    "trufflehog": "TruffleHog",
+    "detect-secrets": "Detect Secrets",
+    "git-secrets": "Git Secrets",
     "semgrep": "Semgrep",
-    "wpscan": "WPScan", "droopescan": "Droopescan", "cmseek": "CMSeek", "cmsmap": "CMSMap",
-    "jwt_tool": "JWT Tool", "jwt-hack": "JWT Hack",
-    "graphql-cop": "GraphQL Cop", "clairvoyance": "Clairvoyance",
-    "inql": "InQL", "kiterunner": "Kiterunner", "schemathesis": "Schemathesis", "postman": "Postman",
-    "hydra": "Hydra", "patator": "Patator",
-    "cloud_enum": "Cloud Enum", "s3scanner": "S3Scanner",
-    "gcpbucketbrute": "GCPBucketBrute", "scout-suite": "ScoutSuite", "prowler": "Prowler",
-    "kube-hunter": "Kube-Hunter", "kube-bench": "Kube-Bench", "kube-score": "Kube-Score",
-    "checkov": "Checkov", "terrascan": "Terrascan", "tfsec": "tfsec",
-    "kubeaudit": "Kubeaudit", "kube-linter": "Kube-Linter", "kube-no-trouble": "KubeNoTrouble",
-    "curl": "curl", "httpie": "HTTPie",
-    "va_active_scan": "ARGUS Active Scan", "va_active_scan_tool": "ARGUS Tool Dispatcher",
+    "wpscan": "WPScan",
+    "droopescan": "Droopescan",
+    "cmseek": "CMSeek",
+    "cmsmap": "CMSMap",
+    "jwt_tool": "JWT Tool",
+    "jwt-hack": "JWT Hack",
+    "graphql-cop": "GraphQL Cop",
+    "clairvoyance": "Clairvoyance",
+    "inql": "InQL",
+    "kiterunner": "Kiterunner",
+    "schemathesis": "Schemathesis",
+    "postman": "Postman",
+    "hydra": "Hydra",
+    "patator": "Patator",
+    "cloud_enum": "Cloud Enum",
+    "s3scanner": "S3Scanner",
+    "gcpbucketbrute": "GCPBucketBrute",
+    "scout-suite": "ScoutSuite",
+    "prowler": "Prowler",
+    "kube-hunter": "Kube-Hunter",
+    "kube-bench": "Kube-Bench",
+    "kube-score": "Kube-Score",
+    "checkov": "Checkov",
+    "terrascan": "Terrascan",
+    "tfsec": "tfsec",
+    "kubeaudit": "Kubeaudit",
+    "kube-linter": "Kube-Linter",
+    "kube-no-trouble": "KubeNoTrouble",
+    "curl": "curl",
+    "httpie": "HTTPie",
+    "va_active_scan": "ARGUS Active Scan",
+    "va_active_scan_tool": "ARGUS Tool Dispatcher",
 }
 
 
 def row_has_docker_or_infra_noise(row: dict[str, str] | None) -> bool:
     if not row:
         return False
-    blob = " ".join(
-        str(row.get(k) or "")
-        for k in ("tool", "status", "note")
-    )
+    blob = " ".join(str(row.get(k) or "") for k in ("tool", "status", "note"))
     return bool(_DOCKER_NOISE.search(blob))
 
 
@@ -337,7 +410,9 @@ _SECTION_DISPLAY: dict[str, str] = {
     "outdated_components": "dependency/SCA",
 }
 
-_STATUS_FAILED = frozenset({"failed", "error", "timeout", "cancelled", "canceled", "aborted", "no_output"})
+_STATUS_FAILED = frozenset(
+    {"failed", "error", "timeout", "cancelled", "canceled", "aborted", "no_output"}
+)
 _STATUS_OK = frozenset(
     {
         "success",
@@ -403,7 +478,7 @@ def build_tool_health_summary_rows(
                 name_to_status[n.lower()] = (st or "").strip().lower()
 
     names: list[str] = list(appendix_tool_names or [])
-    for n, _ in (tool_run_summaries or []):
+    for n, _ in tool_run_summaries or []:
         if n and n.strip():
             names.append(n.strip())
     # Unique preserve order
@@ -437,7 +512,9 @@ def build_tool_health_summary_rows(
         bucket["tools"].add(_display_tool_name(tool))
         st = name_to_status.get(tool.lower(), "")
         st_low = (st or "").lower()
-        if st_low in _STATUS_OK or (st_low and st_low not in _STATUS_FAILED and "fail" not in st_low):
+        if st_low in _STATUS_OK or (
+            st_low and st_low not in _STATUS_FAILED and "fail" not in st_low
+        ):
             bucket["any_ok"] = True
         if st_low in _STATUS_FAILED or "fail" in st_low:
             bucket["any_fail"] = True
@@ -453,7 +530,9 @@ def build_tool_health_summary_rows(
             bucket["artifacts"].append(sanitize_customer_tool_text(arts[tool_key], max_len=200))
 
     rows: list[ToolHealthCapabilityRow] = []
-    mandatory = {str(k): str(v or "").strip().lower() for k, v in (mandatory_section_status or {}).items()}
+    mandatory = {
+        str(k): str(v or "").strip().lower() for k, v in (mandatory_section_status or {}).items()
+    }
     for cid, data in sorted(by_cap.items(), key=lambda x: (x[1]["label"] or "").lower()):
         label = str(data["label"])
         tools_str = ", ".join(sorted(data["tools"]))[:500]
@@ -472,13 +551,18 @@ def build_tool_health_summary_rows(
 
         mapped_sections = _CAPABILITY_MANDATORY_SECTIONS.get(cid, ())
         mapped_statuses = {section: mandatory.get(section, "") for section in mapped_sections}
-        if any(status in {"completed_with_fallback", "parsed_from_fallback"} for status in mapped_statuses.values()):
+        if any(
+            status in {"completed_with_fallback", "parsed_from_fallback"}
+            for status in mapped_statuses.values()
+        ):
             if state == "ok":
                 state = "ok_fallback"
             summary = "Completed with parsed fallback data; see related technical section for evidence and limitations."
-        if any(status == "no_observed_items_after_parsing" for status in mapped_statuses.values()):
-            if state == "ok":
-                summary = "Completed: artifacts were parsed and no relevant observed items were found."
+        if (
+            any(status == "no_observed_items_after_parsing" for status in mapped_statuses.values())
+            and state == "ok"
+        ):
+            summary = "Completed: artifacts were parsed and no relevant observed items were found."
         if any(status in {"not_assessed", "no_data"} for status in mapped_statuses.values()):
             names = ", ".join(
                 _SECTION_DISPLAY.get(section, section)
@@ -503,7 +587,9 @@ def build_tool_health_summary_rows(
         elif any(status == "partial" for status in mapped_statuses.values()):
             state = "degraded"
             summary = "Parsed evidence for this capability is partial; no full-domain conclusion can be drawn."
-        elif mapped_statuses and all(status == "not_executed" for status in mapped_statuses.values()):
+        elif mapped_statuses and all(
+            status == "not_executed" for status in mapped_statuses.values()
+        ):
             state = "not_run"
             summary = "The related assessment domain was not executed for this run."
 
@@ -569,13 +655,12 @@ def tool_health_rows_to_jinja(
 
 
 def any_docker_setup_noise_in_tool_rows(rows: list[dict[str, str]] | None) -> bool:
-    for row in rows or []:
-        if row_has_docker_or_infra_noise(row):
-            return True
-    return False
+    return any(row_has_docker_or_infra_noise(row) for row in rows or [])
 
 
-def summarize_tool_error_rows_for_internal(rows: list[dict[str, str]] | None) -> list[dict[str, str]]:
+def summarize_tool_error_rows_for_internal(
+    rows: list[dict[str, str]] | None,
+) -> list[dict[str, str]]:
     """Copy of rows with sanitized `note` for any customer surface (legacy)."""
     out: list[dict[str, str]] = []
     for row in rows or []:

@@ -42,7 +42,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -96,7 +96,7 @@ _DC_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +241,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "domain_controllers": list(record.get("dcs") or []),
         "zip_path": record.get("zip_path"),
         "object_counts": record.get("counts") or {},
-        "synthetic_id": stable_hash_12(
-            f"{record.get('domain', '')}::{record.get('zip_path', '')}"
-        ),
+        "synthetic_id": stable_hash_12(f"{record.get('domain', '')}::{record.get('zip_path', '')}"),
     }
     cleaned: dict[str, Any] = {}
     for key, value in payload.items():

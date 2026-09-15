@@ -7,7 +7,6 @@ import logging
 from uuid import uuid4
 
 import pytest
-
 from src.findings.normalizer import SUPPORTED_STRATEGIES, Normalizer, ParseStrategy
 from src.pipeline.contracts.finding_dto import FindingCategory, FindingDTO
 
@@ -33,9 +32,7 @@ def context_kwargs() -> dict[str, object]:
 # ---------------------------------------------------------------------------
 
 
-def test_non_bytes_raises(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_non_bytes_raises(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
         normalizer.normalize(
             **context_kwargs,  # type: ignore[arg-type]
@@ -44,9 +41,7 @@ def test_non_bytes_raises(
         )
 
 
-def test_unknown_strategy_raises(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_unknown_strategy_raises(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         normalizer.normalize(
             **context_kwargs,  # type: ignore[arg-type]
@@ -91,9 +86,7 @@ def test_unimplemented_strategy_raises(
 # ---------------------------------------------------------------------------
 
 
-def test_nuclei_jsonl_round_trip(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_nuclei_jsonl_round_trip(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     payload = {
         "template-id": "sqli-test",
         "info": {
@@ -196,8 +189,7 @@ def test_nuclei_malformed_lines_skipped_with_warning(
         )
     assert len(findings) == 1
     assert any(
-        "normalizer.nuclei.malformed" in r.message
-        or "normalizer_nuclei_malformed" in r.message
+        "normalizer.nuclei.malformed" in r.message or "normalizer_nuclei_malformed" in r.message
         for r in caplog.records
     )
 
@@ -230,9 +222,7 @@ _NMAP_SAMPLE = b"""<?xml version="1.0"?>
 """
 
 
-def test_nmap_xml_round_trip(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_nmap_xml_round_trip(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     findings = normalizer.normalize(
         **context_kwargs,  # type: ignore[arg-type]
         raw_output=_NMAP_SAMPLE,
@@ -257,8 +247,7 @@ def test_nmap_xml_malformed_returns_empty(
         )
     assert findings == []
     assert any(
-        "normalizer.nmap_xml.malformed" in r.message
-        or "normalizer_nmap_xml_malformed" in r.message
+        "normalizer.nmap_xml.malformed" in r.message or "normalizer_nmap_xml_malformed" in r.message
         for r in caplog.records
     )
 
@@ -314,9 +303,7 @@ def test_json_single_doc_with_findings_array(
     assert cats == ["sqli", "xss"]
 
 
-def test_json_lines_round_trip(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_json_lines_round_trip(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     line_a = json.dumps({"category": "xss", "title": "a", "severity": "low"})
     line_b = json.dumps({"category": "rce", "title": "b", "severity": "critical"})
     raw = (line_a + "\n" + line_b).encode("utf-8")
@@ -331,11 +318,7 @@ def test_json_lines_round_trip(
 def test_json_lines_empty_lines_skipped(
     normalizer: Normalizer, context_kwargs: dict[str, object]
 ) -> None:
-    raw = (
-        b"\n\n"
-        + json.dumps({"category": "info", "title": "a"}).encode("utf-8")
-        + b"\n   \n"
-    )
+    raw = b"\n\n" + json.dumps({"category": "info", "title": "a"}).encode("utf-8") + b"\n   \n"
     findings = normalizer.normalize(
         **context_kwargs,  # type: ignore[arg-type]
         raw_output=raw,
@@ -349,9 +332,7 @@ def test_json_lines_malformed_logs_warning(
     context_kwargs: dict[str, object],
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    raw = b"this is not json\n" + json.dumps({"category": "info", "title": "x"}).encode(
-        "utf-8"
-    )
+    raw = b"this is not json\n" + json.dumps({"category": "info", "title": "x"}).encode("utf-8")
     with caplog.at_level(logging.WARNING, logger="src.findings.normalizer"):
         findings = normalizer.normalize(
             **context_kwargs,  # type: ignore[arg-type]
@@ -403,9 +384,7 @@ def test_json_generic_array_top_level(
 def test_json_generic_dict_with_keyword_in_title(
     normalizer: Normalizer, context_kwargs: dict[str, object]
 ) -> None:
-    raw = json.dumps({"title": "Reflected XSS in /search", "severity": "low"}).encode(
-        "utf-8"
-    )
+    raw = json.dumps({"title": "Reflected XSS in /search", "severity": "low"}).encode("utf-8")
     findings = normalizer.normalize(
         **context_kwargs,  # type: ignore[arg-type]
         raw_output=raw,
@@ -419,9 +398,7 @@ def test_json_generic_dict_with_keyword_in_title(
 # ---------------------------------------------------------------------------
 
 
-def test_csv_round_trip(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_csv_round_trip(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     raw = (
         b"category,title,severity,url,parameter\n"
         b"xss,Reflected XSS,medium,https://x.invalid/,q\n"
@@ -437,9 +414,7 @@ def test_csv_round_trip(
     assert cats == ["sqli", "xss"]
 
 
-def test_csv_empty_input(
-    normalizer: Normalizer, context_kwargs: dict[str, object]
-) -> None:
+def test_csv_empty_input(normalizer: Normalizer, context_kwargs: dict[str, object]) -> None:
     findings = normalizer.normalize(
         **context_kwargs,  # type: ignore[arg-type]
         raw_output=b"category,title\n",
@@ -456,7 +431,9 @@ def test_csv_empty_input(
 def test_text_fallback_extracts_severity_and_url(
     normalizer: Normalizer, context_kwargs: dict[str, object]
 ) -> None:
-    raw = b"[2024-01-01] HIGH: detected SQLi at https://x.invalid/api?id=1 (CWE-89, CVE-2024-9999)\n"
+    raw = (
+        b"[2024-01-01] HIGH: detected SQLi at https://x.invalid/api?id=1 (CWE-89, CVE-2024-9999)\n"
+    )
     findings = normalizer.normalize(
         **context_kwargs,  # type: ignore[arg-type]
         raw_output=raw,

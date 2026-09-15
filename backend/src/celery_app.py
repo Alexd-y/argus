@@ -171,7 +171,7 @@ except Exception:  # pragma: no cover — defensive
 
 
 @beat_init.connect
-def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None:  # noqa: ARG001
+def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None:  # noqa: ARG001 - Celery task/signal signature
     """Rehydrate RedBeat from the DB on beat startup.
 
     Idempotent — :func:`src.scheduling.redbeat_loader.sync_all_from_db`
@@ -208,9 +208,7 @@ def _hydrate_redbeat_on_beat_startup(sender: Any = None, **_kwargs: Any) -> None
 
 
 @task_prerun.connect
-def _argus_task_prerun(
-    sender: Any = None, task: Any = None, **_kwargs: Any
-) -> None:  # noqa: ARG001
+def _argus_task_prerun(sender: Any = None, task: Any = None, **_kwargs: Any) -> None:
     target = task or sender
     if target is None:
         return
@@ -226,7 +224,7 @@ def _argus_task_postrun(
     task: Any = None,
     state: str | None = None,
     **_kwargs: Any,
-) -> None:  # noqa: ARG001
+) -> None:
     target = task or sender
     if target is None:
         return

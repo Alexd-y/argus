@@ -9,8 +9,14 @@ from src.orchestration.prompt_registry import (
 
 
 def test_base_contract_present_for_all_phases():
-    for phase in ("recon", "threat_modeling", "vuln_analysis", "exploitation",
-                  "post_exploitation", "reporting"):
+    for phase in (
+        "recon",
+        "threat_modeling",
+        "vuln_analysis",
+        "exploitation",
+        "post_exploitation",
+        "reporting",
+    ):
         out = _apply_evidence_contract(phase, "SYSTEM")
         assert out.startswith("SYSTEM")
         assert "STRICT EVIDENCE CONTRACT" in out

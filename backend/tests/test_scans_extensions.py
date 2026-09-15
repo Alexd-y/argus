@@ -5,9 +5,8 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 
 def _session_factory_with_execute_return(result: MagicMock):

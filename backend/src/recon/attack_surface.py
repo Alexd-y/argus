@@ -51,9 +51,7 @@ def _injection_points_from_params(params: list[dict[str, Any]]) -> list[dict[str
         for name in names:
             if not name:
                 continue
-            points.append(
-                {"url": url, "parameter": name, "method": method, "location": "query"}
-            )
+            points.append({"url": url, "parameter": name, "method": method, "location": "query"})
     return points
 
 
@@ -75,7 +73,12 @@ def _injection_points_from_forms(forms: list[dict[str, Any]]) -> list[dict[str, 
                 name = field
             if name:
                 points.append(
-                    {"url": url, "parameter": name, "method": method, "location": "body"}
+                    {
+                        "url": url,
+                        "parameter": name,
+                        "method": method,
+                        "location": "body",
+                    }
                 )
     return points
 
@@ -103,7 +106,11 @@ def build_attack_surface(
 
     url_pool = _dedup(
         (urls or [])
-        + [a for a in assets if isinstance(a, str) and a.lower().startswith(("http://", "https://"))]
+        + [
+            a
+            for a in assets
+            if isinstance(a, str) and a.lower().startswith(("http://", "https://"))
+        ]
         + [str(p.get("url")) for p in params if isinstance(p, dict) and p.get("url")]
         + [str(f.get("action")) for f in forms if isinstance(f, dict) and f.get("action")]
     )

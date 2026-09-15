@@ -245,10 +245,7 @@ class FindingPrioritizer:
         findings: Iterable[FindingDTO],
     ) -> list[RankedFinding]:
         """Return :class:`RankedFinding` records in priority-descending order."""
-        decorated = [
-            RankedFinding(finding=f, rank_key=_compute_rank_key(f))
-            for f in findings
-        ]
+        decorated = [RankedFinding(finding=f, rank_key=_compute_rank_key(f)) for f in findings]
         # Negate numeric fields so descending sort = highest priority first;
         # the hash tie-breaker stays ascending so the result is stable.
         decorated.sort(

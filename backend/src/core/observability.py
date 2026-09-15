@@ -123,10 +123,29 @@ _TENANT_HASH_LEN: Final[int] = 16
 # * Sandbox run — long-tail; some recon tools run minutes (testssl, dnsx).
 # * Celery task — generic; covers both sub-second tasks and report jobs.
 _HTTP_BUCKETS: Final[tuple[float, ...]] = (
-    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
 )
 _SANDBOX_BUCKETS: Final[tuple[float, ...]] = (1.0, 5.0, 10.0, 30.0, 60.0, 300.0)
-_CELERY_BUCKETS: Final[tuple[float, ...]] = (0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 300.0)
+_CELERY_BUCKETS: Final[tuple[float, ...]] = (
+    0.1,
+    0.5,
+    1.0,
+    5.0,
+    10.0,
+    30.0,
+    60.0,
+    300.0,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,7 +264,14 @@ _LLM_PROVIDERS: Final[frozenset[str]] = frozenset(
 )
 _LLM_DIRECTIONS: Final[frozenset[str]] = frozenset({"in", "out"})
 _MCP_STATUSES: Final[frozenset[str]] = frozenset(
-    {"success", "error", "rate_limited", "unauthorized", "forbidden", "validation_error"},
+    {
+        "success",
+        "error",
+        "rate_limited",
+        "unauthorized",
+        "forbidden",
+        "validation_error",
+    },
 )
 _MCP_CLIENT_CLASSES: Final[frozenset[str]] = frozenset(
     {"anthropic", "openai", "generic"},
@@ -307,7 +333,7 @@ class _LabelGuard:
     that's intentional because Prometheus deduplicates by label set anyway.
     """
 
-    __slots__ = ("_metric_name", "_seen", "_lock", "_warning_emitted")
+    __slots__ = ("_lock", "_metric_name", "_seen", "_warning_emitted")
 
     def __init__(self, metric_name: str) -> None:
         self._metric_name = metric_name
@@ -447,8 +473,10 @@ def reset_metrics_registry(registry: Any | None = None) -> _MetricRegistry:
     """
     global _metric_registry
     with _metric_registry_lock:
-        target = registry if registry is not None else (
-            CollectorRegistry() if PROMETHEUS_AVAILABLE else None
+        target = (
+            registry
+            if registry is not None
+            else (CollectorRegistry() if PROMETHEUS_AVAILABLE else None)
         )
         _metric_registry = _MetricRegistry(registry=target)
     return _metric_registry
@@ -895,16 +923,16 @@ def record_tool_run(tool: str) -> None:
 class _NoopSpan:
     """Minimal ``Span`` lookalike — every operation is a silent no-op."""
 
-    def set_attribute(self, _key: str, _value: object) -> None:  # noqa: D401
+    def set_attribute(self, _key: str, _value: object) -> None:
         return None
 
-    def add_event(self, _name: str, **_kwargs: Any) -> None:  # noqa: D401
+    def add_event(self, _name: str, **_kwargs: Any) -> None:
         return None
 
-    def record_exception(self, _exc: BaseException) -> None:  # noqa: D401
+    def record_exception(self, _exc: BaseException) -> None:
         return None
 
-    def end(self) -> None:  # noqa: D401
+    def end(self) -> None:
         return None
 
     def __enter__(self) -> _NoopSpan:
@@ -921,7 +949,7 @@ class _NoopTracer:
     def start_as_current_span(
         self,
         _name: str,
-        attributes: Mapping[str, Any] | None = None,  # noqa: ARG002 — API parity
+        attributes: Mapping[str, Any] | None = None,  # noqa: ARG002 - retained for signature/API compatibility
         **_kwargs: Any,
     ) -> Generator[_NoopSpan, None, None]:
         yield _NoopSpan()
@@ -931,8 +959,8 @@ __all__ = [
     "CONTENT_TYPE_LATEST",
     "LABEL_VALUE_WHITELIST",
     "METRIC_CATALOGUE",
-    "OTHER_LABEL_VALUE",
     "OTEL_AVAILABLE",
+    "OTHER_LABEL_VALUE",
     "PROMETHEUS_AVAILABLE",
     "SYSTEM_TENANT_HASH",
     "CardinalityExceededError",
@@ -951,6 +979,6 @@ __all__ = [
     "reset_metrics_registry",
     "safe_set_span_attribute",
     "tenant_hash",
-    "user_id_hash",
     "trace_phase",
+    "user_id_hash",
 ]

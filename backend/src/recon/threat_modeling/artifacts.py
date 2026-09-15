@@ -6,6 +6,7 @@ reports, and JSON traces from pipeline outputs (bundle, AI task results, MCP tra
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 from datetime import datetime
@@ -285,41 +286,45 @@ def generate_threat_scenarios_csv(
     """Generate threat_scenarios.csv with full scenario fields."""
     buf = StringIO()
     writer = csv.writer(buf, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
-    writer.writerow([
-        "id",
-        "title",
-        "related_assets",
-        "host_component",
-        "entry_point",
-        "attacker_profile",
-        "trust_boundary",
-        "description",
-        "likelihood",
-        "impact",
-        "priority",
-        "recon_evidence_refs",
-        "assumptions",
-        "recommended_next_manual_checks",
-    ])
+    writer.writerow(
+        [
+            "id",
+            "title",
+            "related_assets",
+            "host_component",
+            "entry_point",
+            "attacker_profile",
+            "trust_boundary",
+            "description",
+            "likelihood",
+            "impact",
+            "priority",
+            "recon_evidence_refs",
+            "assumptions",
+            "recommended_next_manual_checks",
+        ]
+    )
     for s in artifact.scenarios:
-        writer.writerow([
-            s.id,
-            s.title,
-            "|".join(s.related_assets) if s.related_assets else "",
-            _escape_csv_field(s.host_component),
-            _escape_csv_field(s.entry_point),
-            _escape_csv_field(s.attacker_profile),
-            _escape_csv_field(s.trust_boundary),
-            s.description,
-            s.likelihood,
-            s.impact,
-            s.priority.value if isinstance(s.priority, PriorityLevel) else str(s.priority),
-            "|".join(s.recon_evidence_refs) if s.recon_evidence_refs else "",
-            "|".join(s.assumptions) if s.assumptions else "",
-            "|".join(s.recommended_next_manual_checks)
-            if s.recommended_next_manual_checks
-            else "",
-        ])
+        writer.writerow(
+            [
+                s.id,
+                s.title,
+                "|".join(s.related_assets) if s.related_assets else "",
+                _escape_csv_field(s.host_component),
+                _escape_csv_field(s.entry_point),
+                _escape_csv_field(s.attacker_profile),
+                _escape_csv_field(s.trust_boundary),
+                s.description,
+                s.likelihood,
+                s.impact,
+                s.priority.value if isinstance(s.priority, PriorityLevel) else str(s.priority),
+                "|".join(s.recon_evidence_refs) if s.recon_evidence_refs else "",
+                "|".join(s.assumptions) if s.assumptions else "",
+                "|".join(s.recommended_next_manual_checks)
+                if s.recommended_next_manual_checks
+                else "",
+            ]
+        )
     return buf.getvalue()
 
 
@@ -372,7 +377,9 @@ def generate_threat_model_md(
 
     lines.append("## Critical Assets")
     lines.append("")
-    lines.append("*Statements tagged as Evidence | Observation | Inference | Hypothesis where available.*")
+    lines.append(
+        "*Statements tagged as Evidence | Observation | Inference | Hypothesis where available.*"
+    )
     lines.append("")
     assets = _get_assets(bundle, ai_results)
     if assets:
@@ -472,9 +479,7 @@ def generate_threat_model_md(
     lines.append("")
     for item in artifact.testing_roadmap:
         prio = (
-            item.priority.value
-            if isinstance(item.priority, PriorityLevel)
-            else str(item.priority)
+            item.priority.value if isinstance(item.priority, PriorityLevel) else str(item.priority)
         )
         lines.append(f"- **{item.title}** (scenario: `{item.scenario_id}`, priority: {prio})")
         for action in item.recommended_actions:
@@ -588,9 +593,7 @@ def generate_testing_priorities_md(
     lines.append("")
     for i, item in enumerate(artifact.testing_roadmap, 1):
         prio = (
-            item.priority.value
-            if isinstance(item.priority, PriorityLevel)
-            else str(item.priority)
+            item.priority.value if isinstance(item.priority, PriorityLevel) else str(item.priority)
         )
         lines.append(f"## {i}. {item.title}")
         lines.append("")
@@ -727,26 +730,22 @@ def generate_threat_model_json(
     threat_scenarios = parse_threat_scenarios_to_stage3(prior_outputs)
 
     profiles_data = prior_outputs.get("attacker_profiles", {}) or {}
-    raw_profiles = (
-        profiles_data.get("profiles")
-        if isinstance(profiles_data, dict)
-        else []
-    ) or []
+    raw_profiles = (profiles_data.get("profiles") if isinstance(profiles_data, dict) else []) or []
     attacker_profiles: list[AttackerProfile] = []
     for i, p in enumerate(raw_profiles):
         if not isinstance(p, dict):
             continue
-        try:
+        with contextlib.suppress(Exception):
             attacker_profiles.append(
                 AttackerProfile(
                     id=str(p.get("id") or f"ap_{i}")[:100],
                     name=str(p.get("name") or "")[:200] or f"profile_{i}",
                     capability_level=str(p.get("capability_level") or "unknown")[:50],
-                    description=(str(p.get("description"))[:2000] if p.get("description") else None),
+                    description=(
+                        str(p.get("description"))[:2000] if p.get("description") else None
+                    ),
                 )
             )
-        except Exception:
-            pass
     if not attacker_profiles and bundle.attacker_profiles:
         attacker_profiles = list(bundle.attacker_profiles[:50])
 
@@ -815,9 +814,7 @@ def generate_mcp_trace_json(
         payload = {
             "run_id": artifact.run_id,
             "job_id": artifact.job_id,
-            "invocations": [
-                _mcp_trace_to_dict(t) for t in artifact.mcp_invocation_traces
-            ],
+            "invocations": [_mcp_trace_to_dict(t) for t in artifact.mcp_invocation_traces],
         }
     return json.dumps(payload, indent=2, ensure_ascii=False, default=str)
 

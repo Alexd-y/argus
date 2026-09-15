@@ -86,7 +86,9 @@ def test_record_helpers_increment_integer_mirrors() -> None:
     qmetrics.record_templates_selected(amount=5)
     qmetrics.record_finding(severity="high", verdict="confirmed")
     qmetrics.record_plan_revision()
-    qmetrics.record_llm_call(model="qwythos", prompt="quick_planner_v1", status="ok", latency_seconds=0.2)
+    qmetrics.record_llm_call(
+        model="qwythos", prompt="quick_planner_v1", status="ok", latency_seconds=0.2
+    )
     qmetrics.record_tool_failure(tool="nuclei", reason="timeout")
     qmetrics.record_scan_duration(12.5)
     qmetrics.record_budget_used_ratio(0.4)
@@ -176,7 +178,13 @@ def test_out_of_scope_plan_emits_zero_network_tasks() -> None:
 
 
 def test_admit_tracked_tool_rejects_untracked() -> None:
-    assert qmetrics.admit_tracked_tool("nuclei", catalog_ids={"nuclei"}, planned_ids={"nuclei"}) is True
+    assert (
+        qmetrics.admit_tracked_tool("nuclei", catalog_ids={"nuclei"}, planned_ids={"nuclei"})
+        is True
+    )
     assert qmetrics.admit_tracked_tool("sqlmap", catalog_ids={"nuclei"}) is False
-    assert qmetrics.admit_tracked_tool("nuclei", catalog_ids={"nuclei"}, planned_ids={"httpx"}) is False
+    assert (
+        qmetrics.admit_tracked_tool("nuclei", catalog_ids={"nuclei"}, planned_ids={"httpx"})
+        is False
+    )
     assert m.get_quick_untracked_tool_executions() >= 2

@@ -8,9 +8,12 @@ and sink persistence.
 from __future__ import annotations
 
 import pytest
-
 from src.policy.scope import ScopeKind, ScopeRule
-from src.web_workbench.proxy.forward_gate import ForwardDecision, ForwardGate, ForwardOutcome
+from src.web_workbench.projects.service import ProjectScopeService
+from src.web_workbench.proxy.forward_gate import (
+    ForwardGate,
+    ForwardOutcome,
+)
 from src.web_workbench.proxy.intercept_rules import (
     InterceptAction,
     InterceptRule,
@@ -19,7 +22,6 @@ from src.web_workbench.proxy.intercept_rules import (
 from src.web_workbench.proxy.repository import CaptureInput
 from src.web_workbench.proxy.service import ProxyFlowProcessor, ProxyIdentity
 from src.web_workbench.proxy.transport import NormalizedRequest, NormalizedResponse
-from src.web_workbench.projects.service import ProjectScopeService
 
 _IDENTITY = ProxyIdentity(tenant_id="t-1", project_id="p-1", listener_id="l-1")
 
@@ -114,7 +116,11 @@ def test_preflight_denied_capture_is_in_scope_but_blocked() -> None:
     request = _request()
     decision = proc.evaluate(request)
     capture = proc.build_capture(
-        request=request, decision=decision, request_body=None, response=None, response_body=None
+        request=request,
+        decision=decision,
+        request_body=None,
+        response=None,
+        response_body=None,
     )
     assert capture.forward_outcome == str(ForwardOutcome.BLOCKED.value)
     assert capture.in_scope is True

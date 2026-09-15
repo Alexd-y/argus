@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.web_workbench.imports.har import ImportedExchange
 from src.web_workbench.imports.wsdl import WsdlImportError, import_wsdl
 

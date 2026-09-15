@@ -12,14 +12,13 @@ No database and no network — pure domain logic (SI-WB-1 gate + shared EAP).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
-
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.engagement_authorization import (
@@ -40,7 +39,7 @@ from src.web_workbench.projects import (
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------

@@ -39,12 +39,16 @@ async def analyse_binary(req: BinaryAnalyseRequest) -> BinaryAnalyseResponse:
     from src.workers.binary.static.analyser import analyse_binary as do_analyse
 
     result = await do_analyse(
-        req.file_path, tenant_id=req.tenant_id, sample_id=req.sample_id,
+        req.file_path,
+        tenant_id=req.tenant_id,
+        sample_id=req.sample_id,
     )
     return BinaryAnalyseResponse(
-        id=result.id, sample_id=result.sample_id,
+        id=result.id,
+        sample_id=result.sample_id,
         format=result.metadata.format.value,
-        verdict=result.verdict, risk_score=result.risk_score,
+        verdict=result.verdict,
+        risk_score=result.risk_score,
         architecture=result.metadata.architecture,
         capabilities=result.metadata.capabilities,
         mitre_attck=result.mitre_attck,
@@ -60,9 +64,11 @@ async def dynamic_analysis(req: BinaryAnalyseRequest) -> dict[str, Any]:
 
     result = await run_dynamic_analysis(req.file_path, tenant_id=req.tenant_id)
     return {
-        "id": result.id, "sample_id": result.sample_id,
+        "id": result.id,
+        "sample_id": result.sample_id,
         "execution_time_ms": result.execution_time_ms,
-        "exit_code": result.exit_code, "verdict": result.verdict,
+        "exit_code": result.exit_code,
+        "verdict": result.verdict,
         "error": result.error,
     }
 
@@ -73,14 +79,22 @@ async def quarantine(req: BinaryAnalyseRequest) -> dict[str, Any]:
 
     record = await quarantine_sample(req.file_path, tenant_id=req.tenant_id)
     return {
-        "id": record.id, "sample_id": record.sample_id,
-        "status": record.status, "hash_before": record.hash_before,
+        "id": record.id,
+        "sample_id": record.sample_id,
+        "status": record.status,
+        "hash_before": record.hash_before,
     }
 
 
 @router.post("/yara")
-async def generate_yara(indicators: list[str], metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+async def generate_yara(
+    indicators: list[str], metadata: dict[str, Any] | None = None
+) -> dict[str, Any]:
     from src.workers.binary.clustering.yara_sigma import generate_yara_rules
 
     rules = await generate_yara_rules(indicators, metadata or {})
-    return {"rules": [{"name": r.name, "strings": r.strings[:20], "condition": r.condition} for r in rules]}
+    return {
+        "rules": [
+            {"name": r.name, "strings": r.strings[:20], "condition": r.condition} for r in rules
+        ]
+    }

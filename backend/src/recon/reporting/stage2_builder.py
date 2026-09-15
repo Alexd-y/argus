@@ -40,6 +40,7 @@ class Stage2Structured(TypedDict):
     critical_assets: list[StructuredItem]
     entry_points: list[StructuredItem]
 
+
 STAGE2_PROMPT_TEMPLATE = """You are a security architect preparing inputs for threat modeling.
 
 ## Context
@@ -72,6 +73,7 @@ Return valid JSON only:
 
 If you cannot process, return: {{"error": "reason"}}
 """
+
 
 def _load_csv(path: Path) -> list[dict]:
     """Load CSV into list of dicts. Returns empty list if file missing."""
@@ -141,26 +143,32 @@ def _extract_rule_based_inputs(
         priority = "high" if role in {"hosting/admin", "auth/sso"} else "medium"
         for h in hosts[:5]:
             if role == "hosting/admin":
-                priority_hypotheses.append({
-                    "type": "hypothesis",
-                    "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
-                    "text": f"Validate admin/hosting subdomain {h} — check exposure",
-                    "priority": priority,
-                })
+                priority_hypotheses.append(
+                    {
+                        "type": "hypothesis",
+                        "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
+                        "text": f"Validate admin/hosting subdomain {h} — check exposure",
+                        "priority": priority,
+                    }
+                )
             elif role == "auth/sso":
-                priority_hypotheses.append({
-                    "type": "hypothesis",
-                    "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
-                    "text": f"Validate auth/SSO subdomain {h} — entry point for auth flows",
-                    "priority": priority,
-                })
+                priority_hypotheses.append(
+                    {
+                        "type": "hypothesis",
+                        "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
+                        "text": f"Validate auth/SSO subdomain {h} — entry point for auth flows",
+                        "priority": priority,
+                    }
+                )
             elif role == "mail":
-                priority_hypotheses.append({
-                    "type": "hypothesis",
-                    "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
-                    "text": f"Validate mail subdomain {h} — check MX and webmail exposure",
-                    "priority": "medium",
-                })
+                priority_hypotheses.append(
+                    {
+                        "type": "hypothesis",
+                        "source": SOURCE_SUBDOMAIN_CLASSIFICATION,
+                        "text": f"Validate mail subdomain {h} — check MX and webmail exposure",
+                        "priority": "medium",
+                    }
+                )
 
     # Critical assets from tech_profile.csv (evidence contains host)
     for row in tech_profile:
@@ -168,11 +176,13 @@ def _extract_rule_based_inputs(
         host = _extract_host_from_evidence(evidence)
         if host and host not in seen_assets:
             seen_assets.add(host)
-            critical_assets.append({
-                "type": "observation",
-                "source": SOURCE_TECH_PROFILE,
-                "text": host,
-            })
+            critical_assets.append(
+                {
+                    "type": "observation",
+                    "source": SOURCE_TECH_PROFILE,
+                    "text": host,
+                }
+            )
 
     # Entry points from endpoint_inventory.csv (urls where exists=yes)
     for row in endpoint_inventory:
@@ -180,49 +190,64 @@ def _extract_rule_based_inputs(
         exists = (row.get("exists") or "").strip().lower()
         if url and exists in ("yes", "true", "1") and url not in seen_entry_points:
             seen_entry_points.add(url)
-            entry_points.append({
-                "type": "hypothesis",
-                "source": SOURCE_ENDPOINT_INVENTORY,
-                "text": url,
-            })
+            entry_points.append(
+                {
+                    "type": "hypothesis",
+                    "source": SOURCE_ENDPOINT_INVENTORY,
+                    "text": url,
+                }
+            )
 
     # Trust boundaries from live_hosts_detailed.csv
-    live_host_list = sorted({(r.get("host") or "").strip() for r in live_hosts if (r.get("host") or "").strip()})
+    live_host_list = sorted(
+        {(r.get("host") or "").strip() for r in live_hosts if (r.get("host") or "").strip()}
+    )
     if live_host_list:
-        trust_boundaries.append({
-            "type": "inference",
-            "source": SOURCE_LIVE_HOSTS,
-            "text": "Public web tier (live hosts with HTTP response)",
-        })
-        trust_boundaries.append({
-            "type": "inference",
-            "source": SOURCE_LIVE_HOSTS,
-            "text": "DNS/resolution layer (resolved vs unresolved)",
-        })
+        trust_boundaries.append(
+            {
+                "type": "inference",
+                "source": SOURCE_LIVE_HOSTS,
+                "text": "Public web tier (live hosts with HTTP response)",
+            }
+        )
+        trust_boundaries.append(
+            {
+                "type": "inference",
+                "source": SOURCE_LIVE_HOSTS,
+                "text": "DNS/resolution layer (resolved vs unresolved)",
+            }
+        )
     if by_role.get("hosting/admin") or by_role.get("auth/sso"):
-        trust_boundaries.append({
-            "type": "inference",
-            "source": SOURCE_LIVE_HOSTS,
-            "text": "Admin/auth boundary (hosting/admin, auth/sso subdomains)",
-        })
+        trust_boundaries.append(
+            {
+                "type": "inference",
+                "source": SOURCE_LIVE_HOSTS,
+                "text": "Admin/auth boundary (hosting/admin, auth/sso subdomains)",
+            }
+        )
 
     # Fallback entry points from live hosts (when endpoint_inventory empty)
     for h in live_host_list[:10]:
         if h and h not in seen_entry_points:
             seen_entry_points.add(h)
-            entry_points.append({
-                "type": "hypothesis",
-                "source": SOURCE_LIVE_HOSTS,
-                "text": h,
-            })
+            entry_points.append(
+                {
+                    "type": "hypothesis",
+                    "source": SOURCE_LIVE_HOSTS,
+                    "text": h,
+                }
+            )
 
     if anomalies_text and "anomaly" in anomalies_text.lower():
-        priority_hypotheses.insert(0, {
-            "type": "hypothesis",
-            "source": SOURCE_ANOMALIES,
-            "text": "Investigate anomalies from Stage 1 (see anomalies.md)",
-            "priority": "high",
-        })
+        priority_hypotheses.insert(
+            0,
+            {
+                "type": "hypothesis",
+                "source": SOURCE_ANOMALIES,
+                "text": "Investigate anomalies from Stage 1 (see anomalies.md)",
+                "priority": "high",
+            },
+        )
 
     return {
         "priority_hypotheses": priority_hypotheses[:8],
@@ -258,12 +283,20 @@ def _enrich_with_llm(
     """Optionally enrich Stage 2 inputs via LLM. Falls back to rule_inputs on failure."""
     try:
         high_priority = [
-            {"subdomain": r.get("subdomain"), "role": r.get("role"), "priority": r.get("priority")}
+            {
+                "subdomain": r.get("subdomain"),
+                "role": r.get("role"),
+                "priority": r.get("priority"),
+            }
             for r in classification
             if (r.get("role") or "") in {"hosting/admin", "auth/sso", "mail"}
         ][:15]
         live_summary = [
-            {"host": r.get("host"), "status": r.get("status"), "server": r.get("server")}
+            {
+                "host": r.get("host"),
+                "status": r.get("status"),
+                "server": r.get("server"),
+            }
             for r in live_hosts[:20]
         ]
         prompt = STAGE2_PROMPT_TEMPLATE.format(
@@ -283,12 +316,14 @@ def _enrich_with_llm(
             return rule_inputs
         return {
             "priority_hypotheses": _strings_to_structured(
-                data.get("priority_hypotheses") or [i["text"] for i in rule_inputs["priority_hypotheses"]],
+                data.get("priority_hypotheses")
+                or [i["text"] for i in rule_inputs["priority_hypotheses"]],
                 "hypothesis",
                 SOURCE_SUBDOMAIN_CLASSIFICATION,
             ),
             "trust_boundaries": _strings_to_structured(
-                data.get("trust_boundaries") or [i["text"] for i in rule_inputs["trust_boundaries"]],
+                data.get("trust_boundaries")
+                or [i["text"] for i in rule_inputs["trust_boundaries"]],
                 "inference",
                 SOURCE_LIVE_HOSTS,
             ),

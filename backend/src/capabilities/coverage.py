@@ -116,10 +116,10 @@ def resolve_coverage_status(
 ) -> CoverageStatus:
     """Resolve the next coverage status with strict execution-evidence rules.
 
-    Invariants enforced:
-    * ``not_tested`` never becomes ``covered_no_finding`` without execution evidence.
-    * Absence of a finding does not imply coverage.
-  * ``covered_with_finding`` requires both execution evidence and a finding id.
+      Invariants enforced:
+      * ``not_tested`` never becomes ``covered_no_finding`` without execution evidence.
+      * Absence of a finding does not imply coverage.
+    * ``covered_with_finding`` requires both execution evidence and a finding id.
     """
     has_execution_evidence = bool(execution_evidence_id) or tool_executed
     has_finding = bool(finding_id)
@@ -133,21 +133,15 @@ def resolve_coverage_status(
 
     if proposed in COVERED_STATUSES and not has_execution_evidence:
         record_coverage_transition(accurate=False)
-        raise CoverageAccountingError(
-            f"cannot mark {proposed.value} without execution evidence"
-        )
+        raise CoverageAccountingError(f"cannot mark {proposed.value} without execution evidence")
 
     if proposed is CoverageStatus.COVERED_NO_FINDING and has_finding:
         record_coverage_transition(accurate=False)
-        raise CoverageAccountingError(
-            "covered_no_finding incompatible with present finding_id"
-        )
+        raise CoverageAccountingError("covered_no_finding incompatible with present finding_id")
 
     if proposed is CoverageStatus.COVERED_WITH_FINDING and not has_finding:
         record_coverage_transition(accurate=False)
-        raise CoverageAccountingError(
-            "covered_with_finding requires finding_id"
-        )
+        raise CoverageAccountingError("covered_with_finding requires finding_id")
 
     if not can_transition_coverage(
         current,

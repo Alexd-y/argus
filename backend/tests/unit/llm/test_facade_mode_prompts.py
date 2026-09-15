@@ -183,9 +183,7 @@ class TestMissingModeDefaultsProduction:
         ):
             await call_llm_unified("sys", "user", task=LLMTask.VULN_ANALYSIS)
 
-        assert any(
-            rec.getMessage() == "llm_execution_mode_missing" for rec in caplog.records
-        )
+        assert any(rec.getMessage() == "llm_execution_mode_missing" for rec in caplog.records)
 
     @pytest.mark.asyncio
     async def test_scan_options_lab_mode_injected(self, gateway_flag_on: None) -> None:

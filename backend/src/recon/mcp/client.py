@@ -119,7 +119,10 @@ def _fetch_via_httpx(url: str, timeout: float) -> dict:
     except Exception:
         logger.info(
             "httpx_fetch_failed",
-            extra={"url": _sanitize_url_for_log(url), "error_code": "httpx_fetch_failed"},
+            extra={
+                "url": _sanitize_url_for_log(url),
+                "error_code": "httpx_fetch_failed",
+            },
         )
         return {
             "status": 0,
@@ -196,12 +199,14 @@ def _get_fetch_server_params():
     # Try python -m mcp_server_fetch first (pip install mcp-server-fetch)
     try:
         import mcp_server_fetch  # noqa: F401
+
         return StdioServerParameters(command="python", args=["-m", "mcp_server_fetch"])
     except ImportError:
         pass
 
     # Fallback: uvx mcp-server-fetch (if uv in PATH)
     import shutil
+
     if shutil.which("uvx"):
         return StdioServerParameters(command="uvx", args=["mcp-server-fetch"])
 
@@ -238,6 +243,7 @@ def get_mcp_fetch_func(
     Returns callable(url) -> {status, content_type, exists, notes}.
     The callable itself is fail-closed when MCP is unavailable.
     """
+
     def _fetch(u: str) -> dict:
         r = fetch_url_mcp(u, timeout, operation=operation)
         return {

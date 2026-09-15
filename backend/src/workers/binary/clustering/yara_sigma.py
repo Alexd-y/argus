@@ -43,7 +43,8 @@ class ATTACKMapping:
 
 
 async def generate_yara_rules(
-    indicators: list[str], metadata: dict[str, Any],
+    indicators: list[str],
+    metadata: dict[str, Any],
 ) -> list[YARARule]:
     """Generate YARA rules for binary family via WRB."""
     from src.llm.facade import call_llm_unified
@@ -52,9 +53,9 @@ async def generate_yara_rules(
     prompt = f"""Generate YARA detection rule for this malware sample.
 
 === INDICATORS ===
-Strings: {', '.join(indicators[:30])}
-File type: {metadata.get('format', 'unknown')}
-Capabilities: {', '.join(metadata.get('capabilities', []))}
+Strings: {", ".join(indicators[:30])}
+File type: {metadata.get("format", "unknown")}
+Capabilities: {", ".join(metadata.get("capabilities", []))}
 
 === OUTPUT ===
 JSON: {{"name": "rule_name", "description": "...",
@@ -64,7 +65,9 @@ JSON: {{"name": "rule_name", "description": "...",
     try:
         resp = await call_llm_unified(
             "You generate YARA rules for malware detection. Output valid JSON.",
-            prompt, task=LLMTask.EXPLOIT_GENERATION, phase="yara_generation",
+            prompt,
+            task=LLMTask.EXPLOIT_GENERATION,
+            phase="yara_generation",
         )
         data = json.loads(resp)
         return [YARARule(**data)]
@@ -73,7 +76,8 @@ JSON: {{"name": "rule_name", "description": "...",
 
 
 async def generate_sigma_rule(
-    technique_id: str, indicators: list[str],
+    technique_id: str,
+    indicators: list[str],  # noqa: ARG001 - retained for signature/API compatibility
 ) -> SigmaRule | None:
     """Generate Sigma rule for SIEM from ATT&CK technique."""
     return SigmaRule(
@@ -86,15 +90,47 @@ async def generate_sigma_rule(
 def map_to_attck(capabilities: list[str]) -> list[ATTACKMapping]:
     """Map binary capabilities to MITRE ATT&CK."""
     cap_to_attck = {
-        "creates_process": ATTACKMapping(tactic="Execution", technique_id="T1059", technique="Command and Scripting Interpreter"),
-        "network_communication": ATTACKMapping(tactic="Command and Control", technique_id="T1071", technique="Application Layer Protocol"),
-        "file_manipulation": ATTACKMapping(tactic="Defense Evasion", technique_id="T1564", technique="Hide Artifacts"),
-        "registry_modification": ATTACKMapping(tactic="Persistence", technique_id="T1547", technique="Boot or Logon Autostart Execution"),
-        "credential_access": ATTACKMapping(tactic="Credential Access", technique_id="T1003", technique="OS Credential Dumping"),
-        "defense_evasion": ATTACKMapping(tactic="Defense Evasion", technique_id="T1055", technique="Process Injection"),
-        "persistence": ATTACKMapping(tactic="Persistence", technique_id="T1053", technique="Scheduled Task/Job"),
-        "c2_communication": ATTACKMapping(tactic="Command and Control", technique_id="T1573", technique="Encrypted Channel"),
-        "data_exfiltration": ATTACKMapping(tactic="Exfiltration", technique_id="T1041", technique="Exfiltration Over C2 Channel"),
+        "creates_process": ATTACKMapping(
+            tactic="Execution",
+            technique_id="T1059",
+            technique="Command and Scripting Interpreter",
+        ),
+        "network_communication": ATTACKMapping(
+            tactic="Command and Control",
+            technique_id="T1071",
+            technique="Application Layer Protocol",
+        ),
+        "file_manipulation": ATTACKMapping(
+            tactic="Defense Evasion", technique_id="T1564", technique="Hide Artifacts"
+        ),
+        "registry_modification": ATTACKMapping(
+            tactic="Persistence",
+            technique_id="T1547",
+            technique="Boot or Logon Autostart Execution",
+        ),
+        "credential_access": ATTACKMapping(
+            tactic="Credential Access",
+            technique_id="T1003",
+            technique="OS Credential Dumping",
+        ),
+        "defense_evasion": ATTACKMapping(
+            tactic="Defense Evasion",
+            technique_id="T1055",
+            technique="Process Injection",
+        ),
+        "persistence": ATTACKMapping(
+            tactic="Persistence", technique_id="T1053", technique="Scheduled Task/Job"
+        ),
+        "c2_communication": ATTACKMapping(
+            tactic="Command and Control",
+            technique_id="T1573",
+            technique="Encrypted Channel",
+        ),
+        "data_exfiltration": ATTACKMapping(
+            tactic="Exfiltration",
+            technique_id="T1041",
+            technique="Exfiltration Over C2 Channel",
+        ),
     }
     mappings = []
     for cap in capabilities:

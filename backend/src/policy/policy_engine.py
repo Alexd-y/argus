@@ -320,9 +320,7 @@ class PolicyEngine:
         7. Approval requirement — flag (does not deny on its own).
         """
         if self._policy.tenant_id != context.tenant_id:
-            raise ValueError(
-                "PolicyContext.tenant_id does not match the engine's tenant_id"
-            )
+            raise ValueError("PolicyContext.tenant_id does not match the engine's tenant_id")
 
         if self._kill_switch_checker is not None:
             verdict = self._kill_switch_checker(context.tenant_id)
@@ -345,9 +343,7 @@ class PolicyEngine:
                         "reason": summary,
                     },
                 )
-                return self._deny(
-                    context, summary, matched_cap=None, skip_log=True
-                )
+                return self._deny(context, summary, matched_cap=None, skip_log=True)
 
         # Verified lab_unrestricted lease: capability set = * (master prompt §2.5).
         # Kill switch above still applies; no per-action risk/tool/rate/approval gates.
@@ -377,17 +373,12 @@ class PolicyEngine:
 
         phase_cap = self._policy.cap_for_phase(context.phase)
         if not _is_at_or_below(context.risk_level, phase_cap.max_risk):
-            return self._deny(
-                context, _REASON_PHASE_RISK_OVER_CAP, matched_cap=phase_cap
-            )
+            return self._deny(context, _REASON_PHASE_RISK_OVER_CAP, matched_cap=phase_cap)
 
         if context.tool_id in self._policy.banned_tools:
             return self._deny(context, _REASON_TOOL_BANNED, matched_cap=phase_cap)
 
-        if (
-            context.family_id is not None
-            and context.family_id in self._policy.banned_families
-        ):
+        if context.family_id is not None and context.family_id in self._policy.banned_families:
             return self._deny(context, _REASON_FAMILY_BANNED, matched_cap=phase_cap)
 
         if (
@@ -398,10 +389,7 @@ class PolicyEngine:
             return self._deny(context, _REASON_TARGET_NOT_OWNED, matched_cap=phase_cap)
 
         rate_limit = self._policy.rate_limits.get(context.tool_id)
-        if (
-            rate_limit is not None
-            and context.recent_invocations >= rate_limit.max_per_window
-        ):
+        if rate_limit is not None and context.recent_invocations >= rate_limit.max_per_window:
             return self._deny(context, _REASON_RATE_LIMIT, matched_cap=phase_cap)
 
         if self._policy.budget is not None:
@@ -411,9 +399,7 @@ class PolicyEngine:
                 new_today > self._policy.budget.daily_cents
                 or new_month > self._policy.budget.monthly_cents
             ):
-                return self._deny(
-                    context, _REASON_BUDGET_EXCEEDED, matched_cap=phase_cap
-                )
+                return self._deny(context, _REASON_BUDGET_EXCEEDED, matched_cap=phase_cap)
 
         approval_threshold = _RISK_ORDER[phase_cap.requires_approval_at_or_above]
         requires_approval = _RISK_ORDER[context.risk_level] >= approval_threshold
@@ -464,9 +450,9 @@ class PolicyEngine:
 
 
 __all__ = [
+    "PLAN_MAX_RISK",
     "POLICY_FAILURE_REASONS",
     "BudgetCap",
-    "PLAN_MAX_RISK",
     "PhaseRiskCap",
     "PlanTier",
     "PolicyContext",

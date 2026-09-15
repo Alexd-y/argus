@@ -173,6 +173,5 @@ def is_applicable(fingerprint: AssetFingerprint, node: CapabilityNode) -> bool:
     if app.require_api_hints and not _fact_value(fingerprint.api_hints):
         return False
     return not (
-        app.require_cloud_exposure
-        and not _fact_value(fingerprint.cloud_storage_admin_debug)
+        app.require_cloud_exposure and not _fact_value(fingerprint.cloud_storage_admin_debug)
     )

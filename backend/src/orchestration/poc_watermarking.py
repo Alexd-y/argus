@@ -108,15 +108,15 @@ def extract_watermark_from_payload(payload: str) -> str | None:
     if WATERMARK_PREFIX not in payload:
         return None
     idx = payload.find(WATERMARK_PREFIX)
-    candidate = payload[idx:idx + len(WATERMARK_PREFIX) + 16]
+    candidate = payload[idx : idx + len(WATERMARK_PREFIX) + 16]
     if len(candidate) >= len(WATERMARK_PREFIX) + 8:
         return candidate
     return None
 
 
 __all__ = [
-    "Watermark",
     "WATERMARK_PREFIX",
+    "Watermark",
     "extract_watermark_from_payload",
     "generate_watermark",
     "stamp_payload",

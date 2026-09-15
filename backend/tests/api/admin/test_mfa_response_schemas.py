@@ -13,11 +13,10 @@ milliseconds and is unaffected by the DAO test markers.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from src.api.admin.schemas.mfa import (
     AwareUtcDatetime,
     BackupCodesRegenerateResponse,
@@ -30,7 +29,7 @@ from src.api.admin.schemas.mfa import (
 
 # A fixed UTC-aware reference instant — uses an explicit constructor so the
 # tests are deterministic and do not depend on wall-clock time.
-_AWARE_UTC: datetime = datetime(2026, 4, 23, 12, 0, 0, tzinfo=timezone.utc)
+_AWARE_UTC: datetime = datetime(2026, 4, 23, 12, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

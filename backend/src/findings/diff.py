@@ -57,7 +57,7 @@ def diff_occurrence(
     baseline: FindingOccurrence | None,
     current: FindingOccurrence | None,
     *,
-    baseline_state: FindingState | None = None,
+    baseline_state: FindingState | None = None,  # noqa: ARG001 - retained for signature/API compatibility
     current_state: FindingState | None = None,
     coverage_status: CoverageStatus | None = None,
 ) -> DiffStatus:

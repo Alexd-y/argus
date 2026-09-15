@@ -40,23 +40,25 @@ class SubfinderAdapter(ToolAdapter):
                 continue
             try:
                 data = json.loads(line)
-                results.append({
-                    "subdomain": data.get("host", line),
-                    "source": data.get("source", "subfinder"),
-                    "ip": data.get("ip", ""),
-                })
+                results.append(
+                    {
+                        "subdomain": data.get("host", line),
+                        "source": data.get("source", "subfinder"),
+                        "ip": data.get("ip", ""),
+                    }
+                )
             except json.JSONDecodeError:
                 if "." in line and not line.startswith("#"):
-                    results.append({
-                        "subdomain": line.lower().rstrip("."),
-                        "source": "subfinder",
-                        "ip": "",
-                    })
+                    results.append(
+                        {
+                            "subdomain": line.lower().rstrip("."),
+                            "source": "subfinder",
+                            "ip": "",
+                        }
+                    )
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize to canonical SubdomainFinding format."""
         findings: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -65,18 +67,18 @@ class SubfinderAdapter(ToolAdapter):
             if not sub or sub in seen:
                 continue
             seen.add(sub)
-            findings.append({
-                "finding_type": FindingType.SUBDOMAIN,
-                "value": sub,
-                "data": {
-                    "subdomain": sub,
-                    "source": item.get("source", "subfinder"),
-                    "is_wildcard": sub.startswith("*."),
-                    "parent_domain": (
-                        ".".join(sub.split(".")[-2:]) if "." in sub else sub
-                    ),
-                },
-                "source_tool": "subfinder",
-                "confidence": 0.8,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.SUBDOMAIN,
+                    "value": sub,
+                    "data": {
+                        "subdomain": sub,
+                        "source": item.get("source", "subfinder"),
+                        "is_wildcard": sub.startswith("*."),
+                        "parent_domain": (".".join(sub.split(".")[-2:]) if "." in sub else sub),
+                    },
+                    "source_tool": "subfinder",
+                    "confidence": 0.8,
+                }
+            )
         return findings

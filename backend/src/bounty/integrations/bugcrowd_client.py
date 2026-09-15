@@ -40,11 +40,13 @@ async def list_programs(api_token: str | None = None) -> list[dict[str, Any]]:
                 data = r.json()
                 for item in data.get("data", []):
                     attrs = item.get("attributes", {})
-                    programs.append({
-                        "slug": item.get("id", ""),
-                        "name": attrs.get("name", ""),
-                        "status": attrs.get("status", ""),
-                    })
+                    programs.append(
+                        {
+                            "slug": item.get("id", ""),
+                            "name": attrs.get("name", ""),
+                            "status": attrs.get("status", ""),
+                        }
+                    )
         except Exception as exc:
             logger.warning("bugcrowd_api_error", extra={"error": str(exc)})
 
@@ -78,12 +80,10 @@ async def import_scope(
                 attrs = data.get("attributes", {})
                 scope_items = attrs.get("scope", [])
                 in_scope = [
-                    s.get("target", "") for s in scope_items
-                    if s.get("eligible_for_bounty")
+                    s.get("target", "") for s in scope_items if s.get("eligible_for_bounty")
                 ]
                 out_scope = [
-                    s.get("target", "") for s in scope_items
-                    if not s.get("eligible_for_bounty")
+                    s.get("target", "") for s in scope_items if not s.get("eligible_for_bounty")
                 ]
                 return {
                     "program_name": attrs.get("name", program_slug),

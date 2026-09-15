@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-import pytest
-
-from src.recon.vulnerability_analysis.context_detector import ReflectionContext
 from src.recon.vulnerability_analysis.active_scan.payload_generator import (
-    AdaptivePayloadGenerator,
-    _ATTR_EVENT_HANDLERS,
     _HTML_BASE,
-    _JS_STRING_BASE,
     _WAF_BYPASS_TRANSFORMS,
+    AdaptivePayloadGenerator,
 )
+from src.recon.vulnerability_analysis.context_detector import ReflectionContext
 
-_NO_ESCAPES: dict[str, bool] = {"<": False, ">": False, '"': False, "'": False, "(": False, ")": False}
+_NO_ESCAPES: dict[str, bool] = {
+    "<": False,
+    ">": False,
+    '"': False,
+    "'": False,
+    "(": False,
+    ")": False,
+}
 
 
 def _make_ctx(
@@ -44,9 +47,7 @@ class TestHtmlContextGeneration:
         ctx = _make_ctx("html")
         result = gen.generate(ctx, base_payloads=[], max_output=200)
         has_case_variant = any(
-            "SCRIPT" in p or "ScRiPt" in p.lower() != p
-            for p in result
-            if "script" in p.lower()
+            "SCRIPT" in p or "ScRiPt" in p.lower() != p for p in result if "script" in p.lower()
         )
         assert has_case_variant or len(result) > len(_HTML_BASE)
 

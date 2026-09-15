@@ -8,31 +8,23 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
 from src.orchestration.auth_config import (
-    AuthConfig,
-    AuthCredentials,
-    LoginFlowStep,
     LoginType,
-    RulesOfEngagement,
-    ScopeRuleConfig,
-    SuccessCondition,
     SuccessConditionType,
     TargetConfig,
 )
 from src.orchestration.evidence_tier import EvidenceTier, classify_finding
 from src.orchestration.exploitation_queue import (
-    ExploitHypothesis,
-    ExploitationQueue,
-    VulnClass,
     CATEGORY_TO_VULN_CLASS,
+    ExploitationQueue,
+    ExploitHypothesis,
+    VulnClass,
 )
 from src.orchestration.phases import (
     ExploitationInput,
     ExploitationOutput,
-    VulnAnalysisOutput,
     ReportingInput,
+    VulnAnalysisOutput,
 )
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -111,9 +103,7 @@ class TestPipelineRoundTrip:
         assert len(expl_input.exploitation_queue.hypotheses) == 2
 
     def test_backward_compat_without_queue(self) -> None:
-        vuln_output = VulnAnalysisOutput(
-            findings=[{"category": "sqli", "url": "/test"}]
-        )
+        vuln_output = VulnAnalysisOutput(findings=[{"category": "sqli", "url": "/test"}])
 
         assert vuln_output.exploitation_queues is None
 
@@ -287,7 +277,7 @@ class TestEvidenceTierInPipeline:
             EvidenceTier.INFORMATIONAL,
         ]
 
-        for fd, expected in zip(findings_data, expected_tiers):
+        for fd, expected in zip(findings_data, expected_tiers, strict=False):
             confidence = ConfidenceLevel(fd["confidence"])
             tier = classify_finding(
                 confidence,
@@ -312,7 +302,18 @@ class TestEvidenceTierInPipeline:
 
     def test_vuln_class_mapping_completeness(self) -> None:
         for vc in VulnClass:
-            assert vc in [VulnClass.INJECTION, VulnClass.XSS, VulnClass.AUTH, VulnClass.AUTHZ, VulnClass.SSRF]
+            assert vc in [
+                VulnClass.INJECTION,
+                VulnClass.XSS,
+                VulnClass.AUTH,
+                VulnClass.AUTHZ,
+                VulnClass.SSRF,
+            ]
 
-        for cat in [FindingCategory.SQLI, FindingCategory.CMDI, FindingCategory.XSS, FindingCategory.SSRF]:
+        for cat in [
+            FindingCategory.SQLI,
+            FindingCategory.CMDI,
+            FindingCategory.XSS,
+            FindingCategory.SSRF,
+        ]:
             assert cat in CATEGORY_TO_VULN_CLASS, f"{cat} not in CATEGORY_TO_VULN_CLASS"

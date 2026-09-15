@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.reports.data_collector import (
     FindingRow,
     ReportRowSlice,
@@ -233,7 +232,7 @@ def test_prepare_template_context_valhalla_defaults_embed_poc_inline(
         summary={"critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0},
         technologies=[],
     )
-    texts = {k: "x" for k in report_tier_sections("valhalla")}
+    texts = dict.fromkeys(report_tier_sections("valhalla"), "x")
     with patch("src.services.reporting.settings") as m:
         m.report_poc_embed_screenshot_inline = False
         ctx = gen.prepare_template_context("valhalla", sample_scan_report_data, texts)
@@ -254,20 +253,25 @@ def test_prepare_template_context_valhalla_extra_can_disable_embed_poc(
         summary={"critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0},
         technologies=[],
     )
-    texts = {k: "x" for k in report_tier_sections("valhalla")}
+    texts = dict.fromkeys(report_tier_sections("valhalla"), "x")
     with patch("src.services.reporting.settings") as m:
         m.report_poc_embed_screenshot_inline = True
         ctx = gen.prepare_template_context(
             "valhalla",
             sample_scan_report_data,
             texts,
-            extra={"embed_poc_screenshot_inline": False, "scan_artifacts": {"status": "skipped"}},
+            extra={
+                "embed_poc_screenshot_inline": False,
+                "scan_artifacts": {"status": "skipped"},
+            },
         )
     assert ctx["embed_poc_screenshot_inline"] is False
     assert ctx["scan_artifacts"]["status"] == "skipped"
 
 
-def test_prepare_template_context_jinja_slots(sample_scan_report_data: ScanReportData) -> None:
+def test_prepare_template_context_jinja_slots(
+    sample_scan_report_data: ScanReportData,
+) -> None:
     gen = ReportGenerator()
     texts = {"executive_summary": "ES", "vulnerability_description": "VD"}
     ctx = gen.prepare_template_context("midgard", sample_scan_report_data, texts)
@@ -293,7 +297,11 @@ def test_to_generator_report_data(sample_scan_report_data: ScanReportData) -> No
     gen = ReportGenerator()
     rd = gen.to_generator_report_data(
         sample_scan_report_data,
-        {"executive_summary": "Exec", "remediation_step": "Fix it", "vulnerability_description": "Vuln"},
+        {
+            "executive_summary": "Exec",
+            "remediation_step": "Fix it",
+            "vulnerability_description": "Vuln",
+        },
     )
     assert rd.target == "https://example.com"
     assert rd.executive_summary == "Exec"
@@ -302,63 +310,73 @@ def test_to_generator_report_data(sample_scan_report_data: ScanReportData) -> No
 
 
 @pytest.mark.asyncio
-async def test_build_context_sync_ai_mocked(sample_scan_report_data: ScanReportData) -> None:
+async def test_build_context_sync_ai_mocked(
+    sample_scan_report_data: ScanReportData,
+) -> None:
     gen = ReportGenerator()
     mock_session = MagicMock()
-    with patch.object(
-        gen,
-        "collect_scan_report_data",
-        new_callable=AsyncMock,
-        return_value=sample_scan_report_data,
-    ):
-        with patch.object(
+    with (
+        patch.object(
+            gen,
+            "collect_scan_report_data",
+            new_callable=AsyncMock,
+            return_value=sample_scan_report_data,
+        ),
+        patch.object(
             gen,
             "run_ai_sections_sync",
             return_value={
                 "executive_summary": {"status": "ok", "text": "ok"},
                 "vulnerability_description": {"status": "ok", "text": "vd"},
             },
-        ):
-            result = await gen.build_context(
-                mock_session,
-                "tenant-1",
-                "scan-1",
-                "midgard",
-                sync_ai=True,
-            )
+        ),
+    ):
+        result = await gen.build_context(
+            mock_session,
+            "tenant-1",
+            "scan-1",
+            "midgard",
+            sync_ai=True,
+        )
     assert result.scan_report_data.scan_id == "scan-1"
     assert result.template_context["ai_sections"]["executive_summary"] == "ok"
     assert result.celery_task_ids is None
 
 
 @pytest.mark.asyncio
-async def test_build_context_async_celery_scheduled(sample_scan_report_data: ScanReportData) -> None:
+async def test_build_context_async_celery_scheduled(
+    sample_scan_report_data: ScanReportData,
+) -> None:
     gen = ReportGenerator()
     mock_session = MagicMock()
     mock_delay = MagicMock()
     mock_delay.return_value.id = "task-xyz"
 
-    with patch.object(
-        gen,
-        "collect_scan_report_data",
-        new_callable=AsyncMock,
-        return_value=sample_scan_report_data,
+    with (
+        patch.object(
+            gen,
+            "collect_scan_report_data",
+            new_callable=AsyncMock,
+            return_value=sample_scan_report_data,
+        ),
+        patch("src.tasks.ai_text_generation_task") as mock_task,
     ):
-        with patch("src.tasks.ai_text_generation_task") as mock_task:
-            mock_task.delay = mock_delay
-            result = await gen.build_context(
-                mock_session,
-                "tenant-1",
-                "scan-1",
-                "midgard",
-                sync_ai=False,
-            )
+        mock_task.delay = mock_delay
+        result = await gen.build_context(
+            mock_session,
+            "tenant-1",
+            "scan-1",
+            "midgard",
+            sync_ai=False,
+        )
     assert result.ai_section_results == {}
     assert result.celery_task_ids is not None
     assert mock_delay.call_count == len(report_tier_sections("midgard"))
 
 
-def test_run_ai_sections_sync_llm_callable(sample_scan_report_data: ScanReportData) -> None:
+def test_run_ai_sections_sync_llm_callable(
+    sample_scan_report_data: ScanReportData,
+) -> None:
     gen = ReportGenerator()
     out = gen.run_ai_sections_sync(
         "tenant-1",

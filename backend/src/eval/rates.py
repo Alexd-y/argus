@@ -107,9 +107,7 @@ def snapshot_eval_rates() -> EvalRates:
         return EvalRates(
             unknown_id_rate=_ratio(_unknown_id_hits, _unknown_id_total),
             template_compile_rate=_ratio(_template_compile_ok, _template_compile_total),
-            evidence_citation_precision=_ratio(
-                _citation_claims_cited, _citation_claims_total
-            ),
+            evidence_citation_precision=_ratio(_citation_claims_cited, _citation_claims_total),
             plan_completion_rate=_ratio(_plan_steps_completed, _plan_steps_total),
             coverage_state_accuracy=_ratio(
                 _coverage_transitions_accurate, _coverage_transitions_total

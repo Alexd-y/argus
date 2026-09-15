@@ -37,6 +37,7 @@ def _provider_from_model(model: str) -> str:
         return "meta"
     return "_other"
 
+
 COST_PER_1K_TOKENS: dict[str, dict[str, float]] = {
     "deepseek-chat": {"input": 0.00014, "output": 0.00028},
     "deepseek-reasoner": {"input": 0.00055, "output": 0.00219},
@@ -84,9 +85,7 @@ class ScanCostTracker:
 
     def __init__(self, scan_id: str, max_cost_usd: float | None = None) -> None:
         self.scan_id = scan_id
-        self.max_cost_usd = max_cost_usd or float(
-            os.environ.get("MAX_COST_PER_SCAN_USD", "10.0")
-        )
+        self.max_cost_usd = max_cost_usd or float(os.environ.get("MAX_COST_PER_SCAN_USD", "10.0"))
         self.calls: list[LLMCallRecord] = []
 
     def record(
@@ -161,9 +160,7 @@ class ScanCostTracker:
         """Generate cost breakdown by phase."""
         by_phase: dict[str, dict[str, Any]] = {}
         for c in self.calls:
-            entry = by_phase.setdefault(
-                c.phase, {"cost": 0.0, "tokens": 0, "calls": 0}
-            )
+            entry = by_phase.setdefault(c.phase, {"cost": 0.0, "tokens": 0, "calls": 0})
             entry["cost"] += c.cost_usd
             entry["tokens"] += c.prompt_tokens + c.completion_tokens
             entry["calls"] += 1

@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from src.llm_orchestrator.agents import AgentContext, CriticVerdict, ReportNarrative
 from src.llm_orchestrator.cost_tracker import CostTracker
 from src.llm_orchestrator.llm_provider import EchoLLMProvider
@@ -73,9 +72,7 @@ class TestOrchestratorPlan:
                 "critic_v1": canned_critic_verdict(approved=True),
             }
         )
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         plan = await orchestrator.plan(agent_context, policy={"k": "v"})
         assert isinstance(plan, ValidationPlanV1)
 
@@ -108,9 +105,7 @@ class TestOrchestratorPlan:
                 "critic_v1": canned_critic_verdict(approved=False),
             }
         )
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         with pytest.raises(OrchestratorPlanRejected) as exc_info:
             await orchestrator.plan(agent_context, policy={})
         assert isinstance(exc_info.value.verdict, CriticVerdict)
@@ -134,9 +129,7 @@ class TestOrchestratorPlan:
     ) -> None:
         registry, _, _ = full_signed_registry
         provider = echo_provider_factory({"planner_v1": canned_validation_plan()})
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         plan = await orchestrator.plan(agent_context, run_critic=False)
         assert isinstance(plan, ValidationPlanV1)
         # Critic skipped → only one cost record.
@@ -154,9 +147,7 @@ class TestOrchestratorPlan:
     ) -> None:
         registry, _, _ = full_signed_registry
         provider = echo_provider_factory()  # no canned planner_v1
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         with pytest.raises(OrchestratorProviderFailure):
             await orchestrator.plan(agent_context, policy={})
 
@@ -174,9 +165,7 @@ class TestOrchestratorPlan:
         bad = canned_validation_plan()
         bad.pop("hypothesis")
         provider = echo_provider_factory({"planner_v1": bad, "fixer_v1": bad})
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         with pytest.raises(OrchestratorParseFailure):
             await orchestrator.plan(agent_context, policy={})
 
@@ -242,9 +231,7 @@ class TestOrchestratorVerify:
                 )
             }
         )
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         findings = await orchestrator.verify(
             agent_context, tool_output={"x": 1}, oast_evidence=None
         )
@@ -270,9 +257,7 @@ class TestOrchestratorReport:
     ) -> None:
         registry, _, _ = full_signed_registry
         provider = echo_provider_factory({"reporter_v1": canned_report_narrative()})
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         narrative = await orchestrator.report(agent_context, findings=[])
         assert isinstance(narrative, ReportNarrative)
         assert narrative.recommendations
@@ -302,9 +287,7 @@ class TestOrchestratorAuditFailure:
                 "critic_v1": canned_critic_verdict(approved=True),
             }
         )
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
 
         def boom(**_kwargs: object) -> None:
             raise RuntimeError("audit sink down")
@@ -329,9 +312,7 @@ class TestOrchestratorAccessors:
     ) -> None:
         registry, _, _ = full_signed_registry
         provider = echo_provider_factory()
-        orchestrator = _build_orchestrator(
-            registry, provider, cost_tracker, audit_logger
-        )
+        orchestrator = _build_orchestrator(registry, provider, cost_tracker, audit_logger)
         assert orchestrator.cost_tracker is cost_tracker
         assert orchestrator.retry_loop is not None
         assert orchestrator.planner.role.value == "planner"

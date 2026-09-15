@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.execution_mode.mode import ExecutionMode
 from src.nuclei.execution_planner import NucleiExecutionPlanner
 from src.nuclei.profile_compiler import PROFILE_DIR, default_profile_id_for_mode
@@ -31,7 +30,9 @@ def _safe_manifest(template_id: str = "http-fingerprint") -> NucleiTemplateManif
     )
 
 
-def _unsigned_tenant_manifest(template_id: str = "tenant-unsigned") -> NucleiTemplateManifest:
+def _unsigned_tenant_manifest(
+    template_id: str = "tenant-unsigned",
+) -> NucleiTemplateManifest:
     return NucleiTemplateManifest(
         template_id=template_id,
         version="1",

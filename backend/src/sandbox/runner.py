@@ -103,9 +103,7 @@ class SandboxRunner:
         self._max_parallel = max_parallel
         self._per_job_timeout_s = per_job_timeout_s
 
-    async def dispatch_jobs(
-        self, tool_jobs: Iterable[ToolJob]
-    ) -> list[SandboxRunResult]:
+    async def dispatch_jobs(self, tool_jobs: Iterable[ToolJob]) -> list[SandboxRunResult]:
         """Run every job and return results in the same order as the input.
 
         A failed job (config error, missing approval, template rejection,
@@ -121,9 +119,7 @@ class SandboxRunner:
         coroutines = [self._guarded_run(sem, job) for job in jobs]
         return await asyncio.gather(*coroutines)
 
-    async def _guarded_run(
-        self, sem: asyncio.Semaphore, tool_job: ToolJob
-    ) -> SandboxRunResult:
+    async def _guarded_run(self, sem: asyncio.Semaphore, tool_job: ToolJob) -> SandboxRunResult:
         async with sem:
             start = time.perf_counter()
             timed_out = False
@@ -146,9 +142,7 @@ class SandboxRunner:
                                     timeout=self._per_job_timeout_s,
                                 )
                             else:
-                                result = await self._adapter.run(
-                                    tool_job, descriptor
-                                )
+                                result = await self._adapter.run(tool_job, descriptor)
                         except TimeoutError:
                             timed_out = True
                             _logger.warning(
@@ -169,13 +163,9 @@ class SandboxRunner:
                                 tool_job, failure_reason=f"approval: {exc}"
                             )
                         except SandboxConfigError as exc:
-                            result = self._build_failure(
-                                tool_job, failure_reason=f"config: {exc}"
-                            )
+                            result = self._build_failure(tool_job, failure_reason=f"config: {exc}")
                         except SandboxClusterError as exc:
-                            result = self._build_failure(
-                                tool_job, failure_reason=f"cluster: {exc}"
-                            )
+                            result = self._build_failure(tool_job, failure_reason=f"cluster: {exc}")
                         except TemplateRenderError as exc:
                             result = self._build_failure(
                                 tool_job, failure_reason=f"template: {exc.reason}"
@@ -204,9 +194,7 @@ class SandboxRunner:
                 duration_seconds = max(0.0, time.perf_counter() - start)
                 status = _result_status(result, timed_out=timed_out)
                 safe_set_span_attribute(span, "argus.status", status)
-                safe_set_span_attribute(
-                    span, "argus.duration_seconds", round(duration_seconds, 4)
-                )
+                safe_set_span_attribute(span, "argus.duration_seconds", round(duration_seconds, 4))
                 try:
                     record_sandbox_run(
                         tool_id=tool_job.tool_id,

@@ -112,9 +112,7 @@ class Tenant(Base):
         """
         if value not in PDF_ARCHIVAL_FORMAT_VALUES:
             allowed = ", ".join(repr(v) for v in PDF_ARCHIVAL_FORMAT_VALUES)
-            raise ValueError(
-                f"pdf_archival_format must be one of {{{allowed}}}, got {value!r}"
-            )
+            raise ValueError(f"pdf_archival_format must be one of {{{allowed}}}, got {value!r}")
         return value  # type: ignore[return-value]
 
 
@@ -163,7 +161,10 @@ class ScanQuota(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True
+        String(36),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
     )
     tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -219,7 +220,10 @@ class Scan(Base):
     #: quick | standard | deep (Strix-style scan *depth*, not execution_mode).
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     scan_mode: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="standard", server_default=text("'standard'")
+        String(20),
+        nullable=False,
+        default="standard",
+        server_default=text("'standard'"),
     )
     #: Immutable execution profile: production | lab_unrestricted | quick.
     #: Distinct from ``scan_mode`` (depth). Default production for backward compatibility.
@@ -340,15 +344,9 @@ class WebhookDlqEntry(Base):
     attempt_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
-    next_retry_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    replayed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    abandoned_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replayed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    abandoned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     abandoned_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -453,7 +451,9 @@ class Asset(Base):
     )
     asset_type: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[str] = mapped_column(String(2048), nullable=False)
-    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)  # metadata, renamed to avoid SA reserved
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )  # metadata, renamed to avoid SA reserved
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -476,12 +476,16 @@ class Report(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     #: Sanitized short message for operators only; no tracebacks or raw exception text.
     last_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    requested_formats: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    requested_formats: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
     #: Extension JSON; no secrets or PII; prefer an allowlisted key set at API boundaries.
     report_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     technologies: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=text("1")
+    )
     parent_report_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("reports.id", ondelete="SET NULL"), nullable=True
     )
@@ -537,14 +541,19 @@ class Finding(Base):
     adversarial_score: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     #: unique | duplicate | unchecked (Strix-style LLM dedup).
     dedup_status: Mapped[str | None] = mapped_column(
-        String(20), nullable=True, default="unchecked", server_default=text("'unchecked'")
+        String(20),
+        nullable=True,
+        default="unchecked",
+        server_default=text("'unchecked'"),
     )
     false_positive: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")
     )
     false_positive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     evidence_tier: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, default=None,
+        Integer,
+        nullable=True,
+        default=None,
         comment="1=INFORMATIONAL, 2=SUSPECTED, 3=CONFIRMED, 4=EXPLOITED",
     )
     payload_attempted: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
@@ -630,9 +639,7 @@ class SeverityAssessment(Base):
     #: Manual-override audit trail (author / reason). ``created_at`` records time.
     override_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
     override_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         Index("ix_severity_assessments_finding_id", "finding_id"),
@@ -753,8 +760,12 @@ class UsageMetering(Base):
     )
     metric_type: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[int] = mapped_column(Integer, nullable=False)
-    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)  # metadata, renamed to avoid SA reserved
-    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )  # metadata, renamed to avoid SA reserved
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class ProviderConfig(Base):
@@ -862,7 +873,9 @@ class ReportShareLink(Base):
     created_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    view_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
 
     __table_args__ = (
         Index("ix_report_share_links_token", "token", unique=True),
@@ -937,9 +950,7 @@ class AdminUser(Base):
     #: comes from ``Settings.admin_mfa_keyring`` (CSV of base64 keys, newest
     #: first). Plaintext NEVER hits disk and MUST NOT be logged. ``NULL``
     #: until ``enroll_totp`` runs.
-    mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
-        LargeBinary, nullable=True
-    )
+    mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     #: C7-T01 — bcrypt hashes of one-time backup codes (cost ≥ 12). Issued
     #: 10 at a time by ``regenerate_backup_codes``; consumed atomically by
     #: ``consume_backup_code`` so a single code can never be redeemed twice.
@@ -952,9 +963,7 @@ class AdminUser(Base):
     )
     #: Soft-delete marker. When non-NULL, ``verify_credentials`` MUST refuse
     #: the row even if the password matches — the operator was off-boarded.
-    disabled_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AdminSession(Base):
@@ -999,9 +1008,7 @@ class AdminSession(Base):
     #: (Cycle 6 / Batch 6). The legacy raw ``session_id`` PK column was
     #: dropped and ``session_token_hash`` promoted to PK in Alembic 031
     #: (Cycle 7 / C7-T07).
-    session_token_hash: Mapped[str] = mapped_column(
-        String(64), primary_key=True
-    )
+    session_token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     #: Admin subject (matches ``admin_users.subject``); kept denormalized so
     #: revocation lookups never need a join.
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -1012,9 +1019,7 @@ class AdminSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_used_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -1024,17 +1029,13 @@ class AdminSession(Base):
     user_agent_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     #: Tombstone — set on logout, admin revoke, or password change. Once set,
     #: ``resolve_session`` MUST refuse the row.
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: C7-T01 — timestamp of the most recent successful MFA challenge for
     #: this session. ``NULL`` means MFA has never been satisfied (or the
     #: subject is not MFA-enrolled). Compared against
     #: ``Settings.admin_mfa_reauth_window_seconds`` to gate sensitive
     #: actions; refreshed by :func:`admin_mfa.mark_session_mfa_passed`.
-    mfa_passed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    mfa_passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_admin_sessions_subject_revoked", "subject", "revoked_at"),
@@ -1076,6 +1077,7 @@ class AdminPasswordResetToken(Base):
 
 # ===== Phase 1: Ingestion & Knowledge Graph =====
 
+
 class Repo(Base):
     __tablename__ = "repos"
 
@@ -1096,7 +1098,9 @@ class Repo(Base):
     size_kb: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class RepoArtifact(Base):
@@ -1106,7 +1110,9 @@ class RepoArtifact(Base):
     tenant_id: Mapped[str] = mapped_column(String(36), nullable=False)
     repo_id: Mapped[str] = mapped_column(String(36), ForeignKey("repos.id", ondelete="CASCADE"))
     path: Mapped[str] = mapped_column(String(1024), nullable=False)
-    artifact_type: Mapped[str] = mapped_column(String(32), default="source_code", server_default="source_code")
+    artifact_type: Mapped[str] = mapped_column(
+        String(32), default="source_code", server_default="source_code"
+    )
     content_hash: Mapped[str] = mapped_column(String(64))
     commit_sha: Mapped[str | None] = mapped_column(String(64))
     source: Mapped[str] = mapped_column(String(32), default="webhook", server_default="webhook")
@@ -1160,6 +1166,7 @@ class ThreatModel(Base):
 
 # ===== Phase 2: Sandbox & Patches & Risk =====
 
+
 class SandboxRun(Base):
     __tablename__ = "sandbox_runs"
 
@@ -1199,7 +1206,9 @@ class PatchProposal(Base):
     rationale: Mapped[str | None] = mapped_column(Text)
     secure_alternative: Mapped[str | None] = mapped_column(Text)
     blast_radius: Mapped[str | None] = mapped_column(Text)
-    backward_compat_risk: Mapped[str] = mapped_column(String(16), default="low", server_default="low")
+    backward_compat_risk: Mapped[str] = mapped_column(
+        String(16), default="low", server_default="low"
+    )
     regression_test: Mapped[str | None] = mapped_column(Text)
     validation_output: Mapped[str | None] = mapped_column(Text)
     lint_passed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
@@ -1208,7 +1217,9 @@ class PatchProposal(Base):
     pr_url: Mapped[str | None] = mapped_column(String(512))
     error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class RiskScore(Base):
@@ -1219,8 +1230,12 @@ class RiskScore(Base):
     finding_id: Mapped[str | None] = mapped_column(String(36))
     cvss_base: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
     cvss_temporal: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
-    cvss_environmental: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
-    exploitability_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    cvss_environmental: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0")
+    )
+    exploitability_score: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0")
+    )
     impact_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
     business_impact: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
     overall_score: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
@@ -1231,6 +1246,7 @@ class RiskScore(Base):
 
 
 # ===== Phase 3: Binary & Incidents & Safety =====
+
 
 class BinaryAnalysis(Base):
     __tablename__ = "binary_analyses"
@@ -1292,6 +1308,7 @@ class SafetyAlert(Base):
 
 # ===== Phase 4: Gateway & Governance =====
 
+
 class GatewayProvider(Base):
     __tablename__ = "gateway_providers"
 
@@ -1306,7 +1323,9 @@ class GatewayProvider(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
     config_json: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class GatewayInvocation(Base):
@@ -1324,7 +1343,9 @@ class GatewayInvocation(Base):
     response_hash: Mapped[str | None] = mapped_column(String(64))
     prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
-    estimated_cost_usd: Mapped[float] = mapped_column(Float, default=0.0, server_default=text("0.0"))
+    estimated_cost_usd: Mapped[float] = mapped_column(
+        Float, default=0.0, server_default=text("0.0")
+    )
     latency_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     status: Mapped[str] = mapped_column(String(20), default="completed", server_default="completed")
     error_code: Mapped[str | None] = mapped_column(String(32))
@@ -1353,18 +1374,22 @@ class BountyProgram(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     tenant_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False,
+        String(36),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     platform: Mapped[str] = mapped_column(String(32), nullable=False, default="private")
     scope_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     reward_range: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="draft", server_default="draft"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
-    __table_args__ = (
-        Index("ix_bounty_programs_tenant_id", "tenant_id"),
-    )
+    __table_args__ = (Index("ix_bounty_programs_tenant_id", "tenant_id"),)

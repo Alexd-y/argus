@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.auth.session_store import (
     PrincipalSession,
     SecretResolutionError,

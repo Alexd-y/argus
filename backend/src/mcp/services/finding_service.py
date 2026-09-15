@@ -109,9 +109,7 @@ async def list_findings(
                 )
             )
             if scan_check.scalar_one_or_none() is None:
-                raise ResourceNotFoundError(
-                    f"Scan {scan_id!r} was not found in this tenant scope."
-                )
+                raise ResourceNotFoundError(f"Scan {scan_id!r} was not found in this tenant scope.")
 
             base = select(FindingModel).where(
                 cast(FindingModel.scan_id, String) == scan_id,
@@ -131,17 +129,13 @@ async def list_findings(
             count_stmt = select(func.count()).select_from(base.subquery())
             total = (await session.execute(count_stmt)).scalar() or 0
 
-            page_stmt = (
-                base.order_by(desc(FindingModel.created_at)).limit(limit).offset(offset)
-            )
+            page_stmt = base.order_by(desc(FindingModel.created_at)).limit(limit).offset(offset)
             page_result = await session.execute(page_stmt)
             rows = list(page_result.scalars().all())
 
             items = tuple(_row_to_summary(row) for row in rows)
             next_offset = offset + len(items) if (offset + len(items)) < total else None
-            return FindingListResult(
-                items=items, total=int(total), next_offset=next_offset
-            )
+            return FindingListResult(items=items, total=int(total), next_offset=next_offset)
     except (ResourceNotFoundError, ValidationError):
         raise
     except Exception as exc:
@@ -149,9 +143,7 @@ async def list_findings(
             "mcp.findings.list_failed",
             extra={"scan_id": scan_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read findings; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read findings; please retry later.") from exc
 
 
 async def get_finding(*, tenant_id: str, finding_id: str) -> FindingDetail:
@@ -179,14 +171,10 @@ async def get_finding(*, tenant_id: str, finding_id: str) -> FindingDetail:
             "mcp.findings.get_failed",
             extra={"finding_id": finding_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read the finding; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read the finding; please retry later.") from exc
 
 
-async def mark_false_positive(
-    *, tenant_id: str, finding_id: str, reason: str, actor: str
-) -> bool:
+async def mark_false_positive(*, tenant_id: str, finding_id: str, reason: str, actor: str) -> bool:
     """Mark the finding as a false positive and append an operator note.
 
     Returns ``True`` when the row was updated, ``False`` when it was already
@@ -235,9 +223,7 @@ async def mark_false_positive(
             "mcp.findings.mark_fp_failed",
             extra={"finding_id": finding_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to update the finding; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to update the finding; please retry later.") from exc
 
 
 __all__ = [

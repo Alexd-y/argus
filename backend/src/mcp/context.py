@@ -18,11 +18,12 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeAlias
+from typing import Any
 
 from mcp.server.fastmcp import Context
 
@@ -31,7 +32,7 @@ from src.mcp.auth import MCPAuthContext, authenticate
 
 _logger = logging.getLogger(__name__)
 
-MCPContext: TypeAlias = Context[Any, Any, Any]
+type MCPContext = Context[Any, Any, Any]
 """Concrete Context alias used across the MCP layer.
 
 The framework's :class:`Context` carries three opaque generics
@@ -128,10 +129,8 @@ def _extract_headers(ctx: MCPContext | None) -> Mapping[str, str]:
     if request_attr is not None:
         headers_obj = getattr(request_attr, "headers", None)
         if headers_obj is not None and hasattr(headers_obj, "items"):
-            try:
-                candidates.append({k: v for k, v in headers_obj.items()})
-            except Exception:  # pragma: no cover — defensive
-                pass
+            with contextlib.suppress(Exception):  # pragma: no cover — defensive
+                candidates.append(dict(headers_obj.items()))
 
     meta = getattr(request_context, "meta", None)
     if isinstance(meta, Mapping):

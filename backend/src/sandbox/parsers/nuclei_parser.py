@@ -106,7 +106,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -293,7 +293,7 @@ _CATEGORY_DEFAULT_CWE: Final[dict[FindingCategory, tuple[int, ...]]] = {
 
 # Stable dedup key shape. Module-level alias keeps the signature short
 # in the dedup loop and ``_dedup_key`` types.
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -530,9 +530,7 @@ def _emit(
         finding = _build_finding(record)
         raw_blob = _build_raw_match(record, tool_id=tool_id)
         raw_hash = hashlib.sha256(raw_blob.encode("utf-8")).hexdigest()
-        evidence_blob = _build_evidence(
-            record, tool_id=tool_id, raw_match_hash=raw_hash
-        )
+        evidence_blob = _build_evidence(record, tool_id=tool_id, raw_match_hash=raw_hash)
         keyed.append((key, finding, evidence_blob, raw_blob))
 
         if len(keyed) >= _MAX_FINDINGS:
@@ -657,9 +655,7 @@ def _normalise_nuclei_record(record: dict[str, Any]) -> dict[str, Any] | None:
 
     confidence = _classify_confidence(severity=severity, has_cve=bool(cve_list))
 
-    matched_at = (
-        _string_field(record, "matched-at") or _string_field(record, "host") or ""
-    )
+    matched_at = _string_field(record, "matched-at") or _string_field(record, "host") or ""
     host = _string_field(record, "host") or ""
     request_blob = _truncate_text(_string_field(record, "request"))
     response_blob = _truncate_text(_string_field(record, "response"))
@@ -693,9 +689,7 @@ def _normalise_nuclei_record(record: dict[str, Any]) -> dict[str, Any] | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_nikto_records(
-    payload: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_nikto_records(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     """Yield normalised records from a Nikto ``-Format json`` payload.
 
     Nikto's JSON layout (2.5+):
@@ -757,9 +751,7 @@ def _iter_nikto_records(
 # ---------------------------------------------------------------------------
 
 
-def _iter_wapiti_records(
-    payload: dict[str, Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_wapiti_records(payload: dict[str, Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     """Yield normalised records from a Wapiti ``-f json`` payload.
 
     Wapiti's JSON layout (3.x):
@@ -1207,8 +1199,7 @@ def _coerce_cwe(value: Any) -> int | None:
         return value
     if isinstance(value, str):
         candidate = value.strip().upper()
-        if candidate.startswith("CWE-"):
-            candidate = candidate[4:]
+        candidate = candidate.removeprefix("CWE-")
         if candidate.isdigit():
             cwe_id = int(candidate)
             return cwe_id if cwe_id > 0 else None
@@ -1239,9 +1230,7 @@ def _extract_cvss(classification: dict[str, Any]) -> tuple[float, str]:
     if score is None or not (0.0 <= score <= 10.0):
         score = SENTINEL_CVSS_SCORE
 
-    vector_raw = classification.get("cvss-metrics") or classification.get(
-        "cvss_metrics"
-    )
+    vector_raw = classification.get("cvss-metrics") or classification.get("cvss_metrics")
     vector = (
         vector_raw.strip()
         if isinstance(vector_raw, str) and vector_raw.strip()

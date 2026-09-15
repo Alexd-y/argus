@@ -112,10 +112,7 @@ async def check_stage1_readiness(
     artifacts = await get_artifacts_for_engagement(db, engagement_id)
 
     if target_id is not None and artifacts:
-        linked = any(
-            a.target_id is None or a.target_id == target_id
-            for a in artifacts
-        )
+        linked = any(a.target_id is None or a.target_id == target_id for a in artifacts)
         if not linked:
             return Stage1ReadinessResult(
                 ready=True,

@@ -125,7 +125,9 @@ def _http_version(value: object) -> str:
     return _DEFAULT_HTTP_VERSION
 
 
-def _build_request(entry_request: dict[str, object]) -> tuple[NormalizedRequest, bytes, str]:
+def _build_request(
+    entry_request: dict[str, object],
+) -> tuple[NormalizedRequest, bytes, str]:
     method = entry_request.get("method")
     url = entry_request.get("url")
     if not isinstance(method, str) or not method:

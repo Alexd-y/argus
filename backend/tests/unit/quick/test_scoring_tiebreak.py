@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
-
 from src.quick.scoring import (
     DEFAULT_SCORING_WEIGHTS,
     ScoringComponents,
@@ -16,14 +15,14 @@ from src.quick.scoring import (
 
 
 def _components(**overrides) -> ScoringComponents:
-    base = dict(
-        exploitability_probability=1.0,
-        expected_impact=1.0,
-        evidence_confidence=1.0,
-        asset_criticality=1.0,
-        coverage_value=1.0,
-        estimated_cost=1.0,
-    )
+    base = {
+        "exploitability_probability": 1.0,
+        "expected_impact": 1.0,
+        "evidence_confidence": 1.0,
+        "asset_criticality": 1.0,
+        "coverage_value": 1.0,
+        "estimated_cost": 1.0,
+    }
     base.update(overrides)
     return ScoringComponents(**base)
 
@@ -56,9 +55,7 @@ def test_compute_priority_clamps_to_unit_interval() -> None:
 
 def test_compute_priority_uses_default_weights_when_omitted() -> None:
     components = _components(estimated_cost=4.0)
-    assert compute_priority(components) == compute_priority(
-        components, DEFAULT_SCORING_WEIGHTS
-    )
+    assert compute_priority(components) == compute_priority(components, DEFAULT_SCORING_WEIGHTS)
 
 
 def test_tie_break_higher_score_first() -> None:

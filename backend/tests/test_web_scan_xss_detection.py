@@ -23,6 +23,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # 1. Static URL parameter extraction (no network)
 # ---------------------------------------------------------------------------
 
+
 def test_extract_url_query_params_alf_nu() -> None:
     from src.orchestration.handlers import _extract_url_query_params
 
@@ -46,6 +47,7 @@ def test_extract_url_query_params_no_query() -> None:
 # ---------------------------------------------------------------------------
 # 2. HTML form parsing
 # ---------------------------------------------------------------------------
+
 
 def test_parse_forms_from_html_simple_form() -> None:
     from src.orchestration.handlers import _parse_forms_from_html
@@ -76,6 +78,7 @@ def test_parse_forms_from_html_empty() -> None:
 # ---------------------------------------------------------------------------
 # 3. Async URL params + forms extraction (mocked HTTP)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_extract_url_params_and_forms_with_mock_http() -> None:
@@ -122,6 +125,7 @@ async def test_extract_url_params_and_forms_http_timeout() -> None:
 # ---------------------------------------------------------------------------
 # 4. Intel finding normalization
 # ---------------------------------------------------------------------------
+
 
 def test_normalize_intel_finding_xss_high_cvss() -> None:
     from src.orchestration.handlers import _normalize_intel_finding
@@ -228,6 +232,7 @@ def test_normalize_intel_finding_cwe79_from_poc_xss_alert() -> None:
 # 5. PoC generation
 # ---------------------------------------------------------------------------
 
+
 def test_generate_poc_with_poc_url() -> None:
     from src.orchestration.handlers import _generate_poc
 
@@ -260,11 +265,17 @@ def test_generate_poc_empty() -> None:
 # 6. CVSS post-processing
 # ---------------------------------------------------------------------------
 
+
 def test_postprocess_findings_cvss_xss_floor() -> None:
     from src.orchestration.handlers import _postprocess_findings_cvss
 
     findings = [
-        {"title": "Reflected XSS in world param", "severity": "high", "source": "active_scan", "cvss": None},
+        {
+            "title": "Reflected XSS in world param",
+            "severity": "high",
+            "source": "active_scan",
+            "cvss": None,
+        },
         {"title": "Info leak", "severity": "low", "source": "llm", "cvss": 3.1},
     ]
     result = _postprocess_findings_cvss(findings)
@@ -278,7 +289,14 @@ def test_postprocess_findings_cvss_xss_floor() -> None:
 def test_postprocess_findings_cvss_sqli() -> None:
     from src.orchestration.handlers import _postprocess_findings_cvss
 
-    findings = [{"title": "SQL Injection in id param", "severity": "critical", "source": "active_scan", "cvss": None}]
+    findings = [
+        {
+            "title": "SQL Injection in id param",
+            "severity": "critical",
+            "source": "active_scan",
+            "cvss": None,
+        }
+    ]
     result = _postprocess_findings_cvss(findings)
     assert result[0]["cvss"] is not None
     assert result[0]["cvss"] >= 8.0
@@ -296,6 +314,7 @@ def test_postprocess_findings_preserves_existing_cvss() -> None:
 # ---------------------------------------------------------------------------
 # 7. Full run_vuln_analysis with mocked active scan pipeline
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_run_vuln_analysis_active_scan_bridge() -> None:
@@ -337,10 +356,36 @@ async def test_run_vuln_analysis_active_scan_bridge() -> None:
 
     with (
         patch("src.orchestration.handlers.settings") as mock_settings,
-        patch("src.orchestration.handlers.run_va_active_scan_phase", new_callable=AsyncMock, return_value=mock_bundle_result),
-        patch("src.orchestration.handlers.ai_vuln_analysis", new_callable=AsyncMock, return_value=VulnAnalysisOutput(findings=[])),
-        patch("src.orchestration.handlers._extract_url_params_and_forms", new_callable=AsyncMock, return_value=([{"url": "https://alf.nu/alert1", "param": "world", "value": "alert", "method": "GET"}], [])),
-        patch("src.orchestration.handlers.run_web_vuln_heuristics", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "src.orchestration.handlers.run_va_active_scan_phase",
+            new_callable=AsyncMock,
+            return_value=mock_bundle_result,
+        ),
+        patch(
+            "src.orchestration.handlers.ai_vuln_analysis",
+            new_callable=AsyncMock,
+            return_value=VulnAnalysisOutput(findings=[]),
+        ),
+        patch(
+            "src.orchestration.handlers._extract_url_params_and_forms",
+            new_callable=AsyncMock,
+            return_value=(
+                [
+                    {
+                        "url": "https://alf.nu/alert1",
+                        "param": "world",
+                        "value": "alert",
+                        "method": "GET",
+                    }
+                ],
+                [],
+            ),
+        ),
+        patch(
+            "src.orchestration.handlers.run_web_vuln_heuristics",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
         patch("src.orchestration.handlers.RawPhaseSink"),
     ):
         mock_settings.sandbox_enabled = True
@@ -357,7 +402,8 @@ async def test_run_vuln_analysis_active_scan_bridge() -> None:
     assert isinstance(result, VulnAnalysisOutput)
     assert len(result.findings) >= 1
     xss_findings = [
-        f for f in result.findings
+        f
+        for f in result.findings
         if "xss" in f.get("title", "").lower() or "XSS" in f.get("title", "")
     ]
     assert len(xss_findings) >= 1
@@ -425,7 +471,11 @@ async def test_run_vuln_analysis_minio_sink_uploads_active_scan_intel() -> None:
             new_callable=AsyncMock,
             return_value=([], []),
         ),
-        patch("src.orchestration.handlers.run_web_vuln_heuristics", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "src.orchestration.handlers.run_web_vuln_heuristics",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
         patch("src.orchestration.handlers.RawPhaseSink", mock_sink_class),
     ):
         mock_settings.sandbox_enabled = True
@@ -465,13 +515,23 @@ async def test_run_vuln_analysis_sandbox_disabled_fallback() -> None:
 
     with (
         patch("src.orchestration.handlers.settings") as mock_settings,
-        patch("src.orchestration.handlers.ai_vuln_analysis", new_callable=AsyncMock, return_value=VulnAnalysisOutput(findings=llm_findings)),
-        patch("src.orchestration.handlers.run_web_vuln_heuristics", new_callable=AsyncMock, return_value=[]),
+        patch(
+            "src.orchestration.handlers.ai_vuln_analysis",
+            new_callable=AsyncMock,
+            return_value=VulnAnalysisOutput(findings=llm_findings),
+        ),
+        patch(
+            "src.orchestration.handlers.run_web_vuln_heuristics",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
     ):
         mock_settings.sandbox_enabled = False
 
         result = await run_vuln_analysis(
-            threat_model={}, assets=[], target=ALF_NU_TARGET,
+            threat_model={},
+            assets=[],
+            target=ALF_NU_TARGET,
         )
 
     assert len(result.findings) >= 1
@@ -481,6 +541,7 @@ async def test_run_vuln_analysis_sandbox_disabled_fallback() -> None:
 # ---------------------------------------------------------------------------
 # 8. Dalfox adapter CVSS normalization
 # ---------------------------------------------------------------------------
+
 
 def test_dalfox_normalize_findings_cvss_floor() -> None:
     from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import (
@@ -504,7 +565,6 @@ def test_dalfox_normalize_findings_cvss_floor() -> None:
 
 def test_dalfox_fixture_alf_nu_alert1() -> None:
     """Parse the real dalfox fixture file for alf.nu alert1."""
-    import json
     from src.recon.vulnerability_analysis.active_scan.dalfox_adapter import (
         normalize_dalfox_findings,
         parse_dalfox_stdout,
@@ -529,11 +589,18 @@ def test_dalfox_fixture_alf_nu_alert1() -> None:
 # 9. Build active scan context
 # ---------------------------------------------------------------------------
 
+
 def test_build_active_scan_context_non_empty() -> None:
     from src.orchestration.handlers import _build_active_scan_context
 
     findings = [
-        {"title": "XSS in world", "severity": "high", "cwe": "CWE-79", "cvss": 7.2, "description": "Reflected XSS"},
+        {
+            "title": "XSS in world",
+            "severity": "high",
+            "cwe": "CWE-79",
+            "cvss": 7.2,
+            "description": "Reflected XSS",
+        },
     ]
     ctx = _build_active_scan_context(findings)
     assert "XSS" in ctx

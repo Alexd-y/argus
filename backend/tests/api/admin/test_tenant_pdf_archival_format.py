@@ -36,17 +36,16 @@ suite stays default-discoverable while still using the synchronous
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Iterator
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from starlette.testclient import TestClient
-
 from main import app
 from src.db.models import AuditLog
 from src.db.session import get_db
-
+from starlette.testclient import TestClient
 from tests.api.admin.conftest import ADMIN_API_KEY
 
 _ADMIN_HEADERS = {
@@ -98,8 +97,8 @@ def _make_tenant(
     tenant.scope_blacklist = None
     tenant.retention_days = None
     tenant.pdf_archival_format = pdf_archival_format
-    tenant.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    tenant.updated_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    tenant.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+    tenant.updated_at = datetime(2026, 1, 2, tzinfo=UTC)
     return tenant
 
 
@@ -267,13 +266,10 @@ def test_patch_tenant_pdf_archival_format_invalid_returns_422(
     )
 
     assert r.status_code == 422, (
-        f"value {bad_value!r} should be rejected with 422, got {r.status_code}: "
-        f"{r.text}"
+        f"value {bad_value!r} should be rejected with 422, got {r.status_code}: {r.text}"
     )
     audit_rows = [obj for obj in added if isinstance(obj, AuditLog)]
-    assert audit_rows == [], (
-        "no AuditLog row should be emitted on validation failure"
-    )
+    assert audit_rows == [], "no AuditLog row should be emitted on validation failure"
 
 
 def test_patch_tenant_pdf_archival_format_null_returns_422(

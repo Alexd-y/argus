@@ -136,6 +136,4 @@ def download_stage2_artifact(scan_id: str, filename: str) -> bytes | None:
         key = _build_object_key(scan_id, filename)
     except ValueError:
         raise
-    return fetch_stage_bucket_object(
-        client, bucket, key, scan_id=scan_id, filename=filename
-    )
+    return fetch_stage_bucket_object(client, bucket, key, scan_id=scan_id, filename=filename)

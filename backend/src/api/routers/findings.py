@@ -104,9 +104,7 @@ def _public_mapping(raw: Any) -> dict[str, Any] | None:
 def _row_to_detail(f: FindingModel) -> FindingDetailResponse:
     fingerprint_key = getattr(f, "fingerprint_key", None)
     fingerprint_meta = (
-        public_fingerprint(fingerprint_key=str(fingerprint_key))
-        if fingerprint_key
-        else {}
+        public_fingerprint(fingerprint_key=str(fingerprint_key)) if fingerprint_key else {}
     )
     provenance = _public_mapping(getattr(f, "provenance", None))
     hypothesis = _public_mapping(getattr(f, "hypothesis", None))
@@ -284,7 +282,10 @@ async def post_generate_poc(
     except Exception:
         logger.exception(
             "finding_poc_generate_failed",
-            extra={"event": "argus.finding_poc_generate_failed", "finding_id": finding_id},
+            extra={
+                "event": "argus.finding_poc_generate_failed",
+                "finding_id": finding_id,
+            },
         )
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -417,12 +418,18 @@ async def get_finding_remediation(
             except (LLMProviderUnavailableError, LLMAllProvidersFailedError):
                 logger.info(
                     "finding_remediation_llm_skipped",
-                    extra={"event": "argus.finding_remediation_llm_skipped", "finding_id": finding_id},
+                    extra={
+                        "event": "argus.finding_remediation_llm_skipped",
+                        "finding_id": finding_id,
+                    },
                 )
             except Exception:
                 logger.exception(
                     "finding_remediation_llm_failed",
-                    extra={"event": "argus.finding_remediation_llm_failed", "finding_id": finding_id},
+                    extra={
+                        "event": "argus.finding_remediation_llm_failed",
+                        "finding_id": finding_id,
+                    },
                 )
 
     return FindingRemediationResponse(

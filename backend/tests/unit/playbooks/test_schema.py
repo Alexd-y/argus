@@ -6,7 +6,6 @@ from collections.abc import Callable
 
 import pytest
 from pydantic import ValidationError
-
 from src.playbooks.schema import (
     ActionType,
     HttpRequestParams,
@@ -121,7 +120,7 @@ def test_step_typed_params_roundtrip() -> None:
         params={"seconds": 1.5},
     )
     typed = step.typed_params()
-    assert getattr(typed, "seconds") == 1.5
+    assert typed.seconds == 1.5
 
 
 def test_register_cleanup_reference_must_exist(

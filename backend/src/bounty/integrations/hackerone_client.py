@@ -47,12 +47,14 @@ async def list_programs(
                 data = r.json()
                 for item in data.get("data", []):
                     attrs = item.get("attributes", {})
-                    programs.append({
-                        "handle": attrs.get("handle", ""),
-                        "name": attrs.get("name", ""),
-                        "submission_state": attrs.get("submission_state", ""),
-                        "triaged_count": attrs.get("triaged_count", 0),
-                    })
+                    programs.append(
+                        {
+                            "handle": attrs.get("handle", ""),
+                            "name": attrs.get("name", ""),
+                            "submission_state": attrs.get("submission_state", ""),
+                            "triaged_count": attrs.get("triaged_count", 0),
+                        }
+                    )
         except Exception as exc:
             logger.warning("hackerone_api_error", extra={"error": str(exc)})
 

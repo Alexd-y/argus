@@ -9,7 +9,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src.recon.adapters.intel import (
     CrtShIntelAdapter,
     NvdIntelAdapter,
@@ -230,17 +229,19 @@ class TestCensysIntelAdapter:
             return cert_payload
 
         calls: list[int] = []
-        with patch.dict(
-            os.environ,
-            {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": "secret"},
-            clear=False,
-        ):
-            with patch(
+        with (
+            patch.dict(
+                os.environ,
+                {"CENSYS_API_KEY": "id", "CENSYS_API_SECRET": "secret"},
+                clear=False,
+            ),
+            patch(
                 "src.recon.adapters.intel.censys_adapter.CensysClient.query",
                 new_callable=AsyncMock,
                 side_effect=fake_query,
-            ):
-                result = await adapter.fetch("example.com")
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "censys"
@@ -269,13 +270,15 @@ class TestSecurityTrailsIntelAdapter:
                 return subdomains
             return {"data": {}}
 
-        with patch.dict(os.environ, {"SECURITYTRAILS_API_KEY": "k"}, clear=False):
-            with patch(
+        with (
+            patch.dict(os.environ, {"SECURITYTRAILS_API_KEY": "k"}, clear=False),
+            patch(
                 "src.recon.adapters.intel.securitytrails_adapter.SecurityTrailsClient.query",
                 new_callable=AsyncMock,
                 side_effect=fake_query,
-            ):
-                result = await adapter.fetch("example.com")
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "securitytrails"
@@ -308,13 +311,15 @@ class TestVirusTotalIntelAdapter:
                 }
             }
         }
-        with patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "k"}, clear=False):
-            with patch(
+        with (
+            patch.dict(os.environ, {"VIRUSTOTAL_API_KEY": "k"}, clear=False),
+            patch(
                 "src.recon.adapters.intel.virustotal_adapter.VirusTotalClient.query",
                 new_callable=AsyncMock,
                 return_value=vt_body,
-            ):
-                result = await adapter.fetch("example.com")
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "virustotal"
@@ -352,9 +357,14 @@ class TestOtxIntelAdapter:
 
         responses: list[int] = []
         mock_client_cls = _async_client_context(do_get)
-        with patch.dict(os.environ, {"OTX_API_KEY": "secret"}, clear=False):
-            with patch("src.recon.adapters.intel.otx_adapter.httpx.AsyncClient", mock_client_cls):
-                result = await adapter.fetch("example.com")
+        with (
+            patch.dict(os.environ, {"OTX_API_KEY": "secret"}, clear=False),
+            patch(
+                "src.recon.adapters.intel.otx_adapter.httpx.AsyncClient",
+                mock_client_cls,
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "otx"
@@ -379,17 +389,24 @@ class TestGreyNoiseIntelAdapter:
         async def do_get(*_a: Any, **_kw: Any) -> _FakeHttpResponse:
             return _FakeHttpResponse(
                 200,
-                {"noise": False, "riot": True, "classification": "benign", "name": "cdn"},
+                {
+                    "noise": False,
+                    "riot": True,
+                    "classification": "benign",
+                    "name": "cdn",
+                },
             )
 
         mock_client_cls = _async_client_context(do_get)
-        with patch.dict(os.environ, {"GREYNOISE_API_KEY": "k"}, clear=False):
-            with patch("socket.gethostbyname", return_value="93.184.216.34"):
-                with patch(
-                    "src.recon.adapters.intel.greynoise_adapter.httpx.AsyncClient",
-                    mock_client_cls,
-                ):
-                    result = await adapter.fetch("example.com")
+        with (
+            patch.dict(os.environ, {"GREYNOISE_API_KEY": "k"}, clear=False),
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch(
+                "src.recon.adapters.intel.greynoise_adapter.httpx.AsyncClient",
+                mock_client_cls,
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "greynoise"
@@ -414,17 +431,26 @@ class TestAbuseIpDbIntelAdapter:
         async def do_get(*_a: Any, **_kw: Any) -> _FakeHttpResponse:
             return _FakeHttpResponse(
                 200,
-                {"data": {"abuseConfidenceScore": 5, "totalReports": 1, "isp": "x", "countryCode": "US"}},
+                {
+                    "data": {
+                        "abuseConfidenceScore": 5,
+                        "totalReports": 1,
+                        "isp": "x",
+                        "countryCode": "US",
+                    }
+                },
             )
 
         mock_client_cls = _async_client_context(do_get)
-        with patch.dict(os.environ, {"ABUSEIPDB_API_KEY": "k"}, clear=False):
-            with patch("socket.gethostbyname", return_value="93.184.216.34"):
-                with patch(
-                    "src.recon.adapters.intel.abuseipdb_adapter.httpx.AsyncClient",
-                    mock_client_cls,
-                ):
-                    result = await adapter.fetch("example.com")
+        with (
+            patch.dict(os.environ, {"ABUSEIPDB_API_KEY": "k"}, clear=False),
+            patch("socket.gethostbyname", return_value="93.184.216.34"),
+            patch(
+                "src.recon.adapters.intel.abuseipdb_adapter.httpx.AsyncClient",
+                mock_client_cls,
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "abuseipdb"
@@ -438,11 +464,15 @@ class TestUrlScanIntelAdapter:
     async def test_runs_without_optional_api_key(self):
         adapter = UrlScanIntelAdapter()
         with patch.dict(os.environ, {"URLSCAN_API_KEY": ""}, clear=False):
+
             async def do_get(*_a: Any, **_kw: Any) -> _FakeHttpResponse:
                 return _FakeHttpResponse(200, {"results": []})
 
             mock_client_cls = _async_client_context(do_get)
-            with patch("src.recon.adapters.intel.urlscan_adapter.httpx.AsyncClient", mock_client_cls):
+            with patch(
+                "src.recon.adapters.intel.urlscan_adapter.httpx.AsyncClient",
+                mock_client_cls,
+            ):
                 result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
@@ -467,7 +497,10 @@ class TestUrlScanIntelAdapter:
             return _FakeHttpResponse(200, body)
 
         mock_client_cls = _async_client_context(do_get)
-        with patch("src.recon.adapters.intel.urlscan_adapter.httpx.AsyncClient", mock_client_cls):
+        with patch(
+            "src.recon.adapters.intel.urlscan_adapter.httpx.AsyncClient",
+            mock_client_cls,
+        ):
             result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
@@ -499,13 +532,15 @@ class TestGitHubIntelAdapter:
                 "severity": "high",
             }
         ]
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "tok"}, clear=False):
-            with patch(
+        with (
+            patch.dict(os.environ, {"GITHUB_TOKEN": "tok"}, clear=False),
+            patch(
                 "src.recon.adapters.intel.github_adapter.GitHubClient.query",
                 new_callable=AsyncMock,
                 return_value=advisories,
-            ):
-                result = await adapter.fetch("example.com")
+            ),
+        ):
+            result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
         assert result["source"] == "github"
@@ -539,7 +574,10 @@ class TestExploitDbIntelAdapter:
             return _FakeHttpResponse(200, payload)
 
         mock_client_cls = _async_client_context(do_get)
-        with patch("src.recon.adapters.intel.exploitdb_adapter.httpx.AsyncClient", mock_client_cls):
+        with patch(
+            "src.recon.adapters.intel.exploitdb_adapter.httpx.AsyncClient",
+            mock_client_cls,
+        ):
             result = await adapter.fetch("example.com")
         assert result["skipped"] is False
         assert result["error"] is None
@@ -575,14 +613,16 @@ class TestAllIntelAdaptersContract:
 
     @pytest.mark.asyncio
     async def test_no_stub_not_implemented_empty_env(self):
-        with patch.dict(os.environ, _ENV_STRIP_FOR_KEYED, clear=False):
-            with _patch_urlscan_and_exploitdb_httpx():
-                for AdapterClass in NINE_INTEL_ADAPTER_CLASSES:
-                    adapter = AdapterClass()
-                    result = await adapter.fetch("example.com")
-                    err = result.get("error")
-                    assert "Stub" not in str(err or ""), f"{adapter.name}: {err!r}"
-                    assert result["source"] == adapter.name
+        with (
+            patch.dict(os.environ, _ENV_STRIP_FOR_KEYED, clear=False),
+            _patch_urlscan_and_exploitdb_httpx(),
+        ):
+            for AdapterClass in NINE_INTEL_ADAPTER_CLASSES:
+                adapter = AdapterClass()
+                result = await adapter.fetch("example.com")
+                err = result.get("error")
+                assert "Stub" not in str(err or ""), f"{adapter.name}: {err!r}"
+                assert result["source"] == adapter.name
 
     def test_get_available_intel_adapters_import(self):
         adapters = get_available_intel_adapters()

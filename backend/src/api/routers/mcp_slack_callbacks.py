@@ -66,9 +66,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # ``src.pipeline.contracts`` is loaded first by other routers / fixtures.
 # Loading it explicitly here makes this router safe to import in any order
 # (cold pytest collection, ``main.py`` boot, ad-hoc REPL).
-import src.pipeline.contracts  # noqa: E402, F401 — see comment above
+import src.pipeline.contracts  # noqa: F401 — see comment above
 from src.core.config import settings
-from src.policy.audit import AuditEventType, AuditLogger  # noqa: E402
+from src.policy.audit import AuditEventType, AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -205,9 +205,7 @@ def _expected_signature(*, signing_secret: str, timestamp: str, raw_body: bytes)
     caller can compare against the wire value verbatim.
     """
     base = b"v0:" + timestamp.encode("ascii") + b":" + raw_body
-    digest = hmac.new(
-        signing_secret.encode("utf-8"), base, hashlib.sha256
-    ).hexdigest()
+    digest = hmac.new(signing_secret.encode("utf-8"), base, hashlib.sha256).hexdigest()
     return f"v0={digest}"
 
 
@@ -394,9 +392,7 @@ def _emit_intent_audit(
 )
 async def slack_action_callback(
     request: Request,
-    x_slack_signature: Annotated[
-        str | None, Header(alias="X-Slack-Signature")
-    ] = None,
+    x_slack_signature: Annotated[str | None, Header(alias="X-Slack-Signature")] = None,
     x_slack_request_timestamp: Annotated[
         str | None, Header(alias="X-Slack-Request-Timestamp")
     ] = None,

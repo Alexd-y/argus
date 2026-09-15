@@ -11,8 +11,7 @@ from datetime import datetime
 from uuid import UUID
 
 import pytest
-
-from src.oast.canary import CanaryGenerator, CanaryKind
+from src.oast.canary import CanaryGenerationError, CanaryGenerator, CanaryKind
 from src.oast.correlator import OASTCorrelator
 from src.oast.integration import (
     EvidencePreparation,
@@ -36,7 +35,6 @@ from src.pipeline.contracts.finding_dto import ConfidenceLevel
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.policy.policy_engine import PolicyContext
-
 
 _TENANT = UUID("11111111-1111-1111-1111-111111111111")
 _SCAN = UUID("22222222-2222-2222-2222-222222222222")
@@ -120,10 +118,7 @@ class TestOASTPlaneOAST:
         assert prep.canary is None
         assert prep.payload_request.family_id == family.family_id
         assert prep.payload_request.parameters["oast_host"] == prep.oast_token.subdomain
-        assert (
-            prep.payload_request.parameters["canary"]
-            == prep.oast_token.path_token.lower()
-        )
+        assert prep.payload_request.parameters["canary"] == prep.oast_token.path_token.lower()
         assert len(prep.canary_token_for_finding) == _CANARY_TOKEN_RE_HEX_LEN
         # Listener should have been notified about the issued token.
         assert listener.is_registered(prep.oast_token.id)
@@ -236,10 +231,7 @@ class TestOASTPlaneCanary:
             )
         assert exc_info.value.family_id == family.family_id
         assert exc_info.value.reason
-        assert (
-            plane.policy_failure_reason_oast_disabled()
-            == "oast_disabled_for_oast_required"
-        )
+        assert plane.policy_failure_reason_oast_disabled() == "oast_disabled_for_oast_required"
 
     def test_canary_mode_requires_header_name_for_header_marker(
         self,
@@ -250,7 +242,7 @@ class TestOASTPlaneCanary:
         plane = OASTPlane(disabled_provisioner, correlator, canary_generator)
         family = _payload_family(oast_required=False, template="<m>{canary}</m>")
         # Generator raises if no header name is supplied for HEADER_MARKER.
-        with pytest.raises(Exception):
+        with pytest.raises(CanaryGenerationError):
             plane.prepare(
                 family=family,
                 policy_context=_policy_context(),
@@ -287,9 +279,7 @@ class TestOASTPlaneCanary:
             disabled_provisioner,
             correlator,
             canary_generator,
-            config=OASTPlaneConfig(
-                canary_kind_for_unknown_family=CanaryKind.DOM_MARKER
-            ),
+            config=OASTPlaneConfig(canary_kind_for_unknown_family=CanaryKind.DOM_MARKER),
         )
         family = _payload_family(oast_required=False, template="<m>{canary}</m>")
         prep = plane.prepare(

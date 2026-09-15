@@ -10,7 +10,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam._common import (
     CLOUD_PROOF_DEFAULT_TTL,
@@ -32,7 +31,6 @@ from src.policy.ownership import (
     OwnershipVerificationError,
     hash_identifier,
 )
-
 
 SA_EMAIL = "verifier@argus-prod.iam.gserviceaccount.com"
 AUDIENCE = "https://ownership.argus.io/argus-prod"
@@ -165,9 +163,7 @@ class TestGcpVerifierHappyPath:
         gcp_challenge_token: str,
     ) -> None:
         iam = _StubIam(claims=_ok_claims(token=gcp_challenge_token))
-        verifier = GcpServiceAccountJwtVerifier(
-            iam_client=iam, audit_logger=cloud_audit_logger
-        )
+        verifier = GcpServiceAccountJwtVerifier(iam_client=iam, audit_logger=cloud_audit_logger)
         challenge = _challenge(token=gcp_challenge_token)
 
         proof = await verifier.verify(challenge)
@@ -196,9 +192,7 @@ class TestGcpVerifierHappyPath:
         self, cloud_audit_logger: AuditLogger, gcp_challenge_token: str
     ) -> None:
         iam = _StubIam(claims=_ok_claims(token=gcp_challenge_token))
-        verifier = GcpServiceAccountJwtVerifier(
-            iam_client=iam, audit_logger=cloud_audit_logger
-        )
+        verifier = GcpServiceAccountJwtVerifier(iam_client=iam, audit_logger=cloud_audit_logger)
         challenge = _challenge(
             token=gcp_challenge_token, method=OwnershipMethod.AWS_STS_ASSUME_ROLE
         )
@@ -307,9 +301,7 @@ class TestClaimValidation:
 
 class TestSdkErrors:
     @pytest.mark.asyncio
-    async def test_arbitrary_exception_maps_to_expired(
-        self, gcp_challenge_token: str
-    ) -> None:
+    async def test_arbitrary_exception_maps_to_expired(self, gcp_challenge_token: str) -> None:
         iam = _StubIam(raise_exc=RuntimeError("boom"))
         verifier = GcpServiceAccountJwtVerifier(iam_client=iam)
 
@@ -318,9 +310,7 @@ class TestSdkErrors:
         assert exc.value.summary == REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID
 
     @pytest.mark.asyncio
-    async def test_propagates_explicit_verification_error(
-        self, gcp_challenge_token: str
-    ) -> None:
+    async def test_propagates_explicit_verification_error(self, gcp_challenge_token: str) -> None:
         explicit = OwnershipVerificationError(REASON_GCP_SA_JWT_INVALID_AUDIENCE)
         iam = _StubIam(raise_exc=explicit)
         verifier = GcpServiceAccountJwtVerifier(iam_client=iam)
@@ -332,9 +322,7 @@ class TestSdkErrors:
 
 class TestTimeout:
     @pytest.mark.asyncio
-    async def test_timeout(
-        self, monkeypatch: pytest.MonkeyPatch, gcp_challenge_token: str
-    ) -> None:
+    async def test_timeout(self, monkeypatch: pytest.MonkeyPatch, gcp_challenge_token: str) -> None:
         from src.policy.cloud_iam import _common as common_module
 
         monkeypatch.setattr(common_module, "CLOUD_SDK_TIMEOUT_S", 0.05)
@@ -360,9 +348,7 @@ class TestAuditDiscipline:
         gcp_challenge_token: str,
     ) -> None:
         iam = _StubIam(claims=_ok_claims(token=gcp_challenge_token))
-        verifier = GcpServiceAccountJwtVerifier(
-            iam_client=iam, audit_logger=cloud_audit_logger
-        )
+        verifier = GcpServiceAccountJwtVerifier(iam_client=iam, audit_logger=cloud_audit_logger)
         challenge = _challenge(token=gcp_challenge_token)
 
         await verifier.verify(challenge)
@@ -382,12 +368,7 @@ class TestAuditDiscipline:
         assert AUDIENCE not in flat
         target_hash = hash_identifier(TARGET)
         assert target_hash in flat
-        assert (
-            re.search(
-                r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b", flat
-            )
-            is None
-        )
+        assert re.search(r"\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b", flat) is None
 
 
 # ---------------------------------------------------------------------------

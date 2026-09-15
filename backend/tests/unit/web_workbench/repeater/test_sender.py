@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from src.web_workbench.proxy.transport import NormalizedRequest
 from src.web_workbench.repeater.sender import HttpxSender
 

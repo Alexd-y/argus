@@ -42,7 +42,9 @@ class TestCallLlmWithJsonRetry:
     async def test_disabled_accepts_loose_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "argus_scan_schema_enforcement", False)
         monkeypatch.setattr(
-            ai_prompts, "call_llm_unified", _queued_responder([json.dumps(_INVALID_RECON)])
+            ai_prompts,
+            "call_llm_unified",
+            _queued_responder([json.dumps(_INVALID_RECON)]),
         )
         data = await ai_prompts._call_llm_with_json_retry(RECON, "u", "s")
         assert data == _INVALID_RECON  # loose JSON accepted, no retry
@@ -50,7 +52,9 @@ class TestCallLlmWithJsonRetry:
     async def test_enabled_valid_first_try(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "argus_scan_schema_enforcement", True)
         monkeypatch.setattr(
-            ai_prompts, "call_llm_unified", _queued_responder([json.dumps(_VALID_RECON)])
+            ai_prompts,
+            "call_llm_unified",
+            _queued_responder([json.dumps(_VALID_RECON)]),
         )
         data = await ai_prompts._call_llm_with_json_retry(RECON, "u", "s")
         assert data == _VALID_RECON

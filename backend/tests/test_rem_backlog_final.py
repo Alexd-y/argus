@@ -17,6 +17,7 @@ ARGUS_ROOT = BACKEND_ROOT.parent
 # REM-001: No more `app.` imports in src/
 # ---------------------------------------------------------------------------
 
+
 class TestRem001NoAppImports:
     """All `from app.` / `import app.` references must be gone from backend/src/."""
 
@@ -33,6 +34,7 @@ class TestRem001NoAppImports:
 # ---------------------------------------------------------------------------
 # REM-001: src.schemas package importable
 # ---------------------------------------------------------------------------
+
 
 class TestRem001SchemasPackage:
     """The new src.schemas package must be importable and expose key types."""
@@ -58,6 +60,7 @@ class TestRem001SchemasPackage:
 # REM-001: FindingStatus has all required members
 # ---------------------------------------------------------------------------
 
+
 class TestRem001FindingStatusMembers:
     """FindingStatus enum must contain every expected status value."""
 
@@ -65,8 +68,14 @@ class TestRem001FindingStatusMembers:
         from src.schemas.vulnerability_analysis.schemas import FindingStatus
 
         expected = {
-            "confirmed", "suspected", "unconfirmed", "false_positive",
-            "duplicate", "hypothesis", "partially_confirmed", "rejected",
+            "confirmed",
+            "suspected",
+            "unconfirmed",
+            "false_positive",
+            "duplicate",
+            "hypothesis",
+            "partially_confirmed",
+            "rejected",
         }
         actual = {s.value for s in FindingStatus}
         assert expected.issubset(actual), f"Missing: {expected - actual}"
@@ -75,6 +84,7 @@ class TestRem001FindingStatusMembers:
 # ---------------------------------------------------------------------------
 # REM-002: JWT secret validation
 # ---------------------------------------------------------------------------
+
 
 class TestRem002JwtSecret:
     """JWT_SECRET must be required in production (debug=False) and optional in dev."""
@@ -107,6 +117,7 @@ class TestRem002JwtSecret:
 # ---------------------------------------------------------------------------
 # REM-002: docker-compose CORS no wildcard default
 # ---------------------------------------------------------------------------
+
 
 class TestRem002DockerComposeCors:
     """docker-compose.yml must not fall back to wildcard '*' CORS default."""
@@ -164,12 +175,18 @@ class TestRem003NoCyrillicReporting:
 # declared so the regression cannot reappear.
 # ---------------------------------------------------------------------------
 
+
 class TestRem004RequiredDeps:
     """Packages previously misclassified as unused — must remain declared."""
 
     REQUIRED_PACKAGES = [
-        "typer", "tldextract", "dnspython", "netaddr",
-        "rich", "beautifulsoup4", "shodan",
+        "typer",
+        "tldextract",
+        "dnspython",
+        "netaddr",
+        "rich",
+        "beautifulsoup4",
+        "shodan",
     ]
 
     def test_required_deps_present(self) -> None:
@@ -188,13 +205,20 @@ class TestRem004RequiredDeps:
 # REM-005: Settings exposes all env API-key fields
 # ---------------------------------------------------------------------------
 
+
 class TestRem005SettingsApiKeys:
     """Settings model must declare every external-service API key field."""
 
     EXPECTED_KEYS = [
-        "censys_api_secret", "nvd_api_key", "exploitdb_api_key",
-        "urlscan_api_key", "abuseipdb_api_key", "greynoise_api_key",
-        "otx_api_key", "github_token", "shodan_api_key",
+        "censys_api_secret",
+        "nvd_api_key",
+        "exploitdb_api_key",
+        "urlscan_api_key",
+        "abuseipdb_api_key",
+        "greynoise_api_key",
+        "otx_api_key",
+        "github_token",
+        "shodan_api_key",
     ]
 
     def test_settings_has_env_api_keys(self) -> None:
@@ -209,17 +233,21 @@ class TestRem005SettingsApiKeys:
 # REM-006: No duplicate backend/Dockerfile
 # ---------------------------------------------------------------------------
 
+
 class TestRem006NoDuplicateDockerfile:
     """backend/Dockerfile must not exist; the canonical one lives in infra/."""
 
     def test_no_duplicate_backend_dockerfile(self) -> None:
         dupe = BACKEND_ROOT / "Dockerfile"
-        assert not dupe.exists(), "backend/Dockerfile should not exist (use infra/backend/Dockerfile)"
+        assert not dupe.exists(), (
+            "backend/Dockerfile should not exist (use infra/backend/Dockerfile)"
+        )
 
 
 # ---------------------------------------------------------------------------
 # REM-007: Email validation on ScanCreateRequest
 # ---------------------------------------------------------------------------
+
 
 class TestRem007EmailValidation:
     """ScanCreateRequest.email field must reject invalid addresses."""
@@ -247,6 +275,7 @@ class TestRem007EmailValidation:
 # REM-007: Severity whitelist uses Literal type
 # ---------------------------------------------------------------------------
 
+
 class TestRem007SeverityWhitelist:
     """scans.py must use Literal[...] for the severity filter parameter."""
 
@@ -265,12 +294,12 @@ class TestRem007SeverityWhitelist:
 # REM-008: Dead variable removed from va_active_scan_phase.py
 # ---------------------------------------------------------------------------
 
+
 class TestRem008DeadVariableRemoved:
     """The dead `_ = float(settings...)` assignment must be gone."""
 
     VA_PATH = (
-        BACKEND_SRC / "recon" / "vulnerability_analysis"
-        / "active_scan" / "va_active_scan_phase.py"
+        BACKEND_SRC / "recon" / "vulnerability_analysis" / "active_scan" / "va_active_scan_phase.py"
     )
 
     def test_no_dead_float_settings_var(self) -> None:
@@ -285,6 +314,7 @@ class TestRem008DeadVariableRemoved:
 # ---------------------------------------------------------------------------
 # REM-008: FindingNote CRUD endpoints exist
 # ---------------------------------------------------------------------------
+
 
 class TestRem008FindingNoteCrud:
     """findings.py router must expose PUT and DELETE endpoints for notes."""

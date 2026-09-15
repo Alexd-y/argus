@@ -55,8 +55,17 @@ def test_policy_allows_theharvester_passive_sources() -> None:
 
 
 def test_assetfinder_and_findomain_argv() -> None:
-    assert build_assetfinder_recon_argv("ex.com") == ["assetfinder", "--subs-only", "ex.com"]
-    assert build_findomain_recon_argv("ex.com") == ["findomain", "-t", "ex.com", "--quiet"]
+    assert build_assetfinder_recon_argv("ex.com") == [
+        "assetfinder",
+        "--subs-only",
+        "ex.com",
+    ]
+    assert build_findomain_recon_argv("ex.com") == [
+        "findomain",
+        "-t",
+        "ex.com",
+        "--quiet",
+    ]
 
 
 def test_dedupe_intel_by_hostname() -> None:

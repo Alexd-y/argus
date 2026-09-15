@@ -113,9 +113,7 @@ def _match_api_key(candidate: str) -> AuthContext | None:
 
 
 async def get_optional_auth(
-    credentials: Annotated[
-        HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
-    ],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     api_key: Annotated[str | None, Depends(api_key_header)],
 ) -> AuthContext | None:
     """

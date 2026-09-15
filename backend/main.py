@@ -8,13 +8,13 @@ import logging
 import subprocess
 from contextlib import asynccontextmanager
 
-import src.api.routers.admin_audit_chain  # noqa: F401 — admin audit-log chain integrity verify (T25)
-import src.api.routers.admin_bulk_ops  # noqa: F401 — side-effect: register bulk routes on admin.router
-import src.api.routers.admin_emergency  # noqa: F401 — admin emergency stop / throttle (T31)
-import src.api.routers.admin_findings  # noqa: F401 — admin cross-tenant findings query (T24)
-import src.api.routers.admin_password  # noqa: F401 — admin password change / reset
-import src.api.routers.admin_reports  # noqa: F401 — admin report list / detail / generate / download
-import src.api.routers.admin_scans  # noqa: F401 — admin scan history + detail routes
+import src.api.routers.admin_audit_chain
+import src.api.routers.admin_bulk_ops
+import src.api.routers.admin_emergency
+import src.api.routers.admin_findings
+import src.api.routers.admin_password
+import src.api.routers.admin_reports
+import src.api.routers.admin_scans
 import src.api.routers.admin_schedules  # noqa: F401 — admin scan-schedule CRUD + run-now (T33)
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -94,9 +94,7 @@ async def lifespan(_app: FastAPI):
         subprocess.run(["alembic", "upgrade", "head"], check=True, timeout=60)
         logger.info("Alembic migrations applied successfully")
     except Exception as e:
-        logger.warning(
-            "Startup migrations skipped: %s", type(e).__name__, exc_info=False
-        )
+        logger.warning("Startup migrations skipped: %s", type(e).__name__, exc_info=False)
     try:
         await bootstrap_admin_user_if_configured()
     except Exception as e:
@@ -130,14 +128,20 @@ async def lifespan(_app: FastAPI):
         else:
             logger.warning(
                 "prompt_catalog_verification_skipped",
-                extra={"event": "prompt_catalog.skipped", "reason": "skip_prompt_verification is True"},
+                extra={
+                    "event": "prompt_catalog.skipped",
+                    "reason": "skip_prompt_verification is True",
+                },
             )
     except SystemExit:
         raise
     except Exception as e:
         logger.critical(
             "prompt_catalog_verification_unexpected_error",
-            extra={"event": "prompt_catalog.unexpected_error", "error_type": type(e).__name__},
+            extra={
+                "event": "prompt_catalog.unexpected_error",
+                "error_type": type(e).__name__,
+            },
         )
         raise SystemExit(1) from e
     try:
@@ -204,7 +208,10 @@ def _verify_prompt_catalog() -> int:
     if not signatures_path.is_file():
         logger.critical(
             "prompt_catalog_verification_failed",
-            extra={"event": "prompt_catalog.signatures_missing", "path": str(signatures_path)},
+            extra={
+                "event": "prompt_catalog.signatures_missing",
+                "path": str(signatures_path),
+            },
         )
         raise SystemExit(1)
 
@@ -214,7 +221,11 @@ def _verify_prompt_catalog() -> int:
     except SignatureError as exc:
         logger.critical(
             "prompt_catalog_verification_failed",
-            extra={"event": "prompt_catalog.keys_load_error", "reason": str(exc), "keys_dir": str(keys_dir)},
+            extra={
+                "event": "prompt_catalog.keys_load_error",
+                "reason": str(exc),
+                "keys_dir": str(keys_dir),
+            },
         )
         raise SystemExit(1) from exc
 
@@ -223,7 +234,10 @@ def _verify_prompt_catalog() -> int:
     except SignatureError as exc:
         logger.critical(
             "prompt_catalog_verification_failed",
-            extra={"event": "prompt_catalog.signatures_parse_error", "reason": str(exc)},
+            extra={
+                "event": "prompt_catalog.signatures_parse_error",
+                "reason": str(exc),
+            },
         )
         raise SystemExit(1) from exc
 
@@ -236,7 +250,11 @@ def _verify_prompt_catalog() -> int:
         except OSError as exc:
             logger.critical(
                 "prompt_catalog_verification_failed",
-                extra={"event": "prompt_catalog.read_error", "reason": str(exc), "yaml": rel},
+                extra={
+                    "event": "prompt_catalog.read_error",
+                    "reason": str(exc),
+                    "yaml": rel,
+                },
             )
             raise SystemExit(1) from exc
         try:
@@ -248,7 +266,11 @@ def _verify_prompt_catalog() -> int:
         except (SignatureError, KeyNotFoundError) as exc:
             logger.critical(
                 "prompt_catalog_verification_failed",
-                extra={"event": "prompt_catalog.signature_mismatch", "reason": str(exc), "yaml": rel},
+                extra={
+                    "event": "prompt_catalog.signature_mismatch",
+                    "reason": str(exc),
+                    "yaml": rel,
+                },
             )
             raise SystemExit(1) from exc
 

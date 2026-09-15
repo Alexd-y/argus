@@ -87,8 +87,7 @@ class ScanMemoryCompressor:
 
         recent = history[-_MAX_HISTORY_MESSAGES_TO_COMPRESS:]
         history_text = "\n\n".join(
-            f"[{msg.get('role', 'unknown')}]: {str(msg.get('content', ''))[:500]}"
-            for msg in recent
+            f"[{msg.get('role', 'unknown')}]: {str(msg.get('content', ''))[:500]}" for msg in recent
         )
 
         try:

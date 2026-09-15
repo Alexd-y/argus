@@ -46,7 +46,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -64,7 +63,6 @@ from src.sandbox.signing import (
 )
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 _SHELL_METACHARS: Final[tuple[str, ...]] = (
     ";",
@@ -156,9 +154,7 @@ def isolated_catalog(
         assert src.is_file(), f"source YAML missing: {src}"
         shutil.copy2(src, tools_dir / f"{tool_id}.yaml")
 
-    priv_path, _, key_id = KeyManager.generate_dev_keypair(
-        keys_dir, name="arg015_e2e_signing"
-    )
+    priv_path, _, key_id = KeyManager.generate_dev_keypair(keys_dir, name="arg015_e2e_signing")
     private_key = load_private_key_bytes(priv_path.read_bytes())
     priv_path.unlink()  # private material lives only in this test process
 
@@ -263,9 +259,7 @@ def _nuclei_payload() -> bytes:
             ],
         ),
     ]
-    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode("utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -344,9 +338,7 @@ def test_dispatch_parse_yields_expected_finding_breakdown(
         tool_id="nuclei",
     )
 
-    assert len(findings) == 2, (
-        f"expected 2 findings (1 INFO + 1 RCE), got {len(findings)}"
-    )
+    assert len(findings) == 2, f"expected 2 findings (1 INFO + 1 RCE), got {len(findings)}"
 
     by_category = {f.category: f for f in findings}
     assert FindingCategory.INFO in by_category
@@ -358,9 +350,7 @@ def test_dispatch_parse_yields_expected_finding_breakdown(
     rce_finding = by_category[FindingCategory.RCE]
     assert rce_finding.confidence is ConfidenceLevel.LIKELY
     assert rce_finding.cvss_v3_score == pytest.approx(9.8)
-    assert rce_finding.cvss_v3_vector == (
-        "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-    )
+    assert rce_finding.cvss_v3_vector == ("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")
     assert rce_finding.epss_score == pytest.approx(0.97231)
 
 
@@ -399,9 +389,7 @@ def test_dispatch_parse_writes_evidence_sidecar(
     rce_records = [r for r in parsed if r["template_id"] == "cve-2024-1337-rce"]
     assert rce_records, "expected RCE template record in sidecar"
     assert rce_records[0]["cve"] == ["CVE-2024-1337"]
-    assert (
-        "https://nvd.nist.gov/vuln/detail/CVE-2024-1337" in rce_records[0]["references"]
-    )
+    assert "https://nvd.nist.gov/vuln/detail/CVE-2024-1337" in rce_records[0]["references"]
 
 
 def test_dispatch_parse_canonical_artifact_round_trip(

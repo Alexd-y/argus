@@ -41,7 +41,7 @@ from __future__ import annotations
 import importlib.util
 import os
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -88,9 +88,7 @@ _EXPECTED_SESSION_MFA_COLUMN_NULLABILITY: dict[str, bool] = {
 
 # Postgres-only gate (Layer B).
 _PG_URL_RAW = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
@@ -111,9 +109,7 @@ def _load_revision_module(revision: str) -> Any:
     """Import a migration file as a standalone module (no chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{revision}_*.py"))
     assert matches, f"revision file for {revision} not found"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{revision}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{revision}", matches[0])
     assert spec and spec.loader, f"unable to load spec for {matches[0]}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -137,9 +133,7 @@ def _to_sync_url(url: str) -> str:
     return url
 
 
-def _apply_revision_with_op_context(
-    connection: sa.engine.Connection, revision: str
-) -> None:
+def _apply_revision_with_op_context(connection: sa.engine.Connection, revision: str) -> None:
     """Apply *revision*'s ``upgrade()`` using a fresh Alembic op context."""
     module = _load_revision_module(revision)
     ctx = MigrationContext.configure(connection)
@@ -147,9 +141,7 @@ def _apply_revision_with_op_context(
         module.upgrade()
 
 
-def _downgrade_revision_with_op_context(
-    connection: sa.engine.Connection, revision: str
-) -> None:
+def _downgrade_revision_with_op_context(connection: sa.engine.Connection, revision: str) -> None:
     """Apply *revision*'s ``downgrade()`` using a fresh Alembic op context."""
     module = _load_revision_module(revision)
     ctx = MigrationContext.configure(connection)
@@ -184,7 +176,7 @@ def _seed_pre_032_admin_user(
             "sub": subject,
             "pwh": "$2b$12$" + "x" * 53,  # bcrypt-shaped placeholder
             "r": role,
-            "ca": datetime.now(timezone.utc),
+            "ca": datetime.now(UTC),
         },
     )
 
@@ -198,7 +190,7 @@ def _seed_pre_032_admin_session(
     ttl_seconds: int = 12 * 3600,
 ) -> None:
     """Insert a row that mimics a pre-032 admin session (no mfa_passed_at)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     connection.execute(
         text(
             f"""
@@ -267,8 +259,7 @@ def test_032_revision_metadata_pinned() -> None:
     """``revision='032'`` chains off ``031`` (rebased in Cycle 7 / C7-T07)."""
     module = _load_revision_module(_REVISION)
     assert module.revision == _REVISION, (
-        f"032 migration must declare revision={_REVISION!r}, "
-        f"got {module.revision!r}"
+        f"032 migration must declare revision={_REVISION!r}, got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
         f"032 migration must chain off {_DOWN_REVISION!r} (post C7-T07 rebase); "
@@ -280,12 +271,8 @@ def test_032_revision_metadata_pinned() -> None:
 
 def test_032_has_upgrade_and_downgrade_callables() -> None:
     module = _load_revision_module(_REVISION)
-    assert callable(getattr(module, "upgrade", None)), (
-        "032.upgrade missing or not callable"
-    )
-    assert callable(getattr(module, "downgrade", None)), (
-        "032.downgrade missing or not callable"
-    )
+    assert callable(getattr(module, "upgrade", None)), "032.upgrade missing or not callable"
+    assert callable(getattr(module, "downgrade", None)), "032.downgrade missing or not callable"
 
 
 def test_032_orm_admin_user_carries_mfa_columns() -> None:
@@ -302,12 +289,8 @@ def test_032_orm_admin_user_carries_mfa_columns() -> None:
     table = cast(sa.Table, AdminUser.__table__)
     column_shapes = {c.name: c.nullable for c in table.columns}
 
-    for col_name, expected_nullable in (
-        _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items()
-    ):
-        assert col_name in column_shapes, (
-            f"AdminUser ORM is missing post-032 column {col_name!r}"
-        )
+    for col_name, expected_nullable in _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items():
+        assert col_name in column_shapes, f"AdminUser ORM is missing post-032 column {col_name!r}"
         assert column_shapes[col_name] is expected_nullable, (
             f"AdminUser.{col_name} nullable={column_shapes[col_name]!r} "
             f"but post-032 spec requires {expected_nullable!r}"
@@ -319,8 +302,7 @@ def test_032_orm_admin_user_carries_mfa_columns() -> None:
     )
     secret_col = table.columns[_COL_MFA_SECRET_ENCRYPTED]
     assert isinstance(secret_col.type, sa.LargeBinary), (
-        f"{_COL_MFA_SECRET_ENCRYPTED} must be LargeBinary, "
-        f"got {secret_col.type!r}"
+        f"{_COL_MFA_SECRET_ENCRYPTED} must be LargeBinary, got {secret_col.type!r}"
     )
 
 
@@ -342,8 +324,7 @@ def test_032_orm_admin_session_carries_mfa_passed_at() -> None:
     # The migration declares ``DateTime(timezone=True)``; the ORM must
     # mirror that or the AsyncSession will round-trip naive datetimes.
     assert getattr(column.type, "timezone", False) is True, (
-        f"{_COL_MFA_PASSED_AT} must be TIMESTAMPTZ-equivalent "
-        "(timezone=True)"
+        f"{_COL_MFA_PASSED_AT} must be TIMESTAMPTZ-equivalent (timezone=True)"
     )
 
 
@@ -365,13 +346,10 @@ def test_upgrade_adds_mfa_columns_to_admin_users(sqlite_engine: Engine) -> None:
         f"{_USERS_TABLE}; missing: {sorted(missing)!r}"
     )
 
-    for col_name, expected_nullable in (
-        _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items()
-    ):
+    for col_name, expected_nullable in _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items():
         actual = columns[col_name]["nullable"]
         assert actual is expected_nullable, (
-            f"{_USERS_TABLE}.{col_name} nullable={actual!r} but spec "
-            f"requires {expected_nullable!r}"
+            f"{_USERS_TABLE}.{col_name} nullable={actual!r} but spec requires {expected_nullable!r}"
         )
 
 
@@ -415,27 +393,19 @@ def test_existing_admin_users_survive_upgrade_with_mfa_disabled(
         ).all()
 
     assert len(rows) == 2, (
-        f"032.upgrade must preserve all pre-existing admin rows; got "
-        f"{len(rows)} rows after upgrade"
+        f"032.upgrade must preserve all pre-existing admin rows; got {len(rows)} rows after upgrade"
     )
     by_subject = {r[0]: r for r in rows}
     for subject in ("alpha@example.com", "beta@example.com"):
-        assert subject in by_subject, (
-            f"row for {subject!r} disappeared during 032.upgrade"
-        )
+        assert subject in by_subject, f"row for {subject!r} disappeared during 032.upgrade"
         row = by_subject[subject]
         # SQLite stores BOOLEAN as 0/1; treat both False and 0 as the
         # canonical "off" value.
         assert row[2] in (False, 0), (
-            f"{subject}.{_COL_MFA_ENABLED} must default to False post-032; "
-            f"got {row[2]!r}"
+            f"{subject}.{_COL_MFA_ENABLED} must default to False post-032; got {row[2]!r}"
         )
-        assert row[3] is None, (
-            f"{subject}.{_COL_MFA_SECRET_ENCRYPTED} must default to NULL"
-        )
-        assert row[4] is None, (
-            f"{subject}.{_COL_MFA_BACKUP_CODES_HASH} must default to NULL"
-        )
+        assert row[3] is None, f"{subject}.{_COL_MFA_SECRET_ENCRYPTED} must default to NULL"
+        assert row[4] is None, f"{subject}.{_COL_MFA_BACKUP_CODES_HASH} must default to NULL"
 
 
 def test_existing_admin_sessions_survive_upgrade_with_null_mfa_passed_at(
@@ -503,8 +473,7 @@ def test_upgrade_is_idempotent_under_repeated_run(
         f"missing: {sorted(_NEW_USER_COLUMNS - user_cols)!r}"
     )
     assert _COL_MFA_PASSED_AT in session_cols, (
-        f"after 2× upgrade {_SESSIONS_TABLE}.{_COL_MFA_PASSED_AT} must "
-        "still exist"
+        f"after 2× upgrade {_SESSIONS_TABLE}.{_COL_MFA_PASSED_AT} must still exist"
     )
 
 
@@ -548,7 +517,7 @@ def test_downgrade_drops_mfa_columns_cleanly(sqlite_engine: Engine) -> None:
                 """
             ),
             {
-                "ts": datetime.now(timezone.utc),
+                "ts": datetime.now(UTC),
                 "sid": "legacy-session-id-3",
             },
         )
@@ -565,24 +534,18 @@ def test_downgrade_drops_mfa_columns_cleanly(sqlite_engine: Engine) -> None:
         f"{_USERS_TABLE}; still present: {sorted(overlap)!r}"
     )
     assert _COL_MFA_PASSED_AT not in session_cols, (
-        f"032.downgrade must drop {_COL_MFA_PASSED_AT!r} from "
-        f"{_SESSIONS_TABLE}; still present"
+        f"032.downgrade must drop {_COL_MFA_PASSED_AT!r} from {_SESSIONS_TABLE}; still present"
     )
 
     # Non-MFA rows must survive the downgrade — they carry forensic
     # value (audit trail) and operators expect them to be untouched.
     with sqlite_engine.connect() as conn:
         user_row = conn.execute(
-            text(
-                f"SELECT subject, role FROM {_USERS_TABLE} WHERE subject = :sub"
-            ),
+            text(f"SELECT subject, role FROM {_USERS_TABLE} WHERE subject = :sub"),
             {"sub": "gamma@example.com"},
         ).one()
         session_row = conn.execute(
-            text(
-                f"SELECT session_id, subject FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT session_id, subject FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": "legacy-session-id-3"},
         ).one()
     assert user_row.subject == "gamma@example.com"
@@ -611,9 +574,7 @@ def test_upgrade_downgrade_roundtrip_is_clean(sqlite_engine: Engine) -> None:
     assert _NEW_USER_COLUMNS.issubset(user_cols), (
         "round-trip must end with the MFA user columns present"
     )
-    assert _COL_MFA_PASSED_AT in session_cols, (
-        "round-trip must end with mfa_passed_at present"
-    )
+    assert _COL_MFA_PASSED_AT in session_cols, "round-trip must end with mfa_passed_at present"
 
 
 def test_sqlite_backup_codes_column_degrades_to_json(
@@ -673,10 +634,7 @@ def test_sqlite_secret_encrypted_column_is_blob_compatible(
 
     with sqlite_engine.connect() as conn:
         roundtripped = conn.execute(
-            text(
-                f"SELECT {_COL_MFA_SECRET_ENCRYPTED} FROM {_USERS_TABLE} "
-                "WHERE subject = :sub"
-            ),
+            text(f"SELECT {_COL_MFA_SECRET_ENCRYPTED} FROM {_USERS_TABLE} WHERE subject = :sub"),
             {"sub": "binary-probe@example.com"},
         ).scalar_one()
 
@@ -685,8 +643,7 @@ def test_sqlite_secret_encrypted_column_is_blob_compatible(
         f"got {type(roundtripped).__name__}"
     )
     assert bytes(roundtripped) == payload, (
-        "binary payload corrupted by the BLOB round-trip — Fernet ciphertext "
-        "would be unrecoverable"
+        "binary payload corrupted by the BLOB round-trip — Fernet ciphertext would be unrecoverable"
     )
 
 
@@ -699,13 +656,9 @@ def test_sqlite_secret_encrypted_column_is_blob_compatible(
 def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
     """Return the configured Postgres URL and patch the cached settings."""
     if _PG_URL_RAW.startswith("postgresql://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif _PG_URL_RAW.startswith("postgres://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgres://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgres://", "postgresql+asyncpg://", 1)
     else:
         async_url = _PG_URL_RAW
     monkeypatch.setenv("DATABASE_URL", async_url)
@@ -738,9 +691,7 @@ def test_032_pg_upgrade_creates_mfa_columns(migrated_engine: Engine) -> None:
     user_cols = {c["name"]: c for c in insp.get_columns(_USERS_TABLE)}
     session_cols = {c["name"]: c for c in insp.get_columns(_SESSIONS_TABLE)}
 
-    for col_name, expected_nullable in (
-        _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items()
-    ):
+    for col_name, expected_nullable in _EXPECTED_USER_MFA_COLUMN_NULLABILITY.items():
         assert col_name in user_cols, (
             f"Postgres upgrade head must add {col_name!r} to {_USERS_TABLE}"
         )

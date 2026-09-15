@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -67,14 +67,14 @@ def grep_extract(response: bytes, pattern: str, *, group: int = 0) -> str | None
 
 
 @dataclass(frozen=True)
-class DedupResult(Generic[T]):
+class DedupResult[T]:
     """Outcome of :func:`dedup`: the kept items and how many were dropped."""
 
     kept: tuple[T, ...]
     dropped: int
 
 
-def dedup(items: Sequence[T], key: Callable[[T], object]) -> DedupResult[T]:
+def dedup[T](items: Sequence[T], key: Callable[[T], object]) -> DedupResult[T]:
     """Keep the first item per distinct ``key(item)``; count the rest as dropped."""
     seen: set[object] = set()
     kept: list[T] = []

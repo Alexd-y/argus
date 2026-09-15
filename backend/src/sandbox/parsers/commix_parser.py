@@ -60,7 +60,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -144,7 +144,7 @@ _URL_LEVEL_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 _URL_LEVEL_KEY: Final[DedupKey] = ("", "")
 
 
@@ -187,9 +187,7 @@ def _iter_records(text: str) -> Iterator[dict[str, Any]]:
             continue
         if not _DETECT_RE.search(line):
             continue
-        param_match = _PARAM_QUOTED_BEFORE_RE.search(
-            line
-        ) or _PARAM_QUOTED_AFTER_RE.search(line)
+        param_match = _PARAM_QUOTED_BEFORE_RE.search(line) or _PARAM_QUOTED_AFTER_RE.search(line)
         is_url_level = _URL_LEVEL_RE.search(line) is not None
         # Require an injection-kind mention unless a parameter is explicitly
         # named on a detection line (some commix builds omit the phrase on
@@ -208,13 +206,9 @@ def _iter_records(text: str) -> Iterator[dict[str, Any]]:
             # quoted parameter (``'user') POST parameter``); recover it from
             # the param regex's optional capture when no ``(METHOD)`` token is
             # present on the line.
-            bare_method = (
-                param_match.groupdict().get("method_bare") if param_match else None
-            )
+            bare_method = param_match.groupdict().get("method_bare") if param_match else None
             method = bare_method.upper() if bare_method else ""
-        technique = (
-            technique_match.group("technique").strip() if technique_match else ""
-        )
+        technique = technique_match.group("technique").strip() if technique_match else ""
         yield {
             "param": param,
             "method": method,
@@ -308,9 +302,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         if value in (None, "") and key != "url_level":
             continue
         cleaned[key] = value
-    return json.dumps(
-        scrub_evidence_strings(cleaned), sort_keys=True, ensure_ascii=False
-    )
+    return json.dumps(scrub_evidence_strings(cleaned), sort_keys=True, ensure_ascii=False)
 
 
 def _persist_sidecar(

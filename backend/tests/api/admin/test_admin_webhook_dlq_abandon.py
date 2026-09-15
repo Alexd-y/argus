@@ -20,10 +20,8 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.api.schemas import (
     WEBHOOK_DLQ_REASON_MAX_LEN,
 )
@@ -60,9 +58,7 @@ class TestAbandonRbac:
         audit_emitter: AuditEmitter,
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-abandon-op"
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-abandon-op")
 
         r = await api_client.post(
             ABANDON_PATH.format(entry_id=entry.id),
@@ -126,8 +122,7 @@ class TestAbandonRbac:
 
         # MUST be 404 — never 403 — so admins cannot enumerate other tenants.
         assert r.status_code == 404, (
-            f"expected 404 for cross-tenant probe, got {r.status_code}; "
-            f"body={r.text!r}"
+            f"expected 404 for cross-tenant probe, got {r.status_code}; body={r.text!r}"
         )
         assert r.json()["detail"] == "dlq_entry_not_found"
         audit_emitter.assert_not_called()
@@ -145,9 +140,7 @@ class TestAbandonRbac:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        entry = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-abandon-super"
-        )
+        entry = await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-abandon-super")
 
         r = await api_client.post(
             ABANDON_PATH.format(entry_id=entry.id),
@@ -392,9 +385,7 @@ class TestAbandonEdgeCases:
             adapter_name="jira",
         )
 
-        custom_reason = (
-            "Customer requested permanent suppression for this delivery."
-        )
+        custom_reason = "Customer requested permanent suppression for this delivery."
         r = await api_client.post(
             ABANDON_PATH.format(entry_id=entry.id),
             headers=headers_admin(TENANT_A),
@@ -410,10 +401,7 @@ class TestAbandonEdgeCases:
         details: dict[str, Any] = call["details"]
         required_keys = {"entry_id", "adapter_name", "event_id", "reason"}
         missing = required_keys - set(details.keys())
-        assert not missing, (
-            f"audit details missing required keys: {missing}; "
-            f"details={details!r}"
-        )
+        assert not missing, f"audit details missing required keys: {missing}; details={details!r}"
         assert details["entry_id"] == entry.id
         assert details["adapter_name"] == "jira"
         assert details["event_id"] == entry.event_id

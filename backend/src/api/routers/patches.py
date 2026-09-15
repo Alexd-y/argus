@@ -48,11 +48,14 @@ async def generate_patch(req: PatchGenerateRequest) -> PatchResponse:
     try:
         ptype = PatchType(req.patch_type)
     except ValueError:
-        raise HTTPException(400, f"Unknown patch type: {req.patch_type}")
+        raise HTTPException(400, f"Unknown patch type: {req.patch_type}") from None
 
     result = await generate_and_validate_patch(
-        req.finding, req.original_code,
-        patch_type=ptype, tenant_id=req.tenant_id, repo_id=req.repo_id,
+        req.finding,
+        req.original_code,
+        patch_type=ptype,
+        tenant_id=req.tenant_id,
+        repo_id=req.repo_id,
     )
     return PatchResponse(
         id=result.id,
@@ -84,17 +87,25 @@ async def generate_patches_batch(
     try:
         ptype = PatchType(patch_type)
     except ValueError:
-        raise HTTPException(400, f"Unknown patch type: {patch_type}")
+        raise HTTPException(400, f"Unknown patch type: {patch_type}") from None
 
     inputs = [(f, f.get("code_snippet", f.get("original_code", ""))) for f in findings]
     results = await batch_generate_patches(inputs, patch_type=ptype)
     return [
         PatchResponse(
-            id=r.id, finding_id=r.finding_id, file_path=r.file_path,
-            patch_type=r.patch_type.value, patched_code=r.patched_code,
-            diff=r.diff, rationale=r.rationale, blast_radius=r.blast_radius,
-            backward_compat_risk=r.backward_compat_risk, status=r.status.value,
-            lint_passed=r.lint_passed, tests_passed=r.tests_passed, error=r.error,
+            id=r.id,
+            finding_id=r.finding_id,
+            file_path=r.file_path,
+            patch_type=r.patch_type.value,
+            patched_code=r.patched_code,
+            diff=r.diff,
+            rationale=r.rationale,
+            blast_radius=r.blast_radius,
+            backward_compat_risk=r.backward_compat_risk,
+            status=r.status.value,
+            lint_passed=r.lint_passed,
+            tests_passed=r.tests_passed,
+            error=r.error,
         )
         for r in results
     ]

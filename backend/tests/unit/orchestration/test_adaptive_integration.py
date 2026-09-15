@@ -14,7 +14,12 @@ class TestSignedToolExecutor:
         with patch(
             "src.orchestration.adaptive_integration.run_signed_tool",
             new_callable=AsyncMock,
-            return_value={"stdout": "hit", "stderr": "", "exit_code": 0, "duration_ms": 3},
+            return_value={
+                "stdout": "hit",
+                "stderr": "",
+                "exit_code": 0,
+                "duration_ms": 3,
+            },
         ):
             res = await SignedToolExecutor(scan_id="s").execute(proposal)
         assert res.exit_code == 0

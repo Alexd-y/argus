@@ -35,10 +35,7 @@ OUTPUT_SUMMARY_MAX_CHARS = 2000
 def _is_http_url(value: str) -> bool:
     """Check if value looks like an HTTP(S) URL."""
     v = value.strip()
-    return (
-        v.startswith("http://")
-        or v.startswith("https://")
-    ) and " " not in v
+    return (v.startswith("http://") or v.startswith("https://")) and " " not in v
 
 
 def _collect_urls_from_bundle(bundle: ThreatModelInputBundle) -> set[str]:
@@ -108,7 +105,10 @@ def _read_file_local(recon_dir: Path, path: str) -> dict:
             return {"error": "not_found", "lines": 0}
         text = resolved.read_text(encoding="utf-8", errors="replace")
         lines = text.count("\n") + 1
-        return {"lines": lines, "preview": text[:500] + ("..." if len(text) > 500 else "")}
+        return {
+            "lines": lines,
+            "preview": text[:500] + ("..." if len(text) > 500 else ""),
+        }
     except OSError:
         return {"error": "read_failed", "lines": 0}
 
@@ -164,7 +164,11 @@ def enrich_with_mcp(
     if not allowed:
         logger.info(
             "mcp_enrichment_skipped",
-            extra={"reason": "no_allowlisted_tools", "run_id": run_id, "job_id": job_id},
+            extra={
+                "reason": "no_allowlisted_tools",
+                "run_id": run_id,
+                "job_id": job_id,
+            },
         )
         return traces
 
@@ -228,7 +232,10 @@ def enrich_with_mcp(
                             invocation_id=invocation_id,
                             tool_name="read_file",
                             input_summary=sanitize_args(input_summary),
-                            output_summary={"status": "denied", "reason": decision.reason},
+                            output_summary={
+                                "status": "denied",
+                                "reason": decision.reason,
+                            },
                             timestamp=datetime.now(UTC),
                         )
                     )

@@ -21,7 +21,9 @@ def test_build_recon_httpx_argv_respects_rate_limit() -> None:
     assert argv[argv.index("-rate-limit") + 1] == "25"
 
 
-def test_build_recon_nuclei_tech_argv_default_tags(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_recon_nuclei_tech_argv_default_tags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Legacy argv path (profile compiler OFF): the caller's rate_limit_rps is
     # honored verbatim. With the compiler ON (default) the rate-limit is instead
     # governed by the safe profile — see the companion test below.
@@ -157,9 +159,13 @@ async def test_run_recon_http_probe_bundle_merges_with_mocks() -> None:
         argv = kwargs.get("argv") or []
         cmd = str(argv[0]) if argv else ""
         if cmd == "httpx":
-            stdout = json.dumps({"url": "https://h.example/", "host": "h.example", "tech": ["Apache"]})
+            stdout = json.dumps(
+                {"url": "https://h.example/", "host": "h.example", "tech": ["Apache"]}
+            )
         elif cmd == "whatweb":
-            stdout = '{"target":"https://h.example/","plugins":{"HTTPServer":{"string":["Apache"]}}}'
+            stdout = (
+                '{"target":"https://h.example/","plugins":{"HTTPServer":{"string":["Apache"]}}}'
+            )
         else:
             stdout = ""
         return {
@@ -175,8 +181,14 @@ async def test_run_recon_http_probe_bundle_merges_with_mocks() -> None:
     with (
         patch("src.recon.recon_http_probe._tool_binary_visible", return_value=True),
         patch("src.recon.recon_http_probe.evaluate_kal_mcp_policy", return_value=allowed),
-        patch("src.recon.recon_http_probe.evaluate_va_active_scan_tool_policy", return_value=allowed),
-        patch("src.recon.recon_http_probe.run_kal_mcp_tool", side_effect=fake_run_kal_mcp_tool),
+        patch(
+            "src.recon.recon_http_probe.evaluate_va_active_scan_tool_policy",
+            return_value=allowed,
+        ),
+        patch(
+            "src.recon.recon_http_probe.run_kal_mcp_tool",
+            side_effect=fake_run_kal_mcp_tool,
+        ),
     ):
         out = await run_recon_http_probe_bundle(
             "https://h.example/",

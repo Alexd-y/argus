@@ -232,9 +232,7 @@ class FindingLifecycleBridge:
             finding.occurrence_keys = _merge_unique(
                 finding.occurrence_keys, [occurrence.occurrence_key]
             )
-            finding.evidence_refs = _merge_unique(
-                finding.evidence_refs, occurrence.evidence_refs
-            )
+            finding.evidence_refs = _merge_unique(finding.evidence_refs, occurrence.evidence_refs)
             if ctx.title and not finding.title:
                 finding.title = ctx.title
 

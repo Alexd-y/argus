@@ -1,18 +1,15 @@
 """Tests for ABAC engine."""
 
-import pytest
 import time
-from unittest.mock import MagicMock
 
 from src.auth.abac import (
-    ABACEngine,
-    Role,
-    AccessAction,
-    ResourceType,
-    AccessRequest,
-    AccessDecision,
-    _ROLE_PERMISSIONS,
     _MFA_REQUIRED_ACTIONS,
+    _ROLE_PERMISSIONS,
+    ABACEngine,
+    AccessAction,
+    AccessRequest,
+    ResourceType,
+    Role,
     generate_session_watermark,
     verify_mfa_session,
 )
@@ -56,8 +53,11 @@ class TestABACEngine:
 
     def test_viewer_read_finding_allowed(self):
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.VIEWER,
-            action=AccessAction.READ, resource_type=ResourceType.FINDING,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.VIEWER,
+            action=AccessAction.READ,
+            resource_type=ResourceType.FINDING,
         )
         decision = self.engine.evaluate(req)
         assert decision.allowed is True
@@ -65,8 +65,11 @@ class TestABACEngine:
 
     def test_viewer_write_finding_denied(self):
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.VIEWER,
-            action=AccessAction.WRITE, resource_type=ResourceType.FINDING,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.VIEWER,
+            action=AccessAction.WRITE,
+            resource_type=ResourceType.FINDING,
         )
         decision = self.engine.evaluate(req)
         assert decision.allowed is False
@@ -74,9 +77,13 @@ class TestABACEngine:
 
     def test_delete_without_mfa_denied(self):
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.ORG_ADMIN,
-            action=AccessAction.DELETE, resource_type=ResourceType.SCAN,
-            mfa_verified=False, device_trusted=True,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.ORG_ADMIN,
+            action=AccessAction.DELETE,
+            resource_type=ResourceType.SCAN,
+            mfa_verified=False,
+            device_trusted=True,
         )
         decision = self.engine.evaluate(req)
         assert decision.allowed is False
@@ -84,18 +91,26 @@ class TestABACEngine:
 
     def test_delete_with_mfa_allowed(self):
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.ORG_ADMIN,
-            action=AccessAction.DELETE, resource_type=ResourceType.SCAN,
-            mfa_verified=True, device_trusted=True,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.ORG_ADMIN,
+            action=AccessAction.DELETE,
+            resource_type=ResourceType.SCAN,
+            mfa_verified=True,
+            device_trusted=True,
         )
         decision = self.engine.evaluate(req)
         assert decision.allowed is True
 
     def test_admin_without_trusted_device_denied(self):
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.ORG_ADMIN,
-            action=AccessAction.ADMIN, resource_type=ResourceType.POLICY,
-            mfa_verified=True, device_trusted=False,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.ORG_ADMIN,
+            action=AccessAction.ADMIN,
+            resource_type=ResourceType.POLICY,
+            mfa_verified=True,
+            device_trusted=False,
         )
         decision = self.engine.evaluate(req)
         assert decision.allowed is False
@@ -107,8 +122,11 @@ class TestABACEngine:
 
         engine = ABACEngine(kill_switch_checker=kill_all)
         req = AccessRequest(
-            user_id="u1", tenant_id="t1", role=Role.ORG_ADMIN,
-            action=AccessAction.READ, resource_type=ResourceType.SCAN,
+            user_id="u1",
+            tenant_id="t1",
+            role=Role.ORG_ADMIN,
+            action=AccessAction.READ,
+            resource_type=ResourceType.SCAN,
         )
         decision = engine.evaluate(req)
         assert decision.allowed is False

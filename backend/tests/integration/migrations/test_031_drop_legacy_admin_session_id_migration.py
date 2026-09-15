@@ -39,7 +39,7 @@ import hmac
 import importlib.util
 import os
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -69,16 +69,11 @@ _TEST_PEPPER = "test-pepper-iss-t20-003-not-for-prod-32chars-min"
 
 # Postgres-only gate.
 _PG_URL_RAW = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
-    reason=(
-        "DATABASE_URL is not a Postgres URL — 031 dialect checks need a "
-        "real Postgres engine"
-    ),
+    reason=("DATABASE_URL is not a Postgres URL — 031 dialect checks need a real Postgres engine"),
 )
 
 
@@ -90,9 +85,7 @@ pytestmark_pg = pytest.mark.skipif(
 def _load_revision_module(revision: str) -> Any:
     matches = list(_VERSIONS_DIR.glob(f"{revision}_*.py"))
     assert matches, f"revision file for {revision} not found"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{revision}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{revision}", matches[0])
     assert spec and spec.loader, f"unable to load spec for {matches[0]}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -115,18 +108,14 @@ def _to_sync_url(url: str) -> str:
     return url
 
 
-def _apply_revision_with_op_context(
-    connection: sa.engine.Connection, revision: str
-) -> None:
+def _apply_revision_with_op_context(connection: sa.engine.Connection, revision: str) -> None:
     module = _load_revision_module(revision)
     ctx = MigrationContext.configure(connection)
     with Operations.context(ctx):
         module.upgrade()
 
 
-def _downgrade_revision_with_op_context(
-    connection: sa.engine.Connection, revision: str
-) -> None:
+def _downgrade_revision_with_op_context(connection: sa.engine.Connection, revision: str) -> None:
     module = _load_revision_module(revision)
     ctx = MigrationContext.configure(connection)
     with Operations.context(ctx):
@@ -153,7 +142,7 @@ def _seed_post_030_session(
     ttl_seconds: int = 12 * 3600,
 ) -> None:
     """Insert a row with the post-030, pre-031 shape (legacy session_id PK)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     connection.execute(
         text(
             f"""
@@ -222,12 +211,10 @@ def test_031_revision_metadata_pinned() -> None:
     """``revision='031'`` chains directly off ``030``."""
     module = _load_revision_module(_REVISION)
     assert module.revision == _REVISION, (
-        f"031 migration must declare revision={_REVISION!r}, "
-        f"got {module.revision!r}"
+        f"031 migration must declare revision={_REVISION!r}, got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
-        f"031 migration must chain off {_DOWN_REVISION!r}; "
-        f"got {module.down_revision!r}"
+        f"031 migration must chain off {_DOWN_REVISION!r}; got {module.down_revision!r}"
     )
     assert module.branch_labels is None, "031 must not introduce a branch label"
     assert module.depends_on is None, "031 must not depend on another revision"
@@ -235,12 +222,8 @@ def test_031_revision_metadata_pinned() -> None:
 
 def test_031_has_upgrade_and_downgrade_callables() -> None:
     module = _load_revision_module(_REVISION)
-    assert callable(getattr(module, "upgrade", None)), (
-        "031.upgrade missing or not callable"
-    )
-    assert callable(getattr(module, "downgrade", None)), (
-        "031.downgrade missing or not callable"
-    )
+    assert callable(getattr(module, "upgrade", None)), "031.upgrade missing or not callable"
+    assert callable(getattr(module, "downgrade", None)), "031.downgrade missing or not callable"
 
 
 def test_032_chains_off_031() -> None:
@@ -264,12 +247,9 @@ def test_upgrade_drops_legacy_session_id_column(sqlite_engine: Engine) -> None:
     insp = inspect(sqlite_engine)
     columns = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
     assert _LEGACY_COL not in columns, (
-        f"031.upgrade must drop {_SESSIONS_TABLE}.{_LEGACY_COL!r}; "
-        f"got {sorted(columns)!r}"
+        f"031.upgrade must drop {_SESSIONS_TABLE}.{_LEGACY_COL!r}; got {sorted(columns)!r}"
     )
-    assert _HASH_COL in columns, (
-        f"031.upgrade must keep {_HASH_COL!r}; got {sorted(columns)!r}"
-    )
+    assert _HASH_COL in columns, f"031.upgrade must keep {_HASH_COL!r}; got {sorted(columns)!r}"
 
 
 def test_upgrade_promotes_session_token_hash_to_pk(sqlite_engine: Engine) -> None:
@@ -280,9 +260,7 @@ def test_upgrade_promotes_session_token_hash_to_pk(sqlite_engine: Engine) -> Non
     insp = inspect(sqlite_engine)
     pk = insp.get_pk_constraint(_SESSIONS_TABLE)
     pk_cols = set(pk.get("constrained_columns") or [])
-    assert pk_cols == {_HASH_COL}, (
-        f"post-031 PK must be exactly ({_HASH_COL!r},); got {pk_cols!r}"
-    )
+    assert pk_cols == {_HASH_COL}, f"post-031 PK must be exactly ({_HASH_COL!r},); got {pk_cols!r}"
 
     columns = {c["name"]: c for c in insp.get_columns(_SESSIONS_TABLE)}
     assert columns[_HASH_COL]["nullable"] is False, (
@@ -297,9 +275,7 @@ def test_upgrade_drops_redundant_unique_hash_index(sqlite_engine: Engine) -> Non
         _apply_revision_with_op_context(conn, _REVISION)
 
     insp = inspect(sqlite_engine)
-    index_names = {
-        ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE) if ix.get("name")
-    }
+    index_names = {ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE) if ix.get("name")}
     assert _HASH_INDEX not in index_names, (
         f"031.upgrade must drop redundant UNIQUE index {_HASH_INDEX!r} "
         f"(PK already covers session_token_hash); got indexes: "
@@ -323,14 +299,10 @@ def test_upgrade_preserves_rows_with_hash_populated(sqlite_engine: Engine) -> No
         _apply_revision_with_op_context(conn, _REVISION)
 
     with sqlite_engine.connect() as conn:
-        rows = conn.execute(
-            text(f"SELECT subject, {_HASH_COL} FROM {_SESSIONS_TABLE}")
-        ).all()
+        rows = conn.execute(text(f"SELECT subject, {_HASH_COL} FROM {_SESSIONS_TABLE}")).all()
     assert len(rows) == 1
     assert rows[0][0] == "alpha@example.com"
-    assert rows[0][1] == digest, (
-        "session_token_hash must round-trip across the PK rebuild"
-    )
+    assert rows[0][1] == digest, "session_token_hash must round-trip across the PK rebuild"
 
 
 def test_upgrade_backfills_straggler_rows_when_pepper_set(
@@ -359,19 +331,14 @@ def test_upgrade_backfills_straggler_rows_when_pepper_set(
     expected = _expected_hash(_TEST_PEPPER, raw)
     with sqlite_engine.connect() as conn:
         row = conn.execute(
-            text(
-                f"SELECT subject, {_HASH_COL} FROM {_SESSIONS_TABLE} "
-                "WHERE subject = :s"
-            ),
+            text(f"SELECT subject, {_HASH_COL} FROM {_SESSIONS_TABLE} WHERE subject = :s"),
             {"s": "straggler@example.com"},
         ).one_or_none()
     assert row is not None, (
         "straggler row must survive — 031 backfill should hash from "
         "session_id before dropping the column"
     )
-    assert row[1] == expected, (
-        "031 straggler backfill must hash with the live pepper"
-    )
+    assert row[1] == expected, "031 straggler backfill must hash with the live pepper"
 
 
 def test_upgrade_purges_unreachable_rows_when_pepper_unset(
@@ -407,10 +374,7 @@ def test_upgrade_purges_unreachable_rows_when_pepper_unset(
 
     with sqlite_engine.connect() as conn:
         subjects = {
-            row[0]
-            for row in conn.execute(
-                text(f"SELECT subject FROM {_SESSIONS_TABLE}")
-            ).all()
+            row[0] for row in conn.execute(text(f"SELECT subject FROM {_SESSIONS_TABLE}")).all()
         }
     assert "orphan@example.com" not in subjects, (
         "row without session_token_hash and no pepper to backfill must be "
@@ -451,12 +415,8 @@ def test_downgrade_restores_session_id_column_and_pk(sqlite_engine: Engine) -> N
 
     insp = inspect(sqlite_engine)
     columns = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
-    assert _LEGACY_COL in columns, (
-        "downgrade must re-add session_id column"
-    )
-    assert _HASH_COL in columns, (
-        "downgrade must keep session_token_hash (now nullable)"
-    )
+    assert _LEGACY_COL in columns, "downgrade must re-add session_id column"
+    assert _HASH_COL in columns, "downgrade must keep session_token_hash (now nullable)"
 
     pk = insp.get_pk_constraint(_SESSIONS_TABLE)
     pk_cols = set(pk.get("constrained_columns") or [])
@@ -464,12 +424,9 @@ def test_downgrade_restores_session_id_column_and_pk(sqlite_engine: Engine) -> N
         f"downgrade must restore PK to ({_LEGACY_COL!r},); got {pk_cols!r}"
     )
 
-    index_names = {
-        ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE) if ix.get("name")
-    }
+    index_names = {ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE) if ix.get("name")}
     assert _HASH_INDEX in index_names, (
-        f"downgrade must restore UNIQUE index {_HASH_INDEX!r}; "
-        f"got indexes: {sorted(index_names)!r}"
+        f"downgrade must restore UNIQUE index {_HASH_INDEX!r}; got indexes: {sorted(index_names)!r}"
     )
 
 
@@ -505,14 +462,15 @@ def test_upgrade_aborts_when_post_030_schema_missing(
     """
     with sqlite_engine.begin() as conn:
         ctx = MigrationContext.configure(conn)
-        with Operations.context(ctx) as ops:
-            with ops.batch_alter_table(_SESSIONS_TABLE) as batch:
-                batch.drop_index(_HASH_INDEX)
-                batch.drop_column(_HASH_COL)
+        with Operations.context(ctx) as ops, ops.batch_alter_table(_SESSIONS_TABLE) as batch:
+            batch.drop_index(_HASH_INDEX)
+            batch.drop_column(_HASH_COL)
 
-    with pytest.raises(RuntimeError, match="Apply migration 030 before 031"):
-        with sqlite_engine.begin() as conn:
-            _apply_revision_with_op_context(conn, _REVISION)
+    with (
+        pytest.raises(RuntimeError, match="Apply migration 030 before 031"),
+        sqlite_engine.begin() as conn,
+    ):
+        _apply_revision_with_op_context(conn, _REVISION)
 
 
 # ---------------------------------------------------------------------------
@@ -524,13 +482,9 @@ def test_upgrade_aborts_when_post_030_schema_missing(
 def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
     """Return the configured Postgres URL and patch the cached settings."""
     if _PG_URL_RAW.startswith("postgresql://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif _PG_URL_RAW.startswith("postgres://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgres://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgres://", "postgresql+asyncpg://", 1)
     else:
         async_url = _PG_URL_RAW
     monkeypatch.setenv("DATABASE_URL", async_url)
@@ -563,16 +517,12 @@ def test_031_pg_upgrade_drops_session_id_and_promotes_hash_pk(
     """Postgres ``upgrade head`` lands the post-031 schema."""
     insp = inspect(migrated_engine)
     columns = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
-    assert _LEGACY_COL not in columns, (
-        f"Postgres upgrade head must drop {_LEGACY_COL}"
-    )
+    assert _LEGACY_COL not in columns, f"Postgres upgrade head must drop {_LEGACY_COL}"
     assert _HASH_COL in columns
 
     pk = insp.get_pk_constraint(_SESSIONS_TABLE)
     pk_cols = set(pk.get("constrained_columns") or [])
-    assert pk_cols == {_HASH_COL}, (
-        f"Postgres post-031 PK must be ({_HASH_COL!r},); got {pk_cols!r}"
-    )
+    assert pk_cols == {_HASH_COL}, f"Postgres post-031 PK must be ({_HASH_COL!r},); got {pk_cols!r}"
 
 
 @pytestmark_pg
@@ -594,9 +544,7 @@ def test_031_pg_downgrade_restores_legacy_pk(pg_url: str) -> None:
         engine = sa.create_engine(sync_url, future=True)
         insp = inspect(engine)
         columns = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
-        assert _LEGACY_COL in columns, (
-            "Postgres downgrade -2 from head must restore session_id"
-        )
+        assert _LEGACY_COL in columns, "Postgres downgrade -2 from head must restore session_id"
         pk = insp.get_pk_constraint(_SESSIONS_TABLE)
         assert set(pk.get("constrained_columns") or []) == {_LEGACY_COL}
 

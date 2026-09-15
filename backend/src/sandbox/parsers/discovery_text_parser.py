@@ -20,7 +20,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -61,7 +61,7 @@ _MAGESCAN_LIST_KEYS: Final[frozenset[str]] = frozenset(
     {"missingPatches", "sensitiveFiles", "unreachablePaths", "paths"}
 )
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 _DISCOVERY_CANONICAL: Final[dict[str, tuple[str, ...]]] = {
     "gobuster_dir": ("gobuster.txt",),
@@ -376,4 +376,4 @@ def _magescan_from_dict(
     return [f for _, f, _ in keyed]
 
 
-__all__ = ["parse_discovery_text_lines", "EVIDENCE_SIDECAR"]
+__all__ = ["EVIDENCE_SIDECAR", "parse_discovery_text_lines"]

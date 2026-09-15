@@ -39,7 +39,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -89,7 +89,7 @@ _DANGEROUS_FUNCTIONS: Final[frozenset[str]] = frozenset(
 _HIGH_ENTROPY_THRESHOLD: Final[float] = 7.0
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_radare2_info(
@@ -264,9 +264,7 @@ def _build_entropy_finding() -> FindingDTO:
 def _serialise_evidence(record: dict[str, str], *, tool_id: str) -> str:
     payload: dict[str, object] = {
         "tool_id": tool_id,
-        "synthetic_id": stable_hash_12(
-            f"{record.get('kind', '')}::{record.get('name', '')}"
-        ),
+        "synthetic_id": stable_hash_12(f"{record.get('kind', '')}::{record.get('name', '')}"),
         **record,
     }
     cleaned = scrub_evidence_strings(payload)

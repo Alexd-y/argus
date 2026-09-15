@@ -27,7 +27,13 @@ from src.recon.mcp.policy import (
 
 class TestActiveScanAllowlist:
     def test_profile_nuclei_variants_resolve_to_base_binary(self) -> None:
-        for tool_id in ("nuclei_ssrf", "nuclei_csrf", "nuclei_sqli", "nuclei_rce", "nuclei_idor"):
+        for tool_id in (
+            "nuclei_ssrf",
+            "nuclei_csrf",
+            "nuclei_sqli",
+            "nuclei_rce",
+            "nuclei_idor",
+        ):
             assert resolve_va_active_scan_tool_canonical(tool_id) == "nuclei", tool_id
             assert evaluate_va_active_scan_tool_policy(tool_name=tool_id).allowed, tool_id
 
@@ -55,7 +61,7 @@ class TestExtractJsonObject:
         assert extract_json_object('{"a": 1}') == {"a": 1}
 
     def test_fenced_json_block(self) -> None:
-        text = "Here is the result:\n```json\n{\"critiques\": [], \"ok\": true}\n```\nDone."
+        text = 'Here is the result:\n```json\n{"critiques": [], "ok": true}\n```\nDone.'
         assert extract_json_object(text) == {"critiques": [], "ok": True}
 
     def test_prose_prefix_then_object(self) -> None:
@@ -78,7 +84,14 @@ class TestExtractJsonObject:
 
 class TestAdversarialCriticGracefulDegrade:
     def _findings(self) -> list[dict[str, object]]:
-        return [{"finding_id": "f1", "title": "TLS", "severity": "medium", "vuln_type": "tls_probe"}]
+        return [
+            {
+                "finding_id": "f1",
+                "title": "TLS",
+                "severity": "medium",
+                "vuln_type": "tls_probe",
+            }
+        ]
 
     def test_malformed_response_degrades_not_parse_error(self) -> None:
         async def _bad_executor(_s: str, _u: str) -> dict[str, str]:

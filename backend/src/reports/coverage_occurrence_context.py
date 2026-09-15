@@ -174,15 +174,9 @@ def _parse_coverage_results(
                         str(item["blocked_reason"]) if item.get("blocked_reason") else None
                     ),
                     finding_id=str(item["finding_id"]) if item.get("finding_id") else None,
-                    reason_code=(
-                        str(item["reason_code"]) if item.get("reason_code") else None
-                    ),
-                    template_ids=tuple(
-                        str(x) for x in (item.get("template_ids") or ()) if x
-                    ),
-                    evidence_ids=tuple(
-                        str(x) for x in (item.get("evidence_ids") or ()) if x
-                    ),
+                    reason_code=(str(item["reason_code"]) if item.get("reason_code") else None),
+                    template_ids=tuple(str(x) for x in (item.get("template_ids") or ()) if x),
+                    evidence_ids=tuple(str(x) for x in (item.get("evidence_ids") or ()) if x),
                 )
             )
         except (ValidationError, ValueError):
@@ -238,9 +232,7 @@ def _parse_logical_findings(
                         state=_coerce_finding_state(payload.get("state")),
                         title=str(payload.get("title") or ""),
                         category=str(payload.get("category") or ""),
-                        evidence_refs=[
-                            str(x) for x in (payload.get("evidence_refs") or []) if x
-                        ],
+                        evidence_refs=[str(x) for x in (payload.get("evidence_refs") or []) if x],
                         occurrence_keys=[
                             str(x) for x in (payload.get("occurrence_keys") or []) if x
                         ],
@@ -332,7 +324,12 @@ def derive_occurrences_from_findings(
             or payload.get("normalized_location")
             or finding_key
         )[:2048]
-        evidence = payload.get("proof_of_concept") or payload.get("evidence") or payload.get("description") or ""
+        evidence = (
+            payload.get("proof_of_concept")
+            or payload.get("evidence")
+            or payload.get("description")
+            or ""
+        )
 
         try:
             occ = occurrence_from_scan(
@@ -510,8 +507,7 @@ def build_coverage_occurrence_context(
             for key, finding in sorted(logical_findings.items())
         },
         "occurrences_by_key": {
-            key: _serialize_occurrence(occ)
-            for key, occ in sorted(occurrences.items())
+            key: _serialize_occurrence(occ) for key, occ in sorted(occurrences.items())
         },
         "occurrence_index": {
             finding_key: sorted(keys) for finding_key, keys in sorted(occurrence_index.items())

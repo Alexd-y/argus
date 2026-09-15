@@ -8,6 +8,7 @@ endpoints. Produces a SourceAnalysisOutput for downstream phases.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -56,16 +57,27 @@ class SourceAnalyzer:
         """
         if not self.repo_path:
             logger.info("source_analysis: no repo_path provided, skipping")
-            return SourceAnalysisOutput(skipped=True, summary="No repository path provided; source analysis skipped.")
+            return SourceAnalysisOutput(
+                skipped=True,
+                summary="No repository path provided; source analysis skipped.",
+            )
 
         repo = Path(self.repo_path)
         if not repo.exists():
             if self.repo_url:
                 try:
-                    logger.info("source_analysis: cloning %s into %s", self.repo_url, self.repo_path)
+                    logger.info(
+                        "source_analysis: cloning %s into %s",
+                        self.repo_url,
+                        self.repo_path,
+                    )
                     repo.parent.mkdir(parents=True, exist_ok=True)
                     proc = await asyncio.create_subprocess_exec(
-                        "git", "clone", "--depth=1", self.repo_url, str(repo),
+                        "git",
+                        "clone",
+                        "--depth=1",
+                        self.repo_url,
+                        str(repo),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
@@ -74,19 +86,34 @@ class SourceAnalyzer:
                     except TimeoutError:
                         proc.kill()
                         await proc.wait()
-                        return SourceAnalysisOutput(skipped=True, summary=f"git clone timed out for {self.repo_url}")
+                        return SourceAnalysisOutput(
+                            skipped=True,
+                            summary=f"git clone timed out for {self.repo_url}",
+                        )
                     if proc.returncode != 0:
-                        err_msg = _stderr.decode(errors="replace")[:500] if _stderr else "unknown error"
+                        err_msg = (
+                            _stderr.decode(errors="replace")[:500] if _stderr else "unknown error"
+                        )
                         logger.warning("source_analysis: git clone failed: %s", err_msg)
-                        return SourceAnalysisOutput(skipped=True, summary=f"git clone failed: {err_msg}")
+                        return SourceAnalysisOutput(
+                            skipped=True, summary=f"git clone failed: {err_msg}"
+                        )
                     if not repo.exists():
-                        return SourceAnalysisOutput(skipped=True, summary=f"Repository path missing after clone: {self.repo_path}")
+                        return SourceAnalysisOutput(
+                            skipped=True,
+                            summary=f"Repository path missing after clone: {self.repo_path}",
+                        )
                     logger.info("source_analysis: clone successful")
                 except Exception as clone_exc:
                     logger.warning("source_analysis: clone error: %s", clone_exc)
-                    return SourceAnalysisOutput(skipped=True, summary=f"git clone error: {clone_exc}")
+                    return SourceAnalysisOutput(
+                        skipped=True, summary=f"git clone error: {clone_exc}"
+                    )
             else:
-                return SourceAnalysisOutput(skipped=True, summary=f"Repository path does not exist: {self.repo_path}")
+                return SourceAnalysisOutput(
+                    skipped=True,
+                    summary=f"Repository path does not exist: {self.repo_path}",
+                )
 
         logger.info("source_analysis: analyzing %s", repo)
 
@@ -127,7 +154,13 @@ class SourceAnalyzer:
 
         # LLM-augmented deep source review for high-value findings
         llm_sinks, llm_taint_paths, llm_auth_gaps = await self._llm_deep_review(
-            repo, primary_language, frameworks, sinks, sources, taint_paths, auth_patterns
+            repo,
+            primary_language,
+            frameworks,
+            sinks,
+            sources,
+            taint_paths,
+            auth_patterns,
         )
         if llm_sinks:
             sinks.extend(llm_sinks)
@@ -182,14 +215,23 @@ class SourceAnalyzer:
         }
 
         import re as re_module
+
         patterns = source_patterns.get(language, [])
-        ext = {"python": ".py", "javascript": ".js", "java": ".java", "typescript": ".ts"}.get(language, ".py")
+        ext = {
+            "python": ".py",
+            "javascript": ".js",
+            "java": ".java",
+            "typescript": ".ts",
+        }.get(language, ".py")
 
         count = 0
         for path in repo.rglob(f"*{ext}"):
             if count >= 200:
                 break
-            if any(skip in path.parts for skip in ("node_modules", ".git", "__pycache__", "venv", "dist")):
+            if any(
+                skip in path.parts
+                for skip in ("node_modules", ".git", "__pycache__", "venv", "dist")
+            ):
                 continue
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")
@@ -199,27 +241,41 @@ class SourceAnalyzer:
             for line_no, line in enumerate(content.splitlines(), 1):
                 for pattern in patterns:
                     if re_module.search(pattern, line):
-                        sources.append(CodeSource(
-                            file_path=rel,
-                            line_number=line_no,
-                            source_type="http_param",
-                            code_snippet=line.strip()[:200],
-                        ))
+                        sources.append(
+                            CodeSource(
+                                file_path=rel,
+                                line_number=line_no,
+                                source_type="http_param",
+                                code_snippet=line.strip()[:200],
+                            )
+                        )
                         count += 1
                         break
 
         return sources[:500]
 
-    def _identify_auth_patterns(self, repo: Path, language: str) -> list[dict[str, Any]]:
+    def _identify_auth_patterns(self, repo: Path, language: str) -> list[dict[str, Any]]:  # noqa: ARG002 - retained for signature/API compatibility
         """Identify authentication/authorization patterns in the codebase."""
         patterns: list[dict[str, Any]] = []
         auth_files = [
-            "auth.py", "authentication.py", "login.py", "middleware.py",
-            "security.py", "permissions.py", "decorators.py",
-            "auth.js", "auth.ts", "middleware.js", "middleware.ts",
-            "AuthController.java", "SecurityConfig.java",
-            "auth.go", "middleware.go",
-            "sessions.py", "jwt.py", "token.py",
+            "auth.py",
+            "authentication.py",
+            "login.py",
+            "middleware.py",
+            "security.py",
+            "permissions.py",
+            "decorators.py",
+            "auth.js",
+            "auth.ts",
+            "middleware.js",
+            "middleware.ts",
+            "AuthController.java",
+            "SecurityConfig.java",
+            "auth.go",
+            "middleware.go",
+            "sessions.py",
+            "jwt.py",
+            "token.py",
             "Passport.java",
         ]
 
@@ -227,17 +283,20 @@ class SourceAnalyzer:
             for path in repo.rglob(auth_name):
                 if any(skip in path.parts for skip in ("node_modules", ".git", "vendor")):
                     continue
-                patterns.append({
-                    "file": str(path.relative_to(repo)),
-                    "type": "auth_file",
-                    "name": auth_name,
-                })
+                patterns.append(
+                    {
+                        "file": str(path.relative_to(repo)),
+                        "type": "auth_file",
+                        "name": auth_name,
+                    }
+                )
 
         return patterns[:50]
 
     def _identify_api_endpoints(self, repo: Path, language: str) -> list[dict[str, Any]]:
         """Identify API endpoints from route definitions."""
         import re as re_module
+
         endpoints: list[dict[str, Any]] = []
         route_patterns: dict[str, list[str]] = {
             "python": [
@@ -254,9 +313,17 @@ class SourceAnalyzer:
             ],
         }
 
-        ext = {"python": ".py", "javascript": ".js", "java": ".java", "typescript": ".ts"}.get(language, ".py")
+        ext = {
+            "python": ".py",
+            "javascript": ".js",
+            "java": ".java",
+            "typescript": ".ts",
+        }.get(language, ".py")
         for path in repo.rglob(f"*{ext}"):
-            if any(skip in path.parts for skip in ("node_modules", ".git", "__pycache__", "venv", "dist")):
+            if any(
+                skip in path.parts
+                for skip in ("node_modules", ".git", "__pycache__", "venv", "dist")
+            ):
                 continue
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")
@@ -268,18 +335,30 @@ class SourceAnalyzer:
                     groups = match.groups()
                     method = groups[0].upper() if len(groups) > 1 else "ANY"
                     route_path = groups[-1] if groups else "/"
-                    endpoints.append({
-                        "file": rel,
-                        "method": method,
-                        "path": route_path,
-                    })
+                    endpoints.append(
+                        {
+                            "file": rel,
+                            "method": method,
+                            "path": route_path,
+                        }
+                    )
 
         return endpoints[:500]
 
     def _build_file_tree(self, repo: Path, max_depth: int = 3) -> dict[str, Any]:
         """Build a simplified file tree representation."""
         tree: dict[str, Any] = {}
-        skip_dirs = {"node_modules", ".git", "__pycache__", "venv", "dist", "build", ".next", "target", "vendor"}
+        skip_dirs = {
+            "node_modules",
+            ".git",
+            "__pycache__",
+            "venv",
+            "dist",
+            "build",
+            ".next",
+            "target",
+            "vendor",
+        }
 
         try:
             for item in sorted(repo.iterdir()):
@@ -317,24 +396,26 @@ class SourceAnalyzer:
             key = source.file_path.split("/")[0] if "/" in source.file_path else source.file_path
             matching_sinks = sink_by_file.get(key, [])
             for sink in matching_sinks[:3]:
-                paths.append(TaintPath(
-                    source=source,
-                    sink=sink,
-                    intermediate_nodes=[],
-                    sanitizers=[],
-                    is_sanitized=False,
-                ))
+                paths.append(
+                    TaintPath(
+                        source=source,
+                        sink=sink,
+                        intermediate_nodes=[],
+                        sanitizers=[],
+                        is_sanitized=False,
+                    )
+                )
 
         return paths[:200]
 
     async def _llm_deep_review(
         self,
-        repo: Path,
+        repo: Path,  # noqa: ARG002 - retained for signature/API compatibility
         language: str,
         frameworks: list[str],
         sinks: list[CodeSink],
         sources: list[CodeSource],
-        taint_paths: list[TaintPath],
+        taint_paths: list[TaintPath],  # noqa: ARG002 - retained for signature/API compatibility
         auth_patterns: list[dict[str, Any]],
     ) -> tuple[list[CodeSink], list[TaintPath], list[dict[str, Any]]]:
         """LLM-augmented deep source code review.
@@ -356,12 +437,10 @@ class SourceAnalyzer:
                 for s in sinks[:20]
             )
             source_summary = "\n".join(
-                f"- {s.source_type} at {s.file_path}:{s.line_number or '?'}"
-                for s in sources[:20]
+                f"- {s.source_type} at {s.file_path}:{s.line_number or '?'}" for s in sources[:20]
             )
             auth_summary = "\n".join(
-                f"- {a.get('type', '?')}: {a.get('file_path', '?')}"
-                for a in auth_patterns[:10]
+                f"- {a.get('type', '?')}: {a.get('file_path', '?')}" for a in auth_patterns[:10]
             )
             framework_str = ", ".join(frameworks) if frameworks else language
 
@@ -394,6 +473,7 @@ class SourceAnalyzer:
                 return llm_sinks, llm_taint_paths, llm_auth_gaps
 
             import json as _json
+
             try:
                 data = _json.loads(response.strip())
             except _json.JSONDecodeError:
@@ -408,16 +488,16 @@ class SourceAnalyzer:
                     return llm_sinks, llm_taint_paths, llm_auth_gaps
 
             for ms in data.get("missed_sinks", [])[:15]:
-                try:
-                    llm_sinks.append(CodeSink(
-                        file_path=str(ms.get("file_path", "unknown")),
-                        line_number=ms.get("line_number"),
-                        sink_type=str(ms.get("sink_type", "unknown")),
-                        code_snippet=str(ms.get("code_snippet", ""))[:500],
-                        severity=str(ms.get("severity", "medium")),
-                    ))
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    llm_sinks.append(
+                        CodeSink(
+                            file_path=str(ms.get("file_path", "unknown")),
+                            line_number=ms.get("line_number"),
+                            sink_type=str(ms.get("sink_type", "unknown")),
+                            code_snippet=str(ms.get("code_snippet", ""))[:500],
+                            severity=str(ms.get("severity", "medium")),
+                        )
+                    )
 
             for ct in data.get("cross_file_taint", [])[:15]:
                 try:
@@ -434,26 +514,28 @@ class SourceAnalyzer:
                         code_snippet=str(ct.get("sink_function", ""))[:200],
                         severity="high",
                     )
-                    llm_taint_paths.append(TaintPath(
-                        source=src,
-                        sink=snk,
-                        intermediate_nodes=[],
-                        sanitizers=[],
-                        is_sanitized=False,
-                    ))
+                    llm_taint_paths.append(
+                        TaintPath(
+                            source=src,
+                            sink=snk,
+                            intermediate_nodes=[],
+                            sanitizers=[],
+                            is_sanitized=False,
+                        )
+                    )
                 except Exception:
                     pass
 
             for ag in data.get("auth_gaps", [])[:10]:
-                try:
-                    llm_auth_gaps.append({
-                        "type": str(ag.get("type", "unknown")),
-                        "file_path": str(ag.get("file_path", "")),
-                        "description": str(ag.get("description", ""))[:1000],
-                        "source": "llm_deep_review",
-                    })
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    llm_auth_gaps.append(
+                        {
+                            "type": str(ag.get("type", "unknown")),
+                            "file_path": str(ag.get("file_path", "")),
+                            "description": str(ag.get("description", ""))[:1000],
+                            "source": "llm_deep_review",
+                        }
+                    )
 
             logger.info(
                 "llm_deep_review_completed",

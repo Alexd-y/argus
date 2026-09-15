@@ -170,7 +170,10 @@ def test_get_reports_target_returns_empty_array(client: TestClient) -> None:
 
 def test_error_shape_404_scan(client: TestClient) -> None:
     scan_id = str(uuid.uuid4())
-    with patch("src.api.routers.scans.async_session_factory", _mock_db_scan_get(scan_id, exists=False)):
+    with patch(
+        "src.api.routers.scans.async_session_factory",
+        _mock_db_scan_get(scan_id, exists=False),
+    ):
         r = client.get(f"/api/v1/scans/{scan_id}")
     assert r.status_code == 404
     body = r.json()

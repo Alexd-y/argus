@@ -22,10 +22,7 @@ from src.sandbox.parsers.ntlmrelayx_parser import (
     parse_ntlmrelayx,
 )
 
-_SAM_LINE = (
-    "Administrator:500:aad3b435b51404eeaad3b435b51404ee:"
-    "31d6cfe0d16ae931b73c59d7e0c089c0:::"
-)
+_SAM_LINE = "Administrator:500:aad3b435b51404eeaad3b435b51404ee:31d6cfe0d16ae931b73c59d7e0c089c0:::"
 
 
 def _ntlmrelayx_log() -> bytes:

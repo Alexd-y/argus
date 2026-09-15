@@ -40,9 +40,7 @@ def test_single_record_one_service_yields_one_finding(tmp_path: Path) -> None:
                         "service_name": "HTTP",
                         "extended_service_name": "HTTPS",
                         "transport_protocol": "TCP",
-                        "software": [
-                            {"vendor": "nginx", "product": "nginx", "version": "1.18.0"}
-                        ],
+                        "software": [{"vendor": "nginx", "product": "nginx", "version": "1.18.0"}],
                     }
                 ],
                 "autonomous_system": {"asn": 64500, "name": "ExampleAS"},
@@ -89,9 +87,7 @@ def test_dedup_on_repeated_service(tmp_path: Path) -> None:
 
 
 def test_records_without_ip_skipped(tmp_path: Path) -> None:
-    payload = json.dumps([{"services": [{"port": 80, "service_name": "HTTP"}]}]).encode(
-        "utf-8"
-    )
+    payload = json.dumps([{"services": [{"port": 80, "service_name": "HTTP"}]}]).encode("utf-8")
     assert parse_censys(payload, b"", tmp_path, "censys") == []
 
 

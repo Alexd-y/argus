@@ -214,8 +214,7 @@ def _enforce_frequency_guard(iterator: croniter, *, max_freq_seconds: int) -> in
     """
     try:
         fires: list[datetime] = [
-            cast(datetime, iterator.get_next(datetime))
-            for _ in range(_FREQ_GUARD_SAMPLE)
+            cast(datetime, iterator.get_next(datetime)) for _ in range(_FREQ_GUARD_SAMPLE)
         ]
     except CroniterError as exc:  # e.g. CroniterBadDateError on impossible patterns
         _raise_validation_error("invalid cron syntax", cause=exc)
@@ -268,9 +267,7 @@ def validate_cron(
     zone = _resolve_zone(timezone)
     anchor = datetime.now(tz=zone)
     iterator = _build_croniter(canonical, anchor)
-    gap_seconds = _enforce_frequency_guard(
-        iterator, max_freq_seconds=max_freq_minutes * 60
-    )
+    gap_seconds = _enforce_frequency_guard(iterator, max_freq_seconds=max_freq_minutes * 60)
     return ParsedCron(
         expression=canonical,
         timezone=timezone,

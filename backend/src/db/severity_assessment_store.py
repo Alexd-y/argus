@@ -88,13 +88,9 @@ async def record_assessment(
     the currently-effective opinion are computed and stored on the new row.
     """
     if is_manual_override and not (override_author and override_reason):
-        raise ValueError(
-            "manual override requires override_author and override_reason"
-        )
+        raise ValueError("manual override requires override_author and override_reason")
 
-    existing = await load_assessments(
-        session, finding_id=finding_id, tenant_id=tenant_id
-    )
+    existing = await load_assessments(session, finding_id=finding_id, tenant_id=tenant_id)
     row = SeverityAssessment(
         tenant_id=tenant_id,
         finding_id=finding_id,
@@ -115,8 +111,7 @@ async def record_assessment(
     # Record which existing opinions this one disagrees with (different band).
     incoming = _to_record(row)
     conflicts = [
-        r.assessment_id
-        for r in conflicting_assessments([*existing, incoming], effective=incoming)
+        r.assessment_id for r in conflicting_assessments([*existing, incoming], effective=incoming)
     ]
     row.conflicts_with = conflicts or None
 

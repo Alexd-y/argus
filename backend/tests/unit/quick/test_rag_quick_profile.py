@@ -82,7 +82,12 @@ def _pack(
 
 
 class _RecordingRetriever:
-    def __init__(self, packs: list[RagEvidencePack] | None = None, *, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        packs: list[RagEvidencePack] | None = None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
         self.calls: list[dict[str, Any]] = []
         self._packs = list(packs or [])
         self._error = error

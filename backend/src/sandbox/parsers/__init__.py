@@ -65,7 +65,6 @@ from src.sandbox.parsers._base import (
     MAX_STDOUT_BYTES,
     SENTINEL_CVSS_SCORE,
     SENTINEL_CVSS_VECTOR,
-    SENTINEL_UUID,
     ParseError,
     ParserContext,
     make_finding_dto,
@@ -281,8 +280,7 @@ def register_tool_parser(
     """
     if tool_id in _TOOL_TO_PARSER and not override:
         raise ValueError(
-            f"parser for tool_id={tool_id!r} already registered; "
-            "pass override=True to replace it"
+            f"parser for tool_id={tool_id!r} already registered; pass override=True to replace it"
         )
     _TOOL_TO_PARSER[tool_id] = parser
     _logger.debug(
@@ -948,7 +946,7 @@ def register_parser(
     """
     if strategy in _REGISTRY and not override:
         raise ValueError(
-            f"parser for {strategy.value!r} already registered; " "pass override=True to replace it"
+            f"parser for {strategy.value!r} already registered; pass override=True to replace it"
         )
     _REGISTRY[strategy] = handler
     _logger.debug(

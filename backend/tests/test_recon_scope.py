@@ -1,7 +1,5 @@
 """Tests for scope validator — domain, IP, CIDR, URL matching."""
 
-import pytest
-
 from src.recon.schemas.scope import ScopeConfig, ScopeRule
 from src.recon.scope.validator import ScopeValidator
 
@@ -15,11 +13,15 @@ class TestDomainScoping:
     """Test domain-based scope validation."""
 
     def test_exact_match(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         assert v.is_in_scope("example.com").is_in_scope is True
 
     def test_subdomain_wildcard(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         assert v.is_in_scope("api.example.com").is_in_scope is True
 
     def test_subdomain_no_wildcard(self):
@@ -30,7 +32,9 @@ class TestDomainScoping:
         assert v.is_in_scope("api.example.com").is_in_scope is False
 
     def test_different_domain_rejected(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         assert v.is_in_scope("evil.com").is_in_scope is False
 
     def test_exclude_overrides_include(self):
@@ -43,16 +47,22 @@ class TestDomainScoping:
         assert v.is_in_scope("api.example.com").is_in_scope is True
 
     def test_wildcard_pattern(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="*.example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="*.example.com")
+        )
         assert v.is_in_scope("api.example.com").is_in_scope is True
         assert v.is_in_scope("example.com").is_in_scope is True
 
     def test_case_insensitive(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="Example.COM"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="Example.COM")
+        )
         assert v.is_in_scope("EXAMPLE.com").is_in_scope is True
 
     def test_trailing_dot(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         assert v.is_in_scope("example.com.").is_in_scope is True
 
 
@@ -65,7 +75,9 @@ class TestIpScoping:
         assert v.is_in_scope("10.0.0.2", "ip").is_in_scope is False
 
     def test_cidr_range(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="cidr", pattern="10.0.0.0/24"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="cidr", pattern="10.0.0.0/24")
+        )
         assert v.is_in_scope("10.0.0.5", "ip").is_in_scope is True
         assert v.is_in_scope("10.0.1.1", "ip").is_in_scope is False
 
@@ -82,12 +94,16 @@ class TestUrlScoping:
     """Test URL scope validation."""
 
     def test_url_domain_extraction(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         result = v.validate_url("https://api.example.com/v1/users")
         assert result.is_in_scope is True
 
     def test_url_out_of_scope(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         result = v.validate_url("https://evil.com/api")
         assert result.is_in_scope is False
 
@@ -96,7 +112,9 @@ class TestBatchFiltering:
     """Test batch filtering."""
 
     def test_filter_in_scope(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         result = v.filter_in_scope(["api.example.com", "evil.com", "test.example.com"])
         assert result == ["api.example.com", "test.example.com"]
 
@@ -106,5 +124,7 @@ class TestBatchFiltering:
         assert v.is_in_scope("example.com").is_in_scope is False
 
     def test_empty_value_rejected(self):
-        v = _make_validator(ScopeRule(rule_type="include", value_type="domain", pattern="example.com"))
+        v = _make_validator(
+            ScopeRule(rule_type="include", value_type="domain", pattern="example.com")
+        )
         assert v.is_in_scope("").is_in_scope is False

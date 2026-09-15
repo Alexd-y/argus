@@ -17,36 +17,36 @@ _CONFIDENCE_MAP = {"high": 0.9, "medium": 0.5, "low": 0.3}
 
 # Server header -> (indicator_type, confidence). Compiled at load.
 _SERVER_SIGNATURES: list[tuple[re.Pattern[str], str, str]] = [
-    (re.compile(r"^Vercel$", re.I), "platform", "high"),
-    (re.compile(r"^Microsoft-HTTPAPI", re.I), "platform", "high"),
-    (re.compile(r"^nginx", re.I), "platform", "high"),
-    (re.compile(r"^Apache", re.I), "platform", "high"),
-    (re.compile(r"^cloudflare", re.I), "cdn", "high"),
-    (re.compile(r"^AmazonS3", re.I), "platform", "high"),
-    (re.compile(r"^Netlify", re.I), "platform", "high"),
-    (re.compile(r"^GitHub\.com", re.I), "platform", "high"),
-    (re.compile(r"^Google", re.I), "platform", "medium"),
-    (re.compile(r"^AWS", re.I), "platform", "medium"),
-    (re.compile(r"^Akamai", re.I), "cdn", "high"),
-    (re.compile(r"^Fastly", re.I), "cdn", "high"),
-    (re.compile(r"^squid", re.I), "platform", "medium"),
-    (re.compile(r"^Caddy", re.I), "platform", "high"),
-    (re.compile(r"^OpenResty", re.I), "platform", "medium"),
-    (re.compile(r"^IIS", re.I), "platform", "high"),
-    (re.compile(r"^LiteSpeed", re.I), "platform", "high"),
-    (re.compile(r"^Gunicorn", re.I), "framework", "high"),
-    (re.compile(r"^uvicorn", re.I), "framework", "high"),
-    (re.compile(r"^Werkzeug", re.I), "framework", "high"),
-    (re.compile(r"^Express", re.I), "framework", "medium"),
-    (re.compile(r"^PHP", re.I), "framework", "medium"),
-    (re.compile(r"^ASP\.NET", re.I), "framework", "high"),
-    (re.compile(r"^Kestrel", re.I), "framework", "high"),
-    (re.compile(r"^Sucuri", re.I), "waf", "high"),
-    (re.compile(r"^Cloudflare", re.I), "waf", "high"),
-    (re.compile(r"^AWSWAF", re.I), "waf", "high"),
-    (re.compile(r"^Mod_Security", re.I), "waf", "high"),
-    (re.compile(r"^Barracuda", re.I), "waf", "medium"),
-    (re.compile(r"^F5", re.I), "waf", "medium"),
+    (re.compile(r"^Vercel$", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^Microsoft-HTTPAPI", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^nginx", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^Apache", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^cloudflare", re.IGNORECASE), "cdn", "high"),
+    (re.compile(r"^AmazonS3", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^Netlify", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^GitHub\.com", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^Google", re.IGNORECASE), "platform", "medium"),
+    (re.compile(r"^AWS", re.IGNORECASE), "platform", "medium"),
+    (re.compile(r"^Akamai", re.IGNORECASE), "cdn", "high"),
+    (re.compile(r"^Fastly", re.IGNORECASE), "cdn", "high"),
+    (re.compile(r"^squid", re.IGNORECASE), "platform", "medium"),
+    (re.compile(r"^Caddy", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^OpenResty", re.IGNORECASE), "platform", "medium"),
+    (re.compile(r"^IIS", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^LiteSpeed", re.IGNORECASE), "platform", "high"),
+    (re.compile(r"^Gunicorn", re.IGNORECASE), "framework", "high"),
+    (re.compile(r"^uvicorn", re.IGNORECASE), "framework", "high"),
+    (re.compile(r"^Werkzeug", re.IGNORECASE), "framework", "high"),
+    (re.compile(r"^Express", re.IGNORECASE), "framework", "medium"),
+    (re.compile(r"^PHP", re.IGNORECASE), "framework", "medium"),
+    (re.compile(r"^ASP\.NET", re.IGNORECASE), "framework", "high"),
+    (re.compile(r"^Kestrel", re.IGNORECASE), "framework", "high"),
+    (re.compile(r"^Sucuri", re.IGNORECASE), "waf", "high"),
+    (re.compile(r"^Cloudflare", re.IGNORECASE), "waf", "high"),
+    (re.compile(r"^AWSWAF", re.IGNORECASE), "waf", "high"),
+    (re.compile(r"^Mod_Security", re.IGNORECASE), "waf", "high"),
+    (re.compile(r"^Barracuda", re.IGNORECASE), "waf", "medium"),
+    (re.compile(r"^F5", re.IGNORECASE), "waf", "medium"),
 ]
 
 
@@ -85,13 +85,15 @@ def _build_tech_indicators(http_probe_path: Path) -> list[dict[str, str]]:
                 continue
             seen.add(key)
             evidence = f"Server header on {host}" if host else "Server header"
-            indicators.append({
-                "host": host or "unknown",
-                "indicator_type": indicator_type,
-                "value": value,
-                "evidence": evidence,
-                "confidence": confidence,
-            })
+            indicators.append(
+                {
+                    "host": host or "unknown",
+                    "indicator_type": indicator_type,
+                    "value": value,
+                    "evidence": evidence,
+                    "confidence": confidence,
+                }
+            )
     return indicators
 
 
@@ -108,12 +110,14 @@ def build_tech_profile(http_probe_path: str | Path) -> str:
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
     writer.writerow(COLUMNS)
     for ind in indicators:
-        writer.writerow([
-            ind["indicator_type"],
-            ind["value"],
-            ind["evidence"],
-            ind["confidence"],
-        ])
+        writer.writerow(
+            [
+                ind["indicator_type"],
+                ind["value"],
+                ind["evidence"],
+                ind["confidence"],
+            ]
+        )
 
     return output.getvalue()
 

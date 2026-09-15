@@ -42,9 +42,7 @@ from src.payloads.builder import PayloadBundle
 _PAYLOAD_MOUNT_PATH: Final[str] = "/in/payloads"
 _PAYLOAD_BUNDLE_FILENAME: Final[str] = "bundle.json"
 _PAYLOAD_VOLUME_NAME: Final[str] = "argus-payloads"
-_CONFIGMAP_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-z0-9]([a-z0-9-]{0,251}[a-z0-9])?$"
-)
+_CONFIGMAP_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]([a-z0-9-]{0,251}[a-z0-9])?$")
 _LABEL_VALUE_RE: Final[re.Pattern[str]] = re.compile(r"^[a-zA-Z0-9._-]{0,63}$")
 
 
@@ -130,9 +128,7 @@ class PayloadDeliveryConfigMap(BaseModel):
                 },
                 "annotations": {
                     "argus.io/manifest-hash-full": self.bundle.manifest_hash,
-                    "argus.io/correlation-key": _truncate_annotation(
-                        self.bundle.correlation_key
-                    ),
+                    "argus.io/correlation-key": _truncate_annotation(self.bundle.correlation_key),
                     "argus.io/encoding-pipeline": self.bundle.encoding_pipeline,
                     "argus.io/oast-required": str(self.bundle.oast_required).lower(),
                 },
@@ -216,9 +212,7 @@ def attach_payload_bundle_to_job(
             )
         mounts_raw = container.get("volumeMounts", [])
         if not isinstance(mounts_raw, list):
-            raise PayloadIntegrationError(
-                "container.volumeMounts must be a list (or absent)"
-            )
+            raise PayloadIntegrationError("container.volumeMounts must be a list (or absent)")
         mounts = list(mounts_raw)
         for mount in mounts:
             if isinstance(mount, dict) and mount.get("name") == _PAYLOAD_VOLUME_NAME:
@@ -261,19 +255,13 @@ def attach_payload_bundle_to_job(
         labels = metadata.setdefault("labels", {})
         if isinstance(labels, dict):
             labels["argus.io/payload-family"] = _safe_label(configmap.bundle.family_id)
-            labels["argus.io/payload-manifest-hash"] = configmap.bundle.manifest_hash[
-                :12
-            ]
+            labels["argus.io/payload-manifest-hash"] = configmap.bundle.manifest_hash[:12]
     pod_meta = template.get("metadata")
     if isinstance(pod_meta, dict):
         pod_labels = pod_meta.setdefault("labels", {})
         if isinstance(pod_labels, dict):
-            pod_labels["argus.io/payload-family"] = _safe_label(
-                configmap.bundle.family_id
-            )
-            pod_labels["argus.io/payload-manifest-hash"] = (
-                configmap.bundle.manifest_hash[:12]
-            )
+            pod_labels["argus.io/payload-family"] = _safe_label(configmap.bundle.family_id)
+            pod_labels["argus.io/payload-manifest-hash"] = configmap.bundle.manifest_hash[:12]
 
     return out
 
@@ -306,9 +294,7 @@ def collect_payload_artifacts(
 def _require_dict(parent: dict[str, Any], key: str) -> dict[str, Any]:
     value = parent.get(key)
     if not isinstance(value, dict):
-        raise PayloadIntegrationError(
-            f"job_manifest is missing required dict at {key!r}"
-        )
+        raise PayloadIntegrationError(f"job_manifest is missing required dict at {key!r}")
     return value
 
 

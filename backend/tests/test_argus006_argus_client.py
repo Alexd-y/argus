@@ -20,12 +20,12 @@ if str(MCP_SERVER_DIR) not in sys.path:
 # in the default backend test environment. Skip cleanly when it is absent.
 pytest.importorskip("fastmcp")
 
-from argus_mcp import ArgusClient  # noqa: E402
+from argus_mcp import ArgusClient  # noqa: E402 — after sys.path insert + importorskip guard
 
 
 def _stub_init(*_args: object, **_kwargs: object) -> None:
     """No-op __init__ for tests that construct the client via __new__."""
-    return None
+    return
 
 
 class TestArgusClient:

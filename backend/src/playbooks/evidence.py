@@ -260,7 +260,7 @@ def _json_diff_paths(left: object, right: object, prefix: str = "") -> set[str]:
         if len(left) != len(right):
             return {here}
         paths = set()
-        for index, (lft, rgt) in enumerate(zip(left, right)):
+        for index, (lft, rgt) in enumerate(zip(left, right, strict=False)):
             paths |= _json_diff_paths(lft, rgt, f"{prefix}{index}.")
         return paths
     return set() if left == right else {here}

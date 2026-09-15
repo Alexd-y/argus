@@ -334,9 +334,7 @@ class FindingDTO(BaseModel):
         for cwe_id in self.cwe:
             if cwe_id <= 0:
                 raise ValueError(f"CWE id must be positive, got {cwe_id}")
-        if self.cvss_v3_vector is not None and not _CVSS_VECTOR_RE.fullmatch(
-            self.cvss_v3_vector
-        ):
+        if self.cvss_v3_vector is not None and not _CVSS_VECTOR_RE.fullmatch(self.cvss_v3_vector):
             raise ValueError(
                 "cvss_v3_vector must look like 'CVSS:3.x/AV:.../...' or 'CVSS:4.0/...'"
             )

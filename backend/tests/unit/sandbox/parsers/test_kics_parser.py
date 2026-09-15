@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -232,9 +231,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     assert [r["query_id"] for r in rows] == ["qid-high", "qid-medium", "qid-low"]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_kics_json(b"[]", b"", tmp_path, "kics")
     assert findings == []
@@ -244,9 +241,7 @@ def test_envelope_not_dict_returns_empty(
     )
 
 
-def test_missing_query_id_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_query_id_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _query()
     bad.pop("query_id")
     payload = _payload(bad, _query(query_id="ok-id"))
@@ -281,9 +276,7 @@ def test_queries_field_not_a_list_returns_empty(tmp_path: Path) -> None:
 
 def test_all_queries_invalid_returns_empty_no_sidecar(tmp_path: Path) -> None:
     """When every query is malformed the result is empty and no sidecar is written."""
-    payload = json.dumps({"queries": [{"no_id": True}, "string-junk", 5]}).encode(
-        "utf-8"
-    )
+    payload = json.dumps({"queries": [{"no_id": True}, "string-junk", 5]}).encode("utf-8")
     findings = parse_kics_json(payload, b"", tmp_path, "kics")
     assert findings == []
     assert not (tmp_path / EVIDENCE_SIDECAR_NAME).exists()
@@ -352,8 +345,7 @@ def test_sidecar_persist_oserror_logs_warning(
         findings = parse_kics_json(payload, b"", tmp_path, "kics")
     assert len(findings) == 1
     assert any(
-        "kics_parser_evidence_sidecar_write_failed"
-        in (record.__dict__.get("event") or "")
+        "kics_parser_evidence_sidecar_write_failed" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 

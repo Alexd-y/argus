@@ -12,36 +12,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
-from src.llm import (
-    LLMAllProvidersFailedError,
-    LLMProviderUnavailableError,
-    call_llm,
-    is_llm_available,
-)
-from src.llm.gateway_client import GatewayClient, GatewayClientError, GatewayResponse
+from src.llm.gateway_client import GatewayClient, GatewayClientError
 from src.llm.model_aliases import (
     AliasRegistry,
-    ModelAlias,
-    ProviderConfig,
     get_alias_registry,
     reset_alias_registry,
 )
 from src.llm.policy import (
-    Compliance,
     LLMPolicy,
     Profile,
-    Routing,
-    RouteConfig,
     build_effective_policy,
 )
 from src.llm.task_router import (
+    ROUTING_TABLE,
     LLMTask,
     LLMTaskResponse,
-    ROUTING_TABLE,
     call_llm_for_task,
 )
-
 
 # ---------------------------------------------------------------------------
 # Alias Registry
@@ -141,9 +128,7 @@ class TestPolicyBuilder:
         assert policy.budget.max_cost_usd < 0.30
 
     def test_airgapped_compliance_flag(self) -> None:
-        policy = build_effective_policy(
-            compliance_overrides={"airgapped_only": True}
-        )
+        policy = build_effective_policy(compliance_overrides={"airgapped_only": True})
         assert policy.compliance.airgapped_only is True
 
     def test_budget_overrides_merge(self) -> None:
@@ -155,9 +140,7 @@ class TestPolicyBuilder:
 
     def test_soft_limit_must_be_less_than_max(self) -> None:
         with pytest.raises(ValueError, match="soft_limit_usd"):
-            build_effective_policy(
-                budget_overrides={"max_cost_usd": 0.50, "soft_limit_usd": 0.90}
-            )
+            build_effective_policy(budget_overrides={"max_cost_usd": 0.50, "soft_limit_usd": 0.90})
 
     def test_local_only_route_rejects_cloud_alias(self) -> None:
         with pytest.raises(ValueError, match="local_only"):
@@ -208,15 +191,15 @@ class TestTaskRouterTable:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         }
 
-        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-                result = await call_llm_for_task(
-                    LLMTask.DEDUP_ANALYSIS, "find duplicates"
-                )
-                assert isinstance(result, LLMTaskResponse)
-                assert result.text == "dedup_result"
-                assert result.provider == "DEEPSEEK_API_KEY"
+        with (
+            patch.dict(os.environ, {"DEEPSEEK_API_KEY": "sk-test"}),
+            patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post,
+        ):
+            mock_post.return_value = mock_resp
+            result = await call_llm_for_task(LLMTask.DEDUP_ANALYSIS, "find duplicates")
+            assert isinstance(result, LLMTaskResponse)
+            assert result.text == "dedup_result"
+            assert result.provider == "DEEPSEEK_API_KEY"
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +212,10 @@ class TestGatewayClientErrors:
 
     @pytest.mark.asyncio
     async def test_403_policy_denied(self) -> None:
-        err_resp = httpx.Response(403, json={"detail": {"code": "llm_policy_denied", "message": "Blocked by policy"}})
+        err_resp = httpx.Response(
+            403,
+            json={"detail": {"code": "llm_policy_denied", "message": "Blocked by policy"}},
+        )
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = err_resp
             client = GatewayClient("http://localhost:8080")
@@ -273,27 +259,29 @@ class TestWRBFirstRouting:
     @pytest.mark.asyncio
     async def test_wrb_called_for_pentest_task(self) -> None:
         """THREAT_MODELING task routes through WRB first, no cloud fallback."""
-        with patch(
-            "src.llm.facade._get_wrb_adapter",
-            return_value=MagicMock(
-                is_configured=True,
+        with (
+            patch(
+                "src.llm.facade._get_wrb_adapter",
+                return_value=MagicMock(
+                    is_configured=True,
+                ),
             ),
-        ):
-            with patch(
+            patch(
                 "src.llm.facade._call_via_whiterabbitneo",
                 new_callable=AsyncMock,
                 return_value="wrb-result",
-            ) as mock_wrb:
-                from src.llm.facade import call_llm_unified
+            ) as mock_wrb,
+        ):
+            from src.llm.facade import call_llm_unified
 
-                result = await call_llm_unified(
-                    "system",
-                    "user",
-                    task=LLMTask.THREAT_MODELING,
-                    phase="test",
-                )
-                assert result == "wrb-result"
-                mock_wrb.assert_awaited_once()
+            result = await call_llm_unified(
+                "system",
+                "user",
+                task=LLMTask.THREAT_MODELING,
+                phase="test",
+            )
+            assert result == "wrb-result"
+            mock_wrb.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_osint_goes_directly_to_perplexity(self) -> None:
@@ -317,25 +305,27 @@ class TestWRBFirstRouting:
     @pytest.mark.asyncio
     async def test_wrb_unconfigured_falls_back_to_cloud(self) -> None:
         """When WRB has no base_url, cloud task_router is used."""
-        with patch(
-            "src.llm.facade._get_wrb_adapter",
-            return_value=MagicMock(is_configured=False),
-        ):
-            with patch(
+        with (
+            patch(
+                "src.llm.facade._get_wrb_adapter",
+                return_value=MagicMock(is_configured=False),
+            ),
+            patch(
                 "src.llm.facade._call_via_task_router",
                 new_callable=AsyncMock,
                 return_value="cloud-result",
-            ) as mock_task:
-                from src.llm.facade import call_llm_unified
+            ) as mock_task,
+        ):
+            from src.llm.facade import call_llm_unified
 
-                result = await call_llm_unified(
-                    "sys",
-                    "user",
-                    task=LLMTask.REPORT_SECTION,
-                    phase="reporting",
-                )
-                assert result == "cloud-result"
-                mock_task.assert_awaited_once()
+            result = await call_llm_unified(
+                "sys",
+                "user",
+                task=LLMTask.REPORT_SECTION,
+                phase="reporting",
+            )
+            assert result == "cloud-result"
+            mock_task.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

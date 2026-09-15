@@ -123,7 +123,9 @@ async def test_adapter_run_with_capture_returns_stdout() -> None:
 
 
 @pytest.mark.asyncio
-async def test_adapter_run_with_mocked_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_adapter_run_with_mocked_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     adapter = XSStrikeAdapter()
     fixture = _read_fixture("xsstrike_single_payload.txt")
 
@@ -137,7 +139,10 @@ async def test_adapter_run_with_mocked_subprocess(monkeypatch: pytest.MonkeyPatc
     )
 
     def fake_run_argv(argv, *, timeout, use_sandbox):
-        _ = (timeout, use_sandbox)  # match _run_argv keyword interface from asyncio.to_thread
+        _ = (
+            timeout,
+            use_sandbox,
+        )  # match _run_argv keyword interface from asyncio.to_thread
         assert "-u" in argv
         assert "https://scanme.example/page" in argv
         return fixture, "", 0, False, 0.1

@@ -71,9 +71,7 @@ def _nuclei_profile_and_mode(
     ctx = opts.get("execution_mode_context")
     ctx_mode = ctx.get("mode") if isinstance(ctx, dict) else None
     resolved_mode = (
-        _str_opt(execution_mode)
-        or _str_opt(opts.get("execution_mode"))
-        or _str_opt(ctx_mode)
+        _str_opt(execution_mode) or _str_opt(opts.get("execution_mode")) or _str_opt(ctx_mode)
     )
     resolved_profile = _str_opt(profile) or _str_opt(opts.get("nuclei_profile"))
     return resolved_profile, resolved_mode
@@ -117,7 +115,7 @@ def _sanitize_argv_list(argv: list[str]) -> list[str] | None:
     return out
 
 
-def _validate_custom_argv_prefix(tool: str, argv: list[str]) -> bool:
+def _validate_custom_argv_prefix(tool: str, argv: list[str]) -> bool:  # noqa: ARG001 - retained for signature/API compatibility
     """ALL custom argv accepted — unrestricted pentest authorization. Binary prefix check is informational only."""
     return True
 
@@ -254,9 +252,7 @@ def _celery_sink_va_run(
     err_reason = (result.get("error_reason") or "").strip()
     stderr_text = result.get("stderr") or ""
     if err_reason == "exec_os_error" and not (stderr_text or "").strip():
-        stderr_text = (
-            "va_active_scan: process_start_failed (binary_missing_or_exec_error)\n"
-        )
+        stderr_text = "va_active_scan: process_start_failed (binary_missing_or_exec_error)\n"
     keys: dict[str, str | None] = {}
     keys["stdout"] = sink_raw_text(
         tenant_id=tenant_id,
@@ -285,8 +281,7 @@ def _celery_sink_va_run(
             "duration_ms": result.get("duration_ms"),
             "tool_id": result.get("tool_id"),
             "error_reason": err_reason or result.get("error_reason"),
-            "celery_run_id": celery_run_id
-            or (at_base[-16:] if len(at_base) >= 16 else at_base),
+            "celery_run_id": celery_run_id or (at_base[-16:] if len(at_base) >= 16 else at_base),
         },
     )
     return stderr_text, keys

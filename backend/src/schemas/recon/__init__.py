@@ -11,14 +11,15 @@ from src.schemas.recon.stage1 import (
     TechProfileEntry,
 )
 from src.schemas.recon.stage3_readiness import (
+    ROUTE_CLASSIFICATION_CSV_COLUMNS,
     CoverageScores,
     RouteClassificationRow,
-    ROUTE_CLASSIFICATION_CSV_COLUMNS,
     Stage3ReadinessResult,
     Stage3ReadinessStatus,
 )
 
 __all__ = [
+    "ROUTE_CLASSIFICATION_CSV_COLUMNS",
     "AnomaliesStructured",
     "AnomalyEntry",
     "CoverageScores",
@@ -27,7 +28,6 @@ __all__ = [
     "McpTraceEvent",
     "ReconResults",
     "RouteClassificationRow",
-    "ROUTE_CLASSIFICATION_CSV_COLUMNS",
     "SslCertEntry",
     "Stage3ReadinessResult",
     "Stage3ReadinessStatus",

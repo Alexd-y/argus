@@ -1,30 +1,29 @@
 """Tests for Attack Path Builder and Risk Scoring."""
 
-import pytest
 from src.analysis.attack_paths.builder import (
-    AttackPath,
-    RiskScore,
-    PathNode,
-    PathEdge,
-    PathNodeType,
     ImpactCategory,
+    PathNodeType,
+    _classify_impact,
+    _estimate_impact,
+    _estimate_likelihood,
     build_attack_path,
     calculate_risk_score,
-    to_mermaid,
     to_d3_json,
-    _classify_impact,
-    _estimate_likelihood,
-    _estimate_impact,
-    _calculate_business_impact,
+    to_mermaid,
 )
 
 
 class TestAttackPath:
     def test_build_minimal_path(self):
         finding = {
-            "id": "f1", "title": "SQLi in login", "severity": "critical",
-            "cwe": "CWE-89", "description": "Unsanitized input", "file_path": "login.py",
-            "line_start": 10, "param": "username",
+            "id": "f1",
+            "title": "SQLi in login",
+            "severity": "critical",
+            "cwe": "CWE-89",
+            "description": "Unsanitized input",
+            "file_path": "login.py",
+            "line_start": 10,
+            "param": "username",
         }
         path = build_attack_path(finding)
         assert path.finding_id == "f1"
@@ -32,7 +31,13 @@ class TestAttackPath:
         assert path.severity == "critical"
 
     def test_path_has_entry_and_sink(self):
-        finding = {"id": "f2", "title": "XSS", "severity": "high", "url": "https://app.com/search?q=", "param": "q"}
+        finding = {
+            "id": "f2",
+            "title": "XSS",
+            "severity": "high",
+            "url": "https://app.com/search?q=",
+            "param": "q",
+        }
         path = build_attack_path(finding)
         entry_nodes = [n for n in path.nodes if n.node_type == PathNodeType.ENTRY_POINT]
         sink_nodes = [n for n in path.nodes if n.node_type == PathNodeType.SINK]
@@ -40,7 +45,12 @@ class TestAttackPath:
         assert len(sink_nodes) >= 1
 
     def test_path_has_impact_node(self):
-        finding = {"id": "f3", "title": "RCE", "severity": "critical", "description": "remote code execution"}
+        finding = {
+            "id": "f3",
+            "title": "RCE",
+            "severity": "critical",
+            "description": "remote code execution",
+        }
         path = build_attack_path(finding)
         impact_nodes = [n for n in path.nodes if n.node_type == PathNodeType.IMPACT]
         assert len(impact_nodes) >= 1
@@ -56,7 +66,12 @@ class TestAttackPath:
 
 class TestRiskScore:
     def test_calculate_with_cvss(self):
-        finding = {"id": "f1", "cvss": 9.8, "severity": "critical", "exploitability": "high"}
+        finding = {
+            "id": "f1",
+            "cvss": 9.8,
+            "severity": "critical",
+            "exploitability": "high",
+        }
         score = calculate_risk_score(finding)
         assert score.cvss_base == 9.8
         assert score.priority == "p1_critical"
@@ -69,10 +84,18 @@ class TestRiskScore:
 
     def test_business_context_affects_score(self):
         finding = {"id": "f3", "cvss": 8.0, "severity": "high"}
-        ctx = {"data_classification": "restricted", "exposure": "internet", "user_base": 1000000}
+        ctx = {
+            "data_classification": "restricted",
+            "exposure": "internet",
+            "user_base": 1000000,
+        }
         score_high = calculate_risk_score(finding, ctx)
 
-        ctx_low = {"data_classification": "public", "exposure": "internal", "user_base": 10}
+        ctx_low = {
+            "data_classification": "public",
+            "exposure": "internal",
+            "user_base": 10,
+        }
         score_low = calculate_risk_score(finding, ctx_low)
 
         assert score_high.business_impact > score_low.business_impact

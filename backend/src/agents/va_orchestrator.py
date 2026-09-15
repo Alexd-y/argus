@@ -213,7 +213,7 @@ class VAMultiAgentOrchestrator:
                 return
             if not isinstance(raw, str):
                 return
-            m = re.search(r"(?:CWE-)?(\d+)", raw.strip(), re.I)
+            m = re.search(r"(?:CWE-)?(\d+)", raw.strip(), re.IGNORECASE)
             if m:
                 cwe_ids.add(f"CWE-{m.group(1)}")
 
@@ -250,9 +250,7 @@ class VAMultiAgentOrchestrator:
             if isinstance(obj, dict):
                 for k, val in obj.items():
                     lk = str(k).lower()
-                    if lk in {x.lower() for x in owasp_keys} or (
-                        "owasp" in lk and "top" in lk
-                    ):
+                    if lk in {x.lower() for x in owasp_keys} or ("owasp" in lk and "top" in lk):
                         if isinstance(val, list):
                             for x in val:
                                 if isinstance(x, str):
@@ -275,9 +273,9 @@ class VAMultiAgentOrchestrator:
                 for item in obj:
                     walk(item, depth + 1)
             elif isinstance(obj, str):
-                for m in re.finditer(r"\bA(0[1-9]|10)\b", obj, re.I):
+                for m in re.finditer(r"\bA(0[1-9]|10)\b", obj, re.IGNORECASE):
                     owasp_ids.add(f"A{m.group(1).upper()}")
-                for m in re.finditer(r"CWE-?\s*(\d+)", obj, re.I):
+                for m in re.finditer(r"CWE-?\s*(\d+)", obj, re.IGNORECASE):
                     cwe_ids.add(f"CWE-{m.group(1)}")
 
         for finding in recon_findings:
@@ -299,7 +297,9 @@ class VAMultiAgentOrchestrator:
             "tools": tools if isinstance(tools, list) else [],
         }
 
-    def determine_categories(self, recon_findings: list[dict] | None = None) -> dict[str, list[str]]:
+    def determine_categories(
+        self, recon_findings: list[dict] | None = None
+    ) -> dict[str, list[str]]:
         """Select vuln categories to test based on scan mode; optional recon OWASP/CWE enrichment via KB."""
         if self.scan_mode == ScanMode.QUICK:
             cats = {k: list(v) for k, v in CATEGORY_SKILL_MAP.items() if k in _QUICK_CATEGORIES}

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.db.models_web_workbench import (
     WbProxyListener,
@@ -21,7 +21,7 @@ from src.web_workbench.proxy.repository import (
     _message_to_dto,
 )
 
-_NOW = datetime(2026, 7, 22, 12, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
 
 
 def _listener(**over: object) -> WbProxyListener:

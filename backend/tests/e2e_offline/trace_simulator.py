@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.execution_mode import ExecutionMode, evaluate_with_execution_mode
@@ -49,7 +49,7 @@ class TraceSimulator:
             k8s_namespace="argus-lab-42",
             vm_network_ids=("labnet-42",),
             capture_full=True,
-            expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=2),
+            expires_at=datetime.now(tz=UTC) + timedelta(hours=2),
             created_by="sim",
         )
         self._emit("lab_scope_manifest", manifest_id=manifest.manifest_id)

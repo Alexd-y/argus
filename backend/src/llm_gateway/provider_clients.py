@@ -44,7 +44,10 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
                 "base_url": "https://api.deepseek.com/v1",
                 "model": "deepseek-chat",
                 "cloud_allowed": True,
-                "price": {"input_per_million_usd": 0.14, "output_per_million_usd": 0.28},
+                "price": {
+                    "input_per_million_usd": 0.14,
+                    "output_per_million_usd": 0.28,
+                },
             },
         ],
     },
@@ -56,7 +59,10 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
                 "base_url": "https://api.deepseek.com/v1",
                 "model": "deepseek-v4-pro",
                 "cloud_allowed": True,
-                "price": {"input_per_million_usd": 0.28, "output_per_million_usd": 0.56},
+                "price": {
+                    "input_per_million_usd": 0.28,
+                    "output_per_million_usd": 0.56,
+                },
             },
         ],
     },
@@ -68,7 +74,10 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
                 "base_url": "https://openrouter.ai/api/v1",
                 "model": "qwen/qwen3-coder:free",
                 "cloud_allowed": True,
-                "price": {"input_per_million_usd": 0.15, "output_per_million_usd": 0.15},
+                "price": {
+                    "input_per_million_usd": 0.15,
+                    "output_per_million_usd": 0.15,
+                },
             },
         ],
     },
@@ -104,7 +113,10 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
                 "base_url": "https://api.deepseek.com/v1",
                 "model": "deepseek-v4-pro",
                 "cloud_allowed": True,
-                "price": {"input_per_million_usd": 0.28, "output_per_million_usd": 0.56},
+                "price": {
+                    "input_per_million_usd": 0.28,
+                    "output_per_million_usd": 0.56,
+                },
             },
         ],
     },
@@ -116,7 +128,10 @@ ALIAS_REGISTRY: dict[str, dict[str, Any]] = {
                 "base_url": "https://api.perplexity.ai",
                 "model": "sonar",
                 "cloud_allowed": True,
-                "price": {"input_per_million_usd": 1.00, "output_per_million_usd": 1.00},
+                "price": {
+                    "input_per_million_usd": 1.00,
+                    "output_per_million_usd": 1.00,
+                },
             },
         ],
     },
@@ -129,7 +144,9 @@ class ProviderRouter:
         self._spent: dict[str, float] = {}
 
     async def select_provider(
-        self, alias: str, policy: dict[str, Any] | None = None,
+        self,
+        alias: str,
+        policy: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         alias_cfg = ALIAS_REGISTRY.get(alias)
         if not alias_cfg:
@@ -178,7 +195,8 @@ class ProviderRouter:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     f"{base_url}/chat/completions",
-                    json=payload, headers=headers,
+                    json=payload,
+                    headers=headers,
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -201,12 +219,13 @@ class ProviderRouter:
                 "provider": key,
             }
         except httpx.TimeoutException:
-            raise AllProvidersFailedError(f"Provider {key} timed out")
+            raise AllProvidersFailedError(f"Provider {key} timed out") from None
         except Exception as exc:
-            raise AllProvidersFailedError(f"Provider {key} failed: {exc}")
+            raise AllProvidersFailedError(f"Provider {key} failed: {exc}") from exc
 
     def _get_api_key(self, provider_key: str) -> str:
         import os
+
         key_map = {
             "whiterabbitneo-7b": "WHITERABBITNEO_API_KEY",
             "deepseek-v4-flash": "DEEPSEEK_API_KEY",

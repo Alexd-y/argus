@@ -75,9 +75,7 @@ class ScanOptions(BaseModel):
     rateLimit: str = "normal"
     ports: str = "80,443,8080,8443"
     followRedirects: bool = True
-    vulnerabilities: ScanOptionsVulnerabilities = Field(
-        default_factory=ScanOptionsVulnerabilities
-    )
+    vulnerabilities: ScanOptionsVulnerabilities = Field(default_factory=ScanOptionsVulnerabilities)
     authentication: ScanOptionsAuth = Field(default_factory=ScanOptionsAuth)
     scope: ScanOptionsScope = Field(default_factory=ScanOptionsScope)
     advanced: ScanOptionsAdvanced = Field(default_factory=ScanOptionsAdvanced)
@@ -611,8 +609,7 @@ class _EmergencyReasonBase(BaseModel):
         normalized = value.strip()
         if len(normalized) < EMERGENCY_REASON_MIN_LEN:
             raise ValueError(
-                f"reason must contain at least {EMERGENCY_REASON_MIN_LEN} "
-                "non-whitespace characters"
+                f"reason must contain at least {EMERGENCY_REASON_MIN_LEN} non-whitespace characters"
             )
         return normalized
 
@@ -652,9 +649,7 @@ class EmergencyResumeAllRequest(_EmergencyReasonBase):
 
     confirmation_phrase: str = Field(
         ...,
-        description=(
-            "Must equal the literal phrase ``RESUME ALL SCANS`` (case-sensitive)."
-        ),
+        description=("Must equal the literal phrase ``RESUME ALL SCANS`` (case-sensitive)."),
     )
 
     @field_validator("confirmation_phrase")
@@ -796,9 +791,7 @@ class ScanScheduleCreateRequest(BaseModel):
     )
     scan_mode: ScanScheduleMode = "standard"
     enabled: bool = True
-    maintenance_window_cron: str | None = Field(
-        default=None, max_length=SCAN_SCHEDULE_CRON_MAX
-    )
+    maintenance_window_cron: str | None = Field(default=None, max_length=SCAN_SCHEDULE_CRON_MAX)
 
     @field_validator("target_url")
     @classmethod
@@ -824,9 +817,7 @@ class ScanScheduleUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: str | None = Field(
-        default=None, min_length=1, max_length=SCAN_SCHEDULE_NAME_MAX
-    )
+    name: str | None = Field(default=None, min_length=1, max_length=SCAN_SCHEDULE_NAME_MAX)
     cron_expression: str | None = Field(
         default=None, min_length=1, max_length=SCAN_SCHEDULE_CRON_MAX
     )
@@ -838,9 +829,7 @@ class ScanScheduleUpdateRequest(BaseModel):
     )
     scan_mode: ScanScheduleMode | None = None
     enabled: bool | None = None
-    maintenance_window_cron: str | None = Field(
-        default=None, max_length=SCAN_SCHEDULE_CRON_MAX
-    )
+    maintenance_window_cron: str | None = Field(default=None, max_length=SCAN_SCHEDULE_CRON_MAX)
 
     @field_validator("target_url")
     @classmethod
@@ -984,7 +973,9 @@ class ReportSummary(BaseModel):
 
 
 FindingConfidenceLiteral = Literal["confirmed", "likely", "possible", "advisory"]
-FindingValidationStatusLiteral = Literal["missing", "unverified", "partially_validated", "validated"]
+FindingValidationStatusLiteral = Literal[
+    "missing", "unverified", "partially_validated", "validated"
+]
 FindingEvidenceQualityLiteral = Literal["none", "weak", "moderate", "strong"]
 FindingEvidenceClassificationLiteral = Literal["validated", "observed", "candidate", "inconclusive"]
 FindingEvidenceTypeLiteral = Literal[
@@ -1247,9 +1238,7 @@ class ReportListResponse(BaseModel):
         default="ready",
         description="Report artifact generation: pending | processing | ready | failed",
     )
-    tier: str = Field(
-        default="midgard", description="Report tier from generate request"
-    )
+    tier: str = Field(default="midgard", description="Report tier from generate request")
     requested_formats: list[str] | None = Field(
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
@@ -1278,9 +1267,7 @@ class ReportDetailResponse(BaseModel):
         default="ready",
         description="Report artifact generation: pending | processing | ready | failed",
     )
-    tier: str = Field(
-        default="midgard", description="Report tier from generate request"
-    )
+    tier: str = Field(default="midgard", description="Report tier from generate request")
     requested_formats: list[str] | None = Field(
         default=None,
         description="Formats requested at generation time (from Report.requested_formats JSONB)",
@@ -1302,9 +1289,7 @@ class ReportGenerateRequest(BaseModel):
     """POST /scans/{scan_id}/reports/generate — RPT-007."""
 
     type: ReportTierLiteral = Field(..., description="Report tier / template family")
-    formats: list[str] = Field(
-        ..., min_length=1, description="Export formats to produce"
-    )
+    formats: list[str] = Field(..., min_length=1, description="Export formats to produce")
 
     @field_validator("formats", mode="before")
     @classmethod
@@ -1321,9 +1306,7 @@ class ReportGenerateRequest(BaseModel):
             raise ValueError("formats must contain at least one value")
         bad = [x for x in v if x not in allowed]
         if bad:
-            raise ValueError(
-                f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})"
-            )
+            raise ValueError(f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})")
         # de-dupe preserving order
         seen: set[str] = set()
         out: list[str] = []
@@ -1375,9 +1358,7 @@ class ReportGenerateAllRequest(BaseModel):
         allowed = frozenset({"pdf", "html", "json", "csv", "md"})
         bad = [x for x in v if x not in allowed]
         if bad:
-            raise ValueError(
-                f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})"
-            )
+            raise ValueError(f"Invalid format(s): use pdf, html, json, csv, md (got: {bad})")
         seen: set[str] = set()
         out: list[str] = []
         for x in v:
@@ -1397,9 +1378,7 @@ class ReportGenerateAllAcceptedResponse(BaseModel):
 
     bundle_id: str
     report_ids: list[str]
-    task_id: str | None = Field(
-        default=None, description="Celery task id for generate_all_reports"
-    )
+    task_id: str | None = Field(default=None, description="Celery task id for generate_all_reports")
     count: int = Field(description="Number of report rows created (tiers × formats)")
 
 
@@ -1660,9 +1639,7 @@ class IntelligenceCveIntelBody(BaseModel):
 class IntelligenceOsintDomainRequest(BaseModel):
     """POST /intelligence/osint-domain."""
 
-    domain: str = Field(
-        ..., min_length=1, max_length=253, description="Hostname or domain"
-    )
+    domain: str = Field(..., min_length=1, max_length=253, description="Hostname or domain")
 
 
 class IntelligenceShodanServiceItem(BaseModel):
@@ -1744,8 +1721,7 @@ class WebhookDlqReplayRequest(BaseModel):
         min_length=WEBHOOK_DLQ_REASON_MIN_LEN,
         max_length=WEBHOOK_DLQ_REASON_MAX_LEN,
         description=(
-            "Operator-supplied free-text justification (10..500 chars) "
-            "recorded in the audit trail."
+            "Operator-supplied free-text justification (10..500 chars) recorded in the audit trail."
         ),
     )
 
@@ -1788,8 +1764,7 @@ class WebhookDlqAbandonRequest(BaseModel):
         min_length=WEBHOOK_DLQ_REASON_MIN_LEN,
         max_length=WEBHOOK_DLQ_REASON_MAX_LEN,
         description=(
-            "Operator-supplied free-text justification (10..500 chars) "
-            "recorded in the audit trail."
+            "Operator-supplied free-text justification (10..500 chars) recorded in the audit trail."
         ),
     )
 

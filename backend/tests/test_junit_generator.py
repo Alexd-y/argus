@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import pytest
 from defusedxml import ElementTree as DET
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import ReportData
 from src.reports.junit_generator import (
@@ -29,8 +28,15 @@ from src.reports.junit_generator import (
 
 def _summary() -> ReportSummary:
     return ReportSummary(
-        critical=0, high=0, medium=0, low=0, info=0,
-        technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+        critical=0,
+        high=0,
+        medium=0,
+        low=0,
+        info=0,
+        technologies=[],
+        sslIssues=0,
+        headerIssues=0,
+        leaksFound=False,
     )
 
 
@@ -131,7 +137,7 @@ class TestSafety:
         f = Finding(
             severity="high",
             title="bad\x00title\x07",
-            description="body\x08with\x0Bcontrol",
+            description="body\x08with\x0bcontrol",
         )
         out = generate_junit(_data(findings=[f]))
         # Should parse without errors (defusedxml is strict about control chars).

@@ -20,11 +20,10 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -139,14 +138,10 @@ class TestFindingsResource:
             captured["tenant_id"] = tenant_id
             captured["scan_id"] = scan_id
             captured["limit"] = limit
-            return FindingListResult(
-                items=(_make_finding_summary(),), total=1, next_offset=None
-            )
+            return FindingListResult(items=(_make_finding_summary(),), total=1, next_offset=None)
 
         monkeypatch.setattr(findings_resource, "list_findings", _fake_list)
-        body = _call_template(
-            app, "argus://findings/{scan_id}", scan_id="scan-12345678"
-        )
+        body = _call_template(app, "argus://findings/{scan_id}", scan_id="scan-12345678")
         decoded = json.loads(body)
         assert decoded["scan_id"] == "scan-12345678"
         assert decoded["total"] == 1
@@ -168,7 +163,7 @@ class TestReportsResource:
         app: FastMCP,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        expires = datetime.now(UTC) + timedelta(hours=1)
 
         async def _fake_download(
             *, tenant_id: str, report_id: str, format: ReportFormat
@@ -182,9 +177,7 @@ class TestReportsResource:
             )
 
         monkeypatch.setattr(reports_resource, "get_report_download", _fake_download)
-        body = _call_template(
-            app, "argus://reports/{report_id}", report_id="report-12345678"
-        )
+        body = _call_template(app, "argus://reports/{report_id}", report_id="report-12345678")
         decoded = json.loads(body)
         assert decoded["report_id"] == "report-12345678"
         assert decoded["presigned_url"] == "https://example.com/dl/abc"
@@ -212,7 +205,7 @@ class TestApprovalsPendingResource:
         tenant_id: str,
         other_tenant_id: str,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         repo.add(
             StoredApproval(
                 request_id="req-pending-1",
@@ -248,7 +241,7 @@ class TestApprovalsPendingResource:
         repo: InMemoryApprovalRepository,
         tenant_id: str,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         repo.add(
             StoredApproval(
                 request_id="req-granted-1",

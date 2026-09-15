@@ -97,7 +97,7 @@ import logging
 import re
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -150,7 +150,7 @@ _CVSS_VECTOR_RE: Final[re.Pattern[str]] = re.compile(r"^CVSS:[34](?:\.\d+)?/")
 _CVE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"\bCVE-\d{4}-\d{4,7}\b")
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -365,9 +365,7 @@ def _safe_join(base: Path, name: str) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
-def _iter_normalised(
-    raw_matches: list[Any], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_normalised(raw_matches: list[Any], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for raw in raw_matches:
         if not isinstance(raw, dict):
             continue
@@ -405,9 +403,7 @@ def _iter_normalised(
             continue
         grype_severity = _string_field(vuln, "severity") or "Unknown"
         severity = _map_severity(grype_severity)
-        cvss_vector, cvss_score = _extract_cvss(
-            vuln.get("cvss"), severity_fallback=severity
-        )
+        cvss_vector, cvss_score = _extract_cvss(vuln.get("cvss"), severity_fallback=severity)
         related = _extract_related(raw.get("relatedVulnerabilities"))
         cwe_list = _collect_cwes(vuln, related)
         fix_versions, fix_state = _extract_fix(vuln.get("fix"))
@@ -481,11 +477,7 @@ def _extract_cvss(raw: Any, *, severity_fallback: str) -> tuple[str, float]:
         if not _CVSS_VECTOR_RE.match(vector):
             continue
         metrics = entry.get("metrics")
-        score = (
-            _coerce_float(metrics.get("baseScore"))
-            if isinstance(metrics, dict)
-            else None
-        )
+        score = _coerce_float(metrics.get("baseScore")) if isinstance(metrics, dict) else None
         if score is None:
             continue
         if score > best_score:
@@ -525,8 +517,7 @@ def _extract_cwe(raw: Any) -> list[int]:
         return [raw]
     if isinstance(raw, str):
         token = raw.strip().upper()
-        if token.startswith("CWE-"):
-            token = token[4:]
+        token = token.removeprefix("CWE-")
         if token.isdigit():
             value = int(token)
             return [value] if value > 0 else []

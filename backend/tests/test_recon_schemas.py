@@ -2,7 +2,6 @@
 
 import pytest
 from pydantic import ValidationError
-
 from src.recon.schemas.base import (
     ArtifactType,
     EngagementStatus,
@@ -12,7 +11,7 @@ from src.recon.schemas.base import (
     ReconStage,
     TargetType,
 )
-from src.recon.schemas.scope import ScopeConfig, ScopeRule, ScopeValidationResult
+from src.recon.schemas.engagement import EngagementCreate
 from src.recon.schemas.findings import (
     ApiEndpointFinding,
     DnsRecordFinding,
@@ -26,10 +25,10 @@ from src.recon.schemas.findings import (
     TlsInfoFinding,
     UrlFinding,
 )
-from src.recon.schemas.engagement import EngagementCreate, EngagementResponse
-from src.recon.schemas.target import ReconTargetCreate
-from src.recon.schemas.job import ScanJobCreate
 from src.recon.schemas.hypothesis import HypothesisCreate
+from src.recon.schemas.job import ScanJobCreate
+from src.recon.schemas.scope import ScopeConfig, ScopeRule
+from src.recon.schemas.target import ReconTargetCreate
 
 
 class TestEnums:

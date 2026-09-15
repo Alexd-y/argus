@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -19,16 +20,18 @@ from src.recon.sandbox_tool_runner import build_sandbox_exec_argv, run_argv_simp
 logger = logging.getLogger(__name__)
 
 # Extra dnsx flags allowed from env / scan options (flag-only; no arbitrary values).
-_SAFE_DNSX_FLAGS = frozenset({
-    "-silent",
-    "-wd",
-    "-resp",
-    "-oc",
-    "-debug",
-    "-v",
-    "-verbose",
-    "-trace",
-})
+_SAFE_DNSX_FLAGS = frozenset(
+    {
+        "-silent",
+        "-wd",
+        "-resp",
+        "-oc",
+        "-debug",
+        "-v",
+        "-verbose",
+        "-trace",
+    }
+)
 
 _TYPE_ALIASES: dict[str, str] = {
     "a": "A",
@@ -147,7 +150,9 @@ def build_dnsx_argv(domain: str, cfg: ReconRuntimeConfig) -> list[str]:
         argv.append("-resp")
     if cfg.dnsx_silent:
         argv.append("-silent")
-    argv.extend(_merge_extra_flags_from_env_and_cfg(cfg.dnsx_extra_flags, settings.recon_dnsx_extra_flags))
+    argv.extend(
+        _merge_extra_flags_from_env_and_cfg(cfg.dnsx_extra_flags, settings.recon_dnsx_extra_flags)
+    )
     res = _first_resolver_ip(settings.recon_default_dns_resolver)
     if res:
         argv.extend(["-r", res])
@@ -263,14 +268,16 @@ def build_takeover_hints(
                 f"CNAME from {host} points to {tgt} ({matched}); no A/AAAA observed for the target in this probe. "
                 "Heuristic only: may be NXDOMAIN, blocking, or resolver noise — confirm manually."
             )
-        hints.append({
-            "hint_type": hint_type,
-            "hostname": host,
-            "cname_target": tgt,
-            "provider_guess": matched.strip("."),
-            "severity": "info",
-            "note": note,
-        })
+        hints.append(
+            {
+                "hint_type": hint_type,
+                "hostname": host,
+                "cname_target": tgt,
+                "provider_guess": matched.strip("."),
+                "severity": "info",
+                "note": note,
+            }
+        )
     return hints
 
 
@@ -285,7 +292,13 @@ def _dns_depth_timeout_sec(cfg: ReconRuntimeConfig) -> float:
 
 def _run_dnsx_argv(argv: list[str], timeout_sec: float) -> dict[str, Any]:
     if not argv:
-        return {"success": False, "stdout": "", "stderr": "invalid argv", "return_code": -1, "execution_time": 0.0}
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": "invalid argv",
+            "return_code": -1,
+            "execution_time": 0.0,
+        }
     parts = build_sandbox_exec_argv(argv, use_sandbox=settings.sandbox_enabled)
     return run_argv_simple_sync(parts, timeout_sec=timeout_sec)
 
@@ -334,7 +347,7 @@ async def run_recon_dns_depth_bundle(
         return out
 
     timeout_sec = _dns_depth_timeout_sec(cfg)
-    types = _parse_record_types_csv(cfg.dnsx_record_types_csv)
+    _parse_record_types_csv(cfg.dnsx_record_types_csv)
 
     try:
         argv = build_dnsx_argv(domain, cfg)
@@ -379,10 +392,8 @@ async def run_recon_dns_depth_bundle(
                         out["dnsx_cname_follow"] = follow
                         cname_follow.extend(parse_dnsx_stdout(str(follow.get("stdout") or ""))[0])
                     finally:
-                        try:
+                        with contextlib.suppress(OSError):
                             tmp_path.unlink(missing_ok=True)
-                        except OSError:
-                            pass
                 except Exception:
                     logger.warning(
                         "recon_dns_depth_cname_follow_failed",
@@ -415,7 +426,10 @@ async def run_recon_dns_depth_bundle(
                     else None
                 ),
                 "dig_depth": (
-                    {"success": dig_result.get("success"), "return_code": dig_result.get("return_code")}
+                    {
+                        "success": dig_result.get("success"),
+                        "return_code": dig_result.get("return_code"),
+                    }
                     if isinstance(dig_result, dict)
                     else None
                 ),
@@ -426,15 +440,25 @@ async def run_recon_dns_depth_bundle(
             try:
                 await asyncio.to_thread(raw_sink.upload_json, "dns_records", doc)
             except Exception:
-                logger.warning("recon_dns_records_upload_failed", extra={"event": "recon_dns_records_upload_failed"})
+                logger.warning(
+                    "recon_dns_records_upload_failed",
+                    extra={"event": "recon_dns_records_upload_failed"},
+                )
             try:
                 if isinstance(dnsx_result.get("stdout"), str) and dnsx_result["stdout"].strip():
                     await asyncio.to_thread(raw_sink.upload_text, "dnsx_raw", dnsx_result["stdout"])
             except Exception:
-                logger.warning("recon_dnsx_raw_upload_failed", extra={"event": "recon_dnsx_raw_upload_failed"})
+                logger.warning(
+                    "recon_dnsx_raw_upload_failed",
+                    extra={"event": "recon_dnsx_raw_upload_failed"},
+                )
             if isinstance(dig_result, dict) and str(dig_result.get("stdout") or "").strip():
                 try:
-                    await asyncio.to_thread(raw_sink.upload_text, "dig_depth_raw", str(dig_result.get("stdout")))
+                    await asyncio.to_thread(
+                        raw_sink.upload_text,
+                        "dig_depth_raw",
+                        str(dig_result.get("stdout")),
+                    )
                 except Exception:
                     logger.warning(
                         "recon_dig_depth_raw_upload_failed",

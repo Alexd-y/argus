@@ -39,7 +39,7 @@ import logging
 import re
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -69,7 +69,7 @@ _JARM_FINGERPRINT_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{62}$")
 _EMPTY_JARM: Final[str] = "0" * 62
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_jarm_json(
@@ -89,9 +89,7 @@ def parse_jarm_json(
     return _emit(records, artifacts_dir=artifacts_dir, tool_id=tool_id)
 
 
-def _load_payload(
-    *, stdout: bytes, artifacts_dir: Path, tool_id: str
-) -> list[dict[str, Any]]:
+def _load_payload(*, stdout: bytes, artifacts_dir: Path, tool_id: str) -> list[dict[str, Any]]:
     artifact_path = safe_join_artifact(artifacts_dir, _CANONICAL_FILENAME)
     raw = b""
     if artifact_path is not None and artifact_path.is_file():
@@ -130,9 +128,7 @@ def _load_payload(
             return [decoded]
         return []
     return [
-        record
-        for record in safe_load_jsonl(encoded, tool_id=tool_id)
-        if isinstance(record, dict)
+        record for record in safe_load_jsonl(encoded, tool_id=tool_id) if isinstance(record, dict)
     ]
 
 
@@ -218,16 +214,12 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "jarm": record.get("jarm"),
     }
     cleaned: dict[str, Any] = {
-        key: value
-        for key, value in payload.items()
-        if value is not None and value != ""
+        key: value for key, value in payload.items() if value is not None and value != ""
     }
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
 
-def _iter_records(
-    records: list[dict[str, Any]], *, tool_id: str
-) -> Iterable[dict[str, Any]]:
+def _iter_records(records: list[dict[str, Any]], *, tool_id: str) -> Iterable[dict[str, Any]]:
     for index, raw in enumerate(records):
         host = (
             _string_field(raw, "host")

@@ -6,7 +6,6 @@ from datetime import datetime
 
 import pytest
 from pydantic import ValidationError
-
 from src.schemas.recon.stage1 import (
     AnomaliesStructured,
     AnomalyEntry,
@@ -16,7 +15,6 @@ from src.schemas.recon.stage1 import (
     SslCertEntry,
     TechProfileEntry,
 )
-
 
 # --- Fixtures: valid data builders ---
 
@@ -498,7 +496,10 @@ class TestAnomaliesStructured:
         structured = AnomaliesStructured.model_validate(data)
         assert len(structured.coverage_gaps) == 2
         assert structured.coverage_gaps[0] == "Missing params inventory"
-        assert structured.coverage_gaps[1] == {"type": "api_surface", "detail": "No API endpoints found"}
+        assert structured.coverage_gaps[1] == {
+            "type": "api_surface",
+            "detail": "No API endpoints found",
+        }
 
     def test_anomalies_max_length_exceeded_rejected(self) -> None:
         data = {"anomalies": [_valid_anomaly_entry() for _ in range(501)]}

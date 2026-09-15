@@ -37,15 +37,16 @@ def _nuclei_plan(command_config: dict) -> AttackPlan:
 
 def test_inventory_status_compiler_vs_legacy(monkeypatch):
     monkeypatch.setenv("ARGUS_NUCLEI_PROFILE_COMPILER", "0")
-    assert get_call_site_status(
-        "nuclei.profile_compiler.NucleiProfileCompiler.compile"
-    ) == "compiler"
-    assert get_call_site_status(
-        "recon.vulnerability_analysis.active_scan.nuclei_va_adapter.build_nuclei_va_argv"
-    ) == "legacy_warned"
     assert (
-        get_call_site_status("tools.executor.build_nuclei_command") == "legacy_warned"
+        get_call_site_status("nuclei.profile_compiler.NucleiProfileCompiler.compile") == "compiler"
     )
+    assert (
+        get_call_site_status(
+            "recon.vulnerability_analysis.active_scan.nuclei_va_adapter.build_nuclei_va_argv"
+        )
+        == "legacy_warned"
+    )
+    assert get_call_site_status("tools.executor.build_nuclei_command") == "legacy_warned"
     assert get_call_site_status("tasks.tools.run_nuclei_va_argv") == "legacy_warned"
     assert len(NUCLEI_ARGV_CALL_SITES) >= 5
 

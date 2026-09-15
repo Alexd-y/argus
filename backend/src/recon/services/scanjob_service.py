@@ -33,9 +33,7 @@ async def create_job(
 ) -> ScanJob:
     """Create scan job - validates engagement is active."""
     eng_result = await db.execute(
-        select(Engagement).where(
-            Engagement.id == engagement_id, Engagement.tenant_id == tenant_id
-        )
+        select(Engagement).where(Engagement.id == engagement_id, Engagement.tenant_id == tenant_id)
     )
     engagement = eng_result.scalar_one_or_none()
     if not engagement:
@@ -75,9 +73,7 @@ async def create_job(
     return job
 
 
-async def get_job(
-    db: AsyncSession, tenant_id: str, job_id: str
-) -> ScanJob | None:
+async def get_job(db: AsyncSession, tenant_id: str, job_id: str) -> ScanJob | None:
     """Get scan job by ID, scoped to tenant."""
     result = await db.execute(
         select(ScanJob).where(ScanJob.id == job_id, ScanJob.tenant_id == tenant_id)
@@ -140,9 +136,7 @@ async def update_job_status(
     return job
 
 
-async def cancel_job(
-    db: AsyncSession, tenant_id: str, job_id: str
-) -> ScanJob:
+async def cancel_job(db: AsyncSession, tenant_id: str, job_id: str) -> ScanJob:
     """Cancel a pending or running job."""
     job = await get_job(db, tenant_id, job_id)
     if not job:

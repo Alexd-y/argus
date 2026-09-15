@@ -11,9 +11,7 @@ from src.nuclei.profile_compiler import NucleiProfileCompiler
 
 
 def test_python_script_executes_locally() -> None:
-    result = IsolatedLabRunner().execute(
-        LabRunRequest(language="python", source="print('lab-ok')")
-    )
+    result = IsolatedLabRunner().execute(LabRunRequest(language="python", source="print('lab-ok')"))
     assert result.status == "completed"
     assert result.return_code == 0
     assert result.runner == "local"
@@ -33,9 +31,7 @@ def test_production_sandbox_name_is_refused(monkeypatch) -> None:
         "src.lab.runner.settings.lab_runner_container_name",
         _PRODUCTION_SANDBOX_FORBIDDEN,
     )
-    result = IsolatedLabRunner().execute(
-        LabRunRequest(language="python", source="print(1)")
-    )
+    result = IsolatedLabRunner().execute(LabRunRequest(language="python", source="print(1)"))
     assert result.error_code == "lab_runner_must_not_be_production_sandbox"
     assert result.status == "failed"
 

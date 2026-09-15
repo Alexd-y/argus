@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -63,7 +63,7 @@ from src.reports.replay_command_sanitizer import (
 # ---------------------------------------------------------------------------
 
 
-PresignFn: TypeAlias = Callable[[str], str | None]
+type PresignFn = Callable[[str], str | None]
 
 
 # ---------------------------------------------------------------------------
@@ -537,16 +537,12 @@ class ValhallaSectionAssembly(BaseModel):
     title_meta: dict[str, Any] = Field(default_factory=dict)
     executive_summary: str = ""
     executive_summary_counts: dict[str, int] = Field(default_factory=dict)
-    risk_quantification_per_asset: tuple[AssetRiskRow, ...] = Field(
-        default_factory=tuple
-    )
+    risk_quantification_per_asset: tuple[AssetRiskRow, ...] = Field(default_factory=tuple)
     owasp_rollup_matrix: tuple[OwaspRollupRow, ...] = Field(default_factory=tuple)
     top_findings_by_business_impact: tuple[BusinessImpactFindingRow, ...] = Field(
         default_factory=tuple
     )
-    kev_listed_findings: tuple[KevListedFindingRow, ...] = Field(
-        default_factory=tuple
-    )
+    kev_listed_findings: tuple[KevListedFindingRow, ...] = Field(default_factory=tuple)
     remediation_roadmap: tuple[RemediationPhaseRow, ...] = Field(default_factory=tuple)
     evidence_refs: tuple[ValhallaEvidenceRef, ...] = Field(default_factory=tuple)
     timeline_entries: tuple[ValhallaTimelineEntry, ...] = Field(default_factory=tuple)
@@ -557,9 +553,7 @@ class ValhallaSectionAssembly(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-_URL_HOST_RE: Final[re.Pattern[str]] = re.compile(
-    r"^[a-zA-Z][a-zA-Z0-9+.\-]*://([^/\s\"']+)"
-)
+_URL_HOST_RE: Final[re.Pattern[str]] = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://([^/\s\"']+)")
 
 
 def _normalise_severity(sev: str | None) -> str:
@@ -573,9 +567,7 @@ def _normalise_severity(sev: str | None) -> str:
 
 
 def _exploitability_for(f: Finding) -> float:
-    return _CONFIDENCE_EXPLOITABILITY.get(
-        (f.confidence or "likely").strip().lower(), 0.5
-    )
+    return _CONFIDENCE_EXPLOITABILITY.get((f.confidence or "likely").strip().lower(), 0.5)
 
 
 def _owasp_category_for(f: Finding) -> str:
@@ -699,12 +691,9 @@ def _build_asset_risk_rows(
             },
         )
         entry["finding_count"] += 1
-        if cvss > entry["max_cvss"]:
-            entry["max_cvss"] = cvss
-        if expl > entry["max_exploitability"]:
-            entry["max_exploitability"] = expl
-        if composite > entry["max_composite"]:
-            entry["max_composite"] = composite
+        entry["max_cvss"] = max(entry["max_cvss"], cvss)
+        entry["max_exploitability"] = max(entry["max_exploitability"], expl)
+        entry["max_composite"] = max(entry["max_composite"], composite)
         sev = _normalise_severity(f.severity)
         sev_rank = _SEVERITY_RANK[sev]
         if sev_rank < entry["top_sev_rank"]:
@@ -778,9 +767,7 @@ def _build_top_business_impact(
         asset = _asset_for_finding(f, fallback_target=fallback_target) or "(unknown)"
         bv = business_context.value_for(asset)
         expl = _exploitability_for(f)
-        composite_lookup[id(f)] = _composite_score(
-            f, business_value=bv, exploitability=expl
-        )
+        composite_lookup[id(f)] = _composite_score(f, business_value=bv, exploitability=expl)
 
     intel_ranked = FindingPrioritizer.rank_objects(findings)
 
@@ -874,9 +861,7 @@ def _build_remediation_roadmap(
     rows: list[RemediationPhaseRow] = []
     for pid in ("P0", "P1", "P2", "P3"):
         items: list[Finding] = phases[pid]["items"]
-        items_sorted = sorted(
-            items, key=lambda x: ((x.title or "").lower(), x.cwe or "")
-        )
+        items_sorted = sorted(items, key=lambda x: ((x.title or "").lower(), x.cwe or ""))
         rows.append(
             RemediationPhaseRow(
                 phase_id=pid,
@@ -920,9 +905,7 @@ def _build_timeline_entries(
     *,
     snippet_limit: int = 480,
 ) -> tuple[ValhallaTimelineEntry, ...]:
-    rows = sorted(
-        timeline, key=lambda t: (t.order_index, t.phase or "", t.created_at or "")
-    )
+    rows = sorted(timeline, key=lambda t: (t.order_index, t.phase or "", t.created_at or ""))
     out: list[ValhallaTimelineEntry] = []
     for t in rows:
         snippet = ""
@@ -962,9 +945,7 @@ def _build_executive_summary(
     when = data.created_at or "unknown timestamp"
     total = sum(counts.values())
     severity_part = ", ".join(
-        f"{counts.get(b, 0)} {b.upper()}"
-        for b in _SEVERITY_BINS
-        if counts.get(b, 0) > 0
+        f"{counts.get(b, 0)} {b.upper()}" for b in _SEVERITY_BINS if counts.get(b, 0) > 0
     )
     if not severity_part:
         severity_part = "0 actionable"
@@ -1033,8 +1014,8 @@ def assemble_valhalla_sections(
     bctx = business_context or BusinessContext()
     sctx = sanitize_context or SanitizeContext(
         target=data.target or "",
-        endpoints=tuple(),
-        canaries=tuple(),
+        endpoints=(),
+        canaries=(),
     )
     findings = list(data.findings)
     fallback_target = data.target or ""
@@ -1050,9 +1031,7 @@ def assemble_valhalla_sections(
         sanitize_context=sctx,
         fallback_target=fallback_target,
     )
-    kev_rows = _build_kev_listed_findings(
-        findings, fallback_target=fallback_target
-    )
+    kev_rows = _build_kev_listed_findings(findings, fallback_target=fallback_target)
     roadmap = _build_remediation_roadmap(findings)
     evidence_rows = _build_evidence_refs(list(data.evidence), presigner=presigner)
     timeline_rows = _build_timeline_entries(list(data.timeline))

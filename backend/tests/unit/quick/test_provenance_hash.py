@@ -20,8 +20,16 @@ _TASK_ID = "fedcba98-7654-3210-fedc-ba9876543210"
 
 
 def test_compute_evidence_hash_is_stable_and_order_independent() -> None:
-    left = {"template_id": "http-cve-nginx", "matched_at": "https://app.example/", "n": 1}
-    right = {"n": 1, "matched_at": "https://app.example/", "template_id": "http-cve-nginx"}
+    left = {
+        "template_id": "http-cve-nginx",
+        "matched_at": "https://app.example/",
+        "n": 1,
+    }
+    right = {
+        "n": 1,
+        "matched_at": "https://app.example/",
+        "template_id": "http-cve-nginx",
+    }
     first = compute_evidence_hash(left)
     second = compute_evidence_hash(right)
     assert first == second
@@ -125,7 +133,10 @@ def test_build_provenance_is_identifiers_only() -> None:
     assert dumped["tool_id"] == "nuclei"
     assert dumped["task_id"] == _TASK_ID
     fp = public_fingerprint(fingerprint_key="a" * 64)
-    assert fp == {"fingerprint_key": "a" * 64, "fingerprint_version": FINGERPRINT_VERSION}
+    assert fp == {
+        "fingerprint_key": "a" * 64,
+        "fingerprint_version": FINGERPRINT_VERSION,
+    }
 
 
 def test_digest_template_ids_is_stable() -> None:

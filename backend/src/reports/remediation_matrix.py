@@ -6,13 +6,13 @@ __all__ = [
     "RemediationMatrixRowV2",
     "build_remediation_matrix_v2",
     "build_remediation_row",
-    "map_layer_to_owner",
-    "generate_fix_action",
-    "generate_verification_command",
-    "generate_acceptance_criteria",
     "determine_priority",
-    "get_deadline",
+    "generate_acceptance_criteria",
+    "generate_fix_action",
     "generate_layer_specific",
+    "generate_verification_command",
+    "get_deadline",
+    "map_layer_to_owner",
     "priority_order",
     "severity_order",
 ]
@@ -23,7 +23,9 @@ class RemediationMatrixRowV2(BaseModel):
     title: str
     severity: str
     category: str
-    affected_layer: Literal["infrastructure", "app/frontend", "app/backend", "app/database", "CI/CD"]
+    affected_layer: Literal[
+        "infrastructure", "app/frontend", "app/backend", "app/database", "CI/CD"
+    ]
     owner_team: str
     config_component: str
     fix_action: str
@@ -40,8 +42,7 @@ class RemediationMatrixRowV2(BaseModel):
 
 
 def build_remediation_matrix_v2(
-    findings: list[dict],
-    tech_stack: dict
+    findings: list[dict], tech_stack: dict
 ) -> list[RemediationMatrixRowV2]:
     matrix = []
 
@@ -49,10 +50,13 @@ def build_remediation_matrix_v2(
         row = build_remediation_row(finding, tech_stack)
         matrix.append(row)
 
-    return sorted(matrix, key=lambda r: (
-        priority_order(r.priority),
-        severity_order(r.severity),
-    ))
+    return sorted(
+        matrix,
+        key=lambda r: (
+            priority_order(r.priority),
+            severity_order(r.severity),
+        ),
+    )
 
 
 def build_remediation_row(finding: dict, tech_stack: dict) -> RemediationMatrixRowV2:
@@ -172,18 +176,15 @@ def get_deadline(severity: str) -> str:
     return deadline_map.get(severity.lower(), "1 month")
 
 
-def generate_layer_specific(finding: dict, layer: str) -> str:
-    if layer == "infrastructure":
-        return "Configure at CDN/CloudFront level via AWS Console or Infrastructure-as-Code"
-    elif layer == "app/frontend":
-        return "Update in frontend template files or component configuration"
-    elif layer == "app/backend":
-        return "Modify application code or middleware configuration"
-    elif layer == "app/database":
-        return "Update database connection strings and query patterns"
-    elif layer == "CI/CD":
-        return "Update pipeline configuration and security scanning rules"
-    return "Check infrastructure configuration"
+def generate_layer_specific(finding: dict, layer: str) -> str:  # noqa: ARG001 - retained for signature/API compatibility
+    layer_guidance = {
+        "infrastructure": "Configure at CDN/CloudFront level via AWS Console or Infrastructure-as-Code",
+        "app/frontend": "Update in frontend template files or component configuration",
+        "app/backend": "Modify application code or middleware configuration",
+        "app/database": "Update database connection strings and query patterns",
+        "CI/CD": "Update pipeline configuration and security scanning rules",
+    }
+    return layer_guidance.get(layer, "Check infrastructure configuration")
 
 
 def priority_order(priority: str) -> int:

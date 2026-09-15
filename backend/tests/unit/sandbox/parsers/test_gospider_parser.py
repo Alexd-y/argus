@@ -33,7 +33,6 @@ from src.sandbox.parsers.katana_parser import (
     parse_gospider_jsonl,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -63,9 +62,7 @@ def _gospider_record(
 
 def _gospider_jsonl(*records: dict[str, Any]) -> bytes:
     """Build a gospider JSONL stream from the supplied records."""
-    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(record, sort_keys=True) for record in records)).encode("utf-8")
 
 
 def _read_sidecar(artifacts_dir: Path) -> list[dict[str, Any]]:
@@ -99,9 +96,7 @@ def test_empty_stdout_yields_no_findings(tmp_path: Path) -> None:
 
 def test_single_gospider_record_normalises_to_info_finding(tmp_path: Path) -> None:
     """A gospider record produces one INFO/CWE-200 finding with method=GET."""
-    raw = _gospider_jsonl(
-        _gospider_record("https://target.example/api/users", stat="200")
-    )
+    raw = _gospider_jsonl(_gospider_record("https://target.example/api/users", stat="200"))
 
     findings = parse_gospider_jsonl(raw, b"", tmp_path, "gospider")
 
@@ -171,9 +166,7 @@ def test_non_numeric_stat_is_dropped(tmp_path: Path) -> None:
 
 def test_record_without_output_falls_back_to_url(tmp_path: Path) -> None:
     """When ``output`` is absent, the parser falls back to the ``url`` field."""
-    raw = _gospider_jsonl(
-        {"url": "https://target/fallback", "source": "robots", "type": "url"}
-    )
+    raw = _gospider_jsonl({"url": "https://target/fallback", "source": "robots", "type": "url"})
 
     findings = parse_gospider_jsonl(raw, b"", tmp_path, "gospider")
 

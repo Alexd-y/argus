@@ -33,7 +33,6 @@ from uuid import uuid4
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -48,7 +47,6 @@ from src.sandbox.k8s_adapter import (
     SandboxRunMode,
 )
 from src.sandbox.tool_registry import ToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -324,9 +322,7 @@ def test_descriptor_with_zero_zero_egress_override_carries_mandatory_excepts(
 
     manifest = adapter.build_networkpolicy_manifest(job, descriptor)
     payload_rule = manifest["spec"]["egress"][0]
-    wildcard_peers = [
-        peer for peer in payload_rule["to"] if peer["ipBlock"]["cidr"] == "0.0.0.0/0"
-    ]
+    wildcard_peers = [peer for peer in payload_rule["to"] if peer["ipBlock"]["cidr"] == "0.0.0.0/0"]
     assert wildcard_peers, "expected the wildcard peer to be rendered"
     excepts = wildcard_peers[0]["ipBlock"].get("except", [])
     for must_block in (
@@ -425,6 +421,4 @@ def test_dry_run_yaml_preserves_egress_allowlist_override(
     cidrs = {peer["ipBlock"]["cidr"] for peer in payload_rule["to"]}
     assert "0.0.0.0/0" in cidrs
     assert "198.51.100.0/24" in cidrs
-    assert (
-        "api.example.com" in np_doc["metadata"]["annotations"]["argus.io/egress-fqdns"]
-    )
+    assert "api.example.com" in np_doc["metadata"]["annotations"]["argus.io/egress-fqdns"]

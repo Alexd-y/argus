@@ -119,9 +119,7 @@ class PortRange(BaseModel):
     @model_validator(mode="after")
     def _validate_order(self) -> Self:
         if self.high < self.low:
-            raise ValueError(
-                f"PortRange requires low<=high, got [{self.low}, {self.high}]"
-            )
+            raise ValueError(f"PortRange requires low<=high, got [{self.low}, {self.high}]")
         return self
 
     def contains(self, port: int) -> bool:
@@ -190,9 +188,7 @@ class ScopeRule(BaseModel):
                 raise ValueError("URL scope rule requires a non-empty host component")
         elif self.kind in {ScopeKind.DOMAIN, ScopeKind.HOST}:
             if any(ch in self.pattern for ch in (" ", "/", "\\", "?", "#")):
-                raise ValueError(
-                    f"{self.kind.value} pattern contains forbidden characters"
-                )
+                raise ValueError(f"{self.kind.value} pattern contains forbidden characters")
         elif self.kind is ScopeKind.IP:
             try:
                 ipaddress.ip_address(self.pattern)
@@ -314,9 +310,7 @@ class ScopeEngine:
             failure_summary=_REASON_NOT_IN_SCOPE,
         )
 
-    def assert_allowed(
-        self, target: TargetSpec, *, port: int | None = None
-    ) -> ScopeDecision:
+    def assert_allowed(self, target: TargetSpec, *, port: int | None = None) -> ScopeDecision:
         """Like :meth:`check`, but raise :class:`ScopeViolation` on deny."""
         decision = self.check(target, port=port)
         if not decision.allowed:
@@ -346,9 +340,7 @@ def _rule_matches_target(rule: ScopeRule, target: TargetSpec) -> bool:
     rule for that).
     """
     if rule.kind is ScopeKind.URL:
-        return target.kind is TargetKind.URL and _url_matches(
-            rule.pattern, target.value
-        )
+        return target.kind is TargetKind.URL and _url_matches(rule.pattern, target.value)
     if rule.kind is ScopeKind.DOMAIN:
         host = _extract_host(target)
         return host is not None and _domain_matches(rule.pattern, host)
@@ -390,9 +382,7 @@ def _url_matches(pattern: str, candidate: str) -> bool:
         return False
     pat_path = pat.path or "/"
     can_path = can.path or "/"
-    if not can_path.startswith(pat_path):
-        return False
-    return True
+    return can_path.startswith(pat_path)
 
 
 def _domain_matches(pattern: str, host: str) -> bool:
@@ -431,21 +421,17 @@ def _cidr_contains(rule_cidr: str, target: TargetSpec) -> bool:
         # ``supernet_of`` requires the same address family on both
         # sides; mypy cannot narrow the union after the version check
         # alone, so we cast explicitly.
-        if isinstance(network, ipaddress.IPv4Network) and isinstance(
-            other, ipaddress.IPv4Network
-        ):
+        if isinstance(network, ipaddress.IPv4Network) and isinstance(other, ipaddress.IPv4Network):
             return network.supernet_of(other)
-        if isinstance(network, ipaddress.IPv6Network) and isinstance(
-            other, ipaddress.IPv6Network
-        ):
+        if isinstance(network, ipaddress.IPv6Network) and isinstance(other, ipaddress.IPv6Network):
             return network.supernet_of(other)
         return False
     return False
 
 
 __all__ = [
-    "PortRange",
     "SCOPE_FAILURE_REASONS",
+    "PortRange",
     "ScopeDecision",
     "ScopeEngine",
     "ScopeKind",

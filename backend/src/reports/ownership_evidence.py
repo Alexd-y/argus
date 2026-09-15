@@ -14,10 +14,19 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-_WHOIS_KEY_HINTS = frozenset({
-    "registrar", "organization", "org_name", "org", "registrant_org",
-    "creation_date", "expiry_date", "expiration_date", "registry_expiry_date",
-})
+_WHOIS_KEY_HINTS = frozenset(
+    {
+        "registrar",
+        "organization",
+        "org_name",
+        "org",
+        "registrant_org",
+        "creation_date",
+        "expiry_date",
+        "expiration_date",
+        "registry_expiry_date",
+    }
+)
 
 _DNS_SOA_RE = re.compile(r"origin\s*=\s*([^\s;]+)", re.IGNORECASE)
 _DNS_NS_RE = re.compile(r"nameserver\s*=\s*([^\s;]+)", re.IGNORECASE)
@@ -52,10 +61,24 @@ def build_ownership_evidence(
     if isinstance(recon_results, dict):
         whois_data = recon_results.get("whois")
         if isinstance(whois_data, dict):
-            whois_registrar = str(whois_data.get("registrar") or whois_data.get("registrar_name") or "")[:256]
-            whois_org = str(whois_data.get("organization") or whois_data.get("registrant_organization") or whois_data.get("org") or "")[:256]
-            whois_creation = str(whois_data.get("creation_date") or whois_data.get("created_date") or "")[:64]
-            whois_expiry = str(whois_data.get("expiry_date") or whois_data.get("expiration_date") or whois_data.get("registry_expiry_date") or "")[:64]
+            whois_registrar = str(
+                whois_data.get("registrar") or whois_data.get("registrar_name") or ""
+            )[:256]
+            whois_org = str(
+                whois_data.get("organization")
+                or whois_data.get("registrant_organization")
+                or whois_data.get("org")
+                or ""
+            )[:256]
+            whois_creation = str(
+                whois_data.get("creation_date") or whois_data.get("created_date") or ""
+            )[:64]
+            whois_expiry = str(
+                whois_data.get("expiry_date")
+                or whois_data.get("expiration_date")
+                or whois_data.get("registry_expiry_date")
+                or ""
+            )[:64]
         elif isinstance(whois_data, str) and whois_data.strip():
             text = whois_data.strip()
             for pattern, field in [
@@ -118,21 +141,27 @@ def build_ownership_evidence(
     ip_country = ""
 
     if isinstance(recon_results, dict):
-        ip_data = recon_results.get("ip_lookup") or recon_results.get("ipinfo") or recon_results.get("asn")
+        ip_data = (
+            recon_results.get("ip_lookup")
+            or recon_results.get("ipinfo")
+            or recon_results.get("asn")
+        )
         if isinstance(ip_data, dict):
             ip_org = str(ip_data.get("org") or ip_data.get("organization") or "")[:256]
             ip_asn = str(ip_data.get("asn") or "")[:64]
             ip_country = str(ip_data.get("country") or ip_data.get("country_code") or "")[:64]
 
-    ownership_signals = sum([
-        bool(whois_org),
-        bool(whois_registrar),
-        bool(tls_subject),
-        bool(tls_issuer),
-        bool(dns_soa),
-        bool(dns_ns),
-        bool(ip_org),
-    ])
+    ownership_signals = sum(
+        [
+            bool(whois_org),
+            bool(whois_registrar),
+            bool(tls_subject),
+            bool(tls_issuer),
+            bool(dns_soa),
+            bool(dns_ns),
+            bool(ip_org),
+        ]
+    )
     if ownership_signals >= 4:
         confidence = "high"
     elif ownership_signals >= 2:

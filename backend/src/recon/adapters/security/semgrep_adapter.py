@@ -47,9 +47,7 @@ class SemgrepAdapter(SecurityToolAdapter):
             pass
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize to VULNERABILITY findings."""
         findings: list[dict[str, Any]] = []
         for item in raw_results:
@@ -61,18 +59,20 @@ class SemgrepAdapter(SecurityToolAdapter):
             start = item.get("start", {})
             line = start.get("line", 0)
             value = f"{path}:{line}:{check_id}"
-            findings.append({
-                "finding_type": FindingType.VULNERABILITY,
-                "value": value,
-                "data": {
-                    "rule_id": check_id,
-                    "file_path": path,
-                    "line": line,
-                    "message": message,
-                    "severity": severity,
-                    "category": extra.get("metadata", {}).get("category"),
-                },
-                "source_tool": "semgrep",
-                "confidence": 0.9,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.VULNERABILITY,
+                    "value": value,
+                    "data": {
+                        "rule_id": check_id,
+                        "file_path": path,
+                        "line": line,
+                        "message": message,
+                        "severity": severity,
+                        "category": extra.get("metadata", {}).get("category"),
+                    },
+                    "source_tool": "semgrep",
+                    "confidence": 0.9,
+                }
+            )
         return findings

@@ -28,7 +28,7 @@ from src.db.session import async_session_factory, set_session_tenant
 _STACK_HINTS: tuple[str, ...] = (
     "traceback",
     'file "',
-    "\n  file \"",
+    '\n  file "',
     "stack trace",
 )
 
@@ -103,13 +103,7 @@ async def admin_list_scans(
         count_stmt = select(func.count()).select_from(Scan).where(*filters)
         total = int((await session.execute(count_stmt)).scalar_one())
 
-        list_stmt = (
-            select(Scan)
-            .where(*filters)
-            .order_by(order)
-            .offset(offset)
-            .limit(limit)
-        )
+        list_stmt = select(Scan).where(*filters).order_by(order).offset(offset).limit(limit)
         lr = await session.execute(list_stmt)
         rows = list(lr.scalars().all())
 
@@ -167,31 +161,39 @@ async def admin_get_scan_detail(
             raise HTTPException(status_code=404, detail="Scan not found")
 
         tool_rows = (
-            await session.execute(
-                select(ToolRun)
-                .where(
-                    cast(ToolRun.scan_id, String) == scan_id,
-                    cast(ToolRun.tenant_id, String) == tid,
-                )
-                .order_by(
-                    asc(ToolRun.started_at).nulls_last(),
-                    asc(ToolRun.finished_at).nulls_last(),
-                    asc(ToolRun.id),
+            (
+                await session.execute(
+                    select(ToolRun)
+                    .where(
+                        cast(ToolRun.scan_id, String) == scan_id,
+                        cast(ToolRun.tenant_id, String) == tid,
+                    )
+                    .order_by(
+                        asc(ToolRun.started_at).nulls_last(),
+                        asc(ToolRun.finished_at).nulls_last(),
+                        asc(ToolRun.id),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         ev_rows = (
-            await session.execute(
-                select(ScanEvent)
-                .where(
-                    cast(ScanEvent.scan_id, String) == scan_id,
-                    cast(ScanEvent.tenant_id, String) == tid,
-                    ScanEvent.event == "error",
+            (
+                await session.execute(
+                    select(ScanEvent)
+                    .where(
+                        cast(ScanEvent.scan_id, String) == scan_id,
+                        cast(ScanEvent.tenant_id, String) == tid,
+                        ScanEvent.event == "error",
+                    )
+                    .order_by(asc(ScanEvent.created_at), asc(ScanEvent.id))
                 )
-                .order_by(asc(ScanEvent.created_at), asc(ScanEvent.id))
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     tool_metrics = [
         AdminScanToolMetricResponse(
@@ -226,4 +228,4 @@ async def admin_get_scan_detail(
     )
 
 
-__all__ = ["admin_list_scans", "admin_get_scan_detail"]
+__all__ = ["admin_get_scan_detail", "admin_list_scans"]

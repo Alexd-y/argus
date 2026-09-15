@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from src.payloads.mutations import (
     MUTATION_NAMES,
     MutationContext,
@@ -25,9 +24,7 @@ from src.payloads.mutations import (
 )
 
 
-def _ctx(
-    seed: int = 1, family_id: str = "demo", payload_index: int = 0
-) -> MutationContext:
+def _ctx(seed: int = 1, family_id: str = "demo", payload_index: int = 0) -> MutationContext:
     return MutationContext(seed=seed, family_id=family_id, payload_index=payload_index)
 
 
@@ -50,14 +47,17 @@ class _Rule:
 
 
 def test_mutation_registry_contains_expected_rules() -> None:
-    assert MUTATION_NAMES == frozenset(
-        {
-            "case_flip",
-            "comment_injection",
-            "whitespace_alt",
-            "unicode_homoglyph",
-            "length_pad",
-        }
+    assert (
+        frozenset(
+            {
+                "case_flip",
+                "comment_injection",
+                "whitespace_alt",
+                "unicode_homoglyph",
+                "length_pad",
+            }
+        )
+        == MUTATION_NAMES
     )
 
 
@@ -151,9 +151,7 @@ def test_whitespace_alt_only_swaps_runs_of_spaces() -> None:
     payload = "select  *  from"  # two spaces between words
     out = mutate_whitespace_alt(payload, _ctx(seed=12))
     # The non-space characters survive in order.
-    assert (
-        out.replace("\t", "").replace("+", "").replace(" ", "").lower() == "select*from"
-    )
+    assert out.replace("\t", "").replace("+", "").replace(" ", "").lower() == "select*from"
 
 
 def test_whitespace_alt_handles_empty_string() -> None:

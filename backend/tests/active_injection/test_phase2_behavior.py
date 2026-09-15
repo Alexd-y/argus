@@ -15,12 +15,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from src.core.config import Settings, lab_destructive_execution_allowed
 from src.core import config as core_config
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
+from src.core.config import Settings, lab_destructive_execution_allowed
 from src.recon.mcp.policy import evaluate_tool_approval_policy
-from src.recon.vulnerability_analysis.active_scan.commix_va_adapter import build_commix_va_argv
+from src.recon.vulnerability_analysis.active_scan.commix_va_adapter import (
+    build_commix_va_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.injection_findings_normalize import (
     DEFAULT_INJECTION_EVIDENCE_RULES,
     normalize_evidence_quality_for_family,
@@ -37,7 +37,9 @@ from src.recon.vulnerability_analysis.active_scan.input_surface_inventory import
     InputSurfaceItem,
     build_input_surface_inventory,
 )
-from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import build_sqlmap_va_argv
+from src.recon.vulnerability_analysis.active_scan.sqlmap_va_adapter import (
+    build_sqlmap_va_argv,
+)
 from src.recon.vulnerability_analysis.active_scan.va_active_scan_phase import (
     _lab_destructive_execution_allowed_for_scan,
     _target_url_matches_scan_lab_allowlist,
@@ -52,6 +54,7 @@ from src.reports.report_quality_gate import (
     has_xss_browser_or_oast_signal,
 )
 from src.reports.valhalla_report_context import ValhallaReportContext
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _flags(
@@ -221,7 +224,9 @@ def test_deep_mode_schedules_oast_safe_checks(monkeypatch: pytest.MonkeyPatch) -
     assert all(s.not_assessed_reason is None for s in oast_on)
 
 
-def test_maximum_mode_requires_lab_and_signed_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_maximum_mode_requires_lab_and_signed_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", False, raising=False)
     assert lab_destructive_execution_allowed(core_config.settings) is False
     inv = _inventory_multi_surface()
@@ -229,13 +234,13 @@ def test_maximum_mode_requires_lab_and_signed_approval(monkeypatch: pytest.Monke
     rce_blocked = [
         s
         for s in steps
-        if s.family == "rce_commix"
-        and s.not_assessed_reason == "lab_execution_not_authorized"
+        if s.family == "rce_commix" and s.not_assessed_reason == "lab_execution_not_authorized"
     ]
     assert rce_blocked
     assert all(s.approval_status == "blocked" for s in rce_blocked)
     assert any(
-        s.family == "rce_commix" and s.not_assessed_reason == "family_not_applicable_to_surface_location"
+        s.family == "rce_commix"
+        and s.not_assessed_reason == "family_not_applicable_to_surface_location"
         for s in steps
     )
 
@@ -250,7 +255,9 @@ def test_per_scan_lab_allowed_targets_authorize_owned_target(
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True, raising=False)
     monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True, raising=False)
     monkeypatch.setattr(core_config.settings, "sandbox_enabled", True, raising=False)
-    monkeypatch.setattr(core_config.settings, "argus_lab_operator_id", "alex-local-lab", raising=False)
+    monkeypatch.setattr(
+        core_config.settings, "argus_lab_operator_id", "alex-local-lab", raising=False
+    )
     monkeypatch.setattr(
         core_config.settings,
         "argus_lab_signed_approval_id",
@@ -325,7 +332,9 @@ def test_evidence_xss_reflection_not_confirmed_without_execution() -> None:
         "proof_of_concept": {"payload": "<svg/onload=1>", "raw_response": "<html><svg"},
     }
     assert has_xss_browser_or_oast_signal(f) is False
-    assert any("xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(f))
+    assert any(
+        "xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(f)
+    )
 
 
 def test_evidence_sqli_time_based_repeated_samples_gate() -> None:
@@ -342,7 +351,9 @@ def test_evidence_sqli_time_based_repeated_samples_gate() -> None:
             "type": "time-based blind",
         },
     }
-    assert any("sqli_time_based_missing_repeated_samples" in r for r in evaluate_injection_finding_rules(f))
+    assert any(
+        "sqli_time_based_missing_repeated_samples" in r for r in evaluate_injection_finding_rules(f)
+    )
     q, notes = normalize_evidence_quality_for_family(
         {**f, "injection_family": "sqli", "evidence_quality": "strong"},
         DEFAULT_INJECTION_EVIDENCE_RULES,
@@ -391,9 +402,15 @@ def test_evidence_ssrf_xxe_command_injection_rules_via_normalize_evidence_qualit
     q_rce, n_rce = normalize_evidence_quality_for_family(rce, DEFAULT_INJECTION_EVIDENCE_RULES)
     assert q_rce == "weak"
     assert "rce_confirmed_without_oast_meta" in n_rce
-    assert has_oast_callback_signal(
-        {**rce, "proof_of_concept": {**rce["proof_of_concept"], "oast_callback": True}}
-    ) is True
+    assert (
+        has_oast_callback_signal(
+            {
+                **rce,
+                "proof_of_concept": {**rce["proof_of_concept"], "oast_callback": True},
+            }
+        )
+        is True
+    )
 
 
 def test_unavailable_tool_marks_family_not_assessed() -> None:
@@ -402,7 +419,10 @@ def test_unavailable_tool_marks_family_not_assessed() -> None:
         {
             "active_injection_coverage": {
                 "families": {
-                    "sqli": {"status": "not_assessed", "reason": "tool_binary_missing:sqlmap"},
+                    "sqli": {
+                        "status": "not_assessed",
+                        "reason": "tool_binary_missing:sqlmap",
+                    },
                 },
                 "toolsHealth": {"sqlmap": "missing"},
             }
@@ -411,12 +431,17 @@ def test_unavailable_tool_marks_family_not_assessed() -> None:
     assert cov["families"]["sqli"]["status"] == "not_assessed"
     row = next(r for r in cov["table_rows"] if r["family"] == "sqli")
     assert row["assessed"] == "no"
-    assert "missing" in (row.get("not_assessed_reason") or "").lower() or cov["toolsHealth"].get("sqlmap") == "missing"
+    assert (
+        "missing" in (row.get("not_assessed_reason") or "").lower()
+        or cov["toolsHealth"].get("sqlmap") == "missing"
+    )
 
 
 def test_plan_coverage_builder_uses_tool_health() -> None:
     inv = _inventory_multi_surface()
-    steps = build_injection_plan(inv, mode="standard", flags=_flags(destructive=frozenset({"sqlmap"})))
+    steps = build_injection_plan(
+        inv, mode="standard", flags=_flags(destructive=frozenset({"sqlmap"}))
+    )
     cov = build_active_injection_coverage_from_plan(
         steps,
         mode="standard",
@@ -441,7 +466,9 @@ async def test_active_scan_phase_populates_scan_options_coverage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(core_config.settings, "sandbox_enabled", True, raising=False)
-    monkeypatch.setattr(core_config.settings, "argus_active_injection_mode", "standard", raising=False)
+    monkeypatch.setattr(
+        core_config.settings, "argus_active_injection_mode", "standard", raising=False
+    )
     monkeypatch.setattr(core_config.settings, "argus_oast_enabled", False, raising=False)
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", False, raising=False)
     monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", False, raising=False)
@@ -538,7 +565,9 @@ def test_injection_coverage_table_populated() -> None:
     ]
     cov = build_active_injection_coverage(findings, None)
     assert cov["table_rows"]
-    assert any(r.get("family") == "sqli" and r.get("findings_count", 0) >= 1 for r in cov["table_rows"])
+    assert any(
+        r.get("family") == "sqli" and r.get("findings_count", 0) >= 1 for r in cov["table_rows"]
+    )
 
 
 def test_resource_or_force_text_does_not_map_to_rce() -> None:
@@ -557,16 +586,37 @@ def test_resource_or_force_text_does_not_map_to_rce() -> None:
 
 
 def test_report_does_not_mark_unassessed_family_clean() -> None:
-    tpl = Path(__file__).resolve().parents[2] / "src" / "reports" / "templates" / "reports" / "partials" / "valhalla" / "active_injection_coverage.html.j2"
+    tpl = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "reports"
+        / "templates"
+        / "reports"
+        / "partials"
+        / "valhalla"
+        / "active_injection_coverage.html.j2"
+    )
     text = tpl.read_text(encoding="utf-8")
     assert "assessed" in text
     assert "not assessed reason" in text.lower()
 
     cov = build_active_injection_coverage(
-        [{"title": "X", "cwe": "CWE-79", "confidence": "likely", "evidence_refs": ["a"]}],
+        [
+            {
+                "title": "X",
+                "cwe": "CWE-79",
+                "confidence": "likely",
+                "evidence_refs": ["a"],
+            }
+        ],
         {
             "active_injection_coverage": {
-                "families": {"xss": {"status": "partial", "reason": "browser_validation_incomplete"}},
+                "families": {
+                    "xss": {
+                        "status": "partial",
+                        "reason": "browser_validation_incomplete",
+                    }
+                },
             }
         },
     )

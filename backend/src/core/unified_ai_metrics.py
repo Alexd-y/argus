@@ -541,7 +541,10 @@ def _emit_counter(name: str, labels: dict[str, str] | None = None, *, amount: fl
     except Exception:  # pragma: no cover
         logger.warning(
             "unified_ai_metrics.prometheus_emit_failed",
-            extra={"event": "unified_ai_metrics.prometheus_emit_failed", "metric": name},
+            extra={
+                "event": "unified_ai_metrics.prometheus_emit_failed",
+                "metric": name,
+            },
         )
 
 
@@ -560,7 +563,10 @@ def _emit_histogram(name: str, labels: dict[str, str], *, value: float) -> None:
     except Exception:  # pragma: no cover
         logger.warning(
             "unified_ai_metrics.prometheus_emit_failed",
-            extra={"event": "unified_ai_metrics.prometheus_emit_failed", "metric": name},
+            extra={
+                "event": "unified_ai_metrics.prometheus_emit_failed",
+                "metric": name,
+            },
         )
 
 

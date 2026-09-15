@@ -10,10 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
-from src.web_workbench.intruder.repository import STATUS_CANCELLED, STATUS_PAUSED, STATUS_RUNNING
+from src.web_workbench.intruder.repository import (
+    STATUS_CANCELLED,
+    STATUS_PAUSED,
+    STATUS_RUNNING,
+)
 from src.web_workbench.intruder.service import AttackControl
-from src.web_workbench.intruder.tasks import control_from_status, materialize_payload_sets
+from src.web_workbench.intruder.tasks import (
+    control_from_status,
+    materialize_payload_sets,
+)
 
 
 def test_control_from_status_cancel_is_kill_switch() -> None:
@@ -50,7 +56,7 @@ class _FakeBuilder:
     def __init__(self) -> None:
         self.requests: list[str] = []
 
-    def build(self, request):  # noqa: ANN001 — duck-typed PayloadBuildRequest
+    def build(self, request):
         self.requests.append(request.family_id)
         return _Bundle(
             family_id=request.family_id,

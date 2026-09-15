@@ -117,7 +117,9 @@ def evidence_json_for_llm(payload: Mapping[str, Any] | None) -> dict[str, Any]:
     return redacted if isinstance(redacted, dict) else {}
 
 
-def public_fingerprint(*, fingerprint_key: str, version: str = FINGERPRINT_VERSION) -> dict[str, str]:
+def public_fingerprint(
+    *, fingerprint_key: str, version: str = FINGERPRINT_VERSION
+) -> dict[str, str]:
     """Fingerprint identity without asset/url/parameter secrets."""
     return {
         "fingerprint_key": fingerprint_key.strip(),

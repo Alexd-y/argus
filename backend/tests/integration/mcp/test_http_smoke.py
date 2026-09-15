@@ -38,13 +38,11 @@ from contextlib import asynccontextmanager, closing
 
 import httpx
 import pytest
-from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
+from mcp import ClientSession
 
-_REPO_BACKEND_DIR = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..")
-)
+_REPO_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 
 _EXPECTED_TOOLS: frozenset[str] = frozenset(
@@ -88,9 +86,7 @@ def _server_env(port: int) -> dict[str, str]:
     return {
         **os.environ,
         "DEBUG": "true",
-        "DATABASE_URL": (
-            "postgresql+asyncpg://argus:argus@localhost:5432/argus_int_test"
-        ),
+        "DATABASE_URL": ("postgresql+asyncpg://argus:argus@localhost:5432/argus_int_test"),
         "JWT_SECRET": "test-secret-not-for-prod-but-required-by-settings",
         "MCP_TRANSPORT": "streamable-http",
         "MCP_HTTP_HOST": "127.0.0.1",
@@ -169,15 +165,15 @@ async def _mcp_http_server() -> AsyncIterator[str]:
 
 
 @asynccontextmanager
-async def _open_session() -> AsyncIterator[
-    tuple[ClientSession, "InitializeResultLike"]
-]:
+async def _open_session() -> AsyncIterator[tuple[ClientSession, InitializeResultLike]]:
     """Boot the MCP server (HTTP) and yield an initialised session."""
-    async with _mcp_http_server() as url:
-        async with streamable_http_client(url) as (read, write, _get_session_id):
-            async with ClientSession(read, write) as client:
-                init_result = await client.initialize()
-                yield client, init_result
+    async with (
+        _mcp_http_server() as url,
+        streamable_http_client(url) as (read, write, _get_session_id),
+        ClientSession(read, write) as client,
+    ):
+        init_result = await client.initialize()
+        yield client, init_result
 
 
 # Type alias used only for readability above; the concrete type comes

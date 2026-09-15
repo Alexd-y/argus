@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
-from src.pipeline.contracts.finding_dto import ConfidenceLevel, EvidenceTier, FindingCategory
+from src.pipeline.contracts.finding_dto import (
+    ConfidenceLevel,
+    EvidenceTier,
+    FindingCategory,
+)
 from src.playbooks.oracles import OracleVerdict
-from src.web_workbench.checks.authorization_analyzer import AuthorizationFinding, AuthzClass
+from src.web_workbench.checks.authorization_analyzer import (
+    AuthorizationFinding,
+    AuthzClass,
+)
 from src.web_workbench.sessions.finding_bridge import authorization_finding_to_dto
 
 _IDS = {

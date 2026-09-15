@@ -25,7 +25,6 @@ from uuid import uuid4
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import ToolDescriptor
@@ -37,7 +36,6 @@ from src.sandbox.k8s_adapter import (
 from src.sandbox.network_policies import NetworkPolicyTemplate, get_template
 from src.sandbox.runner import SandboxRunner
 from src.sandbox.tool_registry import ToolRegistry
-
 
 _FORBIDDEN_TOKENS: Final[tuple[str, ...]] = (
     "hostpath",
@@ -241,9 +239,7 @@ def test_dry_run_renders_every_tool_in_catalog(
             continue
 
         if result.completed is not False or result.failure_reason != "dry_run":
-            failures.append(
-                f"{descriptor.tool_id}: unexpected dry-run result {result!r}"
-            )
+            failures.append(f"{descriptor.tool_id}: unexpected dry-run result {result!r}")
 
     assert not failures, "dry-run failures:\n" + "\n".join(failures)
 
@@ -293,9 +289,7 @@ def test_dry_run_yaml_contains_both_job_and_networkpolicy(
         assert yaml_path.is_file(), f"{descriptor.tool_id}: missing {yaml_path}"
         docs = list(yaml.safe_load_all(yaml_path.read_text("utf-8")))
         kinds = sorted(doc["kind"] for doc in docs)
-        assert kinds == ["Job", "NetworkPolicy"], (
-            f"{descriptor.tool_id}: unexpected kinds {kinds}"
-        )
+        assert kinds == ["Job", "NetworkPolicy"], f"{descriptor.tool_id}: unexpected kinds {kinds}"
 
 
 def test_dry_run_argv_files_carry_safe_values(

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from src.core import config as core_config
 from src.payloads.registry import PayloadRegistry
 from src.recon.vulnerability_analysis.active_scan import ai_payload_candidates
@@ -43,8 +42,7 @@ def test_dos_payload_candidates_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
     )
     fork_bomb = ":(){ :|:& };:"
     assert (
-        classify_payload_candidate(fork_bomb, core_config.settings)
-        == PayloadCandidateClass.REJECT
+        classify_payload_candidate(fork_bomb, core_config.settings) == PayloadCandidateClass.REJECT
     )
 
 

@@ -201,9 +201,7 @@ def test_ntlm_pair_redacted(empty_ctx: SanitizeContext) -> None:
 
 
 def test_pem_private_key_block_redacted(empty_ctx: SanitizeContext) -> None:
-    blob = (
-        "-----BEGIN RSA PRIVATE KEY-----\nABCDEFG12345\n-----END RSA PRIVATE KEY-----"
-    )
+    blob = "-----BEGIN RSA PRIVATE KEY-----\nABCDEFG12345\n-----END RSA PRIVATE KEY-----"
     argv = ["echo", blob]
     out = sanitize_replay_command(argv, empty_ctx)
     assert REDACTED_PRIVATE_KEY in " ".join(out)

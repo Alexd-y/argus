@@ -13,7 +13,7 @@ _INFRA_SCRIPTS = _REPO_ROOT / "infra" / "scripts"
 if str(_INFRA_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_INFRA_SCRIPTS))
 
-import sbom_drift_check  # noqa: E402
+import sbom_drift_check  # noqa: E402 — after sys.path insert
 
 
 def _minimal_cyclonedx(*components: dict[str, str]) -> dict:
@@ -45,10 +45,20 @@ def test_fingerprint_identical_components_same_hash_order_independent() -> None:
 
 def test_fingerprint_changed_component_list_different_hash() -> None:
     a = _minimal_cyclonedx(
-        {"type": "library", "name": "lib", "version": "1.0.0", "purl": "pkg:deb/lib@1.0.0"},
+        {
+            "type": "library",
+            "name": "lib",
+            "version": "1.0.0",
+            "purl": "pkg:deb/lib@1.0.0",
+        },
     )
     b = _minimal_cyclonedx(
-        {"type": "library", "name": "lib", "version": "1.0.1", "purl": "pkg:deb/lib@1.0.1"},
+        {
+            "type": "library",
+            "name": "lib",
+            "version": "1.0.1",
+            "purl": "pkg:deb/lib@1.0.1",
+        },
     )
     fa, _ = sbom_drift_check._fingerprint_sbom(a)
     fb, _ = sbom_drift_check._fingerprint_sbom(b)
@@ -62,7 +72,12 @@ def test_fingerprint_non_list_components_empty_fingerprint() -> None:
 
 
 def test_fingerprint_skips_non_dict_component_entries() -> None:
-    doc = {"components": ["bad", {"type": "library", "name": "ok", "version": "", "purl": ""}]}
+    doc = {
+        "components": [
+            "bad",
+            {"type": "library", "name": "ok", "version": "", "purl": ""},
+        ]
+    }
     _, count = sbom_drift_check._fingerprint_sbom(doc)
     assert count == 1
 

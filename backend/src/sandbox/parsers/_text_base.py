@@ -80,9 +80,7 @@ REDACTED_BEARER_MARKER: Final[str] = "[REDACTED-BEARER]"
 # Order matters: longer / more specific patterns must match first so
 # ``redact_hashes_in_evidence`` does not cut a 64-hex SHA-256 mid-string
 # and leave a residual 32-hex / 40-hex hash visible.
-_LM_NT_PAIR_RE: Final[re.Pattern[str]] = re.compile(
-    r"\b[a-fA-F0-9]{32}:[a-fA-F0-9]{32}\b"
-)
+_LM_NT_PAIR_RE: Final[re.Pattern[str]] = re.compile(r"\b[a-fA-F0-9]{32}:[a-fA-F0-9]{32}\b")
 _KRB_BLOB_RE: Final[re.Pattern[str]] = re.compile(
     r"\$krb5(?:tgs|asrep|pa)\$[^\s\"]+",
     re.IGNORECASE,

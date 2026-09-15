@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -199,7 +200,19 @@ def build_deep_nmap_sv_argv(host: str, port_csv: str) -> list[str]:
     # ``-sT`` (TCP connect) + ``-Pn`` (skip host discovery) avoid raw sockets,
     # which are unavailable to the non-root sandbox user (raw socket / dnet
     # eth0 open fails with "Operation not permitted").
-    return ["nmap", "-sT", "-Pn", "-sV", "-T4", "--open", "-oX", "-", "-p", port_csv, host]
+    return [
+        "nmap",
+        "-sT",
+        "-Pn",
+        "-sV",
+        "-T4",
+        "--open",
+        "-oX",
+        "-",
+        "-p",
+        port_csv,
+        host,
+    ]
 
 
 def _kal_target_url(host: str) -> str:
@@ -253,7 +266,7 @@ def merge_deep_ports_into_nmap_tool_result(
 
 
 async def run_recon_deep_port_scan_bundle(
-    target: str,
+    target: str,  # noqa: ARG001 - retained for signature/API compatibility
     domain: str,
     ports_option: str,
     tool_results: dict[str, Any],
@@ -284,7 +297,10 @@ async def run_recon_deep_port_scan_bundle(
         return {}
 
     timeout_sec = float(
-        max(30, int(cfg.deep_timeout_sec or getattr(s, "recon_tools_timeout", 300) or 300))
+        max(
+            30,
+            int(cfg.deep_timeout_sec or getattr(s, "recon_tools_timeout", 300) or 300),
+        )
     )
     max_ports = max(1, min(256, int(cfg.deep_max_ports_per_host)))
     prior_tcp = _tcp_ports_from_nmap_tool_result(tool_results)
@@ -341,14 +357,12 @@ async def run_recon_deep_port_scan_bundle(
                     )
                 err = str(nb_r.get("stderr") or "")
                 if len(err) > 0:
-                    try:
+                    with contextlib.suppress(Exception):
                         await asyncio.to_thread(
                             raw_sink.upload_text,
                             f"deep_naabu_{_artifact_slug(host)}_stderr",
                             err,
                         )
-                    except Exception:
-                        pass
             parsed_nb = parse_naabu_host_port_lines(stdout)
             naabu_summaries.append(
                 {
@@ -427,14 +441,12 @@ async def run_recon_deep_port_scan_bundle(
                 )
             err = str(nm_r.get("stderr") or "")
             if len(err) > 0:
-                try:
+                with contextlib.suppress(Exception):
                     await asyncio.to_thread(
                         raw_sink.upload_text,
                         f"deep_nmap_sv_{_artifact_slug(host)}_stderr",
                         err,
                     )
-                except Exception:
-                    pass
 
     aggregate_tcp: set[int] = set()
     by_host_out: dict[str, list[dict[str, Any]]] = {}

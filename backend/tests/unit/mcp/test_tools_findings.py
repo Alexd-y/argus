@@ -17,7 +17,7 @@ import asyncio
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
+from pydantic import ValidationError
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -91,9 +91,7 @@ class TestFindingsList:
             limit: int,
             offset: int,
         ) -> FindingListResult:
-            return FindingListResult(
-                items=(_make_summary(),), total=1, next_offset=None
-            )
+            return FindingListResult(items=(_make_summary(),), total=1, next_offset=None)
 
         monkeypatch.setattr(findings_tools, "svc_list_findings", _fake_list)
         result = _call(
@@ -152,12 +150,12 @@ class TestFindingsList:
 
     def test_invalid_owasp_category_rejected(self) -> None:
         # Pydantic validator rejects unknown OWASP codes at schema time.
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             FindingFilter(owasp_category="Z99")
 
     def test_short_scan_id_rejected(self) -> None:
         # FindingListInput.scan_id has min_length=8.
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             FindingListInput(scan_id="abc")
 
 
@@ -224,9 +222,7 @@ class TestFindingsMarkFalsePositive:
         app: FastMCP,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def _fake_mark(
-            *, tenant_id: str, finding_id: str, reason: str, actor: str
-        ) -> bool:
+        async def _fake_mark(*, tenant_id: str, finding_id: str, reason: str, actor: str) -> bool:
             return False
 
         monkeypatch.setattr(findings_tools, "svc_mark_false_positive", _fake_mark)
@@ -246,9 +242,7 @@ class TestFindingsMarkFalsePositive:
         app: FastMCP,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        async def _fake_mark(
-            *, tenant_id: str, finding_id: str, reason: str, actor: str
-        ) -> bool:
+        async def _fake_mark(*, tenant_id: str, finding_id: str, reason: str, actor: str) -> bool:
             return True
 
         monkeypatch.setattr(findings_tools, "svc_mark_false_positive", _fake_mark)
@@ -265,5 +259,5 @@ class TestFindingsMarkFalsePositive:
 
     def test_short_reason_rejected_by_schema(self) -> None:
         # ``reason`` has a min_length constraint enforced at schema time.
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             FindingMarkFalsePositiveInput(finding_id="find-1234abcd", reason="short")

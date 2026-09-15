@@ -123,7 +123,10 @@ def test_filter_valid_findings_object_style_invalid_filtered() -> None:
 
 
 def test_get_attr_dict_and_object() -> None:
-    d: dict[str, Any] = {"title": "from dict", "description": "x" * _MIN_DESCRIPTION_LENGTH}
+    d: dict[str, Any] = {
+        "title": "from dict",
+        "description": "x" * _MIN_DESCRIPTION_LENGTH,
+    }
     o = _ObjectFinding(title="from object", description="y" * _MIN_DESCRIPTION_LENGTH)
     assert _get_attr(d, "title") == "from dict"
     assert _get_attr(d, "missing") is None

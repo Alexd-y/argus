@@ -102,9 +102,12 @@ _TECH_STACK_RECOMMENDATIONS: dict[str, str] = {
 # 2. Ensure origin server is not directly accessible (IP whitelisting)
 # 3. Configure rate limiting at WAF layer for login endpoints
 # 4. Enable bot protection / JS challenge for suspicious requests""",
-    "cloudfront": _CLOUDFRONT_HEADERS_SNIPPET + "\n# Also verify: Distribution cache behavior, origin access identity, geographic restrictions",
-    "nginx": _NGINX_HEADERS_SNIPPET + "\n# Also verify: ssl_protocols, ssl_ciphers, client_max_body_size, limit_req_zone",
-    "apache": _APACHE_HEADERS_SNIPPET + "\n# Also verify: SSLCipherSuite, SSLProtocol, LimitRequestBody, mod_evasive",
+    "cloudfront": _CLOUDFRONT_HEADERS_SNIPPET
+    + "\n# Also verify: Distribution cache behavior, origin access identity, geographic restrictions",
+    "nginx": _NGINX_HEADERS_SNIPPET
+    + "\n# Also verify: ssl_protocols, ssl_ciphers, client_max_body_size, limit_req_zone",
+    "apache": _APACHE_HEADERS_SNIPPET
+    + "\n# Also verify: SSLCipherSuite, SSLProtocol, LimitRequestBody, mod_evasive",
     "cloudflare": _CLOUDFLARE_HEADERS_SNIPPET,
     "wordpress": """# WordPress Hardening
 # 1. Keep WordPress core, themes, plugins updated
@@ -129,7 +132,7 @@ _TECH_STACK_RECOMMENDATIONS: dict[str, str] = {
 
 def generate_infra_recommendations(
     tech_stack: dict[str, Any] | None,
-    findings: list[dict[str, Any]],
+    findings: list[dict[str, Any]],  # noqa: ARG001 - retained for signature/API compatibility
     ssl_tls: dict[str, Any] | None,
     security_headers: dict[str, Any] | None,
 ) -> dict[str, Any]:
@@ -154,19 +157,19 @@ def generate_infra_recommendations(
         web_server = str(structured.get("web_server", "") or "").lower()
         frameworks = str(structured.get("frameworks", "") or "").lower()
         cms = str(structured.get("cms", "") or "").lower()
-        matched = False
         for tech_key, snippet in _TECH_STACK_RECOMMENDATIONS.items():
             if tech_key in web_server or tech_key in frameworks or tech_key in cms:
                 result["config_snippets"].append((tech_key, snippet))
-                matched = True
         # If CloudFront detected as CDN, always include CloudFront snippet
-        if "cloudfront" in web_server and not any(k == "cloudfront" for k, _ in result["config_snippets"]):
+        if "cloudfront" in web_server and not any(
+            k == "cloudfront" for k, _ in result["config_snippets"]
+        ):
             result["config_snippets"].append(("cloudfront", _CLOUDFRONT_HEADERS_SNIPPET))
-            matched = True
         # If Next.js detected, always include Next.js snippet
-        if "next" in frameworks and not any(k.startswith("next") for k, _ in result["config_snippets"]):
+        if "next" in frameworks and not any(
+            k.startswith("next") for k, _ in result["config_snippets"]
+        ):
             result["config_snippets"].append(("next", _NEXTJS_HEADERS_SNIPPET))
-            matched = True
         if not result["config_snippets"]:
             result["config_snippets"].append(("generic", _NGINX_HEADERS_SNIPPET))
 
@@ -191,14 +194,16 @@ def generate_infra_recommendations(
 
     # OWASP gap closure roadmap
     owasp = tech_stack.get("owasp_compliance_table", []) if isinstance(tech_stack, dict) else []
-    for row in (owasp or []):
+    for row in owasp or []:
         if isinstance(row, dict) and row.get("assessed") == "No":
             category = row.get("category", "")
-            result["owasp_gap_roadmap"].append({
-                "category": category,
-                "manual_test_hint": _owasp_manual_test_hint(category),
-                "priority": "high" if row.get("result") == "Not assessed" else "medium",
-            })
+            result["owasp_gap_roadmap"].append(
+                {
+                    "category": category,
+                    "manual_test_hint": _owasp_manual_test_hint(category),
+                    "priority": "high" if row.get("result") == "Not assessed" else "medium",
+                }
+            )
 
     return result
 
@@ -215,7 +220,9 @@ def _owasp_manual_test_hint(category: str) -> str:
     for key, hint in hints.items():
         if key.lower() in category.lower():
             return hint
-    return f"Manual penetration testing recommended for {category}. Consult OWASP Testing Guide v4.2."
+    return (
+        f"Manual penetration testing recommended for {category}. Consult OWASP Testing Guide v4.2."
+    )
 
 
 def build_verification_commands(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -230,11 +237,13 @@ def build_verification_commands(findings: list[dict[str, Any]]) -> list[dict[str
 
         cmd = _verification_for_finding(title, endpoint)
         if cmd:
-            commands.append({
-                "finding_id": fid,
-                "command": cmd,
-                "expected_result": "Expected: see response confirming fix is applied",
-            })
+            commands.append(
+                {
+                    "finding_id": fid,
+                    "command": cmd,
+                    "expected_result": "Expected: see response confirming fix is applied",
+                }
+            )
     return commands
 
 
@@ -284,19 +293,26 @@ def build_truthfulness_metrics(
         }
 
     validated = sum(
-        1 for f in findings
+        1
+        for f in findings
         if str(f.get("evidence_classification", f.get("status", "")) or "").upper() == "VALIDATED"
     )
     advisory = total - validated
 
     has_poc = sum(
-        1 for f in findings
-        if f.get("proof_of_concept") and
-        (isinstance(f["proof_of_concept"], dict) and f["proof_of_concept"].get("payload") or
-         isinstance(f["proof_of_concept"], str) and f["proof_of_concept"].strip())
+        1
+        for f in findings
+        if f.get("proof_of_concept")
+        and (
+            isinstance(f["proof_of_concept"], dict)
+            and f["proof_of_concept"].get("payload")
+            or isinstance(f["proof_of_concept"], str)
+            and f["proof_of_concept"].strip()
+        )
     )
     has_cmd = sum(
-        1 for f in findings
+        1
+        for f in findings
         if f.get("verification_command") or f.get("fix_command") or f.get("test_command")
     )
 

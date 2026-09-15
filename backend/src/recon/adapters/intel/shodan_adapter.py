@@ -19,6 +19,7 @@ def _resolve_ip(domain: str) -> str | None:
 def _is_ip(target: str) -> bool:
     """Check if target is an IP address."""
     import ipaddress
+
     try:
         ipaddress.ip_address(target)
         return True

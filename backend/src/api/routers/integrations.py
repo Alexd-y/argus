@@ -54,7 +54,12 @@ async def create_jira(req: ForwardRequest) -> dict[str, Any]:
         jira_user=req.config.get("jira_user", ""),
         jira_token=req.config.get("jira_token", ""),
     )
-    return {"success": result.success, "provider": "jira", "external_id": result.external_id, "error": result.error}
+    return {
+        "success": result.success,
+        "provider": "jira",
+        "external_id": result.external_id,
+        "error": result.error,
+    }
 
 
 @router.post("/servicenow")
@@ -67,7 +72,12 @@ async def create_snow(req: ForwardRequest) -> dict[str, Any]:
         snow_user=req.config.get("snow_user", ""),
         snow_password=req.config.get("snow_password", ""),
     )
-    return {"success": result.success, "provider": "servicenow", "external_id": result.external_id, "error": result.error}
+    return {
+        "success": result.success,
+        "provider": "servicenow",
+        "external_id": result.external_id,
+        "error": result.error,
+    }
 
 
 @router.post("/webhook")

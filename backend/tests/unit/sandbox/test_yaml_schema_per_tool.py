@@ -25,14 +25,12 @@ from typing import Final
 import pytest
 import yaml
 from pydantic import ValidationError
-
 from src.sandbox.adapter_base import ToolDescriptor
 from src.sandbox.templating import (
     TemplateRenderError,
     extract_placeholders,
     validate_template,
 )
-
 
 # Hard-coded so a silent removal of any tool YAML breaks CI immediately.
 EXPECTED_TOOL_IDS: Final[tuple[str, ...]] = (
@@ -255,9 +253,7 @@ def test_expected_count_matches_current_scope() -> None:
 
 
 def test_every_expected_yaml_exists(catalog_dir: Path) -> None:
-    missing = [
-        tid for tid in EXPECTED_TOOL_IDS if not (catalog_dir / f"{tid}.yaml").is_file()
-    ]
+    missing = [tid for tid in EXPECTED_TOOL_IDS if not (catalog_dir / f"{tid}.yaml").is_file()]
     assert not missing, f"missing YAML files: {missing}"
 
 
@@ -282,16 +278,13 @@ def test_no_unexpected_yaml_files(catalog_dir: Path) -> None:
 def test_yaml_parses_into_tool_descriptor(catalog_dir: Path, tool_id: str) -> None:
     yaml_path = catalog_dir / f"{tool_id}.yaml"
     payload = yaml.safe_load(yaml_path.read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     try:
         descriptor = ToolDescriptor(**payload)
     except ValidationError as exc:  # pragma: no cover - assertion message
         pytest.fail(f"{tool_id}.yaml schema invalid: {exc.error_count()} errors")
     assert descriptor.tool_id == tool_id, (
-        f"{tool_id}.yaml declares tool_id={descriptor.tool_id!r}; "
-        "filename and id must agree"
+        f"{tool_id}.yaml declares tool_id={descriptor.tool_id!r}; filename and id must agree"
     )
 
 
@@ -305,8 +298,7 @@ def test_command_template_uses_only_allowlisted_placeholders(
         found = validate_template(descriptor.command_template)
     except TemplateRenderError as exc:  # pragma: no cover - assertion message
         pytest.fail(
-            f"{tool_id}.yaml template uses forbidden placeholder "
-            f"{exc.placeholder!r}: {exc.reason}"
+            f"{tool_id}.yaml template uses forbidden placeholder {exc.placeholder!r}: {exc.reason}"
         )
     extracted = extract_placeholders(descriptor.command_template)
     assert found == extracted
@@ -320,15 +312,11 @@ def test_descriptor_description_present_and_references_backlog(
     descriptor = ToolDescriptor(**payload)
     assert descriptor.description, f"{tool_id} description is empty"
     assert len(descriptor.description) <= 500
-    assert "§4." in descriptor.description, (
-        f"{tool_id} description must reference Backlog §4.x"
-    )
+    assert "§4." in descriptor.description, f"{tool_id} description must reference Backlog §4.x"
 
 
 @pytest.mark.parametrize("tool_id", EXPECTED_TOOL_IDS)
-def test_descriptor_image_uses_argus_kali_namespace(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_descriptor_image_uses_argus_kali_namespace(catalog_dir: Path, tool_id: str) -> None:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     descriptor = ToolDescriptor(**payload)
     assert descriptor.image.startswith("argus-kali-"), (
@@ -337,9 +325,7 @@ def test_descriptor_image_uses_argus_kali_namespace(
 
 
 @pytest.mark.parametrize("tool_id", EXPECTED_TOOL_IDS)
-def test_descriptor_default_timeout_within_safe_bounds(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_descriptor_default_timeout_within_safe_bounds(catalog_dir: Path, tool_id: str) -> None:
     """Bound the timeout to the registry's hard ceiling (24h) and a sane floor."""
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     descriptor = ToolDescriptor(**payload)

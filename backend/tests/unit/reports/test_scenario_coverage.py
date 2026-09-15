@@ -8,6 +8,7 @@ finding/evidence linkage is carried through.
 
 from __future__ import annotations
 
+from src.pipeline.contracts.finding_dto import ConfidenceLevel
 from src.playbooks.actions import HttpExchange, HttpRequestSpec, HttpResponse
 from src.playbooks.cleanup import CleanupOutcome
 from src.playbooks.evidence import build_evidence_bundle
@@ -15,7 +16,6 @@ from src.playbooks.executor import ScenarioResult
 from src.playbooks.lifecycle import ScenarioState, ScenarioStatus
 from src.playbooks.oracles import OracleResult, OracleVerdict
 from src.playbooks.schema import HttpMethod, OracleType
-from src.pipeline.contracts.finding_dto import ConfidenceLevel
 from src.reports.scenario_coverage import (
     CoverageStatus,
     build_scenario_coverage,

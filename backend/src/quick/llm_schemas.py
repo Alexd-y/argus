@@ -214,7 +214,15 @@ def contains_shell_command(payload: object) -> bool:
             return True
         return bool(_PATH_OR_FLAG_RE.search(payload) and (" " in payload or len(payload) > 64))
     if isinstance(payload, Mapping):
-        banned_keys = {"command", "argv", "shell", "cmdline", "cli", "payload", "script"}
+        banned_keys = {
+            "command",
+            "argv",
+            "shell",
+            "cmdline",
+            "cli",
+            "payload",
+            "script",
+        }
         for key, value in payload.items():
             if str(key).lower() in banned_keys:
                 return True
@@ -241,7 +249,7 @@ def tool_id_is_catalog_safe(tool_id: str, catalog: frozenset[str]) -> bool:
     return normalized in allowed
 
 
-def _record_failure(schema_id: str, task: str) -> None:
+def _record_failure(schema_id: str, task: str) -> None:  # noqa: ARG001 - retained for signature/API compatibility
     record_llm_schema_failure(
         alias="quick",
         provider="quick_llm",
@@ -392,8 +400,7 @@ def parse_llm_critique(text: str) -> SecurityCritique:
             triage_id=critique.triage_id,
             evidence_to_weakness_valid=False,
             alternative_explanations=critique.alternative_explanations,
-            false_positive_indicators=critique.false_positive_indicators
-            + ("missing_citations",),
+            false_positive_indicators=critique.false_positive_indicators + ("missing_citations",),
             suggested_verification=critique.suggested_verification,
             estimated_cost_seconds=critique.estimated_cost_seconds,
             citations=critique.citations,
@@ -401,7 +408,9 @@ def parse_llm_critique(text: str) -> SecurityCritique:
     return critique
 
 
-def _coverage_from_llm(items: Sequence[LlmCoverageIntent]) -> tuple[QuickCoverageRecord, ...]:
+def _coverage_from_llm(
+    items: Sequence[LlmCoverageIntent],
+) -> tuple[QuickCoverageRecord, ...]:
     records: list[QuickCoverageRecord] = []
     for item in items:
         try:
@@ -434,7 +443,11 @@ def parse_llm_report(text: str) -> QuickReport:
             schema_id=QUICK_REPORT_SCHEMA_ID,
         ) from exc
     allowed_modes = {"production", "lab_unrestricted", "standard", "deep"}
-    next_mode = parsed.recommended_next_mode if parsed.recommended_next_mode in allowed_modes else "production"
+    next_mode = (
+        parsed.recommended_next_mode
+        if parsed.recommended_next_mode in allowed_modes
+        else "production"
+    )
     warning = parsed.incompleteness_warning or (
         "This quick scan does not prove the absence of vulnerabilities. "
         "Uncovered capabilities are gaps, not a clean bill of health."
@@ -473,8 +486,7 @@ def apply_llm_tasks_to_plan(
 ) -> QuickScanPlan:
     """Rerank baseline tasks from validated LLM output. Never invents tool ids."""
     by_key = {
-        (task.tool_id.lower(), task.target_ref, task.capability_id): task
-        for task in baseline.tasks
+        (task.tool_id.lower(), task.target_ref, task.capability_id): task for task in baseline.tasks
     }
     reranked: list[QuickTask] = []
     seen: set[tuple[str, str, str]] = set()
@@ -514,7 +526,11 @@ def apply_llm_tasks_to_plan(
         seen.add(key)
     if not reranked:
         raise LlmSchemaError("planner_no_catalog_overlap", schema_id=QUICK_SCAN_PLAN_SCHEMA_ID)
-    leftovers = [task for task in baseline.tasks if (task.tool_id.lower(), task.target_ref, task.capability_id) not in seen]
+    leftovers = [
+        task
+        for task in baseline.tasks
+        if (task.tool_id.lower(), task.target_ref, task.capability_id) not in seen
+    ]
     merged = tuple(reranked + leftovers)
     assumptions = tuple(llm_plan.assumptions) if llm_plan.assumptions else baseline.assumptions
     fallbacks = tuple(llm_plan.fallbacks) if llm_plan.fallbacks else baseline.fallbacks

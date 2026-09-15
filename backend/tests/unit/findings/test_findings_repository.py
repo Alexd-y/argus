@@ -79,7 +79,9 @@ async def test_inmemory_persist_reload_and_scan_snapshots(
 
 
 @pytest.mark.asyncio
-async def test_repository_has_no_delete_api(memory_repo: InMemoryFindingsRepository) -> None:
+async def test_repository_has_no_delete_api(
+    memory_repo: InMemoryFindingsRepository,
+) -> None:
     assert not hasattr(memory_repo, "delete_logical_finding")
     assert not hasattr(memory_repo, "delete_occurrence")
     finding = LogicalFinding(
@@ -132,9 +134,7 @@ async def test_save_occurrence_bumps_last_seen(
 
 
 @pytest.fixture
-async def sqlite_findings_env() -> AsyncIterator[
-    tuple[SqlAlchemyFindingsRepository, str]
-]:
+async def sqlite_findings_env() -> AsyncIterator[tuple[SqlAlchemyFindingsRepository, str]]:
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         poolclass=StaticPool,
@@ -298,9 +298,7 @@ async def test_sqlalchemy_finding_survives_new_repository_instance(
     assert loaded is not None
     assert loaded.title == "SQLi"
     assert loaded.state is FindingState.AI_REVIEWED
-    snaps = await restarted.list_logical_findings_for_scan(
-        tenant_id=tenant_id, scan_id="scan-live"
-    )
+    snaps = await restarted.list_logical_findings_for_scan(tenant_id=tenant_id, scan_id="scan-live")
     assert key in snaps
     occs = await restarted.list_occurrences_for_scan(tenant_id=tenant_id, scan_id="scan-live")
     assert len(occs) == 1

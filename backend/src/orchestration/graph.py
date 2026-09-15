@@ -75,7 +75,11 @@ class AssetEdge:
     relation: str
 
     def to_dict(self) -> dict[str, str]:
-        return {"source_id": self.source_id, "target_id": self.target_id, "relation": self.relation}
+        return {
+            "source_id": self.source_id,
+            "target_id": self.target_id,
+            "relation": self.relation,
+        }
 
 
 class AssetGraphError(ValueError):

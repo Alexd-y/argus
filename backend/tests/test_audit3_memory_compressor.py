@@ -5,29 +5,17 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 
 class TestMemoryCompressorRedaction:
     """M-8: Memory compressor should redact secrets."""
 
     def test_redact_function_exists(self) -> None:
-        mc = (
-            Path(__file__).resolve().parent.parent
-            / "src"
-            / "agents"
-            / "memory_compressor.py"
-        )
+        mc = Path(__file__).resolve().parent.parent / "src" / "agents" / "memory_compressor.py"
         text = mc.read_text(encoding="utf-8")
         assert "_redact_secrets" in text or "REDACTED" in text
 
     def test_prompt_forbids_secrets(self) -> None:
-        mc = (
-            Path(__file__).resolve().parent.parent
-            / "src"
-            / "agents"
-            / "memory_compressor.py"
-        )
+        mc = Path(__file__).resolve().parent.parent / "src" / "agents" / "memory_compressor.py"
         text = mc.read_text(encoding="utf-8")
         assert "REDACTED" in text
         assert "never store" in text.lower()

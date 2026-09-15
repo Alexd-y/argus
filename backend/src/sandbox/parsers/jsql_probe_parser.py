@@ -88,4 +88,4 @@ def parse_jsql_json(
     return [finding]
 
 
-__all__ = ["parse_jsql_json", "EVIDENCE_SIDECAR"]
+__all__ = ["EVIDENCE_SIDECAR", "parse_jsql_json"]

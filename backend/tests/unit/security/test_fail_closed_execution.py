@@ -22,7 +22,6 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-
 from src.recon import sandbox_tool_runner
 from src.recon.mcp.policy import (
     evaluate_kal_mcp_policy,

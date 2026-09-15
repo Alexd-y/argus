@@ -29,7 +29,6 @@ from typing import Final
 
 import pytest
 
-
 _BACKEND_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 _CATALOG_DIRS: Final[tuple[Path, ...]] = (
     _BACKEND_ROOT / "config" / "tools",
@@ -89,9 +88,7 @@ def test_signed_catalog_dirs_are_populated() -> None:
     )
 
 
-def _run_verify(
-    module_name: str, dir_arg: str, dir_name: str
-) -> subprocess.CompletedProcess[str]:
+def _run_verify(module_name: str, dir_arg: str, dir_name: str) -> subprocess.CompletedProcess[str]:
     """Invoke ``python -m scripts.<module_name> verify`` against the production catalog."""
     return subprocess.run(
         [

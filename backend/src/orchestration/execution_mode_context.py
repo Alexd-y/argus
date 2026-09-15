@@ -73,7 +73,9 @@ def _str_opt(raw: Any) -> str | None:
     return text or None
 
 
-def resolve_lab_lease_from_options(options: dict[str, Any] | None) -> LabExecutionLease | None:
+def resolve_lab_lease_from_options(
+    options: dict[str, Any] | None,
+) -> LabExecutionLease | None:
     """Parse ``lab_lease`` / ``lab_execution_lease`` payload from scan options."""
     opts = _as_dict(options)
     raw = opts.get("lab_lease")
@@ -133,7 +135,9 @@ def extract_lab_lease_id(options: dict[str, Any] | None) -> str | None:
     return lease.lease_id if lease is not None else None
 
 
-def extract_lab_scope_manifest(options: dict[str, Any] | None) -> LabScopeManifest | None:
+def extract_lab_scope_manifest(
+    options: dict[str, Any] | None,
+) -> LabScopeManifest | None:
     """Return parsed lab scope manifest from options."""
     return resolve_lab_manifest_from_options(options)
 
@@ -170,7 +174,9 @@ def resolve_mode_context(
     )
 
 
-def resolve_lab_manifest_from_options(options: dict[str, Any] | None) -> LabScopeManifest | None:
+def resolve_lab_manifest_from_options(
+    options: dict[str, Any] | None,
+) -> LabScopeManifest | None:
     """Parse ``lab_scope`` / ``lab_scope_manifest`` from scan options."""
     opts = _as_dict(options)
     raw = opts.get("lab_scope")
@@ -199,7 +205,11 @@ def resolve_mode_context_from_options(
 ) -> ModeContext:
     """Build ``ModeContext`` from scan/engagement options (defaults → production)."""
     opts = _as_dict(options)
-    tid = _str_opt(tenant_id) or _str_opt(opts.get("tenant_id")) or "00000000-0000-0000-0000-000000000000"
+    tid = (
+        _str_opt(tenant_id)
+        or _str_opt(opts.get("tenant_id"))
+        or "00000000-0000-0000-0000-000000000000"
+    )
     eid = (
         _str_opt(engagement_id)
         or _str_opt(opts.get("engagement_id"))
@@ -403,10 +413,11 @@ def resolve_tool_policy(
                     return ToolPolicyDecision(
                         allowed=False,
                         requires_approval=True,
-                        reason=str(getattr(bridge, "reason", "lab_boundary_denied") or "lab_boundary_denied"),
-                        deny_code=str(
-                            getattr(bridge, "deny_code", None) or _DENY_OUTSIDE_LAB
+                        reason=str(
+                            getattr(bridge, "reason", "lab_boundary_denied")
+                            or "lab_boundary_denied"
                         ),
+                        deny_code=str(getattr(bridge, "deny_code", None) or _DENY_OUTSIDE_LAB),
                         lab_lease_active=False,
                         policy_id="lab_unrestricted_lease_v1",
                     )
@@ -542,9 +553,7 @@ def resolve_tool_policy_from_options(
         raw_flags = opts.get("scan_approval_flags")
         if isinstance(raw_flags, dict):
             flags = {
-                str(k).strip().lower(): bool(v)
-                for k, v in raw_flags.items()
-                if str(k).strip()
+                str(k).strip().lower(): bool(v) for k, v in raw_flags.items() if str(k).strip()
             }
     ns = k8s_namespace or _str_opt(opts.get("k8s_namespace"))
     vm = vm_network_id or _str_opt(opts.get("vm_network_id"))

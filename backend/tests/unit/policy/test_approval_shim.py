@@ -18,13 +18,12 @@ about *import topology*. No fixtures from ``conftest.py`` are needed.
 """
 
 from __future__ import annotations
-
 import __future__ as _future_module
+
 import ast
 from pathlib import Path
 
 import pytest
-
 from src.policy import approval as approval_shim
 from src.policy import approval_dto, approval_service
 
@@ -161,14 +160,10 @@ class TestShimDriftGuards:
             n
             for n in dir(approval_shim)
             if not n.startswith("_")
-            and not isinstance(
-                getattr(approval_shim, n, None), _future_module._Feature
-            )
+            and not isinstance(getattr(approval_shim, n, None), _future_module._Feature)
         }
         extras = public - set(_LEGACY_PUBLIC_NAMES)
-        assert extras == set(), (
-            f"shim exposes unexpected public names: {sorted(extras)}"
-        )
+        assert extras == set(), f"shim exposes unexpected public names: {sorted(extras)}"
 
     def test_legacy_names_match_test_approval_import_block(self) -> None:
         """The canonical list is kept in lockstep with ``test_approval.py``.
@@ -179,10 +174,7 @@ class TestShimDriftGuards:
         test_file = Path(__file__).parent / "test_approval.py"
         tree = ast.parse(test_file.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.ImportFrom)
-                and node.module == "src.policy.approval"
-            ):
+            if isinstance(node, ast.ImportFrom) and node.module == "src.policy.approval":
                 imported = sorted(alias.name for alias in node.names)
                 assert imported == sorted(_LEGACY_PUBLIC_NAMES), (
                     "test_approval.py legacy import block has drifted from "

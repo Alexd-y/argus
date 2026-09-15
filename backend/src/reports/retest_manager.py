@@ -49,15 +49,17 @@ def generate_retest_commands(finding: dict) -> list[str]:
 
 
 def build_remediation_timeline(
-    finding_id: str,
+    finding_id: str,  # noqa: ARG001 - retained for signature/API compatibility
     remediation_date: str,
-    retest_results: list[dict]
+    retest_results: list[dict],
 ) -> RemediationTimeline:
     return RemediationTimeline(
         remediation_date=remediation_date,
         verified_by="security_team",
         retest_results=[RetestResult(**r) for r in retest_results],
-        final_status="remediated" if all(r.get("retest_result") == "PASS" for r in retest_results) else "not_remediated",
+        final_status="remediated"
+        if all(r.get("retest_result") == "PASS" for r in retest_results)
+        else "not_remediated",
     )
 
 
@@ -90,11 +92,7 @@ def generate_acceptance_criteria(finding: dict) -> str:
         return "Vulnerability remediated. Tests passing."
 
 
-def create_retest_manager(
-    finding_id: str,
-    finding: dict,
-    remediation_date: str
-) -> RetestManager:
+def create_retest_manager(finding_id: str, finding: dict, remediation_date: str) -> RetestManager:
     commands = generate_retest_commands(finding)
     criteria = generate_acceptance_criteria(finding)
 

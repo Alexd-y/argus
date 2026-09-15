@@ -45,4 +45,6 @@ def stage1(
         for p in generated:
             console.print(f"  - {p}")
     else:
-        console.print("[yellow]No reports generated. Ensure recon dir has 00_scope..04_live_hosts.[/yellow]")
+        console.print(
+            "[yellow]No reports generated. Ensure recon dir has 00_scope..04_live_hosts.[/yellow]"
+        )

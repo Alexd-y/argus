@@ -48,7 +48,9 @@ def _dto(**overrides: object) -> FindingDTO:
     return FindingDTO(**kwargs)  # type: ignore[arg-type]
 
 
-def _context(dto: FindingDTO, *, request_signature: str = "GET /search?q=1") -> FindingIngestContext:
+def _context(
+    dto: FindingDTO, *, request_signature: str = "GET /search?q=1"
+) -> FindingIngestContext:
     return FindingIngestContext(
         engagement_id=str(dto.scan_id),
         asset="https://app.example",

@@ -181,9 +181,7 @@ class ToolDescriptor(BaseModel):
     risk_level: RiskLevel
     requires_approval: StrictBool = False
     network_policy: NetworkPolicyRef
-    seccomp_profile: StrictStr = Field(
-        min_length=1, max_length=128, pattern=_SECCOMP_PATTERN
-    )
+    seccomp_profile: StrictStr = Field(min_length=1, max_length=128, pattern=_SECCOMP_PATTERN)
     default_timeout_s: StrictInt = Field(ge=1, le=86_400)
     cpu_limit: StrictStr = Field(min_length=1, max_length=16)
     memory_limit: StrictStr = Field(min_length=2, max_length=16)
@@ -365,8 +363,7 @@ class ShellToolAdapter:
         """
         if job.tool_id != self._descriptor.tool_id:
             raise AdapterExecutionError(
-                f"job.tool_id={job.tool_id!r} does not match adapter "
-                f"{self._descriptor.tool_id!r}"
+                f"job.tool_id={job.tool_id!r} does not match adapter {self._descriptor.tool_id!r}"
             )
         return render_argv(list(self._descriptor.command_template), job.parameters)
 

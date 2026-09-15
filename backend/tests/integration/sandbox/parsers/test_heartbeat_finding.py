@@ -27,7 +27,6 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -40,7 +39,6 @@ from src.sandbox.parsers import (
     dispatch_parse,
     reset_registry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture (ARG-020 default surface).
@@ -113,9 +111,7 @@ def test_heartbeat_finding_dto_contract(
         tool_id=tool_id,
     )
 
-    assert len(findings) == 1, (
-        f"heartbeat path must emit exactly one finding, got {len(findings)}"
-    )
+    assert len(findings) == 1, f"heartbeat path must emit exactly one finding, got {len(findings)}"
     heartbeat = findings[0]
 
     assert heartbeat.category is FindingCategory.INFO
@@ -172,11 +168,11 @@ def test_heartbeat_unmapped_tool_logs_structured_warning(
     )
     record = matching[-1]
     assert record.levelno == logging.WARNING
-    assert getattr(record, "tool_id") == "future_jsonl_tool"
-    assert getattr(record, "parse_strategy") == "json_lines"
-    assert getattr(record, "artifacts_dir") == str(tmp_path)
-    assert getattr(record, "stdout_len") == len(b"some-stdout")
-    assert getattr(record, "stderr_len") == len(b"some-stderr-bytes")
+    assert record.tool_id == "future_jsonl_tool"
+    assert record.parse_strategy == "json_lines"
+    assert record.artifacts_dir == str(tmp_path)
+    assert record.stdout_len == len(b"some-stdout")
+    assert record.stderr_len == len(b"some-stderr-bytes")
 
 
 def test_heartbeat_no_handler_logs_structured_warning(
@@ -213,11 +209,11 @@ def test_heartbeat_no_handler_logs_structured_warning(
     )
     record = matching[-1]
     assert record.levelno == logging.WARNING
-    assert getattr(record, "parse_strategy") == "xml_generic"
-    assert getattr(record, "tool_id") == "future_xml_tool"
-    assert getattr(record, "artifacts_dir") == str(tmp_path)
-    assert getattr(record, "stdout_len") == len(b"<root/>")
-    assert getattr(record, "stderr_len") == 0
+    assert record.parse_strategy == "xml_generic"
+    assert record.tool_id == "future_xml_tool"
+    assert record.artifacts_dir == str(tmp_path)
+    assert record.stdout_len == len(b"<root/>")
+    assert record.stderr_len == 0
 
 
 # ---------------------------------------------------------------------------
@@ -303,12 +299,8 @@ def test_heartbeat_unique_per_tool_within_strategy(tmp_path: Path) -> None:
     Operators query coverage gaps per-tool, so the strategy-level signal
     is not enough — the ``HEARTBEAT-{tool_id}`` tag must vary.
     """
-    a = dispatch_parse(
-        ParseStrategy.JSON_LINES, b"", b"", tmp_path, tool_id="alpha_tool"
-    )
-    b = dispatch_parse(
-        ParseStrategy.JSON_LINES, b"", b"", tmp_path, tool_id="beta_tool"
-    )
+    a = dispatch_parse(ParseStrategy.JSON_LINES, b"", b"", tmp_path, tool_id="alpha_tool")
+    b = dispatch_parse(ParseStrategy.JSON_LINES, b"", b"", tmp_path, tool_id="beta_tool")
 
     assert len(a) == 1
     assert len(b) == 1

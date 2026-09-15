@@ -56,6 +56,7 @@ async def run_recon_planned_tool_gather(
         _run_nmap,
         _run_whois,
     )
+
     steps = plan_recon_steps(cfg)
     planned = [s.value for s in steps]
     logger.info(
@@ -151,7 +152,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_http_probe_pipeline_failed",
-                extra={"event": "recon_http_probe_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_http_probe_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -180,7 +184,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_security_headers_pipeline_failed",
-                extra={"event": "recon_security_headers_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_security_headers_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -192,7 +199,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_dns_depth_pipeline_failed",
-                extra={"event": "recon_dns_depth_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_dns_depth_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -218,7 +228,10 @@ async def run_recon_planned_tool_gather(
                         except Exception:
                             logger.warning(
                                 "recon_raw_subdomain_upload_failed",
-                                extra={"event": "recon_raw_subdomain_upload_failed", "tool": key},
+                                extra={
+                                    "event": "recon_raw_subdomain_upload_failed",
+                                    "tool": key,
+                                },
                             )
 
     if ReconStepId.KAL_DNS_BUNDLE in step_set:
@@ -251,7 +264,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_asnmap_pipeline_failed",
-                extra={"event": "recon_asnmap_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_asnmap_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -270,7 +286,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_url_history_pipeline_failed",
-                extra={"event": "recon_url_history_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_url_history_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -290,7 +309,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_js_analysis_pipeline_failed",
-                extra={"event": "recon_js_analysis_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_js_analysis_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -311,7 +333,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_deep_port_scan_pipeline_failed",
-                extra={"event": "recon_deep_port_scan_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_deep_port_scan_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 
@@ -330,7 +355,10 @@ async def run_recon_planned_tool_gather(
         except Exception as ex:
             logger.warning(
                 "recon_gowitness_pipeline_failed",
-                extra={"event": "recon_gowitness_pipeline_failed", "exc_type": type(ex).__name__},
+                extra={
+                    "event": "recon_gowitness_pipeline_failed",
+                    "exc_type": type(ex).__name__,
+                },
                 exc_info=True,
             )
 

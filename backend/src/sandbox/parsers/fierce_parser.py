@@ -31,7 +31,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -60,7 +60,7 @@ _CANONICAL_FILENAME: Final[str] = "fierce.json"
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_fierce(
@@ -139,10 +139,7 @@ def _iter_hostnames(payload: dict[str, Any]) -> Iterable[str]:
     found = payload.get("found_dns")
     if isinstance(found, list):
         for item in found:
-            if isinstance(item, dict):
-                value = item.get("name")
-            else:
-                value = item
+            value = item.get("name") if isinstance(item, dict) else item
             if isinstance(value, str) and is_valid_hostname(value):
                 yield value
     zone = payload.get("zone_transfer")

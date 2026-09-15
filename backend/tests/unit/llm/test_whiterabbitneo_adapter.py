@@ -105,7 +105,11 @@ class TestWhiteRabbitNeoAdapter:
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "choices": [{"message": {"content": "result"}}],
-            "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+            },
         }
 
         with patch(

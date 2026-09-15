@@ -24,8 +24,9 @@ logger = logging.getLogger(__name__)
 
 _DOMAIN_RE_HOST = re.compile(
     r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$",
-    re.I,
+    re.IGNORECASE,
 )
+
 
 def _parse_theharvester_sources_csv(raw: str) -> str:
     picked: list[str] = []
@@ -99,9 +100,8 @@ def _lines_to_hosts(stdout: str, *, domain: str) -> set[str]:
         tlow = token.lower()
         if not token or "." not in token:
             continue
-        if tlow == dlow or tlow.endswith("." + dlow):
-            if _DOMAIN_RE_HOST.match(tlow):
-                out.add(tlow)
+        if (tlow == dlow or tlow.endswith("." + dlow)) and _DOMAIN_RE_HOST.match(tlow):
+            out.add(tlow)
         if len(out) >= cap:
             break
     return out
@@ -150,7 +150,11 @@ async def run_passive_subdomain_sandbox_bundle(
         if not probe_binary_available(bin0):
             logger.info(
                 "recon_passive_subdomain_skip",
-                extra={"event": "recon_passive_subdomain_skip", "tool": name, "reason": "binary_missing"},
+                extra={
+                    "event": "recon_passive_subdomain_skip",
+                    "tool": name,
+                    "reason": "binary_missing",
+                },
             )
             return
         try:

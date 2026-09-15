@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ScanJobCreate(BaseModel):
     """Create scan job request."""
+
     target_id: str
     stage: int = Field(..., ge=0, le=18)
     tool_name: str = Field(..., min_length=1, max_length=100)
@@ -16,6 +17,7 @@ class ScanJobCreate(BaseModel):
 
 class ScanJobResponse(BaseModel):
     """Scan job response."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -38,5 +40,6 @@ class ScanJobResponse(BaseModel):
 
 class ScanJobListResponse(BaseModel):
     """Paginated job list."""
+
     items: list[ScanJobResponse]
     total: int

@@ -135,8 +135,7 @@ def _collect_headers(
         set_cookie_list = [str(item) for item in set_cookie_list if str(item).strip()]
 
         present_map = {
-            header: bool(headers.get(header.lower(), "").strip())
-            for header in SECURITY_HEADERS
+            header: bool(headers.get(header.lower(), "").strip()) for header in SECURITY_HEADERS
         }
         cookie_flags = _extract_cookie_flags(set_cookie_list)
         score = _header_score(present_map)
@@ -148,7 +147,10 @@ def _collect_headers(
                 "status_code": int(entry.get("status_code", 0) or 0),
                 "security_header_score": score,
                 "set_cookie_sample": " | ".join(set_cookie_list[:2])[:180],
-                **{f"has_{h.lower().replace('-', '_')}": "yes" if present_map[h] else "no" for h in SECURITY_HEADERS},
+                **{
+                    f"has_{h.lower().replace('-', '_')}": "yes" if present_map[h] else "no"
+                    for h in SECURITY_HEADERS
+                },
                 **cookie_flags,
                 "evidence_ref": f"header_fetch:{base_url}",
             }
@@ -188,7 +190,9 @@ def _render_headers_summary(rows: list[dict[str, object]]) -> str:
         "|------|--------|--------------|---------|----------|--------|----------|----------|",
     ]
 
-    for row in sorted(rows, key=lambda item: int(item.get("security_header_score", 0)), reverse=True):
+    for row in sorted(
+        rows, key=lambda item: int(item.get("security_header_score", 0)), reverse=True
+    ):
         lines.append(
             "| {host} | {status} | {score}/{max_score} | {cookies} | {httponly} | {secure} | {samesite} | `{evidence}` |".format(
                 host=row.get("host_url", ""),
@@ -299,9 +303,10 @@ def build_headers_summary(
 def _extract_tls_info(host: str, port: int = 443, timeout: float = 5.0) -> dict[str, object]:
     try:
         ctx = ssl.create_default_context()
-        with socket.create_connection((host, port), timeout=timeout) as sock, ctx.wrap_socket(
-            sock, server_hostname=host
-        ) as ssock:
+        with (
+            socket.create_connection((host, port), timeout=timeout) as sock,
+            ctx.wrap_socket(sock, server_hostname=host) as ssock,
+        ):
             cert = ssock.getpeercert()
         san = [
             entry[1]
@@ -337,7 +342,9 @@ def _extract_tls_info(host: str, port: int = 443, timeout: float = 5.0) -> dict[
         }
 
 
-def get_ssl_cert_entry(host: str, port: int = 443, timeout: float = 5.0) -> dict[str, object] | None:
+def get_ssl_cert_entry(
+    host: str, port: int = 443, timeout: float = 5.0
+) -> dict[str, object] | None:
     """Fetch TLS cert and return SslCertEntry-compatible dict for recon_results.
 
     Returns dict with common_name, subject_alternative_names, issuer,
@@ -345,9 +352,10 @@ def get_ssl_cert_entry(host: str, port: int = 443, timeout: float = 5.0) -> dict
     """
     try:
         ctx = ssl.create_default_context()
-        with socket.create_connection((host, port), timeout=timeout) as sock, ctx.wrap_socket(
-            sock, server_hostname=host
-        ) as ssock:
+        with (
+            socket.create_connection((host, port), timeout=timeout) as sock,
+            ctx.wrap_socket(sock, server_hostname=host) as ssock,
+        ):
             cert = ssock.getpeercert()
 
         san = [
@@ -386,7 +394,11 @@ def get_ssl_cert_entry(host: str, port: int = 443, timeout: float = 5.0) -> dict
         except (ValueError, TypeError):
             logger.info(
                 "stage1_tls_date_parse_failed",
-                extra={"host": host, "not_before": str(not_before_str)[:50], "not_after": str(not_after_str)[:50]},
+                extra={
+                    "host": host,
+                    "not_before": str(not_before_str)[:50],
+                    "not_after": str(not_after_str)[:50],
+                },
             )
             return None
 
@@ -447,7 +459,9 @@ def build_tls_summary(
         info = fetched.get(url) or _extract_tls_info(host)
         with_tls += 1
         san = info.get("san") or []
-        san_preview = ", ".join(str(item) for item in san[:8]) if isinstance(san, list) else str(san)
+        san_preview = (
+            ", ".join(str(item) for item in san[:8]) if isinstance(san, list) else str(san)
+        )
         if isinstance(san, list) and len(san) > 8:
             san_preview += f" ... (+{len(san) - 8})"
 

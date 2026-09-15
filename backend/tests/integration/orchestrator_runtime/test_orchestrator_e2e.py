@@ -13,14 +13,12 @@ scan, and the audit-event emission.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
-
-from src.oast.correlator import InteractionKind, OASTInteraction
 from src.llm_orchestrator.agents import AgentContext, ReportNarrative
 from src.llm_orchestrator.cost_tracker import CostTracker
 from src.llm_orchestrator.llm_provider import EchoLLMProvider
@@ -28,6 +26,7 @@ from src.llm_orchestrator.orchestrator import Orchestrator
 from src.llm_orchestrator.prompt_registry import PromptRegistry
 from src.llm_orchestrator.retry_loop import RetryConfig
 from src.llm_orchestrator.schemas.loader import ValidationPlanV1
+from src.oast.correlator import InteractionKind, OASTInteraction
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
@@ -100,8 +99,8 @@ def _finding_payload(scan_id: str, tenant_id: str) -> dict[str, Any]:
         "confidence": "confirmed",
         "status": "new",
         "evidence_ids": [],
-        "first_seen": datetime.now(tz=timezone.utc).isoformat(),
-        "last_seen": datetime.now(tz=timezone.utc).isoformat(),
+        "first_seen": datetime.now(tz=UTC).isoformat(),
+        "last_seen": datetime.now(tz=UTC).isoformat(),
     }
 
 
@@ -113,8 +112,7 @@ def _narrative_payload() -> dict[str, Any]:
     return {
         "executive_summary": "One critical SQLi observed on /api/search.",
         "technical_summary": (
-            "Boolean-blind SQLi confirmed via deterministic response-length "
-            "divergence; CVSS 9.8."
+            "Boolean-blind SQLi confirmed via deterministic response-length divergence; CVSS 9.8."
         ),
         "recommendations": [
             "Switch /api/search to parameterised queries.",
@@ -231,7 +229,7 @@ async def test_oast_evidence_propagated_to_verifier(
         id=uuid4(),
         token_id=uuid4(),
         kind=InteractionKind.DNS_A,
-        received_at=datetime.now(tz=timezone.utc),
+        received_at=datetime.now(tz=UTC),
         source_ip="203.0.113.7",
         metadata={"host": "callback.example"},
         raw_request_hash=hashlib.sha256(b"oob signal").hexdigest(),

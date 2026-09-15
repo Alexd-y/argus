@@ -94,9 +94,7 @@ def _control_status(
         executed = forced or bool(tls_findings) or 443 in ports
         # A TLS weakness (medium+) or explicit "weak/outdated" wording fails it.
         weak = any(
-            _sev(f) >= _SEVERITY_ORDER["medium"]
-            or "weak" in _blob(f)
-            or "outdated" in _blob(f)
+            _sev(f) >= _SEVERITY_ORDER["medium"] or "weak" in _blob(f) or "outdated" in _blob(f)
             for f in tls_findings
         )
         return executed, executed and not weak

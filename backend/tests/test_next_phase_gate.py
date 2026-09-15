@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.vulnerability_analysis.next_phase_gate import (
     check_next_phase_gate_allowed,
     evaluate_next_phase_gate,
     generate_next_phase_gate_md,
 )
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def test_evaluate_next_phase_gate_blocked_missing_stage1() -> None:
@@ -101,13 +101,19 @@ def test_evaluate_next_phase_gate_ready_when_all_conditions_met() -> None:
         },
         "finding_correlation": {"correlations": []},
     }
-    from src.schemas.threat_modeling.schemas import CriticalAsset, ThreatScenario, TrustBoundary
+    from src.schemas.threat_modeling.schemas import (
+        CriticalAsset,
+        ThreatScenario,
+        TrustBoundary,
+    )
 
     bundle = VulnerabilityAnalysisInputBundle(
         engagement_id="e1",
         target_id="t1",
         artifact_refs=["route_inventory.csv"],
-        critical_assets=[CriticalAsset(id="ca_1", name="API", asset_type="service", description="")],
+        critical_assets=[
+            CriticalAsset(id="ca_1", name="API", asset_type="service", description="")
+        ],
         trust_boundaries=[TrustBoundary(id="tb_1", name="Boundary", description="")],
         threat_scenarios=[
             ThreatScenario(

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ArtifactType(str, Enum):
+class ArtifactType(StrEnum):
     SOURCE_CODE = "source_code"
     CONFIG = "config"
     IAC = "iac"  # Infrastructure as Code

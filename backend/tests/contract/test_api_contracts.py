@@ -4,16 +4,13 @@ Ensures existing scan/report/admin endpoints have unchanged response shapes
 after the LLM stack rework. SSE event names unchanged.
 """
 
-import pytest
-from unittest.mock import AsyncMock, patch
-
 
 class TestScanEndpointContract:
     """Verify POST/GET /scans response shapes are unchanged."""
 
     def test_create_scan_returns_expected_shape(self):
         """POST /api/v1/scans must return {scan_id, status, message?}."""
-        import json
+
         expected_keys = {"scan_id", "status"}
         # Test shape validation logic — actual HTTP test needs FastAPI TestClient
         shape = {"scan_id": "scan_1", "status": "queued"}
@@ -23,8 +20,11 @@ class TestScanEndpointContract:
         """GET /api/v1/scans/:id must return {id, status, progress, phase, target, created_at}."""
         expected_keys = {"id", "status", "progress", "phase", "target", "created_at"}
         shape = {
-            "id": "s1", "status": "running", "progress": 45,
-            "phase": "vuln_analysis", "target": "example.com",
+            "id": "s1",
+            "status": "running",
+            "progress": 45,
+            "phase": "vuln_analysis",
+            "target": "example.com",
             "created_at": "2026-05-11T00:00:00Z",
         }
         assert all(k in shape for k in expected_keys)
@@ -36,16 +36,21 @@ class TestReportEndpointContract:
     def test_list_reports_returns_expected_shape(self):
         expected_keys = {"report_id", "target", "generation_status", "tier"}
         shape = {
-            "report_id": "r1", "target": "example.com",
-            "generation_status": "completed", "tier": "midgard",
+            "report_id": "r1",
+            "target": "example.com",
+            "generation_status": "completed",
+            "tier": "midgard",
         }
         assert all(k in shape for k in expected_keys)
 
     def test_report_detail_returns_expected_shape(self):
         expected_keys = {"report_id", "target", "tier", "created_at", "scan_id"}
         shape = {
-            "report_id": "r1", "target": "example.com", "tier": "valhalla",
-            "created_at": "2026-05-11T00:00:00Z", "scan_id": "s1",
+            "report_id": "r1",
+            "target": "example.com",
+            "tier": "valhalla",
+            "created_at": "2026-05-11T00:00:00Z",
+            "scan_id": "s1",
         }
         assert all(k in shape for k in expected_keys)
 
@@ -56,8 +61,11 @@ class TestAdminEndpointContract:
     def test_list_providers_shape(self):
         expected_keys = {"id", "tenant_id", "provider_key", "enabled", "config"}
         shape = {
-            "id": "p1", "tenant_id": "t1", "provider_key": "openai",
-            "enabled": True, "config": {"model": "gpt-4o-mini"},
+            "id": "p1",
+            "tenant_id": "t1",
+            "provider_key": "openai",
+            "enabled": True,
+            "config": {"model": "gpt-4o-mini"},
         }
         assert all(k in shape for k in expected_keys)
 
@@ -69,12 +77,22 @@ class TestAdminEndpointContract:
 
     def test_tenants_list_shape(self):
         expected_keys = {"id", "name", "created_at", "updated_at"}
-        shape = {"id": "t1", "name": "Test", "created_at": "2026-05-11T00:00:00Z", "updated_at": "2026-05-11T00:00:00Z"}
+        shape = {
+            "id": "t1",
+            "name": "Test",
+            "created_at": "2026-05-11T00:00:00Z",
+            "updated_at": "2026-05-11T00:00:00Z",
+        }
         assert all(k in shape for k in expected_keys)
 
     def test_users_list_shape(self):
         expected_keys = {"id", "tenant_id", "email", "is_active"}
-        shape = {"id": "u1", "tenant_id": "t1", "email": "test@example.com", "is_active": True}
+        shape = {
+            "id": "u1",
+            "tenant_id": "t1",
+            "email": "test@example.com",
+            "is_active": True,
+        }
         assert all(k in shape for k in expected_keys)
 
 
@@ -83,9 +101,17 @@ class TestSSEEventContract:
 
     def test_known_event_names(self):
         """SSE must continue using these event names."""
-        known_events = {"phase_start", "phase_end", "tool_start", "tool_end",
-                        "finding_found", "scan_complete", "scan_error",
-                        "progress_update", "approval_required"}
+        known_events = {
+            "phase_start",
+            "phase_end",
+            "tool_start",
+            "tool_end",
+            "finding_found",
+            "scan_complete",
+            "scan_error",
+            "progress_update",
+            "approval_required",
+        }
         # Verify no event was renamed
         assert "scan_complete" in known_events
         assert "progress_update" in known_events
@@ -110,8 +136,11 @@ class TestToolEndpointContract:
         """All tool endpoints must return {success, stdout, stderr, return_code, execution_time}."""
         expected_keys = {"success", "stdout", "stderr", "return_code", "execution_time"}
         shape = {
-            "success": True, "stdout": "output", "stderr": "",
-            "return_code": 0, "execution_time": 1.5,
+            "success": True,
+            "stdout": "output",
+            "stderr": "",
+            "return_code": 0,
+            "execution_time": 1.5,
         }
         assert all(k in shape for k in expected_keys)
 

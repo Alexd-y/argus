@@ -8,7 +8,6 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from src.llm_orchestrator.agents import (
     AgentContext,
     FixerAgent,
@@ -204,9 +203,7 @@ class TestRetryLoopFailures:
         assert log.abort_reason is RetryAbortReason.MAX_RETRIES_EXHAUSTED
         # All fixer attempts produced "fixer response is not valid JSON".
         fixer_attempts = [a for a in log.attempts[1:] if a.agent_role == "fixer"]
-        assert all(
-            "not valid JSON" in (a.sanitized_error or "") for a in fixer_attempts
-        )
+        assert all("not valid JSON" in (a.sanitized_error or "") for a in fixer_attempts)
 
     @pytest.mark.asyncio
     async def test_provider_error_first_attempt(
@@ -364,9 +361,7 @@ class TestRetryLoopBackoff:
         registry, _, _ = full_signed_registry
         bad = canned_validation_plan()
         bad.pop("hypothesis")
-        provider = echo_provider_factory(
-            {"planner_v1": bad, "fixer_v1": canned_validation_plan()}
-        )
+        provider = echo_provider_factory({"planner_v1": bad, "fixer_v1": canned_validation_plan()})
         planner = _make_planner(registry, provider)
         fixer = _make_fixer(registry, provider)
         config = RetryConfig(

@@ -8,12 +8,11 @@ pre-authorized with an audit trail and never bypasses a pending approval.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
 from src.policy.engagement_authorization import (
@@ -26,7 +25,7 @@ from src.sandbox.signing import KeyManager
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _profile(
@@ -49,9 +48,7 @@ def _profile(
 def eap_service(
     key_manager: KeyManager, audit_logger: AuditLogger
 ) -> EngagementAuthorizationService:
-    return EngagementAuthorizationService(
-        key_manager=key_manager, audit_logger=audit_logger
-    )
+    return EngagementAuthorizationService(key_manager=key_manager, audit_logger=audit_logger)
 
 
 @pytest.fixture()
@@ -139,9 +136,7 @@ def test_is_preauthorized_class_and_target_in_scope_true(
         expires=_now() + timedelta(days=1),
         classes=frozenset({ActionClass.INJECTION_SAFE}),
     )
-    assert eap_service.is_preauthorized(
-        profile, ActionClass.INJECTION_SAFE, in_scope_target
-    )
+    assert eap_service.is_preauthorized(profile, ActionClass.INJECTION_SAFE, in_scope_target)
 
 
 def test_is_preauthorized_class_not_in_allowlist_false(
@@ -151,9 +146,7 @@ def test_is_preauthorized_class_not_in_allowlist_false(
         expires=_now() + timedelta(days=1),
         classes=frozenset({ActionClass.RECON}),
     )
-    assert not eap_service.is_preauthorized(
-        profile, ActionClass.RCE, in_scope_target
-    )
+    assert not eap_service.is_preauthorized(profile, ActionClass.RCE, in_scope_target)
 
 
 def test_is_preauthorized_target_out_of_scope_false(
@@ -224,9 +217,7 @@ def test_authorize_denies_when_class_not_preauthorized(
         ),
         private_key=priv,
     )
-    decision = eap_service.authorize(
-        signed, ActionClass.RCE, in_scope_target, tenant_id=tenant_id
-    )
+    decision = eap_service.authorize(signed, ActionClass.RCE, in_scope_target, tenant_id=tenant_id)
     assert decision.authorized is False
     assert decision.approval_id is None
     assert decision.reason == "eap_action_class_not_preauthorized"

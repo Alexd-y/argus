@@ -43,9 +43,7 @@ class Engagement(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (
-        Index("ix_engagements_tenant_status", "tenant_id", "status"),
-    )
+    __table_args__ = (Index("ix_engagements_tenant_status", "tenant_id", "status"),)
 
 
 class ReconTarget(Base):
@@ -102,7 +100,12 @@ class ScanJob(Base):
     )
 
     __table_args__ = (
-        Index("ix_scan_jobs_engagement_target_stage", "engagement_id", "target_id", "stage"),
+        Index(
+            "ix_scan_jobs_engagement_target_stage",
+            "engagement_id",
+            "target_id",
+            "stage",
+        ),
         Index("ix_scan_jobs_tenant_status", "tenant_id", "status"),
     )
 
@@ -200,9 +203,7 @@ class Hypothesis(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (
-        Index("ix_hypotheses_engagement_priority", "engagement_id", "priority"),
-    )
+    __table_args__ = (Index("ix_hypotheses_engagement_priority", "engagement_id", "priority"),)
 
 
 class ThreatModelRun(Base):
@@ -319,7 +320,9 @@ class ExploitationApproval(Base):
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     run_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("exploitation_runs.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("exploitation_runs.id", ondelete="CASCADE"),
+        nullable=False,
     )
     candidate_id: Mapped[str] = mapped_column(String(256), nullable=False)
     target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
@@ -331,6 +334,4 @@ class ExploitationApproval(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (
-        Index("ix_exploitation_approvals_run_status", "run_id", "status"),
-    )
+    __table_args__ = (Index("ix_exploitation_approvals_run_status", "run_id", "status"),)

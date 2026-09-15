@@ -24,7 +24,8 @@ class HttpxAdapter(ToolAdapter):
     async def build_command(self, target: str, config: dict[str, Any]) -> list[str]:
         cmd = [
             "httpx",
-            "-l", target,
+            "-l",
+            target,
             "-json",
             "-silent",
             "-status-code",
@@ -57,20 +58,14 @@ class HttpxAdapter(ToolAdapter):
                 continue
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize httpx output to multiple finding types."""
         findings: list[dict[str, Any]] = []
 
         for item in raw_results:
             url = item.get("url", item.get("input", ""))
             host = item.get("host", "")
-            ip = (
-                item.get("a", [""])[0]
-                if isinstance(item.get("a"), list)
-                else item.get("host", "")
-            )
+            item.get("a", [""])[0] if isinstance(item.get("a"), list) else item.get("host", "")
             status = item.get("status_code") or item.get("status-code")
             title = item.get("title", "")
             server = item.get("webserver") or item.get("server", "")
@@ -79,55 +74,61 @@ class HttpxAdapter(ToolAdapter):
             content_length = item.get("content_length") or item.get("content-length")
 
             if url:
-                findings.append({
-                    "finding_type": FindingType.URL,
-                    "value": url,
-                    "data": {
-                        "url": url,
-                        "method": "GET",
-                        "status_code": status,
-                        "content_type": content_type,
-                        "content_length": content_length,
-                        "title": title,
-                        "redirect_location": item.get("final_url", ""),
-                        "source": "httpx",
-                    },
-                    "source_tool": "httpx",
-                    "confidence": 1.0,
-                })
+                findings.append(
+                    {
+                        "finding_type": FindingType.URL,
+                        "value": url,
+                        "data": {
+                            "url": url,
+                            "method": "GET",
+                            "status_code": status,
+                            "content_type": content_type,
+                            "content_length": content_length,
+                            "title": title,
+                            "redirect_location": item.get("final_url", ""),
+                            "source": "httpx",
+                        },
+                        "source_tool": "httpx",
+                        "confidence": 1.0,
+                    }
+                )
 
             if isinstance(tech, list):
                 for t in tech:
                     if isinstance(t, str) and t:
-                        findings.append({
-                            "finding_type": FindingType.TECHNOLOGY,
-                            "value": f"{host}:{t}",
-                            "data": {
-                                "url": url,
-                                "name": t,
-                                "version": None,
-                                "category": None,
+                        findings.append(
+                            {
+                                "finding_type": FindingType.TECHNOLOGY,
+                                "value": f"{host}:{t}",
+                                "data": {
+                                    "url": url,
+                                    "name": t,
+                                    "version": None,
+                                    "category": None,
+                                    "confidence": 0.8,
+                                    "evidence": f"Detected by httpx on {host}",
+                                },
+                                "source_tool": "httpx",
                                 "confidence": 0.8,
-                                "evidence": f"Detected by httpx on {host}",
-                            },
-                            "source_tool": "httpx",
-                            "confidence": 0.8,
-                        })
+                            }
+                        )
 
             if server:
-                findings.append({
-                    "finding_type": FindingType.TECHNOLOGY,
-                    "value": f"{host}:server:{server}",
-                    "data": {
-                        "url": url,
-                        "name": server,
-                        "version": None,
-                        "category": "server",
+                findings.append(
+                    {
+                        "finding_type": FindingType.TECHNOLOGY,
+                        "value": f"{host}:server:{server}",
+                        "data": {
+                            "url": url,
+                            "name": server,
+                            "version": None,
+                            "category": "server",
+                            "confidence": 0.9,
+                            "evidence": "Server header",
+                        },
+                        "source_tool": "httpx",
                         "confidence": 0.9,
-                        "evidence": "Server header",
-                    },
-                    "source_tool": "httpx",
-                    "confidence": 0.9,
-                })
+                    }
+                )
 
         return findings

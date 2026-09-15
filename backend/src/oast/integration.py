@@ -76,9 +76,7 @@ class OASTRequiredButDisabledError(OASTIntegrationError):
     """Raised when the family requires OAST and the plane cannot provide it."""
 
     def __init__(self, family_id: str, *, reason: str) -> None:
-        super().__init__(
-            f"family_id={family_id!r} requires OAST but it is unavailable: {reason}"
-        )
+        super().__init__(f"family_id={family_id!r} requires OAST but it is unavailable: {reason}")
         self.family_id = family_id
         self.reason = reason
 
@@ -127,18 +125,12 @@ class EvidencePreparation(BaseModel):
     def model_post_init(self, _context: object) -> None:
         if self.strategy is EvidenceStrategy.OAST:
             if self.oast_token is None:
-                raise ValueError(
-                    "EvidencePreparation: OAST strategy requires an oast_token"
-                )
+                raise ValueError("EvidencePreparation: OAST strategy requires an oast_token")
             if self.canary is not None:
-                raise ValueError(
-                    "EvidencePreparation: OAST strategy must not carry a canary"
-                )
+                raise ValueError("EvidencePreparation: OAST strategy must not carry a canary")
         else:
             if self.canary is None:
-                raise ValueError(
-                    "EvidencePreparation: CANARY strategy requires a canary"
-                )
+                raise ValueError("EvidencePreparation: CANARY strategy requires a canary")
             if self.oast_token is not None:
                 raise ValueError(
                     "EvidencePreparation: CANARY strategy must not carry an oast_token"
@@ -282,9 +274,7 @@ class OASTPlane:
                 # Fall through to canary mode below.
 
         if family.oast_required:
-            raise OASTRequiredButDisabledError(
-                family.family_id, reason=_OAST_DISABLED_REASON
-            )
+            raise OASTRequiredButDisabledError(family.family_id, reason=_OAST_DISABLED_REASON)
 
         return self._prepare_canary(
             family=family,
@@ -293,8 +283,7 @@ class OASTPlane:
             approval_id=approval_id,
             max_payloads=max_payloads,
             extra_parameters=merged_extra,
-            canary_kind=canary_kind_override
-            or self._config.canary_kind_for_unknown_family,
+            canary_kind=canary_kind_override or self._config.canary_kind_for_unknown_family,
             canary_header_name=canary_header_name,
             canary_cookie_name=canary_cookie_name,
         )
@@ -370,9 +359,7 @@ class OASTPlane:
         # Canary mode cannot serve OAST-only templates; the caller should
         # have caught this via ``family.oast_required`` already.
         if family.oast_required:
-            raise OASTRequiredButDisabledError(
-                family.family_id, reason=_OAST_DISABLED_REASON
-            )
+            raise OASTRequiredButDisabledError(family.family_id, reason=_OAST_DISABLED_REASON)
 
         canary = self._canary_generator.generate(
             canary_kind,

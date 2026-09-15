@@ -29,6 +29,7 @@ is read up to a hard cap before persistence spills/inlines/drops it.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 from dataclasses import dataclass
@@ -294,7 +295,7 @@ class RepositoryTrafficSink:  # pragma: no cover - requires a live DB
         # Deferred: importing src.db.session at module top builds a DB engine as
         # an import-time side effect, which would defeat offline import of the
         # pure ProxyFlowProcessor. This sink is infra-gated (needs a live DB).
-        from src.db.session import set_session_tenant  # noqa: PLC0415
+        from src.db.session import set_session_tenant
 
         async with self._session_factory() as session, session.begin():
             await set_session_tenant(session, self._identity.tenant_id)
@@ -336,9 +337,7 @@ def _resolve_listen_endpoint() -> tuple[str, int]:
     return host, port
 
 
-def _write_ca_material(
-    confdir: str, *, private_key_pem: bytes, certificate_pem: bytes
-) -> str:
+def _write_ca_material(confdir: str, *, private_key_pem: bytes, certificate_pem: bytes) -> str:
     """Write the unsealed CA as ``mitmproxy-ca.pem`` so mitmproxy mints leaves
     from OUR per-listener CA instead of generating its own (pure filesystem;
     unit-tested).
@@ -347,15 +346,12 @@ def _write_ca_material(
     file ``0600``) and is never logged. Returns the written bundle path.
     """
     os.makedirs(confdir, mode=0o700, exist_ok=True)
-    try:
+    # pragma: no cover - platform-dependent (e.g. Windows)
+    with contextlib.suppress(OSError):
         os.chmod(confdir, 0o700)
-    except OSError:  # pragma: no cover - platform-dependent (e.g. Windows)
-        pass
 
     # mitmproxy's certstore reads a combined KEY-then-CERT PEM bundle.
-    material = (
-        private_key_pem.rstrip(b"\n") + b"\n" + certificate_pem.rstrip(b"\n") + b"\n"
-    )
+    material = private_key_pem.rstrip(b"\n") + b"\n" + certificate_pem.rstrip(b"\n") + b"\n"
     bundle_path = os.path.join(confdir, _MITM_CA_FILENAME)
     fd = os.open(bundle_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
@@ -452,9 +448,7 @@ async def _run() -> None:  # pragma: no cover - infra-gated (needs mitmproxy + l
         )
         # Interception (hold) needs the workbench UI to resume flows; a headless
         # daemon has no resume consumer, so run in capture+gate mode (no hold).
-        processor = ProxyFlowProcessor(
-            gate, identity=identity, sink=sink, intercept_enabled=False
-        )
+        processor = ProxyFlowProcessor(gate, identity=identity, sink=sink, intercept_enabled=False)
 
         logger.info(
             "wb_proxy_starting",

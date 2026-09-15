@@ -80,23 +80,27 @@ def generate_wstg_payload_commands(
     if not missing_tests:
         return {"commands": [], "status": "no_missing_tests"}
 
-    user_prompt = json.dumps({
-        "target_url": target_url,
-        "target_host": target_host,
-        "missing_tests": [
-            {"id": t.get("wstg_id", t.get("id", "")),
-             "name": t.get("test_name", t.get("name", "")),
-             "category": t.get("category", "")}
-            for t in missing_tests[:20]
-        ],
-        "instructions": (
-            "For each missing test, generate the EXACT shell command to run "
-            "with the proper tool, flags, and parameters. Include fallback "
-            "tools if primary tool is unavailable. Output MUST be valid JSON: "
-            '{"commands": [{"wstg_id": "...", "tool": "...", "command": "...", '
-            '"fallback_command": "...", "expected_output": "...", "evidence_type": "..."}]}'
-        ),
-    })
+    user_prompt = json.dumps(
+        {
+            "target_url": target_url,
+            "target_host": target_host,
+            "missing_tests": [
+                {
+                    "id": t.get("wstg_id", t.get("id", "")),
+                    "name": t.get("test_name", t.get("name", "")),
+                    "category": t.get("category", ""),
+                }
+                for t in missing_tests[:20]
+            ],
+            "instructions": (
+                "For each missing test, generate the EXACT shell command to run "
+                "with the proper tool, flags, and parameters. Include fallback "
+                "tools if primary tool is unavailable. Output MUST be valid JSON: "
+                '{"commands": [{"wstg_id": "...", "tool": "...", "command": "...", '
+                '"fallback_command": "...", "expected_output": "...", "evidence_type": "..."}]}'
+            ),
+        }
+    )
 
     try:
         result = call_llm_sync(
@@ -124,25 +128,27 @@ def generate_credential_testing_commands(
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask
 
-    user_prompt = json.dumps({
-        "target_domain": target_domain,
-        "target_url": target_url,
-        "has_auth_form": has_auth_form,
-        "instructions": (
-            "Generate complete credential testing commands including: "
-            "1) username enumeration via forgot-password and registration endpoints "
-            "2) password spray with weak/common passwords "
-            "3) HIBP k-anonymity check for email hashes "
-            "4) brute-force with hydra/patator against login form "
-            "5) credential stuffing commands. "
-            "Use realistic but harmless password lists. "
-            "Output MUST be valid JSON: "
-            '{"commands": [{"tool": "...", "command": "...", "purpose": "...", '
-            '"risk_level": "safe|moderate|aggressive", '
-            '"requires_auth": true/false, '
-            '"output_evidence": "..."}]}'
-        ),
-    })
+    user_prompt = json.dumps(
+        {
+            "target_domain": target_domain,
+            "target_url": target_url,
+            "has_auth_form": has_auth_form,
+            "instructions": (
+                "Generate complete credential testing commands including: "
+                "1) username enumeration via forgot-password and registration endpoints "
+                "2) password spray with weak/common passwords "
+                "3) HIBP k-anonymity check for email hashes "
+                "4) brute-force with hydra/patator against login form "
+                "5) credential stuffing commands. "
+                "Use realistic but harmless password lists. "
+                "Output MUST be valid JSON: "
+                '{"commands": [{"tool": "...", "command": "...", "purpose": "...", '
+                '"risk_level": "safe|moderate|aggressive", '
+                '"requires_auth": true/false, '
+                '"output_evidence": "..."}]}'
+            ),
+        }
+    )
 
     try:
         result = call_llm_sync(
@@ -170,26 +176,39 @@ def generate_auth_testing_commands(
     from src.llm.facade import call_llm_sync
     from src.llm.task_router import LLMTask
 
-    roles = roles or ["admin", "user", "editor", "viewer", "moderator", "guest", "api", "support", "auditor", "developer"]
-    user_prompt = json.dumps({
-        "target_url": target_url,
-        "roles": roles[:10],
-        "auth_method": auth_method or "cookie/session/JWT",
-        "instructions": (
-            "Generate commands for authenticated testing: "
-            "1) session management (cookie invalidation, session fixation, logout) "
-            "2) JWT analysis (none alg, weak key, expiry tampering) "
-            "3) CSRF token validation "
-            "4) MFA bypass attempts "
-            "5) password reset flow testing "
-            "6) username enumeration "
-            "7) role-based access control matrix testing "
-            "Output MUST be valid JSON: "
-            '{"commands": [{"tool": "...", "command": "...", "purpose": "...", '
-            '"auth_method": "...", "roles_tested": [...], '
-            '"expected_evidence": "..."}]}'
-        ),
-    })
+    roles = roles or [
+        "admin",
+        "user",
+        "editor",
+        "viewer",
+        "moderator",
+        "guest",
+        "api",
+        "support",
+        "auditor",
+        "developer",
+    ]
+    user_prompt = json.dumps(
+        {
+            "target_url": target_url,
+            "roles": roles[:10],
+            "auth_method": auth_method or "cookie/session/JWT",
+            "instructions": (
+                "Generate commands for authenticated testing: "
+                "1) session management (cookie invalidation, session fixation, logout) "
+                "2) JWT analysis (none alg, weak key, expiry tampering) "
+                "3) CSRF token validation "
+                "4) MFA bypass attempts "
+                "5) password reset flow testing "
+                "6) username enumeration "
+                "7) role-based access control matrix testing "
+                "Output MUST be valid JSON: "
+                '{"commands": [{"tool": "...", "command": "...", "purpose": "...", '
+                '"auth_method": "...", "roles_tested": [...], '
+                '"expected_evidence": "..."}]}'
+            ),
+        }
+    )
 
     try:
         result = call_llm_sync(
@@ -220,18 +239,22 @@ def generate_missing_evidence_commands(
     if not missing_artifacts:
         return {"commands": [], "status": "no_missing_artifacts"}
 
-    user_prompt = json.dumps({
-        "target_url": target_url,
-        "target_host": target_host,
-        "missing_artifacts": [a.get("description", a.get("finding_id", "")) for a in missing_artifacts[:20]],
-        "instructions": (
-            "Generate specific commands to collect each missing evidence type. "
-            "Output MUST be valid JSON: "
-            '{"commands": [{"artifact_type": "...", "tool": "...", "command": "...", '
-            '"expected_output": "...", "collection_method": "curl|nmap|nuclei|trivy|whatweb"'
-            "\n}]}"
-        ),
-    })
+    user_prompt = json.dumps(
+        {
+            "target_url": target_url,
+            "target_host": target_host,
+            "missing_artifacts": [
+                a.get("description", a.get("finding_id", "")) for a in missing_artifacts[:20]
+            ],
+            "instructions": (
+                "Generate specific commands to collect each missing evidence type. "
+                "Output MUST be valid JSON: "
+                '{"commands": [{"artifact_type": "...", "tool": "...", "command": "...", '
+                '"expected_output": "...", "collection_method": "curl|nmap|nuclei|trivy|whatweb"'
+                "\n}]}"
+            ),
+        }
+    )
 
     try:
         result = call_llm_sync(

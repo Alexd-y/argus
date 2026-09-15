@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
+from pydantic import ValidationError
 from src.evidence.redaction import (
     RedactedContent,
     RedactionReport,
@@ -11,7 +11,6 @@ from src.evidence.redaction import (
     Redactor,
     default_specs,
 )
-
 
 # ---------------------------------------------------------------------------
 # Construction / validation
@@ -31,7 +30,7 @@ def test_invalid_regex_rejected_at_construction() -> None:
 
 
 def test_spec_name_must_be_lowercase_snake() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         RedactionSpec(name="Bad-Name", pattern=r"foo")
 
 
@@ -106,9 +105,7 @@ def test_empty_input_returns_empty() -> None:
         ("openai_key", b"OPENAI=sk-1234567890abcdef1234ABCD", b"[REDACTED:openai_key]"),
     ],
 )
-def test_default_spec_positive(
-    name: str, snippet: bytes, should_contain: bytes
-) -> None:
+def test_default_spec_positive(name: str, snippet: bytes, should_contain: bytes) -> None:
     redactor = Redactor()
     out = redactor.redact(snippet)
     assert out.redactions_applied >= 1
@@ -151,9 +148,7 @@ def test_negative_cases_not_redacted(snippet: bytes) -> None:
 def test_multiple_redactions_counted() -> None:
     redactor = Redactor()
     payload = (
-        b"Authorization: Bearer abc.def\n"
-        b"Authorization: Bearer xyz.123\n"
-        b"key=AKIAABCDEFGHIJKLMNOP\n"
+        b"Authorization: Bearer abc.def\nAuthorization: Bearer xyz.123\nkey=AKIAABCDEFGHIJKLMNOP\n"
     )
     out = redactor.redact(payload)
     assert out.redactions_applied == 3
@@ -195,9 +190,7 @@ def test_invalid_utf8_in_jwt_pattern() -> None:
 
 
 def test_disabled_spec_skipped() -> None:
-    spec = RedactionSpec(
-        name="bearer_token", pattern=r"Bearer\s+[A-Za-z0-9._\-]+", enabled=False
-    )
+    spec = RedactionSpec(name="bearer_token", pattern=r"Bearer\s+[A-Za-z0-9._\-]+", enabled=False)
     redactor = Redactor(specs=[spec])
     out = redactor.redact(b"Authorization: Bearer abc.def")
     assert out.redactions_applied == 0
@@ -236,7 +229,7 @@ def test_replacement_default_includes_name() -> None:
 def test_redaction_dto_is_frozen() -> None:
     redactor = Redactor()
     out = redactor.redact(b"Bearer abc.def")
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         out.redactions_applied = 0  # type: ignore[misc]
 
 

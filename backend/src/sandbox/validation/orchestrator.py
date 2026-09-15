@@ -12,13 +12,13 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class ValidationProfile(str, Enum):
+class ValidationProfile(StrEnum):
     WEB_APP = "web_app"
     API = "api"
     CLI = "cli"
@@ -27,7 +27,7 @@ class ValidationProfile(str, Enum):
     SERVICE_MESH = "service_mesh"
 
 
-class ValidationStatus(str, Enum):
+class ValidationStatus(StrEnum):
     PENDING = "pending"
     PROVISIONING = "provisioning"
     RUNNING = "running"
@@ -145,10 +145,13 @@ class ValidationOrchestrator:
         except Exception as exc:
             result.status = ValidationStatus.FAILED
             result.error = str(exc)
-            logger.warning("validation_failed", extra={
-                "finding_id": result.finding_id,
-                "error": str(exc),
-            })
+            logger.warning(
+                "validation_failed",
+                extra={
+                    "finding_id": result.finding_id,
+                    "error": str(exc),
+                },
+            )
         finally:
             result.duration_ms = int((time.monotonic() - start) * 1000)
             result.completed_at = datetime.now(UTC).isoformat()
@@ -171,7 +174,7 @@ class ValidationOrchestrator:
 
         return await asyncio.gather(*[_validate_one(f) for f in findings])
 
-    async def _provision_environment(self, config: ValidationConfig) -> dict[str, Any]:
+    async def _provision_environment(self, config: ValidationConfig) -> dict[str, Any]:  # noqa: ARG002 - retained for signature/API compatibility
         """Provision isolated environment (container or VM)."""
         env_id = str(uuid.uuid4())[:8]
         return {
@@ -193,6 +196,7 @@ class ValidationOrchestrator:
             LibraryHarness,
             WebAppHarness,
         )
+
         mapping = {
             ValidationProfile.WEB_APP: WebAppHarness,
             ValidationProfile.API: ApiHarness,
@@ -231,10 +235,10 @@ class ValidationOrchestrator:
         prompt = f"""Assess whether this finding is exploitable based on sandbox validation results.
 
 === FINDING ===
-Title: {finding.get('title', 'N/A')}
-Severity: {finding.get('severity', 'unknown')}
-CWE: {finding.get('cwe', 'N/A')}
-Description: {finding.get('description', '')[:500]}
+Title: {finding.get("title", "N/A")}
+Severity: {finding.get("severity", "unknown")}
+CWE: {finding.get("cwe", "N/A")}
+Description: {finding.get("description", "")[:500]}
 
 === VALIDATION OUTPUT ===
 Exit code: {result.exit_code}
@@ -251,11 +255,13 @@ Respond with JSON: {{"exploitable": true/false, "confidence": 0.0-1.0, "rational
 
         try:
             response = await call_llm_unified(
-                system, prompt,
+                system,
+                prompt,
                 task=LLMTask.VALIDATION_ONESHOT,
                 phase="exploitability_assessment",
             )
             import json as _json
+
             data = _json.loads(response)
             return data.get("exploitable", False), data.get("confidence", 0.0)
         except Exception:

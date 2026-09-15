@@ -6,6 +6,7 @@ hallucinated findings, abuse patterns, budget abuse.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import re
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SafetyAlert:
     id: str = ""
-    alert_type: str = ""         # prompt_injection | disallowed_content | hallucination | abuse
+    alert_type: str = ""  # prompt_injection | disallowed_content | hallucination | abuse
     severity: str = "medium"
     description: str = ""
     detected_at: str = ""
@@ -47,12 +48,18 @@ class SafetyMonitor:
         cleaned = _sanitize_for_check(prompt)
 
         patterns = [
-            (r"ignore (?:all )?previous (?:instructions?|prompts?)", "prompt_injection_ignore"),
+            (
+                r"ignore (?:all )?previous (?:instructions?|prompts?)",
+                "prompt_injection_ignore",
+            ),
             (r"you are now\b", "prompt_injection_role_change"),
             (r"\[system\]", "prompt_injection_system_tag"),
             (r"<\|im_end\|>", "prompt_injection_token"),
             (r"jailbreak", "prompt_injection_jailbreak"),
-            (r"disregard (?:all )?(?:previous )?(?:instructions?|rules?)", "prompt_injection_disregard"),
+            (
+                r"disregard (?:all )?(?:previous )?(?:instructions?|rules?)",
+                "prompt_injection_disregard",
+            ),
             (r"reveal (?:your )?(?:system )?prompt", "prompt_injection_reveal"),
             (r"bypass (?:the )?safety", "prompt_injection_bypass"),
         ]
@@ -60,7 +67,9 @@ class SafetyMonitor:
         for pattern, alert_type in patterns:
             if re.search(pattern, cleaned):
                 alert = SafetyAlert(
-                    id=hashlib.blake2b(f"{alert_type}:{time.time()}".encode(), digest_size=8).hexdigest(),
+                    id=hashlib.blake2b(
+                        f"{alert_type}:{time.time()}".encode(), digest_size=8
+                    ).hexdigest(),
                     alert_type=alert_type,
                     severity="high",
                     description=f"Prompt injection pattern detected: {pattern}",
@@ -94,7 +103,10 @@ class SafetyMonitor:
         for pattern, alert_type in command_patterns:
             if re.search(pattern, cleaned):
                 return self._response_alert(
-                    alert_type, f"Dangerous command pattern: {pattern}", response, task,
+                    alert_type,
+                    f"Dangerous command pattern: {pattern}",
+                    response,
+                    task,
                 )
 
         # NOP sled / shellcode: a run of non-printable control bytes (e.g. 0x90)
@@ -110,12 +122,14 @@ class SafetyMonitor:
         return None
 
     def _response_alert(
-        self, alert_type: str, description: str, response: str, task: str,
+        self,
+        alert_type: str,
+        description: str,
+        response: str,
+        task: str,
     ) -> SafetyAlert:
         alert = SafetyAlert(
-            id=hashlib.blake2b(
-                f"{alert_type}:{time.time()}".encode(), digest_size=8
-            ).hexdigest(),
+            id=hashlib.blake2b(f"{alert_type}:{time.time()}".encode(), digest_size=8).hexdigest(),
             alert_type=alert_type,
             severity="high",
             description=description,
@@ -130,13 +144,17 @@ class SafetyMonitor:
         return alert
 
     def check_hallucination(
-        self, claimed_cve: str, known_cves: set[str],
+        self,
+        claimed_cve: str,
+        known_cves: set[str],
     ) -> SafetyAlert | None:
         """Detect hallucinated CVEs."""
         cve = claimed_cve.upper().strip()
         if cve.startswith("CVE-") and cve not in known_cves:
             alert = SafetyAlert(
-                id=hashlib.blake2b(f"hallucination:{cve}:{time.time()}".encode(), digest_size=8).hexdigest(),
+                id=hashlib.blake2b(
+                    f"hallucination:{cve}:{time.time()}".encode(), digest_size=8
+                ).hexdigest(),
                 alert_type="hallucinated_cve",
                 severity="high",
                 description=f"LLM referenced non-existent CVE: {cve}",
@@ -160,16 +178,16 @@ class SafetyMonitor:
         self._recent_alerts.append(alert)
         if len(self._recent_alerts) > 100:
             self._recent_alerts = self._recent_alerts[-100:]
-        self._injection_history.append({
-            "ts": time.time(),
-            "alert_type": alert.alert_type,
-            "severity": alert.severity,
-        })
+        self._injection_history.append(
+            {
+                "ts": time.time(),
+                "alert_type": alert.alert_type,
+                "severity": alert.severity,
+            }
+        )
         if self._alert_callback:
-            try:
+            with contextlib.suppress(Exception):
                 self._alert_callback(alert)
-            except Exception:
-                pass
 
 
 def _sanitize_for_check(text: str) -> str:

@@ -28,7 +28,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -111,17 +110,13 @@ def test_private_key_rule_classified_as_critical(tmp_path: Path) -> None:
 
 
 def test_github_rule_classified_as_high(tmp_path: Path) -> None:
-    payload = _payload(
-        _leak(rule_id="github-pat", description="GitHub personal access token")
-    )
+    payload = _payload(_leak(rule_id="github-pat", description="GitHub personal access token"))
     findings = parse_gitleaks_json(payload, b"", tmp_path, "gitleaks")
     assert findings[0].cvss_v3_score == pytest.approx(8.0)
 
 
 def test_generic_rule_falls_back_to_medium(tmp_path: Path) -> None:
-    payload = _payload(
-        _leak(rule_id="vendor-x-token", description="Vendor X auth token")
-    )
+    payload = _payload(_leak(rule_id="vendor-x-token", description="Vendor X auth token"))
     findings = parse_gitleaks_json(payload, b"", tmp_path, "gitleaks")
     assert findings[0].cvss_v3_score == pytest.approx(6.0)
 
@@ -132,9 +127,7 @@ def test_secret_field_is_redacted_in_sidecar(tmp_path: Path) -> None:
     payload = _payload(_leak(secret=secret, match=match))
     parse_gitleaks_json(payload, b"", tmp_path, "gitleaks")
     sidecar_text = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
-    assert secret not in sidecar_text, (
-        "raw secret leaked through redaction — sidecar must mask"
-    )
+    assert secret not in sidecar_text, "raw secret leaked through redaction — sidecar must mask"
     assert "REDACTED" in sidecar_text
 
 
@@ -220,15 +213,12 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     assert len(findings) == 3
     sidecar_path = tmp_path / EVIDENCE_SIDECAR_NAME
     severities = [
-        json.loads(line)["severity"]
-        for line in sidecar_path.read_text("utf-8").splitlines()
+        json.loads(line)["severity"] for line in sidecar_path.read_text("utf-8").splitlines()
     ]
     assert severities == ["critical", "high", "medium"]
 
 
-def test_envelope_not_list_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_list_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_gitleaks_json(b"{}", b"", tmp_path, "gitleaks")
     assert findings == []
@@ -238,9 +228,7 @@ def test_envelope_not_list_emits_warning(
     )
 
 
-def test_missing_rule_id_dropped(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_rule_id_dropped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     raw = _leak()
     raw.pop("RuleID")
     payload = _payload(raw, _leak(rule_id="aws"))
@@ -356,8 +344,7 @@ def test_sidecar_persist_oserror_logs_warning(
         findings = parse_gitleaks_json(payload, b"", blocker, "gitleaks")
     assert len(findings) == 1
     assert any(
-        "gitleaks_parser_evidence_sidecar_write_failed"
-        in (record.__dict__.get("event") or "")
+        "gitleaks_parser_evidence_sidecar_write_failed" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 

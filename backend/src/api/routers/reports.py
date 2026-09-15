@@ -91,7 +91,26 @@ def _hostname_from_target_string(value: str) -> str | None:
         return None
 
 
-VALID_FORMATS = {"pdf", "html", "json", "csv", "md", VALHALLA_SECTIONS_CSV_FORMAT}
+# Valhalla mandatory LLM remediation/closure deliverable artifacts + manifest
+# (emitted by the report pipeline when valhalla_llm_remediation_enabled).
+_VALHALLA_LLM_FORMATS: dict[str, str] = {
+    "valhalla_llm_json": "application/json; charset=utf-8",
+    "valhalla_llm_md": "text/markdown; charset=utf-8",
+    "valhalla_llm_xml": "application/xml; charset=utf-8",
+    "valhalla_llm_html": "text/html; charset=utf-8",
+    "valhalla_llm_pdf": "application/pdf",
+    "valhalla_llm_manifest": "application/json; charset=utf-8",
+}
+
+VALID_FORMATS = {
+    "pdf",
+    "html",
+    "json",
+    "csv",
+    "md",
+    VALHALLA_SECTIONS_CSV_FORMAT,
+    *_VALHALLA_LLM_FORMATS,
+}
 CONTENT_TYPES = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
@@ -99,6 +118,7 @@ CONTENT_TYPES = {
     "csv": "text/csv; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
+    **_VALHALLA_LLM_FORMATS,
 }
 
 
@@ -121,7 +141,7 @@ def _attachment_content_disposition(filename: str) -> str:
     """
     safe_ascii = filename.encode("ascii", "replace").decode("ascii").replace('"', "_")
     encoded = quote(filename, safe="")
-    return f'attachment; filename="{safe_ascii}"; filename*=UTF-8\'\'{encoded}'
+    return f"attachment; filename=\"{safe_ascii}\"; filename*=UTF-8''{encoded}"
 
 
 def _report_to_summary(report: Report) -> ReportSummary:
@@ -188,7 +208,11 @@ async def list_reports(
     """List reports. Filtered by tenant (IDOR-safe). Optional filter by target."""
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
-        q = select(Report).where(cast(Report.tenant_id, String) == tenant_id).order_by(Report.created_at.desc())
+        q = (
+            select(Report)
+            .where(cast(Report.tenant_id, String) == tenant_id)
+            .order_by(Report.created_at.desc())
+        )
         if target:
             q = q.where(Report.target == target)
         result = await session.execute(q)
@@ -261,7 +285,10 @@ async def get_report(
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         result = await session.execute(
-            select(Report).where(cast(Report.id, String) == report_id, cast(Report.tenant_id, String) == tenant_id)
+            select(Report).where(
+                cast(Report.id, String) == report_id,
+                cast(Report.tenant_id, String) == tenant_id,
+            )
         )
         report = result.scalar_one_or_none()
         if not report:
@@ -318,12 +345,17 @@ async def download_report(
     """Download report in specified format. Filtered by tenant (IDOR-safe)."""
     fmt = format.lower()
     if fmt not in VALID_FORMATS:
-        raise HTTPException(status_code=400, detail=f"Invalid format. Use: {', '.join(VALID_FORMATS)}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid format. Use: {', '.join(VALID_FORMATS)}"
+        )
 
     async with async_session_factory() as session:
         await set_session_tenant(session, tenant_id)
         result = await session.execute(
-            select(Report).where(cast(Report.id, String) == report_id, cast(Report.tenant_id, String) == tenant_id)
+            select(Report).where(
+                cast(Report.id, String) == report_id,
+                cast(Report.tenant_id, String) == tenant_id,
+            )
         )
         report = result.scalar_one_or_none()
         if not report:
@@ -404,9 +436,7 @@ async def download_report(
                     )
                 content = generate_valhalla_sections_csv(report_data, jinja_context=jctx)
             elif fmt == "pdf":
-                tenant_pdf_format = await resolve_tenant_pdf_archival_format(
-                    session, t_id
-                )
+                tenant_pdf_format = await resolve_tenant_pdf_archival_format(session, t_id)
                 content = generate_pdf(
                     report_data,
                     jinja_context=jctx,

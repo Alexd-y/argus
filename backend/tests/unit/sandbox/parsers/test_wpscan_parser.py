@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -294,9 +293,7 @@ def test_parse_wpscan_plugin_vuln_records_slug_in_sidecar(tmp_path: Path) -> Non
     )
     sidecar_lines = [
         line
-        for line in (tmp_path / EVIDENCE_SIDECAR_NAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     parsed = [json.loads(line) for line in sidecar_lines]
@@ -347,17 +344,13 @@ def test_parse_wpscan_cve_normalisation_merges_inline_and_references(
         artifacts_dir=tmp_path,
         tool_id="wpscan",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["cve"] == ["CVE-2024-11111", "CVE-2024-22222", "CVE-2024-99999"]
 
 
 def test_parse_wpscan_dedup_collapses_duplicates(tmp_path: Path) -> None:
     """Re-discovering the same plugin vuln twice → one finding."""
-    duplicate_vuln = _vulnerability(
-        title="Akismet < 4.0.3 — XSS", references_cve=["2023-9999"]
-    )
+    duplicate_vuln = _vulnerability(title="Akismet < 4.0.3 — XSS", references_cve=["2023-9999"])
     payload = _wpscan_payload(
         plugins={
             "akismet": _plugin_block(
@@ -408,9 +401,7 @@ def test_parse_wpscan_output_ordering_is_deterministic(tmp_path: Path) -> None:
 def test_parse_wpscan_caps_at_5000_findings(tmp_path: Path) -> None:
     """A pathological plugin enumeration is hard-capped at 5_000 records."""
     plugins: dict[str, dict[str, Any]] = {
-        f"plugin-{i:05d}": _plugin_block(
-            vulnerabilities=[_vulnerability(title=f"vuln-{i}")]
-        )
+        f"plugin-{i:05d}": _plugin_block(vulnerabilities=[_vulnerability(title=f"vuln-{i}")])
         for i in range(5_500)
     }
     payload = _wpscan_payload(plugins=plugins, core_version=None)
@@ -436,9 +427,7 @@ def test_parse_wpscan_malformed_json_returns_empty(
         )
     assert findings == []
     assert not (tmp_path / EVIDENCE_SIDECAR_NAME).exists()
-    assert any(
-        getattr(r, "event", "") == "parsers_json_malformed" for r in caplog.records
-    )
+    assert any(getattr(r, "event", "") == "parsers_json_malformed" for r in caplog.records)
 
 
 def test_parse_wpscan_empty_inputs_return_empty_no_sidecar(tmp_path: Path) -> None:
@@ -465,10 +454,7 @@ def test_parse_wpscan_non_object_root_returns_empty(
             tool_id="wpscan",
         )
     assert findings == []
-    assert any(
-        getattr(r, "event", "") == "wpscan_parser_stdout_not_object"
-        for r in caplog.records
-    )
+    assert any(getattr(r, "event", "") == "wpscan_parser_stdout_not_object" for r in caplog.records)
 
 
 def test_parse_wpscan_canonical_unreadable_falls_back_to_stdout(
@@ -517,9 +503,7 @@ def test_parse_wpscan_themes_dict_is_iterated(tmp_path: Path) -> None:
     """Each ``themes[slug]`` entry is iterated; vuln titles flow through."""
     payload = _wpscan_payload(
         themes={
-            "alpha": _plugin_block(
-                vulnerabilities=[_vulnerability(title="alpha vuln")]
-            ),
+            "alpha": _plugin_block(vulnerabilities=[_vulnerability(title="alpha vuln")]),
             "beta": _plugin_block(vulnerabilities=[_vulnerability(title="beta vuln")]),
         },
         core_version=None,
@@ -672,8 +656,7 @@ def test_parse_wpscan_canonical_not_object_logs_warning(
         )
     assert len(findings) == 1  # falls through to stdout
     assert any(
-        getattr(r, "event", "") == "wpscan_parser_canonical_not_object"
-        for r in caplog.records
+        getattr(r, "event", "") == "wpscan_parser_canonical_not_object" for r in caplog.records
     )
 
 
@@ -768,9 +751,7 @@ def test_parse_wpscan_inline_cve_string_is_normalised(tmp_path: Path) -> None:
         artifacts_dir=tmp_path,
         tool_id="wpscan",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["cve"] == ["CVE-2024-12345"]
 
 
@@ -798,9 +779,7 @@ def test_parse_wpscan_references_normalised_into_strings(tmp_path: Path) -> None
         artifacts_dir=tmp_path,
         tool_id="wpscan",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     refs = sidecar["references"]
     assert refs["url"] == ["https://a.test", "https://b.test"]
     assert refs["exploitdb"] == ["EDB-12345"]
@@ -821,9 +800,7 @@ def test_parse_wpscan_main_theme_with_string_version_field(tmp_path: Path) -> No
         artifacts_dir=tmp_path,
         tool_id="wpscan",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["version"] == "1.7.2"
 
 
@@ -905,9 +882,7 @@ def test_parse_wpscan_droopescan_finding_carries_droopescan_tool_id(
     )
     sidecar_records = [
         json.loads(line)
-        for line in (tmp_path / EVIDENCE_SIDECAR_NAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     assert all(r["tool_id"] == "droopescan" for r in sidecar_records)

@@ -67,9 +67,7 @@ def test_pure_comments_yield_no_findings(tmp_path: Path) -> None:
 
 
 def test_happy_path_emits_one_finding_per_dn(tmp_path: Path) -> None:
-    findings = parse_ldapsearch(
-        _ldif_admin() + _ldif_regular(), b"", tmp_path, "ldapsearch"
-    )
+    findings = parse_ldapsearch(_ldif_admin() + _ldif_regular(), b"", tmp_path, "ldapsearch")
     assert len(findings) == 2
 
 

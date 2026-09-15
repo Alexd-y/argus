@@ -42,7 +42,6 @@ from typing import Final
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Repository layout — single source of truth for paths consumed by the test.
 # ---------------------------------------------------------------------------
@@ -143,9 +142,7 @@ def _parse_stages(directives: list[str]) -> list[dict[str, object]]:
     """
     stages: list[dict[str, object]] = []
     current: dict[str, object] | None = None
-    from_re = re.compile(
-        r"^FROM\s+(?P<base>\S+)(?:\s+AS\s+(?P<alias>\S+))?", re.IGNORECASE
-    )
+    from_re = re.compile(r"^FROM\s+(?P<base>\S+)(?:\s+AS\s+(?P<alias>\S+))?", re.IGNORECASE)
     for line in directives:
         match = from_re.match(line)
         if match:
@@ -196,9 +193,7 @@ def dockerfile_directives(dockerfile_paths: dict[str, Path]) -> dict[str, list[s
     out: dict[str, list[str]] = {}
     for profile, path in dockerfile_paths.items():
         assert path.is_file(), f"Dockerfile missing for profile={profile}: {path}"
-        out[profile] = _strip_comments_and_continuations(
-            path.read_text(encoding="utf-8")
-        )
+        out[profile] = _strip_comments_and_continuations(path.read_text(encoding="utf-8"))
     return out
 
 
@@ -218,9 +213,7 @@ class TestStructure:
     """Structural invariants — file existence, multi-stage pattern."""
 
     @pytest.mark.parametrize("profile", IMAGE_PROFILES)
-    def test_dockerfile_exists(
-        self, profile: str, dockerfile_paths: dict[str, Path]
-    ) -> None:
+    def test_dockerfile_exists(self, profile: str, dockerfile_paths: dict[str, Path]) -> None:
         path = dockerfile_paths[profile]
         assert path.is_file(), f"Dockerfile missing for profile={profile}: {path}"
         # Sanity: must be non-trivial. Stub headers are only ~50 lines, real
@@ -277,12 +270,8 @@ class TestUserDirective:
         text = " ".join(dockerfile_directives[profile])
         # Look for either `useradd ... --uid 65532` or `useradd -u 65532` plus a
         # matching gid / group. Allow long and short flags, allow either order.
-        uid_pattern = re.compile(
-            r"useradd[^&|;\n]*?(?:--uid\s+|\s-u\s+){uid}\b".format(uid=EXPECTED_UID)
-        )
-        groupadd_pattern = re.compile(
-            r"groupadd[^&|;\n]*?(?:--gid\s+|\s-g\s+){gid}\b".format(gid=EXPECTED_GID)
-        )
+        uid_pattern = re.compile(rf"useradd[^&|;\n]*?(?:--uid\s+|\s-u\s+){EXPECTED_UID}\b")
+        groupadd_pattern = re.compile(rf"groupadd[^&|;\n]*?(?:--gid\s+|\s-g\s+){EXPECTED_GID}\b")
         assert uid_pattern.search(text), (
             f"{profile}: must create the runtime user with uid={EXPECTED_UID} "
             f"(`useradd --uid {EXPECTED_UID} ...` or `useradd -u {EXPECTED_UID} ...`)"
@@ -316,8 +305,7 @@ class TestHealthcheck:
         directives: list[str] = final["directives"]  # type: ignore[assignment]
         hc_lines = [d for d in directives if d.upper().startswith("HEALTHCHECK")]
         assert any("/usr/local/bin/healthcheck.sh" in d for d in hc_lines), (
-            f"{profile}: HEALTHCHECK should invoke /usr/local/bin/healthcheck.sh; "
-            f"got {hc_lines}"
+            f"{profile}: HEALTHCHECK should invoke /usr/local/bin/healthcheck.sh; got {hc_lines}"
         )
 
 
@@ -373,8 +361,7 @@ class TestLabels:
         assert match, f"{profile}: argus.image.cycle label not found"
         expected = EXPECTED_CYCLE_PER_PROFILE[profile]
         assert match.group(1) == expected, (
-            f"{profile}: argus.image.cycle should be {expected!r}, "
-            f"got {match.group(1)!r}"
+            f"{profile}: argus.image.cycle should be {expected!r}, got {match.group(1)!r}"
         )
 
     @pytest.mark.parametrize("profile", IMAGE_PROFILES)
@@ -383,12 +370,9 @@ class TestLabels:
     ) -> None:
         text = " ".join(dockerfile_directives[profile])
         match = re.search(r'argus\.sbom\.path\s*=\s*"([^"]+)"', text)
-        assert match, (
-            f"{profile}: argus.sbom.path label is mandatory (per ARG-026 contract)"
-        )
+        assert match, f"{profile}: argus.sbom.path label is mandatory (per ARG-026 contract)"
         assert match.group(1) == EXPECTED_SBOM_PATH, (
-            f"{profile}: argus.sbom.path should be {EXPECTED_SBOM_PATH!r}, "
-            f"got {match.group(1)!r}"
+            f"{profile}: argus.sbom.path should be {EXPECTED_SBOM_PATH!r}, got {match.group(1)!r}"
         )
 
 
@@ -450,9 +434,7 @@ class TestSharedHelpers:
         assert path.is_file(), f"shared healthcheck.sh missing at {path}"
         content = path.read_text(encoding="utf-8")
         assert content.startswith("#!"), "healthcheck.sh must start with a shebang"
-        assert "exit 0" in content, (
-            "healthcheck.sh must have a deterministic success path"
-        )
+        assert "exit 0" in content, "healthcheck.sh must have a deterministic success path"
 
     def test_sbom_generator_helper_exists(self) -> None:
         path = SHARED_HELPERS_DIR / "generate_sbom.sh"
@@ -466,9 +448,7 @@ class TestSharedHelpers:
             "generate_sbom.sh must fall back to dpkg-query when syft is absent"
         )
         # The CycloneDX envelope is mandatory — Trivy / Grype rely on it.
-        assert "CycloneDX" in content, (
-            "generate_sbom.sh must emit a CycloneDX-format envelope"
-        )
+        assert "CycloneDX" in content, "generate_sbom.sh must emit a CycloneDX-format envelope"
 
     @pytest.mark.parametrize("profile", IMAGE_PROFILES)
     def test_dockerfile_copies_helpers(
@@ -496,14 +476,10 @@ class TestProfileSpecificContracts:
             "(rm -f /usr/lib/chromium/chrome-sandbox) to maintain the no-SUID contract"
         )
 
-    def test_cloud_image_ships_syft(
-        self, dockerfile_directives: dict[str, list[str]]
-    ) -> None:
+    def test_cloud_image_ships_syft(self, dockerfile_directives: dict[str, list[str]]) -> None:
         """Cloud image is the canonical SBOM toolbox — must ship syft."""
         text = " ".join(dockerfile_directives["cloud"])
-        assert "syft" in text, (
-            "cloud: Dockerfile must install syft (canonical SBOM tool)"
-        )
+        assert "syft" in text, "cloud: Dockerfile must install syft (canonical SBOM tool)"
 
     def test_full_image_is_superset_of_others(
         self, dockerfile_directives: dict[str, list[str]]
@@ -511,15 +487,9 @@ class TestProfileSpecificContracts:
         """Full image must contain at least one signature tool from each slim image."""
         text = " ".join(dockerfile_directives["full"])
         # Web signature: nuclei. Cloud signature: trivy. Browser signature: chromium.
-        assert "nuclei" in text, (
-            "full: must contain nuclei (web profile signature tool)"
-        )
-        assert "trivy" in text, (
-            "full: must contain trivy (cloud profile signature tool)"
-        )
-        assert "chromium" in text, (
-            "full: must contain chromium (browser profile signature tool)"
-        )
+        assert "nuclei" in text, "full: must contain nuclei (web profile signature tool)"
+        assert "trivy" in text, "full: must contain trivy (cloud profile signature tool)"
+        assert "chromium" in text, "full: must contain chromium (browser profile signature tool)"
 
     def test_recon_image_carries_passive_and_active_recon_signatures(
         self, dockerfile_directives: dict[str, list[str]]
@@ -538,9 +508,7 @@ class TestProfileSpecificContracts:
             "recon: must contain subfinder (Backlog §4.1 passive recon signature)"
         )
         # Active (§4.2) signature: nmap is the canonical port scanner.
-        assert "nmap" in text, (
-            "recon: must contain nmap (Backlog §4.2 active recon signature)"
-        )
+        assert "nmap" in text, "recon: must contain nmap (Backlog §4.2 active recon signature)"
 
     def test_network_image_carries_protocol_exploitation_signatures(
         self, dockerfile_directives: dict[str, list[str]]
@@ -554,9 +522,7 @@ class TestProfileSpecificContracts:
         exploitation suite). Either dropping below the bar trips drift.
         """
         text = " ".join(dockerfile_directives["network"])
-        assert "snmp" in text, (
-            "network: must contain snmp tooling (Backlog §4.17 SNMP recon)"
-        )
+        assert "snmp" in text, "network: must contain snmp tooling (Backlog §4.17 SNMP recon)"
         assert "impacket" in text, (
             "network: must contain impacket (Backlog §4.17 SMB / Kerberos / NTLM)"
         )

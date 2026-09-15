@@ -37,7 +37,7 @@ import importlib.util
 import logging
 import os
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -63,9 +63,7 @@ _TEST_PEPPER = "test-030-migration-pepper-32chars-or-more-bytes"
 
 # Gate for Layer B (real Postgres).
 _PG_URL_RAW = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
@@ -85,9 +83,7 @@ def _load_revision_module(revision: str) -> Any:
     """Import a migration file as a standalone module (no chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{revision}_*.py"))
     assert matches, f"revision file for {revision} not found"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{revision}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{revision}", matches[0])
     assert spec and spec.loader, f"unable to load spec for {matches[0]}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -128,9 +124,7 @@ def _apply_revision_with_op_context(connection: sa.engine.Connection, revision: 
         module.upgrade()
 
 
-def _downgrade_revision_with_op_context(
-    connection: sa.engine.Connection, revision: str
-) -> None:
+def _downgrade_revision_with_op_context(connection: sa.engine.Connection, revision: str) -> None:
     """Apply *revision*'s ``downgrade()`` using a fresh Alembic op context."""
     module = _load_revision_module(revision)
     ctx = MigrationContext.configure(connection)
@@ -152,7 +146,7 @@ def _seed_legacy_session_row(
     when this is called — that is the operational baseline we are
     migrating from.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     connection.execute(
         text(
             f"""
@@ -221,12 +215,10 @@ def _isolate_pepper_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_030_revision_metadata_pinned() -> None:
     module = _load_revision_module(_REVISION)
     assert module.revision == _REVISION, (
-        f"030 migration must declare revision={_REVISION!r}, "
-        f"got {module.revision!r}"
+        f"030 migration must declare revision={_REVISION!r}, got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
-        f"030 migration must chain off {_DOWN_REVISION!r}, "
-        f"got {module.down_revision!r}"
+        f"030 migration must chain off {_DOWN_REVISION!r}, got {module.down_revision!r}"
     )
     assert module.branch_labels is None, "030 must not introduce a branch label"
     assert module.depends_on is None, "030 must not depend on another revision"
@@ -234,12 +226,8 @@ def test_030_revision_metadata_pinned() -> None:
 
 def test_030_has_upgrade_and_downgrade_callables() -> None:
     module = _load_revision_module(_REVISION)
-    assert callable(getattr(module, "upgrade", None)), (
-        "030.upgrade missing or not callable"
-    )
-    assert callable(getattr(module, "downgrade", None)), (
-        "030.downgrade missing or not callable"
-    )
+    assert callable(getattr(module, "upgrade", None)), "030.upgrade missing or not callable"
+    assert callable(getattr(module, "downgrade", None)), "030.downgrade missing or not callable"
 
 
 def test_030_orm_admin_session_carries_hash_column() -> None:
@@ -253,16 +241,10 @@ def test_030_orm_admin_session_carries_hash_column() -> None:
     from src.db.models import AdminSession
 
     table = cast(sa.Table, AdminSession.__table__)
-    assert _HASH_COLUMN in table.columns, (
-        f"AdminSession ORM missing {_HASH_COLUMN!r} column"
-    )
+    assert _HASH_COLUMN in table.columns, f"AdminSession ORM missing {_HASH_COLUMN!r} column"
     column = table.columns[_HASH_COLUMN]
-    assert column.primary_key is True, (
-        f"{_HASH_COLUMN} must be the primary key post-031"
-    )
-    assert column.nullable is False, (
-        f"{_HASH_COLUMN} must be NOT NULL post-031 (PK invariant)"
-    )
+    assert column.primary_key is True, f"{_HASH_COLUMN} must be the primary key post-031"
+    assert column.nullable is False, f"{_HASH_COLUMN} must be NOT NULL post-031 (PK invariant)"
 
 
 # ---------------------------------------------------------------------------
@@ -277,21 +259,16 @@ def test_upgrade_adds_hash_column_and_index(sqlite_engine: Engine) -> None:
 
     insp = inspect(sqlite_engine)
     columns = {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
-    assert _HASH_COLUMN in columns, (
-        f"030.upgrade must add {_HASH_COLUMN} to {_SESSIONS_TABLE}"
-    )
+    assert _HASH_COLUMN in columns, f"030.upgrade must add {_HASH_COLUMN} to {_SESSIONS_TABLE}"
 
     indexes = {ix["name"]: ix for ix in insp.get_indexes(_SESSIONS_TABLE)}
-    assert _HASH_INDEX in indexes, (
-        f"030.upgrade must create unique index {_HASH_INDEX!r}"
-    )
+    assert _HASH_INDEX in indexes, f"030.upgrade must create unique index {_HASH_INDEX!r}"
     # SQLite inspector returns ``unique`` as int (0/1); Postgres returns bool.
     assert bool(indexes[_HASH_INDEX]["unique"]) is True, (
         f"{_HASH_INDEX} must be UNIQUE — replay defence relies on it"
     )
     assert indexes[_HASH_INDEX]["column_names"] == [_HASH_COLUMN], (
-        f"{_HASH_INDEX} must cover ({_HASH_COLUMN},), got "
-        f"{indexes[_HASH_INDEX]['column_names']}"
+        f"{_HASH_INDEX} must cover ({_HASH_COLUMN},), got {indexes[_HASH_INDEX]['column_names']}"
     )
 
 
@@ -301,9 +278,7 @@ def test_downgrade_drops_hash_column_and_index(sqlite_engine: Engine) -> None:
         _apply_revision_with_op_context(conn, _REVISION)
 
     insp = inspect(sqlite_engine)
-    assert _HASH_COLUMN in {
-        c["name"] for c in insp.get_columns(_SESSIONS_TABLE)
-    }
+    assert _HASH_COLUMN in {c["name"] for c in insp.get_columns(_SESSIONS_TABLE)}
 
     with sqlite_engine.begin() as conn:
         _downgrade_revision_with_op_context(conn, _REVISION)
@@ -314,9 +289,7 @@ def test_downgrade_drops_hash_column_and_index(sqlite_engine: Engine) -> None:
         f"030.downgrade must drop {_HASH_COLUMN} from {_SESSIONS_TABLE}"
     )
     indexes = {ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE)}
-    assert _HASH_INDEX not in indexes, (
-        f"030.downgrade must drop {_HASH_INDEX!r}"
-    )
+    assert _HASH_INDEX not in indexes, f"030.downgrade must drop {_HASH_INDEX!r}"
 
 
 def test_upgrade_backfills_when_pepper_set(
@@ -326,12 +299,8 @@ def test_upgrade_backfills_when_pepper_set(
     raw_token_a = "legacy-token-alpha-must-be-backfilled"
     raw_token_b = "legacy-token-beta-must-be-backfilled"
     with sqlite_engine.begin() as conn:
-        _seed_legacy_session_row(
-            conn, raw_session_id=raw_token_a, subject="alpha@example.com"
-        )
-        _seed_legacy_session_row(
-            conn, raw_session_id=raw_token_b, subject="beta@example.com"
-        )
+        _seed_legacy_session_row(conn, raw_session_id=raw_token_a, subject="alpha@example.com")
+        _seed_legacy_session_row(conn, raw_session_id=raw_token_b, subject="beta@example.com")
 
     monkeypatch.setenv(_PEPPER_ENV, _TEST_PEPPER)
     with sqlite_engine.begin() as conn:
@@ -348,12 +317,12 @@ def test_upgrade_backfills_when_pepper_set(
             )
         ).all()
     by_session_id = {r[0]: r[1] for r in rows}
-    assert by_session_id[raw_token_a] == _expected_hash(
-        _TEST_PEPPER, raw_token_a
-    ), "alpha row must carry sha256(pepper + raw_token_a)"
-    assert by_session_id[raw_token_b] == _expected_hash(
-        _TEST_PEPPER, raw_token_b
-    ), "beta row must carry sha256(pepper + raw_token_b)"
+    assert by_session_id[raw_token_a] == _expected_hash(_TEST_PEPPER, raw_token_a), (
+        "alpha row must carry sha256(pepper + raw_token_a)"
+    )
+    assert by_session_id[raw_token_b] == _expected_hash(_TEST_PEPPER, raw_token_b), (
+        "beta row must carry sha256(pepper + raw_token_b)"
+    )
 
 
 def test_upgrade_skips_backfill_when_pepper_missing(
@@ -370,27 +339,20 @@ def test_upgrade_skips_backfill_when_pepper_missing(
     with sqlite_engine.begin() as conn:
         _seed_legacy_session_row(conn, raw_session_id=raw_token)
 
-    assert _PEPPER_ENV not in os.environ, (
-        "test setup precondition: pepper must be unset"
-    )
+    assert _PEPPER_ENV not in os.environ, "test setup precondition: pepper must be unset"
 
-    with caplog.at_level(
-        logging.WARNING, logger="alembic.030_hash_admin_session_ids"
+    with (
+        caplog.at_level(logging.WARNING, logger="alembic.030_hash_admin_session_ids"),
+        sqlite_engine.begin() as conn,
     ):
-        with sqlite_engine.begin() as conn:
-            _apply_revision_with_op_context(conn, _REVISION)
+        _apply_revision_with_op_context(conn, _REVISION)
 
     with sqlite_engine.connect() as conn:
         hash_value = conn.execute(
-            text(
-                f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": raw_token},
         ).scalar_one()
-    assert hash_value is None, (
-        f"missing pepper must leave {_HASH_COLUMN} NULL for legacy rows"
-    )
+    assert hash_value is None, f"missing pepper must leave {_HASH_COLUMN} NULL for legacy rows"
 
     matching = [
         r
@@ -400,8 +362,7 @@ def test_upgrade_skips_backfill_when_pepper_missing(
         and _PEPPER_ENV in r.getMessage()
     ]
     assert matching, (
-        f"030.upgrade must emit a WARNING that mentions {_PEPPER_ENV} "
-        "when the pepper is unset"
+        f"030.upgrade must emit a WARNING that mentions {_PEPPER_ENV} when the pepper is unset"
     )
 
 
@@ -425,15 +386,10 @@ def test_upgrade_idempotent_under_repeated_run(
 
     with sqlite_engine.connect() as conn:
         first_hash = conn.execute(
-            text(
-                f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": raw_token},
         ).scalar_one()
-        first_count = conn.execute(
-            text(f"SELECT COUNT(*) FROM {_SESSIONS_TABLE}")
-        ).scalar_one()
+        first_count = conn.execute(text(f"SELECT COUNT(*) FROM {_SESSIONS_TABLE}")).scalar_one()
     assert first_hash == _expected_hash(_TEST_PEPPER, raw_token)
     assert first_count == 1
 
@@ -444,18 +400,12 @@ def test_upgrade_idempotent_under_repeated_run(
 
     with sqlite_engine.connect() as conn:
         second_hash = conn.execute(
-            text(
-                f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": raw_token},
         ).scalar_one()
-        second_count = conn.execute(
-            text(f"SELECT COUNT(*) FROM {_SESSIONS_TABLE}")
-        ).scalar_one()
+        second_count = conn.execute(text(f"SELECT COUNT(*) FROM {_SESSIONS_TABLE}")).scalar_one()
     assert second_hash == first_hash, (
-        "second upgrade must produce the same hash — pepper-bound sha256 "
-        "is deterministic"
+        "second upgrade must produce the same hash — pepper-bound sha256 is deterministic"
     )
     assert second_count == first_count, (
         "second upgrade must NOT duplicate rows (downgrade preserves the "
@@ -482,23 +432,15 @@ def test_backfill_helper_is_idempotent_for_same_pepper(
     module = _load_revision_module(_REVISION)
     with sqlite_engine.begin() as conn:
         before = conn.execute(
-            text(
-                f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": raw_token},
         ).scalar_one()
         module._backfill_token_hash(conn, pepper=_TEST_PEPPER)
         after = conn.execute(
-            text(
-                f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} "
-                "WHERE session_id = :sid"
-            ),
+            text(f"SELECT {_HASH_COLUMN} FROM {_SESSIONS_TABLE} WHERE session_id = :sid"),
             {"sid": raw_token},
         ).scalar_one()
-    assert before == after, (
-        "second backfill with same pepper must not alter the hash"
-    )
+    assert before == after, "second backfill with same pepper must not alter the hash"
     assert before == _expected_hash(_TEST_PEPPER, raw_token)
 
 
@@ -511,13 +453,9 @@ def test_backfill_helper_is_idempotent_for_same_pepper(
 def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
     """Return the configured Postgres URL and patch the cached settings."""
     if _PG_URL_RAW.startswith("postgresql://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif _PG_URL_RAW.startswith("postgres://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgres://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgres://", "postgresql+asyncpg://", 1)
     else:
         async_url = _PG_URL_RAW
     monkeypatch.setenv("DATABASE_URL", async_url)

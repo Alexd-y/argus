@@ -57,7 +57,6 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-
 # Map: public attribute name → fully-qualified submodule that owns it.
 # PEP 562 ``__getattr__`` resolves the import on first access so the
 # package's import-time footprint stays minimal — critically, ``import
@@ -154,6 +153,17 @@ def __dir__() -> list[str]:
 
 __all__ = [
     "APPROVAL_FAILURE_REASONS",
+    "CLOUD_IAM_FAILURE_REASONS",
+    "CLOUD_IAM_METHODS",
+    "CLOUD_IAM_TTL_S",
+    "CLOUD_SDK_TIMEOUT_S",
+    "GENESIS_HASH",
+    "OWNERSHIP_FAILURE_REASONS",
+    "PLAN_MAX_RISK",
+    "POLICY_FAILURE_REASONS",
+    "PREFLIGHT_DENIED_TAXONOMY",
+    "PREFLIGHT_FAILURE_REASONS",
+    "SCOPE_FAILURE_REASONS",
     "ApprovalAction",
     "ApprovalError",
     "ApprovalRequest",
@@ -167,15 +177,9 @@ __all__ = [
     "AuditPayloadError",
     "AuditSink",
     "BudgetCap",
-    "CLOUD_IAM_FAILURE_REASONS",
-    "CLOUD_IAM_METHODS",
-    "CLOUD_IAM_TTL_S",
-    "CLOUD_SDK_TIMEOUT_S",
     "CloudOwnershipVerifierProtocol",
-    "GENESIS_HASH",
     "InMemoryAuditSink",
     "InMemoryOwnershipProofStore",
-    "OWNERSHIP_FAILURE_REASONS",
     "OwnershipChallenge",
     "OwnershipMethod",
     "OwnershipProof",
@@ -183,10 +187,6 @@ __all__ = [
     "OwnershipTimeoutError",
     "OwnershipVerificationError",
     "OwnershipVerifier",
-    "PLAN_MAX_RISK",
-    "POLICY_FAILURE_REASONS",
-    "PREFLIGHT_DENIED_TAXONOMY",
-    "PREFLIGHT_FAILURE_REASONS",
     "PhaseRiskCap",
     "PlanTier",
     "PolicyContext",
@@ -197,7 +197,6 @@ __all__ = [
     "PreflightDecision",
     "PreflightDeniedError",
     "RateLimit",
-    "SCOPE_FAILURE_REASONS",
     "ScopeDecision",
     "ScopeEngine",
     "ScopeKind",

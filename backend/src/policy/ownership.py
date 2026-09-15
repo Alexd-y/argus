@@ -154,9 +154,7 @@ REASON_GCP_SA_JWT_TIMEOUT: Final[str] = "ownership_gcp_sa_jwt_timeout"
 
 REASON_AZURE_MI_TENANT_MISMATCH: Final[str] = "ownership_azure_mi_tenant_mismatch"
 REASON_AZURE_MI_RESOURCE_NOT_OWNED: Final[str] = "ownership_azure_mi_resource_not_owned"
-REASON_AZURE_MI_TOKEN_REFRESH_FAILED: Final[str] = (
-    "ownership_azure_mi_token_refresh_failed"
-)
+REASON_AZURE_MI_TOKEN_REFRESH_FAILED: Final[str] = "ownership_azure_mi_token_refresh_failed"
 REASON_AZURE_MI_TIMEOUT: Final[str] = "ownership_azure_mi_timeout"
 
 CLOUD_IAM_FAILURE_REASONS: Final[frozenset[str]] = frozenset(
@@ -419,8 +417,7 @@ class OwnershipVerifier:
         dns_timeout_s: float = _DEFAULT_DNS_TIMEOUT_S,
         http_timeout_s: float = _DEFAULT_HTTP_TIMEOUT_S,
         dry_run: bool = False,
-        cloud_verifiers: Mapping[OwnershipMethod, CloudOwnershipVerifierProtocol]
-        | None = None,
+        cloud_verifiers: Mapping[OwnershipMethod, CloudOwnershipVerifierProtocol] | None = None,
         cloud_iam_ttl_s: int = CLOUD_IAM_TTL_S,
     ) -> None:
         if dns_timeout_s <= 0 or dns_timeout_s > 60:
@@ -435,9 +432,7 @@ class OwnershipVerifier:
         verifiers: dict[OwnershipMethod, CloudOwnershipVerifierProtocol] = {}
         for method, verifier in (cloud_verifiers or {}).items():
             if method not in CLOUD_IAM_METHODS:
-                raise ValueError(
-                    f"cloud_verifiers key {method.value!r} is not a cloud-IAM method"
-                )
+                raise ValueError(f"cloud_verifiers key {method.value!r} is not a cloud-IAM method")
             verifiers[method] = verifier
         self._store = store
         self._audit_logger = audit_logger
@@ -632,9 +627,7 @@ class OwnershipVerifier:
         )
         return proof
 
-    def _cache_lookup(
-        self, cache_key: tuple[UUID, str, OwnershipMethod]
-    ) -> OwnershipProof | None:
+    def _cache_lookup(self, cache_key: tuple[UUID, str, OwnershipMethod]) -> OwnershipProof | None:
         """Return a cached proof iff it has not yet expired."""
         with self._cloud_cache_lock:
             entry = self._cloud_cache.get(cache_key)
@@ -726,10 +719,10 @@ class OwnershipVerifier:
     async def _resolve_dns(self, fqdn: str) -> list[str]:
         """Resolve TXT records for ``fqdn``. ``dnspython`` is imported lazily."""
         try:
-            import dns.asyncresolver as dnsresolver  # noqa: PLC0415 — lazy on purpose
-            import dns.exception as dnsexc  # noqa: PLC0415 — lazy on purpose
-            import dns.rdatatype as dnsrdatatype  # noqa: PLC0415 — lazy on purpose
-            import dns.resolver as dnsresolver_sync  # noqa: PLC0415 — lazy on purpose
+            import dns.asyncresolver as dnsresolver
+            import dns.exception as dnsexc
+            import dns.rdatatype as dnsrdatatype
+            import dns.resolver as dnsresolver_sync
         except ImportError as exc:  # pragma: no cover — declared dep
             raise OwnershipVerificationError(_REASON_DNS_ERROR) from exc
 
@@ -847,9 +840,7 @@ class OwnershipVerifier:
         )
 
     @staticmethod
-    def _log_http_error(
-        challenge: OwnershipChallenge, kind: str, exc: BaseException
-    ) -> None:
+    def _log_http_error(challenge: OwnershipChallenge, kind: str, exc: BaseException) -> None:
         _logger.warning(
             "policy.ownership.http_failure",
             extra={
@@ -930,16 +921,7 @@ __all__ = [
     "CLOUD_IAM_METHODS",
     "CLOUD_IAM_TTL_S",
     "CLOUD_SDK_TIMEOUT_S",
-    "CloudOwnershipVerifierProtocol",
-    "InMemoryOwnershipProofStore",
     "OWNERSHIP_FAILURE_REASONS",
-    "OwnershipChallenge",
-    "OwnershipMethod",
-    "OwnershipProof",
-    "OwnershipProofStore",
-    "OwnershipTimeoutError",
-    "OwnershipVerificationError",
-    "OwnershipVerifier",
     "REASON_AWS_STS_ACCESS_DENIED",
     "REASON_AWS_STS_INVALID_ARN",
     "REASON_AWS_STS_REGION_MISMATCH",
@@ -951,5 +933,14 @@ __all__ = [
     "REASON_GCP_SA_JWT_EXPIRED_OR_NOT_YET_VALID",
     "REASON_GCP_SA_JWT_INVALID_AUDIENCE",
     "REASON_GCP_SA_JWT_TIMEOUT",
+    "CloudOwnershipVerifierProtocol",
+    "InMemoryOwnershipProofStore",
+    "OwnershipChallenge",
+    "OwnershipMethod",
+    "OwnershipProof",
+    "OwnershipProofStore",
+    "OwnershipTimeoutError",
+    "OwnershipVerificationError",
+    "OwnershipVerifier",
     "hash_identifier",
 ]

@@ -8,12 +8,8 @@ from src.nuclei.schemas import (
     TemplateProposal,
 )
 
-_HIGH_RISK_PROTOCOLS = frozenset(
-    {"code", "javascript", "headless", "file", "network", "websocket"}
-)
-_INTRUSIVE_RISK_LEVELS = frozenset(
-    {"intrusive", "code_execution", "destructive", "high"}
-)
+_HIGH_RISK_PROTOCOLS = frozenset({"code", "javascript", "headless", "file", "network", "websocket"})
+_INTRUSIVE_RISK_LEVELS = frozenset({"intrusive", "code_execution", "destructive", "high"})
 
 
 class NucleiTemplateAnalyzer:
@@ -64,9 +60,10 @@ class NucleiTemplateAnalyzer:
         if proposal.uncertainties:
             warnings.extend(f"uncertainty:{u}" for u in proposal.uncertainties)
 
-        production_allowed = (
-            proposal.risk_level not in _INTRUSIVE_RISK_LEVELS
-            and protocol not in ("code", "javascript", "headless")
+        production_allowed = proposal.risk_level not in _INTRUSIVE_RISK_LEVELS and protocol not in (
+            "code",
+            "javascript",
+            "headless",
         )
 
         template_id = proposal.proposal_id or f"proposal:{hash(proposal.intent) & 0xFFFFFFFF:08x}"

@@ -40,10 +40,30 @@ SERVICE_LIKE_ROLES = frozenset(
 # Subdomain prefix patterns for service-like hosts (fallback when classification missing)
 SERVICE_LIKE_PREFIXES = frozenset(
     {
-        "mail.", "smtp.", "imap.", "pop.", "webmail.", "autodiscover.",
-        "cpanel.", "admin.", "portal.", "dashboard.", "whm.", "plesk.",
-        "auth.", "login.", "sso.", "api.", "vpn.", "git.", "jenkins.",
-        "dev.", "staging.", "test.", "stage.", "uat.",
+        "mail.",
+        "smtp.",
+        "imap.",
+        "pop.",
+        "webmail.",
+        "autodiscover.",
+        "cpanel.",
+        "admin.",
+        "portal.",
+        "dashboard.",
+        "whm.",
+        "plesk.",
+        "auth.",
+        "login.",
+        "sso.",
+        "api.",
+        "vpn.",
+        "git.",
+        "jenkins.",
+        "dev.",
+        "staging.",
+        "test.",
+        "stage.",
+        "uat.",
     }
 )
 
@@ -182,7 +202,9 @@ def _detect_rule_based_anomalies(
             anomaly_desc = f"{host} (role: {role or 'service-like'}) returns 404"
             taxonomy_type = "observation"
         elif is_service and is_platform and "shared" in notes.lower():
-            anomaly_desc = f"{host} returns shared platform page ({server}) instead of dedicated service"
+            anomaly_desc = (
+                f"{host} returns shared platform page ({server}) instead of dedicated service"
+            )
             taxonomy_type = "observation"
         elif role == "mail" and is_404:
             anomaly_desc = f"mail subdomain {host} returns 404 (expected mail service)"
@@ -197,17 +219,19 @@ def _detect_rule_based_anomalies(
             key = f"{host}|{anomaly_desc}"
             if key not in seen_keys:
                 seen_keys.add(key)
-                anomalies.append({
-                    "id": f"anom_{len(anomalies) + 1}",
-                    "type": taxonomy_type,
-                    "source": source,
-                    "host": host,
-                    "status": status,
-                    "server": server,
-                    "description": anomaly_desc,
-                    "role": role or "unknown",
-                    "evidence": f"status={status}, server={server}, notes={notes}",
-                })
+                anomalies.append(
+                    {
+                        "id": f"anom_{len(anomalies) + 1}",
+                        "type": taxonomy_type,
+                        "source": source,
+                        "host": host,
+                        "status": status,
+                        "server": server,
+                        "description": anomaly_desc,
+                        "role": role or "unknown",
+                        "evidence": f"status={status}, server={server}, notes={notes}",
+                    }
+                )
 
     return anomalies
 
@@ -234,10 +258,7 @@ def _interpret_with_llm(
         text = response.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            text = "\n".join(
-                ln for ln in lines
-                if not ln.startswith("```") and ln != "```"
-            )
+            text = "\n".join(ln for ln in lines if not ln.startswith("```") and ln != "```")
         data = json.loads(text)
         if data.get("error"):
             return {}
@@ -257,16 +278,20 @@ def _build_hypotheses_rule_based(anomalies: list[dict]) -> list[dict]:
         host = a.get("host", "")
         desc = a.get("description", "")
         anomaly_id = a.get("id", "")
-        hypotheses.append({
-            "anomaly_id": anomaly_id,
-            "hypothesis": f"Verify {host}: {desc} — may indicate misconfiguration or forgotten infra",
-            "priority": "high" if "mail" in desc or "admin" in desc else "medium",
-        })
-        hypotheses.append({
-            "anomaly_id": anomaly_id,
-            "hypothesis": f"Check CNAME/takeover potential for {host}",
-            "priority": "medium",
-        })
+        hypotheses.append(
+            {
+                "anomaly_id": anomaly_id,
+                "hypothesis": f"Verify {host}: {desc} — may indicate misconfiguration or forgotten infra",
+                "priority": "high" if "mail" in desc or "admin" in desc else "medium",
+            }
+        )
+        hypotheses.append(
+            {
+                "anomaly_id": anomaly_id,
+                "hypothesis": f"Check CNAME/takeover potential for {host}",
+                "priority": "medium",
+            }
+        )
     return hypotheses
 
 
@@ -285,12 +310,14 @@ def _to_structured_hypotheses(
         text = (h.get("hypothesis", "") or "").strip()
         if not text:
             text = "Unspecified hypothesis"
-        structured.append({
-            "id": f"hyp_{i + 1}",
-            "type": "hypothesis",
-            "source": source,
-            "text": text,
-        })
+        structured.append(
+            {
+                "id": f"hyp_{i + 1}",
+                "type": "hypothesis",
+                "source": source,
+                "text": text,
+            }
+        )
     return structured
 
 
@@ -304,46 +331,57 @@ def _to_structured_anomalies(anomalies: list[dict]) -> list[dict]:
             host = "unknown"
         if not desc:
             desc = "No description"
-        result.append({
-            "id": a.get("id") or f"anom_{len(result) + 1}",
-            "type": a.get("type") or "observation",
-            "source": a.get("source") or SOURCE_HTTP_PROBE,
-            "host": host,
-            "description": desc,
-            "evidence": a.get("evidence") or "",
-        })
+        result.append(
+            {
+                "id": a.get("id") or f"anom_{len(result) + 1}",
+                "type": a.get("type") or "observation",
+                "source": a.get("source") or SOURCE_HTTP_PROBE,
+                "host": host,
+                "description": desc,
+                "evidence": a.get("evidence") or "",
+            }
+        )
     return result
 
 
 def _build_coverage_gaps_structured() -> list[str | dict[str, object]]:
     """Build coverage gaps as list for AnomaliesStructured (AI-ready)."""
     return [
-        {"section": "covered", "items": [
-            "Subdomain enumeration and DNS resolution",
-            "Live host probing (HTTP/HTTPS)",
-            "Technology fingerprinting (Server headers)",
-            "Subdomain role classification",
-            "CNAME mapping and redirect chains",
-            "Basic endpoint inventory (robots.txt, security.txt, etc.)",
-        ]},
-        {"section": "not_covered", "items": [
-            "Deep URL crawling and path discovery",
-            "JavaScript analysis (secrets, endpoints, API discovery)",
-            "Parameter and form analysis",
-            "Port scanning beyond 80/443",
-            "TLS certificate chain analysis",
-            "Content clustering and deduplication",
-            "OSINT correlation",
-            "Manual validation of hypotheses",
-        ]},
-        {"section": "recommended", "items": [
-            "Run URL crawler on live hosts to discover paths and forms",
-            "Extract and analyze JavaScript for secrets and API endpoints",
-            "Validate mail/admin subdomains manually (MX records, SMTP probes)",
-            "Check CNAME targets for takeover opportunities",
-            "Run port scan on critical hosts (if in scope)",
-            "Perform TLS/certificate analysis for misconfigurations",
-        ]},
+        {
+            "section": "covered",
+            "items": [
+                "Subdomain enumeration and DNS resolution",
+                "Live host probing (HTTP/HTTPS)",
+                "Technology fingerprinting (Server headers)",
+                "Subdomain role classification",
+                "CNAME mapping and redirect chains",
+                "Basic endpoint inventory (robots.txt, security.txt, etc.)",
+            ],
+        },
+        {
+            "section": "not_covered",
+            "items": [
+                "Deep URL crawling and path discovery",
+                "JavaScript analysis (secrets, endpoints, API discovery)",
+                "Parameter and form analysis",
+                "Port scanning beyond 80/443",
+                "TLS certificate chain analysis",
+                "Content clustering and deduplication",
+                "OSINT correlation",
+                "Manual validation of hypotheses",
+            ],
+        },
+        {
+            "section": "recommended",
+            "items": [
+                "Run URL crawler on live hosts to discover paths and forms",
+                "Extract and analyze JavaScript for secrets and API endpoints",
+                "Validate mail/admin subdomains manually (MX records, SMTP probes)",
+                "Check CNAME targets for takeover opportunities",
+                "Run port scan on critical hosts (if in scope)",
+                "Perform TLS/certificate analysis for misconfigurations",
+            ],
+        },
     ]
 
 
@@ -383,11 +421,13 @@ def build_anomalies(
         for i in interpretations:
             if isinstance(i, dict):
                 for h in i.get("hypotheses", []):
-                    hypotheses.append({
-                        "anomaly_id": i.get("anomaly_id", ""),
-                        "hypothesis": h,
-                        "priority": "medium",
-                    })
+                    hypotheses.append(
+                        {
+                            "anomaly_id": i.get("anomaly_id", ""),
+                            "hypothesis": h,
+                            "priority": "medium",
+                        }
+                    )
     else:
         hypotheses = _build_hypotheses_rule_based(anomalies)
 
@@ -399,26 +439,32 @@ def build_anomalies(
     ]
 
     if not anomalies:
-        lines.extend([
-            "No anomalies detected by rule-based heuristics.",
-            "",
-        ])
+        lines.extend(
+            [
+                "No anomalies detected by rule-based heuristics.",
+                "",
+            ]
+        )
     else:
         for a in anomalies:
-            lines.extend([
-                f"### {a.get('id', '')}",
-                "",
-                f"- **Host**: `{a.get('host', '')}`",
-                f"- **Role**: {a.get('role', 'unknown')}",
-                f"- **Description**: {a.get('description', '')}",
-                f"- **Evidence**: {a.get('evidence', '')}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {a.get('id', '')}",
+                    "",
+                    f"- **Host**: `{a.get('host', '')}`",
+                    f"- **Role**: {a.get('role', 'unknown')}",
+                    f"- **Description**: {a.get('description', '')}",
+                    f"- **Evidence**: {a.get('evidence', '')}",
+                    "",
+                ]
+            )
 
-    lines.extend([
-        "## Hypotheses for Threat Modeling",
-        "",
-    ])
+    lines.extend(
+        [
+            "## Hypotheses for Threat Modeling",
+            "",
+        ]
+    )
 
     if llm_summary:
         lines.extend([f"{llm_summary}", ""])
@@ -427,10 +473,12 @@ def build_anomalies(
         prio = h.get("priority", "medium")
         lines.append(f"- [{prio}] {h.get('hypothesis', '')}")
 
-    lines.extend([
-        "",
-        COVERAGE_GAPS_TEMPLATE,
-    ])
+    lines.extend(
+        [
+            "",
+            COVERAGE_GAPS_TEMPLATE,
+        ]
+    )
 
     markdown_content = "\n".join(lines)
 

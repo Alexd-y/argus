@@ -13,9 +13,12 @@ def _file_has_bare_except_pass(filepath: Path) -> bool:
     source = filepath.read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in ast.walk(tree):
-        if isinstance(node, ast.ExceptHandler):
-            if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
-                return True
+        if (
+            isinstance(node, ast.ExceptHandler)
+            and len(node.body) == 1
+            and isinstance(node.body[0], ast.Pass)
+        ):
+            return True
     return False
 
 

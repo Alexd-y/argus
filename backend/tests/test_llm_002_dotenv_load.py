@@ -9,8 +9,8 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from dotenv import load_dotenv
 import pytest
+from dotenv import load_dotenv
 
 # ARGUS root: backend/tests/ -> parent=backend, parent.parent=ARGUS
 ARGUS_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -45,9 +45,7 @@ def _restore_llm_keys(saved: dict[str, str]) -> None:
 class TestLLM002DotenvLoad:
     """LLM-002: .env loading ensures has_any_llm_key() sees LLM keys."""
 
-    def test_load_dotenv_with_llm_key_sets_has_any_llm_key_true(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_dotenv_with_llm_key_sets_has_any_llm_key_true(self, tmp_path: Path) -> None:
         """When .env contains OPENROUTER_API_KEY, load_dotenv + has_any_llm_key is True."""
         env_file = tmp_path / ".env"
         env_file.write_text("OPENROUTER_API_KEY=sk-test-key-123\n", encoding="utf-8")
@@ -62,14 +60,10 @@ class TestLLM002DotenvLoad:
             _restore_llm_keys(saved)
             os.environ.pop("OPENROUTER_API_KEY", None)
 
-    def test_load_dotenv_without_llm_key_has_any_llm_key_false(
-        self, tmp_path: Path
-    ) -> None:
+    def test_load_dotenv_without_llm_key_has_any_llm_key_false(self, tmp_path: Path) -> None:
         """When .env has no LLM keys, has_any_llm_key remains False."""
         env_file = tmp_path / ".env"
-        env_file.write_text(
-            "SOME_OTHER_VAR=value\nDATABASE_URL=postgres://x\n", encoding="utf-8"
-        )
+        env_file.write_text("SOME_OTHER_VAR=value\nDATABASE_URL=postgres://x\n", encoding="utf-8")
 
         saved = _clear_llm_keys()
         try:
@@ -90,9 +84,7 @@ class TestLLM002DotenvLoad:
                 return True
 
             with patch("dotenv.load_dotenv", side_effect=_mock_load_dotenv):
-                spec = importlib.util.spec_from_file_location(
-                    "run_stage1_report", RUN_SCRIPT
-                )
+                spec = importlib.util.spec_from_file_location("run_stage1_report", RUN_SCRIPT)
                 if spec is None or spec.loader is None:
                     pytest.skip("Could not load run_stage1_report script")
                 module = importlib.util.module_from_spec(spec)
@@ -108,9 +100,7 @@ class TestLLM002DotenvLoad:
     def test_run_stage1_report_calls_load_dotenv_with_backend_env(self) -> None:
         """Script calls load_dotenv with backend/.env path before importing stage1_report_generator."""
         with patch("dotenv.load_dotenv") as mock_load:
-            spec = importlib.util.spec_from_file_location(
-                "run_stage1_report", RUN_SCRIPT
-            )
+            spec = importlib.util.spec_from_file_location("run_stage1_report", RUN_SCRIPT)
             if spec is None or spec.loader is None:
                 pytest.skip("Could not load run_stage1_report script")
             module = importlib.util.module_from_spec(spec)

@@ -36,7 +36,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.engagement_authorization import EngagementAuthorizationService
 from src.policy.scope import ScopeKind, ScopeRule
@@ -207,7 +206,10 @@ async def test_wb_project_optimistic_lock_conflict(
     async with sm() as s, s.begin():
         await _set_session_tenant(s, tenant)
         updated = await repo.update(
-            s, tenant, dto.id, WorkbenchProjectUpdate(expected_version=1, name="renamed")
+            s,
+            tenant,
+            dto.id,
+            WorkbenchProjectUpdate(expected_version=1, name="renamed"),
         )
         assert updated.version == 2
         assert updated.name == "renamed"

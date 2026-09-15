@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from src.quick.correlation import (
     append_late_oast,
     correlate_results,
@@ -32,20 +31,20 @@ def _mock_minio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx(**overrides: Any) -> QuickNormalizeContext:
-    base: dict[str, Any] = dict(
-        tenant_id=_TENANT_ID,
-        scan_id=_SCAN_ID,
-        engagement_id=_ENGAGEMENT_ID,
-        asset_id=_ASSET_ID,
-        asset=_ASSET,
-        tool_id="nuclei",
-        tool_version="3.3.0",
-        capability_id="web.application.cve.known_product",
-        phase="vuln_analysis",
-        task_id=_TASK_ID,
-        protocol="https",
-        template_id="oast-ssrf",
-    )
+    base: dict[str, Any] = {
+        "tenant_id": _TENANT_ID,
+        "scan_id": _SCAN_ID,
+        "engagement_id": _ENGAGEMENT_ID,
+        "asset_id": _ASSET_ID,
+        "asset": _ASSET,
+        "tool_id": "nuclei",
+        "tool_version": "3.3.0",
+        "capability_id": "web.application.cve.known_product",
+        "phase": "vuln_analysis",
+        "task_id": _TASK_ID,
+        "protocol": "https",
+        "template_id": "oast-ssrf",
+    }
     base.update(overrides)
     return QuickNormalizeContext(**base)
 
@@ -69,7 +68,15 @@ def _correlated():
 
 @pytest.mark.parametrize(
     "status",
-    ("cancelled", "canceled", "completed", "failed", "timed_out", "timeout", "CANCELLED"),
+    (
+        "cancelled",
+        "canceled",
+        "completed",
+        "failed",
+        "timed_out",
+        "timeout",
+        "CANCELLED",
+    ),
 )
 def test_scan_must_not_reopen_terminal_statuses(status: str) -> None:
     assert scan_must_not_reopen(status) is True

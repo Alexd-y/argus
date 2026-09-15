@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -213,9 +212,9 @@ def test_image_only_emits_inventory(tmp_path: Path) -> None:
 
 
 def test_no_components_no_image_returns_empty(tmp_path: Path) -> None:
-    payload = json.dumps(
-        {"bomFormat": "CycloneDX", "specVersion": "1.5", "components": []}
-    ).encode("utf-8")
+    payload = json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5", "components": []}).encode(
+        "utf-8"
+    )
     assert parse_syft_json(payload, b"", tmp_path, "syft") == []
 
 
@@ -225,9 +224,7 @@ def test_cap_reached_emits_warning_and_truncates(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(syft_module, "_MAX_COMPONENT_FINDINGS", 2)
-    payload = _payload(
-        *(_component(name=f"comp-{i}", purl=f"pkg:p/{i}") for i in range(5))
-    )
+    payload = _payload(*(_component(name=f"comp-{i}", purl=f"pkg:p/{i}") for i in range(5)))
     with caplog.at_level("WARNING"):
         findings = parse_syft_json(payload, b"", tmp_path, "syft")
     # inventory + cap=2 → 3 findings

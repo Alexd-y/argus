@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 class SubdomainFinding(BaseModel):
     """Discovered subdomain."""
+
     subdomain: str
     source: str = ""
     is_wildcard: bool = False
@@ -13,6 +14,7 @@ class SubdomainFinding(BaseModel):
 
 class DnsRecordFinding(BaseModel):
     """DNS record entry."""
+
     hostname: str
     record_type: str  # A, AAAA, CNAME, MX, NS, TXT, CAA, SOA, PTR
     value: str
@@ -22,6 +24,7 @@ class DnsRecordFinding(BaseModel):
 
 class IpAddressFinding(BaseModel):
     """Resolved IP address with metadata."""
+
     ip: str
     hostname: str | None = None
     is_cdn: bool = False
@@ -34,6 +37,7 @@ class IpAddressFinding(BaseModel):
 
 class ServiceFinding(BaseModel):
     """Network service discovered on a port."""
+
     ip: str
     port: int
     protocol: str = "tcp"
@@ -46,6 +50,7 @@ class ServiceFinding(BaseModel):
 
 class UrlFinding(BaseModel):
     """Discovered URL/endpoint."""
+
     url: str
     method: str = "GET"
     status_code: int | None = None
@@ -58,6 +63,7 @@ class UrlFinding(BaseModel):
 
 class ParameterFinding(BaseModel):
     """URL parameter identified for testing."""
+
     url: str
     param_name: str
     param_type: str = "query"  # query / path / header / cookie / body
@@ -69,6 +75,7 @@ class ParameterFinding(BaseModel):
 
 class TechnologyFinding(BaseModel):
     """Detected technology/framework."""
+
     url: str = ""
     name: str
     version: str | None = None
@@ -79,6 +86,7 @@ class TechnologyFinding(BaseModel):
 
 class TlsInfoFinding(BaseModel):
     """TLS/SSL inspection result."""
+
     hostname: str
     port: int = 443
     protocol_version: str = ""
@@ -93,6 +101,7 @@ class TlsInfoFinding(BaseModel):
 
 class HeaderInfoFinding(BaseModel):
     """HTTP security header analysis."""
+
     url: str
     header_name: str
     header_value: str | None = None
@@ -103,6 +112,7 @@ class HeaderInfoFinding(BaseModel):
 
 class JsFinding(BaseModel):
     """Finding from JavaScript analysis."""
+
     url: str
     finding_type: str  # api_endpoint / internal_url / token / key / debug / config
     value: str
@@ -112,6 +122,7 @@ class JsFinding(BaseModel):
 
 class SecretCandidate(BaseModel):
     """Potential secret/credential found in source."""
+
     url: str = ""
     secret_type: str  # api_key / token / password / aws_key / private_key / etc
     value_masked: str
@@ -122,6 +133,7 @@ class SecretCandidate(BaseModel):
 
 class ApiEndpointFinding(BaseModel):
     """API endpoint discovered."""
+
     base_url: str
     path: str
     method: str = "GET"
@@ -134,6 +146,7 @@ class ApiEndpointFinding(BaseModel):
 
 class OsintEntry(BaseModel):
     """OSINT finding from public sources."""
+
     source: str  # github / gitlab / pastebin / document / job_posting / etc
     entry_type: str  # repo / code_snippet / document / metadata / reference
     value: str
@@ -144,6 +157,7 @@ class OsintEntry(BaseModel):
 
 class ContentEntry(BaseModel):
     """Content discovery result."""
+
     url: str
     status_code: int
     content_length: int | None = None

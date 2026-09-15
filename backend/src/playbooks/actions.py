@@ -333,7 +333,7 @@ class BrowserAction(Action):
 
     action_type = ActionType.BROWSER_ACTION
 
-    def execute(self, step: PlaybookStep, ctx: ActionContext) -> ActionResult:
+    def execute(self, step: PlaybookStep, ctx: ActionContext) -> ActionResult:  # noqa: ARG002 - playbook action interface signature
         raise BrowserActionNotSupported
 
 

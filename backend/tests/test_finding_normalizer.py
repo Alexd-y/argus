@@ -82,7 +82,10 @@ def test_merge_dalfox_hypothesis_with_custom_xss() -> None:
     assert d.get("type") == "XSS"
     assert (d.get("severity") or "").lower() == "high"
     assert float(d.get("cvss_score") or 0) >= 7.0
-    assert "Dalfox" in (d.get("description") or "") and "custom" in (d.get("description") or "").lower()
+    assert (
+        "Dalfox" in (d.get("description") or "")
+        and "custom" in (d.get("description") or "").lower()
+    )
     assert d.get("poc_curl")
     assert out[0].get("source_tool") == "custom_xss_poc"
 

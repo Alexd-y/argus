@@ -74,13 +74,8 @@ def register(mcp: FastMCP) -> None:
                 and not lab_ok
                 and not (payload.justification and payload.justification.strip())
             ):
-                raise ApprovalRequiredError(
-                    "Deep scans require a justification (>=10 characters)."
-                )
-            if (
-                payload.justification is not None
-                and len(payload.justification.strip()) < 10
-            ):
+                raise ApprovalRequiredError("Deep scans require a justification (>=10 characters).")
+            if payload.justification is not None and len(payload.justification.strip()) < 10:
                 raise ValidationError("justification must be at least 10 characters.")
             return await svc_enqueue_scan(
                 tenant_id=call.auth.tenant_id,
@@ -156,9 +151,7 @@ def register(mcp: FastMCP) -> None:
             "Non-quick scans return plan_not_applicable. Never includes argv/command."
         ),
     )
-    async def scan_plan(
-        payload: ScanPlanInput, ctx: MCPContext | None = None
-    ) -> ScanPlanResult:
+    async def scan_plan(payload: ScanPlanInput, ctx: MCPContext | None = None) -> ScanPlanResult:
         async def body(call: MCPCallContext) -> ScanPlanResult:
             return await svc_get_scan_plan(
                 tenant_id=call.auth.tenant_id,

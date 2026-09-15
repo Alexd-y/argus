@@ -36,7 +36,7 @@ import logging
 import re
 import time
 from collections.abc import Iterable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Final
 
 import pyotp  # type: ignore[import-not-found]  # pyotp ships no PEP-561 stubs
@@ -44,7 +44,6 @@ import pytest
 from cryptography.fernet import Fernet
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.auth import admin_mfa as admin_mfa_module
 from src.auth._mfa_crypto import MfaCryptoError, decrypt
 from src.auth.admin_mfa import (
@@ -78,9 +77,7 @@ _BACKUP_CODE_ALPHABET: Final[str] = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 #: Compiled regex: 16 chars from the operator alphabet, anchored. Mirrors
 #: the worker's ``_BACKUP_CODE_LENGTH`` × ``_BACKUP_CODE_ALPHABET`` contract.
-_BACKUP_CODE_RE: Final[re.Pattern[str]] = re.compile(
-    rf"^[{_BACKUP_CODE_ALPHABET}]{{16}}$"
-)
+_BACKUP_CODE_RE: Final[re.Pattern[str]] = re.compile(rf"^[{_BACKUP_CODE_ALPHABET}]{{16}}$")
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +103,7 @@ async def _seed_admin(
         password_hash=hash_password("not-the-prod-password-but-bcrypt-shaped"),
         role=role,
         tenant_id=None,
-        created_at=datetime.now(tz=timezone.utc),
+        created_at=datetime.now(tz=UTC),
         disabled_at=None,
     )
     session.add(row)
@@ -155,9 +152,7 @@ def test_generate_backup_codes_returns_ten_alphabet_constrained_codes() -> None:
     """Default invocation yields 10 codes; each matches the operator alphabet."""
     codes = generate_backup_codes()
 
-    assert len(codes) == 10, (
-        f"default backup-code batch size must be 10, got {len(codes)}"
-    )
+    assert len(codes) == 10, f"default backup-code batch size must be 10, got {len(codes)}"
     assert len(set(codes)) == 10, (
         "10 codes from a CSPRNG must not collide — collision rate is "
         f"≈ 4.5e-25; got duplicates: {[c for c in codes if codes.count(c) > 1]!r}"
@@ -172,8 +167,7 @@ def test_generate_backup_codes_returns_ten_alphabet_constrained_codes() -> None:
                 f"backup code character {ch!r} not in operator alphabet"
             )
             assert ch not in {"I", "O"}, (
-                "backup code must exclude confusable letters I/O — "
-                f"got {ch!r} in {code!r}"
+                f"backup code must exclude confusable letters I/O — got {ch!r} in {code!r}"
             )
 
 
@@ -215,9 +209,7 @@ async def test_enroll_totp_persists_ciphertext_but_keeps_mfa_disabled(
         "safety) — none should be set yet"
     )
 
-    assert secret not in caplog.text, (
-        "enroll_totp must NOT log the plaintext TOTP secret"
-    )
+    assert secret not in caplog.text, "enroll_totp must NOT log the plaintext TOTP secret"
     assert mfa_keyring.primary not in caplog.text, (
         "enroll_totp must NOT log the Fernet keyring material"
     )
@@ -257,9 +249,7 @@ async def test_confirm_enrollment_with_valid_totp_enables_mfa(
     assert refreshed.mfa_backup_codes_hash is not None
     assert len(refreshed.mfa_backup_codes_hash) == 10
     for digest in refreshed.mfa_backup_codes_hash:
-        assert digest.startswith("$2"), (
-            f"backup-code hash {digest[:8]!r} is not a bcrypt digest"
-        )
+        assert digest.startswith("$2"), f"backup-code hash {digest[:8]!r} is not a bcrypt digest"
     # No raw plaintext code may appear among the persisted hashes.
     for raw in codes:
         assert raw not in refreshed.mfa_backup_codes_hash, (
@@ -268,9 +258,7 @@ async def test_confirm_enrollment_with_valid_totp_enables_mfa(
 
     assert secret not in caplog.text
     for raw in codes:
-        assert raw not in caplog.text, (
-            "confirm_enrollment must NOT log raw backup codes"
-        )
+        assert raw not in caplog.text, "confirm_enrollment must NOT log raw backup codes"
 
 
 # ---------------------------------------------------------------------------
@@ -313,15 +301,11 @@ async def test_confirm_enrollment_with_invalid_totp_raises_and_does_not_enable(
     refreshed = await session.get(AdminUser, _SUBJECT)
     assert refreshed is not None
     assert refreshed.mfa_enabled is False, "failed confirm must NOT enable MFA"
-    assert refreshed.mfa_backup_codes_hash is None, (
-        "failed confirm must NOT persist backup codes"
-    )
+    assert refreshed.mfa_backup_codes_hash is None, "failed confirm must NOT persist backup codes"
 
     assert secret not in caplog.text
     for raw in codes:
-        assert raw not in caplog.text, (
-            "failed confirm must NOT log the candidate backup codes"
-        )
+        assert raw not in caplog.text, "failed confirm must NOT log the candidate backup codes"
 
 
 # ---------------------------------------------------------------------------
@@ -353,9 +337,7 @@ async def test_verify_totp_accepts_current_and_rejects_stale_code(
         await session.commit()
 
     assert accepted is True, "current TOTP code must verify"
-    assert rejected is False, (
-        "TOTP code from 300 s ago is outside ±30 s window — must reject"
-    )
+    assert rejected is False, "TOTP code from 300 s ago is outside ±30 s window — must reject"
     assert secret not in caplog.text, "verify_totp must NOT log the plaintext secret"
 
 
@@ -456,16 +438,13 @@ async def test_consume_backup_code_is_single_use(
         await session.commit()
 
     assert first is True, "first redemption of a fresh backup code must succeed"
-    assert second is False, (
-        "double-spend defence: a redeemed code must NEVER verify again"
-    )
+    assert second is False, "double-spend defence: a redeemed code must NEVER verify again"
 
     refreshed = await session.get(AdminUser, _SUBJECT)
     assert refreshed is not None
     remaining = refreshed.mfa_backup_codes_hash or []
     assert len(remaining) == 9, (
-        f"successful consume must shrink the array by exactly one; "
-        f"got {len(remaining)} remaining"
+        f"successful consume must shrink the array by exactly one; got {len(remaining)} remaining"
     )
 
     for raw_code in codes:
@@ -509,9 +488,7 @@ async def test_consume_backup_code_with_unknown_code_does_not_modify_row(
         "rejected backup-code attempt must NOT mutate the persisted array"
     )
 
-    assert bogus not in caplog.text, (
-        "consume_backup_code must NOT log the candidate code"
-    )
+    assert bogus not in caplog.text, "consume_backup_code must NOT log the candidate code"
 
 
 # ---------------------------------------------------------------------------
@@ -615,9 +592,7 @@ async def test_backup_code_concurrent_consume_only_one_succeeds(
         "the loser does NOT write at all)"
     )
 
-    cas_lost_records = _records_with_event(
-        caplog.records, "argus.mfa.backup.cas_lost"
-    )
+    cas_lost_records = _records_with_event(caplog.records, "argus.mfa.backup.cas_lost")
     assert len(cas_lost_records) == 1, (
         "loser MUST emit a single `argus.mfa.backup.cas_lost` SIEM "
         f"warning so SOC can alert on race patterns; got "
@@ -625,9 +600,7 @@ async def test_backup_code_concurrent_consume_only_one_succeeds(
     )
 
     for raw in codes:
-        assert raw not in caplog.text, (
-            "concurrent consume must NOT log the candidate raw code"
-        )
+        assert raw not in caplog.text, "concurrent consume must NOT log the candidate raw code"
 
 
 # ---------------------------------------------------------------------------
@@ -658,12 +631,8 @@ async def test_disable_mfa_zeroes_columns_and_emits_event(
     post = await session.get(AdminUser, _SUBJECT)
     assert post is not None
     assert post.mfa_enabled is False, "disable_mfa must clear mfa_enabled"
-    assert post.mfa_secret_encrypted is None, (
-        "disable_mfa must wipe mfa_secret_encrypted"
-    )
-    assert post.mfa_backup_codes_hash is None, (
-        "disable_mfa must wipe mfa_backup_codes_hash"
-    )
+    assert post.mfa_secret_encrypted is None, "disable_mfa must wipe mfa_secret_encrypted"
+    assert post.mfa_backup_codes_hash is None, "disable_mfa must wipe mfa_backup_codes_hash"
 
     applied_records = _records_with_event(caplog.records, "argus.mfa.disable.applied")
     assert applied_records, (
@@ -731,9 +700,7 @@ async def test_regenerate_backup_codes_replaces_previous_batch(
     )
 
     for raw in new_codes:
-        assert raw not in caplog.text, (
-            "regenerate_backup_codes must NOT log raw plaintext codes"
-        )
+        assert raw not in caplog.text, "regenerate_backup_codes must NOT log raw plaintext codes"
 
 
 @pytest.mark.asyncio
@@ -779,19 +746,17 @@ async def test_mark_session_mfa_passed_stamps_timestamp(
         "test pre-condition: 030 must populate session_token_hash on insert"
     )
 
-    before_ts = datetime.now(tz=timezone.utc)
+    before_ts = datetime.now(tz=UTC)
     await mark_session_mfa_passed(session, session_token_hash=token_hash)
     await session.commit()
-    after_ts = datetime.now(tz=timezone.utc)
+    after_ts = datetime.now(tz=UTC)
 
     refreshed = await session.get(AdminSession, token_hash)
     assert refreshed is not None
-    assert refreshed.mfa_passed_at is not None, (
-        "mark_session_mfa_passed must stamp mfa_passed_at"
-    )
+    assert refreshed.mfa_passed_at is not None, "mark_session_mfa_passed must stamp mfa_passed_at"
     stamped = refreshed.mfa_passed_at
     if stamped.tzinfo is None:
-        stamped = stamped.replace(tzinfo=timezone.utc)
+        stamped = stamped.replace(tzinfo=UTC)
     assert before_ts <= stamped <= after_ts, (
         f"mfa_passed_at must be a fresh UTC timestamp; got {stamped!r} "
         f"outside [{before_ts!r}, {after_ts!r}]"
@@ -859,9 +824,7 @@ async def test_no_secret_material_in_logs_end_to_end(
         f"plaintext TOTP secret leaked into log records (searched for {secret[:6]!r}…)"
     )
     for raw in codes:
-        assert raw not in caplog.text, (
-            f"raw backup code leaked into log records ({raw[:6]!r}…)"
-        )
+        assert raw not in caplog.text, f"raw backup code leaked into log records ({raw[:6]!r}…)"
     assert mfa_keyring.primary not in caplog.text
     assert mfa_keyring.secondary not in caplog.text
 
@@ -1045,9 +1008,7 @@ async def test_consume_backup_code_returns_false_for_invalid_code(
 
     result = await consume_backup_code(session, subject=_SUBJECT, code=code)
 
-    assert result is False, (
-        "blank / unparseable codes must surface as no-match, never an exception"
-    )
+    assert result is False, "blank / unparseable codes must surface as no-match, never an exception"
 
 
 # ---- (14b) ``_load_state`` — unknown / disabled subject + DB error. -------
@@ -1076,7 +1037,7 @@ async def test_enroll_totp_raises_when_subject_disabled(
     """A soft-deleted admin (``disabled_at`` set) cannot start MFA enrolment."""
     _ = mfa_keyring
     user = await _seed_admin(session)
-    user.disabled_at = datetime.now(tz=timezone.utc)
+    user.disabled_at = datetime.now(tz=UTC)
     await session.commit()
 
     with pytest.raises(AdminMfaError, match=r"^subject_disabled$"):
@@ -1098,13 +1059,12 @@ async def test_enroll_totp_wraps_load_state_db_error(
     await _seed_admin(session)
     _override_execute_to_fail(session)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^db_error$"):
-            await enroll_totp(
-                session,
-                subject=_SUBJECT,
-                secret="JBSWY3DPEHPK3PXP",
-            )
+    with caplog.at_level(logging.ERROR), pytest.raises(AdminMfaError, match=r"^db_error$"):
+        await enroll_totp(
+            session,
+            subject=_SUBJECT,
+            secret="JBSWY3DPEHPK3PXP",
+        )
 
     assert _records_with_event(caplog.records, "argus.mfa.dao.db_error"), (
         "DB error must produce a structured `argus.mfa.dao.db_error` log event"
@@ -1132,9 +1092,11 @@ async def test_enroll_totp_wraps_encrypt_failure(
 
     monkeypatch.setattr(admin_mfa_module, "encrypt", _broken_encrypt)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^totp_secret_encrypt_failed$"):
-            await enroll_totp(session, subject=_SUBJECT, secret=leak_canary)
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(AdminMfaError, match=r"^totp_secret_encrypt_failed$"),
+    ):
+        await enroll_totp(session, subject=_SUBJECT, secret=leak_canary)
 
     assert leak_canary not in caplog.text, (
         "plaintext secret must never appear in a log line, even on encrypt failure"
@@ -1154,13 +1116,12 @@ async def test_enroll_totp_wraps_update_db_error(
     # SELECT in _load_state succeeds (call #1); UPDATE fails (call #2).
     _override_execute_to_fail(session, fail_after=1)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^db_error$"):
-            await enroll_totp(
-                session,
-                subject=_SUBJECT,
-                secret="JBSWY3DPEHPK3PXP",
-            )
+    with caplog.at_level(logging.ERROR), pytest.raises(AdminMfaError, match=r"^db_error$"):
+        await enroll_totp(
+            session,
+            subject=_SUBJECT,
+            secret="JBSWY3DPEHPK3PXP",
+        )
 
     assert _records_with_event(caplog.records, "argus.mfa.enroll.db_error")
 
@@ -1204,14 +1165,16 @@ async def test_confirm_enrollment_wraps_decrypt_failure(
 
     monkeypatch.setattr(admin_mfa_module, "decrypt", _broken_decrypt)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^totp_secret_decrypt_failed$"):
-            await confirm_enrollment(
-                session,
-                subject=_SUBJECT,
-                totp_code="123456",
-                generated_codes=generate_backup_codes(),
-            )
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(AdminMfaError, match=r"^totp_secret_decrypt_failed$"),
+    ):
+        await confirm_enrollment(
+            session,
+            subject=_SUBJECT,
+            totp_code="123456",
+            generated_codes=generate_backup_codes(),
+        )
 
     assert _records_with_event(caplog.records, "argus.mfa.confirm.decrypt_failed")
 
@@ -1232,14 +1195,13 @@ async def test_confirm_enrollment_wraps_update_db_error(
     # SELECT in _load_state (call #1) succeeds; UPDATE (call #2) fails.
     _override_execute_to_fail(session, fail_after=1)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^db_error$"):
-            await confirm_enrollment(
-                session,
-                subject=_SUBJECT,
-                totp_code=pyotp.TOTP(secret).now(),
-                generated_codes=generate_backup_codes(),
-            )
+    with caplog.at_level(logging.ERROR), pytest.raises(AdminMfaError, match=r"^db_error$"):
+        await confirm_enrollment(
+            session,
+            subject=_SUBJECT,
+            totp_code=pyotp.TOTP(secret).now(),
+            generated_codes=generate_backup_codes(),
+        )
 
     assert _records_with_event(caplog.records, "argus.mfa.confirm.db_error")
 
@@ -1373,9 +1335,7 @@ async def test_verify_totp_succeeds_when_rotation_update_fails(
             totp_code=pyotp.TOTP(secret).now(),
         )
 
-    assert result is True, (
-        "verify must still succeed even when rotation persistence fails"
-    )
+    assert result is True, "verify must still succeed even when rotation persistence fails"
     assert _records_with_event(caplog.records, "argus.mfa.verify.reencrypt_db_error")
 
 
@@ -1446,9 +1406,7 @@ async def test_consume_backup_code_returns_false_on_update_db_error(
             code=codes[0],
         )
 
-    assert result is False, (
-        "consume_backup_code never raises — DB errors must be surfaced as False"
-    )
+    assert result is False, "consume_backup_code never raises — DB errors must be surfaced as False"
     assert _records_with_event(caplog.records, "argus.mfa.backup.db_error")
 
 
@@ -1498,9 +1456,8 @@ async def test_disable_mfa_wraps_update_db_error(
     await _seed_admin(session)
     _override_execute_to_fail(session)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^db_error$"):
-            await disable_mfa(session, subject=_SUBJECT)
+    with caplog.at_level(logging.ERROR), pytest.raises(AdminMfaError, match=r"^db_error$"):
+        await disable_mfa(session, subject=_SUBJECT)
 
     assert _records_with_event(caplog.records, "argus.mfa.disable.db_error")
 
@@ -1519,9 +1476,8 @@ async def test_regenerate_backup_codes_wraps_update_db_error(
     # SELECT (load_state, call #1) succeeds; UPDATE (call #2) fails.
     _override_execute_to_fail(session, fail_after=1)
 
-    with caplog.at_level(logging.ERROR):
-        with pytest.raises(AdminMfaError, match=r"^db_error$"):
-            await regenerate_backup_codes(session, subject=_SUBJECT)
+    with caplog.at_level(logging.ERROR), pytest.raises(AdminMfaError, match=r"^db_error$"):
+        await regenerate_backup_codes(session, subject=_SUBJECT)
 
     assert _records_with_event(caplog.records, "argus.mfa.regen.db_error")
 

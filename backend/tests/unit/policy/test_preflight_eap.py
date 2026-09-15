@@ -14,11 +14,10 @@ collaborator of :class:`PreflightChecker`:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec
 from src.policy.approval import ApprovalService
@@ -28,7 +27,11 @@ from src.policy.engagement_authorization import (
     EngagementAuthorizationProfile,
     EngagementAuthorizationService,
 )
-from src.policy.ownership import InMemoryOwnershipProofStore, OwnershipMethod, OwnershipProof
+from src.policy.ownership import (
+    InMemoryOwnershipProofStore,
+    OwnershipMethod,
+    OwnershipProof,
+)
 from src.policy.policy_engine import PolicyContext, PolicyEngine
 from src.policy.preflight import PreflightChecker
 from src.policy.scope import ScopeEngine
@@ -36,7 +39,7 @@ from src.sandbox.signing import KeyManager
 
 
 def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 def _proof(tenant_id: UUID, target: str) -> OwnershipProof:
@@ -111,9 +114,7 @@ def test_preauthorized_class_satisfies_approval_with_audit(
     tenant_id: UUID,
 ) -> None:
     priv, _, _ = ed25519_keypair
-    eap_service = EngagementAuthorizationService(
-        key_manager=key_manager, audit_logger=audit_logger
-    )
+    eap_service = EngagementAuthorizationService(key_manager=key_manager, audit_logger=audit_logger)
     checker = _checker(
         scope_engine=scope_engine,
         ownership_store=ownership_store,
@@ -155,9 +156,7 @@ def test_non_preauthorized_class_falls_back_and_denies(
     tenant_id: UUID,
 ) -> None:
     priv, _, _ = ed25519_keypair
-    eap_service = EngagementAuthorizationService(
-        key_manager=key_manager, audit_logger=audit_logger
-    )
+    eap_service = EngagementAuthorizationService(key_manager=key_manager, audit_logger=audit_logger)
     checker = _checker(
         scope_engine=scope_engine,
         ownership_store=ownership_store,
@@ -198,9 +197,7 @@ def test_eap_cannot_widen_scope(
     tenant_id: UUID,
 ) -> None:
     priv, _, _ = ed25519_keypair
-    eap_service = EngagementAuthorizationService(
-        key_manager=key_manager, audit_logger=audit_logger
-    )
+    eap_service = EngagementAuthorizationService(key_manager=key_manager, audit_logger=audit_logger)
     checker = _checker(
         scope_engine=scope_engine,
         ownership_store=ownership_store,
@@ -212,9 +209,7 @@ def test_eap_cannot_widen_scope(
     # Out-of-scope target — even though the EAP explicitly lists evil.com, the
     # ScopeEngine denies first (SI-2). The EAP never runs.
     target = TargetSpec(kind=TargetKind.URL, url="https://evil.com/pwn")
-    profile = _signed_profile(
-        priv, classes=frozenset({ActionClass.RCE}), targets=("evil.com",)
-    )
+    profile = _signed_profile(priv, classes=frozenset({ActionClass.RCE}), targets=("evil.com",))
     decision = checker.check(
         target_spec=target,
         port=443,

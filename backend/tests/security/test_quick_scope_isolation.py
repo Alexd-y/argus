@@ -118,13 +118,16 @@ def test_cross_tenant_rag_exposure_is_zero() -> None:
     )
     store.add(foreign, deterministic_embed(foreign.content), foreign.content)
     engine = HybridSearchEngine(store)
-    assert engine.cross_tenant_denied(
-        "secret finding",
-        tenant_id=_TENANT_A,
-        other_tenant_id=_TENANT_B,
-        mode=ExecutionMode.QUICK,
-        collections=(CollectionName.FINDING_HISTORY,),
-    ) is True
+    assert (
+        engine.cross_tenant_denied(
+            "secret finding",
+            tenant_id=_TENANT_A,
+            other_tenant_id=_TENANT_B,
+            mode=ExecutionMode.QUICK,
+            collections=(CollectionName.FINDING_HISTORY,),
+        )
+        is True
+    )
     hits = engine.search(
         "secret finding",
         tenant_id=_TENANT_A,

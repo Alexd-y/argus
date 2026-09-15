@@ -1,10 +1,10 @@
 """Tests for Safety Monitor."""
 
-import pytest
-import time
-
 from src.governance.safety.monitor import (
-    SafetyMonitor, SafetyAlert, _sanitize_for_check, get_safety_monitor,
+    SafetyAlert,
+    SafetyMonitor,
+    _sanitize_for_check,
+    get_safety_monitor,
 )
 
 

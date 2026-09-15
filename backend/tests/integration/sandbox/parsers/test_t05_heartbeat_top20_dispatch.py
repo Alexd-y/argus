@@ -7,13 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import HEARTBEAT_TAG_PREFIX, dispatch_parse
 
-_T05_FIXTURE_DIR = (
-    Path(__file__).resolve().parents[3] / "fixtures" / "heartbeat" / "t05"
-)
+_T05_FIXTURE_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "heartbeat" / "t05"
 
 # Basenames on disk in the sandbox match discovery_text_parser._DISCOVERY_CANONICAL,
 # not necessarily the golden fixture filename under fixtures/heartbeat/t05/.

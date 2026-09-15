@@ -16,6 +16,7 @@ P1-8: WebSocket delivery layer — ScanEventBus now has:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import threading
@@ -67,6 +68,7 @@ class ScanEventBus:
         self._redis_listener_running: bool = False
         try:
             import redis
+
             self._redis_client = redis.Redis.from_url("redis://localhost:6379/0")
             self._redis_client.ping()
             logger.info("Redis event bus connected")
@@ -86,15 +88,18 @@ class ScanEventBus:
         return self._async_subscribers
 
     def publish(self, event: ScanEvent) -> None:
-        payload = json.dumps({
-            "event_type": event.event_type,
-            "scan_id": event.scan_id,
-            "tenant_id": event.tenant_id,
-            "phase": event.phase,
-            "progress": event.progress,
-            "message": event.message,
-            "timestamp": event.timestamp,
-        }, default=str)
+        payload = json.dumps(
+            {
+                "event_type": event.event_type,
+                "scan_id": event.scan_id,
+                "tenant_id": event.tenant_id,
+                "phase": event.phase,
+                "progress": event.progress,
+                "message": event.message,
+                "timestamp": event.timestamp,
+            },
+            default=str,
+        )
         if self._redis_client is not None:
             try:
                 self._redis_client.publish(f"argus:scan:{event.scan_id}", payload)
@@ -102,15 +107,11 @@ class ScanEventBus:
             except Exception:
                 pass
         for sub in self.subscribers:
-            try:
+            with contextlib.suppress(Exception):
                 sub(event)
-            except Exception:
-                pass
         for asub in self.async_subscribers:
-            try:
+            with contextlib.suppress(Exception):
                 asub(event)
-            except Exception:
-                pass
 
     def subscribe(self, callback: Any) -> None:
         self.subscribers.append(callback)
@@ -131,6 +132,7 @@ class ScanEventBus:
             return
         try:
             import redis
+
             pubsub_client = redis.Redis.from_url("redis://localhost:6379/0")
             self._redis_pubsub = pubsub_client.pubsub()
             self._redis_pubsub.psubscribe(channel_pattern)
@@ -166,22 +168,20 @@ class ScanEventBus:
                         message=data.get("message", ""),
                     )
                     for sub in self.subscribers:
-                        try:
+                        with contextlib.suppress(Exception):
                             sub(event)
-                        except Exception:
-                            pass
                     for asub in self.async_subscribers:
-                        try:
+                        with contextlib.suppress(Exception):
                             asub(event)
-                        except Exception:
-                            pass
             except Exception:
                 if self._redis_listener_running:
                     logger.warning("Redis subscriber listener error", exc_info=True)
             finally:
                 self._redis_listener_running = False
 
-        self._redis_listener_thread = threading.Thread(target=_listener, daemon=True, name="redis-event-subscriber")
+        self._redis_listener_thread = threading.Thread(
+            target=_listener, daemon=True, name="redis-event-subscriber"
+        )
         self._redis_listener_thread.start()
         logger.info("Redis event subscriber started", extra={"pattern": channel_pattern})
 
@@ -199,17 +199,18 @@ class ScanEventBus:
         logger.info("Redis event subscriber stopped")
 
     def publish_chat(self, msg: ChatMessage) -> None:
-        payload = json.dumps({
-            "type": "chat",
-            "user_id": msg.user_id,
-            "message": msg.message,
-            "timestamp": msg.timestamp,
-        }, default=str)
+        payload = json.dumps(
+            {
+                "type": "chat",
+                "user_id": msg.user_id,
+                "message": msg.message,
+                "timestamp": msg.timestamp,
+            },
+            default=str,
+        )
         if self._redis_client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._redis_client.publish(f"argus:chat:{msg.scan_id}", payload)
-            except Exception:
-                pass
 
 
 __all__ = [

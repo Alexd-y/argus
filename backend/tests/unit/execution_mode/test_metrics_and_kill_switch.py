@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
-
 from src.execution_mode import evaluate_with_execution_mode
 from src.execution_mode.lab_lease import (
     LabExecutionLease,
@@ -95,7 +94,9 @@ def test_policy_bridge_increments_boundary_denial():
 
 
 @pytest.mark.asyncio
-async def test_kill_switch_revoke_makes_lease_not_usable(repo: InMemoryExecutionModeRepository):
+async def test_kill_switch_revoke_makes_lease_not_usable(
+    repo: InMemoryExecutionModeRepository,
+):
     manifest = _manifest()
     await repo.save_manifest(manifest)
     lease = LabLeaseService().issue(manifest, boundary_proof="proof-abc")

@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.contracts.organizer import (
     OrganizerCollectionCreate,
@@ -204,7 +203,10 @@ async def test_collection_optimistic_lock(async_engine: AsyncEngine) -> None:
     async with sm() as s, s.begin():
         await _set_session_tenant(s, tenant)
         updated = await org.update_collection(
-            s, tenant, coll.id, OrganizerCollectionUpdate(expected_version=1, name="c1-renamed")
+            s,
+            tenant,
+            coll.id,
+            OrganizerCollectionUpdate(expected_version=1, name="c1-renamed"),
         )
         assert updated.version == 2
         assert updated.name == "c1-renamed"
@@ -213,7 +215,10 @@ async def test_collection_optimistic_lock(async_engine: AsyncEngine) -> None:
         await _set_session_tenant(s, tenant)
         with pytest.raises(OptimisticLockError):
             await org.update_collection(
-                s, tenant, coll.id, OrganizerCollectionUpdate(expected_version=1, name="stale")
+                s,
+                tenant,
+                coll.id,
+                OrganizerCollectionUpdate(expected_version=1, name="stale"),
             )
 
 

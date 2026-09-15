@@ -69,21 +69,23 @@ _EXPLOIT_FIELDS: dict[str, tuple[str, ...]] = {
 
 
 def build_vuln_evidence_pack(findings: list[dict[str, Any]], **_: Any) -> dict[str, Any]:
-    rows = [
-        _project(f, _VULN_FIELDS)
-        for f in (findings or [])
-        if isinstance(f, dict)
-    ][:_MAX_ITEMS]
-    return {"schema_version": "vuln_evidence_pack_v2", "findings": rows, "count": len(rows)}
+    rows = [_project(f, _VULN_FIELDS) for f in (findings or []) if isinstance(f, dict)][:_MAX_ITEMS]
+    return {
+        "schema_version": "vuln_evidence_pack_v2",
+        "findings": rows,
+        "count": len(rows),
+    }
 
 
 def build_exploit_candidate_pack(findings: list[dict[str, Any]], **_: Any) -> dict[str, Any]:
-    rows = [
-        _project(f, _EXPLOIT_FIELDS)
-        for f in (findings or [])
-        if isinstance(f, dict)
-    ][:_MAX_ITEMS]
-    return {"schema_version": "exploit_candidate_pack_v1", "candidates": rows, "count": len(rows)}
+    rows = [_project(f, _EXPLOIT_FIELDS) for f in (findings or []) if isinstance(f, dict)][
+        :_MAX_ITEMS
+    ]
+    return {
+        "schema_version": "exploit_candidate_pack_v1",
+        "candidates": rows,
+        "count": len(rows),
+    }
 
 
 def build_recon_digest(recon: dict[str, Any] | None = None, **_: Any) -> dict[str, Any]:
@@ -122,10 +124,16 @@ def build_post_exploit_impact_pack(
         for e in (exploits or [])
         if isinstance(e, dict)
     ][:_MAX_ITEMS]
-    return {"schema_version": "post_exploit_impact_pack_v1", "exploits": rows, "count": len(rows)}
+    return {
+        "schema_version": "post_exploit_impact_pack_v1",
+        "exploits": rows,
+        "count": len(rows),
+    }
 
 
-def build_report_section_input(findings: list[dict[str, Any]] | None = None, **_: Any) -> dict[str, Any]:
+def build_report_section_input(
+    findings: list[dict[str, Any]] | None = None, **_: Any
+) -> dict[str, Any]:
     return {
         "schema_version": "report_section_input_v1",
         "findings": build_vuln_evidence_pack(findings or [])["findings"],

@@ -26,6 +26,7 @@ class TestSecurityHeaders:
     def client(self):
         from main import app
         from starlette.testclient import TestClient
+
         return TestClient(app)
 
     def test_security_headers_present_on_response(self, client) -> None:
@@ -163,7 +164,12 @@ class TestExecutorNoLeak:
             patch("src.tools.executor.check_tool_available", return_value=True),
             patch("src.tools.executor.run_argv_simple_sync") as mock_run,
         ):
-            mock_run.return_value = {"success": True, "stdout": "", "stderr": "", "return_code": 0}
+            mock_run.return_value = {
+                "success": True,
+                "stdout": "",
+                "stderr": "",
+                "return_code": 0,
+            }
             execute_command("nmap -sV 8.8.8.8")
         args = mock_run.call_args[0][0]
         assert isinstance(args, list)

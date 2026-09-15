@@ -354,7 +354,9 @@ class ScenarioExecutor:
         return build_evidence_bundle(baseline, mutated)
 
     @staticmethod
-    def _verdict(results: tuple[OracleResult, ...]) -> tuple[ScenarioStatus, str | None]:
+    def _verdict(
+        results: tuple[OracleResult, ...],
+    ) -> tuple[ScenarioStatus, str | None]:
         if not results:
             return (
                 ScenarioStatus.REJECTED,

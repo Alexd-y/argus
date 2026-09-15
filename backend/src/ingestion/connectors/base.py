@@ -72,9 +72,7 @@ class BaseRepoConnector(ABC):
         """Fetch repository metadata."""
 
     @abstractmethod
-    async def list_repos(
-        self, owner: str, *, page: int = 1, per_page: int = 30
-    ) -> list[RepoInfo]:
+    async def list_repos(self, owner: str, *, page: int = 1, per_page: int = 30) -> list[RepoInfo]:
         """Paginated list of repositories for owner."""
 
     @abstractmethod

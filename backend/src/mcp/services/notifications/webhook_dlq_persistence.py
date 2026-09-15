@@ -56,9 +56,7 @@ DLQ_MAX_AGE_DAYS: Final[int] = 14
 
 # Closed-taxonomy whitelists enforced at the DAO boundary so the T39 admin
 # router and T40 beat task can rely on a small known set without re-validating.
-_VALID_LIST_STATUSES: Final[frozenset[str]] = frozenset(
-    {"pending", "replayed", "abandoned"}
-)
+_VALID_LIST_STATUSES: Final[frozenset[str]] = frozenset({"pending", "replayed", "abandoned"})
 _VALID_ABANDONED_REASONS: Final[frozenset[str]] = frozenset(
     {"operator", "max_age", "manual_abandon"}
 )
@@ -101,9 +99,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def compute_next_retry_at(
-    *, attempt_count: int, now: datetime | None = None
-) -> datetime:
+def compute_next_retry_at(*, attempt_count: int, now: datetime | None = None) -> datetime:
     """Return the UTC-aware instant for the next replay attempt.
 
     Mirrors :func:`._base.compute_backoff_seconds` shape (base 30s,
@@ -149,9 +145,7 @@ async def _load_for_mutation(
         stmt = stmt.where(WebhookDlqEntry.tenant_id == tenant_id)
     row = (await session.scalars(stmt)).first()
     if row is None:
-        raise DlqEntryNotFoundError(
-            f"webhook DLQ entry {entry_id!r} not found"
-        )
+        raise DlqEntryNotFoundError(f"webhook DLQ entry {entry_id!r} not found")
     return row
 
 
@@ -419,13 +413,9 @@ async def mark_replayed(
     ``abandoned_at`` is already set — guarantees single-mutation
     semantics so the audit chain stays deterministic.
     """
-    entry = await _load_for_mutation(
-        session, entry_id=entry_id, tenant_id=tenant_id
-    )
+    entry = await _load_for_mutation(session, entry_id=entry_id, tenant_id=tenant_id)
     if entry.replayed_at is not None or entry.abandoned_at is not None:
-        raise AlreadyTerminalError(
-            f"webhook DLQ entry {entry_id!r} is already terminal"
-        )
+        raise AlreadyTerminalError(f"webhook DLQ entry {entry_id!r} is already terminal")
     entry.replayed_at = _utcnow()
     await session.flush()
     return entry
@@ -447,13 +437,9 @@ async def mark_abandoned(
     """
     if reason not in _VALID_ABANDONED_REASONS:
         raise ValueError(f"invalid abandoned_reason: {reason!r}")
-    entry = await _load_for_mutation(
-        session, entry_id=entry_id, tenant_id=tenant_id
-    )
+    entry = await _load_for_mutation(session, entry_id=entry_id, tenant_id=tenant_id)
     if entry.replayed_at is not None or entry.abandoned_at is not None:
-        raise AlreadyTerminalError(
-            f"webhook DLQ entry {entry_id!r} is already terminal"
-        )
+        raise AlreadyTerminalError(f"webhook DLQ entry {entry_id!r} is already terminal")
     entry.abandoned_at = _utcnow()
     entry.abandoned_reason = reason
     await session.flush()
@@ -477,9 +463,7 @@ async def increment_attempt(
     stmt = select(WebhookDlqEntry).where(WebhookDlqEntry.id == entry_id)
     entry = (await session.scalars(stmt)).first()
     if entry is None:
-        raise DlqEntryNotFoundError(
-            f"webhook DLQ entry {entry_id!r} not found"
-        )
+        raise DlqEntryNotFoundError(f"webhook DLQ entry {entry_id!r} not found")
     entry.attempt_count = entry.attempt_count + 1
     entry.last_error_code = last_error_code
     entry.last_status_code = last_status_code

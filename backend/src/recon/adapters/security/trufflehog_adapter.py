@@ -37,9 +37,7 @@ class TruffleHogAdapter(SecurityToolAdapter):
                 continue
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for item in raw_results:
             detector = item.get("DetectorName") or item.get("detector_name") or "unknown"
@@ -54,17 +52,19 @@ class TruffleHogAdapter(SecurityToolAdapter):
                 if isinstance(data, dict):
                     path_hint = str(data.get("filesystem") or data.get("path") or "")
             value = f"{path_hint}:{detector}" if path_hint else str(detector)
-            findings.append({
-                "finding_type": FindingType.SECRET_CANDIDATE,
-                "value": value,
-                "data": {
-                    "title": str(detector),
-                    "severity": severity,
-                    "verified": verified,
-                    "value_masked": redacted,
-                    "cwe": "CWE-798",
-                },
-                "source_tool": "trufflehog",
-                "confidence": 0.9 if verified else 0.65,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.SECRET_CANDIDATE,
+                    "value": value,
+                    "data": {
+                        "title": str(detector),
+                        "severity": severity,
+                        "verified": verified,
+                        "value_masked": redacted,
+                        "cwe": "CWE-798",
+                    },
+                    "source_tool": "trufflehog",
+                    "confidence": 0.9 if verified else 0.65,
+                }
+            )
         return findings

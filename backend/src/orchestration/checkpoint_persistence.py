@@ -54,7 +54,10 @@ def resolved_profile_from_options(
         try:
             return checkpoint.resolved()
         except Exception:  # noqa: BLE001 — fall through to re-resolve from options
-            logger.debug("checkpoint_resolve_failed", extra={"event": "checkpoint_resolve_failed"})
+            logger.debug(
+                "checkpoint_resolve_failed",
+                extra={"event": "checkpoint_resolve_failed"},
+            )
     if not isinstance(options, dict):
         return None
     raw_profile = str(options.get("scan_profile") or "").strip().lower()
@@ -99,7 +102,9 @@ async def init_scan_checkpoint(
     if resolved is None:
         return None
     existing = read_checkpoint(options)
-    lease_state = "active" if (options.get("lab_lease_id") and resolved.requires_lab_lease) else "none"
+    lease_state = (
+        "active" if (options.get("lab_lease_id") and resolved.requires_lab_lease) else "none"
+    )
     rv = registry_versions or {}
     checkpoint = build_checkpoint(
         scan_id=scan_id,

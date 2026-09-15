@@ -13,11 +13,7 @@ from src.reports.valhalla_report_context import (
 
 
 def test_parse_robots_and_sitemap_from_downloaded_raw() -> None:
-    robots_body = (
-        "User-agent: *\n"
-        "Disallow: /admin/\n"
-        "Sitemap: https://ex.example/sitemap.xml\n"
-    )
+    robots_body = "User-agent: *\nDisallow: /admin/\nSitemap: https://ex.example/sitemap.xml\n"
     sitemap_body = (
         '<?xml version="1.0"?><urlset>'
         "<loc>https://ex.example/a</loc><loc>https://ex.example/b</loc>"
@@ -81,7 +77,7 @@ def test_threat_and_exploit_excerpts_from_phase_outputs() -> None:
         fetch_raw_bodies=False,
     )
     assert "flows" in ctx.threat_model_excerpt or "threat" in ctx.threat_model_excerpt.lower()
-    assert "/api/v1/tenants/ten/scans/sc/phases/threat_modeling" == ctx.threat_model_phase_link
+    assert ctx.threat_model_phase_link == "/api/v1/tenants/ten/scans/sc/phases/threat_modeling"
     assert ctx.exploitation_post_excerpt
 
 
@@ -299,7 +295,13 @@ def test_critical_vulns_val003_exploit_validated_strong_vhq004() -> None:
                 "proof_of_concept": {"html": "<img src=x>"},
             },
             {"id": "v3", "severity": "medium", "title": "Minor", "cvss": 4.0},
-            {"id": "v4", "severity": "high", "title": "No signal", "cvss": 8.0, "description": "Generic text only."},
+            {
+                "id": "v4",
+                "severity": "high",
+                "title": "No signal",
+                "cvss": 8.0,
+                "description": "Generic text only.",
+            },
             {
                 "id": "v_ok",
                 "severity": "critical",
@@ -326,7 +328,15 @@ def test_critical_vulns_val003_exploit_validated_strong_vhq004() -> None:
 
 def test_build_risk_matrix_export() -> None:
     m = build_risk_matrix(
-        [{"id": "z", "severity": "high", "cvss": 8.0, "title": "t", "proof_of_concept": {"a": 1}}]
+        [
+            {
+                "id": "z",
+                "severity": "high",
+                "cvss": 8.0,
+                "title": "t",
+                "proof_of_concept": {"a": 1},
+            }
+        ]
     )
     assert len(m.cells) == 1
     assert m.cells[0].count == 1
@@ -358,7 +368,11 @@ def test_mandatory_sections_coverage_and_harvester_flag() -> None:
         "port_exposure",
     }
     assert set(ctx.coverage.sections.keys()) == expected_keys
-    assert ctx.mandatory_sections.port_exposure.status in {"completed", "partial", "no_data"}
+    assert ctx.mandatory_sections.port_exposure.status in {
+        "completed",
+        "partial",
+        "no_data",
+    }
     assert ctx.coverage.feature_flags["HARVESTER_ENABLED"] is False
     assert ctx.coverage.feature_flags["INCLUDE_MINIO"] is False
     assert "recon" in ctx.coverage.phases_executed
@@ -372,15 +386,42 @@ def test_mandatory_sections_coverage_and_harvester_flag() -> None:
 
 def test_raw_tool_empty_stdout_errors_drive_partial_statuses() -> None:
     keys = [
-        ("t/s/vuln_analysis/raw/20260101T000000_000000_tool_whatweb_scan_target_stdout.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000001_tool_whatweb_scan_target_stderr.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000002_tool_whatweb_scan_target_meta.json", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000003_tool_nikto_scan_target_stdout.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000004_tool_nikto_scan_target_stderr.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000005_tool_testssl_scan_target_stdout.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000006_tool_testssl_scan_target_stderr.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000007_tool_sslscan_scan_target_stdout.txt", "vuln_analysis"),
-        ("t/s/vuln_analysis/raw/20260101T000000_000008_tool_sslscan_scan_target_stderr.txt", "vuln_analysis"),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000000_tool_whatweb_scan_target_stdout.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000001_tool_whatweb_scan_target_stderr.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000002_tool_whatweb_scan_target_meta.json",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000003_tool_nikto_scan_target_stdout.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000004_tool_nikto_scan_target_stderr.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000005_tool_testssl_scan_target_stdout.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000006_tool_testssl_scan_target_stderr.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000007_tool_sslscan_scan_target_stdout.txt",
+            "vuln_analysis",
+        ),
+        (
+            "t/s/vuln_analysis/raw/20260101T000000_000008_tool_sslscan_scan_target_stderr.txt",
+            "vuln_analysis",
+        ),
         (
             "t/s/vuln_analysis/raw/20260101T000000_000009_tool_theharvester_scan_target_stdout.txt",
             "vuln_analysis",
@@ -458,7 +499,10 @@ def test_security_headers_section_reconstructed_from_finding_evidence() -> None:
     )
 
     assert ctx.mandatory_sections.security_headers_analysis.status == "parsed_from_fallback"
-    assert "reconstructed from findings evidence" in ctx.mandatory_sections.security_headers_analysis.reason
+    assert (
+        "reconstructed from findings evidence"
+        in ctx.mandatory_sections.security_headers_analysis.reason
+    )
     rows = {row["header"]: row for row in ctx.security_headers_analysis.rows}
     assert rows["X-Frame-Options"]["present"] is False
     assert rows["Content-Security-Policy"]["present"] is False
@@ -476,5 +520,7 @@ def test_build_valhalla_minimal_context_patch_keys() -> None:
         trivy_enabled=False,
         tool_run_summaries=None,
     )
-    assert "mandatory_sections" in patch and "coverage" in patch and "robots_sitemap_analysis" in patch
+    assert (
+        "mandatory_sections" in patch and "coverage" in patch and "robots_sitemap_analysis" in patch
+    )
     assert "vuln_analysis" in patch["coverage"]["phases_executed"]

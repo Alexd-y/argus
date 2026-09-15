@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers import execution_mode as em_api
 from src.execution_mode import (
     LAB_ALLOW_ALL,
@@ -23,17 +22,17 @@ from src.execution_mode import (
 
 
 def _manifest(**overrides):
-    base = dict(
-        tenant_id="t-1",
-        engagement_id="e-1",
-        cidrs=("10.90.0.0/16",),
-        dns_suffixes=("lab.argus",),
-        k8s_namespace="argus-lab-42",
-        vm_network_ids=("labnet-42",),
-        capture_full=True,
-        expires_at=datetime.now(tz=timezone.utc) + timedelta(hours=4),
-        created_by="u-1",
-    )
+    base = {
+        "tenant_id": "t-1",
+        "engagement_id": "e-1",
+        "cidrs": ("10.90.0.0/16",),
+        "dns_suffixes": ("lab.argus",),
+        "k8s_namespace": "argus-lab-42",
+        "vm_network_ids": ("labnet-42",),
+        "capture_full": True,
+        "expires_at": datetime.now(tz=UTC) + timedelta(hours=4),
+        "created_by": "u-1",
+    }
     base.update(overrides)
     return LabScopeManifest(**base)
 

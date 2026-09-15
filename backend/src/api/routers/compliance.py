@@ -4,6 +4,7 @@ POST /api/v1/compliance/map        — map finding to frameworks
 GET  /api/v1/compliance/report     — build audit report
 """
 
+import contextlib
 from typing import Any
 
 from fastapi import APIRouter
@@ -24,18 +25,20 @@ async def map_finding(req: ComplianceMapRequest) -> list[dict[str, Any]]:
 
     frameworks = []
     for fw in req.frameworks:
-        try:
+        with contextlib.suppress(ValueError):
             frameworks.append(Framework(fw))
-        except ValueError:
-            pass
 
     evidence = await map_finding_to_compliance(
-        req.finding, tenant_id=req.tenant_id, frameworks=frameworks or None,
+        req.finding,
+        tenant_id=req.tenant_id,
+        frameworks=frameworks or None,
     )
     return [
         {
-            "finding_id": e.finding_id, "framework": e.framework,
-            "control_id": e.control_id, "evidence_type": e.evidence_type,
+            "finding_id": e.finding_id,
+            "framework": e.framework,
+            "control_id": e.control_id,
+            "evidence_type": e.evidence_type,
             "evidence_description": e.evidence_description,
             "evidence_hash": e.evidence_hash,
             "validity_days": e.validity_days,
@@ -48,15 +51,15 @@ async def map_finding(req: ComplianceMapRequest) -> list[dict[str, Any]]:
 async def build_report(
     findings: list[dict[str, Any]],
     tenant_id: str = "",
-    frameworks: list[str] = ["iso27001", "soc2"],
+    frameworks: list[str] = None,
 ) -> dict[str, Any]:
     from src.governance.compliance.mapper import Framework, build_audit_report
 
+    if frameworks is None:
+        frameworks = ["iso27001", "soc2"]
     fw_list = []
     for f in frameworks:
-        try:
+        with contextlib.suppress(ValueError):
             fw_list.append(Framework(f))
-        except ValueError:
-            pass
 
     return build_audit_report(findings, tenant_id=tenant_id, frameworks=fw_list or None)

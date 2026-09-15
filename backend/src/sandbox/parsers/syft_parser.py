@@ -50,7 +50,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -77,7 +77,7 @@ _RELEVANT_TYPES: Final[frozenset[str]] = frozenset(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_syft_json(
@@ -160,7 +160,7 @@ def _emit(
     return [finding for _, finding, _ in keyed]
 
 
-def _build_finding(record: dict[str, Any]) -> FindingDTO:
+def _build_finding(record: dict[str, Any]) -> FindingDTO:  # noqa: ARG001 - retained for signature/API compatibility
     return make_finding_dto(
         category=FindingCategory.SUPPLY_CHAIN,
         cwe=[1395],
@@ -205,8 +205,7 @@ def _build_records(
         "image": image,
         "component_count": len(components),
     }
-    for component in components[:_MAX_COMPONENT_FINDINGS]:
-        yield component
+    yield from components[:_MAX_COMPONENT_FINDINGS]
 
 
 def _iter_components(payload: dict[str, Any]) -> Iterator[dict[str, Any]]:
@@ -272,9 +271,7 @@ def _extract_image(payload: dict[str, Any]) -> str | None:
     if isinstance(source, dict):
         target = source.get("target")
         if isinstance(target, dict):
-            return _string_field(target, "userInput") or _string_field(
-                target, "imageID"
-            )
+            return _string_field(target, "userInput") or _string_field(target, "imageID")
         if isinstance(target, str):
             stripped = target.strip()
             return stripped or None

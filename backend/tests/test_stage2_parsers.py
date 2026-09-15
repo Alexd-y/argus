@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 
-from src.schemas.threat_modeling.schemas import CriticalAsset, ThreatModelInputBundle
 from src.recon.threat_modeling.artifacts import (
     generate_application_flows_json,
     generate_priority_hypotheses_json,
@@ -18,6 +17,7 @@ from src.recon.threat_modeling.stage2_parsers import (
     parse_threat_scenarios_to_stage3,
     parse_trust_boundaries_to_stage3,
 )
+from src.schemas.threat_modeling.schemas import CriticalAsset, ThreatModelInputBundle
 
 
 def _minimal_bundle() -> ThreatModelInputBundle:
@@ -32,7 +32,12 @@ class TestParseCriticalAssetsToStage3:
         prior = {
             "critical_assets": {
                 "assets": [
-                    {"id": "ca-1", "name": "DB", "asset_type": "data", "statement_type": "evidence"},
+                    {
+                        "id": "ca-1",
+                        "name": "DB",
+                        "asset_type": "data",
+                        "statement_type": "evidence",
+                    },
                     {"id": "ca-2", "name": "API", "statement_type": "hypothesis"},
                 ]
             }
@@ -129,7 +134,11 @@ class TestParsePriorityHypotheses:
         prior = {
             "threat_scenarios": {
                 "scenarios": [
-                    {"id": "ts-1", "description": "Auth weakness", "priority": "medium"},
+                    {
+                        "id": "ts-1",
+                        "description": "Auth weakness",
+                        "priority": "medium",
+                    },
                 ]
             }
         }
@@ -143,7 +152,12 @@ class TestParseApplicationFlowsToStage3:
         prior = {
             "application_flows": {
                 "flows": [
-                    {"id": "f1", "source": "client", "sink": "api", "data_type": "json"},
+                    {
+                        "id": "f1",
+                        "source": "client",
+                        "sink": "api",
+                        "data_type": "json",
+                    },
                 ]
             }
         }
@@ -159,7 +173,9 @@ class TestGenerateThreatModelJson:
             "critical_assets": {"assets": [{"id": "ca-1", "name": "DB", "asset_type": "data"}]},
             "trust_boundaries": {"boundaries": []},
             "entry_points": {"entry_points": []},
-            "attacker_profiles": {"profiles": [{"id": "ap-1", "name": "A", "capability_level": "low"}]},
+            "attacker_profiles": {
+                "profiles": [{"id": "ap-1", "name": "A", "capability_level": "low"}]
+            },
             "threat_scenarios": {"scenarios": []},
         }
         out = generate_threat_model_json(_minimal_bundle(), prior, "run-1", "job-1")
@@ -174,7 +190,9 @@ class TestGeneratePriorityHypothesesJson:
     def test_output_valid_json(self) -> None:
         bundle = ThreatModelInputBundle(
             engagement_id="eng",
-            priority_hypotheses=[{"id": "ph-1", "text": "Test", "priority": "high", "confidence": 0.5}],
+            priority_hypotheses=[
+                {"id": "ph-1", "text": "Test", "priority": "high", "confidence": 0.5}
+            ],
         )
         out = generate_priority_hypotheses_json(bundle, {})
         data = json.loads(out)

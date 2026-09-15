@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.core.config import Settings
 
 
@@ -21,9 +20,7 @@ def test_quick_mode_enabled_empty_env_is_false(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.parametrize("raw", ["true", "1", "yes", "on", "TRUE"])
-def test_quick_mode_enabled_env_override_true(
-    monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
+def test_quick_mode_enabled_env_override_true(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
     monkeypatch.setenv("ARGUS_QUICK_MODE_ENABLED", raw)
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
     assert settings.quick_mode_enabled is True

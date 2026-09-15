@@ -121,8 +121,7 @@ def test_reflected_query_param() -> None:
 
 def test_reflected_form_body_param() -> None:
     req = _request(
-        b"POST /s HTTP/1.1\r\nHost: app\r\n"
-        b"Content-Type: application/x-www-form-urlencoded\r\n\r\n"
+        b"POST /s HTTP/1.1\r\nHost: app\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\n"
     )
     findings = check_reflected_input(req, b"echo: needle123", request_body=b"q=needle123")
     assert _codes(findings) == {"reflected-input"}

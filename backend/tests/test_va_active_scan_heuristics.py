@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 from src.recon.vulnerability_analysis.active_scan.heuristics import (
     SCHEMA_VERSION,
     build_va_active_scan_heuristics,
 )
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def test_schema_version_constant_matches_output() -> None:

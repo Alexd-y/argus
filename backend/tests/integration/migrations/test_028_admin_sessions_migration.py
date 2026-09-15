@@ -88,9 +88,7 @@ _EXPECTED_SESSIONS_INDEXES = {_INDEX_SUBJECT_REVOKED, _INDEX_EXPIRES_AT}
 
 # Gate for Layer B.
 _PG_URL_RAW = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
@@ -110,9 +108,7 @@ def _load_revision_module() -> Any:
     """Import the 028 migration file as a standalone module (no chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{_REVISION}_*.py"))
     assert matches, f"revision file for {_REVISION} not found"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{_REVISION}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{_REVISION}", matches[0])
     assert spec and spec.loader, f"unable to load spec for {matches[0]}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -144,12 +140,10 @@ def _to_sync_url(url: str) -> str:
 def test_028_revision_metadata_pinned() -> None:
     module = _load_revision_module()
     assert module.revision == _REVISION, (
-        f"028 migration must declare revision={_REVISION!r}, "
-        f"got {module.revision!r}"
+        f"028 migration must declare revision={_REVISION!r}, got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
-        f"028 migration must chain off {_DOWN_REVISION!r}, "
-        f"got {module.down_revision!r}"
+        f"028 migration must chain off {_DOWN_REVISION!r}, got {module.down_revision!r}"
     )
     assert module.branch_labels is None, "028 must not introduce a branch label"
     assert module.depends_on is None, "028 must not depend on another revision"
@@ -157,12 +151,8 @@ def test_028_revision_metadata_pinned() -> None:
 
 def test_028_has_upgrade_and_downgrade_callables() -> None:
     module = _load_revision_module()
-    assert callable(getattr(module, "upgrade", None)), (
-        "028.upgrade missing or not callable"
-    )
-    assert callable(getattr(module, "downgrade", None)), (
-        "028.downgrade missing or not callable"
-    )
+    assert callable(getattr(module, "upgrade", None)), "028.upgrade missing or not callable"
+    assert callable(getattr(module, "downgrade", None)), "028.downgrade missing or not callable"
 
 
 def test_028_orm_admin_users_matches_spec() -> None:
@@ -180,11 +170,7 @@ def test_028_orm_admin_users_matches_spec() -> None:
     assert AdminUser.__tablename__ == _USERS_TABLE
     table = cast(sa.Table, AdminUser.__table__)
 
-    column_shapes = {
-        c.name: c.nullable
-        for c in table.columns
-        if c.name in _EXPECTED_USERS_COLUMNS
-    }
+    column_shapes = {c.name: c.nullable for c in table.columns if c.name in _EXPECTED_USERS_COLUMNS}
     assert column_shapes == _EXPECTED_USERS_COLUMNS, (
         f"AdminUser column shape drifted from spec:\n"
         f"  expected: {_EXPECTED_USERS_COLUMNS}\n"
@@ -210,9 +196,7 @@ def test_028_orm_admin_sessions_matches_spec() -> None:
     table = cast(sa.Table, AdminSession.__table__)
 
     column_shapes = {
-        c.name: c.nullable
-        for c in table.columns
-        if c.name in _EXPECTED_SESSIONS_COLUMNS
+        c.name: c.nullable for c in table.columns if c.name in _EXPECTED_SESSIONS_COLUMNS
     }
     assert column_shapes == _EXPECTED_SESSIONS_COLUMNS, (
         f"AdminSession column shape drifted from spec:\n"
@@ -244,8 +228,7 @@ def test_028_orm_admin_sessions_indexes_match_spec() -> None:
         f"got {by_name[_INDEX_SUBJECT_REVOKED]}"
     )
     assert by_name[_INDEX_EXPIRES_AT] == ("expires_at",), (
-        f"{_INDEX_EXPIRES_AT} must be (expires_at,), "
-        f"got {by_name[_INDEX_EXPIRES_AT]}"
+        f"{_INDEX_EXPIRES_AT} must be (expires_at,), got {by_name[_INDEX_EXPIRES_AT]}"
     )
 
 
@@ -254,9 +237,7 @@ def test_028_no_foreign_key_between_sessions_and_users() -> None:
     from src.db.models import AdminSession
 
     table = cast(sa.Table, AdminSession.__table__)
-    fk_targets = {
-        (fk.column.table.name, fk.column.name) for fk in table.foreign_keys
-    }
+    fk_targets = {(fk.column.table.name, fk.column.name) for fk in table.foreign_keys}
     assert ("admin_users", "subject") not in fk_targets, (
         "admin_sessions.subject MUST NOT FK admin_users.subject — see "
         "migration docstring (forensic preservation on soft-delete)"
@@ -272,13 +253,9 @@ def test_028_no_foreign_key_between_sessions_and_users() -> None:
 def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
     """Return the configured Postgres URL and patch the cached settings."""
     if _PG_URL_RAW.startswith("postgresql://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif _PG_URL_RAW.startswith("postgres://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgres://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgres://", "postgresql+asyncpg://", 1)
     else:
         async_url = _PG_URL_RAW
     monkeypatch.setenv("DATABASE_URL", async_url)
@@ -309,9 +286,7 @@ def test_028_upgrade_creates_admin_users_with_expected_columns(
     migrated_engine: Engine,
 ) -> None:
     insp = inspect(migrated_engine)
-    assert insp.has_table(_USERS_TABLE), (
-        f"{_USERS_TABLE} should exist after upgrade head"
-    )
+    assert insp.has_table(_USERS_TABLE), f"{_USERS_TABLE} should exist after upgrade head"
 
     columns = {c["name"]: c for c in insp.get_columns(_USERS_TABLE)}
     # Fixture upgrades to HEAD, so later migrations (030 session hash, 032 MFA)
@@ -360,9 +335,7 @@ def test_028_indexes_present(migrated_engine: Engine) -> None:
     insp = inspect(migrated_engine)
     index_names = {ix["name"] for ix in insp.get_indexes(_SESSIONS_TABLE)}
     missing = _EXPECTED_SESSIONS_INDEXES - index_names
-    assert not missing, (
-        f"{_SESSIONS_TABLE} missing indexes after upgrade head: {missing}"
-    )
+    assert not missing, f"{_SESSIONS_TABLE} missing indexes after upgrade head: {missing}"
 
 
 @pytestmark_pg
@@ -387,9 +360,7 @@ def test_028_no_rls_enabled_on_admin_users(migrated_engine: Engine) -> None:
         assert not row.relrowsecurity, (
             f"{_USERS_TABLE} must NOT have RLS enabled (cross-tenant by design)"
         )
-        assert not row.relforcerowsecurity, (
-            f"{_USERS_TABLE} must NOT have FORCE RLS"
-        )
+        assert not row.relforcerowsecurity, f"{_USERS_TABLE} must NOT have FORCE RLS"
 
 
 @pytestmark_pg
@@ -408,12 +379,9 @@ def test_028_no_rls_enabled_on_admin_sessions(migrated_engine: Engine) -> None:
             {"table": _SESSIONS_TABLE},
         ).one()
         assert not row.relrowsecurity, (
-            f"{_SESSIONS_TABLE} must NOT have RLS enabled (super-admin needs "
-            "cross-tenant lookup)"
+            f"{_SESSIONS_TABLE} must NOT have RLS enabled (super-admin needs cross-tenant lookup)"
         )
-        assert not row.relforcerowsecurity, (
-            f"{_SESSIONS_TABLE} must NOT have FORCE RLS"
-        )
+        assert not row.relforcerowsecurity, f"{_SESSIONS_TABLE} must NOT have FORCE RLS"
 
 
 @pytestmark_pg
@@ -424,18 +392,13 @@ def test_028_no_policies_attached_to_admin_tables(migrated_engine: Engine) -> No
         for table in (_USERS_TABLE, _SESSIONS_TABLE):
             policies = (
                 conn.execute(
-                    text(
-                        "SELECT polname FROM pg_policy "
-                        "WHERE polrelid = CAST(:table AS regclass)"
-                    ),
+                    text("SELECT polname FROM pg_policy WHERE polrelid = CAST(:table AS regclass)"),
                     {"table": table},
                 )
                 .scalars()
                 .all()
             )
-            assert policies == [], (
-                f"{table} must not have RLS policies; got {policies!r}"
-            )
+            assert policies == [], f"{table} must not have RLS policies; got {policies!r}"
 
 
 @pytestmark_pg
@@ -522,7 +485,5 @@ def test_028_basic_insert_select_roundtrip(migrated_engine: Engine) -> None:
 
     with migrated_engine.connect() as conn:
         users = conn.execute(text("SELECT COUNT(*) FROM admin_users")).scalar_one()
-        sessions = conn.execute(
-            text("SELECT COUNT(*) FROM admin_sessions")
-        ).scalar_one()
+        sessions = conn.execute(text("SELECT COUNT(*) FROM admin_sessions")).scalar_one()
         assert users == 1 and sessions == 1

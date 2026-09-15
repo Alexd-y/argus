@@ -24,6 +24,7 @@ def _get_redis():
     """Lazy get Redis client. Returns None if unavailable."""
     try:
         from src.core.redis_client import get_redis
+
         return get_redis()
     except Exception:
         return None
@@ -81,8 +82,8 @@ class PolicyEnforcer:
         compliance = policy.get("compliance", {})
         budget = policy.get("budget", {})
         routing = policy.get("routing", {})
-        safety = policy.get("safety", {})
-        telemetry = policy.get("telemetry", {})
+        policy.get("safety", {})
+        policy.get("telemetry", {})
 
         model_alias = getattr(request, "model", "")
         metadata = getattr(request, "metadata", {}) or {}
@@ -90,20 +91,26 @@ class PolicyEnforcer:
         content_class = metadata.get("content_class", "")
 
         # airgapped_only — все cloud провайдеры запрещены
-        if compliance.get("airgapped_only"):
-            if model_alias not in ("argus-pentest-primary", "argus-code-local", "argus-devsecops-local"):
-                raise PolicyDeniedError(
-                    "Airgapped mode blocks all cloud providers",
-                    {"reason": "airgapped_only_blocks_cloud", "alias": model_alias},
-                )
+        if compliance.get("airgapped_only") and model_alias not in (
+            "argus-pentest-primary",
+            "argus-code-local",
+            "argus-devsecops-local",
+        ):
+            raise PolicyDeniedError(
+                "Airgapped mode blocks all cloud providers",
+                {"reason": "airgapped_only_blocks_cloud", "alias": model_alias},
+            )
 
         # no_cloud_llm_for_source_code — запрет cloud для source_code
-        if compliance.get("no_cloud_llm_for_source_code") and content_class == "source_code":
-            if model_alias != "argus-pentest-primary":
-                raise PolicyDeniedError(
-                    "Source code cannot be sent to cloud LLM",
-                    {"reason": "no_cloud_llm_for_source_code", "alias": model_alias},
-                )
+        if (
+            compliance.get("no_cloud_llm_for_source_code")
+            and content_class == "source_code"
+            and model_alias != "argus-pentest-primary"
+        ):
+            raise PolicyDeniedError(
+                "Source code cannot be sent to cloud LLM",
+                {"reason": "no_cloud_llm_for_source_code", "alias": model_alias},
+            )
 
         # OSINT enabled check
         osint_cfg = policy.get("osint", {})
@@ -139,12 +146,16 @@ class PolicyEnforcer:
         role = role_mapping.get(model_alias, "planner")
         route_cfg = routing.get(role, {})
 
-        if route_cfg.get("local_only") and model_alias != "argus-pentest-primary":
-            if not model_alias.startswith("argus-code-local") and not model_alias.startswith("argus-devsecops"):
-                raise PolicyDeniedError(
-                    f"Route {role} requires local-only provider",
-                    {"reason": "local_only_required", "role": role},
-                )
+        if (
+            route_cfg.get("local_only")
+            and model_alias != "argus-pentest-primary"
+            and not model_alias.startswith("argus-code-local")
+            and not model_alias.startswith("argus-devsecops")
+        ):
+            raise PolicyDeniedError(
+                f"Route {role} requires local-only provider",
+                {"reason": "local_only_required", "role": role},
+            )
 
         # max_calls enforcement (Redis-backed with in-process fallback)
         max_calls = route_cfg.get("max_calls", 0)
@@ -156,10 +167,21 @@ class PolicyEnforcer:
             if current >= max_calls:
                 raise PolicyDeniedError(
                     f"Route {role} call limit reached ({current}/{max_calls})",
-                    {"reason": "max_calls_exceeded", "role": role, "current": current, "max": max_calls},
+                    {
+                        "reason": "max_calls_exceeded",
+                        "role": role,
+                        "current": current,
+                        "max": max_calls,
+                    },
                 )
 
-    def record_usage(self, policy: dict[str, Any], request: Any, input_tokens: int, output_tokens: int) -> None:
+    def record_usage(
+        self,
+        policy: dict[str, Any],
+        request: Any,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> None:
         """Record token/call usage after successful LLM call."""
         role_mapping = {
             "argus-pentest-primary": "pentest",
@@ -177,17 +199,27 @@ class PolicyEnforcer:
         scan_id = metadata.get("scan_id", policy.get("scan_id", ""))
         _record_call(role, scan_id if scan_id else "global", input_tokens, output_tokens)
 
-    def check_token_caps(self, route_cfg: dict[str, Any], estimated_input: int, estimated_output: int) -> None:
+    def check_token_caps(
+        self, route_cfg: dict[str, Any], estimated_input: int, estimated_output: int
+    ) -> None:
         """Enforce per-request token caps before sending to provider."""
         max_in = route_cfg.get("max_input_tokens", 0)
         max_out = route_cfg.get("max_output_tokens", 0)
         if max_in > 0 and estimated_input > max_in:
             raise PolicyDeniedError(
                 f"Request input tokens ({estimated_input}) exceed route cap ({max_in})",
-                {"reason": "input_tokens_exceeded", "estimated": estimated_input, "max": max_in},
+                {
+                    "reason": "input_tokens_exceeded",
+                    "estimated": estimated_input,
+                    "max": max_in,
+                },
             )
         if max_out > 0 and estimated_output > max_out:
             raise PolicyDeniedError(
                 f"Requested output tokens ({estimated_output}) exceed route cap ({max_out})",
-                {"reason": "output_tokens_exceeded", "estimated": estimated_output, "max": max_out},
+                {
+                    "reason": "output_tokens_exceeded",
+                    "estimated": estimated_output,
+                    "max": max_out,
+                },
             )

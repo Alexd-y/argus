@@ -9,12 +9,11 @@ sockets.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from itertools import count
 from uuid import UUID
 
 import pytest
-
 from src.oast.canary import CanaryGenerator
 from src.oast.correlator import OASTCorrelator
 from src.oast.listener_protocol import FakeOASTListener
@@ -23,14 +22,13 @@ from src.oast.provisioner import (
     InternalOASTProvisioner,
 )
 
-
 _BASE_DOMAIN = "oast.argus.local"
 
 
 @pytest.fixture()
 def fixed_clock() -> Callable[[], datetime]:
     """Return a clock that is stable for the lifetime of a single test."""
-    moment = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    moment = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
     return lambda: moment
 
 
@@ -39,7 +37,7 @@ def advancing_clock() -> Callable[[timedelta], Callable[[], datetime]]:
     """Return a factory that produces clocks advancing by a fixed step."""
 
     def _factory(step: timedelta) -> Callable[[], datetime]:
-        start = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         ticks: Iterator[int] = count()
 
         def _clock() -> datetime:
@@ -71,9 +69,7 @@ def deterministic_token_factory() -> Callable[[int], str]:
         index = next(counter)
         marker = format(index, "x")
         if len(marker) > nbytes * 2:
-            raise AssertionError(
-                "deterministic_token_factory exhausted; raise the upper bound"
-            )
+            raise AssertionError("deterministic_token_factory exhausted; raise the upper bound")
         return marker.rjust(nbytes * 2, "a")
 
     return _factory

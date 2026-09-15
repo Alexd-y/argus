@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.web_workbench.imports.har import ImportedExchange
 from src.web_workbench.imports.postman import PostmanImportError, import_postman
 
@@ -47,7 +46,10 @@ def test_import_url_object_raw() -> None:
     doc = _collection(
         _req_item(
             "get",
-            {"method": "GET", "url": {"raw": "https://api.test/items/1", "host": ["api", "test"]}},
+            {
+                "method": "GET",
+                "url": {"raw": "https://api.test/items/1", "host": ["api", "test"]},
+            },
         )
     )
     ex = import_postman(json.dumps(doc))[0]
@@ -199,7 +201,10 @@ def test_urlencoded_body() -> None:
                 "url": "https://api.test/form",
                 "body": {
                     "mode": "urlencoded",
-                    "urlencoded": [{"key": "a", "value": "1"}, {"key": "b", "value": "2"}],
+                    "urlencoded": [
+                        {"key": "a", "value": "1"},
+                        {"key": "b", "value": "2"},
+                    ],
                 },
             },
         )
@@ -216,7 +221,10 @@ def test_formdata_body_multipart() -> None:
             {
                 "method": "POST",
                 "url": "https://api.test/upload",
-                "body": {"mode": "formdata", "formdata": [{"key": "field", "value": "val"}]},
+                "body": {
+                    "mode": "formdata",
+                    "formdata": [{"key": "field", "value": "val"}],
+                },
             },
         )
     )
@@ -235,7 +243,11 @@ def test_explicit_content_type_not_overwritten() -> None:
                 "method": "POST",
                 "url": "https://api.test/x",
                 "header": [{"key": "Content-Type", "value": "application/vnd.custom+json"}],
-                "body": {"mode": "raw", "raw": "{}", "options": {"raw": {"language": "json"}}},
+                "body": {
+                    "mode": "raw",
+                    "raw": "{}",
+                    "options": {"raw": {"language": "json"}},
+                },
             },
         )
     )

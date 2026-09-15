@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 class ArtifactResponse(BaseModel):
     """Artifact metadata response."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -28,5 +29,6 @@ class ArtifactResponse(BaseModel):
 
 class ArtifactListResponse(BaseModel):
     """Artifact list."""
+
     items: list[ArtifactResponse]
     total: int

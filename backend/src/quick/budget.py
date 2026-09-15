@@ -498,7 +498,9 @@ class QuickBudgetManager:
             if take < 0 or take > unused:
                 raise QuickBudgetError("lease_consume_invalid", code="lease_consume_invalid")
             new_consumed = lease.consumed + take
-            new_status = LeaseStatus.EXHAUSTED if new_consumed >= lease.granted else LeaseStatus.ACTIVE
+            new_status = (
+                LeaseStatus.EXHAUSTED if new_consumed >= lease.granted else LeaseStatus.ACTIVE
+            )
             updated = lease.model_copy(update={"consumed": new_consumed, "status": new_status})
             state.consumed[lease.kind] = state.consumed.get(lease.kind, 0) + take
             self._store_lease(state, updated)
@@ -536,7 +538,9 @@ class QuickBudgetManager:
         host_key: str | None,
     ) -> int:
         if kind is QuickBudgetKind.WALL_CLOCK:
-            raise QuickBudgetError("wall_clock_lease_already_open", code="wall_clock_lease_already_open")
+            raise QuickBudgetError(
+                "wall_clock_lease_already_open", code="wall_clock_lease_already_open"
+            )
         if kind is QuickBudgetKind.DISCOVERY:
             if amount > state.remaining[QuickBudgetKind.DISCOVERY]:
                 raise BudgetExhaustedError("budget_exhausted")

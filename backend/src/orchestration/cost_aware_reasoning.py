@@ -27,7 +27,12 @@ class TokenUsageRecord:
 
 
 class CostTracker:
-    def __init__(self, scan_id: str = "", max_cost_usd: float = 50.0, max_total_tokens: int = 2000000) -> None:
+    def __init__(
+        self,
+        scan_id: str = "",
+        max_cost_usd: float = 50.0,
+        max_total_tokens: int = 2000000,
+    ) -> None:
         self._scan_id = scan_id
         self._max_cost_usd = max_cost_usd
         self._max_total_tokens = max_total_tokens
@@ -41,7 +46,10 @@ class CostTracker:
         self._total_cost_usd += record.estimated_cost_usd
 
     def is_budget_exceeded(self) -> bool:
-        return self._total_cost_usd >= self._max_cost_usd or self._total_tokens >= self._max_total_tokens
+        return (
+            self._total_cost_usd >= self._max_cost_usd
+            or self._total_tokens >= self._max_total_tokens
+        )
 
     @property
     def total_tokens(self) -> int:
@@ -125,7 +133,7 @@ __all__ = [
     "ConfidenceEscalator",
     "CostTracker",
     "TokenUsageRecord",
+    "get_cost_tracker",
     "register_cost_tracker",
     "unregister_cost_tracker",
-    "get_cost_tracker",
 ]

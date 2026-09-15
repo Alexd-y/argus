@@ -21,7 +21,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam._common import make_proof, utcnow
 from src.policy.ownership import (
@@ -37,13 +36,10 @@ from src.policy.ownership import (
     hash_identifier,
 )
 
-
 AWS_TARGET = "arn:aws:iam::123456789012:role/argus-prod"
 AWS_TOKEN = "AwsExternalIdAwsExternalIdAwsExternalIdAwsa"
 
-GCP_TARGET = (
-    "verifier@argus-prod.iam.gserviceaccount.com|https://ownership.argus.io/argus-prod"
-)
+GCP_TARGET = "verifier@argus-prod.iam.gserviceaccount.com|https://ownership.argus.io/argus-prod"
 GCP_TOKEN = "GcpArgusTokenGcpArgusTokenGcpArgusTokenGcpA"
 
 AZ_TENANT = "11111111-2222-3333-4444-555555555555"
@@ -88,7 +84,11 @@ class _StubCloudVerifier:
 
 
 def _challenge(
-    *, method: OwnershipMethod, target: str, token: str, ttl: timedelta = timedelta(hours=1)
+    *,
+    method: OwnershipMethod,
+    target: str,
+    token: str,
+    ttl: timedelta = timedelta(hours=1),
 ) -> OwnershipChallenge:
     issued_at = utcnow()
     return OwnershipChallenge(
@@ -300,9 +300,7 @@ class TestCloudCache:
         assert events[1].payload.get("cache_hit") is True
 
     @pytest.mark.asyncio
-    async def test_cache_miss_after_ttl_expires(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_cache_miss_after_ttl_expires(self, monkeypatch: pytest.MonkeyPatch) -> None:
         aws = _StubCloudVerifier(
             method=OwnershipMethod.AWS_STS_ASSUME_ROLE,
             cloud_provider="aws",
@@ -535,8 +533,6 @@ class TestCloudConcurrency:
         )
         await verifier.verify(challenge)
         # Even ten parallel cached lookups must not invoke the SDK.
-        results = await asyncio.gather(
-            *(verifier.verify(challenge) for _ in range(10))
-        )
+        results = await asyncio.gather(*(verifier.verify(challenge) for _ in range(10)))
         assert all(r.proof_id == results[0].proof_id for r in results)
         assert aws.call_count == 1

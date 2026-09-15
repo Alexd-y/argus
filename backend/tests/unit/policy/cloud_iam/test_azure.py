@@ -9,7 +9,6 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-
 from src.policy.audit import AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam._common import (
     CLOUD_PROOF_DEFAULT_TTL,
@@ -32,7 +31,6 @@ from src.policy.ownership import (
     OwnershipVerificationError,
     hash_identifier,
 )
-
 
 AZ_TENANT = "11111111-2222-3333-4444-555555555555"
 AZ_OID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -174,9 +172,7 @@ class TestAzureVerifierHappyPath:
         azure_challenge_token: str,
     ) -> None:
         cred = _StubCredential(result=_ok_token_result())
-        verifier = AzureManagedIdentityVerifier(
-            credential=cred, audit_logger=cloud_audit_logger
-        )
+        verifier = AzureManagedIdentityVerifier(credential=cred, audit_logger=cloud_audit_logger)
         challenge = _challenge(token=azure_challenge_token)
 
         proof = await verifier.verify(challenge)
@@ -205,9 +201,7 @@ class TestAzureVerifierHappyPath:
         self, cloud_audit_logger: AuditLogger, azure_challenge_token: str
     ) -> None:
         cred = _StubCredential(result=_ok_token_result())
-        verifier = AzureManagedIdentityVerifier(
-            credential=cred, audit_logger=cloud_audit_logger
-        )
+        verifier = AzureManagedIdentityVerifier(credential=cred, audit_logger=cloud_audit_logger)
         challenge = _challenge(
             token=azure_challenge_token,
             method=OwnershipMethod.AWS_STS_ASSUME_ROLE,
@@ -219,9 +213,7 @@ class TestAzureVerifierHappyPath:
         assert cred.calls == []
 
     @pytest.mark.asyncio
-    async def test_custom_scope_propagates(
-        self, azure_challenge_token: str
-    ) -> None:
+    async def test_custom_scope_propagates(self, azure_challenge_token: str) -> None:
         cred = _StubCredential(result=_ok_token_result())
         custom_scope = "https://graph.microsoft.com/.default"
         verifier = AzureManagedIdentityVerifier(credential=cred, scope=custom_scope)
@@ -280,9 +272,7 @@ class TestAzureClaimValidation:
         assert exc.value.summary == REASON_AZURE_MI_RESOURCE_NOT_OWNED
 
     @pytest.mark.asyncio
-    async def test_alternate_mi_claim_name_mi_res_id(
-        self, azure_challenge_token: str
-    ) -> None:
+    async def test_alternate_mi_claim_name_mi_res_id(self, azure_challenge_token: str) -> None:
         claims = _ok_claims()
         del claims["xms_mirid"]
         claims["mi_res_id"] = AZ_MI_RESOURCE
@@ -294,9 +284,7 @@ class TestAzureClaimValidation:
 
     @pytest.mark.asyncio
     async def test_expired_token_rejected(self, azure_challenge_token: str) -> None:
-        cred = _StubCredential(
-            result=_ok_token_result(_ok_claims(exp_offset=-600))
-        )
+        cred = _StubCredential(result=_ok_token_result(_ok_claims(exp_offset=-600)))
         verifier = AzureManagedIdentityVerifier(credential=cred)
 
         with pytest.raises(OwnershipVerificationError) as exc:
@@ -322,9 +310,7 @@ class TestAzureSdkErrors:
         assert exc.value.summary == REASON_AZURE_MI_TOKEN_REFRESH_FAILED
 
     @pytest.mark.asyncio
-    async def test_propagates_explicit_verification_error(
-        self, azure_challenge_token: str
-    ) -> None:
+    async def test_propagates_explicit_verification_error(self, azure_challenge_token: str) -> None:
         explicit = OwnershipVerificationError(REASON_AZURE_MI_TENANT_MISMATCH)
         cred = _StubCredential(raise_exc=explicit)
         verifier = AzureManagedIdentityVerifier(credential=cred)
@@ -364,9 +350,7 @@ class TestAzureAuditDiscipline:
         azure_challenge_token: str,
     ) -> None:
         cred = _StubCredential(result=_ok_token_result())
-        verifier = AzureManagedIdentityVerifier(
-            credential=cred, audit_logger=cloud_audit_logger
-        )
+        verifier = AzureManagedIdentityVerifier(credential=cred, audit_logger=cloud_audit_logger)
         challenge = _challenge(token=azure_challenge_token)
 
         await verifier.verify(challenge)

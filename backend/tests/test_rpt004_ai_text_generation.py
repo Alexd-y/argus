@@ -7,7 +7,6 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-
 from src.orchestration.prompt_registry import (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
     REPORT_AI_SECTION_KEYS,
@@ -42,7 +41,7 @@ class TestRpt004PromptRegistry:
             "zero_day_potential",
             "cost_summary",
         }
-        assert REPORT_AI_SECTION_KEYS == expected
+        assert expected == REPORT_AI_SECTION_KEYS
 
     def test_get_prompt_returns_tuple(self) -> None:
         system, user, version = get_report_ai_section_prompt(
@@ -69,9 +68,10 @@ class TestRpt004CacheKey:
             "payload_hash": h,
             "prompt_version": "v1",
         }
-        expected = "argus:ai_text:" + hashlib.sha256(
-            json.dumps(components, sort_keys=True).encode("utf-8")
-        ).hexdigest()
+        expected = (
+            "argus:ai_text:"
+            + hashlib.sha256(json.dumps(components, sort_keys=True).encode("utf-8")).hexdigest()
+        )
         key = build_ai_text_cache_key("t1", "s1", "full", "executive_summary", h, "v1")
         assert key == expected
         assert key.startswith("argus:ai_text:")
@@ -181,7 +181,9 @@ class TestRpt004ExecutiveFactGate:
         assert "99" not in out["text"]
         assert "critical: 0" in out["text"]
 
-    def test_mismatched_keeps_llm_when_replace_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_mismatched_keeps_llm_when_replace_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setattr(
             "src.reports.ai_text_generation.settings.ai_text_executive_fact_check_replace",
             False,
@@ -209,7 +211,9 @@ class TestRpt004ExecutiveFactGate:
 
 
 class TestRpt004NoLlmPlaceholders:
-    def test_run_ai_text_generation_no_keys_returns_placeholder_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_run_ai_text_generation_no_keys_returns_placeholder_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k in (
             "OPENAI_API_KEY",
             "DEEPSEEK_API_KEY",
@@ -231,7 +235,9 @@ class TestRpt004NoLlmPlaceholders:
         assert out["status"] == "skipped_no_llm"
         assert out.get("text") == REPORT_AI_SKIPPED_NO_LLM
 
-    def test_ai_results_to_text_map_includes_skipped_no_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_ai_results_to_text_map_includes_skipped_no_llm(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         for k in (
             "OPENAI_API_KEY",
             "DEEPSEEK_API_KEY",
@@ -242,7 +248,12 @@ class TestRpt004NoLlmPlaceholders:
         ):
             monkeypatch.delenv(k, raising=False)
         raw = run_ai_text_generation(
-            "t1", "s1", "midgard", "remediation_step", {"finding_count": 1}, redis_client=None
+            "t1",
+            "s1",
+            "midgard",
+            "remediation_step",
+            {"finding_count": 1},
+            redis_client=None,
         )
         mapped = ReportGenerator.ai_results_to_text_map({"remediation_step": raw})
         assert mapped["remediation_step"] == REPORT_AI_SKIPPED_NO_LLM

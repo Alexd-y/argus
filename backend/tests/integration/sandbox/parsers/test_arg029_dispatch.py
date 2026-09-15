@@ -51,7 +51,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import (
@@ -104,7 +103,6 @@ from src.sandbox.parsers.wappalyzer_cli_parser import (
 from src.sandbox.parsers.zap_baseline_parser import (
     EVIDENCE_SIDECAR_NAME as ZAP_BASELINE_SIDECAR,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -201,9 +199,7 @@ def _payload(tool_id: str) -> bytes:
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -321,9 +317,7 @@ def test_dispatch_writes_per_tool_sidecar(tool_id: str, tmp_path: Path) -> None:
     )
     assert findings
     sidecar = artifacts_dir / ARG029_TOOL_SIDECARS[tool_id]
-    assert sidecar.is_file(), (
-        f"{tool_id}: parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert parsed, f"{tool_id}: sidecar is empty"
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -384,12 +378,9 @@ def test_trufflehog_redacts_raw_secrets_in_sidecar(tmp_path: Path) -> None:
     gh_hits = _RAW_GH_PAT_RE.findall(text)
     long_alnum_hits = _LONG_ALNUM_TOKEN_RE.findall(text)
     assert aws_hits == [], (
-        f"RAW AWS key LEAKED through trufflehog sidecar — redaction broken. "
-        f"Hits: {aws_hits[:3]}"
+        f"RAW AWS key LEAKED through trufflehog sidecar — redaction broken. Hits: {aws_hits[:3]}"
     )
-    assert gh_hits == [], (
-        f"RAW GitHub PAT LEAKED through trufflehog sidecar. Hits: {gh_hits[:3]}"
-    )
+    assert gh_hits == [], f"RAW GitHub PAT LEAKED through trufflehog sidecar. Hits: {gh_hits[:3]}"
     assert long_alnum_hits == [], (
         f"Opaque long token LEAKED through trufflehog sidecar — likely raw "
         f"secret survived redaction. Hits: {long_alnum_hits[:3]}"
@@ -406,9 +397,7 @@ def test_trufflehog_redacts_raw_secrets_in_sidecar(tmp_path: Path) -> None:
 
 _RAW_MD5_RE: Final[re.Pattern[str]] = re.compile(r"\b[a-f0-9]{32}\b")
 _RAW_SHA1_RE: Final[re.Pattern[str]] = re.compile(r"\b[a-f0-9]{40}\b")
-_RAW_BCRYPT_RE: Final[re.Pattern[str]] = re.compile(
-    r"\$2[abxy]\$\d{2}\$[A-Za-z0-9./]{53}"
-)
+_RAW_BCRYPT_RE: Final[re.Pattern[str]] = re.compile(r"\$2[abxy]\$\d{2}\$[A-Za-z0-9./]{53}")
 
 
 @pytest.mark.parametrize("tool_id", ["hashid", "hash_analyzer"])
@@ -439,9 +428,7 @@ def test_hash_classifiers_never_persist_raw_hash(tool_id: str, tmp_path: Path) -
     bcrypt_hits = _RAW_BCRYPT_RE.findall(text)
     assert md5_hits == [], f"{tool_id}: RAW MD5 hash LEAKED. Hits: {md5_hits[:3]}"
     assert sha1_hits == [], f"{tool_id}: RAW SHA-1 hash LEAKED. Hits: {sha1_hits[:3]}"
-    assert bcrypt_hits == [], (
-        f"{tool_id}: RAW bcrypt hash LEAKED. Hits: {bcrypt_hits[:3]}"
-    )
+    assert bcrypt_hits == [], f"{tool_id}: RAW bcrypt hash LEAKED. Hits: {bcrypt_hits[:3]}"
 
 
 # ---------------------------------------------------------------------------
@@ -545,9 +532,7 @@ def test_detect_secrets_preserves_hashed_secret(tmp_path: Path) -> None:
         ("detect_secrets", "trufflehog"),
     ],
 )
-def test_cross_routing_is_inert(
-    payload_tool: str, wrong_tool: str, tmp_path: Path
-) -> None:
+def test_cross_routing_is_inert(payload_tool: str, wrong_tool: str, tmp_path: Path) -> None:
     """A payload from tool X dispatched as tool Y produces 0 real findings.
 
     Defence-in-depth check that every ARG-029 parser refuses to
@@ -623,9 +608,7 @@ def test_all_arg029_parsers_in_single_artifacts_dir_keeps_sidecars_intact(
 
     for tool_id, sidecar_name in ARG029_TOOL_SIDECARS.items():
         sidecar = tmp_path / sidecar_name
-        assert sidecar.is_file(), (
-            f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
-        )
+        assert sidecar.is_file(), f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
         records = _read_sidecar(sidecar)
         assert records, f"{tool_id}: sidecar {sidecar_name} is empty"
         assert all(r["tool_id"] == tool_id for r in records), (

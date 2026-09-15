@@ -9,14 +9,17 @@ from src.recon.vulnerability_analysis.active_scan.tool_argv_profile import (
 
 def test_resolve_dalfox_aggressive_off_unchanged() -> None:
     base = ["dalfox", "url", "https://ex.test/a?x=1"]
-    assert resolve_tool_argv_profile(
-        "dalfox",
-        base,
-        False,
-        target_url="https://ex.test/a?x=1",
-        fuzz_url="",
-        use_sandbox=False,
-    ) == base
+    assert (
+        resolve_tool_argv_profile(
+            "dalfox",
+            base,
+            False,
+            target_url="https://ex.test/a?x=1",
+            fuzz_url="",
+            use_sandbox=False,
+        )
+        == base
+    )
 
 
 def test_resolve_dalfox_aggressive_appends_custom_payload() -> None:

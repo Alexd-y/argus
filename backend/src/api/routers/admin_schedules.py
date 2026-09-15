@@ -235,9 +235,7 @@ def _enforce_tenant_scope(
                 detail=_DETAIL_TENANT_MISMATCH,
             )
         return target_tenant
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN
-    )
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN)
 
 
 def _utcnow() -> datetime:
@@ -261,9 +259,7 @@ async def _ensure_tenant_exists(session: AsyncSession, tenant_id: str) -> None:
         )
 
 
-async def _load_schedule_or_404(
-    session: AsyncSession, schedule_id: str
-) -> ScanSchedule:
+async def _load_schedule_or_404(session: AsyncSession, schedule_id: str) -> ScanSchedule:
     """Fetch a schedule by id; raise 404 when missing.
 
     Tenant-scope enforcement happens at the *router* layer (caller compares
@@ -376,9 +372,7 @@ async def list_scan_schedules(
             "super-admin (omitted = cross-tenant)."
         ),
     ),
-    enabled: bool | None = Query(
-        default=None, description="Optional enabled-only filter"
-    ),
+    enabled: bool | None = Query(default=None, description="Optional enabled-only filter"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0, le=100_000),
     _: None = Depends(require_admin),
@@ -392,9 +386,7 @@ async def list_scan_schedules(
     write endpoints below require admin or super-admin.
     """
     if role not in {"operator", "admin", "super-admin"}:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN)
 
     target = str(tenant_id) if tenant_id is not None else None
     if role in {"operator", "admin"}:
@@ -435,16 +427,12 @@ async def list_scan_schedules(
             "event": "argus.admin.scan_schedule.list",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_id_hash": (
-                tenant_hash(effective_tenant) if effective_tenant else None
-            ),
+            "tenant_id_hash": (tenant_hash(effective_tenant) if effective_tenant else None),
             "total": total,
             "result_count": len(items),
         },
     )
-    return ScanSchedulesListResponse(
-        items=items, total=total, limit=limit, offset=offset
-    )
+    return ScanSchedulesListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
 # ---------------------------------------------------------------------------
@@ -468,9 +456,7 @@ async def create_scan_schedule(
     """Insert a row into ``scan_schedules`` and sync to RedBeat."""
     _require_admin_or_super(role)
     target_tenant = str(body.tenant_id)
-    _enforce_admin_tenant_match(
-        role=role, role_tenant=role_tenant, target_tenant=target_tenant
-    )
+    _enforce_admin_tenant_match(role=role, role_tenant=role_tenant, target_tenant=target_tenant)
     _validate_primary_cron(body.cron_expression)
     _validate_maintenance_cron(body.maintenance_window_cron)
 
@@ -578,10 +564,7 @@ async def update_scan_schedule(
         if body.name is not None and body.name != row.name:
             row.name = body.name
             changed_fields["name"] = body.name
-        if (
-            body.cron_expression is not None
-            and body.cron_expression != row.cron_expression
-        ):
+        if body.cron_expression is not None and body.cron_expression != row.cron_expression:
             row.cron_expression = body.cron_expression
             row.next_run_at = _compute_initial_next_run(body.cron_expression)
             changed_fields["cron_expression"] = body.cron_expression

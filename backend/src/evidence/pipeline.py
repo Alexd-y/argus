@@ -46,7 +46,7 @@ class EvidencePersistError(RuntimeError):
 class StorageUploaderProtocol(Protocol):
     """Subset of :mod:`src.storage.s3` used by the pipeline."""
 
-    def upload(  # noqa: PLR0913 - matches the storage adapter signature
+    def upload(
         self,
         tenant_id: str,
         scan_id: str,
@@ -85,9 +85,7 @@ class EvidencePipeline:
     ) -> EvidenceDTO:
         """Persist a single evidence blob and return its :class:`EvidenceDTO`."""
         if not isinstance(raw_data, (bytes, bytearray)):
-            raise TypeError(
-                f"raw_data must be bytes-like, got {type(raw_data).__name__}"
-            )
+            raise TypeError(f"raw_data must be bytes-like, got {type(raw_data).__name__}")
 
         redacted: RedactedContent
         if redact:
@@ -122,9 +120,7 @@ class EvidencePipeline:
                 redactions_applied=redacted.redactions_applied,
                 failure="storage_upload_exception",
             )
-            raise EvidencePersistError(
-                f"evidence upload failed for finding {finding_id}"
-            ) from exc
+            raise EvidencePersistError(f"evidence upload failed for finding {finding_id}") from exc
 
         if object_key is None:
             self._emit_audit(
@@ -136,9 +132,7 @@ class EvidencePipeline:
                 redactions_applied=redacted.redactions_applied,
                 failure="storage_upload_none",
             )
-            raise EvidencePersistError(
-                f"evidence upload returned None for finding {finding_id}"
-            )
+            raise EvidencePersistError(f"evidence upload returned None for finding {finding_id}")
 
         evidence = EvidenceDTO(
             id=uuid4(),

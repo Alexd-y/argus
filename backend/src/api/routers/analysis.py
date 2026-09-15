@@ -90,13 +90,15 @@ async def analyse_batch(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         score = calculate_risk_score(f)
         path = build_attack_path(f)
         graph = to_d3_json(path)
-        results.append({
-            "finding_id": f.get("id", ""),
-            "risk_score": {
-                "overall": score.overall_score,
-                "priority": score.priority,
-                "cvss": score.cvss_base,
-            },
-            "attack_path": graph,
-        })
+        results.append(
+            {
+                "finding_id": f.get("id", ""),
+                "risk_score": {
+                    "overall": score.overall_score,
+                    "priority": score.priority,
+                    "cvss": score.cvss_base,
+                },
+                "attack_path": graph,
+            }
+        )
     return results

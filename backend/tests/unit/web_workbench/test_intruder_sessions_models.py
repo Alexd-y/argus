@@ -10,7 +10,6 @@ aligned.
 from __future__ import annotations
 
 from sqlalchemy import Boolean, Integer, LargeBinary, String
-
 from src.db.models_web_workbench import (
     WbIntruderAttack,
     WbIntruderRequest,
@@ -114,7 +113,12 @@ def test_session_macro_has_no_inline_secrets() -> None:
 
 
 def test_all_new_models_are_tenant_scoped() -> None:
-    for model in (WbIntruderAttack, WbIntruderRequest, WbSessionMacro, WbSessionPrincipal):
+    for model in (
+        WbIntruderAttack,
+        WbIntruderRequest,
+        WbSessionMacro,
+        WbSessionPrincipal,
+    ):
         cols = _cols(model)
         assert "tenant_id" in cols, f"{model.__tablename__} missing tenant_id"
         assert cols["tenant_id"].nullable is False

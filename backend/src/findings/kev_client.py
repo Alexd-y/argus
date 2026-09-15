@@ -169,9 +169,7 @@ class KevClient:
         try:
             raw = self._redis.get(_CATALOG_CACHE_KEY)
         except Exception:
-            _logger.warning(
-                "kev.cache_get_failed", extra={"event": "kev_cache_get_failed"}
-            )
+            _logger.warning("kev.cache_get_failed", extra={"event": "kev_cache_get_failed"})
             return None
         if raw is None:
             return None
@@ -191,9 +189,7 @@ class KevClient:
             payload = json.dumps(sorted(catalog), ensure_ascii=False)
             self._redis.setex(_CATALOG_CACHE_KEY, self._ttl, payload)
         except Exception:
-            _logger.warning(
-                "kev.cache_put_failed", extra={"event": "kev_cache_put_failed"}
-            )
+            _logger.warning("kev.cache_put_failed", extra={"event": "kev_cache_put_failed"})
 
     def _cache_get_etag(self) -> str | None:
         if self._redis is None:
@@ -237,9 +233,7 @@ class KevClient:
 
         return _parse_kev_catalog(response)
 
-    async def _http_get(
-        self, url: str, *, headers: dict[str, str] | None
-    ) -> HttpResponse:
+    async def _http_get(self, url: str, *, headers: dict[str, str] | None) -> HttpResponse:
         """Adapter around :class:`HttpClientProtocol`.
 
         Older fakes (notably the test conftest) only accept ``url`` and

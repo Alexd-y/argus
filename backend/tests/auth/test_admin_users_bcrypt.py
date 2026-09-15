@@ -15,10 +15,9 @@ Covers the contract documented in :mod:`src.auth.admin_users`:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from src.auth.admin_users import (
     AdminPrincipal,
     bootstrap_admin_user_if_configured,
@@ -30,7 +29,6 @@ from src.core.config import settings
 from src.db.models import AdminUser
 
 from .conftest import TEST_ADMIN_SUBJECT, TEST_PLAINTEXT_PASSWORD
-
 
 # ---------------------------------------------------------------------------
 # hash_password / is_bcrypt_hash
@@ -51,9 +49,7 @@ def test_hash_password_rounds_cost_meets_minimum() -> None:
     parts = digest.split("$")
     assert len(parts) >= 4, f"unexpected bcrypt format: {digest!r}"
     rounds = int(parts[2])
-    assert rounds >= 12, (
-        f"bcrypt rounds must be >= 12 per security policy, got {rounds}"
-    )
+    assert rounds >= 12, f"bcrypt rounds must be >= 12 per security policy, got {rounds}"
 
 
 def test_hash_password_rejects_empty_plaintext() -> None:
@@ -89,7 +85,7 @@ async def _seed_admin(
         password_hash=password_hash or hash_password(plaintext),
         role=role,
         tenant_id=tenant_id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         disabled_at=disabled_at,
     )
     session.add(row)
@@ -123,9 +119,7 @@ async def test_verify_credentials_normalizes_subject_whitespace(session) -> None
 async def test_verify_credentials_returns_none_for_wrong_password(session) -> None:
     await _seed_admin(session)
     assert (
-        await verify_credentials(
-            session, subject=TEST_ADMIN_SUBJECT, password="not the password"
-        )
+        await verify_credentials(session, subject=TEST_ADMIN_SUBJECT, password="not the password")
         is None
     )
 
@@ -147,7 +141,7 @@ async def test_verify_credentials_returns_none_for_unknown_subject(
 
 
 async def test_verify_credentials_returns_none_for_disabled_account(session) -> None:
-    await _seed_admin(session, disabled_at=datetime.now(timezone.utc))
+    await _seed_admin(session, disabled_at=datetime.now(UTC))
     assert (
         await verify_credentials(
             session, subject=TEST_ADMIN_SUBJECT, password=TEST_PLAINTEXT_PASSWORD
@@ -161,18 +155,13 @@ async def test_verify_credentials_returns_none_for_empty_credentials(
 ) -> None:
     await _seed_admin(session)
     assert await verify_credentials(session, subject="", password="x") is None
-    assert (
-        await verify_credentials(session, subject=TEST_ADMIN_SUBJECT, password="")
-        is None
-    )
+    assert await verify_credentials(session, subject=TEST_ADMIN_SUBJECT, password="") is None
     assert await verify_credentials(session, subject="   ", password="x") is None
 
 
 async def test_verify_credentials_returns_none_for_malformed_hash(session) -> None:
     """Operator pasting a non-bcrypt blob into ``password_hash`` MUST NOT raise."""
-    await _seed_admin(
-        session, password_hash="not-a-bcrypt-hash-at-all-but-long-enough"
-    )
+    await _seed_admin(session, password_hash="not-a-bcrypt-hash-at-all-but-long-enough")
     result = await verify_credentials(
         session, subject=TEST_ADMIN_SUBJECT, password=TEST_PLAINTEXT_PASSWORD
     )
@@ -186,12 +175,8 @@ async def test_verify_credentials_does_not_log_password(
     await _seed_admin(session)
     caplog.set_level("DEBUG", logger="src.auth.admin_users")
 
-    await verify_credentials(
-        session, subject=TEST_ADMIN_SUBJECT, password=TEST_PLAINTEXT_PASSWORD
-    )
-    await verify_credentials(
-        session, subject=TEST_ADMIN_SUBJECT, password="wrong-password-xyz"
-    )
+    await verify_credentials(session, subject=TEST_ADMIN_SUBJECT, password=TEST_PLAINTEXT_PASSWORD)
+    await verify_credentials(session, subject=TEST_ADMIN_SUBJECT, password="wrong-password-xyz")
 
     for record in caplog.records:
         msg = record.getMessage()
@@ -216,9 +201,7 @@ def _bootstrap_env(monkeypatch: pytest.MonkeyPatch):
         tenant_id: str | None = None,
     ) -> str | None:
         monkeypatch.setattr(settings, "admin_bootstrap_subject", subject)
-        monkeypatch.setattr(
-            settings, "admin_bootstrap_password_hash", password_hash
-        )
+        monkeypatch.setattr(settings, "admin_bootstrap_password_hash", password_hash)
         monkeypatch.setattr(settings, "admin_bootstrap_role", role)
         monkeypatch.setattr(settings, "admin_bootstrap_tenant_id", tenant_id)
         return password_hash
@@ -303,8 +286,8 @@ async def test_bootstrap_re_enables_disabled_admin(
                 password_hash=digest,
                 role="admin",
                 tenant_id=None,
-                created_at=datetime.now(timezone.utc),
-                disabled_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                disabled_at=datetime.now(UTC),
             )
         )
         await s.commit()
@@ -333,9 +316,7 @@ async def test_bootstrap_rejects_non_bcrypt_hash(
 
     async with session_factory() as s:
         rows = (await s.execute(_select_admin_users())).scalars().all()
-        assert rows == [], (
-            "non-bcrypt input must NOT be accepted as a password hash"
-        )
+        assert rows == [], "non-bcrypt input must NOT be accepted as a password hash"
 
 
 async def test_bootstrap_strips_subject_whitespace_and_empty_tenant(

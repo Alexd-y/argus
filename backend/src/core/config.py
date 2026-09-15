@@ -61,6 +61,72 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("MAX_COST_PER_SCAN_USD", "max_cost_per_scan_usd"),
     )
 
+    # --- Platform-hardening A (§7 budget ledger / §8 leases) ------------------
+    # Staged rollout: when enabled the per-scan cost tracker also books usage
+    # into the authoritative durable budget ledger. Default OFF keeps existing
+    # behaviour byte-identical until the ledger is validated in the target env.
+    budget_ledger_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("BUDGET_LEDGER_ENABLED", "budget_ledger_enabled"),
+    )
+    # Distributed concurrency leases (§8). Conservative defaults — do NOT raise
+    # target load automatically. 0 = unbounded (lease not enforced for that pool).
+    lease_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LEASE_ENABLED", "lease_enabled"),
+    )
+    lease_ttl_seconds: int = Field(
+        default=120,
+        validation_alias=AliasChoices("LEASE_TTL_SECONDS", "lease_ttl_seconds"),
+    )
+    lease_provider_capacity: int = Field(
+        default=4,
+        validation_alias=AliasChoices("LEASE_PROVIDER_CAPACITY", "lease_provider_capacity"),
+    )
+    lease_tenant_capacity: int = Field(
+        default=6,
+        validation_alias=AliasChoices("LEASE_TENANT_CAPACITY", "lease_tenant_capacity"),
+    )
+    lease_scan_capacity: int = Field(
+        default=4,
+        validation_alias=AliasChoices("LEASE_SCAN_CAPACITY", "lease_scan_capacity"),
+    )
+    lease_browser_capacity: int = Field(
+        default=2,
+        validation_alias=AliasChoices("LEASE_BROWSER_CAPACITY", "lease_browser_capacity"),
+    )
+    lease_tool_capacity: int = Field(
+        default=3,
+        validation_alias=AliasChoices("LEASE_TOOL_CAPACITY", "lease_tool_capacity"),
+    )
+    lease_host_capacity: int = Field(
+        default=1,
+        validation_alias=AliasChoices("LEASE_HOST_CAPACITY", "lease_host_capacity"),
+    )
+    # §8.2/§10: route exploitation tool runs through the verifiable ephemeral
+    # sandbox lifecycle (create → exec → collect → destroy, create-fails-closed)
+    # backed by the hardened Docker adapter. Default OFF keeps the existing
+    # shared-container ``docker exec`` path byte-identical until validated.
+    sandbox_lifecycle_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("SANDBOX_LIFECYCLE_ENABLED", "sandbox_lifecycle_enabled"),
+    )
+    # Which hardened lifecycle backend runs the ephemeral sandbox: ``docker``
+    # (default; local daemon / ECS-on-EC2) or ``k8s`` (short-lived hardened Pod).
+    sandbox_lifecycle_backend: str = Field(
+        default="docker",
+        validation_alias=AliasChoices("SANDBOX_LIFECYCLE_BACKEND", "sandbox_lifecycle_backend"),
+    )
+    # Durable agent-task claim/lease (§6).
+    agent_task_lease_seconds: int = Field(
+        default=180,
+        validation_alias=AliasChoices("AGENT_TASK_LEASE_SECONDS", "agent_task_lease_seconds"),
+    )
+    agent_task_max_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices("AGENT_TASK_MAX_ATTEMPTS", "agent_task_max_attempts"),
+    )
+
     # WhiteRabbitNeo — primary pentest AI (локально, $0)
     whiterabbitneo_url: str = Field(
         default="",
@@ -217,6 +283,18 @@ class Settings(BaseSettings):
             "canonical_report_snapshot_enabled",
         ),
     )
+    # Emit the mandatory per-finding Valhalla LLM remediation/closure deliverable
+    # (MD/XML/HTML/JSON + manifest) alongside the standard Valhalla artifacts.
+    # Opt-in + fail-soft: never breaks standard tier outputs. Requires a
+    # configured report LLM provider; without one the release is an honest
+    # incomplete draft, not a false final.
+    valhalla_llm_remediation_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_VALHALLA_LLM_REMEDIATION",
+            "valhalla_llm_remediation_enabled",
+        ),
+    )
     mcp_registrability_gate_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(
@@ -290,6 +368,16 @@ class Settings(BaseSettings):
     securitytrails_api_key: str | None = None
     virustotal_api_key: str | None = None
     hibp_api_key: str | None = None
+    # REM-005: recon/intel provider keys documented in infra/.env.example
+    # (NVD_API_KEY, EXPLOITDB_API_KEY, URLSCAN_API_KEY, ABUSEIPDB_API_KEY,
+    # GREYNOISE_API_KEY, OTX_API_KEY). Reconciled into Settings so the declared
+    # env is actually loaded (pydantic-settings maps field -> UPPERCASE env).
+    nvd_api_key: str | None = None
+    exploitdb_api_key: str | None = None
+    urlscan_api_key: str | None = None
+    abuseipdb_api_key: str | None = None
+    greynoise_api_key: str | None = None
+    otx_api_key: str | None = None
 
     # MinIO/S3 (Phase 7 — reports, screenshots). Env: MINIO_ENDPOINT, MINIO_ACCESS_KEY, etc.
     minio_endpoint: str = "localhost:9000"
@@ -1848,7 +1936,10 @@ def _sync_llm_api_keys_to_environ() -> None:
         ("POC_GENERATION_ENABLED", str(settings.poc_generation_enabled).lower()),
         ("SCAN_MODE", settings.scan_mode),
         ("LLM_DEDUP_ENABLED", str(settings.llm_dedup_enabled).lower()),
-        ("MEMORY_COMPRESSION_ENABLED", str(settings.memory_compression_enabled).lower()),
+        (
+            "MEMORY_COMPRESSION_ENABLED",
+            str(settings.memory_compression_enabled).lower(),
+        ),
         ("LLM_PRIMARY_PROVIDER", settings.llm_primary_provider),
     ]
     for env_key, val in flag_pairs:

@@ -36,12 +36,12 @@ Coverage matrix (≥6 cases per the C7-T07 spec)
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from sqlalchemy import inspect, select, text
-
+from sqlalchemy.exc import SQLAlchemyError
 from src.auth import admin_sessions as admin_sessions_module
 from src.auth.admin_sessions import (
     create_session,
@@ -51,9 +51,7 @@ from src.auth.admin_sessions import (
 from src.core.config import Settings, settings
 from src.db.models import AdminSession
 
-_ADMIN_SESSIONS_SOURCE: Path = (
-    Path(admin_sessions_module.__file__).resolve()
-)
+_ADMIN_SESSIONS_SOURCE: Path = Path(admin_sessions_module.__file__).resolve()
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +77,7 @@ def test_orm_admin_session_pk_is_session_token_hash_only() -> None:
     """Post-031 the only primary-key column is ``session_token_hash``."""
     pk_columns = {col.name for col in AdminSession.__table__.primary_key.columns}
     assert pk_columns == {"session_token_hash"}, (
-        f"AdminSession PK must be exactly (session_token_hash,) post-031; "
-        f"got {pk_columns!r}"
+        f"AdminSession PK must be exactly (session_token_hash,) post-031; got {pk_columns!r}"
     )
 
 
@@ -94,8 +91,7 @@ async def test_live_schema_has_no_session_id_column(engine) -> None:
     async with engine.connect() as conn:
         column_names = await conn.run_sync(
             lambda sync_conn: {
-                col["name"]
-                for col in inspect(sync_conn).get_columns("admin_sessions")
+                col["name"] for col in inspect(sync_conn).get_columns("admin_sessions")
             }
         )
 
@@ -179,8 +175,7 @@ async def test_create_session_writes_only_session_token_hash(session) -> None:
         "row PK must be the keyed digest; raw token must never be persisted"
     )
     assert not hasattr(row, "session_id"), (
-        "AdminSession instance leaks a session_id attribute — the ORM "
-        "shape regressed"
+        "AdminSession instance leaks a session_id attribute — the ORM shape regressed"
     )
 
 
@@ -191,7 +186,7 @@ async def test_create_session_writes_only_session_token_hash(session) -> None:
 
 async def test_legacy_shape_row_cannot_be_inserted_via_orm(session) -> None:
     """Trying to insert with ``session_id=`` on the model raises ``TypeError``."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with pytest.raises(TypeError):
         AdminSession(  # type: ignore[call-arg]
             session_id="raw-legacy-token",
@@ -210,8 +205,8 @@ async def test_legacy_shape_row_cannot_be_inserted_via_orm(session) -> None:
 
 async def test_raw_sql_insert_into_session_id_fails(session) -> None:
     """Even raw SQL cannot use the dropped column — defence in depth."""
-    now = datetime.now(timezone.utc)
-    with pytest.raises(Exception):
+    now = datetime.now(UTC)
+    with pytest.raises(SQLAlchemyError):
         await session.execute(
             text(
                 "INSERT INTO admin_sessions ("
@@ -260,10 +255,7 @@ async def test_resolver_misses_when_hash_does_not_match_persisted(
     # other lookup path now that the legacy column is gone.
     different_hash = "f" * 64
     await session.execute(
-        text(
-            "UPDATE admin_sessions SET session_token_hash = :h "
-            "WHERE session_token_hash = :pk"
-        ),
+        text("UPDATE admin_sessions SET session_token_hash = :h WHERE session_token_hash = :pk"),
         {"h": different_hash, "pk": row.session_token_hash},
     )
     await session.commit()
@@ -271,8 +263,7 @@ async def test_resolver_misses_when_hash_does_not_match_persisted(
 
     principal = await resolve_session(session, session_id=raw_token)
     assert principal is None, (
-        "tampered hash must produce a miss; a hit here proves the legacy "
-        "fallback regressed"
+        "tampered hash must produce a miss; a hit here proves the legacy fallback regressed"
     )
 
     refreshed = (
@@ -318,9 +309,7 @@ async def test_resolver_returns_none_without_pepper_no_legacy_path(
 # ---------------------------------------------------------------------------
 
 
-_LEGACY_FLAG_REGEX = re.compile(
-    r"settings\.admin_session_legacy_raw_(write|fallback)"
-)
+_LEGACY_FLAG_REGEX = re.compile(r"settings\.admin_session_legacy_raw_(write|fallback)")
 
 
 def test_admin_sessions_source_has_no_legacy_settings_references() -> None:

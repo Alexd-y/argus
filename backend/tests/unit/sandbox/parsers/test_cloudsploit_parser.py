@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -167,9 +166,7 @@ def test_public_routes_to_misconfig_with_cwe_732(tmp_path: Path) -> None:
 
 def test_account_id_preserved_in_arn(tmp_path: Path) -> None:
     arn = "arn:aws:iam::123456789012:role/admin"
-    parse_cloudsploit_json(
-        _payload(_result(resource=arn)), b"", tmp_path, "cloudsploit"
-    )
+    parse_cloudsploit_json(_payload(_result(resource=arn)), b"", tmp_path, "cloudsploit")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "123456789012" in sidecar
     assert "REDACTED" not in sidecar

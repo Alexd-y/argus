@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.web_workbench.imports.graphql import (
     GraphQLImportError,
     import_graphql_introspection,
@@ -32,7 +31,10 @@ def _obj(name: str) -> dict[str, object]:
 
 
 def _schema(
-    *, query_fields: list[dict], mutation_fields: list[dict] | None, extra_types: list[dict]
+    *,
+    query_fields: list[dict],
+    mutation_fields: list[dict] | None,
+    extra_types: list[dict],
 ) -> str:
     types: list[dict] = [
         {"kind": "OBJECT", "name": "Query", "fields": query_fields},
@@ -185,7 +187,10 @@ def test_required_non_scalar_arg_skips_operation() -> None:
             {
                 "name": "search",
                 "args": [
-                    {"name": "filter", "type": _nn({"kind": "INPUT_OBJECT", "name": "Filter"})}
+                    {
+                        "name": "filter",
+                        "type": _nn({"kind": "INPUT_OBJECT", "name": "Filter"}),
+                    }
                 ],
                 "type": _scalar("String"),
             },

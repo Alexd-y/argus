@@ -64,7 +64,9 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         jinja_tiers[name] = {"active": name == tier_norm, "slots": slots}
 
     timeline_preview: list[dict[str, Any]] = []
-    for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_TIMELINE_PREVIEW_LIMIT]:
+    for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[
+        :_TIMELINE_PREVIEW_LIMIT
+    ]:
         # Leak-safe preview only — never the raw entry body (internal IPs / secrets).
         snippet = gen.safe_phase_summary_text(t.entry) if t.entry is not None else ""
         timeline_preview.append(
@@ -80,7 +82,9 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         if (p.phase or "").lower() == phase_key
     ]
 
-    aligned_counts = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
+    aligned_counts = executive_severity_totals_from_severity_strings(
+        f.severity for f in data.findings
+    )
     pipeline_summary: dict[str, Any] = {}
     recon_summary = {
         "target_url": data.target or "",
@@ -191,9 +195,7 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         "owasp_top10_labels": OWASP_TOP10_2025_CATEGORY_TITLES,
         "recon_summary": recon_summary,
         "exploitation": exploitation,
-        "ai_sections": {
-            k: v for k, v in texts.items() if k not in gen.INTERNAL_ONLY_AI_SECTIONS
-        },
+        "ai_sections": {k: v for k, v in texts.items() if k not in gen.INTERNAL_ONLY_AI_SECTIONS},
         "jinja": jinja_tiers,
         "tier_stubs": TIER_METADATA,
     }
@@ -206,7 +208,9 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
         out["valhalla_appendix_nmap_excerpt"] = None
         out["valhalla_appendix_phase_inputs_excerpt"] = None
         tl_rows: list[dict[str, Any]] = []
-        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[:_VALHALLA_TIMELINE_LIMIT]:
+        for t in sorted(data.timeline, key=lambda x: (x.order_index, x.phase))[
+            :_VALHALLA_TIMELINE_LIMIT
+        ]:
             # Leak-safe projection only — the raw entry body carries internal
             # addresses/secrets (e.g. 169.254.169.254, AWS keys). Never dump it
             # verbatim into the Valhalla JSON appendix (regression: RPT-008).
@@ -215,11 +219,13 @@ def offline_minimal_jinja_context_from_report_data(data: ReportData, tier: str) 
                 if t.entry is not None
                 else ""
             )
-            tl_rows.append({
-                "phase": t.phase or "",
-                "order_index": t.order_index,
-                "snippet": snippet,
-            })
+            tl_rows.append(
+                {
+                    "phase": t.phase or "",
+                    "order_index": t.order_index,
+                    "snippet": snippet,
+                }
+            )
         out["valhalla_appendix_timeline_rows"] = tl_rows
         out["hibp_pwned_password_summary"] = data.hibp_pwned_password_summary
     return out
@@ -250,7 +256,9 @@ _PHASE_ORDER: tuple[str, ...] = (
 )
 
 
-def _build_scan_artifacts_from_raw(raw_artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_scan_artifacts_from_raw(
+    raw_artifacts: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Transform ``ReportData.raw_artifacts`` into ``scan_artifacts`` Jinja context.
 
     When no artifacts are available, returns ``{"status": "skipped", ...}``.
@@ -264,13 +272,15 @@ def _build_scan_artifacts_from_raw(raw_artifacts: list[dict[str, Any]]) -> dict[
         if phase not in grouped:
             grouped[phase] = []
         file_name = art.get("artifact_type") or art.get("key", "").rsplit("/", 1)[-1]
-        grouped[phase].append({
-            "file_name": file_name,
-            "key": art.get("key", ""),
-            "size": art.get("size_bytes", 0),
-            "last_modified": art.get("last_modified") or "",
-            "download_url": art.get("url"),
-        })
+        grouped[phase].append(
+            {
+                "file_name": file_name,
+                "key": art.get("key", ""),
+                "size": art.get("size_bytes", 0),
+                "last_modified": art.get("last_modified") or "",
+                "download_url": art.get("url"),
+            }
+        )
 
     phase_blocks: list[dict[str, Any]] = []
     for phase_key in _PHASE_ORDER:
@@ -278,27 +288,31 @@ def _build_scan_artifacts_from_raw(raw_artifacts: list[dict[str, Any]]) -> dict[
         if not items:
             continue
         items.sort(key=lambda x: str(x.get("key") or ""))
-        phase_blocks.append({
-            "phase_key": phase_key,
-            "phase_label": _PHASE_LABELS.get(phase_key, phase_key),
-            "phase_query": phase_key if phase_key != "unknown" else "",
-            "rows": items,
-            "tool_output_rows": items,
-            "other_rows": [],
-        })
+        phase_blocks.append(
+            {
+                "phase_key": phase_key,
+                "phase_label": _PHASE_LABELS.get(phase_key, phase_key),
+                "phase_query": phase_key if phase_key != "unknown" else "",
+                "rows": items,
+                "tool_output_rows": items,
+                "other_rows": [],
+            }
+        )
     for phase_key in sorted(grouped.keys()):
         items = grouped[phase_key]
         if not items:
             continue
         items.sort(key=lambda x: str(x.get("key") or ""))
-        phase_blocks.append({
-            "phase_key": phase_key,
-            "phase_label": _PHASE_LABELS.get(phase_key, phase_key),
-            "phase_query": "",
-            "rows": items,
-            "tool_output_rows": items,
-            "other_rows": [],
-        })
+        phase_blocks.append(
+            {
+                "phase_key": phase_key,
+                "phase_label": _PHASE_LABELS.get(phase_key, phase_key),
+                "phase_query": "",
+                "rows": items,
+                "tool_output_rows": items,
+                "other_rows": [],
+            }
+        )
 
     return {"status": "ok", "phase_blocks": phase_blocks}
 

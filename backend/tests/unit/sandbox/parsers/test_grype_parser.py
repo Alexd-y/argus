@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -303,9 +302,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     ]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_grype_json(b"[]", b"", tmp_path, "grype")
     assert findings == []
@@ -430,8 +427,7 @@ def test_sidecar_persist_oserror_logs_warning(
         findings = parse_grype_json(payload, b"", blocker, "grype")
     assert len(findings) == 1
     assert any(
-        "grype_parser_evidence_sidecar_write_failed"
-        in (record.__dict__.get("event") or "")
+        "grype_parser_evidence_sidecar_write_failed" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 

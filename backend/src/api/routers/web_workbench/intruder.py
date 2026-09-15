@@ -203,7 +203,11 @@ async def start_attack(
     await _load_active_attack(session, tenant_id, attack_id)
     try:
         row = await _repository.set_status(
-            session, tenant_id, attack_id, STATUS_QUEUED, expected_version=body.expected_version
+            session,
+            tenant_id,
+            attack_id,
+            STATUS_QUEUED,
+            expected_version=body.expected_version,
         )
     except AttackNotFoundError as exc:
         raise HTTPException(status_code=404, detail="attack not found") from exc
@@ -231,7 +235,11 @@ async def pause_attack(
     session, tenant_id = ctx
     try:
         row = await _repository.set_status(
-            session, tenant_id, attack_id, STATUS_PAUSED, expected_version=body.expected_version
+            session,
+            tenant_id,
+            attack_id,
+            STATUS_PAUSED,
+            expected_version=body.expected_version,
         )
     except AttackNotFoundError as exc:
         raise HTTPException(status_code=404, detail="attack not found") from exc
@@ -247,7 +255,11 @@ async def cancel_attack(
     session, tenant_id = ctx
     try:
         row = await _repository.set_status(
-            session, tenant_id, attack_id, STATUS_CANCELLED, expected_version=body.expected_version
+            session,
+            tenant_id,
+            attack_id,
+            STATUS_CANCELLED,
+            expected_version=body.expected_version,
         )
     except AttackNotFoundError as exc:
         raise HTTPException(status_code=404, detail="attack not found") from exc

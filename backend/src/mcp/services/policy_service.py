@@ -115,9 +115,7 @@ def verify_scope(*, tenant_id: str, payload: ScopeVerifyInput) -> ScopeVerifyRes
     )
 
 
-def evaluate_policy(
-    *, tenant_id: str, payload: PolicyEvaluateInput
-) -> PolicyEvaluateResult:
+def evaluate_policy(*, tenant_id: str, payload: PolicyEvaluateInput) -> PolicyEvaluateResult:
     """Run :class:`PolicyEngine.evaluate` and translate to MCP enums."""
     engine, policy = _policy_engine_for(tenant_id)
 

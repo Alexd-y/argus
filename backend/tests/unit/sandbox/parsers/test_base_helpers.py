@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-
+from pydantic import ValidationError
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -54,7 +54,6 @@ from src.sandbox.parsers._base import (
     safe_load_json,
     safe_load_jsonl,
 )
-
 
 # ---------------------------------------------------------------------------
 # safe_load_jsonl
@@ -278,5 +277,5 @@ def test_make_finding_dto_empty_cwe_is_rejected() -> None:
 def test_make_finding_dto_returns_immutable_dto() -> None:
     """The Pydantic model is frozen — direct mutation must raise."""
     finding = make_finding_dto(category=FindingCategory.INFO, cwe=[200])
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         finding.kev_listed = True

@@ -55,17 +55,13 @@ def test_axfr_record_escalates_to_misconfig(tmp_path: Path) -> None:
 
 
 def test_mx_record_uses_exchange_field(tmp_path: Path) -> None:
-    stdout = _payload(
-        [{"type": "MX", "exchange": "mail.example.com", "preference": 10}]
-    )
+    stdout = _payload([{"type": "MX", "exchange": "mail.example.com", "preference": 10}])
     findings = parse_dnsrecon(stdout, b"", tmp_path, "dnsrecon")
     assert len(findings) == 1
 
 
 def test_records_envelope_supported(tmp_path: Path) -> None:
-    stdout = json.dumps({"records": [{"type": "A", "name": "api.example.com"}]}).encode(
-        "utf-8"
-    )
+    stdout = json.dumps({"records": [{"type": "A", "name": "api.example.com"}]}).encode("utf-8")
     assert len(parse_dnsrecon(stdout, b"", tmp_path, "dnsrecon")) == 1
 
 

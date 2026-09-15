@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from src.nuclei.profile_compiler import PROFILE_DIR, load_scan_profile
 from src.nuclei.schemas import ScanProfile
 
@@ -77,6 +76,4 @@ def test_quick_default_is_not_the_lab_unrestricted_document() -> None:
     quick = _raw_profile()
     assert lab["id"] == "lab_unrestricted"
     assert quick["id"] != lab["id"]
-    assert Path(_QUICK_YAML).read_text(encoding="utf-8") != lab_path.read_text(
-        encoding="utf-8"
-    )
+    assert Path(_QUICK_YAML).read_text(encoding="utf-8") != lab_path.read_text(encoding="utf-8")

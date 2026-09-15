@@ -13,9 +13,7 @@ def test_total_wstg_tests() -> None:
 
 
 def test_coverage_with_common_tools() -> None:
-    result = build_wstg_coverage(
-        ["nmap", "nikto", "nuclei", "dalfox", "sqlmap", "testssl"]
-    )
+    result = build_wstg_coverage(["nmap", "nikto", "nuclei", "dalfox", "sqlmap", "testssl"])
     assert result.covered > 0
     assert result.coverage_percentage > 0
 

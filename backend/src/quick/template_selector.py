@@ -64,9 +64,7 @@ def _meets_severity_floor(manifest: NucleiTemplateManifest, floor: SeverityFloor
 
 def _is_unsigned_disallowed(manifest: NucleiTemplateManifest) -> bool:
     source = (
-        manifest.source
-        if isinstance(manifest.source, TemplateSource)
-        else str(manifest.source)
+        manifest.source if isinstance(manifest.source, TemplateSource) else str(manifest.source)
     )
     if source in (TemplateSource.INTERNAL, TemplateSource.INTERNAL.value):
         return False
@@ -92,7 +90,12 @@ def _is_misconfig_template(manifest: NucleiTemplateManifest) -> bool:
 
 
 def _product_of(fingerprint: AssetFingerprint) -> str:
-    for fact in (fingerprint.product, fingerprint.cms, fingerprint.framework, fingerprint.web_server):
+    for fact in (
+        fingerprint.product,
+        fingerprint.cms,
+        fingerprint.framework,
+        fingerprint.web_server,
+    ):
         if fact is not None and fact.value and fact.value.strip():
             return fact.value.strip().lower()
     return ""
@@ -126,7 +129,9 @@ def _technology_tag_match(manifest: NucleiTemplateManifest, fingerprint: AssetFi
     return bool(_tags(manifest) & tokens)
 
 
-def _generic_protocol_match(manifest: NucleiTemplateManifest, fingerprint: AssetFingerprint) -> bool:
+def _generic_protocol_match(
+    manifest: NucleiTemplateManifest, fingerprint: AssetFingerprint
+) -> bool:
     protocols = {str(item).strip().lower() for item in manifest.protocols}
     if not protocols:
         return False

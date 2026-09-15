@@ -34,7 +34,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.contracts.project import WorkbenchProjectCreate
 from src.web_workbench.contracts.repeater import RepeaterTabCreate, RepeaterTabUpdate
@@ -173,7 +172,12 @@ async def test_repeater_cross_tenant_isolation(async_engine: AsyncEngine) -> Non
         service = RepeaterService(ProjectScopeService(proj_a.scope_rules))
         result = service.replay(_IN_SCOPE, _CountingSender())
         await repo.record_exchange(
-            s, tenant_a, project_id=proj_a.id, tab_id=tab.id, raw_request=_IN_SCOPE, result=result
+            s,
+            tenant_a,
+            project_id=proj_a.id,
+            tab_id=tab.id,
+            raw_request=_IN_SCOPE,
+            result=result,
         )
 
     async with sm() as s, s.begin():
@@ -260,7 +264,12 @@ async def test_out_of_scope_replay_records_blocked_without_sending(
         assert result.forwarded is False
 
         exchange = await repo.record_exchange(
-            s, tenant, project_id=proj.id, tab_id=tab.id, raw_request=_OUT_OF_SCOPE, result=result
+            s,
+            tenant,
+            project_id=proj.id,
+            tab_id=tab.id,
+            raw_request=_OUT_OF_SCOPE,
+            result=result,
         )
         assert exchange.forward_outcome == "blocked"
         assert exchange.block_reason == "out_of_scope"

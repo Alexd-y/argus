@@ -23,9 +23,7 @@ _PORT_SERVICE_RE = re.compile(
     r"(?:\s+(?P<detail>.+))?",
     re.IGNORECASE,
 )
-_ENDPOINT_PATTERNS = re.compile(
-    r"(?:^|\s|,)(\/[a-zA-Z0-9_./-]{1,256})", re.MULTILINE
-)
+_ENDPOINT_PATTERNS = re.compile(r"(?:^|\s|,)(\/[a-zA-Z0-9_./-]{1,256})", re.MULTILINE)
 
 _FORM_TYPE_KEYWORDS: dict[str, str] = {
     "login": "authentication",
@@ -101,10 +99,7 @@ def _classify_form(action: str, inputs: list[dict[str, Any]]) -> str:
     for keyword, form_type in _FORM_TYPE_KEYWORDS.items():
         if keyword in blob:
             return form_type
-    if any(
-        (inp.get("input_type") or inp.get("type") or "").lower() == "file"
-        for inp in inputs
-    ):
+    if any((inp.get("input_type") or inp.get("type") or "").lower() == "file" for inp in inputs):
         return "file_upload"
     return "general"
 
@@ -136,22 +131,26 @@ def extract_ports_from_assets(
             if port in seen or port < 1 or port > 65535:
                 continue
             seen.add(port)
-            result.append({
-                "port": port,
-                "protocol": match.group("proto"),
-                "service": match.group("service"),
-                "detail": (match.group("detail") or "").strip()[:256],
-            })
+            result.append(
+                {
+                    "port": port,
+                    "protocol": match.group("proto"),
+                    "service": match.group("service"),
+                    "detail": (match.group("detail") or "").strip()[:256],
+                }
+            )
 
     for port_num in ports or []:
         if isinstance(port_num, int) and port_num not in seen and 0 < port_num <= 65535:
             seen.add(port_num)
-            result.append({
-                "port": port_num,
-                "protocol": "tcp",
-                "service": "unknown",
-                "detail": "",
-            })
+            result.append(
+                {
+                    "port": port_num,
+                    "protocol": "tcp",
+                    "service": "unknown",
+                    "detail": "",
+                }
+            )
     return sorted(result, key=lambda x: x["port"])[:500]
 
 
@@ -195,7 +194,9 @@ def build_recon_context(
                     if isinstance(entries, list):
                         for entry in entries:
                             if isinstance(entry, dict):
-                                name = str(entry.get("name") or entry.get("technology") or "").strip()
+                                name = str(
+                                    entry.get("name") or entry.get("technology") or ""
+                                ).strip()
                                 version = str(entry.get("version") or "").strip()
                                 if name:
                                     key = f"{name.lower()}:{version}"
@@ -322,69 +323,85 @@ def parse_threat_model_result(raw: dict[str, Any]) -> ThreatModelResult:
     attack_surface: list[AttackSurfaceItem] = []
     for item in tm.get("attack_surface") or []:
         if isinstance(item, str):
-            attack_surface.append(AttackSurfaceItem(
-                component=item[:256],
-                type="service",
-                exposure_level="external",
-            ))
+            attack_surface.append(
+                AttackSurfaceItem(
+                    component=item[:256],
+                    type="service",
+                    exposure_level="external",
+                )
+            )
         elif isinstance(item, dict):
-            attack_surface.append(AttackSurfaceItem(
-                component=str(item.get("component") or item.get("name") or "")[:256],
-                type=str(item.get("type") or "service")[:64],
-                exposure_level=str(item.get("exposure_level") or "external")[:32],
-                url=str(item.get("url") or "")[:512],
-            ))
+            attack_surface.append(
+                AttackSurfaceItem(
+                    component=str(item.get("component") or item.get("name") or "")[:256],
+                    type=str(item.get("type") or "service")[:64],
+                    exposure_level=str(item.get("exposure_level") or "external")[:32],
+                    url=str(item.get("url") or "")[:512],
+                )
+            )
 
     threats: list[StrideThreat] = []
     for item in tm.get("threats") or []:
         if isinstance(item, str):
-            threats.append(StrideThreat(
-                category="I",
-                description=item[:1024],
-                component="general",
-                likelihood="medium",
-                impact="medium",
-            ))
+            threats.append(
+                StrideThreat(
+                    category="I",
+                    description=item[:1024],
+                    component="general",
+                    likelihood="medium",
+                    impact="medium",
+                )
+            )
         elif isinstance(item, dict):
-            threats.append(StrideThreat(
-                category=str(item.get("category") or "I")[:2],
-                description=str(item.get("description") or "")[:1024],
-                component=str(item.get("component") or "general")[:256],
-                likelihood=str(item.get("likelihood") or "medium")[:16],
-                impact=str(item.get("impact") or "medium")[:16],
-            ))
+            threats.append(
+                StrideThreat(
+                    category=str(item.get("category") or "I")[:2],
+                    description=str(item.get("description") or "")[:1024],
+                    component=str(item.get("component") or "general")[:256],
+                    likelihood=str(item.get("likelihood") or "medium")[:16],
+                    impact=str(item.get("impact") or "medium")[:16],
+                )
+            )
 
     cves: list[CveReference] = []
     for item in tm.get("cves") or []:
         if isinstance(item, str):
-            cves.append(CveReference(
-                cve_id=item[:20],
-                technology="unknown",
-                severity="medium",
-                description="",
-            ))
+            cves.append(
+                CveReference(
+                    cve_id=item[:20],
+                    technology="unknown",
+                    severity="medium",
+                    description="",
+                )
+            )
         elif isinstance(item, dict):
-            cves.append(CveReference(
-                cve_id=str(item.get("cve_id") or item.get("id") or "")[:20],
-                technology=str(item.get("technology") or "")[:128],
-                severity=str(item.get("severity") or "medium")[:16],
-                description=str(item.get("description") or "")[:512],
-            ))
+            cves.append(
+                CveReference(
+                    cve_id=str(item.get("cve_id") or item.get("id") or "")[:20],
+                    technology=str(item.get("technology") or "")[:128],
+                    severity=str(item.get("severity") or "medium")[:16],
+                    description=str(item.get("description") or "")[:512],
+                )
+            )
 
     mitigations: list[dict[str, str]] = []
     for item in tm.get("mitigations") or []:
         if isinstance(item, str):
-            mitigations.append({
-                "threat_ref": "general",
-                "recommendation": item[:1024],
-                "priority": "medium",
-            })
+            mitigations.append(
+                {
+                    "threat_ref": "general",
+                    "recommendation": item[:1024],
+                    "priority": "medium",
+                }
+            )
         elif isinstance(item, dict):
-            mitigations.append({
-                "threat_ref": str(item.get("threat_ref") or "general")[:256],
-                "recommendation": str(item.get("recommendation") or "")[:1024],
-                "priority": str(item.get("priority") or "medium")[:16],
-            })
+            mitigations.append(
+                {
+                    "threat_ref": str(item.get("threat_ref") or "general")[:256],
+                    "recommendation": str(item.get("recommendation") or "")[:1024],
+                    "priority": str(item.get("priority") or "medium")[:16],
+                }
+            )
 
     return ThreatModelResult(
         attack_surface=attack_surface,
@@ -409,23 +426,18 @@ def merge_threat_model_result_into_output(
     result = dict(tm)
 
     if parsed.attack_surface and (
-        not result.get("attack_surface") or all(
-            isinstance(x, str) for x in result.get("attack_surface", [])
-        )
+        not result.get("attack_surface")
+        or all(isinstance(x, str) for x in result.get("attack_surface", []))
     ):
         result["attack_surface"] = [a.to_dict() for a in parsed.attack_surface]
 
     if parsed.threats and (
-        not result.get("threats") or all(
-            isinstance(x, str) for x in result.get("threats", [])
-        )
+        not result.get("threats") or all(isinstance(x, str) for x in result.get("threats", []))
     ):
         result["threats"] = [t.to_dict() for t in parsed.threats]
 
     if parsed.cves and (
-        not result.get("cves") or all(
-            isinstance(x, str) for x in result.get("cves", [])
-        )
+        not result.get("cves") or all(isinstance(x, str) for x in result.get("cves", []))
     ):
         result["cves"] = [c.to_dict() for c in parsed.cves]
 

@@ -91,7 +91,9 @@ def test_mcp_policy_allowed_operation_is_audited(monkeypatch, tmp_path: Path) ->
     assert "token=%5BREDACTED%5D" in event["args_sanitized"]["url"]
 
 
-def test_stage1_report_writes_contract_and_mcp_linkage_artifacts(tmp_path: Path) -> None:
+def test_stage1_report_writes_contract_and_mcp_linkage_artifacts(
+    tmp_path: Path,
+) -> None:
     scope_dir = tmp_path / "00_scope"
     domains_dir = tmp_path / "01_domains"
     subdomains_dir = tmp_path / "02_subdomains"
@@ -105,7 +107,9 @@ def test_stage1_report_writes_contract_and_mcp_linkage_artifacts(tmp_path: Path)
 
     (scope_dir / "scope.txt").write_text("example.com\n*.example.com", encoding="utf-8")
     (domains_dir / "whois.txt").write_text("Domain Name: example.com", encoding="utf-8")
-    (domains_dir / "ns.txt").write_text("example.com. nameserver = ns1.example.com.", encoding="utf-8")
+    (domains_dir / "ns.txt").write_text(
+        "example.com. nameserver = ns1.example.com.", encoding="utf-8"
+    )
     (subdomains_dir / "subdomains_clean.txt").write_text("www.example.com", encoding="utf-8")
     (dns_dir / "resolved.txt").write_text("www.example.com -> 93.184.216.34", encoding="utf-8")
     (live_dir / "http_probe.csv").write_text(
@@ -118,8 +122,17 @@ def test_stage1_report_writes_contract_and_mcp_linkage_artifacts(tmp_path: Path)
     generate_stage1_report(
         tmp_path,
         use_mcp=False,
-        fetch_func=lambda _url: {"status": 200, "content_type": "text/plain", "exists": True, "notes": "mock"},
-        headers_fetch_func=lambda url, _timeout=10.0: {"status_code": 200, "headers": {}, "url": url},
+        fetch_func=lambda _url: {
+            "status": 200,
+            "content_type": "text/plain",
+            "exists": True,
+            "notes": "mock",
+        },
+        headers_fetch_func=lambda url, _timeout=10.0: {
+            "status_code": 200,
+            "headers": {},
+            "url": url,
+        },
     )
 
     contract_path = tmp_path / "stage1_contract_baseline.json"
@@ -520,13 +533,17 @@ def test_build_mcp_trace_from_audit_produces_mcp_trace_jsonl(tmp_path: Path) -> 
     assert "denied" in ev2["output_summary"].lower() or "domain" in ev2["output_summary"].lower()
 
 
-def test_build_mcp_trace_from_audit_returns_none_when_audit_missing(tmp_path: Path) -> None:
+def test_build_mcp_trace_from_audit_returns_none_when_audit_missing(
+    tmp_path: Path,
+) -> None:
     """build_mcp_trace_from_audit returns None when mcp_invocation_audit.jsonl does not exist."""
     result = build_mcp_trace_from_audit(tmp_path)
     assert result is None
 
 
-def test_build_mcp_trace_from_audit_returns_none_when_audit_empty(tmp_path: Path) -> None:
+def test_build_mcp_trace_from_audit_returns_none_when_audit_empty(
+    tmp_path: Path,
+) -> None:
     """build_mcp_trace_from_audit returns None when audit file is empty."""
     (tmp_path / MCP_AUDIT_LOG_FILENAME).write_text("", encoding="utf-8")
     result = build_mcp_trace_from_audit(tmp_path)

@@ -130,15 +130,14 @@ def build_container_security_context() -> dict[str, Any]:
 def _validate_cpu_quantity(value: str) -> None:
     if not _CPU_QUANTITY_RE.fullmatch(value):
         raise ValueError(
-            f"cpu quantity {value!r} is not a valid k8s value " "(expected '500m', '1', '2.5')"
+            f"cpu quantity {value!r} is not a valid k8s value (expected '500m', '1', '2.5')"
         )
 
 
 def _validate_memory_quantity(value: str) -> None:
     if not _MEM_QUANTITY_RE.fullmatch(value):
         raise ValueError(
-            f"memory quantity {value!r} is not a valid k8s value "
-            "(expected '256Mi', '1Gi', '512M')"
+            f"memory quantity {value!r} is not a valid k8s value (expected '256Mi', '1Gi', '512M')"
         )
 
 

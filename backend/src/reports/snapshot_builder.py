@@ -276,7 +276,7 @@ def _finding_dicts_for_wstg(report_data: Any) -> list[dict[str, Any]]:
 
 def _build_wstg_block(
     report_data: Any,
-    scan_report_data: Any,
+    scan_report_data: Any,  # noqa: ARG001 - retained for signature/API compatibility
     *,
     scan_meta: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:

@@ -27,7 +27,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -163,9 +162,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     assert [r["code"] for r in rows] == ["CIS-B", "CIS-C", "CIS-A"]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_dockle_json(b"[]", b"", tmp_path, "dockle")
     assert findings == []
@@ -175,9 +172,7 @@ def test_envelope_not_dict_returns_empty(
     )
 
 
-def test_missing_code_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_code_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _detail()
     bad.pop("code")
     payload = _payload(bad, _detail(code="CIS-OK"))

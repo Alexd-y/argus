@@ -8,6 +8,7 @@ full deterministic path. Timeouts never block report generation.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -75,9 +76,7 @@ PROMPT_TRIAGE: Final[str] = "quick_finding_triage_v1"
 PROMPT_CRITIC: Final[str] = "quick_security_critic_v1"
 PROMPT_REPORTER: Final[str] = "quick_reporter_v1"
 
-_PROMPTS_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "config" / "prompts"
-)
+_PROMPTS_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "config" / "prompts"
 _DEFAULT_AI_TIMEOUT_SECONDS: Final[float] = 20.0
 _MAX_CONTEXT_CHARS: Final[int] = 12_000
 _CACHE_MAX: Final[int] = 128
@@ -125,9 +124,7 @@ def render_quick_prompt(prompt_id: str, **kwargs: Any) -> tuple[str, str, str]:
     system = str(definition.get("system_prompt") or "")
     template = str(definition.get("user_prompt_template") or "")
     schema_id = str(
-        definition.get("response_schema_id")
-        or definition.get("expected_schema_ref")
-        or ""
+        definition.get("response_schema_id") or definition.get("expected_schema_ref") or ""
     )
     sanitized = sanitize_kwargs_for_prompt(kwargs)
     user = template.format(**sanitized)
@@ -171,7 +168,12 @@ async def _call_quick_llm(
     key = _cache_key(prompt_id, user)
     cached = _RESPONSE_CACHE.get(key)
     if cached is not None:
-        record_llm_call(model="deterministic", prompt=prompt_id, status="cached", latency_seconds=0.0)
+        record_llm_call(
+            model="deterministic",
+            prompt=prompt_id,
+            status="cached",
+            latency_seconds=0.0,
+        )
         return cached
     timeout = max(1.0, min(float(timeout_seconds), 60.0))
     started = time.monotonic()
@@ -257,7 +259,9 @@ def _rules_fingerprint(observations: Mapping[str, Any], asset_id: str) -> AssetF
         return FingerprintFact(value=str(value)[:512], confidence=0.5, evidence_ids=evidence_ids)
 
     evidence_raw = observations.get("evidence_ids") or ()
-    evidence_ids = tuple(str(item) for item in evidence_raw) if isinstance(evidence_raw, (list, tuple)) else ()
+    evidence_ids = (
+        tuple(str(item) for item in evidence_raw) if isinstance(evidence_raw, (list, tuple)) else ()
+    )
     return AssetFingerprint(
         asset_id=asset_id,
         protocol=_fact("protocol"),
@@ -283,11 +287,11 @@ def _rules_triage(candidate: Mapping[str, Any]) -> FindingTriage:
     evidence = candidate.get("evidence_ids") or candidate.get("citations") or ()
     citations = tuple(str(item) for item in evidence) if isinstance(evidence, (list, tuple)) else ()
     verdict = (
-        FindingTriageVerdict.NEEDS_VERIFICATION
-        if citations
-        else FindingTriageVerdict.HYPOTHESIS
+        FindingTriageVerdict.NEEDS_VERIFICATION if citations else FindingTriageVerdict.HYPOTHESIS
     )
-    summary = str(candidate.get("title") or candidate.get("summary") or "unverified candidate")[:4096]
+    summary = str(candidate.get("title") or candidate.get("summary") or "unverified candidate")[
+        :4096
+    ]
     return FindingTriage(
         finding_id=finding_id or "unknown",
         verdict=verdict,
@@ -300,7 +304,9 @@ def _rules_triage(candidate: Mapping[str, Any]) -> FindingTriage:
     )
 
 
-def _needs_verification_critique(triage: FindingTriage | Mapping[str, Any]) -> SecurityCritique:
+def _needs_verification_critique(
+    triage: FindingTriage | Mapping[str, Any],
+) -> SecurityCritique:
     if isinstance(triage, FindingTriage):
         triage_id = triage.finding_id
         citations = triage.citations
@@ -330,10 +336,8 @@ def _emit_report_observability(
     usage = dict(budget_usage or {})
     elapsed = usage.get("elapsed_seconds") or usage.get("wall_clock_used_seconds")
     if elapsed is not None:
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             record_scan_duration(float(elapsed))
-        except (TypeError, ValueError):
-            pass
     emit_quick_audit_event(
         "quick.report",
         scan_id=scan_id,
@@ -385,7 +389,10 @@ def _template_report(
         budget_usage=dict(budget_usage),
         versions={str(key): str(value) for key, value in versions.items()},
         recommended_next_mode="production",
-        follow_up_actions=("review coverage gaps", "consider standard or deep follow-up"),
+        follow_up_actions=(
+            "review coverage gaps",
+            "consider standard or deep follow-up",
+        ),
     )
 
 
@@ -461,7 +468,10 @@ async def plan_with_ai(
     except TimeoutError:
         logger.warning(
             "quick_planner_timeout_deterministic",
-            extra={"event": "quick_planner_timeout_deterministic", "scan_id": request.scan_id},
+            extra={
+                "event": "quick_planner_timeout_deterministic",
+                "scan_id": request.scan_id,
+            },
         )
         return QuickLlmResult(
             value=baseline,
@@ -672,7 +682,9 @@ async def critique_finding(
             prompt_version="rules-v1",
             fallback_reason="enable_ai_false",
         )
-    triage_payload = triage.model_dump(mode="json") if isinstance(triage, FindingTriage) else dict(triage)
+    triage_payload = (
+        triage.model_dump(mode="json") if isinstance(triage, FindingTriage) else dict(triage)
+    )
     system, user, schema_id = render_quick_prompt(
         PROMPT_CRITIC,
         triage_json=_bounded_json(triage_payload),

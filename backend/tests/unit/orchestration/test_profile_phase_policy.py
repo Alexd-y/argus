@@ -5,9 +5,9 @@ from __future__ import annotations
 from src.orchestration.phases import PHASE_ORDER, ScanPhase
 from src.orchestration.profile_phase_policy import DESTRUCTIVE_PHASES, plan_phases
 from src.orchestration.scan_checkpoint import (
+    ScanCheckpointV1,
     build_checkpoint,
     resume_context,
-    ScanCheckpointV1,
 )
 from src.profiles.resolver import resolve_scan_profile
 
@@ -91,6 +91,10 @@ def test_checkpoint_hash_ignores_updated_at():
 
 def test_checkpoint_hash_changes_with_phase():
     resolved = resolve_scan_profile("light")
-    a = build_checkpoint(scan_id="s", tenant_id="t", resolved_profile=resolved, current_phase="recon")
-    b = build_checkpoint(scan_id="s", tenant_id="t", resolved_profile=resolved, current_phase="reporting")
+    a = build_checkpoint(
+        scan_id="s", tenant_id="t", resolved_profile=resolved, current_phase="recon"
+    )
+    b = build_checkpoint(
+        scan_id="s", tenant_id="t", resolved_profile=resolved, current_phase="reporting"
+    )
     assert a.checkpoint_hash() != b.checkpoint_hash()

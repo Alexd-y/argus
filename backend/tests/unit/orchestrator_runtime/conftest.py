@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -25,7 +25,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.llm_orchestrator.agents import AgentContext
 from src.llm_orchestrator.cost_tracker import CostTracker
 from src.llm_orchestrator.llm_provider import EchoLLMProvider
@@ -180,8 +179,7 @@ def full_signed_registry(
             "planner_v1",
             "planner",
             user_template=(
-                "Target: {target_summary}\nPhase: {phase}\n"
-                "Previous: {previous_findings}"
+                "Target: {target_summary}\nPhase: {phase}\nPrevious: {previous_findings}"
             ),
             expected_schema_ref="validation_plan_v1",
         ),
@@ -194,9 +192,7 @@ def full_signed_registry(
         _sample_prompt(
             "verifier_v1",
             "verifier",
-            user_template=(
-                "Phase: {phase}\nTool output: {tool_output}\nOAST: {oast_evidence}"
-            ),
+            user_template=("Phase: {phase}\nTool output: {tool_output}\nOAST: {oast_evidence}"),
             expected_schema_ref="finding_dto_list_v1",
         ),
         _sample_prompt(
@@ -209,8 +205,7 @@ def full_signed_registry(
             "fixer_v1",
             "fixer",
             user_template=(
-                "Schema: {schema_ref}\nErrors: {schema_errors}\n"
-                "Original: {original_content}"
+                "Schema: {schema_ref}\nErrors: {schema_errors}\nOriginal: {original_content}"
             ),
         ),
     ]
@@ -281,9 +276,7 @@ def _canned_finding(scan_id: UUID, tenant_id: UUID) -> dict[str, Any]:
     }
 
 
-def _canned_findings_payload(
-    scan_id: UUID, tenant_id: UUID, count: int = 1
-) -> dict[str, Any]:
+def _canned_findings_payload(scan_id: UUID, tenant_id: UUID, count: int = 1) -> dict[str, Any]:
     return {
         "findings": [_canned_finding(scan_id, tenant_id) for _ in range(count)],
     }
@@ -365,7 +358,7 @@ def audit_logger() -> AuditLogger:
 
 @pytest.fixture()
 def now_utc() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 # ---------------------------------------------------------------------------

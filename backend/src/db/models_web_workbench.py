@@ -647,7 +647,10 @@ class WbIntruderRequest(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "attack_id", "request_index", name="uq_wb_intruder_request_index"
+            "tenant_id",
+            "attack_id",
+            "request_index",
+            name="uq_wb_intruder_request_index",
         ),
         Index("ix_wb_intruder_request_attack", "tenant_id", "attack_id"),
         Index("ix_wb_intruder_request_flagged", "tenant_id", "attack_id", "flagged"),

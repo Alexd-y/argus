@@ -93,9 +93,7 @@ _INTERNAL_TO_METRIC_STATUS: Final[Mapping[str, str]] = {
 }
 
 
-def _emit_mcp_metric(
-    *, tool_name: str, status: str, client_id: str | None
-) -> None:
+def _emit_mcp_metric(*, tool_name: str, status: str, client_id: str | None) -> None:
     """Emit ``argus_mcp_calls_total`` defensively (never raises)."""
     metric_status = _INTERNAL_TO_METRIC_STATUS.get(status, status)
     try:
@@ -135,7 +133,7 @@ def _classify_failure(exc: Exception) -> tuple[str, str]:
     return "mcp_internal_error", "Internal MCP error; see server logs."
 
 
-async def run_tool(
+async def run_tool[T](
     *,
     tool_name: str,
     payload: BaseModel,
@@ -170,9 +168,7 @@ async def run_tool(
         )
         raise
 
-    client_id_str = (
-        str(call.auth.user_id) if call.auth.user_id else "anonymous"
-    )
+    client_id_str = str(call.auth.user_id) if call.auth.user_id else "anonymous"
 
     span_ctx = _tracer.start_as_current_span("mcp.tool")
     span = span_ctx.__enter__()
@@ -262,9 +258,7 @@ async def run_tool(
                 "mcp.tool.validation_failed",
                 extra={"tool_name": tool_name, "tenant_id": call.auth.tenant_id},
             )
-            raise ValidationError(
-                "Invalid arguments for the requested tool."
-            ) from exc
+            raise ValidationError("Invalid arguments for the requested tool.") from exc
         except Exception as exc:
             final_status = "error"
             try:
@@ -298,26 +292,17 @@ async def run_tool(
                 failure_summary=None,
                 extra_payload=extras,
             )
-            if (
-                isinstance(result, BaseModel)
-                and "audit_event_id" in type(result).model_fields
-            ):
+            if isinstance(result, BaseModel) and "audit_event_id" in type(result).model_fields:
                 try:
-                    result = result.model_copy(
-                        update={"audit_event_id": str(event.event_id)}
-                    )
+                    result = result.model_copy(update={"audit_event_id": str(event.event_id)})
                 except Exception:  # pragma: no cover — defensive
-                    _logger.debug(
-                        "mcp.tool.cannot_attach_audit_event", exc_info=True
-                    )
+                    _logger.debug("mcp.tool.cannot_attach_audit_event", exc_info=True)
         except Exception:  # pragma: no cover
             _logger.exception("mcp.audit.allow_emit_failed")
         return result
     finally:
         safe_set_span_attribute(span, "argus.status", final_status)
-        _emit_mcp_metric(
-            tool_name=tool_name, status=final_status, client_id=client_id_str
-        )
+        _emit_mcp_metric(tool_name=tool_name, status=final_status, client_id=client_id_str)
         try:
             span_ctx.__exit__(None, None, None)
         except Exception:  # pragma: no cover — defensive

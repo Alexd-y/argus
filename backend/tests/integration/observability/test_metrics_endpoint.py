@@ -13,7 +13,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
-
 from src.api.routers import metrics as metrics_router
 from src.core.observability import (
     METRIC_CATALOGUE,
@@ -49,9 +48,7 @@ def _emit_one_of_each() -> None:
         duration_seconds=0.05,
         tenant_id="tenant-test",
     )
-    record_celery_task(
-        task_name="test.task", status="success", duration_seconds=0.1
-    )
+    record_celery_task(task_name="test.task", status="success", duration_seconds=0.1)
     record_celery_task(
         task_name="test.task",
         status="failure",
@@ -65,9 +62,7 @@ def _emit_one_of_each() -> None:
         duration_seconds=2.5,
     )
     record_finding_emitted(tier="midgard", severity="high", kev_listed=True)
-    record_llm_tokens(
-        provider="openai", model="gpt-4o", direction="in", tokens=42
-    )
+    record_llm_tokens(provider="openai", model="gpt-4o", direction="in", tokens=42)
     record_mcp_call(tool="scan.start", status="success", client_class="anthropic")
 
 
@@ -104,8 +99,7 @@ def test_http_counter_increments_after_request(client: TestClient) -> None:
     line = next(
         ln
         for ln in body.splitlines()
-        if ln.startswith("argus_http_requests_total{")
-        and 'method="POST"' in ln
+        if ln.startswith("argus_http_requests_total{") and 'method="POST"' in ln
     )
     assert "1.0" in line
 
@@ -149,8 +143,7 @@ def test_llm_tokens_value_records_actual_count(client: TestClient) -> None:
     line = next(
         ln
         for ln in body.splitlines()
-        if ln.startswith("argus_llm_tokens_total{")
-        and 'direction="in"' in ln
+        if ln.startswith("argus_llm_tokens_total{") and 'direction="in"' in ln
     )
     # Counter values are floats; substring check is sufficient.
     assert "999" in line

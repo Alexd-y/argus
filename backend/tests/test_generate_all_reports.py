@@ -9,15 +9,17 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.api.schemas import ReportGenerateAllRequest
 from src.core.config import settings
 from src.db.models import Finding as FindingModel
 from src.db.models import Report as ReportModel
 from src.db.models import ReportObject
-from src.reports.report_pipeline import DEFAULT_REPORT_FORMATS, normalize_generation_formats
+from src.reports.report_pipeline import (
+    DEFAULT_REPORT_FORMATS,
+    normalize_generation_formats,
+)
 from src.storage.s3 import build_report_object_key
+from starlette.testclient import TestClient
 
 GENERATE_ALL_TIERS = ("midgard", "asgard", "valhalla")
 DEFAULT_GENERATE_ALL_API = ("pdf", "html", "json", "csv")
@@ -125,7 +127,9 @@ def _session_factory_for_generate_all() -> tuple:
     return factory, added
 
 
-def test_post_generate_all_creates_twelve_rows_and_enqueues_task(client: TestClient) -> None:
+def test_post_generate_all_creates_twelve_rows_and_enqueues_task(
+    client: TestClient,
+) -> None:
     scan_id = str(uuid.uuid4())
     tenant_id = "00000000-0000-0000-0000-000000000001"
     factory, added = _session_factory_for_generate_all()
@@ -229,7 +233,9 @@ def test_post_generate_all_empty_formats_array_rejected(app) -> None:
     )
 
 
-def test_post_generate_all_task_payload_matches_created_bundle_and_ids(client: TestClient) -> None:
+def test_post_generate_all_task_payload_matches_created_bundle_and_ids(
+    client: TestClient,
+) -> None:
     """Celery receives exactly this request's bundle_id and report_ids (correlation / batch filter)."""
     scan_id = str(uuid.uuid4())
     factory, added = _session_factory_for_generate_all()
@@ -316,7 +322,9 @@ def _session_factory_download_with_report_object(
     return factory
 
 
-def test_download_report_uses_report_object_key_not_legacy_path(client: TestClient) -> None:
+def test_download_report_uses_report_object_key_not_legacy_path(
+    client: TestClient,
+) -> None:
     """When ReportObject.object_key is set, stream from download_by_key(ro.object_key); skip legacy storage_*."""
     tenant_id = settings.default_tenant_id
     report_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -382,7 +390,9 @@ class _ExecScalar:
 
 
 @pytest.mark.asyncio
-async def test_pipeline_upload_fn_receives_distinct_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_pipeline_upload_fn_receives_distinct_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import src.reports.report_pipeline as rp
     from src.reports.data_collector import ScanReportData
     from src.services.reporting import ReportContextBuildResult
@@ -409,7 +419,7 @@ async def test_pipeline_upload_fn_receives_distinct_keys(monkeypatch: pytest.Mon
         ai_section_results={"executive_summary": {"status": "ok", "text": "t"}},
     )
 
-    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):  # noqa: ANN001
+    async def fake_build_context(self, session, tenant_id, scan_id, tier, **kwargs):
         return built
 
     monkeypatch.setattr(rp.ReportGenerator, "build_context", fake_build_context)
@@ -460,7 +470,10 @@ def test_normalize_generation_formats_requested_formats_string_scalar() -> None:
 @pytest.mark.asyncio
 async def test_enqueue_generate_all_bundle_creates_twelve_rows() -> None:
     """OWASP-006: 3 tiers × 4 formats = 12 Report rows (same as generate-all API default)."""
-    from src.reports.bundle_enqueue import GENERATE_ALL_REPORT_TIERS, enqueue_generate_all_bundle
+    from src.reports.bundle_enqueue import (
+        GENERATE_ALL_REPORT_TIERS,
+        enqueue_generate_all_bundle,
+    )
 
     assert len(GENERATE_ALL_REPORT_TIERS) * len(DEFAULT_GENERATE_ALL_API) == 12
 

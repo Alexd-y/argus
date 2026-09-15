@@ -36,6 +36,7 @@ def _spf_all_qualifier(record: str) -> str | None:
             qualifier = m.group(1) or "+"
     return qualifier
 
+
 _SPF_CWE = "CWE-16"
 _SPF_OWASP = "A05:2021-Security Misconfiguration"
 

@@ -106,7 +106,9 @@ def is_quick_execution(options: Mapping[str, Any] | None) -> bool:
         return False
 
 
-def skipped_phases_for_options(options: Mapping[str, Any] | None) -> frozenset[ScanPhase]:
+def skipped_phases_for_options(
+    options: Mapping[str, Any] | None,
+) -> frozenset[ScanPhase]:
     if is_quick_execution(options):
         return SKIPPED_BY_QUICK_PROFILE
     return frozenset()
@@ -183,9 +185,7 @@ class QuickWorkflow:
             for dep in task.depends_on:
                 adjacency[dep].append(task.task_id)
                 incoming[task.task_id] += 1
-        queue: deque[str] = deque(
-            task_id for task_id, count in incoming.items() if count == 0
-        )
+        queue: deque[str] = deque(task_id for task_id, count in incoming.items() if count == 0)
         seen = 0
         while queue:
             node = queue.popleft()

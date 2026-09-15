@@ -28,9 +28,7 @@ and pydantic-settings re-reads the env on every ``__init__`` call.
 from __future__ import annotations
 
 import pytest
-
 from src.core.config import Settings
-
 
 # ---------------------------------------------------------------------------
 # Local helpers
@@ -65,9 +63,7 @@ _VALID_PEPPER = "test-pepper-iss-t20-003-not-for-prod-32chars-min"
 
 
 @pytest.mark.parametrize("mode", ["cookie", "both"])
-def test_production_rejects_non_session_mode(
-    mode: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_production_rejects_non_session_mode(mode: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """``ENVIRONMENT=production`` + cookie/both mode → SystemExit(1)."""
     _set_admin_env(
         monkeypatch,
@@ -216,14 +212,12 @@ def test_critical_log_emitted_for_unsafe_mode(
         admin_auth_mode="cookie",
         admin_session_pepper=_VALID_PEPPER,
     )
-    with caplog.at_level("CRITICAL", logger="src.core.config"):
-        with pytest.raises(SystemExit):
-            Settings()
+    with caplog.at_level("CRITICAL", logger="src.core.config"), pytest.raises(SystemExit):
+        Settings()
     matching = [
         r
         for r in caplog.records
-        if r.name == "src.core.config"
-        and r.message == "admin_auth_mode_unsafe_for_production"
+        if r.name == "src.core.config" and r.message == "admin_auth_mode_unsafe_for_production"
     ]
     assert matching, "expected one CRITICAL record for the unsafe-mode path"
     record = matching[0]
@@ -243,14 +237,12 @@ def test_critical_log_emitted_for_missing_pepper(
         admin_auth_mode="session",
         admin_session_pepper="",
     )
-    with caplog.at_level("CRITICAL", logger="src.core.config"):
-        with pytest.raises(SystemExit):
-            Settings()
+    with caplog.at_level("CRITICAL", logger="src.core.config"), pytest.raises(SystemExit):
+        Settings()
     matching = [
         r
         for r in caplog.records
-        if r.name == "src.core.config"
-        and r.message == "admin_session_pepper_missing_in_production"
+        if r.name == "src.core.config" and r.message == "admin_session_pepper_missing_in_production"
     ]
     assert matching, "expected one CRITICAL record for the missing-pepper path"
     record = matching[0]

@@ -20,7 +20,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers import queues_health as queues_module
 
 
@@ -66,9 +65,7 @@ def _patch_get_redis(monkeypatch: pytest.MonkeyPatch, fake: Any | None) -> None:
 
 
 def _patch_workers(monkeypatch: pytest.MonkeyPatch, count: int) -> None:
-    monkeypatch.setattr(
-        queues_module, "_inspect_worker_count", lambda: count
-    )
+    monkeypatch.setattr(queues_module, "_inspect_worker_count", lambda: count)
 
 
 def test_returns_503_when_redis_missing(
@@ -125,9 +122,7 @@ def test_status_is_degraded_when_no_workers_active(
 def test_llen_failure_returns_zero_depth_without_raising(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_get_redis(
-        monkeypatch, FakeRedis(llen_should_raise=True)
-    )
+    _patch_get_redis(monkeypatch, FakeRedis(llen_should_raise=True))
     _patch_workers(monkeypatch, 1)
     resp = client.get("/queues/health")
     assert resp.status_code == 200

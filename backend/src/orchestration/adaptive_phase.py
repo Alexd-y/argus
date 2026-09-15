@@ -58,7 +58,11 @@ _SURFACE_LIST_KEYS: tuple[str, ...] = ("input_surfaces", "findings", "hypotheses
 # (actively probed). Rows may be surface descriptors (url+param) or bare
 # ``surface_id`` strings. ``findings`` are always treated as tested as well — a
 # finding is evidence that its surface was probed (see ``tested_surface_ids_from_output``).
-_TESTED_LIST_KEYS: tuple[str, ...] = ("tested_surfaces", "surfaces_tested", "probed_surfaces")
+_TESTED_LIST_KEYS: tuple[str, ...] = (
+    "tested_surfaces",
+    "surfaces_tested",
+    "probed_surfaces",
+)
 
 # Only unambiguous location values are honoured; everything else defaults to
 # "query" so a mislabeled/absent location can never raise on the Literal type.

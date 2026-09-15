@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import shutil
@@ -239,10 +240,7 @@ async def run_recon_js_analysis_bundle(
     param_block = extract_query_param_names(merged, max_urls=max_merge)
     js_urls = [u for u in merged if is_js_asset_url(u)]
     max_js_list = max(0, min(500, _cfg_int(s, "recon_js_max_js_urls", 200)))
-    if max_js_list > 0:
-        js_urls = js_urls[:max_js_list]
-    else:
-        js_urls = []
+    js_urls = js_urls[:max_js_list] if max_js_list > 0 else []
 
     bundle: dict[str, Any] = {
         "apex_domain": (domain or "").strip().lower().rstrip("."),
@@ -298,14 +296,23 @@ async def run_recon_js_analysis_bundle(
             for u in fetch_targets:
                 await asyncio.sleep(delay)
                 url_norm, body, status, err = await _download_one(client, u)
-                entry = {"url": url_norm, "status": status, "bytes": len(body), "error": err}
+                entry = {
+                    "url": url_norm,
+                    "status": status,
+                    "bytes": len(body),
+                    "error": err,
+                }
                 deep["fetched"].append(entry)
                 if body and status > 0:
                     for ep in extract_endpoints_regex(body):
                         deep["regex_endpoints"].append(ep)
-                    if linkfinder_on and _tool_visible("linkfinder", s) and _host_ok_for_fetch(url_norm, "linkfinder"):
+                    if (
+                        linkfinder_on
+                        and _tool_visible("linkfinder", s)
+                        and _host_ok_for_fetch(url_norm, "linkfinder")
+                    ):
 
-                        def _lf_run() -> dict[str, Any]:
+                        def _lf_run(body: str = body, url_norm: str = url_norm) -> dict[str, Any]:
                             path: Path | None = None
                             try:
                                 fd, name = tempfile.mkstemp(suffix=".js", prefix="argus_js_")
@@ -329,10 +336,8 @@ async def run_recon_js_analysis_bundle(
                                 }
                             finally:
                                 if path is not None:
-                                    try:
+                                    with contextlib.suppress(OSError):
                                         path.unlink(missing_ok=True)
-                                    except OSError:
-                                        pass
 
                         lf = await asyncio.to_thread(_lf_run)
                         deep["linkfinder_blocks"].append(
@@ -370,7 +375,7 @@ async def run_recon_js_analysis_bundle(
             if not su or not _host_ok_for_fetch(su, "unfurl"):
                 continue
 
-            def _uf() -> dict[str, Any]:
+            def _uf(su: str = su) -> dict[str, Any]:
                 return _run_unfurl_url(
                     su,
                     tenant_id=tenant_id,
@@ -409,7 +414,10 @@ async def run_recon_js_analysis_bundle(
                     except Exception:
                         logger.warning(
                             "js_analysis_linkfinder_upload_failed",
-                            extra={"event": "js_analysis_linkfinder_upload_failed", "index": i},
+                            extra={
+                                "event": "js_analysis_linkfinder_upload_failed",
+                                "index": i,
+                            },
                         )
 
     return out

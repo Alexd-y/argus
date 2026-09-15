@@ -79,24 +79,64 @@ class WstgCoverageV2Result:
 
 _WSTG_TESTS: list[WstgTestCase] = [
     # ── INFO (Information Gathering) ──────────────────────────────
-    WstgTestCase("WSTG-INFO-01", "Conduct Search Engine Discovery Reconnaissance", "Information Gathering"),
+    WstgTestCase(
+        "WSTG-INFO-01",
+        "Conduct Search Engine Discovery Reconnaissance",
+        "Information Gathering",
+    ),
     WstgTestCase("WSTG-INFO-02", "Fingerprint Web Server", "Information Gathering"),
-    WstgTestCase("WSTG-INFO-03", "Review Webserver Metafiles for Information Leakage", "Information Gathering"),
+    WstgTestCase(
+        "WSTG-INFO-03",
+        "Review Webserver Metafiles for Information Leakage",
+        "Information Gathering",
+    ),
     WstgTestCase("WSTG-INFO-04", "Enumerate Applications on Webserver", "Information Gathering"),
-    WstgTestCase("WSTG-INFO-05", "Review Webpage Content for Information Leakage", "Information Gathering"),
+    WstgTestCase(
+        "WSTG-INFO-05",
+        "Review Webpage Content for Information Leakage",
+        "Information Gathering",
+    ),
     WstgTestCase("WSTG-INFO-06", "Identify Application Entry Points", "Information Gathering"),
-    WstgTestCase("WSTG-INFO-07", "Map Execution Paths Through Application", "Information Gathering"),
+    WstgTestCase(
+        "WSTG-INFO-07",
+        "Map Execution Paths Through Application",
+        "Information Gathering",
+    ),
     WstgTestCase("WSTG-INFO-08", "Fingerprint Web Application Framework", "Information Gathering"),
     WstgTestCase("WSTG-INFO-09", "Fingerprint Web Application", "Information Gathering"),
     WstgTestCase("WSTG-INFO-10", "Map Application Architecture", "Information Gathering"),
     # ── CONF (Configuration and Deployment) ───────────────────────
-    WstgTestCase("WSTG-CONF-01", "Test Network Infrastructure Configuration", "Configuration and Deployment"),
-    WstgTestCase("WSTG-CONF-02", "Test Application Platform Configuration", "Configuration and Deployment"),
-    WstgTestCase("WSTG-CONF-03", "Test File Extensions Handling for Sensitive Information", "Configuration and Deployment"),
-    WstgTestCase("WSTG-CONF-04", "Review Old Backup and Unreferenced Files", "Configuration and Deployment"),
-    WstgTestCase("WSTG-CONF-05", "Enumerate Infrastructure and Application Admin Interfaces", "Configuration and Deployment"),
+    WstgTestCase(
+        "WSTG-CONF-01",
+        "Test Network Infrastructure Configuration",
+        "Configuration and Deployment",
+    ),
+    WstgTestCase(
+        "WSTG-CONF-02",
+        "Test Application Platform Configuration",
+        "Configuration and Deployment",
+    ),
+    WstgTestCase(
+        "WSTG-CONF-03",
+        "Test File Extensions Handling for Sensitive Information",
+        "Configuration and Deployment",
+    ),
+    WstgTestCase(
+        "WSTG-CONF-04",
+        "Review Old Backup and Unreferenced Files",
+        "Configuration and Deployment",
+    ),
+    WstgTestCase(
+        "WSTG-CONF-05",
+        "Enumerate Infrastructure and Application Admin Interfaces",
+        "Configuration and Deployment",
+    ),
     WstgTestCase("WSTG-CONF-06", "Test HTTP Methods", "Configuration and Deployment"),
-    WstgTestCase("WSTG-CONF-07", "Test HTTP Strict Transport Security", "Configuration and Deployment"),
+    WstgTestCase(
+        "WSTG-CONF-07",
+        "Test HTTP Strict Transport Security",
+        "Configuration and Deployment",
+    ),
     WstgTestCase("WSTG-CONF-08", "Test RIA Cross Domain Policy", "Configuration and Deployment"),
     WstgTestCase("WSTG-CONF-09", "Test File Permission", "Configuration and Deployment"),
     WstgTestCase("WSTG-CONF-10", "Test for Subdomain Takeover", "Configuration and Deployment"),
@@ -105,10 +145,22 @@ _WSTG_TESTS: list[WstgTestCase] = [
     WstgTestCase("WSTG-IDNT-01", "Test Role Definitions", "Identity Management"),
     WstgTestCase("WSTG-IDNT-02", "Test User Registration Process", "Identity Management"),
     WstgTestCase("WSTG-IDNT-03", "Test Account Provisioning Process", "Identity Management"),
-    WstgTestCase("WSTG-IDNT-04", "Test for Account Enumeration and Guessable User Account", "Identity Management"),
-    WstgTestCase("WSTG-IDNT-05", "Test for Weak or Unenforced Username Policy", "Identity Management"),
+    WstgTestCase(
+        "WSTG-IDNT-04",
+        "Test for Account Enumeration and Guessable User Account",
+        "Identity Management",
+    ),
+    WstgTestCase(
+        "WSTG-IDNT-05",
+        "Test for Weak or Unenforced Username Policy",
+        "Identity Management",
+    ),
     # ── ATHN (Authentication) ─────────────────────────────────────
-    WstgTestCase("WSTG-ATHN-01", "Test for Credentials Transported over an Encrypted Channel", "Authentication"),
+    WstgTestCase(
+        "WSTG-ATHN-01",
+        "Test for Credentials Transported over an Encrypted Channel",
+        "Authentication",
+    ),
     WstgTestCase("WSTG-ATHN-02", "Test for Default Credentials", "Authentication"),
     WstgTestCase("WSTG-ATHN-03", "Test for Weak Lock Out Mechanism", "Authentication"),
     WstgTestCase("WSTG-ATHN-04", "Test for Bypassing Authentication Schema", "Authentication"),
@@ -116,8 +168,16 @@ _WSTG_TESTS: list[WstgTestCase] = [
     WstgTestCase("WSTG-ATHN-06", "Test for Browser Cache Weaknesses", "Authentication"),
     WstgTestCase("WSTG-ATHN-07", "Test for Weak Password Policy", "Authentication"),
     WstgTestCase("WSTG-ATHN-08", "Test for Weak Security Question Answer", "Authentication"),
-    WstgTestCase("WSTG-ATHN-09", "Test for Weak Password Change or Reset Functionalities", "Authentication"),
-    WstgTestCase("WSTG-ATHN-10", "Test for Weaker Authentication in Alternative Channel", "Authentication"),
+    WstgTestCase(
+        "WSTG-ATHN-09",
+        "Test for Weak Password Change or Reset Functionalities",
+        "Authentication",
+    ),
+    WstgTestCase(
+        "WSTG-ATHN-10",
+        "Test for Weaker Authentication in Alternative Channel",
+        "Authentication",
+    ),
     # ── ATHZ (Authorization) ──────────────────────────────────────
     WstgTestCase("WSTG-ATHZ-01", "Test Directory Traversal File Include", "Authorization"),
     WstgTestCase("WSTG-ATHZ-02", "Test for Bypassing Authorization Schema", "Authorization"),
@@ -159,14 +219,22 @@ _WSTG_TESTS: list[WstgTestCase] = [
     # ── CRYP (Cryptography) ───────────────────────────────────────
     WstgTestCase("WSTG-CRYP-01", "Test for Weak Transport Layer Security", "Cryptography"),
     WstgTestCase("WSTG-CRYP-02", "Test for Padding Oracle", "Cryptography"),
-    WstgTestCase("WSTG-CRYP-03", "Test for Sensitive Information Sent via Unencrypted Channels", "Cryptography"),
+    WstgTestCase(
+        "WSTG-CRYP-03",
+        "Test for Sensitive Information Sent via Unencrypted Channels",
+        "Cryptography",
+    ),
     WstgTestCase("WSTG-CRYP-04", "Test for Weak Encryption", "Cryptography"),
     # ── BUSL (Business Logic) ─────────────────────────────────────
     WstgTestCase("WSTG-BUSL-01", "Test Business Logic Data Validation", "Business Logic"),
     WstgTestCase("WSTG-BUSL-02", "Test Ability to Forge Requests", "Business Logic"),
     WstgTestCase("WSTG-BUSL-03", "Test Integrity Checks", "Business Logic"),
     WstgTestCase("WSTG-BUSL-04", "Test for Process Timing", "Business Logic"),
-    WstgTestCase("WSTG-BUSL-05", "Test Number of Times a Function Can Be Used Limits", "Business Logic"),
+    WstgTestCase(
+        "WSTG-BUSL-05",
+        "Test Number of Times a Function Can Be Used Limits",
+        "Business Logic",
+    ),
     WstgTestCase("WSTG-BUSL-06", "Test for Circumvention of Work Flows", "Business Logic"),
     WstgTestCase("WSTG-BUSL-07", "Test Defenses Against Application Misuse", "Business Logic"),
     WstgTestCase("WSTG-BUSL-08", "Test Upload of Unexpected File Types", "Business Logic"),
@@ -189,66 +257,118 @@ _WSTG_TESTS: list[WstgTestCase] = [
 
 _TOOL_TO_WSTG: dict[str, list[str]] = {
     "nmap": [
-        "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-INFO-10",
-        "WSTG-CONF-01", "WSTG-CONF-06",
+        "WSTG-INFO-01",
+        "WSTG-INFO-02",
+        "WSTG-INFO-04",
+        "WSTG-INFO-10",
+        "WSTG-CONF-01",
+        "WSTG-CONF-06",
     ],
     "nikto": [
-        "WSTG-CONF-01", "WSTG-CONF-02", "WSTG-CONF-03",
-        "WSTG-CONF-04", "WSTG-CONF-06", "WSTG-ERRH-01",
+        "WSTG-CONF-01",
+        "WSTG-CONF-02",
+        "WSTG-CONF-03",
+        "WSTG-CONF-04",
+        "WSTG-CONF-06",
+        "WSTG-ERRH-01",
     ],
     "nuclei": [
-        "WSTG-INFO-08", "WSTG-CONF-02", "WSTG-CONF-07", "WSTG-CONF-08",
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
-        "WSTG-INPV-18", "WSTG-INPV-19", "WSTG-CRYP-01",
-        "WSTG-ERRH-01", "WSTG-ERRH-02", "WSTG-CLNT-09",
+        "WSTG-INFO-08",
+        "WSTG-CONF-02",
+        "WSTG-CONF-07",
+        "WSTG-CONF-08",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-INPV-05",
+        "WSTG-INPV-18",
+        "WSTG-INPV-19",
+        "WSTG-CRYP-01",
+        "WSTG-ERRH-01",
+        "WSTG-ERRH-02",
+        "WSTG-CLNT-09",
     ],
     "dalfox": [
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-CLNT-01",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-CLNT-01",
     ],
     "sqlmap": [
         "WSTG-INPV-05",
     ],
     "testssl": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04", "WSTG-CONF-07",
+        "WSTG-CRYP-01",
+        "WSTG-CRYP-02",
+        "WSTG-CRYP-03",
+        "WSTG-CRYP-04",
+        "WSTG-CONF-07",
     ],
     "testssl.sh": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04", "WSTG-CONF-07",
+        "WSTG-CRYP-01",
+        "WSTG-CRYP-02",
+        "WSTG-CRYP-03",
+        "WSTG-CRYP-04",
+        "WSTG-CONF-07",
     ],
     "whatweb": [
-        "WSTG-INFO-02", "WSTG-INFO-05", "WSTG-INFO-08", "WSTG-INFO-09",
+        "WSTG-INFO-02",
+        "WSTG-INFO-05",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
     ],
     "httpx": [
-        "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-INFO-05", "WSTG-INFO-10",
-        "WSTG-CONF-07", "WSTG-CLNT-09",
+        "WSTG-INFO-02",
+        "WSTG-INFO-04",
+        "WSTG-INFO-05",
+        "WSTG-INFO-10",
+        "WSTG-CONF-07",
+        "WSTG-CLNT-09",
     ],
     "gobuster": [
-        "WSTG-CONF-03", "WSTG-CONF-04", "WSTG-CONF-05",
+        "WSTG-CONF-03",
+        "WSTG-CONF-04",
+        "WSTG-CONF-05",
     ],
     "feroxbuster": [
-        "WSTG-CONF-03", "WSTG-CONF-04", "WSTG-CONF-05",
+        "WSTG-CONF-03",
+        "WSTG-CONF-04",
+        "WSTG-CONF-05",
     ],
     "dirsearch": [
-        "WSTG-CONF-03", "WSTG-CONF-04", "WSTG-CONF-05",
+        "WSTG-CONF-03",
+        "WSTG-CONF-04",
+        "WSTG-CONF-05",
     ],
     "ffuf": [
-        "WSTG-CONF-03", "WSTG-CONF-04", "WSTG-CONF-05",
+        "WSTG-CONF-03",
+        "WSTG-CONF-04",
+        "WSTG-CONF-05",
         "WSTG-INFO-06",
     ],
     "subfinder": [
-        "WSTG-INFO-04", "WSTG-CONF-10",
+        "WSTG-INFO-04",
+        "WSTG-CONF-10",
     ],
     "amass": [
-        "WSTG-INFO-04", "WSTG-CONF-10",
+        "WSTG-INFO-04",
+        "WSTG-CONF-10",
     ],
     "wpscan": [
-        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-ATHN-02",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
+        "WSTG-ATHN-02",
         "WSTG-IDNT-04",
     ],
     "sslyze": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04",
+        "WSTG-CRYP-01",
+        "WSTG-CRYP-02",
+        "WSTG-CRYP-03",
+        "WSTG-CRYP-04",
     ],
     "arjun": [
-        "WSTG-INFO-06", "WSTG-ATHZ-02", "WSTG-ATHZ-04", "WSTG-INPV-05",
+        "WSTG-INFO-06",
+        "WSTG-ATHZ-02",
+        "WSTG-ATHZ-04",
+        "WSTG-INPV-05",
     ],
     "subjack": [
         "WSTG-CONF-10",
@@ -263,108 +383,175 @@ _TOOL_TO_WSTG: dict[str, list[str]] = {
         "WSTG-CONF-04",
     ],
     "wappalyzer": [
-        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
+        "WSTG-IDNT-01",
     ],
     "wappalyzer_cli": [
-        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
+        "WSTG-IDNT-01",
     ],
     "webanalyze": [
-        "WSTG-INFO-08", "WSTG-INFO-09", "WSTG-IDNT-01",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
+        "WSTG-IDNT-01",
     ],
     "curl": [
-        "WSTG-INFO-03", "WSTG-CONF-06", "WSTG-CLNT-09",
+        "WSTG-INFO-03",
+        "WSTG-CONF-06",
+        "WSTG-CLNT-09",
     ],
     "theharvester": [
-        "WSTG-INFO-01", "WSTG-INFO-05",
+        "WSTG-INFO-01",
+        "WSTG-INFO-05",
     ],
     "shodan": [
-        "WSTG-INFO-01", "WSTG-INFO-04", "WSTG-INFO-10",
+        "WSTG-INFO-01",
+        "WSTG-INFO-04",
+        "WSTG-INFO-10",
     ],
     "censys": [
-        "WSTG-INFO-01", "WSTG-INFO-04",
+        "WSTG-INFO-01",
+        "WSTG-INFO-04",
     ],
     "dnsrecon": [
-        "WSTG-INFO-04", "WSTG-CONF-10",
+        "WSTG-INFO-04",
+        "WSTG-CONF-10",
     ],
     "dig": [
         "WSTG-INFO-04",
     ],
     "commix": [
-        "WSTG-INPV-11", "WSTG-INPV-12",
+        "WSTG-INPV-11",
+        "WSTG-INPV-12",
     ],
     "tplmap": [
         "WSTG-INPV-18",
     ],
     "jwt_tool": [
-        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-03", "WSTG-ATHN-06",
+        "WSTG-SESS-01",
+        "WSTG-SESS-02",
+        "WSTG-SESS-03",
+        "WSTG-ATHN-06",
     ],
     "burp": [
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
-        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-05",
-        "WSTG-ATHN-04", "WSTG-ATHZ-02", "WSTG-ATHZ-04",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-INPV-05",
+        "WSTG-SESS-01",
+        "WSTG-SESS-02",
+        "WSTG-SESS-05",
+        "WSTG-ATHN-04",
+        "WSTG-ATHZ-02",
+        "WSTG-ATHZ-04",
     ],
     "zap": [
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
-        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-05",
-        "WSTG-CONF-06", "WSTG-ERRH-01",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-INPV-05",
+        "WSTG-SESS-01",
+        "WSTG-SESS-02",
+        "WSTG-SESS-05",
+        "WSTG-CONF-06",
+        "WSTG-ERRH-01",
     ],
     "retire.js": [
-        "WSTG-CLNT-12", "WSTG-CLNT-13",
+        "WSTG-CLNT-12",
+        "WSTG-CLNT-13",
     ],
     "sslscan": [
-        "WSTG-CRYP-01", "WSTG-CRYP-02", "WSTG-CRYP-03", "WSTG-CRYP-04",
+        "WSTG-CRYP-01",
+        "WSTG-CRYP-02",
+        "WSTG-CRYP-03",
+        "WSTG-CRYP-04",
     ],
     "hydra": [
-        "WSTG-ATHN-01", "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-07",
+        "WSTG-ATHN-01",
+        "WSTG-ATHN-02",
+        "WSTG-ATHN-04",
+        "WSTG-ATHN-07",
     ],
     "patator": [
-        "WSTG-ATHN-01", "WSTG-ATHN-02", "WSTG-ATHN-04", "WSTG-ATHN-07",
+        "WSTG-ATHN-01",
+        "WSTG-ATHN-02",
+        "WSTG-ATHN-04",
+        "WSTG-ATHN-07",
     ],
     "rate_limit_signal": [
         "WSTG-ATHN-03",
     ],
     "trivy": [
-        "WSTG-INFO-09", "WSTG-CONF-02",
+        "WSTG-INFO-09",
+        "WSTG-CONF-02",
     ],
     "xsstrike": [
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-CLNT-01",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-CLNT-01",
     ],
     "argus_recon": [
-        "WSTG-INFO-01", "WSTG-INFO-02", "WSTG-INFO-04",
-        "WSTG-INFO-05", "WSTG-INFO-06", "WSTG-INFO-08",
-        "WSTG-INFO-09", "WSTG-INFO-10",
-        "WSTG-CONF-07", "WSTG-CONF-10",
+        "WSTG-INFO-01",
+        "WSTG-INFO-02",
+        "WSTG-INFO-04",
+        "WSTG-INFO-05",
+        "WSTG-INFO-06",
+        "WSTG-INFO-08",
+        "WSTG-INFO-09",
+        "WSTG-INFO-10",
+        "WSTG-CONF-07",
+        "WSTG-CONF-10",
         "WSTG-CRYP-03",
     ],
     "argus_active_scan": [
-        "WSTG-INPV-01", "WSTG-INPV-02", "WSTG-INPV-05",
-        "WSTG-INPV-06", "WSTG-INPV-10", "WSTG-INPV-11",
-        "WSTG-INPV-12", "WSTG-INPV-18", "WSTG-INPV-19",
+        "WSTG-INPV-01",
+        "WSTG-INPV-02",
+        "WSTG-INPV-05",
+        "WSTG-INPV-06",
+        "WSTG-INPV-10",
+        "WSTG-INPV-11",
+        "WSTG-INPV-12",
+        "WSTG-INPV-18",
+        "WSTG-INPV-19",
         "WSTG-CLNT-01",
     ],
     "playwright": [
-        "WSTG-CLNT-01", "WSTG-CLNT-02", "WSTG-CLNT-06", "WSTG-CLNT-07",
+        "WSTG-CLNT-01",
+        "WSTG-CLNT-02",
+        "WSTG-CLNT-06",
+        "WSTG-CLNT-07",
     ],
     "katana": [
-        "WSTG-INFO-04", "WSTG-CONF-03", "WSTG-CONF-05",
+        "WSTG-INFO-04",
+        "WSTG-CONF-03",
+        "WSTG-CONF-05",
     ],
     "waybackurls": [
-        "WSTG-INFO-04", "WSTG-CONF-03",
+        "WSTG-INFO-04",
+        "WSTG-CONF-03",
     ],
     "gau": [
-        "WSTG-INFO-04", "WSTG-CONF-03",
+        "WSTG-INFO-04",
+        "WSTG-CONF-03",
     ],
     "cookie_probe": [
-        "WSTG-SESS-01", "WSTG-SESS-02", "WSTG-SESS-03", "WSTG-SESS-05",
+        "WSTG-SESS-01",
+        "WSTG-SESS-02",
+        "WSTG-SESS-03",
+        "WSTG-SESS-05",
     ],
     "httpx_tool": [
-        "WSTG-INFO-02", "WSTG-INFO-04", "WSTG-CONF-07",
+        "WSTG-INFO-02",
+        "WSTG-INFO-04",
+        "WSTG-CONF-07",
     ],
     "masscan": [
-        "WSTG-INFO-04", "WSTG-CONF-01",
+        "WSTG-INFO-04",
+        "WSTG-CONF-01",
     ],
     "naabu": [
-        "WSTG-INFO-04", "WSTG-CONF-01",
+        "WSTG-INFO-04",
+        "WSTG-CONF-01",
     ],
 }
 
@@ -499,37 +686,37 @@ def _determine_test_status(
 # carries a CWE but no explicit WSTG tag still count toward the control it
 # exercises, so coverage reflects what was actually tested.
 _CWE_TO_WSTG: dict[str, str] = {
-    "CWE-79": "WSTG-INPV-01",     # Reflected XSS
-    "CWE-89": "WSTG-INPV-05",     # SQL Injection
-    "CWE-90": "WSTG-INPV-06",     # LDAP Injection
-    "CWE-943": "WSTG-INPV-05",    # NoSQL (SQLi family)
-    "CWE-77": "WSTG-INPV-12",     # Command Injection
+    "CWE-79": "WSTG-INPV-01",  # Reflected XSS
+    "CWE-89": "WSTG-INPV-05",  # SQL Injection
+    "CWE-90": "WSTG-INPV-06",  # LDAP Injection
+    "CWE-943": "WSTG-INPV-05",  # NoSQL (SQLi family)
+    "CWE-77": "WSTG-INPV-12",  # Command Injection
     "CWE-78": "WSTG-INPV-12",
-    "CWE-94": "WSTG-INPV-11",     # Code Injection
-    "CWE-1336": "WSTG-INPV-18",   # SSTI
-    "CWE-918": "WSTG-INPV-19",    # SSRF
-    "CWE-352": "WSTG-SESS-05",    # CSRF
-    "CWE-601": "WSTG-CLNT-04",    # Open Redirect
-    "CWE-22": "WSTG-ATHZ-01",     # Path Traversal
-    "CWE-98": "WSTG-ATHZ-01",     # LFI/RFI
-    "CWE-639": "WSTG-ATHZ-04",    # IDOR
-    "CWE-285": "WSTG-ATHZ-02",    # Authorization bypass
+    "CWE-94": "WSTG-INPV-11",  # Code Injection
+    "CWE-1336": "WSTG-INPV-18",  # SSTI
+    "CWE-918": "WSTG-INPV-19",  # SSRF
+    "CWE-352": "WSTG-SESS-05",  # CSRF
+    "CWE-601": "WSTG-CLNT-04",  # Open Redirect
+    "CWE-22": "WSTG-ATHZ-01",  # Path Traversal
+    "CWE-98": "WSTG-ATHZ-01",  # LFI/RFI
+    "CWE-639": "WSTG-ATHZ-04",  # IDOR
+    "CWE-285": "WSTG-ATHZ-02",  # Authorization bypass
     "CWE-863": "WSTG-ATHZ-02",
-    "CWE-269": "WSTG-ATHZ-03",    # Privilege escalation
-    "CWE-307": "WSTG-ATHN-03",    # Weak lockout / brute force
-    "CWE-521": "WSTG-ATHN-07",    # Weak password policy
-    "CWE-798": "WSTG-ATHN-02",    # Default credentials
-    "CWE-319": "WSTG-CRYP-01",    # Cleartext transmission / TLS
+    "CWE-269": "WSTG-ATHZ-03",  # Privilege escalation
+    "CWE-307": "WSTG-ATHN-03",  # Weak lockout / brute force
+    "CWE-521": "WSTG-ATHN-07",  # Weak password policy
+    "CWE-798": "WSTG-ATHN-02",  # Default credentials
+    "CWE-319": "WSTG-CRYP-01",  # Cleartext transmission / TLS
     "CWE-311": "WSTG-CRYP-01",
-    "CWE-326": "WSTG-CRYP-04",    # Inadequate encryption strength
-    "CWE-327": "WSTG-CRYP-04",    # Weak crypto
-    "CWE-757": "WSTG-CRYP-01",    # Downgrade
-    "CWE-693": "WSTG-CONF-07",    # Missing protection mechanism / security headers
-    "CWE-16": "WSTG-CONF-02",     # Configuration
-    "CWE-209": "WSTG-ERRH-01",    # Error handling / info in errors
-    "CWE-614": "WSTG-SESS-02",    # Cookie without Secure
-    "CWE-1004": "WSTG-SESS-02",   # Cookie without HttpOnly
-    "CWE-113": "WSTG-INPV-15",    # HTTP response splitting
+    "CWE-326": "WSTG-CRYP-04",  # Inadequate encryption strength
+    "CWE-327": "WSTG-CRYP-04",  # Weak crypto
+    "CWE-757": "WSTG-CRYP-01",  # Downgrade
+    "CWE-693": "WSTG-CONF-07",  # Missing protection mechanism / security headers
+    "CWE-16": "WSTG-CONF-02",  # Configuration
+    "CWE-209": "WSTG-ERRH-01",  # Error handling / info in errors
+    "CWE-614": "WSTG-SESS-02",  # Cookie without Secure
+    "CWE-1004": "WSTG-SESS-02",  # Cookie without HttpOnly
+    "CWE-113": "WSTG-INPV-15",  # HTTP response splitting
 }
 
 # Coarse vuln_type/keyword → WSTG for findings that carry a type but no CWE.
@@ -596,7 +783,10 @@ def wstg_ids_for_finding(finding: dict[str, Any]) -> set[str]:
             for token in val.upper().replace(",", " ").split():
                 if token.startswith("WSTG-"):
                     result.add(token)
-    for text in (str(finding.get("description") or ""), str(finding.get("title") or "")):
+    for text in (
+        str(finding.get("description") or ""),
+        str(finding.get("title") or ""),
+    ):
         for token in text.upper().replace(",", " ").split():
             if token.startswith("WSTG-") and len(token) <= 16:
                 result.add(token)
@@ -654,9 +844,15 @@ def build_wstg_coverage(
         covering = wstg_to_covering_tools.get(tc.id, set())
         status = _determine_test_status(tc.id, covering, finding_wstg_ids)
 
-        cat_bucket = categories.setdefault(tc.category, {
-            "covered": 0, "partial": 0, "not_covered": 0, "total": 0,
-        })
+        cat_bucket = categories.setdefault(
+            tc.category,
+            {
+                "covered": 0,
+                "partial": 0,
+                "not_covered": 0,
+                "total": 0,
+            },
+        )
         cat_bucket["total"] += 1
         cat_bucket[status] += 1
         if status != "not_covered":
@@ -665,13 +861,15 @@ def build_wstg_coverage(
                 if evidence_id:
                     category_evidence.setdefault(tc.category, set()).add(evidence_id)
 
-        tests_output.append({
-            "id": tc.id,
-            "name": tc.name,
-            "category": tc.category,
-            "status": status,
-            "tools": sorted(covering),
-        })
+        tests_output.append(
+            {
+                "id": tc.id,
+                "name": tc.name,
+                "category": tc.category,
+                "status": status,
+                "tools": sorted(covering),
+            }
+        )
 
     total = len(_WSTG_TESTS)
     covered = sum(1 for t in tests_output if t["status"] == "covered")
@@ -725,9 +923,7 @@ def build_test_limitations(
         },
         {
             "category": "scope",
-            "description": (
-                "Destructive testing and denial-of-service attacks were not performed"
-            ),
+            "description": ("Destructive testing and denial-of-service attacks were not performed"),
             "impact": "high",
         },
         {
@@ -745,25 +941,29 @@ def build_test_limitations(
 
     waf_detected = _check_waf_detected(results, config)
     if waf_detected:
-        limitations.append({
-            "category": "network",
-            "description": (
-                "Web Application Firewall (WAF) detected; "
-                "testing accuracy may be affected by WAF rules"
-            ),
-            "impact": "high",
-        })
+        limitations.append(
+            {
+                "category": "network",
+                "description": (
+                    "Web Application Firewall (WAF) detected; "
+                    "testing accuracy may be affected by WAF rules"
+                ),
+                "impact": "high",
+            }
+        )
 
     scan_perspective = str(config.get("scan_perspective", "external")).lower()
     if scan_perspective in ("external", "ext", "outside"):
-        limitations.append({
-            "category": "access",
-            "description": (
-                "Testing performed from external perspective only; "
-                "internal network not assessed"
-            ),
-            "impact": "high",
-        })
+        limitations.append(
+            {
+                "category": "access",
+                "description": (
+                    "Testing performed from external perspective only; "
+                    "internal network not assessed"
+                ),
+                "impact": "high",
+            }
+        )
 
     has_creds = bool(
         config.get("credentials")
@@ -772,62 +972,62 @@ def build_test_limitations(
         or config.get("auth_testing_enabled")
     )
     if not has_creds:
-        limitations.append({
-            "category": "access",
-            "description": (
-                "Authenticated testing not performed; "
-                "coverage limited to unauthenticated access. "
-                "Business logic flaws, IDOR, privilege escalation, and "
-                "authenticated access control issues were NOT tested."
-            ),
-            "impact": "high",
-        })
+        limitations.append(
+            {
+                "category": "access",
+                "description": (
+                    "Authenticated testing not performed; "
+                    "coverage limited to unauthenticated access. "
+                    "Business logic flaws, IDOR, privilege escalation, and "
+                    "authenticated access control issues were NOT tested."
+                ),
+                "impact": "high",
+            }
+        )
 
     missing_tools = results.get("missing_tools") or config.get("missing_tools")
     if isinstance(missing_tools, list) and missing_tools:
-        limitations.append({
-            "category": "tool",
-            "description": (
-                "Some tools were unavailable in the testing environment"
-            ),
-            "impact": "medium",
-        })
+        limitations.append(
+            {
+                "category": "tool",
+                "description": ("Some tools were unavailable in the testing environment"),
+                "impact": "medium",
+            }
+        )
 
     scan_mode = str(config.get("scan_mode", "")).lower()
     if scan_mode in ("quick", "fast", "light"):
-        limitations.append({
-            "category": "time",
-            "description": (
-                "Quick scan mode used; "
-                "reduced coverage compared to deep scan"
-            ),
-            "impact": "high",
-        })
+        limitations.append(
+            {
+                "category": "time",
+                "description": ("Quick scan mode used; reduced coverage compared to deep scan"),
+                "impact": "high",
+            }
+        )
 
-    rate_limited = (
-        results.get("rate_limited")
-        or results.get("rate_limiting_detected")
-    )
+    rate_limited = results.get("rate_limited") or results.get("rate_limiting_detected")
     if rate_limited:
-        limitations.append({
-            "category": "network",
-            "description": (
-                "Rate limiting detected on target; "
-                "some tests may have incomplete results"
-            ),
-            "impact": "medium",
-        })
+        limitations.append(
+            {
+                "category": "network",
+                "description": (
+                    "Rate limiting detected on target; some tests may have incomplete results"
+                ),
+                "impact": "medium",
+            }
+        )
 
     ssl_errors = results.get("ssl_errors") or results.get("tls_errors")
     if ssl_errors:
-        limitations.append({
-            "category": "network",
-            "description": (
-                "TLS/SSL certificate errors encountered; "
-                "some HTTPS tests may be incomplete"
-            ),
-            "impact": "low",
-        })
+        limitations.append(
+            {
+                "category": "network",
+                "description": (
+                    "TLS/SSL certificate errors encountered; some HTTPS tests may be incomplete"
+                ),
+                "impact": "low",
+            }
+        )
 
     return limitations
 
@@ -878,12 +1078,14 @@ def build_wstg_coverage_v2(
     missing_artifacts = []
     for test in result.tests:
         if test["status"] == "not_covered" and test["id"] not in evidence_set:
-            missing_artifacts.append({
-                "test_id": test["id"],
-                "category": test["category"],
-                "tool_hint": f"tool_{test['tools'][0]}_stdout" if test["tools"] else "unknown",
-                "artifact_hint": f"Not assessed: missing artifact for {test['id']}",
-            })
+            missing_artifacts.append(
+                {
+                    "test_id": test["id"],
+                    "category": test["category"],
+                    "tool_hint": f"tool_{test['tools'][0]}_stdout" if test["tools"] else "unknown",
+                    "artifact_hint": f"Not assessed: missing artifact for {test['id']}",
+                }
+            )
 
     return WstgCoverageV2Result(
         total_tests=result.total_tests,

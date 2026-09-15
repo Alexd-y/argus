@@ -155,9 +155,7 @@ class Correlator:
         if len(chain_techniques) < 2 or len(chain_finding_ids) < 2:
             return None
 
-        severity = _severity_from_findings(
-            [f for _, _, f in ordered if f.id in seen_findings]
-        )
+        severity = _severity_from_findings([f for _, _, f in ordered if f.id in seen_findings])
         rationale = (
             f"{len(chain_techniques)} kill-chain steps observed on asset {asset_id}: "
             f"{' → '.join(chain_techniques)}"

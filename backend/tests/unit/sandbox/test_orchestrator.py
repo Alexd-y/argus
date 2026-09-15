@@ -1,15 +1,12 @@
 """Tests for Sandbox Validation Orchestrator."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-
 from src.sandbox.validation.orchestrator import (
-    ValidationOrchestrator,
-    ValidationConfig,
-    ValidationProfile,
-    ValidationStatus,
-    ValidationResult,
     PolicyBreachError,
+    ValidationConfig,
+    ValidationOrchestrator,
+    ValidationProfile,
+    ValidationResult,
+    ValidationStatus,
 )
 
 
@@ -54,24 +51,28 @@ class TestHarnessSelection:
         orch = ValidationOrchestrator("t", "s")
         harness = orch._select_harness(ValidationProfile.WEB_APP)
         from src.sandbox.validation.harness.profiles import WebAppHarness
+
         assert isinstance(harness, WebAppHarness)
 
     def test_selects_api_harness(self):
         orch = ValidationOrchestrator("t", "s")
         harness = orch._select_harness(ValidationProfile.API)
         from src.sandbox.validation.harness.profiles import ApiHarness
+
         assert isinstance(harness, ApiHarness)
 
     def test_selects_cli_harness(self):
         orch = ValidationOrchestrator("t", "s")
         harness = orch._select_harness(ValidationProfile.CLI)
         from src.sandbox.validation.harness.profiles import CliHarness
+
         assert isinstance(harness, CliHarness)
 
     def test_selects_binary_harness(self):
         orch = ValidationOrchestrator("t", "s")
         harness = orch._select_harness(ValidationProfile.BINARY_SAMPLE)
         from src.sandbox.validation.harness.profiles import BinaryHarness
+
         assert isinstance(harness, BinaryHarness)
 
 

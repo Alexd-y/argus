@@ -34,7 +34,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -96,7 +96,7 @@ _TABLE_HEADER_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +202,7 @@ def _emit(
         finding = _build_finding(record)
         evidence_blob = _build_evidence(record, tool_id=tool_id)
         sort_key = (
-            -2
-            if record["writable"]
-            else (-1 if record["kind"] == "smb_readable_share" else 0),
+            -2 if record["writable"] else (-1 if record["kind"] == "smb_readable_share" else 0),
             record["ip"],
             record["share"].lower(),
         )

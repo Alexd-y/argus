@@ -12,21 +12,21 @@ import logging
 import struct
 import uuid
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class BinaryFormat(str, Enum):
+class BinaryFormat(StrEnum):
     ELF = "elf"
     PE = "pe"
     MACH_O = "mach-o"
     UNKNOWN = "unknown"
 
 
-class AnalysisConfidence(str, Enum):
+class AnalysisConfidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -41,7 +41,7 @@ class BinaryMetadata:
     file_size: int = 0
     sha256: str = ""
     md5: str = ""
-    architecture: str = ""       # x86, x86-64, ARM, ARM64, ...
+    architecture: str = ""  # x86, x86-64, ARM, ARM64, ...
     entry_point: int = 0
     sections: list[dict[str, Any]] = field(default_factory=list)
     imports: list[str] = field(default_factory=list)
@@ -77,8 +77,13 @@ def _detect_binary_format(data: bytes) -> BinaryFormat:
         return BinaryFormat.PE
     magic = struct.unpack(">I", data[:4])[0]
     if magic in (
-        0xFEEDFACE, 0xFEEDFACF, 0xCAFEBABE, 0xBEBAFECA,
-        0xCFFAEDFE, 0xCEFAEDFE, 0xCAFEBABE,
+        0xFEEDFACE,
+        0xFEEDFACF,
+        0xCAFEBABE,
+        0xBEBAFECA,
+        0xCFFAEDFE,
+        0xCEFAEDFE,
+        0xCAFEBABE,
     ):
         return BinaryFormat.MACH_O
     return BinaryFormat.UNKNOWN
@@ -86,7 +91,8 @@ def _detect_binary_format(data: bytes) -> BinaryFormat:
 
 def _extract_strings(data: bytes, min_length: int = 4) -> list[str]:
     import re
-    ascii_re = re.compile(rb'[\x20-\x7e]{%d,}' % min_length)
+
+    ascii_re = re.compile(rb"[\x20-\x7e]{%d,}" % min_length)
     matches = ascii_re.findall(data)
     return [m.decode("ascii", errors="replace") for m in matches]
 
@@ -126,6 +132,7 @@ def _detect_packer_hints(strings_list: list[str], data: bytes) -> list[str]:
 
 def _calc_entropy(data: bytes) -> float:
     from collections import Counter
+
     if not data:
         return 0.0
     n = len(data)
@@ -136,15 +143,46 @@ def _calc_entropy(data: bytes) -> float:
 def _classify_capabilities(strings_list: list[str]) -> list[str]:
     capabilities = []
     patterns: dict[str, list[str]] = {
-        "creates_process": ["CreateProcess", "exec", "system(", "popen", "ShellExecute"],
-        "network_communication": ["http://", "https://", "socket", "connect(", "send(", "WSASocket"],
+        "creates_process": [
+            "CreateProcess",
+            "exec",
+            "system(",
+            "popen",
+            "ShellExecute",
+        ],
+        "network_communication": [
+            "http://",
+            "https://",
+            "socket",
+            "connect(",
+            "send(",
+            "WSASocket",
+        ],
         "file_manipulation": ["CreateFile", "WriteFile", "ReadFile", "fopen", "open("],
         "registry_modification": ["RegOpenKey", "RegSetValue", "HKEY_"],
         "service_manipulation": ["CreateService", "StartService", "OpenSCManager"],
-        "credential_access": ["lsass", "sam", "credential", "token", "password", "login"],
-        "defense_evasion": ["VirtualProtect", "WriteProcessMemory", "Process Hollowing", "injection"],
+        "credential_access": [
+            "lsass",
+            "sam",
+            "credential",
+            "token",
+            "password",
+            "login",
+        ],
+        "defense_evasion": [
+            "VirtualProtect",
+            "WriteProcessMemory",
+            "Process Hollowing",
+            "injection",
+        ],
         "persistence": ["Run\\", "RunOnce", "Scheduled Task", "Startup", "svchost"],
-        "c2_communication": ["beacon", "callback", "botnet", "c2", "command and control"],
+        "c2_communication": [
+            "beacon",
+            "callback",
+            "botnet",
+            "c2",
+            "command and control",
+        ],
         "data_exfiltration": ["POST /", "upload", "exfil", "ftp://", "curl"],
     }
     blob = " ".join(strings_list[:5000]).lower()
@@ -155,7 +193,8 @@ def _classify_capabilities(strings_list: list[str]) -> list[str]:
 
 
 async def _call_wb_for_binary_analysis(
-    metadata: BinaryMetadata, tenant_id: str = ""
+    metadata: BinaryMetadata,
+    tenant_id: str = "",  # noqa: ARG001 - retained for signature/API compatibility
 ) -> dict[str, Any]:
     """Call WhiteRabbitNeo for binary analysis verdict."""
     from src.llm.facade import call_llm_unified
@@ -170,11 +209,11 @@ Size: {metadata.file_size} bytes
 SHA256: {metadata.sha256}
 Entry point: 0x{metadata.entry_point:x}
 Sections: {len(metadata.sections)}
-Imports ({len(metadata.imports)}): {', '.join(metadata.imports[:30])}
-Suspicious strings ({len(metadata.strings_suspicious)}): {', '.join(metadata.strings_suspicious[:20])}
-Packer hints: {', '.join(metadata.packer_hints) or 'none'}
+Imports ({len(metadata.imports)}): {", ".join(metadata.imports[:30])}
+Suspicious strings ({len(metadata.strings_suspicious)}): {", ".join(metadata.strings_suspicious[:20])}
+Packer hints: {", ".join(metadata.packer_hints) or "none"}
 Obfuscation score: {metadata.obfuscation_score:.1f}/8.0
-Detected capabilities: {', '.join(metadata.capabilities) or 'none'}
+Detected capabilities: {", ".join(metadata.capabilities) or "none"}
 
 === TASK ===
 Respond with JSON:
@@ -191,19 +230,25 @@ Respond with JSON:
     )
 
     try:
-        resp = await call_llm_unified(system, prompt, task=LLMTask.ZERO_DAY_ANALYSIS, phase="binary_triage")
+        resp = await call_llm_unified(
+            system, prompt, task=LLMTask.ZERO_DAY_ANALYSIS, phase="binary_triage"
+        )
         return json.loads(resp)
     except Exception:
         return {}
 
 
 async def analyse_binary(
-    file_path: str, data: bytes | None = None,
-    *, tenant_id: str = "", sample_id: str = "",
+    file_path: str,
+    data: bytes | None = None,
+    *,
+    tenant_id: str = "",
+    sample_id: str = "",
 ) -> BinaryAnalysisResult:
     """Run full static binary analysis pipeline."""
     result = BinaryAnalysisResult(
-        id=str(uuid.uuid4()), tenant_id=tenant_id,
+        id=str(uuid.uuid4()),
+        tenant_id=tenant_id,
         sample_id=sample_id or file_path,
     )
 
@@ -233,10 +278,15 @@ async def analyse_binary(
     if meta.format == BinaryFormat.PE:
         try:
             pe_offset = struct.unpack("<I", data[0x3C:0x40])[0]
-            if data[pe_offset:pe_offset+4] == b"PE\0\0":
-                coff = data[pe_offset+4:pe_offset+24]
+            if data[pe_offset : pe_offset + 4] == b"PE\0\0":
+                coff = data[pe_offset + 4 : pe_offset + 24]
                 machine = struct.unpack("<H", coff[0:2])[0]
-                arch_map = {0x014C: "x86", 0x8664: "x86-64", 0x01C4: "ARM", 0xAA64: "ARM64"}
+                arch_map = {
+                    0x014C: "x86",
+                    0x8664: "x86-64",
+                    0x01C4: "ARM",
+                    0xAA64: "ARM64",
+                }
                 meta.architecture = arch_map.get(machine, f"0x{machine:x}")
                 meta.entry_point = struct.unpack("<I", coff[16:20])[0]
                 num_sections = struct.unpack("<H", coff[2:4])[0]
@@ -245,17 +295,29 @@ async def analyse_binary(
                 for i in range(num_sections):
                     off = section_start + i * 40
                     if off + 40 <= len(data):
-                        name = data[off:off+8].rstrip(b"\0").decode("ascii", errors="replace")
-                        vsize = struct.unpack("<I", data[off+8:off+12])[0]
+                        name = data[off : off + 8].rstrip(b"\0").decode("ascii", errors="replace")
+                        vsize = struct.unpack("<I", data[off + 8 : off + 12])[0]
                         meta.sections.append({"name": name, "virtual_size": vsize})
         except Exception:
             pass
     elif meta.format == BinaryFormat.ELF:
         try:
             elf_class = data[4]
-            arch_map = {1: "x86", 2: "x86-64", 0x28: "ARM", 0xB7: "ARM64", 0x3E: "x86-64"}
-            meta.architecture = arch_map.get(data[18] if elf_class == 1 else data[18] | (data[19] << 8), f"0x{(data[18]):x}")
-            meta.entry_point = struct.unpack("<I" if data[4] == 1 else "<Q", data[24:24+(4 if data[4]==1 else 8)])[0]
+            arch_map = {
+                1: "x86",
+                2: "x86-64",
+                0x28: "ARM",
+                0xB7: "ARM64",
+                0x3E: "x86-64",
+            }
+            meta.architecture = arch_map.get(
+                data[18] if elf_class == 1 else data[18] | (data[19] << 8),
+                f"0x{(data[18]):x}",
+            )
+            meta.entry_point = struct.unpack(
+                "<I" if data[4] == 1 else "<Q",
+                data[24 : 24 + (4 if data[4] == 1 else 8)],
+            )[0]
         except Exception:
             pass
 
@@ -264,16 +326,39 @@ async def analyse_binary(
     meta.strings_all_count = len(all_strings)
 
     suspicious_keywords = [
-        "hack", "exploit", "inject", "payload", "shellcode", "backdoor",
-        "trojan", "keylog", "ransom", "crypt", "bitcoin", "monero",
-        "tor", "onion", "darknet", "malware", "rootkit", "reverse shell",
-        "cmd.exe", "powershell", "wget", "curl -", "netcat",
-        "127.0.0.1", "192.168.", "10.0.", "172.16.",
-        "meterpreter", "msfvenom", "metasploit",
+        "hack",
+        "exploit",
+        "inject",
+        "payload",
+        "shellcode",
+        "backdoor",
+        "trojan",
+        "keylog",
+        "ransom",
+        "crypt",
+        "bitcoin",
+        "monero",
+        "tor",
+        "onion",
+        "darknet",
+        "malware",
+        "rootkit",
+        "reverse shell",
+        "cmd.exe",
+        "powershell",
+        "wget",
+        "curl -",
+        "netcat",
+        "127.0.0.1",
+        "192.168.",
+        "10.0.",
+        "172.16.",
+        "meterpreter",
+        "msfvenom",
+        "metasploit",
     ]
     meta.strings_suspicious = [
-        s[:100] for s in all_strings
-        if any(kw.lower() in s.lower() for kw in suspicious_keywords)
+        s[:100] for s in all_strings if any(kw.lower() in s.lower() for kw in suspicious_keywords)
     ][:30]
 
     meta.packer_hints = _detect_packer_hints(all_strings, data)

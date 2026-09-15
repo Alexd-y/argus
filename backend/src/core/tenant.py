@@ -28,9 +28,7 @@ async def get_current_tenant_id(
     x_tenant_id: Annotated[str | None, Header(alias="X-Tenant-ID")] = None,
 ) -> str:
     """Resolve the tenant for the current request (see module docstring)."""
-    header_tenant = (
-        x_tenant_id.strip() if x_tenant_id and x_tenant_id.strip() else None
-    )
+    header_tenant = x_tenant_id.strip() if x_tenant_id and x_tenant_id.strip() else None
 
     if auth is not None:
         if header_tenant is not None and header_tenant != auth.tenant_id:

@@ -197,9 +197,7 @@ class RetestService:
         if job.result is RetestResultKind.NOT_REPRODUCED:
             if not job.coverage_equivalent:
                 return finding, job
-            finding = self._lifecycle.propose_resolved_candidate(
-                finding, coverage_equivalent=True
-            )
+            finding = self._lifecycle.propose_resolved_candidate(finding, coverage_equivalent=True)
             finding = self._lifecycle.confirm_resolved_via_retest(finding)
             return finding, job
 

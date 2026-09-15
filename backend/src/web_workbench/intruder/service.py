@@ -192,7 +192,11 @@ class IntruderService:
             planned = planned_total(template, strategy, payload_sets)
         except (HttpMessageError, ValueError) as exc:
             await self._repo.save_progress(
-                session, tenant_id, attack_id, status=STATUS_FAILED, error_reason=str(exc)[:256]
+                session,
+                tenant_id,
+                attack_id,
+                status=STATUS_FAILED,
+                error_reason=str(exc)[:256],
             )
             raise IntruderRunError(str(exc)) from exc
 

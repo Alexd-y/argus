@@ -337,14 +337,14 @@ class PlaybookStep(BaseModel):
     @classmethod
     def _check_id(cls, value: str) -> str:
         if not _STEP_ID_RE.fullmatch(value):
-            raise ValueError("step id must match ^[a-z][a-z0-9_]{0,63}$ " f"(got {value!r})")
+            raise ValueError(f"step id must match ^[a-z][a-z0-9_]{{0,63}}$ (got {value!r})")
         return value
 
     @field_validator("save_as")
     @classmethod
     def _check_save_as(cls, value: str | None) -> str | None:
         if value is not None and not _SAVE_AS_RE.fullmatch(value):
-            raise ValueError("save_as must match ^[a-z][a-z0-9_]{0,63}$ " f"(got {value!r})")
+            raise ValueError(f"save_as must match ^[a-z][a-z0-9_]{{0,63}}$ (got {value!r})")
         return value
 
     @model_validator(mode="after")
@@ -354,8 +354,7 @@ class PlaybookStep(BaseModel):
             model_cls.model_validate(self.params)
         except ValidationError as exc:
             raise ValueError(
-                f"params for action {self.action.value!r} are invalid: "
-                f"{exc.error_count()} error(s)"
+                f"params for action {self.action.value!r} are invalid: {exc.error_count()} error(s)"
             ) from exc
         return self
 
@@ -506,12 +505,14 @@ class Playbook(BaseModel):
                 )
 
     def _check_approval_gate(self) -> None:
-        if self.risk_level in {PlaybookRiskLevel.HIGH, PlaybookRiskLevel.DESTRUCTIVE}:
-            if not self.requires_approval:
-                raise ValueError(
-                    f"playbook_id={self.playbook_id!r}: risk_level="
-                    f"{self.risk_level.value} requires requires_approval=True"
-                )
+        if (
+            self.risk_level in {PlaybookRiskLevel.HIGH, PlaybookRiskLevel.DESTRUCTIVE}
+            and not self.requires_approval
+        ):
+            raise ValueError(
+                f"playbook_id={self.playbook_id!r}: risk_level="
+                f"{self.risk_level.value} requires requires_approval=True"
+            )
 
 
 def is_valid_playbook_id(value: str) -> bool:

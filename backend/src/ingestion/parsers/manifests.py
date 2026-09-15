@@ -6,6 +6,7 @@ for threat modeling and vulnerability analysis.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import tomllib
@@ -70,10 +71,8 @@ def parse_dockerfile(content: str) -> DockerfileInfo:
         elif upper.startswith("EXPOSE "):
             for part in stripped.split()[1:]:
                 part = part.rstrip("/tcp").rstrip("/udp")
-                try:
+                with contextlib.suppress(ValueError):
                     info.exposed_ports.append(int(part))
-                except ValueError:
-                    pass
         elif upper.startswith("ENV "):
             parts = stripped.split(None, 2)
             if len(parts) >= 3:
@@ -98,24 +97,26 @@ def parse_terraform(content: str) -> TerraformInfo:
     provider_re = re.compile(r'provider\s+"([^"]+)"')
     info.providers = provider_re.findall(content)
     resource_re = re.compile(r'resource\s+"([^"]+)"\s+"([^"]+)"')
-    info.resources = [
-        {"type": m[0], "name": m[1]} for m in resource_re.findall(content)
-    ]
+    info.resources = [{"type": m[0], "name": m[1]} for m in resource_re.findall(content)]
     data_re = re.compile(r'data\s+"([^"]+)"\s+"([^"]+)"')
     info.data_sources = [f"{m[0]}.{m[1]}" for m in data_re.findall(content)]
-    sec_grp_blocks = re.findall(r'resource\s+"aws_security_group"\s+"([^"]+)"\s*\{([^}]+)\}', content, re.DOTALL)
+    sec_grp_blocks = re.findall(
+        r'resource\s+"aws_security_group"\s+"([^"]+)"\s*\{([^}]+)\}', content, re.DOTALL
+    )
     for name, block in sec_grp_blocks:
         sg = {"name": name, "ingress": []}
-        ingress_re = re.compile(r'ingress\s*\{([^}]+)\}', re.DOTALL)
+        ingress_re = re.compile(r"ingress\s*\{([^}]+)\}", re.DOTALL)
         for ing in ingress_re.findall(block):
-            port = re.search(r'from_port\s*=\s*(\d+)', ing)
+            port = re.search(r"from_port\s*=\s*(\d+)", ing)
             proto = re.search(r'protocol\s*=\s*"([^"]+)"', ing)
-            cidr = re.search(r'cidr_blocks\s*=\s*\[([^\]]+)\]', ing)
-            sg["ingress"].append({
-                "port": int(port.group(1)) if port else 0,
-                "protocol": proto.group(1) if proto else "",
-                "cidr": cidr.group(1) if cidr else "",
-            })
+            cidr = re.search(r"cidr_blocks\s*=\s*\[([^\]]+)\]", ing)
+            sg["ingress"].append(
+                {
+                    "port": int(port.group(1)) if port else 0,
+                    "protocol": proto.group(1) if proto else "",
+                    "cidr": cidr.group(1) if cidr else "",
+                }
+            )
         info.security_groups.append(sg)
     iam_policy_re = re.compile(r'resource\s+"aws_iam_policy"\s+"([^"]+)"')
     info.iam_policies = iam_policy_re.findall(content)
@@ -154,10 +155,12 @@ def parse_python_dependencies(content: str) -> DependencyInfo:
             name, _, version = line.partition("~=")
         else:
             name, version = line, ""
-        info.packages.append({
-            "name": name.split("[")[0].strip(),
-            "version": version.split(";")[0].strip(),
-        })
+        info.packages.append(
+            {
+                "name": name.split("[")[0].strip(),
+                "version": version.split(";")[0].strip(),
+            }
+        )
     info.total_count = len(info.packages)
     return info
 
@@ -182,7 +185,7 @@ def parse_cargo_dependencies(content: str) -> DependencyInfo:
 
 def parse_go_dependencies(content: str) -> DependencyInfo:
     info = DependencyInfo(language="go")
-    require_re = re.compile(r'\t([^\s]+)\s+v([^\s]+)')
+    require_re = re.compile(r"\t([^\s]+)\s+v([^\s]+)")
     found_require = False
     for line in content.splitlines():
         if line.strip() == "require (":

@@ -3,14 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
-from src.schemas.threat_modeling.schemas import (
-    CriticalAsset,
-    ThreatScenario,
-    TrustBoundary,
-)
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-from src.schemas.vulnerability_analysis.scenario_mapping import FindingToScenarioMap
 from src.recon.vulnerability_analysis.scenario_mapping import (
     generate_all_scenario_mapping_artifacts,
     generate_finding_asset_map_csv,
@@ -19,6 +11,13 @@ from src.recon.vulnerability_analysis.scenario_mapping import (
     generate_finding_to_scenario_map_json,
     map_findings_to_scenario,
 )
+from src.schemas.threat_modeling.schemas import (
+    CriticalAsset,
+    ThreatScenario,
+    TrustBoundary,
+)
+from src.schemas.vulnerability_analysis.scenario_mapping import FindingToScenarioMap
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 @pytest.fixture
@@ -88,20 +87,22 @@ def test_map_findings_from_checks(bundle: VulnerabilityAnalysisInputBundle) -> N
     assert len(mapping.boundary_links) == 2
     assert len(mapping.asset_links) == 2
 
-    scenario_ids = {l.scenario_id for l in mapping.scenario_links}
+    scenario_ids = {link.scenario_id for link in mapping.scenario_links}
     assert "ts1" in scenario_ids
     assert "ts2" in scenario_ids
 
-    boundary_ids = {l.boundary_id for l in mapping.boundary_links}
+    boundary_ids = {link.boundary_id for link in mapping.boundary_links}
     assert "tb1" in boundary_ids
     assert "tb2" in boundary_ids
 
-    asset_ids = {l.asset_id for l in mapping.asset_links}
+    asset_ids = {link.asset_id for link in mapping.asset_links}
     assert "ca1" in asset_ids
     assert "ca2" in asset_ids
 
 
-def test_map_findings_ignores_unknown_ids(bundle: VulnerabilityAnalysisInputBundle) -> None:
+def test_map_findings_ignores_unknown_ids(
+    bundle: VulnerabilityAnalysisInputBundle,
+) -> None:
     """Unknown scenario/boundary/asset IDs are skipped."""
     ai_results = {
         "authorization_analysis": {
@@ -163,7 +164,7 @@ def test_map_findings_from_correlations_and_remediations(
     }
     mapping = map_findings_to_scenario(bundle, ai_results)
     assert len(mapping.scenario_links) >= 1
-    assert any(l.finding_id == "ep1" for l in mapping.scenario_links)
+    assert any(link.finding_id == "ep1" for link in mapping.scenario_links)
 
 
 def test_generate_json(mapping: FindingToScenarioMap) -> None:

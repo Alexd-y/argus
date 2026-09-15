@@ -61,15 +61,11 @@ pytestmark = skip_if_no_kind
 # ---------------------------------------------------------------------------
 
 NAMESPACE: Final[str] = os.environ.get("ARGUS_KIND_NAMESPACE", "argus-test")
-HPA_NAME: Final[str] = os.environ.get(
-    "ARGUS_KIND_HPA_NAME", "argus-celery-kev"
-)
+HPA_NAME: Final[str] = os.environ.get("ARGUS_KIND_HPA_NAME", "argus-celery-kev")
 PUSHGATEWAY_SERVICE: Final[str] = os.environ.get(
     "ARGUS_KIND_PUSHGATEWAY_SERVICE", "prometheus-pushgateway.monitoring"
 )
-PUSHGATEWAY_PORT: Final[int] = int(
-    os.environ.get("ARGUS_KIND_PUSHGATEWAY_PORT", "9091")
-)
+PUSHGATEWAY_PORT: Final[int] = int(os.environ.get("ARGUS_KIND_PUSHGATEWAY_PORT", "9091"))
 
 MIN_REPLICAS: Final[int] = 2
 SCALE_UP_TARGET_REPLICAS: Final[int] = 4
@@ -96,9 +92,7 @@ POLL_INTERVAL_SECONDS: Final[float] = float(
 # `kevEmitRateTarget=1` HPA bound (50 / 300s ≈ 0.17/s — still below 1/s,
 # so we set a deliberately high counter value to exceed the per-replica
 # target as the rate is computed against the previous scrape).
-KEV_BURST_COUNTER_VALUE: Final[int] = int(
-    os.environ.get("ARGUS_KIND_KEV_BURST_COUNTER", "50000")
-)
+KEV_BURST_COUNTER_VALUE: Final[int] = int(os.environ.get("ARGUS_KIND_KEV_BURST_COUNTER", "50000"))
 KEV_DECAY_COUNTER_VALUE: Final[int] = 0
 
 
@@ -134,9 +128,7 @@ def _run(
             f"binary not found on PATH: {cmd[0]} (set up by helm/kind-action in CI)"
         ) from exc
     except subprocess.TimeoutExpired as exc:
-        raise KubectlError(
-            f"command timed out after {timeout}s: {' '.join(cmd)}"
-        ) from exc
+        raise KubectlError(f"command timed out after {timeout}s: {' '.join(cmd)}") from exc
 
     if check and result.returncode != 0:
         raise KubectlError(
@@ -157,9 +149,7 @@ def _kubectl_json(*args: str, namespace: str | None = NAMESPACE) -> dict:
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise KubectlError(
-            f"non-JSON stdout from kubectl: {result.stdout!r}"
-        ) from exc
+        raise KubectlError(f"non-JSON stdout from kubectl: {result.stdout!r}") from exc
 
 
 def _hpa_status() -> dict:
@@ -350,8 +340,7 @@ def test_kev_decay_returns_to_min_replicas() -> None:
     pytest.fail(
         f"HPA failed to scale back to {MIN_REPLICAS} after KEV decay within "
         f"stabilizationWindow ({STABILIZATION_WINDOW_SECONDS}s) + "
-        f"{deadline_buffer_seconds}s buffer (last_seen={last_seen})\n"
-        + diagnostics
+        f"{deadline_buffer_seconds}s buffer (last_seen={last_seen})\n" + diagnostics
     )
 
 
@@ -361,7 +350,7 @@ def test_kev_decay_returns_to_min_replicas() -> None:
 # ---------------------------------------------------------------------------
 
 
-def teardown_module(module: object) -> None:  # noqa: ARG001 — pytest hook signature
+def teardown_module(module: object) -> None:
     """Drop the pushgateway job-bucket so the next run starts from zero."""
     if not shutil.which("kubectl"):
         return

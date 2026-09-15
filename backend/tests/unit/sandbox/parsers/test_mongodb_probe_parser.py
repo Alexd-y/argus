@@ -88,9 +88,9 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
         {"host": "10.0.0.99:27017", "version": "5.0.0", "auth_required": True}
     ).encode("utf-8")
     (tmp_path / "mongo_info.json").write_bytes(canonical)
-    decoy = json.dumps(
-        {"host": "1.1.1.1:27017", "version": "4.4.6", "auth_required": True}
-    ).encode("utf-8")
+    decoy = json.dumps({"host": "1.1.1.1:27017", "version": "4.4.6", "auth_required": True}).encode(
+        "utf-8"
+    )
     findings = parse_mongodb_probe(decoy, b"", tmp_path, "mongodb_probe")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")

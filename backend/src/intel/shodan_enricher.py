@@ -138,9 +138,7 @@ def cross_reference_findings(
         if isinstance(affected_port, int):
             for svc in shodan_result.services:
                 if svc.port == affected_port and svc.product:
-                    finding["shodan_service_info"] = (
-                        f"{svc.product} {svc.version or ''}".strip()
-                    )
+                    finding["shodan_service_info"] = f"{svc.product} {svc.version or ''}".strip()
                     break
 
     return findings

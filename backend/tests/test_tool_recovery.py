@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.cache.tool_recovery import (
     MAX_RECOVERY_ATTEMPTS,
     TOOL_ALTERNATIVES,
@@ -66,7 +65,12 @@ def test_replace_tool_in_command_empty_string() -> None:
 
 def test_build_recovery_info_shape(recovery: ToolRecoverySystem) -> None:
     attempts = [
-        {"tool": "nmap", "exit_code": 1, "error_type": "nonzero_exit", "duration_sec": 0.1},
+        {
+            "tool": "nmap",
+            "exit_code": 1,
+            "error_type": "nonzero_exit",
+            "duration_sec": 0.1,
+        },
     ]
     info = recovery.build_recovery_info("nmap", "rustscan", attempts, from_cache=False)
     expected_keys = {

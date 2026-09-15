@@ -49,9 +49,7 @@ def test_dedup_on_host_service_user(tmp_path: Path) -> None:
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    (tmp_path / "ncrack.txt").write_bytes(
-        b"canonical.example 22/tcp ssh: 'admin' 'pwd'\n"
-    )
+    (tmp_path / "ncrack.txt").write_bytes(b"canonical.example 22/tcp ssh: 'admin' 'pwd'\n")
     decoy = b"decoy.example 22/tcp ssh: 'admin' 'pwd'\n"
     parse_ncrack(decoy, b"", tmp_path, "ncrack")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")

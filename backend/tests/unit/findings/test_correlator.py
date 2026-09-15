@@ -6,7 +6,7 @@ from collections.abc import Callable
 from uuid import uuid4
 
 import pytest
-
+from pydantic import ValidationError
 from src.findings.correlator import ChainSeverity, Correlator, FindingChain
 from src.pipeline.contracts.finding_dto import FindingCategory, FindingDTO
 
@@ -177,7 +177,7 @@ def test_chain_dto_is_frozen(
         ]
     )
     assert chains
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         chains[0].severity = ChainSeverity.LOW  # type: ignore[misc]
 
 
@@ -187,12 +187,12 @@ def test_categorical_categories_have_no_effect(
     asset_id = uuid4()
     chains = correlator.correlate(
         [
-            _with_techniques(
-                make_finding, asset_id=asset_id, techniques=["T1190"]
-            ).model_copy(update={"category": FindingCategory.RCE}),
-            _with_techniques(
-                make_finding, asset_id=asset_id, techniques=["T1059"]
-            ).model_copy(update={"category": FindingCategory.INFO}),
+            _with_techniques(make_finding, asset_id=asset_id, techniques=["T1190"]).model_copy(
+                update={"category": FindingCategory.RCE}
+            ),
+            _with_techniques(make_finding, asset_id=asset_id, techniques=["T1059"]).model_copy(
+                update={"category": FindingCategory.INFO}
+            ),
         ]
     )
     assert chains and len(chains[0].findings) == 2

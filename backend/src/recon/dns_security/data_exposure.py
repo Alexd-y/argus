@@ -45,9 +45,7 @@ def analyze_breach_exposure(
     ``Name`` and ``DataClasses``). Emails with no breaches are ignored.
     """
     exposed: dict[str, list[dict[str, Any]]] = {
-        email: breaches
-        for email, breaches in (account_results or {}).items()
-        if breaches
+        email: breaches for email, breaches in (account_results or {}).items() if breaches
     }
     if not exposed:
         return []
@@ -118,7 +116,10 @@ async def collect_breach_exposure(
     """
     client = HIBPClient()
     if not client.is_available():
-        logger.info("breach_check_skipped", extra={"reason": "hibp_key_absent", "domain": domain})
+        logger.info(
+            "breach_check_skipped",
+            extra={"reason": "hibp_key_absent", "domain": domain},
+        )
         return []
 
     account_results: dict[str, list[dict[str, Any]]] = {}

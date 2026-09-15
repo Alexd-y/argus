@@ -9,7 +9,7 @@ Kubernetes SDK — pure dependency injection.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,7 +20,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import (
     RiskLevel,
@@ -48,7 +47,6 @@ from src.policy.scope import (
     ScopeRule,
 )
 from src.sandbox.signing import KeyManager, public_key_id
-
 
 # ---------------------------------------------------------------------------
 # UUID generation helpers (deterministic when the test caller wants reuse)
@@ -193,9 +191,7 @@ def policy_engine(tenant_policy: TenantPolicy) -> PolicyEngine:
 
 
 @pytest.fixture()
-def approval_service(
-    key_manager: KeyManager, audit_logger: AuditLogger
-) -> ApprovalService:
+def approval_service(key_manager: KeyManager, audit_logger: AuditLogger) -> ApprovalService:
     return ApprovalService(key_manager=key_manager, audit_logger=audit_logger)
 
 
@@ -272,9 +268,7 @@ def tool_job_factory(tenant_id: UUID, scan_id: UUID) -> Callable[..., ToolJob]:
         kwargs: dict[str, Any] = {
             "tenant_id": tenant_id,
             "scan_id": scan_id,
-            "target": TargetSpec(
-                kind=TargetKind.URL, url="https://api.example.com/v1/users"
-            ),
+            "target": TargetSpec(kind=TargetKind.URL, url="https://api.example.com/v1/users"),
         }
         kwargs.update(overrides)
         return _make_tool_job(**kwargs)
@@ -290,7 +284,7 @@ def tool_job_factory(tenant_id: UUID, scan_id: UUID) -> Callable[..., ToolJob]:
 @pytest.fixture()
 def fixed_now() -> datetime:
     """A stable UTC instant used by ``frozen_clock`` tests."""
-    return datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture()

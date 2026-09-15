@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 async def get_scope_validator(db: AsyncSession, engagement_id: str) -> ScopeValidator | None:
     """Load engagement scope config and create ScopeValidator."""
-    result = await db.execute(
-        select(Engagement).where(Engagement.id == engagement_id)
-    )
+    result = await db.execute(select(Engagement).where(Engagement.id == engagement_id))
     engagement = result.scalar_one_or_none()
     if not engagement:
         return None

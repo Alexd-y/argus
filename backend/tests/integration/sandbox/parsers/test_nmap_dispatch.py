@@ -33,7 +33,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -45,7 +44,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.nmap_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -180,8 +178,7 @@ def test_dispatch_routes_each_nmap_variant_to_parser_via_per_tool_filename(
     )
 
     assert findings, (
-        f"{tool_id}: dispatch produced no findings from the canonical "
-        f"artifact file at {filename}"
+        f"{tool_id}: dispatch produced no findings from the canonical artifact file at {filename}"
     )
     sidecar = _read_sidecar(tmp_path)
     assert all(rec["tool_id"] == tool_id for rec in sidecar), (
@@ -190,9 +187,7 @@ def test_dispatch_routes_each_nmap_variant_to_parser_via_per_tool_filename(
 
 
 @pytest.mark.parametrize("tool_id", NMAP_TOOL_IDS)
-def test_dispatch_falls_back_to_stdout_when_artifact_missing(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_falls_back_to_stdout_when_artifact_missing(tool_id: str, tmp_path: Path) -> None:
     """No canonical artifact + non-empty stdout XML still parses."""
     payload = _open_port_xml().encode("utf-8")
     findings = dispatch_parse(
@@ -255,9 +250,7 @@ def test_dispatch_legacy_filename_serves_as_fallback_for_known_variants(
     tmp_path: Path,
 ) -> None:
     """``nmap.xml`` (legacy) is consumed when the per-tool filename is missing."""
-    (tmp_path / "nmap.xml").write_text(
-        _open_port_xml(host="10.0.0.99"), encoding="utf-8"
-    )
+    (tmp_path / "nmap.xml").write_text(_open_port_xml(host="10.0.0.99"), encoding="utf-8")
 
     findings = dispatch_parse(
         ParseStrategy.XML_NMAP,
@@ -279,12 +272,8 @@ def test_dispatch_per_tool_filename_takes_priority_over_legacy(
     tmp_path: Path,
 ) -> None:
     """The per-tool filename always wins over the legacy fallback."""
-    (tmp_path / "nmap_full.xml").write_text(
-        _open_port_xml(host="10.0.0.1"), encoding="utf-8"
-    )
-    (tmp_path / "nmap.xml").write_text(
-        _open_port_xml(host="10.0.0.99"), encoding="utf-8"
-    )
+    (tmp_path / "nmap_full.xml").write_text(_open_port_xml(host="10.0.0.1"), encoding="utf-8")
+    (tmp_path / "nmap.xml").write_text(_open_port_xml(host="10.0.0.99"), encoding="utf-8")
 
     findings = dispatch_parse(
         ParseStrategy.XML_NMAP,
@@ -310,9 +299,7 @@ def test_dispatch_routes_vulners_critical_to_supply_chain_likely(
     tmp_path: Path,
 ) -> None:
     """Critical CVE in vulners script output → SUPPLY_CHAIN, LIKELY confidence."""
-    (tmp_path / NMAP_TOOL_FILENAMES["nmap_vuln"]).write_text(
-        _vulners_xml(), encoding="utf-8"
-    )
+    (tmp_path / NMAP_TOOL_FILENAMES["nmap_vuln"]).write_text(_vulners_xml(), encoding="utf-8")
     findings = dispatch_parse(
         ParseStrategy.XML_NMAP,
         b"",

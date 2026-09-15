@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -64,10 +65,12 @@ def parse_nmap_xml_stdout(xml_text: str) -> dict[str, Any]:
 
         addrs: list[dict[str, str]] = []
         for addr in host.findall("address"):
-            addrs.append({
-                "addr": addr.get("addr", "") or "",
-                "addrtype": addr.get("addrtype", "") or "",
-            })
+            addrs.append(
+                {
+                    "addr": addr.get("addr", "") or "",
+                    "addrtype": addr.get("addrtype", "") or "",
+                }
+            )
 
         ports_out: list[dict[str, Any]] = []
         ports_el = host.find("ports")
@@ -78,14 +81,16 @@ def parse_nmap_xml_stdout(xml_text: str) -> dict[str, Any]:
                 if state != "open":
                     continue
                 svc_el = port.find("service")
-                ports_out.append({
-                    "protocol": port.get("protocol", "") or "",
-                    "portid": port.get("portid", "") or "",
-                    "state": state,
-                    "service": (svc_el.get("name", "") if svc_el is not None else "") or "",
-                    "product": (svc_el.get("product", "") if svc_el is not None else "") or "",
-                    "version": (svc_el.get("version", "") if svc_el is not None else "") or "",
-                })
+                ports_out.append(
+                    {
+                        "protocol": port.get("protocol", "") or "",
+                        "portid": port.get("portid", "") or "",
+                        "state": state,
+                        "service": (svc_el.get("name", "") if svc_el is not None else "") or "",
+                        "product": (svc_el.get("product", "") if svc_el is not None else "") or "",
+                        "version": (svc_el.get("version", "") if svc_el is not None else "") or "",
+                    }
+                )
 
         hostnames: list[str] = []
         hostnames_el = host.find("hostnames")
@@ -193,13 +198,14 @@ async def _run_one_phase(
         except Exception:
             logger.warning(
                 "nmap_recon_phase_artifact_upload_failed",
-                extra={"event": "nmap_recon_phase_artifact_upload_failed", "phase": phase},
+                extra={
+                    "event": "nmap_recon_phase_artifact_upload_failed",
+                    "phase": phase,
+                },
             )
         if stderr.strip():
-            try:
+            with contextlib.suppress(Exception):
                 await asyncio.to_thread(raw_sink.upload_text, f"nmap_{phase}_stderr", stderr)
-            except Exception:
-                pass
 
     out = {
         "phase": phase,
@@ -275,7 +281,17 @@ async def run_nmap_recon_for_recon(
         }
         return result
 
-    baseline_argv = ["nmap", "-sS", "--top-ports", "1000", "-T4", "--open", "-oX", "-", target]
+    baseline_argv = [
+        "nmap",
+        "-sS",
+        "--top-ports",
+        "1000",
+        "-T4",
+        "--open",
+        "-oX",
+        "-",
+        target,
+    ]
     if not nmap_argv_policy_allowed(baseline_argv):
         logger.info(
             "nmap_recon_cycle_policy_fallback_legacy",
@@ -312,7 +328,17 @@ async def run_nmap_recon_for_recon(
         )
         phases_out.append(pr)
 
-    tcp_argv = ["nmap", "-sS", "--top-ports", "1000", "-T4", "--open", "-oX", "-", target]
+    tcp_argv = [
+        "nmap",
+        "-sS",
+        "--top-ports",
+        "1000",
+        "-T4",
+        "--open",
+        "-oX",
+        "-",
+        target,
+    ]
     tr = await _run_one_phase(
         "tcp_top1000",
         tcp_argv,
@@ -343,7 +369,17 @@ async def run_nmap_recon_for_recon(
             open_udp |= b
 
     if udp50:
-        uargv = ["nmap", "-sU", "--top-ports", "50", "-T4", "--open", "-oX", "-", target]
+        uargv = [
+            "nmap",
+            "-sU",
+            "--top-ports",
+            "50",
+            "-T4",
+            "--open",
+            "-oX",
+            "-",
+            target,
+        ]
         ur = await _run_one_phase(
             "udp_top50",
             uargv,
@@ -409,11 +445,13 @@ async def run_nmap_recon_for_recon(
         try:
             await asyncio.to_thread(raw_sink.upload_json, "nmap_recon_structured", structured)
         except Exception:
-            logger.warning("nmap_recon_structured_upload_failed", extra={"event": "nmap_recon_structured_upload_failed"})
+            logger.warning(
+                "nmap_recon_structured_upload_failed",
+                extra={"event": "nmap_recon_structured_upload_failed"},
+            )
 
     any_tcp_ok = any(
-        p.get("phase") in ("tcp_top1000", "tcp_full_sv_os") and p.get("success")
-        for p in phases_out
+        p.get("phase") in ("tcp_top1000", "tcp_full_sv_os") and p.get("success") for p in phases_out
     )
     success = any_tcp_ok or bool(open_tcp)
     combined_stderr = "\n".join(

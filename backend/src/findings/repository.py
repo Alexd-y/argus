@@ -341,9 +341,7 @@ class SqlAlchemyFindingsRepository:
                 )
             )
             missing_keys = {
-                occ.finding_key
-                for occ in occ_result.scalars().all()
-                if occ.finding_key not in out
+                occ.finding_key for occ in occ_result.scalars().all() if occ.finding_key not in out
             }
         for finding_key in missing_keys:
             loaded = await self.get_logical_finding(tenant_id=tenant_id, finding_key=finding_key)
@@ -380,8 +378,13 @@ class SqlAlchemyFindingsRepository:
                     )
                 )
             else:
-                first_seen = min(row.first_seen_at or occurrence.first_seen_at, occurrence.first_seen_at)
-                last_seen = max(row.last_seen_at or occurrence.last_seen_at, occurrence.last_seen_at)
+                first_seen = min(
+                    row.first_seen_at or occurrence.first_seen_at,
+                    occurrence.first_seen_at,
+                )
+                last_seen = max(
+                    row.last_seen_at or occurrence.last_seen_at, occurrence.last_seen_at
+                )
                 merged_refs = list(dict.fromkeys([*(row.evidence_refs or []), *refs]))
                 row.scanner = occurrence.scanner
                 row.detector_id = occurrence.detector_id
@@ -419,7 +422,11 @@ class SqlAlchemyFindingsRepository:
                     FindingOccurrenceRow.scan_id == scan_id,
                 )
             )
-            return [occ for occ in (_occurrence_from_row(row) for row in result.scalars().all()) if occ is not None]
+            return [
+                occ
+                for occ in (_occurrence_from_row(row) for row in result.scalars().all())
+                if occ is not None
+            ]
 
     async def save_assessment(self, assessment: FindingAssessment) -> None:
         tenant_id = assessment.tenant_id or "unknown"

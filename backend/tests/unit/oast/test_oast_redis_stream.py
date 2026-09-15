@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from uuid import uuid4
 
 import pytest
 from redis.exceptions import ResponseError
-
 from src.core.config import Settings
 from src.oast.correlator import InteractionKind, OASTCorrelator, OASTInteraction
 from src.oast.provisioner import InternalOASTProvisioner
@@ -31,7 +31,9 @@ def _interaction(token_id) -> OASTInteraction:
     )
 
 
-def test_publish_skipped_when_disabled(internal_provisioner: InternalOASTProvisioner) -> None:
+def test_publish_skipped_when_disabled(
+    internal_provisioner: InternalOASTProvisioner,
+) -> None:
     settings = Settings(oast_redis_streams_enabled=False)
     bridge = OASTRedisStreamBridge(settings)
     token = internal_provisioner.issue(
@@ -271,10 +273,8 @@ async def test_run_consumer_xreadgroup_ingests_and_xacks(
             redis.xack.assert_awaited()
         finally:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
     redis.close.assert_awaited()
 

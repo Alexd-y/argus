@@ -309,9 +309,7 @@ class KillSwitchService:
             "activated_at": ts.isoformat(),
         }
         if not client.set(_global_key(), _serialize(payload), nx=True):
-            raise EmergencyAlreadyActiveError(
-                "global emergency already active; resume first"
-            )
+            raise EmergencyAlreadyActiveError("global emergency already active; resume first")
         logger.info(
             "kill_switch.global.set",
             extra={
@@ -402,9 +400,7 @@ class KillSwitchService:
         if duration_seconds <= 0:
             raise ValueError("duration_seconds must be > 0")
         if duration_seconds > TENANT_THROTTLE_MAX_SECONDS:
-            raise ValueError(
-                f"duration_seconds must be <= {TENANT_THROTTLE_MAX_SECONDS}"
-            )
+            raise ValueError(f"duration_seconds must be <= {TENANT_THROTTLE_MAX_SECONDS}")
         normalized_reason = _normalize_reason(reason)
         ts = _ensure_aware(activated_at) or _utcnow()
         expires_at = ts + timedelta(seconds=duration_seconds)
@@ -485,16 +481,12 @@ class KillSwitchService:
         return TenantThrottleState(
             tenant_id=tid,
             reason=(
-                str(reason_raw)[:EMERGENCY_REASON_MAX_LEN]
-                if isinstance(reason_raw, str)
-                else ""
+                str(reason_raw)[:EMERGENCY_REASON_MAX_LEN] if isinstance(reason_raw, str) else ""
             ),
             activated_at=activated_at,
             expires_at=expires_at,
             duration_seconds=max(duration, 0),
-            operator_subject_hash=(
-                str(op_hash_raw) if isinstance(op_hash_raw, str) else ""
-            ),
+            operator_subject_hash=(str(op_hash_raw) if isinstance(op_hash_raw, str) else ""),
         )
 
     # -- Combined verdict ---------------------------------------------------
@@ -708,6 +700,7 @@ __all__ = [
     "EMERGENCY_GLOBAL_KEY",
     "EMERGENCY_REASON_MAX_LEN",
     "EMERGENCY_TENANT_KEY_PREFIX",
+    "TENANT_THROTTLE_MAX_SECONDS",
     "EmergencyAlreadyActiveError",
     "EmergencyNotActiveError",
     "GlobalEmergencyState",
@@ -716,7 +709,6 @@ __all__ = [
     "KillSwitchStatus",
     "KillSwitchUnavailableError",
     "KillSwitchVerdict",
-    "TENANT_THROTTLE_MAX_SECONDS",
     "TenantThrottleState",
     "get_kill_switch_service",
     "revoke_all_lab_leases",

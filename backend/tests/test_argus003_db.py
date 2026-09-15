@@ -116,9 +116,7 @@ class TestMigrationFiles:
         files = list(migrations_dir.glob("001*.py"))
         assert len(files) >= 1
 
-    def test_initial_migration_has_upgrade_downgrade(
-        self, migrations_dir: Path
-    ) -> None:
+    def test_initial_migration_has_upgrade_downgrade(self, migrations_dir: Path) -> None:
         """001 migration defines upgrade and downgrade."""
         content = (migrations_dir / "001_initial_schema.py").read_text()
         assert "def upgrade(" in content

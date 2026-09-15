@@ -61,7 +61,9 @@ async def test_repository_mode_round_trip(repo: InMemoryExecutionModeRepository)
 
 
 @pytest.mark.asyncio
-async def test_repository_manifest_and_lease_round_trip(repo: InMemoryExecutionModeRepository):
+async def test_repository_manifest_and_lease_round_trip(
+    repo: InMemoryExecutionModeRepository,
+):
     manifest = _manifest()
     await repo.save_manifest(manifest)
 
@@ -81,7 +83,9 @@ async def test_repository_manifest_and_lease_round_trip(repo: InMemoryExecutionM
 
 
 @pytest.mark.asyncio
-async def test_mark_first_execution_sets_timestamp(repo: InMemoryExecutionModeRepository):
+async def test_mark_first_execution_sets_timestamp(
+    repo: InMemoryExecutionModeRepository,
+):
     await repo.upsert_execution_mode(
         tenant_id="t-1",
         engagement_id="e-1",
@@ -95,7 +99,9 @@ async def test_mark_first_execution_sets_timestamp(repo: InMemoryExecutionModeRe
 
 
 @pytest.mark.asyncio
-async def test_mode_immutable_after_mark_first_execution(repo: InMemoryExecutionModeRepository):
+async def test_mode_immutable_after_mark_first_execution(
+    repo: InMemoryExecutionModeRepository,
+):
     await repo.upsert_execution_mode(
         tenant_id="t-1",
         engagement_id="e-1",
@@ -154,7 +160,9 @@ def test_api_works_with_injected_repo(repo: InMemoryExecutionModeRepository):
 
 
 @pytest.mark.asyncio
-async def test_api_mode_immutable_after_first_execution(repo: InMemoryExecutionModeRepository):
+async def test_api_mode_immutable_after_first_execution(
+    repo: InMemoryExecutionModeRepository,
+):
     set_execution_mode_repository(repo)
     app = FastAPI()
     app.include_router(em_api.router, prefix="/api/v1")

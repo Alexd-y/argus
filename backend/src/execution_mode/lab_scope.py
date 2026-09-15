@@ -31,7 +31,9 @@ class LabScopeManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    manifest_id: StrictStr = Field(default_factory=lambda: str(uuid4()), min_length=1, max_length=36)
+    manifest_id: StrictStr = Field(
+        default_factory=lambda: str(uuid4()), min_length=1, max_length=36
+    )
     tenant_id: StrictStr = Field(min_length=1, max_length=36)
     engagement_id: StrictStr = Field(min_length=1, max_length=36)
     mode: ExecutionMode = ExecutionMode.LAB_UNRESTRICTED
@@ -96,9 +98,7 @@ class LabScopeManifest(BaseModel):
         if not self.signature:
             return False
         key = secret.encode("utf-8") if isinstance(secret, str) else secret
-        expected = hmac.new(
-            key, self.unsigned_digest().encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        expected = hmac.new(key, self.unsigned_digest().encode("utf-8"), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, self.signature)
 
     def to_storage_dict(self) -> dict[str, Any]:

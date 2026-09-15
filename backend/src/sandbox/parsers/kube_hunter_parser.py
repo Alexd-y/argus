@@ -76,7 +76,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -158,7 +158,7 @@ _OWASP_WSTG_DEFAULT: Final[tuple[str, ...]] = ("WSTG-CONF-04", "WSTG-ATHN-01")
 _MITRE_ATTACK_DEFAULT: Final[tuple[str, ...]] = ("T1610", "T1613")
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------

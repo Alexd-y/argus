@@ -46,20 +46,24 @@ def _parse_json_lines(blob: str) -> list[dict[str, Any]]:
 
 
 def _security_header_keys() -> frozenset[str]:
-    return frozenset({
-        "strict-transport-security",
-        "content-security-policy",
-        "x-frame-options",
-        "x-content-type-options",
-        "referrer-policy",
-        "permissions-policy",
-        "x-xss-protection",
-        "cross-origin-opener-policy",
-        "cross-origin-embedder-policy",
-    })
+    return frozenset(
+        {
+            "strict-transport-security",
+            "content-security-policy",
+            "x-frame-options",
+            "x-content-type-options",
+            "referrer-policy",
+            "permissions-policy",
+            "x-xss-protection",
+            "cross-origin-opener-policy",
+            "cross-origin-embedder-policy",
+        }
+    )
 
 
-def _extract_security_headers_from_httpx_stdout(stdout: str) -> dict[str, dict[str, str]]:
+def _extract_security_headers_from_httpx_stdout(
+    stdout: str,
+) -> dict[str, dict[str, str]]:
     """Best-effort host/url → lowercased security header map from httpx -json lines."""
     merged: dict[str, dict[str, str]] = {}
     keys = _security_header_keys()
@@ -144,7 +148,7 @@ def _live_hosts_from_probe(tr: dict[str, Any]) -> list[str]:
     if isinstance(merged, dict):
         bh = merged.get("by_host")
         if isinstance(bh, dict) and bh:
-            return sorted({str(k).strip() for k in bh.keys() if str(k).strip()})[:2000]
+            return sorted({str(k).strip() for k in bh if str(k).strip()})[:2000]
     hx = tr.get("httpx")
     if isinstance(hx, dict):
         hosts: set[str] = set()
@@ -239,7 +243,9 @@ def _parameters_from_tool_results(tr: dict[str, Any]) -> dict[str, Any]:
                 names = []
             return {
                 "source": "js_analysis",
-                "unique_param_names": [str(x).strip()[:256] for x in names if str(x).strip()][:2000],
+                "unique_param_names": [str(x).strip()[:256] for x in names if str(x).strip()][
+                    :2000
+                ],
                 "urls_with_query": int(qp.get("urls_with_query") or 0),
             }
     hc = tr.get("http_crawl")
@@ -257,7 +263,10 @@ def _parameters_from_tool_results(tr: dict[str, Any]) -> dict[str, Any]:
                         n = row.get("name") or row.get("param") or row.get("key")
                         if isinstance(n, str) and n.strip():
                             names.append(n.strip()[:256])
-                return {"source": "http_crawl", "unique_param_names": sorted(frozenset(names))[:2000]}
+                return {
+                    "source": "http_crawl",
+                    "unique_param_names": sorted(frozenset(names))[:2000],
+                }
     return {"source": "", "unique_param_names": [], "urls_with_query": 0}
 
 

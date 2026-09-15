@@ -27,8 +27,12 @@ class ScopeIngestRequest(BaseModel):
 
     raw_text: str | None = Field(default=None, description="Raw paste from HackerOne/Bugcrowd")
     scope_json: dict[str, Any] | None = Field(default=None, description="Structured JSON scope")
-    platform: str | None = Field(default=None, description="hackerone | bugcrowd | intigriti | private")
-    program_slug: str | None = Field(default=None, description="Platform program slug for API import")
+    platform: str | None = Field(
+        default=None, description="hackerone | bugcrowd | intigriti | private"
+    )
+    program_slug: str | None = Field(
+        default=None, description="Platform program slug for API import"
+    )
 
 
 class BountyScopeRule(BaseModel):
@@ -36,7 +40,9 @@ class BountyScopeRule(BaseModel):
 
     rule_type: str = Field(default="include", description="include | exclude")
     target: str = Field(description="Domain, URL, IP, CIDR, or wildcard pattern")
-    target_type: str = Field(default="domain", description="domain | url | ip | cidr | wildcard | regex")
+    target_type: str = Field(
+        default="domain", description="domain | url | ip | cidr | wildcard | regex"
+    )
 
 
 class BountyScope(BaseModel):

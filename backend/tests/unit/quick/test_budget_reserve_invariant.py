@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.quick.budget import (
     DiscoveryReserveProtectedError,
     QuickBudgetManager,
@@ -74,7 +73,9 @@ def test_open_scan_budget_keeps_reserve_invariant(profile: QuickProfileName) -> 
         snapshot.budget.reserve_for_validation_percent,
     )
     assert (
-        abs(stage_budget_sum(snapshot.budget) + reserved - snapshot.budget.wall_clock_budget_seconds)
+        abs(
+            stage_budget_sum(snapshot.budget) + reserved - snapshot.budget.wall_clock_budget_seconds
+        )
         <= 1
     )
 
@@ -102,7 +103,9 @@ def test_discovery_cannot_consume_verification_reserve() -> None:
     assert manager.should_stop_discovery(_SCAN_ID) is True
     assert manager.remaining(_SCAN_ID, QuickBudgetKind.DISCOVERY) == discovery_left
 
-    with pytest.raises(DiscoveryReserveProtectedError, match="discovery_reserve_protected") as exc_info:
+    with pytest.raises(
+        DiscoveryReserveProtectedError, match="discovery_reserve_protected"
+    ) as exc_info:
         manager.acquire_lease(
             scan_id=_SCAN_ID,
             kind=QuickBudgetKind.DISCOVERY,

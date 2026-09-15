@@ -226,7 +226,9 @@ def _detect_integrity_errors(
         for tid in sorted(catalog_ids - state_ids):
             errors.append(
                 IntegrityError(
-                    IntegrityCode.MISSING_CATALOG_TEST, tid, "catalog test absent from plan"
+                    IntegrityCode.MISSING_CATALOG_TEST,
+                    tid,
+                    "catalog test absent from plan",
                 )
             )
 

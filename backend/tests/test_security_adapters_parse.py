@@ -3,7 +3,6 @@
 import json
 
 import pytest
-
 from src.recon.adapters.security import (
     CheckovAdapter,
     ProwlerAdapter,

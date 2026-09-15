@@ -38,12 +38,11 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -66,7 +65,6 @@ from src.sandbox.signing import (
 )
 from src.sandbox.templating import render_argv
 from src.sandbox.tool_registry import ToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # ARG-017 tool inventory — pinned to mirror Backlog/dev1_md §4.11/§4.12/§4.13
@@ -292,9 +290,7 @@ def isolated_catalog(
         assert src.is_file(), f"source YAML missing: {src}"
         shutil.copy2(src, tools_dir / f"{tool_id}.yaml")
 
-    priv_path, _, key_id = KeyManager.generate_dev_keypair(
-        keys_dir, name="arg017_e2e_signing"
-    )
+    priv_path, _, key_id = KeyManager.generate_dev_keypair(keys_dir, name="arg017_e2e_signing")
     private_key = load_private_key_bytes(priv_path.read_bytes())
     priv_path.unlink()
 
@@ -357,9 +353,7 @@ def test_isolated_catalog_includes_all_twenty_arg017_tools(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "policy_name", ("oast-egress", "auth-bruteforce", "offline-no-egress")
-)
+@pytest.mark.parametrize("policy_name", ("oast-egress", "auth-bruteforce", "offline-no-egress"))
 def test_arg017_network_policies_are_known_templates(policy_name: str) -> None:
     """Every new ARG-017 network policy must be registered in the templates."""
     assert policy_name in NETWORK_POLICY_NAMES, (
@@ -396,8 +390,7 @@ def test_argv_renders_clean_with_sandbox_placeholders(
     assert argv, f"{tool_id}: rendered argv must be non-empty"
     for token in argv:
         assert "{" not in token and "}" not in token, (
-            f"{tool_id}: rendered argv contains leftover placeholder "
-            f"in token {token!r}: {argv!r}"
+            f"{tool_id}: rendered argv contains leftover placeholder in token {token!r}: {argv!r}"
         )
 
 
@@ -499,9 +492,7 @@ _INTERACTSH_PAYLOAD: Final[bytes] = (
                     "full-id": "c2vhx10sxxx.oast.argus.local",
                     "remote-address": "203.0.113.55:48372",
                     "timestamp": "2026-04-19T12:34:56.123456789Z",
-                    "raw-request": (
-                        "GET /tok HTTP/1.1\r\nHost: oast.argus.local\r\n\r\n"
-                    ),
+                    "raw-request": ("GET /tok HTTP/1.1\r\nHost: oast.argus.local\r\n\r\n"),
                     "raw-response": "HTTP/1.1 200 OK\r\n\r\n",
                 }
             ),
@@ -559,8 +550,7 @@ def test_interactsh_dispatch_yields_protocol_split_findings(
         tool_id=tool_id,
     )
     assert len(findings) == 3, (
-        f"{tool_id}: 3-record interactsh stream must yield 3 findings, "
-        f"got {len(findings)}"
+        f"{tool_id}: 3-record interactsh stream must yield 3 findings, got {len(findings)}"
     )
 
     categories = sorted(f.category.value for f in findings)
@@ -647,6 +637,4 @@ def test_interactsh_canonical_artifact_round_trip(
         artifacts_dir,
         tool_id="interactsh_client",
     )
-    assert len(findings) == 3, (
-        "interactsh parser must prefer canonical artifact over stdout"
-    )
+    assert len(findings) == 3, "interactsh parser must prefer canonical artifact over stdout"

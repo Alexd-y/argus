@@ -171,14 +171,20 @@ class QuickRagProfile:
             if CollectionName.LAB_RESEARCH in {chunk.collection for chunk in pack.chunks}:
                 logger.warning(
                     "quick_rag_lab_research_stripped",
-                    extra={"event": "quick_rag_lab_research_stripped", "tenant_id": tenant_id},
+                    extra={
+                        "event": "quick_rag_lab_research_stripped",
+                        "tenant_id": tenant_id,
+                    },
                 )
                 pack = _strip_lab_research(pack)
             return pack
         except Exception:  # noqa: BLE001 — vector failure falls back to FTS
             logger.warning(
                 "quick_rag_vector_failed_fts_fallback",
-                extra={"event": "quick_rag_vector_failed_fts_fallback", "tenant_id": tenant_id},
+                extra={
+                    "event": "quick_rag_vector_failed_fts_fallback",
+                    "tenant_id": tenant_id,
+                },
             )
         try:
             pack = active.retrieve(
@@ -198,7 +204,10 @@ class QuickRagProfile:
         except Exception:  # noqa: BLE001 — RAG down continues the scan degraded
             logger.warning(
                 "quick_rag_unavailable_continue_degraded",
-                extra={"event": "quick_rag_unavailable_continue_degraded", "tenant_id": tenant_id},
+                extra={
+                    "event": "quick_rag_unavailable_continue_degraded",
+                    "tenant_id": tenant_id,
+                },
             )
             return RagEvidencePack(
                 query=query,
@@ -234,7 +243,11 @@ def _strip_lab_research(pack: RagEvidencePack) -> RagEvidencePack:
     metadata = dict(pack.metadata)
     metadata["lab_research_denied"] = True
     return pack.model_copy(
-        update={"chunks": kept_chunks, "citations": kept_citations, "metadata": metadata}
+        update={
+            "chunks": kept_chunks,
+            "citations": kept_citations,
+            "metadata": metadata,
+        }
     )
 
 
@@ -262,5 +275,7 @@ def default_quick_rag_store() -> InMemoryRagStore:
     return InMemoryRagStore()
 
 
-def default_quick_search_engine(store: InMemoryRagStore | None = None) -> HybridSearchEngine:
+def default_quick_search_engine(
+    store: InMemoryRagStore | None = None,
+) -> HybridSearchEngine:
     return HybridSearchEngine(store or default_quick_rag_store())

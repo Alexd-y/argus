@@ -55,12 +55,8 @@ DISALLOWED_TOOL_IDS: Final[frozenset[str]] = frozenset(
     }
 )
 
-_POST_EX_PHASES: Final[frozenset[str]] = frozenset(
-    {"exploitation", "post_exploitation"}
-)
-_HEAVY_RE_FAMILIES: Final[frozenset[str]] = frozenset(
-    {"reverse_engineering"}
-)
+_POST_EX_PHASES: Final[frozenset[str]] = frozenset({"exploitation", "post_exploitation"})
+_HEAVY_RE_FAMILIES: Final[frozenset[str]] = frozenset({"reverse_engineering"})
 _DESTRUCTIVE_RISKS: Final[frozenset[str]] = frozenset(
     {ProductionRisk.DESTRUCTIVE.value, "destructive"}
 )

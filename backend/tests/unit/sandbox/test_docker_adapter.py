@@ -58,7 +58,13 @@ def descriptor() -> ToolDescriptor:
         memory_limit="2Gi",
         pids_limit=256,
         image="argus-kali-web:latest",
-        command_template=["nuclei", "-target", "{url}", "-output", "{out_dir}/nuclei.jsonl"],
+        command_template=[
+            "nuclei",
+            "-target",
+            "{url}",
+            "-output",
+            "{out_dir}/nuclei.jsonl",
+        ],
         parse_strategy=ParseStrategy.NUCLEI_JSONL,
         evidence_artifacts=["/out/nuclei.jsonl"],
     )
@@ -140,7 +146,9 @@ class TestQuantityConversion:
 class TestBuildCommand:
     def test_hardening_flags_present(self, tmp_path: Path, descriptor: ToolDescriptor) -> None:
         adapter = DockerSandboxAdapter(
-            _FakeRegistry([descriptor]), mode=DockerRunMode.DRY_RUN, dry_run_artifact_dir=tmp_path
+            _FakeRegistry([descriptor]),
+            mode=DockerRunMode.DRY_RUN,
+            dry_run_artifact_dir=tmp_path,
         )
         cmd = adapter.build_docker_command(_job(), descriptor, host_out_dir=tmp_path / "out")
         assert cmd[:3] == ["docker", "run", "--rm"]
@@ -154,7 +162,9 @@ class TestBuildCommand:
 
     def test_entrypoint_and_argv(self, tmp_path: Path, descriptor: ToolDescriptor) -> None:
         adapter = DockerSandboxAdapter(
-            _FakeRegistry([descriptor]), mode=DockerRunMode.DRY_RUN, dry_run_artifact_dir=tmp_path
+            _FakeRegistry([descriptor]),
+            mode=DockerRunMode.DRY_RUN,
+            dry_run_artifact_dir=tmp_path,
         )
         cmd = adapter.build_docker_command(_job(), descriptor, host_out_dir=tmp_path / "out")
         # --entrypoint = argv[0]; image (registry-resolved) precedes the tool args.
@@ -180,7 +190,9 @@ class TestBuildCommand:
 
     def test_tool_id_mismatch_raises(self, tmp_path: Path, descriptor: ToolDescriptor) -> None:
         adapter = DockerSandboxAdapter(
-            _FakeRegistry([descriptor]), mode=DockerRunMode.DRY_RUN, dry_run_artifact_dir=tmp_path
+            _FakeRegistry([descriptor]),
+            mode=DockerRunMode.DRY_RUN,
+            dry_run_artifact_dir=tmp_path,
         )
         with pytest.raises(SandboxConfigError):
             adapter.build_docker_command(
@@ -205,7 +217,9 @@ class TestBuildCommand:
             parse_strategy=ParseStrategy.NUCLEI_JSONL,
         )
         adapter = DockerSandboxAdapter(
-            _FakeRegistry([bad]), mode=DockerRunMode.DRY_RUN, dry_run_artifact_dir=tmp_path
+            _FakeRegistry([bad]),
+            mode=DockerRunMode.DRY_RUN,
+            dry_run_artifact_dir=tmp_path,
         )
         with pytest.raises(SandboxConfigError):
             adapter.build_docker_command(_job(), bad, host_out_dir=tmp_path / "out")
@@ -319,7 +333,11 @@ class TestDockerExec:
         proc.kill = MagicMock()
         proc.wait = AsyncMock()
         with (
-            patch("asyncio.create_subprocess_exec", new_callable=AsyncMock, return_value=proc),
+            patch(
+                "asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=proc,
+            ),
             patch("asyncio.wait_for", new_callable=AsyncMock, side_effect=TimeoutError),
         ):
             result = await adapter.run(_job(), descriptor)
@@ -355,7 +373,9 @@ class TestAuthArgv:
         self, tmp_path: Path, descriptor: ToolDescriptor
     ) -> None:
         adapter = DockerSandboxAdapter(
-            _FakeRegistry([descriptor]), mode=DockerRunMode.DRY_RUN, dry_run_artifact_dir=tmp_path
+            _FakeRegistry([descriptor]),
+            mode=DockerRunMode.DRY_RUN,
+            dry_run_artifact_dir=tmp_path,
         )
         cmd = adapter.build_docker_command(
             _job(),

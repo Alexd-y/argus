@@ -53,6 +53,8 @@ from src.orchestration.binary_analysis import (
     detect_binary_type,
     run_binary_analysis,
 )
+from src.orchestration.budget_scan_registry import unregister_scan_ledger
+from src.orchestration.budget_scan_wiring import register_scan_budget_ledger
 from src.orchestration.cost_aware_reasoning import (
     BudgetEnforcer,
     CostTracker,
@@ -351,7 +353,11 @@ def _quick_phase_skip_reason(
     if stop_discovery and phase in DISCOVERY_PHASES and phase is not ScanPhase.REPORTING:
         if phase in VERIFICATION_AND_REPORT_PHASES:
             return None
-        if phase is ScanPhase.RECON or phase is ScanPhase.QUICK_FUZZ or phase is ScanPhase.SOURCE_ANALYSIS:
+        if (
+            phase is ScanPhase.RECON
+            or phase is ScanPhase.QUICK_FUZZ
+            or phase is ScanPhase.SOURCE_ANALYSIS
+        ):
             return "deadline_reached"
     return None
 
@@ -586,8 +592,7 @@ async def _check_exploitation_approval_required(
     if is_lab_lease_active_from_options(options, tenant_id=tenant_id):
         return False
     result = await session.execute(
-        select(Policy)
-        .where(
+        select(Policy).where(
             cast(Policy.tenant_id, String) == tenant_id,
             Policy.policy_type == "exploit_approval",
             Policy.enabled.is_(True),
@@ -663,9 +668,7 @@ async def _materialise_finding_evidence(
                 upload_finding_poc_json, tenant_id, scan_id, finding_id, poc_db
             )
             screenshot_key = (
-                str(poc_db.get("screenshot_key") or "").strip()
-                if isinstance(poc_db, dict)
-                else ""
+                str(poc_db.get("screenshot_key") or "").strip() if isinstance(poc_db, dict) else ""
             ) or None
         elif evidence_refs:
             observation_poc = build_observation_poc(
@@ -675,7 +678,11 @@ async def _materialise_finding_evidence(
             )
             if observation_poc:
                 poc_key = await asyncio.to_thread(
-                    upload_finding_poc_json, tenant_id, scan_id, finding_id, observation_poc
+                    upload_finding_poc_json,
+                    tenant_id,
+                    scan_id,
+                    finding_id,
+                    observation_poc,
                 )
     except Exception:
         logger.warning(
@@ -783,7 +790,10 @@ async def _persist_report_and_findings(
         _cvss_scorer = CVSSAutoScorer()
         _cvss_scorer.score_all_findings(findings_raw)
     except Exception as _cvss_exc:
-        logger.warning("cvss_auto_score_failed", extra={"scan_id": scan_id, "error": str(_cvss_exc)})
+        logger.warning(
+            "cvss_auto_score_failed",
+            extra={"scan_id": scan_id, "error": str(_cvss_exc)},
+        )
 
     assign_stable_finding_ids(findings_raw, scan_id=scan_id)
     _dedupe_finding_ids_after_assign(findings_raw, scan_id=scan_id)
@@ -837,7 +847,9 @@ async def _persist_report_and_findings(
         fid_raw = str(f.get("finding_id") or "").strip()
         try:
             finding_pk = (
-                str(uuid.UUID(fid_raw)) if fid_raw else compute_stable_finding_id(f, scan_id=scan_id)
+                str(uuid.UUID(fid_raw))
+                if fid_raw
+                else compute_stable_finding_id(f, scan_id=scan_id)
             )
         except (ValueError, TypeError, AttributeError):
             finding_pk = compute_stable_finding_id(f, scan_id=scan_id)
@@ -857,7 +869,11 @@ async def _persist_report_and_findings(
         poc_blob = f.get("proof_of_concept")
         poc_db = poc_blob if isinstance(poc_blob, dict) and poc_blob else None
         ow_raw = f.get("owasp_category")
-        owasp_val = parse_owasp_category(ow_raw.strip()) if isinstance(ow_raw, str) and ow_raw.strip() else None
+        owasp_val = (
+            parse_owasp_category(ow_raw.strip())
+            if isinstance(ow_raw, str) and ow_raw.strip()
+            else None
+        )
         conf = normalize_confidence(f.get("confidence"), default="likely")
         ev_type = normalize_evidence_type(f.get("evidence_type"))
         ev_refs = resolve_finding_cross_refs(
@@ -944,6 +960,7 @@ async def _persist_report_and_findings(
 @dataclass
 class ScanContext:
     """Mutable state carrying all phase outputs across the scan pipeline."""
+
     source_out: SourceAnalysisOutput | None = None
     recon_out: ReconOutput | None = None
     quick_fuzz_out: QuickFuzzOutput | None = None
@@ -1014,6 +1031,24 @@ async def _init_scan_subsystems(
             logger.warning(
                 "register_cost_tracker_failed",
                 extra={"scan_id": scan_id, "error": str(_reg_exc)},
+            )
+
+    # §8.3 reserve-before-call: register an authoritative Postgres-backed budget
+    # ledger for the scan so the LLM facade enforces caps BEFORE spend. Opt-in
+    # via BUDGET_LEDGER_ENABLED and fail-soft — a store/registration failure
+    # never blocks the scan (the facade simply skips budgeting when unregistered).
+    if settings.budget_ledger_enabled:
+        try:
+            await register_scan_budget_ledger(
+                scan_id=scan_id,
+                tenant_id=tenant_id,
+                max_cost_usd=_max_cost,
+                max_total_tokens=_max_tokens,
+            )
+        except Exception as _bl_exc:
+            logger.warning(
+                "register_scan_ledger_failed",
+                extra={"scan_id": scan_id, "error": str(_bl_exc)},
             )
 
     try:
@@ -1149,7 +1184,8 @@ async def _detect_resume_plan(
         freeze_scan_scope_kwargs["exploit_enabled"] = options.get("exploit_enabled", True)
     try:
         await freeze_scan_scope(
-            session, scan_id,
+            session,
+            scan_id,
             target_url=target,
             **{k: v for k, v in freeze_scan_scope_kwargs.items() if v is not None},
         )
@@ -1201,7 +1237,9 @@ async def _build_phase_input(
         input_data = {
             "target": target,
             "options": options,
-            "source_analysis": ctx.source_out.model_dump() if ctx.source_out and not ctx.source_out.skipped else None,
+            "source_analysis": ctx.source_out.model_dump()
+            if ctx.source_out and not ctx.source_out.skipped
+            else None,
         }
     elif phase == ScanPhase.QUICK_FUZZ:
         input_data = {
@@ -1212,7 +1250,9 @@ async def _build_phase_input(
     elif phase == ScanPhase.THREAT_MODELING:
         input_data = {
             "assets": ctx.recon_out.assets if ctx.recon_out else [],
-            "source_analysis": ctx.source_out.model_dump() if ctx.source_out and not ctx.source_out.skipped else None,
+            "source_analysis": ctx.source_out.model_dump()
+            if ctx.source_out and not ctx.source_out.skipped
+            else None,
             "quick_fuzz_findings": ctx.quick_fuzz_out.findings if ctx.quick_fuzz_out else [],
             "quick_fuzz_candidates": ctx.quick_fuzz_out.candidates if ctx.quick_fuzz_out else [],
         }
@@ -1252,9 +1292,11 @@ async def _build_phase_input(
             "exploits": ctx.exploit_out.exploits if ctx.exploit_out else [],
             "evidence": ctx.exploit_out.evidence if ctx.exploit_out else [],
             "evidence_tiers": {
-                k: int(v) if hasattr(v, '__int__') else v
+                k: int(v) if hasattr(v, "__int__") else v
                 for k, v in (ctx.exploit_out.evidence_tiers or {}).items()
-            } if ctx.exploit_out else {},
+            }
+            if ctx.exploit_out
+            else {},
         }
     elif phase == ScanPhase.REPORTING:
         input_data = {
@@ -1275,11 +1317,17 @@ async def _build_phase_input(
     if phase == ScanPhase.RECON:
         await _upload_raw_phase_snapshot(tenant_id, scan_id, "recon", "phase_input", input_data)
     elif phase == ScanPhase.QUICK_FUZZ:
-        await _upload_raw_phase_snapshot(tenant_id, scan_id, "quick_fuzz", "phase_input", input_data)
+        await _upload_raw_phase_snapshot(
+            tenant_id, scan_id, "quick_fuzz", "phase_input", input_data
+        )
     elif phase == ScanPhase.VULN_ANALYSIS:
-        await _upload_raw_phase_snapshot(tenant_id, scan_id, "vuln_analysis", "phase_input", input_data)
+        await _upload_raw_phase_snapshot(
+            tenant_id, scan_id, "vuln_analysis", "phase_input", input_data
+        )
     elif phase == ScanPhase.POST_EXPLOITATION:
-        await _upload_raw_phase_snapshot(tenant_id, scan_id, "post_exploitation", "phase_input", input_data)
+        await _upload_raw_phase_snapshot(
+            tenant_id, scan_id, "post_exploitation", "phase_input", input_data
+        )
 
     return input_data
 
@@ -1293,7 +1341,7 @@ async def _execute_phase(
     phase: ScanPhase,
     ctx: ScanContext,
     input_data: dict,
-    subsystems: dict[str, Any],
+    subsystems: dict[str, Any],  # noqa: ARG001 - retained for signature/API compatibility
     session: AsyncSession,
     scan_id: str,
     tenant_id: str,
@@ -1314,22 +1362,38 @@ async def _execute_phase(
     # Pre-phase: record step, events, update status
     await _record_step(session, tenant_id, scan_id, phase, "running", order_index)
     await _record_event(
-        session, tenant_id, scan_id, "phase_start", phase_str, progress,
+        session,
+        tenant_id,
+        scan_id,
+        "phase_start",
+        phase_str,
+        progress,
         message=f"Starting {phase_str}",
     )
     if event_bus is not None:
         try:
-            event_bus.publish(_ScanEvent(
-                event_type="phase_start", scan_id=scan_id, tenant_id=tenant_id,
-                phase=phase_str, progress=progress, message=f"Starting {phase_str}",
-            ))
+            event_bus.publish(
+                _ScanEvent(
+                    event_type="phase_start",
+                    scan_id=scan_id,
+                    tenant_id=tenant_id,
+                    phase=phase_str,
+                    progress=progress,
+                    message=f"Starting {phase_str}",
+                )
+            )
         except Exception as _eb_exc:
             logger.warning(
                 "event_bus_publish_phase_start_failed",
                 extra={"scan_id": scan_id, "error": str(_eb_exc)},
             )
     await _record_event(
-        session, tenant_id, scan_id, "progress", phase_str, progress,
+        session,
+        tenant_id,
+        scan_id,
+        "progress",
+        phase_str,
+        progress,
         message=f"Progress {progress}%",
     )
     await _update_scan_phase_status(session, scan_id, phase_str, "running", progress)
@@ -1363,9 +1427,7 @@ async def _execute_phase(
         with suppress(asyncio.CancelledError):
             await heartbeat_task
         await session.execute(
-            update(ScanStep)
-            .where(cast(ScanStep.id, String) == step.id)
-            .values(status="failed")
+            update(ScanStep).where(cast(ScanStep.id, String) == step.id).values(status="failed")
         )
         logger.error(
             "Phase handler failed",
@@ -1385,8 +1447,14 @@ async def _execute_phase(
                 err_message = etext
                 err_data = {"code": "llm_required"}
         await _record_event(
-            session, tenant_id, scan_id, "error", phase_str, progress,
-            message=err_message, data=err_data,
+            session,
+            tenant_id,
+            scan_id,
+            "error",
+            phase_str,
+            progress,
+            message=err_message,
+            data=err_data,
         )
         # Persist any tool-run provenance buffered before the failure.
         with suppress(Exception):
@@ -1406,7 +1474,7 @@ async def _execute_phase(
 async def _dispatch_phase_handler(
     phase: ScanPhase,
     ctx: ScanContext,
-    input_data: dict,
+    input_data: dict,  # noqa: ARG001 - retained for signature/API compatibility
     scan_id: str,
     tenant_id: str,
     target: str,
@@ -1414,8 +1482,8 @@ async def _dispatch_phase_handler(
     session: AsyncSession,
     progress: int,
     phase_str: str,
-    cost_tracker: Any | None,
-    auth_config_obj: Any | None,
+    cost_tracker: Any | None,  # noqa: ARG001 - retained for signature/API compatibility
+    auth_config_obj: Any | None,  # noqa: ARG001 - retained for signature/API compatibility
     scope_context: dict[str, Any] | None,
 ) -> dict:
     """Dispatch to the appropriate phase handler. Returns output_data dict."""
@@ -1471,22 +1539,32 @@ async def _dispatch_phase_handler(
                             )
                             if _ba_result and _ba_result.vulnerabilities:
                                 for _bv in _ba_result.vulnerabilities:
-                                    _sa_dict.setdefault("binary_findings", []).append({
-                                        "title": f"Binary: {_bv.vuln_type} in {_bi['file']}",
-                                        "severity": _bv.severity,
-                                        "description": _bv.description,
-                                        "source": "binary_analysis",
-                                        "cwe": "",
-                                        "evidence_tier": 2,
-                                    })
+                                    _sa_dict.setdefault("binary_findings", []).append(
+                                        {
+                                            "title": f"Binary: {_bv.vuln_type} in {_bi['file']}",
+                                            "severity": _bv.severity,
+                                            "description": _bv.description,
+                                            "source": "binary_analysis",
+                                            "cwe": "",
+                                            "evidence_tier": 2,
+                                        }
+                                    )
                                 logger.info(
                                     "binary_analysis_vulns_found",
-                                    extra={"scan_id": scan_id, "file": _bi["file"], "vulns": len(_ba_result.vulnerabilities)},
+                                    extra={
+                                        "scan_id": scan_id,
+                                        "file": _bi["file"],
+                                        "vulns": len(_ba_result.vulnerabilities),
+                                    },
                                 )
                             elif _ba_result and _ba_result.strings:
                                 logger.info(
                                     "binary_analysis_strings_extracted",
-                                    extra={"scan_id": scan_id, "file": _bi["file"], "strings": len(_ba_result.strings)},
+                                    extra={
+                                        "scan_id": scan_id,
+                                        "file": _bi["file"],
+                                        "strings": len(_ba_result.strings),
+                                    },
                                 )
                             else:
                                 logger.info(
@@ -1496,7 +1574,11 @@ async def _dispatch_phase_handler(
                         except Exception as _ba_run_exc:
                             logger.warning(
                                 "binary_analysis_run_failed",
-                                extra={"scan_id": scan_id, "file": _bi["file"], "error": str(_ba_run_exc)},
+                                extra={
+                                    "scan_id": scan_id,
+                                    "file": _bi["file"],
+                                    "error": str(_ba_run_exc),
+                                },
                             )
             except Exception as _ba_exc:
                 logger.warning(
@@ -1518,7 +1600,10 @@ async def _dispatch_phase_handler(
             },
         )
         recon_out = await run_recon(
-            target, options, tenant_id=tenant_id, scan_id=scan_id,
+            target,
+            options,
+            tenant_id=tenant_id,
+            scan_id=scan_id,
             source_analysis=ctx.source_out,
         )
         ctx.recon_out = recon_out
@@ -1592,7 +1677,7 @@ async def _dispatch_phase_handler(
                 findings=findings,
                 scan_id=scan_id or "",
             )
-            for _hyp_dict in (ctx.vuln_out.hypotheses or []):
+            for _hyp_dict in ctx.vuln_out.hypotheses or []:
                 try:
                     _hyp = ExploitHypothesis(
                         finding_id=str(_hyp_dict.get("finding_id") or _hyp_dict.get("id") or ""),
@@ -1629,8 +1714,7 @@ async def _dispatch_phase_handler(
                         extra={"scan_id": scan_id, "error": str(_vq_exc)},
                     )
             _has_actionable_hypotheses = any(
-                getattr(h, "vuln_class", None) is not None
-                for h in exploitation_queue.hypotheses
+                getattr(h, "vuln_class", None) is not None for h in exploitation_queue.hypotheses
             )
             _queue_built = True
             structured_findings = exploitation_queue.to_exploitation_input()
@@ -1642,7 +1726,8 @@ async def _dispatch_phase_handler(
             )
         except Exception as eq_exc:
             logger.warning(
-                "ExploitationQueue build failed, using raw findings: %s", eq_exc,
+                "ExploitationQueue build failed, using raw findings: %s",
+                eq_exc,
                 extra={"scan_id": scan_id},
             )
             structured_findings = None
@@ -1661,7 +1746,12 @@ async def _dispatch_phase_handler(
                 status="skipped: no actionable hypotheses",
             )
             await _record_event(
-                session, tenant_id, scan_id, "progress", phase_str, progress,
+                session,
+                tenant_id,
+                scan_id,
+                "progress",
+                phase_str,
+                progress,
                 message="Exploitation skipped: no actionable hypotheses",
                 data={"status": "skipped_no_actionable_hypotheses"},
             )
@@ -1687,7 +1777,12 @@ async def _dispatch_phase_handler(
                 scan_options=options,
             )
         await _record_event(
-            session, tenant_id, scan_id, "tool_run", phase_str, progress,
+            session,
+            tenant_id,
+            scan_id,
+            "tool_run",
+            phase_str,
+            progress,
             message=f"Running {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
             data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
         )
@@ -1697,14 +1792,17 @@ async def _dispatch_phase_handler(
         _ewp = None
         if options and options.get("ephemeral_workers"):
             try:
-                _ewp = EphemeralWorkerPool(max_containers=options.get("max_ephemeral_containers", 5))
+                _ewp = EphemeralWorkerPool(
+                    max_containers=options.get("max_ephemeral_containers", 5)
+                )
                 logger.info(
                     "ephemeral_worker_pool_active",
                     extra={"scan_id": scan_id, "max": _ewp._max_containers},
                 )
             except Exception as _ewp_exc:
                 logger.warning(
-                    "ephemeral_worker_pool_init_failed: %s", _ewp_exc,
+                    "ephemeral_worker_pool_init_failed: %s",
+                    _ewp_exc,
                     extra={"scan_id": scan_id},
                 )
 
@@ -1736,7 +1834,10 @@ async def _dispatch_phase_handler(
             )
 
         attempt_out = await run_exploit_attempt(
-            _exploitation_findings, scan_id=scan_id, target=target, tenant_id=tenant_id,
+            _exploitation_findings,
+            scan_id=scan_id,
+            target=target,
+            tenant_id=tenant_id,
             auth_config=_auth_config_dict,
             execution_mode=extract_execution_mode(
                 options if isinstance(options, dict) else None
@@ -1744,12 +1845,22 @@ async def _dispatch_phase_handler(
             scan_options=options if isinstance(options, dict) else None,
         )
         await _record_event(
-            session, tenant_id, scan_id, "progress", phase_str, progress,
+            session,
+            tenant_id,
+            scan_id,
+            "progress",
+            phase_str,
+            progress,
             message=f"Completed {ExploitationSubPhase.EXPLOIT_ATTEMPT.value}",
             data={"tool": ExploitationSubPhase.EXPLOIT_ATTEMPT.value},
         )
         await _record_event(
-            session, tenant_id, scan_id, "tool_run", phase_str, progress,
+            session,
+            tenant_id,
+            scan_id,
+            "tool_run",
+            phase_str,
+            progress,
             message=f"Running {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
             data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
         )
@@ -1759,11 +1870,13 @@ async def _dispatch_phase_handler(
 
         try:
             _microvm = ExploitVerificationMicroVM()
-            for _cand in (exploit_out.exploits or []):
+            for _cand in exploit_out.exploits or []:
                 if str(_cand.get("severity", "")).lower() in ("critical", "high"):
                     try:
                         _vr = VerificationRequest(
-                            exploit_payload=str(_cand.get("poc_curl", _cand.get("exploit_payload", ""))),
+                            exploit_payload=str(
+                                _cand.get("poc_curl", _cand.get("exploit_payload", ""))
+                            ),
                             exploit_type=str(_cand.get("vuln_type", "general")),
                             finding_id=str(_cand.get("finding_id", "")),
                             scan_id=scan_id,
@@ -1793,22 +1906,35 @@ async def _dispatch_phase_handler(
                         if _container_id:
                             logger.info(
                                 "ephemeral_worker_acquired",
-                                extra={"scan_id": scan_id, "container": _container_id, "finding": str(_ecand.get("finding_id", ""))},
+                                extra={
+                                    "scan_id": scan_id,
+                                    "container": _container_id,
+                                    "finding": str(_ecand.get("finding_id", "")),
+                                },
                             )
                             try:
-                                _artifacts = await _ewp.collect_artifacts(_container_id, scan_id, "exploit_verify", str(_ecand.get("finding_id", "")))
+                                _artifacts = await _ewp.collect_artifacts(
+                                    _container_id,
+                                    scan_id,
+                                    "exploit_verify",
+                                    str(_ecand.get("finding_id", "")),
+                                )
                                 if _artifacts:
                                     _ecand["ephemeral_artifacts"] = _artifacts
                             except Exception as _ewp_coll_exc:
                                 logger.warning(
                                     "ephemeral_collect_artifacts_failed",
-                                    extra={"scan_id": scan_id, "error": str(_ewp_coll_exc)},
+                                    extra={
+                                        "scan_id": scan_id,
+                                        "error": str(_ewp_coll_exc),
+                                    },
                                 )
                             finally:
                                 await _ewp.release(_container_id)
             except Exception as _ewp_dispatch_exc:
                 logger.warning(
-                    "ephemeral_worker_dispatch_failed: %s", _ewp_dispatch_exc,
+                    "ephemeral_worker_dispatch_failed: %s",
+                    _ewp_dispatch_exc,
                     extra={"scan_id": scan_id},
                 )
             try:
@@ -1819,17 +1945,25 @@ async def _dispatch_phase_handler(
                 )
             except Exception as _ewp_clean_exc:
                 logger.warning(
-                    "ephemeral_cleanup_failed: %s", _ewp_clean_exc,
+                    "ephemeral_cleanup_failed: %s",
+                    _ewp_clean_exc,
                     extra={"scan_id": scan_id},
                 )
 
         try:
-            _wm_secret = options.get("watermark_secret", "argus-default-wm-key") if options else "argus-default-wm-key"
-            for _exploit in (exploit_out.exploits or []):
+            _wm_secret = (
+                options.get("watermark_secret", "argus-default-wm-key")
+                if options
+                else "argus-default-wm-key"
+            )
+            for _exploit in exploit_out.exploits or []:
                 _poc = _exploit.get("poc_curl", _exploit.get("poc", ""))
                 if _poc and not _poc.startswith("# ARGUS-WM"):
                     _exploit["poc_curl"] = stamp_payload(
-                        _poc, scan_id=scan_id, tenant_id=tenant_id, secret_key=_wm_secret
+                        _poc,
+                        scan_id=scan_id,
+                        tenant_id=tenant_id,
+                        secret_key=_wm_secret,
                     )
         except Exception as _wm_exc:
             logger.warning(
@@ -1838,7 +1972,12 @@ async def _dispatch_phase_handler(
             )
 
         await _record_event(
-            session, tenant_id, scan_id, "progress", phase_str, progress,
+            session,
+            tenant_id,
+            scan_id,
+            "progress",
+            phase_str,
+            progress,
             message=f"Completed {ExploitationSubPhase.EXPLOIT_VERIFY.value}",
             data={"tool": ExploitationSubPhase.EXPLOIT_VERIFY.value},
         )
@@ -1921,14 +2060,18 @@ async def _finalize_scan(
         try:
             for _f in (ctx.vuln_out.findings or []) if ctx.vuln_out else []:
                 _eid = f"ep-{scan_id}-{_f.get('finding_id', _f.get('id', ''))}"
-                episodic_memory.store(EpisodicEntry(
-                    entry_id=_eid, scan_id=scan_id, tenant_id=tenant_id,
-                    finding_type=str(_f.get("vuln_type", _f.get("type", ""))),
-                    cwe=str(_f.get("cwe", _f.get("cwe_id", ""))),
-                    title=str(_f.get("title", _f.get("name", ""))),
-                    description=str(_f.get("description", "")),
-                    framework="",
-                ))
+                episodic_memory.store(
+                    EpisodicEntry(
+                        entry_id=_eid,
+                        scan_id=scan_id,
+                        tenant_id=tenant_id,
+                        finding_type=str(_f.get("vuln_type", _f.get("type", ""))),
+                        cwe=str(_f.get("cwe", _f.get("cwe_id", ""))),
+                        title=str(_f.get("title", _f.get("name", ""))),
+                        description=str(_f.get("description", "")),
+                        framework="",
+                    )
+                )
         except Exception as _em_store_exc:
             logger.warning(
                 "episodic_memory_store_failed",
@@ -1948,7 +2091,13 @@ async def _finalize_scan(
 
     try:
         _rv_tracker = ReVerificationTracker()
-        if options and options.get("auto_reverify") and ctx.exploit_out and (ctx.exploit_out.exploits or []):
+        if (
+            options
+            and options.get("auto_reverify")
+            and ctx.exploit_out
+            and (ctx.exploit_out.exploits or [])
+        ):
+
             async def _scanner_func(req):
                 try:
                     poc_data = {
@@ -1991,7 +2140,10 @@ async def _finalize_scan(
                             _rv_exp["re_verified_fixed"] = True
                             logger.info(
                                 "re_verification_fixed",
-                                extra={"scan_id": scan_id, "finding_id": _rv_req.finding_id},
+                                extra={
+                                    "scan_id": scan_id,
+                                    "finding_id": _rv_req.finding_id,
+                                },
                             )
                     except Exception as _rv_cand_exc:
                         logger.warning(
@@ -2014,7 +2166,11 @@ async def _finalize_scan(
                 }
                 if tenant_id and scan_id:
                     _rv_sink = RawPhaseSink(tenant_id, scan_id, "re_verification")
-                    await asyncio.to_thread(_rv_sink.upload_text, "re_verification_history", json.dumps(_rv_data, default=str))
+                    await asyncio.to_thread(
+                        _rv_sink.upload_text,
+                        "re_verification_history",
+                        json.dumps(_rv_data, default=str),
+                    )
             except Exception as _rv_persist_exc:
                 logger.warning(
                     "re_verification_persist_failed",
@@ -2052,7 +2208,10 @@ async def _finalize_scan(
             else:
                 logger.info(
                     "self_pentest_clean",
-                    extra={"scan_id": scan_id, "targets_scanned": _sp_result.targets_scanned},
+                    extra={
+                        "scan_id": scan_id,
+                        "targets_scanned": _sp_result.targets_scanned,
+                    },
                 )
         except Exception as _sp_exc:
             logger.warning(
@@ -2124,9 +2283,22 @@ async def _finalize_scan(
             extra={"scan_id": scan_id, "error": str(_unreg_exc)},
         )
 
+    try:
+        unregister_scan_ledger(scan_id)
+    except Exception as _unreg_led_exc:
+        logger.warning(
+            "unregister_scan_ledger_failed",
+            extra={"scan_id": scan_id, "error": str(_unreg_led_exc)},
+        )
+
     await _persist_report_and_findings(
-        session, tenant_id, scan_id, target,
-        ctx.report_out, ctx.vuln_out, ctx.recon_out,
+        session,
+        tenant_id,
+        scan_id,
+        target,
+        ctx.report_out,
+        ctx.vuln_out,
+        ctx.recon_out,
     )
     # Commit Report + Findings + Events FIRST so they are durable independent of
     # the (best-effort) evidence artifacts and the post-scan report bundle. This
@@ -2139,19 +2311,20 @@ async def _finalize_scan(
 
     # Notification dispatch
     try:
-        findings_for_notify = list(ctx.vuln_out.findings) if ctx.vuln_out and ctx.vuln_out.findings else []
+        findings_for_notify = (
+            list(ctx.vuln_out.findings) if ctx.vuln_out and ctx.vuln_out.findings else []
+        )
         _top_sev = "info"
         for _f in findings_for_notify:
             _s = str(_f.get("severity", "")).lower()
-            if _s in ("critical", "high", "medium", "low", "info"):
-                if (
-                    (_s == "critical")
-                    or (_s == "high" and _top_sev != "critical")
-                    or (_s == "medium" and _top_sev not in ("critical", "high"))
-                    or (_s == "low" and _top_sev not in ("critical", "high", "medium"))
-                    or (_s == "info" and _top_sev not in ("critical", "high", "medium", "low"))
-                ):
-                    _top_sev = _s
+            if _s in ("critical", "high", "medium", "low", "info") and (
+                (_s == "critical")
+                or (_s == "high" and _top_sev != "critical")
+                or (_s == "medium" and _top_sev not in ("critical", "high"))
+                or (_s == "low" and _top_sev not in ("critical", "high", "medium"))
+                or (_s == "info" and _top_sev not in ("critical", "high", "medium", "low"))
+            ):
+                _top_sev = _s
         _sev_map = {
             "critical": NotificationSeverity.CRITICAL,
             "high": NotificationSeverity.HIGH,
@@ -2167,7 +2340,10 @@ async def _finalize_scan(
             severity=_sev_map.get(_top_sev, NotificationSeverity.INFO),
             title=f"Scan completed for {target}",
             message=f"Scan {scan_id} completed. Top severity: {_top_sev}. Findings: {len(findings_for_notify)}.",
-            metadata={"findings_count": len(findings_for_notify), "top_severity": _top_sev},
+            metadata={
+                "findings_count": len(findings_for_notify),
+                "top_severity": _top_sev,
+            },
         )
         _notify_dispatcher = NotificationDispatcher(
             adapters=[DiscordNotifier(), GitHubIssuesNotifier()],
@@ -2184,9 +2360,7 @@ async def _finalize_scan(
     # (fire-and-forget; gated on RESEND_API_KEY, never breaks completion).
     try:
         _recipient = (
-            await session.execute(
-                select(Scan.email).where(cast(Scan.id, String) == scan_id)
-            )
+            await session.execute(select(Scan.email).where(cast(Scan.id, String) == scan_id))
         ).scalar_one_or_none()
         if _recipient:
             await notify_report_ready(to_email=_recipient, target=target, scan_id=scan_id)
@@ -2198,7 +2372,12 @@ async def _finalize_scan(
 
     await _update_scan_phase_status(session, scan_id, "complete", "completed", 100)
     await _record_event(
-        session, tenant_id, scan_id, "complete", "complete", 100,
+        session,
+        tenant_id,
+        scan_id,
+        "complete",
+        "complete",
+        100,
         message="Scan completed",
     )
     post_scan_bundle = await enqueue_generate_all_bundle(
@@ -2243,9 +2422,7 @@ async def run_scan_state_machine(
     resume_plan, ctx = await _detect_resume_plan(session, scan_id, options, target)
 
     # 3. Start heartbeat
-    heartbeat_task = asyncio.create_task(
-        _heartbeat_loop(session, scan_id, _SCAN_HEARTBEAT_SEC)
-    )
+    heartbeat_task = asyncio.create_task(_heartbeat_loop(session, scan_id, _SCAN_HEARTBEAT_SEC))
 
     cost_tracker = subsystems.get("cost_tracker")
     evidence_chain = subsystems.get("evidence_chain")
@@ -2315,15 +2492,25 @@ async def run_scan_state_machine(
                 _budget_enforcer = BudgetEnforcer(cost_tracker)
                 _budget_enforcer.check()
             except Exception as _budget_exc:
-                if "BudgetExceeded" in type(_budget_exc).__name__ or "BudgetExceeded" in str(type(_budget_exc)):
+                if "BudgetExceeded" in type(_budget_exc).__name__ or "BudgetExceeded" in str(
+                    type(_budget_exc)
+                ):
                     logger.warning(
                         "scan_budget_exceeded",
-                        extra={"scan_id": scan_id, "phase": phase.value, "cost_usd": cost_tracker.total_cost_usd},
+                        extra={
+                            "scan_id": scan_id,
+                            "phase": phase.value,
+                            "cost_usd": cost_tracker.total_cost_usd,
+                        },
                     )
                     break
                 logger.warning(
                     "budget_check_non_fatal",
-                    extra={"scan_id": scan_id, "phase": phase.value, "error": str(_budget_exc)},
+                    extra={
+                        "scan_id": scan_id,
+                        "phase": phase.value,
+                        "error": str(_budget_exc),
+                    },
                 )
 
         progress = _phase_to_progress(phase)
@@ -2338,14 +2525,23 @@ async def run_scan_state_machine(
             except Exception as _ac_exc:
                 logger.warning(
                     "auth_config_load_failed",
-                    extra={"scan_id": scan_id, "phase": phase_str, "error": str(_ac_exc)},
+                    extra={
+                        "scan_id": scan_id,
+                        "phase": phase_str,
+                        "error": str(_ac_exc),
+                    },
                 )
 
         scope_context: dict[str, Any] | None = None
         if options and phase in (
-            ScanPhase.SOURCE_ANALYSIS, ScanPhase.RECON, ScanPhase.QUICK_FUZZ,
-            ScanPhase.THREAT_MODELING, ScanPhase.VULN_ANALYSIS, ScanPhase.EXPLOITATION,
-            ScanPhase.POST_EXPLOITATION, ScanPhase.REPORTING,
+            ScanPhase.SOURCE_ANALYSIS,
+            ScanPhase.RECON,
+            ScanPhase.QUICK_FUZZ,
+            ScanPhase.THREAT_MODELING,
+            ScanPhase.VULN_ANALYSIS,
+            ScanPhase.EXPLOITATION,
+            ScanPhase.POST_EXPLOITATION,
+            ScanPhase.REPORTING,
         ):
             try:
                 if auth_config_obj is not None:
@@ -2392,7 +2588,12 @@ async def run_scan_state_machine(
         if exec_preflight.deny_code and not exec_preflight.lab_lease_active:
             await _update_scan_phase_status(session, scan_id, phase_str, "failed", progress)
             await _record_event(
-                session, tenant_id, scan_id, "progress", phase_str, progress,
+                session,
+                tenant_id,
+                scan_id,
+                "progress",
+                phase_str,
+                progress,
                 message="LAB mode requires a usable execution lease",
                 data={
                     "code": "lab_lease_required",
@@ -2401,14 +2602,13 @@ async def run_scan_state_machine(
                 },
             )
             await session.commit()
-            raise LabLeaseRequiredError(
-                exec_preflight.reason or "lab_lease_required"
-            )
+            raise LabLeaseRequiredError(exec_preflight.reason or "lab_lease_required")
 
         # Inject dynamic auth_config & scope_context into input_data
-        if auth_config_obj:
-            if phase == ScanPhase.EXPLOITATION:
-                input_data["auth_config"] = auth_config_obj.model_dump() if hasattr(auth_config_obj, "model_dump") else None
+        if auth_config_obj and phase == ScanPhase.EXPLOITATION:
+            input_data["auth_config"] = (
+                auth_config_obj.model_dump() if hasattr(auth_config_obj, "model_dump") else None
+            )
         if phase == ScanPhase.REPORTING:
             input_data["scope_config"] = scope_context
 
@@ -2418,9 +2618,16 @@ async def run_scan_state_machine(
                 session, tenant_id, scan_id, options
             )
             if needs_approval:
-                await _update_scan_phase_status(session, scan_id, phase_str, "awaiting_approval", progress)
+                await _update_scan_phase_status(
+                    session, scan_id, phase_str, "awaiting_approval", progress
+                )
                 await _record_event(
-                    session, tenant_id, scan_id, "progress", phase_str, progress,
+                    session,
+                    tenant_id,
+                    scan_id,
+                    "progress",
+                    phase_str,
+                    progress,
                     message="Exploitation requires approval",
                     data={"code": "approval_required"},
                 )
@@ -2485,19 +2692,45 @@ async def run_scan_state_machine(
             except Exception as _ec_link_exc:
                 logger.warning(
                     "evidence_chain_link_failed",
-                    extra={"scan_id": scan_id, "phase": phase_str, "error": str(_ec_link_exc)},
+                    extra={
+                        "scan_id": scan_id,
+                        "phase": phase_str,
+                        "error": str(_ec_link_exc),
+                    },
                 )
 
         await _persist_phase_output(session, tenant_id, scan_id, phase_str, output_data)
-        if phase in (ScanPhase.RECON, ScanPhase.QUICK_FUZZ, ScanPhase.VULN_ANALYSIS, ScanPhase.POST_EXPLOITATION):
-            await _upload_raw_phase_snapshot(tenant_id, scan_id, phase_str, "phase_output_final", output_data)
+        if phase in (
+            ScanPhase.RECON,
+            ScanPhase.QUICK_FUZZ,
+            ScanPhase.VULN_ANALYSIS,
+            ScanPhase.POST_EXPLOITATION,
+        ):
             await _upload_raw_phase_snapshot(
-                tenant_id, scan_id, phase_str, "phase_execution_summary",
-                {"phase": phase_str, "order_index": order_index, "duration_seconds": round(phase_duration, 2)},
+                tenant_id, scan_id, phase_str, "phase_output_final", output_data
+            )
+            await _upload_raw_phase_snapshot(
+                tenant_id,
+                scan_id,
+                phase_str,
+                "phase_execution_summary",
+                {
+                    "phase": phase_str,
+                    "order_index": order_index,
+                    "duration_seconds": round(phase_duration, 2),
+                },
             )
         await _record_timeline_entry(
-            session, tenant_id, scan_id, phase_str, order_index,
-            {"phase": phase_str, "output": output_data, "duration_seconds": round(phase_duration, 2)},
+            session,
+            tenant_id,
+            scan_id,
+            phase_str,
+            order_index,
+            {
+                "phase": phase_str,
+                "output": output_data,
+                "duration_seconds": round(phase_duration, 2),
+            },
         )
         # Adaptive-driver seam (overhaul §6): flag-gated, append-only, tool-free.
         # Off by default -> no-op. On -> record one extra AssetGraph coverage entry
@@ -2507,11 +2740,22 @@ async def run_scan_state_machine(
         )
         if _adaptive_cov is not None:
             await _record_timeline_entry(
-                session, tenant_id, scan_id, phase_str, order_index, _adaptive_cov,
+                session,
+                tenant_id,
+                scan_id,
+                phase_str,
+                order_index,
+                _adaptive_cov,
             )
         await _record_event(
-            session, tenant_id, scan_id, "phase_complete", phase_str, progress,
-            message=f"Completed {phase_str}", data=output_data,
+            session,
+            tenant_id,
+            scan_id,
+            "phase_complete",
+            phase_str,
+            progress,
+            message=f"Completed {phase_str}",
+            data=output_data,
         )
         logger.info(
             "Phase completed",
@@ -2523,9 +2767,7 @@ async def run_scan_state_machine(
             },
         )
         await session.execute(
-            update(ScanStep)
-            .where(cast(ScanStep.id, String) == step.id)
-            .values(status="completed")
+            update(ScanStep).where(cast(ScanStep.id, String) == step.id).values(status="completed")
         )
         await session.commit()
 

@@ -16,8 +16,13 @@ async def capture_logs(container_id: str, lines: int = 200) -> list[str]:
     """Capture recent container logs."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "logs", "--tail", str(lines), container_id,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "docker",
+            "logs",
+            "--tail",
+            str(lines),
+            container_id,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10)
         logs = []
@@ -76,9 +81,8 @@ def sign_evidence(evidence: dict[str, Any], signing_key: str = "") -> dict[str, 
     content = json.dumps(evidence, sort_keys=True, default=str)
     if signing_key:
         import hmac
-        signature = hmac.new(
-            signing_key.encode(), content.encode(), hashlib.sha256
-        ).hexdigest()
+
+        signature = hmac.new(signing_key.encode(), content.encode(), hashlib.sha256).hexdigest()
     else:
         signature = hashlib.sha256(content.encode()).hexdigest()
 

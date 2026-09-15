@@ -64,7 +64,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.adapter_base import ParseStrategy
 from src.sandbox.parsers import (
@@ -162,7 +161,6 @@ from src.sandbox.parsers.webanalyze_parser import (
 from src.sandbox.parsers.whatweb_parser import (
     EVIDENCE_SIDECAR_NAME as WHATWEB_SIDECAR,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -565,9 +563,7 @@ def _make_payload(tool_id: str) -> bytes:
         return (
             b"INFO - 0 14:36:05 ssh_login - Trying...\n"
             b"INFO - 0 14:36:08 ssh_login - 0 1.234 | "
-            b"host=10.0.0.1:22:user=root:pass="
-            + _PASSWORD_BAIT.encode("ascii")
-            + b" [Found]\n"
+            b"host=10.0.0.1:22:user=root:pass=" + _PASSWORD_BAIT.encode("ascii") + b" [Found]\n"
         )
     if tool_id == "ncrack":
         return (
@@ -596,9 +592,7 @@ def _make_payload(tool_id: str) -> bytes:
         )
     if tool_id == "hashcat":
         return (
-            b"5f4dcc3b5aa765d61d8327deb882cf99:"
-            + _PASSWORD_BAIT.encode("ascii")
-            + b"\n"
+            b"5f4dcc3b5aa765d61d8327deb882cf99:" + _PASSWORD_BAIT.encode("ascii") + b"\n"
             b"$2a$12$abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQR:bcryptpwd\n"
         )
     if tool_id == "ntlmrelayx":
@@ -654,9 +648,7 @@ def _make_payload(tool_id: str) -> bytes:
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -760,9 +752,7 @@ def test_dispatch_writes_per_tool_sidecar(tool_id: str, tmp_path: Path) -> None:
     )
     assert findings
     sidecar = artifacts_dir / ARG032_TOOL_SIDECARS[tool_id]
-    assert sidecar.is_file(), (
-        f"{tool_id}: parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert parsed, f"{tool_id}: sidecar is empty"
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -828,9 +818,7 @@ _BROWSER_HAR_TOOLS: Final[tuple[str, ...]] = (
 
 
 @pytest.mark.parametrize("tool_id", _BROWSER_HAR_TOOLS)
-def test_browser_har_strips_cookie_and_auth_headers(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_browser_har_strips_cookie_and_auth_headers(tool_id: str, tmp_path: Path) -> None:
     """Browser parsers MUST scrub Cookie / Set-Cookie / Authorization in HAR.
 
     The C12 bait blob (``session=ABC-COOKIE-BAIT-...``) and the bearer
@@ -856,12 +844,10 @@ def test_browser_har_strips_cookie_and_auth_headers(
         f"{tool_id}: HAR Cookie bait LEAKED into sidecar — browser redaction broken"
     )
     assert _HAR_AUTH_BAIT not in text, (
-        f"{tool_id}: HAR Authorization bait LEAKED into sidecar — "
-        "browser redaction broken"
+        f"{tool_id}: HAR Authorization bait LEAKED into sidecar — browser redaction broken"
     )
     assert _PASSWORD_BAIT not in text, (
-        f"{tool_id}: URL-embedded password LEAKED into sidecar — "
-        "browser redaction broken"
+        f"{tool_id}: URL-embedded password LEAKED into sidecar — browser redaction broken"
     )
 
 
@@ -933,9 +919,7 @@ _PASSWORD_PARSERS: Final[tuple[str, ...]] = (
 
 
 @pytest.mark.parametrize("tool_id", _PASSWORD_PARSERS)
-def test_credential_parsers_redact_cleartext_password(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_credential_parsers_redact_cleartext_password(tool_id: str, tmp_path: Path) -> None:
     """Hydra/Medusa/Patator/Ncrack/Crackmapexec MUST mask cleartext passwords.
 
     The bait password (``hunter2-PASSWORD-BAIT``) must be replaced by
@@ -998,8 +982,7 @@ def test_ntlm_hash_redaction(tool_id: str, tmp_path: Path) -> None:
     sidecar = artifacts_dir / ARG032_TOOL_SIDECARS[tool_id]
     text = sidecar.read_text(encoding="utf-8")
     assert _NTLM_HASH_FINGERPRINT_BAIT not in text, (
-        f"{tool_id}: NTLM hash bytes LEAKED into sidecar — "
-        "redact_hash_string gate broken"
+        f"{tool_id}: NTLM hash bytes LEAKED into sidecar — redact_hash_string gate broken"
     )
 
 
@@ -1071,9 +1054,7 @@ def test_subdomain_parsers_drop_noise_lines(tool_id: str, tmp_path: Path) -> Non
     sidecar = artifacts_dir / ARG032_TOOL_SIDECARS[tool_id]
     text = sidecar.read_text(encoding="utf-8")
     assert "valid.example.com" in text
-    assert "NOT VALID" not in text, (
-        f"{tool_id}: noise line LEAKED through hostname validator"
-    )
+    assert "NOT VALID" not in text, f"{tool_id}: noise line LEAKED through hostname validator"
 
 
 # ---------------------------------------------------------------------------
@@ -1115,9 +1096,7 @@ def test_all_arg032_parsers_in_single_artifacts_dir_keeps_sidecars_intact(
 
     for tool_id, sidecar_name in ARG032_TOOL_SIDECARS.items():
         sidecar = tmp_path / sidecar_name
-        assert sidecar.is_file(), (
-            f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
-        )
+        assert sidecar.is_file(), f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
         records = _read_sidecar(sidecar)
         assert records, f"{tool_id}: sidecar {sidecar_name} is empty"
         assert all(r["tool_id"] == tool_id for r in records), (

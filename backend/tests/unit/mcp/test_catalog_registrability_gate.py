@@ -9,11 +9,10 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-but-required-by-settings")
 os.environ.setdefault("ARGUS_TEST_MODE", "1")
 
-import pytest  # noqa: E402
-
-from src.core.config import settings  # noqa: E402
-from src.mcp.schemas.tool_run import ToolRiskLevel  # noqa: E402
-from src.mcp.services import tool_service  # noqa: E402
+import pytest
+from src.core.config import settings
+from src.mcp.schemas.tool_run import ToolRiskLevel
+from src.mcp.services import tool_service
 
 
 @dataclass
@@ -50,11 +49,11 @@ _DESCRIPTORS = [
 @pytest.fixture(autouse=True)
 def _inject_registry(monkeypatch):
     tool_service.reset_registry_for_tests(FakeRegistry(_DESCRIPTORS))
+    monkeypatch.setattr(tool_service, "get_registered_tool_parsers", lambda: frozenset({"nuclei"}))
     monkeypatch.setattr(
-        tool_service, "get_registered_tool_parsers", lambda: frozenset({"nuclei"})
-    )
-    monkeypatch.setattr(
-        tool_service, "load_known_executables", lambda: frozenset({"nuclei", "skipfish"})
+        tool_service,
+        "load_known_executables",
+        lambda: frozenset({"nuclei", "skipfish"}),
     )
     yield
     tool_service.reset_registry_for_tests(None)

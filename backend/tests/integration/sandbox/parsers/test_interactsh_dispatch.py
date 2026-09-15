@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -51,7 +50,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.interactsh_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -101,8 +99,7 @@ def _http_record(
         "remote-address": remote_address,
         "timestamp": timestamp,
         "raw-request": (
-            "GET /tok HTTP/1.1\r\nHost: oast.argus.local\r\n"
-            "User-Agent: curl/8.0\r\n\r\n"
+            "GET /tok HTTP/1.1\r\nHost: oast.argus.local\r\nUser-Agent: curl/8.0\r\n\r\n"
         ),
         "raw-response": "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n",
     }
@@ -153,9 +150,7 @@ def test_default_per_tool_registry_includes_all_oast_jsonl_tools() -> None:
 
 
 @pytest.mark.parametrize("tool_id", OAST_JSONL_TOOL_IDS)
-def test_dispatch_routes_each_oast_tool_to_interactsh_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_oast_tool_to_interactsh_parser(tool_id: str, tmp_path: Path) -> None:
     """Both §4.11 JSONL tool_ids dispatch via JSON_LINES and produce findings."""
     findings = dispatch_parse(
         ParseStrategy.JSON_LINES,
@@ -172,9 +167,7 @@ def test_dispatch_routes_each_oast_tool_to_interactsh_parser(
 
 
 @pytest.mark.parametrize("tool_id", OAST_JSONL_TOOL_IDS)
-def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_writes_shared_sidecar_with_correct_tool_id(tool_id: str, tmp_path: Path) -> None:
     """Each OAST dispatch emits a per-finding sidecar tagged with the tool_id."""
     artifacts_dir = tmp_path / tool_id
     findings = dispatch_parse(
@@ -263,8 +256,7 @@ def test_non_jsonl_oast_tools_have_no_json_lines_parser(
         )
 
     assert len(findings) == 1, (
-        f"{tool_id}: expected one heartbeat via JSON_LINES misroute, "
-        f"got {len(findings)} findings"
+        f"{tool_id}: expected one heartbeat via JSON_LINES misroute, got {len(findings)} findings"
     )
     heartbeat = findings[0]
     assert heartbeat.category is FindingCategory.INFO
@@ -303,8 +295,7 @@ def test_dispatch_is_failsoft_on_malformed_jsonl(
 
     assert len(findings) == 1
     assert any(
-        getattr(record, "event", "") == "parsers_jsonl_malformed"
-        for record in caplog.records
+        getattr(record, "event", "") == "parsers_jsonl_malformed" for record in caplog.records
     ), "missing parsers.jsonl.malformed warning"
 
 
@@ -363,9 +354,7 @@ def test_each_oast_tool_writes_to_its_own_artifacts_dir(tmp_path: Path) -> None:
         tool_id="oastify_client",
     )
 
-    interactsh_sidecar = (interactsh_dir / EVIDENCE_SIDECAR_NAME).read_text(
-        encoding="utf-8"
-    )
+    interactsh_sidecar = (interactsh_dir / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     oastify_sidecar = (oastify_dir / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
 
     assert json.loads(interactsh_sidecar.strip())["tool_id"] == "interactsh_client"

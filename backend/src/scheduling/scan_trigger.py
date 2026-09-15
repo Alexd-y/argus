@@ -139,9 +139,7 @@ def _compute_next_run_at(cron_expression: str, *, after: datetime) -> datetime |
 # ---------------------------------------------------------------------------
 
 
-async def _load_schedule(
-    session: AsyncSession, schedule_id: str
-) -> ScanSchedule | None:
+async def _load_schedule(session: AsyncSession, schedule_id: str) -> ScanSchedule | None:
     """Fetch the schedule row by id; ``None`` when missing."""
     result = await session.execute(
         select(ScanSchedule).where(cast(ScanSchedule.id, String) == schedule_id)
@@ -156,9 +154,7 @@ async def _ensure_tenant(session: AsyncSession, tenant_id: str) -> None:
     :func:`src.api.routers.scans._persist_scan_start` so scheduled scans
     behave identically to ad-hoc scans on a fresh tenant.
     """
-    result = await session.execute(
-        select(Tenant).where(cast(Tenant.id, String) == tenant_id)
-    )
+    result = await session.execute(select(Tenant).where(cast(Tenant.id, String) == tenant_id))
     if result.scalar_one_or_none() is None:
         session.add(Tenant(id=tenant_id, name="default"))
         await session.flush()
@@ -214,9 +210,7 @@ async def _update_run_timestamps(
     if next_run_at is not None:
         values["next_run_at"] = next_run_at
     await session.execute(
-        update(ScanSchedule)
-        .where(cast(ScanSchedule.id, String) == schedule_id)
-        .values(**values)
+        update(ScanSchedule).where(cast(ScanSchedule.id, String) == schedule_id).values(**values)
     )
 
 
@@ -360,9 +354,7 @@ async def _run_scheduled_scan_async(
                 schedule_id=schedule_id,
                 reason="kill_switch_blocked",
                 extra={
-                    "verdict_scope": (
-                        verdict.scope.value if verdict.scope else None
-                    ),
+                    "verdict_scope": (verdict.scope.value if verdict.scope else None),
                     "verdict_reason": verdict.reason,
                 },
             )
@@ -426,9 +418,7 @@ async def _run_scheduled_scan_async(
                             schedule_id=schedule_id,
                             reason="in_maintenance_window",
                             extra={
-                                "maintenance_window_cron": (
-                                    schedule.maintenance_window_cron
-                                ),
+                                "maintenance_window_cron": (schedule.maintenance_window_cron),
                             },
                         )
                     )
@@ -467,7 +457,6 @@ async def _run_scheduled_scan_async(
             )
             await session.commit()
 
-            target_url = schedule.target_url
             captured_tenant_id = schedule.tenant_id
     finally:
         await engine.dispose()

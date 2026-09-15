@@ -7,6 +7,7 @@ from bundle or task metadata.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -199,7 +200,10 @@ def parse_entry_points_to_stage3(
                     )
                 )
             except Exception as ex:
-                logger.debug("Skip invalid bundle entry point", extra={"idx": i, "error": str(ex)})
+                logger.debug(
+                    "Skip invalid bundle entry point",
+                    extra={"idx": i, "error": str(ex)},
+                )
         if not result and bundle.endpoint_inventory:
             for i, row in enumerate(bundle.endpoint_inventory[:50]):
                 url = row.get("url") or row.get("path") or str(i)
@@ -335,7 +339,7 @@ def parse_priority_hypotheses(
             desc = s.get("description") or s.get("title") or ""
             if not desc:
                 continue
-            try:
+            with contextlib.suppress(Exception):
                 hypotheses.append(
                     PriorityHypothesis(
                         id=f"ph_ts_{i}",
@@ -346,8 +350,6 @@ def parse_priority_hypotheses(
                         source_artifact="ai_tm_threat_scenarios",
                     )
                 )
-            except Exception:
-                pass
 
     return AiTmPriorityHypotheses(hypotheses=hypotheses)
 

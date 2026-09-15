@@ -25,9 +25,17 @@ def test_empty_scan_all_not_assessed():
 
 def test_weak_domain_high_coverage_low_pass_rate():
     findings = [
-        {"title": "TLS configuration weakness", "source_tool": "testssl", "severity": "medium"},
+        {
+            "title": "TLS configuration weakness",
+            "source_tool": "testssl",
+            "severity": "medium",
+        },
         {"title": "Incomplete security HTTP headers", "severity": "low"},
-        {"title": "SPF record missing", "source_tool": "dns_recon", "severity": "medium"},
+        {
+            "title": "SPF record missing",
+            "source_tool": "dns_recon",
+            "severity": "medium",
+        },
     ]
     recon = {"ports": [443], "subdomains": ["www.alleksy.com"]}
     r = evaluate_baseline(findings, recon)
@@ -35,9 +43,9 @@ def test_weak_domain_high_coverage_low_pass_rate():
     # All five executed (tls via 443/finding, open_ports via 443, dns via subs,
     # mail via SPF finding, headers via finding).
     assert r["executed"] == 5
-    assert controls["tls"]["status"] == "fail"           # medium weakness
-    assert controls["open_ports"]["status"] == "pass"    # 443 enumerated
-    assert controls["dns"]["status"] == "pass"           # no high DNS issue
+    assert controls["tls"]["status"] == "fail"  # medium weakness
+    assert controls["open_ports"]["status"] == "pass"  # 443 enumerated
+    assert controls["dns"]["status"] == "pass"  # no high DNS issue
     assert controls["mail_headers"]["status"] == "fail"  # SPF missing
     assert controls["security_headers"]["status"] == "fail"
     assert r["coverage"] == 1.0
@@ -46,7 +54,11 @@ def test_weak_domain_high_coverage_low_pass_rate():
 
 def test_open_axfr_fails_dns_control():
     findings = [
-        {"title": "DNS zone transfer (AXFR) allowed", "source_tool": "dig_axfr", "severity": "high"},
+        {
+            "title": "DNS zone transfer (AXFR) allowed",
+            "source_tool": "dig_axfr",
+            "severity": "high",
+        },
     ]
     r = evaluate_baseline(findings, {"ports": [53]})
     assert _by_id(r)["dns"]["status"] == "fail"

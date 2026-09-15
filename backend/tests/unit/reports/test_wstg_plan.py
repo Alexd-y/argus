@@ -40,7 +40,10 @@ def test_catalog_ids_matches_registry():
 def _states_from_findings(findings, *, scan_id="scan-1", target="https://t.example"):
     """End-to-end helper mirroring the shared assembler (producer → states)."""
     execs = findings_to_executions(
-        findings, scan_id=scan_id, target=target, wstg_ids_for_finding=wstg_ids_for_finding
+        findings,
+        scan_id=scan_id,
+        target=target,
+        wstg_ids_for_finding=wstg_ids_for_finding,
     )
     aggregated = aggregate_executions(execs)
     finding_test_ids = frozenset(
@@ -48,7 +51,7 @@ def _states_from_findings(findings, *, scan_id="scan-1", target="https://t.examp
     )
     decisions = decide_applicability(finding_test_ids=finding_test_ids)
     # In this pure-unit helper the finding IS the evidence (validated upstream).
-    ev = {tid: True for tid in aggregated}
+    ev = dict.fromkeys(aggregated, True)
     return build_wstg_states(
         decisions=decisions, aggregated=aggregated, evidence_validated_by_test=ev
     )

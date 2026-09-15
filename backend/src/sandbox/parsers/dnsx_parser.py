@@ -30,7 +30,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -71,7 +71,7 @@ _RECORD_TYPES: Final[tuple[str, ...]] = (
 )
 
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_dnsx(
@@ -135,9 +135,7 @@ def _normalise(record: dict[str, Any]) -> Iterator[dict[str, object]]:
         return
     host = raw_host.strip().rstrip(".").lower()
     wildcard = bool(record.get("wildcard"))
-    status = (
-        record.get("status_code") if isinstance(record.get("status_code"), str) else ""
-    )
+    status = record.get("status_code") if isinstance(record.get("status_code"), str) else ""
     for record_type in _RECORD_TYPES:
         values = record.get(record_type)
         if not isinstance(values, list) or not values:

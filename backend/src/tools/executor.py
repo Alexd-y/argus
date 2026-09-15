@@ -71,10 +71,7 @@ def _schedule_tool_run_record(
     # On failure the actionable reason lives in ``stderr`` (stdout is typically
     # empty for a crashed/denied tool). Persist stderr into ``output_raw`` so the
     # cause is visible directly in ``tool_runs`` instead of only worker logs.
-    if success:
-        output_raw = stdout
-    else:
-        output_raw = "\n".join(part for part in (stderr, stdout) if part)
+    output_raw = stdout if success else "\n".join(part for part in (stderr, stdout) if part)
     record = {
         "tenant_id": tenant_id,
         "tool_name": tool_name,
@@ -252,7 +249,11 @@ def execute_command(
                 cached["execution_time"] = 0.0
                 logger.debug(
                     "tool_cache_hit",
-                    extra={"event": "argus.tool_cache.hit", "tool": tool_name, "key": key},
+                    extra={
+                        "event": "argus.tool_cache.hit",
+                        "tool": tool_name,
+                        "key": key,
+                    },
                 )
                 return cached
 

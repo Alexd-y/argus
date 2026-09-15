@@ -74,7 +74,6 @@ from __future__ import annotations
 # Mirrors the patterns in tests/celery/test_queue_depth_metrics_updater.py and
 # tests/unit/conftest.py so the settings module loads without a live DB.
 # ---------------------------------------------------------------------------
-
 import os
 
 os.environ.setdefault("DEBUG", "true")
@@ -90,24 +89,22 @@ os.environ.setdefault("ARGUS_TEST_MODE", "1")
 # Layer 2 — module-under-test imports.
 # ---------------------------------------------------------------------------
 
-import json  # noqa: E402
-import shutil  # noqa: E402
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
-from typing import Final  # noqa: E402
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Final
 
-import pytest  # noqa: E402
-import yaml  # noqa: E402
-from prometheus_client import CollectorRegistry  # noqa: E402
-
-from src.core import observability as obs  # noqa: E402
-from src.core.observability import (  # noqa: E402
+import pytest
+import yaml
+from prometheus_client import CollectorRegistry
+from src.core import observability as obs
+from src.core.observability import (
     METRIC_CATALOGUE,
     OTHER_LABEL_VALUE,
     record_finding_emitted,
     reset_metrics_registry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants — single source of truth for the contract surface.
@@ -268,7 +265,7 @@ def test_unknown_kev_listed_value_is_coerced_to_other(
     backstop. If a caller bypasses the recorder, an unknown value becomes the
     ``_other`` sentinel — the HPA slice (``kev_listed="true"``) stays clean."""
     obs._safe_emit_counter(  # type: ignore[attr-defined]  (intentional internal API
-        SOURCE_COUNTER,                               # access — defence-in-depth check)
+        SOURCE_COUNTER,  # access — defence-in-depth check)
         {"tier": "midgard", "severity": "critical", "kev_listed": "yes-please"},
     )
 
@@ -446,7 +443,7 @@ def test_adapter_kev_series_query_filters_on_kev_listed_true() -> None:
     assert isinstance(series_query, str)
     assert SOURCE_COUNTER in series_query
     assert 'kev_listed="true"' in series_query, (
-        f"seriesQuery must pin kev_listed=\"true\": got {series_query!r}"
+        f'seriesQuery must pin kev_listed="true": got {series_query!r}'
     )
 
 
@@ -502,6 +499,4 @@ def test_grafana_dashboards_reference_kev_metric_surface() -> None:
                 matched.add(metric)
 
     missing = referenced_metrics - matched
-    assert not missing, (
-        f"Grafana dashboards do not reference required metrics: {sorted(missing)}"
-    )
+    assert not missing, f"Grafana dashboards do not reference required metrics: {sorted(missing)}"

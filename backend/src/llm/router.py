@@ -34,9 +34,7 @@ async def call_llm(
     last_error: Exception | None = None
     for adapter in adapters:
         try:
-            result = await adapter.call(
-                prompt, system_prompt=system_prompt, model=model
-            )
+            result = await adapter.call(prompt, system_prompt=system_prompt, model=model)
             return result
         except Exception as e:
             last_error = e
@@ -46,8 +44,10 @@ async def call_llm(
             )
             continue
 
-    raise LLMAllProvidersFailedError(
-        f"All LLM providers failed. Last error type: {type(last_error).__name__}"
-    ) if last_error else LLMAllProvidersFailedError(
-        "No LLM provider returned a response"
+    raise (
+        LLMAllProvidersFailedError(
+            f"All LLM providers failed. Last error type: {type(last_error).__name__}"
+        )
+        if last_error
+        else LLMAllProvidersFailedError("No LLM provider returned a response")
     )

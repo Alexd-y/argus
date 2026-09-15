@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from src.execution_mode import (
     ExecutionMode,
     LabBoundaryVerifier,
@@ -276,7 +275,11 @@ def test_vuln_analysis_lab_allow_all_and_outside_boundary_deny():
     )
 
     denied_opts = _attach_phase_execution_mode(
-        {"execution_mode": "lab_unrestricted", "tenant_id": "t-1", "engagement_id": "e-1"},
+        {
+            "execution_mode": "lab_unrestricted",
+            "tenant_id": "t-1",
+            "engagement_id": "e-1",
+        },
         tenant_id="t-1",
         scan_id="s-va-2",
         engagement_id="e-1",
@@ -400,7 +403,7 @@ def test_all_phase_handlers_attach_execution_mode():
         "run_post_exploitation",
         "run_reporting",
     }
-    found: dict[str, bool] = {name: False for name in phase_fns}
+    found: dict[str, bool] = dict.fromkeys(phase_fns, False)
     for node in tree.body:
         if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
             continue

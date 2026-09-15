@@ -348,7 +348,9 @@ def _build_fallback_output(
                     "scenario_id": sid,
                     "title": s.get("title", "Scenario")[:500],
                     "priority": priority,
-                    "recommended_actions": s.get("recommended_next_manual_checks", ["Manual verification"]),
+                    "recommended_actions": s.get(
+                        "recommended_next_manual_checks", ["Manual verification"]
+                    ),
                     **hypothesis,
                 }
             )
@@ -409,13 +411,28 @@ def _build_task_input(
         flows = prior_outputs.get("application_flows", {}).get("flows", [])
 
         def to_asset(a: dict) -> dict:
-            return {"id": a["id"], "name": a["name"], "asset_type": a["asset_type"], "description": a.get("description")}
+            return {
+                "id": a["id"],
+                "name": a["name"],
+                "asset_type": a["asset_type"],
+                "description": a.get("description"),
+            }
 
         def to_boundary(b: dict) -> dict:
-            return {"id": b["id"], "name": b["name"], "description": b.get("description"), "components": b.get("components", [])}
+            return {
+                "id": b["id"],
+                "name": b["name"],
+                "description": b.get("description"),
+                "components": b.get("components", []),
+            }
 
         def to_profile(p: dict) -> dict:
-            return {"id": p["id"], "name": p["name"], "capability_level": p["capability_level"], "description": p.get("description")}
+            return {
+                "id": p["id"],
+                "name": p["name"],
+                "capability_level": p["capability_level"],
+                "description": p.get("description"),
+            }
 
         def to_entry(e: dict) -> dict:
             return {
@@ -481,8 +498,12 @@ def _run_ai_task(
     # Build prompt with bundle context
     bundle_json = json.dumps(bundle.model_dump(mode="json"), indent=2, ensure_ascii=False)[:15000]
     if task_name == "report_summary":
-        full_model_json = json.dumps(input_payload.get("full_model", {}), indent=2, ensure_ascii=False)[:20000]
-        prompt = f"{prompt_template}\n\nFull model data:\n{full_model_json}\n\nOutput valid JSON only."
+        full_model_json = json.dumps(
+            input_payload.get("full_model", {}), indent=2, ensure_ascii=False
+        )[:20000]
+        prompt = (
+            f"{prompt_template}\n\nFull model data:\n{full_model_json}\n\nOutput valid JSON only."
+        )
     else:
         prompt = f"{prompt_template}\n\nRecon bundle (excerpt):\n{bundle_json}\n\nOutput valid JSON only."
 
@@ -500,10 +521,16 @@ def _run_ai_task(
                 if use_fallback_on_llm_error:
                     logger.warning(
                         "LLM output validation failed, using fallback",
-                        extra={"task": task_name, "errors": validation["output"]["errors"]},
+                        extra={
+                            "task": task_name,
+                            "errors": validation["output"]["errors"],
+                        },
                     )
             elif use_fallback_on_llm_error:
-                logger.warning("LLM returned invalid JSON, using fallback", extra={"task": task_name})
+                logger.warning(
+                    "LLM returned invalid JSON, using fallback",
+                    extra={"task": task_name},
+                )
         except Exception as e:
             logger.warning(
                 "LLM call failed",
@@ -701,7 +728,10 @@ async def execute_threat_modeling_run(
     if readiness.missing_artifacts:
         logger.info(
             "tm_stage1_readiness_notices",
-            extra={"reason": readiness.blocking_reason, "missing": readiness.missing_artifacts},
+            extra={
+                "reason": readiness.blocking_reason,
+                "missing": readiness.missing_artifacts,
+            },
         )
 
     # Create or reuse ThreatModelRun DB record at start (when db provided)
@@ -761,12 +791,17 @@ async def execute_threat_modeling_run(
             else:
                 save_to_dir = base
         elif db is not None:
-            bundle = await load_threat_model_input_bundle_from_artifacts(db, engagement_id, target_id)
+            bundle = await load_threat_model_input_bundle_from_artifacts(
+                db, engagement_id, target_id
+            )
             save_to_dir = None
         else:
             logger.warning(
                 "tm_no_input_source",
-                extra={"engagement_id": engagement_id, "reason": "Neither recon_dir nor db provided"},
+                extra={
+                    "engagement_id": engagement_id,
+                    "reason": "Neither recon_dir nor db provided",
+                },
             )
             bundle = None
             save_to_dir = None
@@ -785,7 +820,9 @@ async def execute_threat_modeling_run(
             artifact_type="pipeline_input_bundle",
             payload=bundle.model_dump(mode="json"),
         )
-        _tm_raw_log(f"threat_modeling_start engagement={engagement_id} run_id={run_id} job_id={job_id}")
+        _tm_raw_log(
+            f"threat_modeling_start engagement={engagement_id} run_id={run_id} job_id={job_id}"
+        )
 
         # 3. MCP enrichment (optional)
         mcp_tools_list = mcp_tools or []

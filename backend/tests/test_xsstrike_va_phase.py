@@ -5,13 +5,11 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
-
 from src.recon.vulnerability_analysis.pipeline import (
     RAW_PHASE_VULN_ANALYSIS,
     _run_xsstrike_va_phase,
 )
+from src.schemas.vulnerability_analysis.schemas import VulnerabilityAnalysisInputBundle
 
 
 def _bundle_with_param_jobs() -> VulnerabilityAnalysisInputBundle:
@@ -28,9 +26,7 @@ def _bundle_with_param_jobs() -> VulnerabilityAnalysisInputBundle:
 async def test_run_xsstrike_va_phase_merges_intel_and_sinks_raw() -> None:
     """Mock run_with_capture; assert intel_findings append order and sink_raw_* calls."""
     bundle = _bundle_with_param_jobs()
-    bundle = bundle.model_copy(
-        update={"intel_findings": [{"source": "prior", "id": "p0"}]}
-    )
+    bundle = bundle.model_copy(update={"intel_findings": [{"source": "prior", "id": "p0"}]})
 
     mock_instance = MagicMock()
     mock_instance.run_with_capture = AsyncMock(
@@ -50,12 +46,8 @@ async def test_run_xsstrike_va_phase_merges_intel_and_sinks_raw() -> None:
             "src.recon.vulnerability_analysis.pipeline.XSStrikeAdapter",
             return_value=mock_instance,
         ),
-        patch(
-            "src.recon.vulnerability_analysis.pipeline.sink_raw_text"
-        ) as mock_sink_text,
-        patch(
-            "src.recon.vulnerability_analysis.pipeline.sink_raw_json"
-        ) as mock_sink_json,
+        patch("src.recon.vulnerability_analysis.pipeline.sink_raw_text") as mock_sink_text,
+        patch("src.recon.vulnerability_analysis.pipeline.sink_raw_json") as mock_sink_json,
     ):
         out = await _run_xsstrike_va_phase(
             bundle,
@@ -119,9 +111,7 @@ async def test_run_xsstrike_va_phase_merges_intel_and_sinks_raw() -> None:
 async def test_run_xsstrike_va_phase_no_jobs_short_circuits() -> None:
     bundle = VulnerabilityAnalysisInputBundle(engagement_id="e1")
 
-    with patch(
-        "src.recon.vulnerability_analysis.pipeline.XSStrikeAdapter"
-    ) as mock_cls:
+    with patch("src.recon.vulnerability_analysis.pipeline.XSStrikeAdapter") as mock_cls:
         out = await _run_xsstrike_va_phase(
             bundle,
             tenant_id_raw=None,
@@ -135,9 +125,7 @@ async def test_run_xsstrike_va_phase_no_jobs_short_circuits() -> None:
 
 @pytest.mark.asyncio
 async def test_run_xsstrike_va_phase_adapter_error_still_sinks_and_merges_empty() -> None:
-    bundle = _bundle_with_param_jobs().model_copy(
-        update={"intel_findings": [{"kept": True}]}
-    )
+    bundle = _bundle_with_param_jobs().model_copy(update={"intel_findings": [{"kept": True}]})
 
     mock_instance = MagicMock()
     mock_instance.run_with_capture = AsyncMock(side_effect=RuntimeError("xsstrike_failed"))

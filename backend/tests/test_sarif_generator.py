@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import ReportData
 from src.reports.sarif_generator import (
@@ -31,8 +30,15 @@ from src.reports.sarif_generator import (
 
 def _summary() -> ReportSummary:
     return ReportSummary(
-        critical=0, high=0, medium=0, low=0, info=0,
-        technologies=[], sslIssues=0, headerIssues=0, leaksFound=False,
+        critical=0,
+        high=0,
+        medium=0,
+        low=0,
+        info=0,
+        technologies=[],
+        sslIssues=0,
+        headerIssues=0,
+        leaksFound=False,
     )
 
 

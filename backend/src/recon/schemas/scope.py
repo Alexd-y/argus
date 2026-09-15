@@ -5,6 +5,7 @@ from pydantic import BaseModel, field_validator
 
 class ScopeRule(BaseModel):
     """Single scope rule — include or exclude a pattern."""
+
     rule_type: str = "include"  # include / exclude
     value_type: str = "domain"  # domain / ip / cidr / regex
     pattern: str
@@ -33,6 +34,7 @@ class ScopeRule(BaseModel):
 
 class ScopeConfig(BaseModel):
     """Full engagement scope configuration."""
+
     rules: list[ScopeRule] = []
     wildcard_subdomains: bool = True
     allowed_scan_types: list[str] = []
@@ -51,6 +53,7 @@ class ScopeConfig(BaseModel):
 
 class ScopeValidationResult(BaseModel):
     """Result of a scope validation check."""
+
     is_in_scope: bool
     matched_rule: ScopeRule | None = None
     reason: str = ""

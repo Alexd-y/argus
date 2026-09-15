@@ -174,9 +174,7 @@ def _budget_from_dict(raw: object, *, default: BucketBudget) -> BucketBudget:
         return default
 
 
-def _budgets_map(
-    raw: object, *, default: BucketBudget
-) -> dict[str, BucketBudget]:
+def _budgets_map(raw: object, *, default: BucketBudget) -> dict[str, BucketBudget]:
     if not isinstance(raw, dict):
         return {}
     out: dict[str, BucketBudget] = {}
@@ -209,12 +207,8 @@ def _build_rate_limiter_from_config(
         section.get("default_tenant_budget"),
         default=BucketBudget(rate_per_second=10.0, burst=60),
     )
-    per_client = _budgets_map(
-        section.get("per_client_budgets"), default=default_client
-    )
-    per_tenant = _budgets_map(
-        section.get("per_tenant_budgets"), default=default_tenant
-    )
+    per_client = _budgets_map(section.get("per_client_budgets"), default=default_client)
+    per_tenant = _budgets_map(section.get("per_tenant_budgets"), default=default_tenant)
 
     redis_client: Any | None = None
     if backend == "redis":
@@ -237,9 +231,7 @@ def _build_rate_limiter_from_config(
         per_client_budgets=per_client,
         per_tenant_budgets=per_tenant,
         redis_client=redis_client,
-        redis_key_prefix=str(
-            section.get("redis_key_prefix", "argus:mcp:rl") or "argus:mcp:rl"
-        ),
+        redis_key_prefix=str(section.get("redis_key_prefix", "argus:mcp:rl") or "argus:mcp:rl"),
     )
 
 
@@ -266,9 +258,7 @@ def _build_notification_dispatcher_from_config(
             if not isinstance(tenant, str):
                 continue
             if isinstance(names, list):
-                per_tenant_disabled[tenant] = frozenset(
-                    str(n) for n in names if isinstance(n, str)
-                )
+                per_tenant_disabled[tenant] = frozenset(str(n) for n in names if isinstance(n, str))
 
     dispatcher = NotificationDispatcher(
         adapters=adapters,

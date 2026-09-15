@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from src.recon.recon_runtime import ReconRuntimeConfig
 from src.recon.recon_url_history import (
     build_gau_argv,
@@ -107,9 +106,19 @@ async def test_run_recon_url_history_bundle_merges_and_uploads_json() -> None:
             return {"success": True, "stdout": "", "stderr": "", "return_code": 0}
         name = str(argv[0])
         if name == "gau":
-            return {"success": True, "stdout": "https://ex.com/old\n", "stderr": "", "return_code": 0}
+            return {
+                "success": True,
+                "stdout": "https://ex.com/old\n",
+                "stderr": "",
+                "return_code": 0,
+            }
         if name == "waybackurls":
-            return {"success": True, "stdout": "https://ex.com/old\nhttps://ex.com/other\n", "stderr": "", "return_code": 0}
+            return {
+                "success": True,
+                "stdout": "https://ex.com/old\nhttps://ex.com/other\n",
+                "stderr": "",
+                "return_code": 0,
+            }
         if name == "katana":
             return {
                 "success": True,

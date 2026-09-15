@@ -303,7 +303,11 @@ class SessionRepository:
                 WbSessionPrincipal.tenant_id == tenant_id,
                 WbSessionPrincipal.project_id == project_id,
             )
-            .order_by(WbSessionPrincipal.role, WbSessionPrincipal.created_at, WbSessionPrincipal.id)
+            .order_by(
+                WbSessionPrincipal.role,
+                WbSessionPrincipal.created_at,
+                WbSessionPrincipal.id,
+            )
         )
         return [_principal_to_dto(r) for r in result.scalars().all()]
 

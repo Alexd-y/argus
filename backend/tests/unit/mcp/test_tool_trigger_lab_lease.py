@@ -6,7 +6,10 @@ from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from src.core.unified_ai_metrics import get_lab_executions_total, reset_unified_ai_metrics
+from src.core.unified_ai_metrics import (
+    get_lab_executions_total,
+    reset_unified_ai_metrics,
+)
 from src.execution_mode import (
     LabBoundaryVerifier,
     LabLeaseService,

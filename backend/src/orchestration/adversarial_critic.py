@@ -99,11 +99,10 @@ def build_critic_prompt(findings: list[dict[str, Any]]) -> tuple[str, str]:
 
     Returns (system_prompt, user_prompt).
     """
-    findings_json = json.dumps(
-        _slim_findings_for_critic(findings), default=str, ensure_ascii=False
-    )
+    findings_json = json.dumps(_slim_findings_for_critic(findings), default=str, ensure_ascii=False)
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
@@ -124,13 +123,15 @@ def parse_critic_response(response_data: dict[str, Any]) -> AdversarialCritiqueR
     """Parse the LLM response from the adversarial critic."""
     critiques = []
     for item in response_data.get("critiques", []):
-        critiques.append(CritiqueItem(
-            finding_id=item.get("finding_id", ""),
-            critique_type=item.get("critique_type", "unknown"),
-            description=item.get("description", ""),
-            suggested_action=item.get("suggested_action", ""),
-            severity=item.get("severity", "medium"),
-        ))
+        critiques.append(
+            CritiqueItem(
+                finding_id=item.get("finding_id", ""),
+                critique_type=item.get("critique_type", "unknown"),
+                description=item.get("description", ""),
+                suggested_action=item.get("suggested_action", ""),
+                severity=item.get("severity", "medium"),
+            )
+        )
     return AdversarialCritiqueResult(
         findings_reviewed=len(response_data.get("critiques", [])),
         critiques=critiques,
@@ -207,9 +208,9 @@ async def run_adversarial_critic(
 
 
 __all__ = [
-    "AdversarialCritiqueResult",
     "CRITIC_SYSTEM_PROMPT",
     "CRITIC_USER_TEMPLATE",
+    "AdversarialCritiqueResult",
     "CritiqueItem",
     "build_critic_prompt",
     "parse_critic_response",

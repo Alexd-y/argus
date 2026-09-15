@@ -21,13 +21,13 @@ Conventions
 
 from __future__ import annotations
 
+import json
 import os
+import urllib.error
+import urllib.request
+from typing import Any
 
 import pytest
-import urllib.request
-import urllib.error
-import json
-from typing import Any
 
 pytestmark = pytest.mark.requires_docker_e2e
 
@@ -35,7 +35,9 @@ BASE_URL: str = os.environ.get("E2E_BACKEND_URL", "http://localhost:8000")
 TIMEOUT_SECONDS: float = 10.0
 
 
-def _http_get(path: str, *, headers: dict[str, str] | None = None) -> tuple[int, dict[str, Any] | str]:
+def _http_get(
+    path: str, *, headers: dict[str, str] | None = None
+) -> tuple[int, dict[str, Any] | str]:
     """Minimal GET wrapper — returns (status_code, decoded_body).
 
     Uses stdlib so the test suite has zero new third-party deps. Body is
@@ -46,7 +48,7 @@ def _http_get(path: str, *, headers: dict[str, str] | None = None) -> tuple[int,
         headers=headers or {"Accept": "application/json", "User-Agent": "argus-e2e-tests/1.0"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             body_bytes = resp.read()
             status = resp.status
     except urllib.error.HTTPError as exc:

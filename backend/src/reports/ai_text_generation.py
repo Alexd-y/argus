@@ -300,7 +300,11 @@ def run_ai_text_generation(
                     try:
                         r.delete(cache_key)
                     except Exception as exc:
-                        logger.warning("cache delete failed", extra={"key": cache_key}, exc_info=exc)
+                        logger.warning(
+                            "cache delete failed",
+                            extra={"key": cache_key},
+                            exc_info=exc,
+                        )
         except Exception as e:
             logger.warning(
                 "Redis cache read failed for AI text generation",
@@ -334,7 +338,9 @@ def run_ai_text_generation(
     try:
         if llm_callable is not None:
             combined_prompt = f"{system_prompt}\n\n{user_prompt}"
-            generated = (llm_callable(combined_prompt, {"task": section_key, "tier": tier}) or "").strip()
+            generated = (
+                llm_callable(combined_prompt, {"task": section_key, "tier": tier}) or ""
+            ).strip()
         else:
             generated = call_llm_sync(
                 system_prompt,
@@ -354,7 +360,11 @@ def run_ai_text_generation(
             prompt_version=prompt_version,
             status="llm_error",
         )
-        logger.warning("LLM generation failed", extra={"section_key": section_key, "tier": tier}, exc_info=exc)
+        logger.warning(
+            "LLM generation failed",
+            extra={"section_key": section_key, "tier": tier},
+            exc_info=exc,
+        )
         return {
             "status": "failed",
             "error": "generation_failed",

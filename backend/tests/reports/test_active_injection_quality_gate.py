@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from src.core import config as core_config
 from src.recon.mcp.policy import evaluate_tool_approval_policy
 from src.reports.report_quality_gate import (
@@ -19,7 +18,10 @@ from src.reports.report_quality_gate import (
     has_xss_browser_or_oast_signal,
     map_injection_family,
 )
-from src.reports.valhalla_report_context import ValhallaReportContext, build_valhalla_report_context
+from src.reports.valhalla_report_context import (
+    ValhallaReportContext,
+    build_valhalla_report_context,
+)
 
 
 def test_destructive_tools_fail_closed_without_approval(
@@ -40,12 +42,8 @@ def test_destructive_tools_fail_closed_without_approval(
     assert ok.reason == "requires_lab_mode"
 
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True, raising=False)
-    monkeypatch.setattr(
-        core_config.settings, "argus_destructive_lab_mode", True, raising=False
-    )
-    monkeypatch.setattr(
-        core_config.settings, "argus_kill_switch_required", False, raising=False
-    )
+    monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True, raising=False)
+    monkeypatch.setattr(core_config.settings, "argus_kill_switch_required", False, raising=False)
     ok2 = evaluate_tool_approval_policy("sqlmap", scan_approval_flags={"sqlmap": True})
     assert ok2.allowed is True
 
@@ -64,7 +62,9 @@ def test_destructive_never_allowed_when_flags_none_even_with_lab_flags(
     assert d.reason == "requires_approval"
 
 
-def test_lab_profile_does_not_bypass_empty_approval_map(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lab_profile_does_not_bypass_empty_approval_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(core_config.settings, "argus_lab_mode", True)
     monkeypatch.setattr(core_config.settings, "argus_destructive_lab_mode", True)
     monkeypatch.setattr(core_config.settings, "va_lab_profile_allow_destructive_tools", True)
@@ -78,10 +78,15 @@ def test_xss_poc_browser_validation_satisfies_gate() -> None:
         "cwe": "CWE-79",
         "confidence": "confirmed",
         "evidence_refs": ["a1"],
-        "proof_of_concept": {"browser_validation": True, "payload": "<img onerror=alert(1)>"},
+        "proof_of_concept": {
+            "browser_validation": True,
+            "payload": "<img onerror=alert(1)>",
+        },
     }
     assert has_xss_browser_or_oast_signal(f) is True
-    assert not any("xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(f))
+    assert not any(
+        "xss_confirmed_missing_browser_or_oast" in r for r in evaluate_injection_finding_rules(f)
+    )
 
 
 def test_validated_status_triggers_strong_evidence_warning() -> None:
@@ -132,7 +137,9 @@ def test_ssrf_confirmed_requires_oast_callback() -> None:
 
     f_ok = {**f, "description": "interactsh callback received: oast.proof"}
     assert has_oast_callback_signal(f_ok) is True
-    assert not any("ssrf_confirmed_missing_oast" in r for r in evaluate_injection_finding_rules(f_ok))
+    assert not any(
+        "ssrf_confirmed_missing_oast" in r for r in evaluate_injection_finding_rules(f_ok)
+    )
 
 
 def test_quality_gate_includes_active_injection_coverage() -> None:
@@ -142,7 +149,13 @@ def test_quality_gate_includes_active_injection_coverage() -> None:
         "confidence": "likely",
         "evidence_refs": ["r1"],
     }
-    scan = SimpleNamespace(options={"active_injection_coverage": {"families": {"xss": {"status": "not_assessed", "reason": "scanner_skipped"}}}})
+    scan = SimpleNamespace(
+        options={
+            "active_injection_coverage": {
+                "families": {"xss": {"status": "not_assessed", "reason": "scanner_skipped"}}
+            }
+        }
+    )
     data = SimpleNamespace(
         valhalla_context=ValhallaReportContext(),
         findings=[f],
@@ -202,7 +215,11 @@ def test_valhalla_includes_active_injection_coverage_placeholder() -> None:
         findings=[{"title": "SQLi", "cwe": "CWE-89", "description": "injection"}],
         report_technologies=None,
         fetch_raw_bodies=False,
-        scan_options={"active_injection_coverage": {"families": {"rce": {"status": "not_assessed", "reason": "not_in_scope"}}}},
+        scan_options={
+            "active_injection_coverage": {
+                "families": {"rce": {"status": "not_assessed", "reason": "not_in_scope"}}
+            }
+        },
     )
     c = ctx.active_injection_coverage
     rows = c.get("table_rows") or []
@@ -228,7 +245,10 @@ def test_valhalla_reads_active_injection_coverage_from_vuln_phase_output() -> No
                     "findings": [],
                     "active_injection_coverage": {
                         "families": {
-                            "xss": {"status": "partial", "reason": "planned_but_execution_status_not_observed"},
+                            "xss": {
+                                "status": "partial",
+                                "reason": "planned_but_execution_status_not_observed",
+                            },
                         },
                         "table_rows": [
                             {
@@ -297,7 +317,10 @@ def test_time_based_sqli_confirmed_requires_timing_samples() -> None:
             "timing_samples": [1.1, 1.2],
         },
     }
-    assert not any("sqli_time_based_missing_repeated_samples" in r for r in evaluate_injection_finding_rules(f_ok))
+    assert not any(
+        "sqli_time_based_missing_repeated_samples" in r
+        for r in evaluate_injection_finding_rules(f_ok)
+    )
 
 
 def test_build_active_injection_coverage_stub_overlay_from_options() -> None:

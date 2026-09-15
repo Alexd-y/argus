@@ -14,63 +14,65 @@ import re
 logger = logging.getLogger(__name__)
 
 # ANSI escape sequence stripper — terminal control chars from raw tool output
-_ANSI_ESCAPE_RE = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 
 # Code garbage patterns (C/C++/Python/Java/Shell)
 _CODE_GARBAGE = [
-    re.compile(r'^\s*#include\s*[<"]', re.I | re.MULTILINE),
-    re.compile(r'\bint\s+main\s*\(\s*\)', re.I),
-    re.compile(r'\bstd::(cout|cin|cerr|endl|vector|string)\b', re.I),
-    re.compile(r'\bSystem\.out\.println', re.I),
-    re.compile(r'\bpublic\s+static\s+void\s+main', re.I),
-    re.compile(r'^\s*#!/bin/(bash|sh|zsh)\b', re.I | re.MULTILINE),
-    re.compile(r'\bdef\s+(main|test|foo|bar)\s*\(\s*\)', re.I),
+    re.compile(r'^\s*#include\s*[<"]', re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bint\s+main\s*\(\s*\)", re.IGNORECASE),
+    re.compile(r"\bstd::(cout|cin|cerr|endl|vector|string)\b", re.IGNORECASE),
+    re.compile(r"\bSystem\.out\.println", re.IGNORECASE),
+    re.compile(r"\bpublic\s+static\s+void\s+main", re.IGNORECASE),
+    re.compile(r"^\s*#!/bin/(bash|sh|zsh)\b", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bdef\s+(main|test|foo|bar)\s*\(\s*\)", re.IGNORECASE),
 ]
 
 # AI stub patterns — telltale signs of unhelpful LLM fallback output
 _AI_STUB_PATTERNS = [
-    re.compile(r'\bHello[,!]\s*World[!.]?\b', re.I),
-    re.compile(r'#include\s*<iostream>', re.I),
-    re.compile(r'#include\s*<stdio\.h>', re.I),
-    re.compile(r'\bint\s+main\s*\(\s*\)\s*\{', re.I),
-    re.compile(r'<h[1-6][^>]*>\s*This is a (?:code block|title|heading)\s*</h[1-6]>', re.I),
-    re.compile(r'\bSee Attack Scenarios\b', re.I),
-    re.compile(r'\bNo remediation matrix available\b', re.I),
-    re.compile(r'\bReview finding details and apply appropriate fix\b', re.I),
-    re.compile(r'\bUnknown component\b', re.I),
-    re.compile(r'\bDevelopment team\b(?!\s+of)'),
-    re.compile(r'high\s*\|\s*medium\s*\|\s*low', re.I),
-    re.compile(r'\(See\s+\w+\s+Scenarios\)', re.I),
-    re.compile(r'iostream>\s*\{', re.I),
-    re.compile(r'cout\s*<<\s*"Hello', re.I),
-    re.compile(r'printf\s*\(\s*"Hello', re.I),
-    re.compile(r'\bprint\s*\(\s*"Hello', re.I),
-    re.compile(r'\bpotential security compromise\b', re.I),
-    re.compile(r'\bassess before deployment\b', re.I),
-    re.compile(r'\bfollow security best practices\b', re.I),
-    re.compile(r'\bimplement proper (?:security )?measures?\b', re.I),
-    re.compile(r'\bregularly (?:update|patch|review)\b', re.I),
-    re.compile(r'\bcould (?:allow|lead to|result in|enable)\b', re.I),
-    re.compile(r'\bposes? a risk\b', re.I),
-    re.compile(r'\bis a significant concern\b', re.I),
-    re.compile(r'\bvalidate all input\b', re.I),
-    re.compile(r'\bfinding no longer reproducible under same conditions\b', re.I),
-    re.compile(r'\bverify finding is no longer reproducible\b', re.I),
-    re.compile(r'\bSee\s+«[^»]+»\s+(?:section|Section)\b', re.I),
+    re.compile(r"\bHello[,!]\s*World[!.]?\b", re.IGNORECASE),
+    re.compile(r"#include\s*<iostream>", re.IGNORECASE),
+    re.compile(r"#include\s*<stdio\.h>", re.IGNORECASE),
+    re.compile(r"\bint\s+main\s*\(\s*\)\s*\{", re.IGNORECASE),
+    re.compile(
+        r"<h[1-6][^>]*>\s*This is a (?:code block|title|heading)\s*</h[1-6]>", re.IGNORECASE
+    ),
+    re.compile(r"\bSee Attack Scenarios\b", re.IGNORECASE),
+    re.compile(r"\bNo remediation matrix available\b", re.IGNORECASE),
+    re.compile(r"\bReview finding details and apply appropriate fix\b", re.IGNORECASE),
+    re.compile(r"\bUnknown component\b", re.IGNORECASE),
+    re.compile(r"\bDevelopment team\b(?!\s+of)"),
+    re.compile(r"high\s*\|\s*medium\s*\|\s*low", re.IGNORECASE),
+    re.compile(r"\(See\s+\w+\s+Scenarios\)", re.IGNORECASE),
+    re.compile(r"iostream>\s*\{", re.IGNORECASE),
+    re.compile(r'cout\s*<<\s*"Hello', re.IGNORECASE),
+    re.compile(r'printf\s*\(\s*"Hello', re.IGNORECASE),
+    re.compile(r'\bprint\s*\(\s*"Hello', re.IGNORECASE),
+    re.compile(r"\bpotential security compromise\b", re.IGNORECASE),
+    re.compile(r"\bassess before deployment\b", re.IGNORECASE),
+    re.compile(r"\bfollow security best practices\b", re.IGNORECASE),
+    re.compile(r"\bimplement proper (?:security )?measures?\b", re.IGNORECASE),
+    re.compile(r"\bregularly (?:update|patch|review)\b", re.IGNORECASE),
+    re.compile(r"\bcould (?:allow|lead to|result in|enable)\b", re.IGNORECASE),
+    re.compile(r"\bposes? a risk\b", re.IGNORECASE),
+    re.compile(r"\bis a significant concern\b", re.IGNORECASE),
+    re.compile(r"\bvalidate all input\b", re.IGNORECASE),
+    re.compile(r"\bfinding no longer reproducible under same conditions\b", re.IGNORECASE),
+    re.compile(r"\bverify finding is no longer reproducible\b", re.IGNORECASE),
+    re.compile(r"\bSee\s+«[^»]+»\s+(?:section|Section)\b", re.IGNORECASE),
 ]
 
 # Cross-reference placeholder pattern
 _CROSS_REF_RE = re.compile(
-    r'\(See\s+«[^»]+»\s+(?:section|Section)\s+for\s+additional\s+details\.?\)',
+    r"\(See\s+«[^»]+»\s+(?:section|Section)\s+for\s+additional\s+details\.?\)",
     re.IGNORECASE,
 )
 
 # HTML tags leaking into AI text sections
 _HTML_TAG_LEAKAGE = [
-    (re.compile(r'<li>\s*', re.I), ''),
-    (re.compile(r'</li>\s*', re.I), ''),
-    (re.compile(r'<p>\s*', re.I), ''),
-    (re.compile(r'</p>\s*', re.I), ''),
+    (re.compile(r"<li>\s*", re.IGNORECASE), ""),
+    (re.compile(r"</li>\s*", re.IGNORECASE), ""),
+    (re.compile(r"<p>\s*", re.IGNORECASE), ""),
+    (re.compile(r"</p>\s*", re.IGNORECASE), ""),
 ]
 
 # Patterns that indicate the LLM regurgitated the prompt instead of answering.
@@ -160,7 +162,7 @@ def sanitize_ai_report_text(text: str) -> str:
     original_len = len(text)
 
     # 0. Strip ANSI escape sequences first (terminal control chars)
-    text = _ANSI_ESCAPE_RE.sub('', text)
+    text = _ANSI_ESCAPE_RE.sub("", text)
 
     # 1. Remove prompt leakage
     for pat in _COMPILED_LEAKAGE:
@@ -180,7 +182,7 @@ def sanitize_ai_report_text(text: str) -> str:
 
     # 5. Strip code garbage (C/C++/Python/Java/Shell snippets)
     for pat in _CODE_GARBAGE:
-        text = pat.sub('', text)
+        text = pat.sub("", text)
 
     # 5b. Detect and replace AI stub output (Hello World, code blocks, placeholders)
     if contains_ai_stub_output(text):
@@ -194,7 +196,7 @@ def sanitize_ai_report_text(text: str) -> str:
     # Count cross-refs; if > 50% of content is cross-refs, replace whole section
     cross_refs = _CROSS_REF_RE.findall(text)
     if cross_refs:
-        text_without_refs = _CROSS_REF_RE.sub('', text).strip()
+        text_without_refs = _CROSS_REF_RE.sub("", text).strip()
         meaningful_chars = sum(1 for c in text_without_refs if c.isalnum())
         if meaningful_chars < 50:
             text = "No evidence-backed narrative available. See the relevant technical section for structured findings data."
@@ -220,10 +222,7 @@ def contains_raw_prompt_leakage(text: str) -> bool:
     """Detect if AI output contains unprocessed prompt instructions."""
     if not text:
         return False
-    for pat in _COMPILED_LEAKAGE:
-        if pat.search(text):
-            return True
-    return False
+    return any(pat.search(text) for pat in _COMPILED_LEAKAGE)
 
 
 def contains_ai_stub_output(text: str) -> bool:
@@ -235,10 +234,7 @@ def contains_ai_stub_output(text: str) -> bool:
     """
     if not text or not isinstance(text, str):
         return False
-    for pat in _AI_STUB_PATTERNS:
-        if pat.search(text):
-            return True
-    return False
+    return any(pat.search(text) for pat in _AI_STUB_PATTERNS)
 
 
 def find_duplicate_paragraphs(text: str, threshold: float = 0.80) -> list[str]:
@@ -253,8 +249,7 @@ def find_duplicate_paragraphs(text: str, threshold: float = 0.80) -> list[str]:
         best_overlap = 0.0
         for s in seen_terms:
             overlap = len(words & s) / max(len(words | s), 1)
-            if overlap > best_overlap:
-                best_overlap = overlap
+            best_overlap = max(best_overlap, overlap)
         if best_overlap > threshold:
             duplicates.append(p[:120] + "..." if len(p) > 120 else p)
         seen_terms.append(words)

@@ -17,13 +17,12 @@ Tested invariants:
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from itertools import count
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.oast.provisioner import (
     DisabledOASTProvisioner,
     InternalOASTProvisioner,
@@ -33,7 +32,6 @@ from src.oast.provisioner import (
     OASTToken,
     OASTUnavailableError,
 )
-
 
 _TENANT = UUID("11111111-1111-1111-1111-111111111111")
 _SCAN = UUID("22222222-2222-2222-2222-222222222222")
@@ -54,7 +52,7 @@ class TestOASTToken:
         backend: OASTBackendKind = OASTBackendKind.INTERNAL,
         expires_in: timedelta = timedelta(minutes=10),
     ) -> OASTToken:
-        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
         return OASTToken(
             id=uuid4(),
             tenant_id=_TENANT,
@@ -81,9 +79,7 @@ class TestOASTToken:
         # The HTTPS URL drops the per-token DNS label and uses the
         # canonical OAST host so listeners do not need wildcard
         # certificates per token.
-        assert token.http_url == (
-            "https://oast.argus.local/p/0123456789abcdef0123456789abcdef"
-        )
+        assert token.http_url == ("https://oast.argus.local/p/0123456789abcdef0123456789abcdef")
 
     def test_dns_label_rejects_uppercase(self) -> None:
         with pytest.raises(ValidationError):
@@ -150,8 +146,8 @@ class TestOASTToken:
                 subdomain="argus-test01abcdef.oast.argus.local",
                 path_token="abcdef0123456789",
                 dns_label="argus-test01abcdef",
-                created_at=datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc),
-                expires_at=datetime(2026, 4, 17, 13, 0, 0, tzinfo=timezone.utc),
+                created_at=datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC),
+                expires_at=datetime(2026, 4, 17, 13, 0, 0, tzinfo=UTC),
                 reserved_for_family="BadFamily",
             )
 
@@ -207,9 +203,7 @@ class TestInternalOASTProvisioner:
         internal_provisioner.revoke(UUID(int=0xDEADBEEF))
         assert internal_provisioner.is_active(UUID(int=0xDEADBEEF)) is False
 
-    def test_issue_rejects_short_ttl(
-        self, internal_provisioner: InternalOASTProvisioner
-    ) -> None:
+    def test_issue_rejects_short_ttl(self, internal_provisioner: InternalOASTProvisioner) -> None:
         with pytest.raises(OASTProvisioningError):
             internal_provisioner.issue(
                 tenant_id=_TENANT,
@@ -231,16 +225,12 @@ class TestInternalOASTProvisioner:
         self, internal_provisioner: InternalOASTProvisioner
     ) -> None:
         with pytest.raises(OASTProvisioningError):
-            internal_provisioner.issue(
-                tenant_id=_TENANT, scan_id=_SCAN, family="BadFamily"
-            )
+            internal_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, family="BadFamily")
 
     def test_issue_accepts_well_formed_family(
         self, internal_provisioner: InternalOASTProvisioner
     ) -> None:
-        token = internal_provisioner.issue(
-            tenant_id=_TENANT, scan_id=_SCAN, family="ssrf"
-        )
+        token = internal_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, family="ssrf")
         assert token.reserved_for_family == "ssrf"
 
     def test_constructor_rejects_bad_base_domain(self) -> None:
@@ -261,7 +251,7 @@ class TestInternalOASTProvisioner:
         deterministic_token_factory: Callable[[int], str],
     ) -> None:
         clock_call = count(start=0)
-        base = datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)
 
         def _moving_clock() -> datetime:
             return base + timedelta(seconds=next(clock_call))
@@ -320,9 +310,7 @@ class TestInternalOASTProvisioner:
         with pytest.raises(OASTProvisioningError):
             _default_token_hex(64)
 
-    def test_satisfies_protocol(
-        self, internal_provisioner: InternalOASTProvisioner
-    ) -> None:
+    def test_satisfies_protocol(self, internal_provisioner: InternalOASTProvisioner) -> None:
         assert isinstance(internal_provisioner, OASTProvisioner)
 
 
@@ -389,7 +377,7 @@ class TestProvisionerPurgeExpired:
         deterministic_uuid_factory: Callable[[], UUID],
         deterministic_token_factory: Callable[[int], str],
     ) -> None:
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]
@@ -397,12 +385,8 @@ class TestProvisionerPurgeExpired:
         provisioner = self._make_provisioner(
             clock, deterministic_uuid_factory, deterministic_token_factory
         )
-        short = provisioner.issue(
-            tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60)
-        )
-        long = provisioner.issue(
-            tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(hours=2)
-        )
+        short = provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60))
+        long = provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(hours=2))
 
         # 30 minutes after the snapshot: short token is 29 minutes past
         # expiry (well past the 5-minute default grace) but the long token
@@ -418,7 +402,7 @@ class TestProvisionerPurgeExpired:
         deterministic_uuid_factory: Callable[[], UUID],
         deterministic_token_factory: Callable[[int], str],
     ) -> None:
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]
@@ -426,9 +410,7 @@ class TestProvisionerPurgeExpired:
         provisioner = self._make_provisioner(
             clock, deterministic_uuid_factory, deterministic_token_factory
         )
-        token = provisioner.issue(
-            tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60)
-        )
+        token = provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60))
 
         # 30 seconds past expiry, well within the 5 minute default grace.
         slight_future = moments[0] + timedelta(seconds=90)
@@ -443,7 +425,7 @@ class TestProvisionerPurgeExpired:
     ) -> None:
         """Revoked-but-expired tokens drop their revocation marker too,
         otherwise ``_revoked`` would leak ids forever."""
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]
@@ -451,9 +433,7 @@ class TestProvisionerPurgeExpired:
         provisioner = self._make_provisioner(
             clock, deterministic_uuid_factory, deterministic_token_factory
         )
-        token = provisioner.issue(
-            tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60)
-        )
+        token = provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN, ttl=timedelta(seconds=60))
         provisioner.revoke(token.id)
 
         future = moments[0] + timedelta(minutes=30)
@@ -482,7 +462,7 @@ class TestProvisionerPurgeExpired:
         deterministic_uuid_factory: Callable[[], UUID],
         deterministic_token_factory: Callable[[int], str],
     ) -> None:
-        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=timezone.utc)]
+        moments: list[datetime] = [datetime(2026, 4, 17, 12, 0, 0, tzinfo=UTC)]
 
         def clock() -> datetime:
             return moments[-1]
@@ -505,35 +485,23 @@ class TestProvisionerPurgeExpired:
 
 
 class TestDisabledOASTProvisioner:
-    def test_issue_raises_unavailable(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_issue_raises_unavailable(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         with pytest.raises(OASTUnavailableError):
             disabled_provisioner.issue(tenant_id=_TENANT, scan_id=_SCAN)
 
-    def test_revoke_is_noop(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_revoke_is_noop(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         disabled_provisioner.revoke(UUID(int=1))
 
-    def test_is_active_returns_false(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_is_active_returns_false(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         assert disabled_provisioner.is_active(UUID(int=1)) is False
 
-    def test_get_returns_none(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_get_returns_none(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         assert disabled_provisioner.get(UUID(int=1)) is None
 
-    def test_backend_is_disabled(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_backend_is_disabled(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         assert disabled_provisioner.backend is OASTBackendKind.DISABLED
 
-    def test_satisfies_protocol(
-        self, disabled_provisioner: DisabledOASTProvisioner
-    ) -> None:
+    def test_satisfies_protocol(self, disabled_provisioner: DisabledOASTProvisioner) -> None:
         assert isinstance(disabled_provisioner, OASTProvisioner)
 
     def test_custom_reason_propagates(self) -> None:

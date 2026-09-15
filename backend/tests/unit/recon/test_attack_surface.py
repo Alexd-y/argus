@@ -23,9 +23,7 @@ def test_urls_collected_from_assets_and_params():
 
 
 def test_endpoints_strip_query():
-    surface = build_attack_surface(
-        params=[{"url": "https://alleksy.com/search?q=1", "param": "q"}]
-    )
+    surface = build_attack_surface(params=[{"url": "https://alleksy.com/search?q=1", "param": "q"}])
     assert "https://alleksy.com/search" in surface.endpoints
 
 
@@ -34,7 +32,12 @@ def test_injection_points_from_query_params():
         params=[{"url": "https://alleksy.com/item", "param": "id", "method": "get"}]
     )
     assert surface.injection_points == [
-        {"url": "https://alleksy.com/item", "parameter": "id", "method": "GET", "location": "query"}
+        {
+            "url": "https://alleksy.com/item",
+            "parameter": "id",
+            "method": "GET",
+            "location": "query",
+        }
     ]
 
 

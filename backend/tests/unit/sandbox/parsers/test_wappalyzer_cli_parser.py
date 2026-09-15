@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -90,9 +89,7 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 
 def test_finding_category_and_cwe(tmp_path: Path) -> None:
-    findings = parse_wappalyzer_cli_json(
-        _modern_payload(), b"", tmp_path, "wappalyzer_cli"
-    )
+    findings = parse_wappalyzer_cli_json(_modern_payload(), b"", tmp_path, "wappalyzer_cli")
     assert findings[0].category is FindingCategory.INFO
     assert 200 in findings[0].cwe
     assert findings[0].confidence is ConfidenceLevel.LIKELY
@@ -171,8 +168,7 @@ def test_unsupported_payload_emits_warning(
         findings = parse_wappalyzer_cli_json(b"", b"", tmp_path, "wappalyzer_cli")
     assert findings == []
     assert any(
-        "wappalyzer_cli_parser_unsupported_payload"
-        in (record.__dict__.get("event") or "")
+        "wappalyzer_cli_parser_unsupported_payload" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -219,9 +215,7 @@ def test_cap_reached_emits_warning_and_truncates(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(wappalyzer_module, "_MAX_FINDINGS", 2)
-    payload = _modern_payload(
-        techs=[_tech(name=f"Tech-{i}", version=f"{i}.0") for i in range(5)]
-    )
+    payload = _modern_payload(techs=[_tech(name=f"Tech-{i}", version=f"{i}.0") for i in range(5)])
     with caplog.at_level("WARNING"):
         findings = parse_wappalyzer_cli_json(payload, b"", tmp_path, "wappalyzer_cli")
     assert len(findings) == 2
@@ -249,9 +243,7 @@ def test_legacy_array_with_non_dict_entries_skipped(
 
 def test_techs_not_a_list_returns_no_findings(tmp_path: Path) -> None:
     """``technologies`` must be a list — otherwise nothing is yielded."""
-    payload = json.dumps(
-        {"urls": {"https://x": {}}, "technologies": "not-a-list"}
-    ).encode("utf-8")
+    payload = json.dumps({"urls": {"https://x": {}}, "technologies": "not-a-list"}).encode("utf-8")
     findings = parse_wappalyzer_cli_json(payload, b"", tmp_path, "wappalyzer_cli")
     assert findings == []
 

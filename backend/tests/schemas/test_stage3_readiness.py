@@ -1,13 +1,13 @@
 """Tests for Stage 3 readiness schemas."""
 
 import pytest
+from pydantic import ValidationError
 from src.schemas.recon.stage3_readiness import (
     ROUTE_CLASSIFICATION_CSV_COLUMNS,
     CoverageScores,
     RouteClassificationRow,
     Stage3ReadinessResult,
 )
-from pydantic import ValidationError
 
 
 def test_stage3_readiness_result_validates() -> None:
@@ -38,17 +38,33 @@ def test_stage3_readiness_result_rejects_invalid_status() -> None:
 
 
 def test_stage3_readiness_result_valid_statuses() -> None:
-    for status in ("ready_for_stage3", "partially_ready_for_stage3", "not_ready_for_stage3"):
+    for status in (
+        "ready_for_stage3",
+        "partially_ready_for_stage3",
+        "not_ready_for_stage3",
+    ):
         result = Stage3ReadinessResult(status=status, coverage_scores=CoverageScores())
         assert result.status == status
 
 
 def test_coverage_scores_validates_bounds() -> None:
     with pytest.raises(ValidationError):
-        CoverageScores(route=1.5, input_surface=0.0, api_surface=0.0, content_anomaly=0.0, boundary_mapping=0.0)
+        CoverageScores(
+            route=1.5,
+            input_surface=0.0,
+            api_surface=0.0,
+            content_anomaly=0.0,
+            boundary_mapping=0.0,
+        )
 
     with pytest.raises(ValidationError):
-        CoverageScores(route=-0.1, input_surface=0.0, api_surface=0.0, content_anomaly=0.0, boundary_mapping=0.0)
+        CoverageScores(
+            route=-0.1,
+            input_surface=0.0,
+            api_surface=0.0,
+            content_anomaly=0.0,
+            boundary_mapping=0.0,
+        )
 
 
 def test_coverage_scores_defaults() -> None:

@@ -17,11 +17,10 @@ registered tool's underlying coroutine directly so the closed-taxonomy
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -79,7 +78,7 @@ def _seed(
     status: str = "pending",
     tool_id: str = "demo_tool",
 ) -> StoredApproval:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     approval = StoredApproval(
         request_id=request_id,
         tenant_id=tenant_id,

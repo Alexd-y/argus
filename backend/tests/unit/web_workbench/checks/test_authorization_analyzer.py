@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.playbooks.oracles import OracleVerdict
 from src.web_workbench.checks.authorization_analyzer import (
     AuthorizationError,

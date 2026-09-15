@@ -13,7 +13,12 @@ from src.recon.reporting.stage1_report_generator import generate_stage1_report
 
 def _mock_fetch(_url: str) -> dict:
     """Mock fetch for endpoint inventory (--fast mode)."""
-    return {"status": 200, "content_type": "text/plain", "exists": True, "notes": "mock"}
+    return {
+        "status": 200,
+        "content_type": "text/plain",
+        "exists": True,
+        "notes": "mock",
+    }
 
 
 def _mock_headers_fetch(_url: str, _timeout: float = 10.0) -> dict:
@@ -71,9 +76,7 @@ def _create_minimal_recon_dir(tmp_path: Path) -> Path:
 class TestLLM003FastMode:
     """LLM-003: --fast mode with LLM keys still passes call_llm to anomaly/stage2 builders."""
 
-    def test_fast_mode_with_llm_keys_passes_call_llm_to_builders(
-        self, tmp_path: Path
-    ) -> None:
+    def test_fast_mode_with_llm_keys_passes_call_llm_to_builders(self, tmp_path: Path) -> None:
         """When --fast + has_any_llm_key()=True, build_anomalies and build_stage2_inputs receive non-None call_llm."""
         recon_dir = _create_minimal_recon_dir(tmp_path)
 
@@ -83,15 +86,24 @@ class TestLLM003FastMode:
 
         def _capture_build_anomalies(recon_dir_arg, call_llm=None):
             build_anomalies_calls.append({"call_llm": call_llm})
-            return ("# Anomalies\n", {"anomalies": [], "hypotheses": [], "coverage_gaps": []})
+            return (
+                "# Anomalies\n",
+                {"anomalies": [], "hypotheses": [], "coverage_gaps": []},
+            )
 
         def _capture_build_stage2(recon_dir_arg, call_llm=None):
             build_stage2_calls.append({"call_llm": call_llm})
             return ("# Stage 2\n", {"critical_assets": [], "entry_points": []})
 
         with (
-            patch("src.recon.reporting.stage1_report_generator.has_any_llm_key", return_value=True),
-            patch("src.recon.reporting.stage1_report_generator.get_llm_client", return_value=mock_call_llm),
+            patch(
+                "src.recon.reporting.stage1_report_generator.has_any_llm_key",
+                return_value=True,
+            ),
+            patch(
+                "src.recon.reporting.stage1_report_generator.get_llm_client",
+                return_value=mock_call_llm,
+            ),
             patch(
                 "src.recon.reporting.anomaly_builder.build_anomalies",
                 side_effect=_capture_build_anomalies,

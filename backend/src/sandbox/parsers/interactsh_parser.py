@@ -91,7 +91,7 @@ import re
 from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -209,7 +209,7 @@ _INTERACTSH_DEFAULT_CVSS: Final[float] = 6.0
 
 # Stable dedup key shape. Module-level alias keeps the signature short
 # in the dedup loop.
-DedupKey: TypeAlias = tuple[str, str, str, str]
+type DedupKey = tuple[str, str, str, str]
 
 
 # Timestamp formats interactsh / oastify can emit (RFC-3339 with or
@@ -253,9 +253,7 @@ def parse_interactsh_jsonl(
     """
     del stderr  # intentionally unused — interactsh stderr is banner only
 
-    raw_records = list(
-        _load_records(stdout=stdout, artifacts_dir=artifacts_dir, tool_id=tool_id)
-    )
+    raw_records = list(_load_records(stdout=stdout, artifacts_dir=artifacts_dir, tool_id=tool_id))
     if not raw_records:
         return []
 
@@ -550,9 +548,7 @@ def _parse_timestamp(timestamp: str) -> datetime | None:
 def _sort_key(record: dict[str, Any]) -> tuple[int, str, str, str, str]:
     """Deterministic sort key (severity_rank desc → protocol → addr → id → ts)."""
     protocol = str(record.get("protocol", ""))
-    _, _, rank = _PROTOCOL_MAP.get(
-        protocol, (FindingCategory.INFO, ConfidenceLevel.SUSPECTED, 0)
-    )
+    _, _, rank = _PROTOCOL_MAP.get(protocol, (FindingCategory.INFO, ConfidenceLevel.SUSPECTED, 0))
     return (
         -rank,
         protocol,

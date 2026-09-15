@@ -60,6 +60,7 @@ def _parse_env_keys(content: str) -> set[str]:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def compose_config() -> dict:
     """Load and parse infra/docker-compose.yml."""
@@ -103,12 +104,14 @@ def migration_008_content() -> str:
 # Settings class tests
 # ---------------------------------------------------------------------------
 
+
 class TestStage4SettingsFields:
     """Settings class has all Stage 4 fields with correct defaults."""
 
     @pytest.fixture(autouse=True)
     def _load_settings_class(self):
         from src.core.config import Settings
+
         self.settings_cls = Settings
 
     def test_stage4_artifacts_bucket_field_exists(self) -> None:
@@ -157,21 +160,18 @@ class TestStage4SettingsFields:
     def test_exploitation_timeout_reasonable_range(self) -> None:
         """exploitation_timeout_minutes within reasonable range (1-120)."""
         default = self.settings_cls.model_fields["exploitation_timeout_minutes"].default
-        assert 1 <= default <= 120, (
-            f"Timeout {default}m outside reasonable 1-120 range"
-        )
+        assert 1 <= default <= 120, f"Timeout {default}m outside reasonable 1-120 range"
 
     def test_exploitation_approval_timeout_reasonable_range(self) -> None:
         """exploitation_approval_timeout_minutes within reasonable range (5-1440)."""
         default = self.settings_cls.model_fields["exploitation_approval_timeout_minutes"].default
-        assert 5 <= default <= 1440, (
-            f"Approval timeout {default}m outside reasonable 5-1440 range"
-        )
+        assert 5 <= default <= 1440, f"Approval timeout {default}m outside reasonable 5-1440 range"
 
 
 # ---------------------------------------------------------------------------
 # Celery config tests
 # ---------------------------------------------------------------------------
+
 
 class TestStage4CeleryConfig:
     """Celery task routes and registration include exploitation."""
@@ -211,6 +211,7 @@ class TestStage4CeleryConfig:
 # ENV template tests
 # ---------------------------------------------------------------------------
 
+
 class TestStage4BackendEnvExample:
     """backend/.env.example contains all Stage 4 variables."""
 
@@ -219,9 +220,7 @@ class TestStage4BackendEnvExample:
         assert BACKEND_ENV_EXAMPLE.exists(), f"Not found: {BACKEND_ENV_EXAMPLE}"
 
     @pytest.mark.parametrize("var", STAGE4_ENV_VARS)
-    def test_stage4_var_present(
-        self, backend_env_example_keys: set[str], var: str
-    ) -> None:
+    def test_stage4_var_present(self, backend_env_example_keys: set[str], var: str) -> None:
         """Each Stage 4 env var must be defined in backend/.env.example."""
         assert var in backend_env_example_keys, (
             f"Missing Stage 4 var '{var}' in backend/.env.example"
@@ -236,18 +235,15 @@ class TestStage4InfraEnvExample:
         assert INFRA_ENV_EXAMPLE.exists(), f"Not found: {INFRA_ENV_EXAMPLE}"
 
     @pytest.mark.parametrize("var", STAGE4_ENV_VARS)
-    def test_stage4_var_present(
-        self, infra_env_example_keys: set[str], var: str
-    ) -> None:
+    def test_stage4_var_present(self, infra_env_example_keys: set[str], var: str) -> None:
         """Each Stage 4 env var must be defined in infra/.env.example."""
-        assert var in infra_env_example_keys, (
-            f"Missing Stage 4 var '{var}' in infra/.env.example"
-        )
+        assert var in infra_env_example_keys, f"Missing Stage 4 var '{var}' in infra/.env.example"
 
 
 # ---------------------------------------------------------------------------
 # Docker Compose validation tests
 # ---------------------------------------------------------------------------
+
 
 class TestStage4DockerComposeSandbox:
     """docker-compose.yml sandbox service configuration."""
@@ -255,9 +251,7 @@ class TestStage4DockerComposeSandbox:
     def test_sandbox_service_defined(self, compose_config: dict) -> None:
         """sandbox service must exist in docker-compose.yml."""
         services = compose_config.get("services", {})
-        assert "sandbox" in services, (
-            "docker-compose.yml must define 'sandbox' service"
-        )
+        assert "sandbox" in services, "docker-compose.yml must define 'sandbox' service"
 
     def test_sandbox_has_build_section(self, compose_config: dict) -> None:
         """sandbox service must have build section."""
@@ -295,9 +289,7 @@ class TestStage4DockerComposeSandbox:
         )
         mem = limits.get("memory", "0M")
         mem_mb = int(re.sub(r"[^0-9]", "", str(mem)))
-        assert 256 <= mem_mb <= 8192, (
-            f"sandbox memory limit {mem} outside 256M-8192M range"
-        )
+        assert 256 <= mem_mb <= 8192, f"sandbox memory limit {mem} outside 256M-8192M range"
 
     def test_sandbox_exploit_scripts_volume(self, compose_config: dict) -> None:
         """sandbox volumes must include exploit_scripts mount."""
@@ -321,9 +313,7 @@ class TestStage4DockerComposeSandbox:
         """sandbox must be on 'data' network (needs MinIO access)."""
         sandbox = compose_config["services"]["sandbox"]
         networks = sandbox.get("networks", [])
-        assert "data" in networks, (
-            f"sandbox must be on 'data' network, got: {networks}"
-        )
+        assert "data" in networks, f"sandbox must be on 'data' network, got: {networks}"
 
     def test_sandbox_depends_on_minio(self, compose_config: dict) -> None:
         """sandbox must depend on minio."""
@@ -332,9 +322,7 @@ class TestStage4DockerComposeSandbox:
         if isinstance(depends, list):
             assert "minio" in depends
         else:
-            assert "minio" in depends, (
-                f"sandbox must depend on minio, got: {list(depends.keys())}"
-            )
+            assert "minio" in depends, f"sandbox must depend on minio, got: {list(depends.keys())}"
 
     def test_sandbox_has_healthcheck(self, compose_config: dict) -> None:
         """sandbox service must have healthcheck."""
@@ -350,9 +338,7 @@ class TestStage4DockerComposeMinioInit:
     def test_minio_init_service_defined(self, compose_config: dict) -> None:
         """minio-init service must exist in docker-compose.yml."""
         services = compose_config.get("services", {})
-        assert "minio-init" in services, (
-            "docker-compose.yml must define 'minio-init' service"
-        )
+        assert "minio-init" in services, "docker-compose.yml must define 'minio-init' service"
 
     def test_minio_init_depends_on_minio(self, compose_config: dict) -> None:
         """minio-init must depend on minio."""
@@ -367,9 +353,7 @@ class TestStage4DockerComposeMinioInit:
         """minio-init entrypoint should create stage4-artifacts bucket."""
         minio_init = compose_config["services"]["minio-init"]
         entrypoint = str(minio_init.get("entrypoint", ""))
-        assert "stage4-artifacts" in entrypoint, (
-            "minio-init must create 'stage4-artifacts' bucket"
-        )
+        assert "stage4-artifacts" in entrypoint, "minio-init must create 'stage4-artifacts' bucket"
 
     def test_minio_init_creates_reports_bucket(self, compose_config: dict) -> None:
         """minio-init should create MINIO_REPORTS_BUCKET (RPT-002)."""
@@ -404,14 +388,13 @@ class TestStage4DockerComposeVolumes:
     def test_sandbox_tmp_volume_defined(self, compose_config: dict) -> None:
         """sandbox_tmp volume must be defined."""
         volumes = compose_config.get("volumes", {})
-        assert "sandbox_tmp" in volumes, (
-            "docker-compose.yml must define 'sandbox_tmp' volume"
-        )
+        assert "sandbox_tmp" in volumes, "docker-compose.yml must define 'sandbox_tmp' volume"
 
 
 # ---------------------------------------------------------------------------
 # Worker Dockerfile tests
 # ---------------------------------------------------------------------------
+
 
 class TestStage4WorkerDockerfile:
     """Worker Dockerfile includes exploitation queue."""
@@ -420,9 +403,7 @@ class TestStage4WorkerDockerfile:
         """infra/worker/Dockerfile exists."""
         assert WORKER_DOCKERFILE.exists(), f"Not found: {WORKER_DOCKERFILE}"
 
-    def test_exploitation_queue_in_worker(
-        self, worker_dockerfile_content: str
-    ) -> None:
+    def test_exploitation_queue_in_worker(self, worker_dockerfile_content: str) -> None:
         """Worker CMD must include argus.exploitation queue."""
         assert "argus.exploitation" in worker_dockerfile_content, (
             "Worker Dockerfile must include 'argus.exploitation' in -Q queue list"
@@ -433,6 +414,7 @@ class TestStage4WorkerDockerfile:
 # Sandbox Dockerfile tests
 # ---------------------------------------------------------------------------
 
+
 class TestStage4SandboxDockerfile:
     """sandbox/Dockerfile installs required exploitation tools."""
 
@@ -441,13 +423,9 @@ class TestStage4SandboxDockerfile:
         assert SANDBOX_DOCKERFILE.exists(), f"Not found: {SANDBOX_DOCKERFILE}"
 
     @pytest.mark.parametrize("tool", SANDBOX_REQUIRED_TOOLS)
-    def test_tool_installed(
-        self, sandbox_dockerfile_content: str, tool: str
-    ) -> None:
+    def test_tool_installed(self, sandbox_dockerfile_content: str, tool: str) -> None:
         """Each required tool must appear in sandbox Dockerfile (apt-get or binary install)."""
-        assert tool in sandbox_dockerfile_content, (
-            f"sandbox/Dockerfile must install '{tool}'"
-        )
+        assert tool in sandbox_dockerfile_content, f"sandbox/Dockerfile must install '{tool}'"
 
     def test_nuclei_binary_install(self, sandbox_dockerfile_content: str) -> None:
         """Nuclei installed from GitHub release (binary, not apt)."""
@@ -459,21 +437,18 @@ class TestStage4SandboxDockerfile:
     def test_nuclei_template_update(self, sandbox_dockerfile_content: str) -> None:
         """Nuclei template update step exists in Dockerfile."""
         assert "nuclei" in sandbox_dockerfile_content
-        assert "update-templates" in sandbox_dockerfile_content or "-update-templates" in sandbox_dockerfile_content, (
-            "Dockerfile must include nuclei template update step"
-        )
+        assert (
+            "update-templates" in sandbox_dockerfile_content
+            or "-update-templates" in sandbox_dockerfile_content
+        ), "Dockerfile must include nuclei template update step"
 
-    def test_metasploit_optional_build_arg(
-        self, sandbox_dockerfile_content: str
-    ) -> None:
+    def test_metasploit_optional_build_arg(self, sandbox_dockerfile_content: str) -> None:
         """Metasploit is optional via INSTALL_MSF build arg."""
         assert "INSTALL_MSF" in sandbox_dockerfile_content, (
             "Metasploit must be optional via INSTALL_MSF build arg"
         )
 
-    def test_exploit_scripts_mount_point(
-        self, sandbox_dockerfile_content: str
-    ) -> None:
+    def test_exploit_scripts_mount_point(self, sandbox_dockerfile_content: str) -> None:
         """Dockerfile creates /opt/exploit_scripts mount point."""
         assert "/opt/exploit_scripts" in sandbox_dockerfile_content, (
             "Dockerfile must create /opt/exploit_scripts directory"
@@ -481,16 +456,10 @@ class TestStage4SandboxDockerfile:
 
     def test_runs_as_non_root(self, sandbox_dockerfile_content: str) -> None:
         """Dockerfile switches to non-root user before CMD."""
-        assert "USER" in sandbox_dockerfile_content, (
-            "Dockerfile must switch to non-root USER"
-        )
+        assert "USER" in sandbox_dockerfile_content, "Dockerfile must switch to non-root USER"
         lines = sandbox_dockerfile_content.strip().splitlines()
-        user_lines = [
-            i for i, line in enumerate(lines) if line.strip().startswith("USER")
-        ]
-        cmd_lines = [
-            i for i, line in enumerate(lines) if line.strip().startswith("CMD")
-        ]
+        user_lines = [i for i, line in enumerate(lines) if line.strip().startswith("USER")]
+        cmd_lines = [i for i, line in enumerate(lines) if line.strip().startswith("CMD")]
         if user_lines and cmd_lines:
             assert max(user_lines) < min(cmd_lines), (
                 "USER directive must appear before CMD (run as non-root)"
@@ -500,6 +469,7 @@ class TestStage4SandboxDockerfile:
 # ---------------------------------------------------------------------------
 # Plugin directory tests
 # ---------------------------------------------------------------------------
+
 
 class TestStage4PluginDirectory:
     """plugins/exploit_scripts/ directory structure."""
@@ -525,6 +495,7 @@ class TestStage4PluginDirectory:
 # Migration file tests
 # ---------------------------------------------------------------------------
 
+
 class TestStage4Migration:
     """Alembic migration 008 — exploitation_runs and exploitation_approvals."""
 
@@ -532,17 +503,13 @@ class TestStage4Migration:
         """008_add_exploitation_models.py exists in alembic/versions/."""
         assert MIGRATION_008.exists(), f"Not found: {MIGRATION_008}"
 
-    def test_migration_creates_exploitation_runs(
-        self, migration_008_content: str
-    ) -> None:
+    def test_migration_creates_exploitation_runs(self, migration_008_content: str) -> None:
         """Migration creates exploitation_runs table."""
         assert "exploitation_runs" in migration_008_content, (
             "Migration 008 must create 'exploitation_runs' table"
         )
 
-    def test_migration_creates_exploitation_approvals(
-        self, migration_008_content: str
-    ) -> None:
+    def test_migration_creates_exploitation_approvals(self, migration_008_content: str) -> None:
         """Migration creates exploitation_approvals table."""
         assert "exploitation_approvals" in migration_008_content, (
             "Migration 008 must create 'exploitation_approvals' table"
@@ -564,13 +531,12 @@ class TestStage4Migration:
 
     def test_migration_enables_rls(self, migration_008_content: str) -> None:
         """Migration enables Row Level Security on exploitation tables."""
-        assert "ROW LEVEL SECURITY" in migration_008_content.upper() or "row level security" in migration_008_content.lower(), (
-            "Migration must enable RLS on exploitation tables"
-        )
+        assert (
+            "ROW LEVEL SECURITY" in migration_008_content.upper()
+            or "row level security" in migration_008_content.lower()
+        ), "Migration must enable RLS on exploitation tables"
 
-    def test_migration_has_tenant_id_columns(
-        self, migration_008_content: str
-    ) -> None:
+    def test_migration_has_tenant_id_columns(self, migration_008_content: str) -> None:
         """Both tables must have tenant_id column for multi-tenancy."""
         assert migration_008_content.count("tenant_id") >= 2, (
             "Both exploitation_runs and exploitation_approvals must have tenant_id"

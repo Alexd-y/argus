@@ -17,13 +17,16 @@ from src.reports.data_collector import (
     TimelineRow,
 )
 from src.reports.generators import (
-    ReportData,
     _VALHALLA_REPORT_SECTION_ORDER,
+    ReportData,
     build_valhalla_report_payload,
     generate_json,
     generate_valhalla_sections_csv,
 )
-from src.reports.template_env import get_report_jinja_environment, render_tier_report_html
+from src.reports.template_env import (
+    get_report_jinja_environment,
+    render_tier_report_html,
+)
 from src.reports.valhalla_report_context import (
     AppendixToolEntryModel,
     CriticalVulnRefModel,

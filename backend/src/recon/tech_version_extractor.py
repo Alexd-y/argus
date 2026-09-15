@@ -37,7 +37,9 @@ def extract_nextjs_version(response_html: str) -> str | None:
     return None
 
 
-def extract_framework_versions(response_html: str, headers: dict[str, str] | None = None) -> dict[str, str]:
+def extract_framework_versions(
+    response_html: str, headers: dict[str, str] | None = None
+) -> dict[str, str]:
     """Extract all detectable versions from HTML + headers."""
     versions: dict[str, str] = {}
     html = response_html or ""

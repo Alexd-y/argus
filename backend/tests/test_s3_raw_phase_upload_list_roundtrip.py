@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from src.storage.s3 import RAW_ARTIFACT_PHASES, list_scan_artifacts, upload_raw_artifact
 
 
@@ -57,7 +56,9 @@ def fake_s3() -> _FakeS3Client:
 
 
 @pytest.mark.storage_contract
-def test_full_scan_concept_each_phase_raw_key_upload_then_listable(fake_s3: _FakeS3Client) -> None:
+def test_full_scan_concept_each_phase_raw_key_upload_then_listable(
+    fake_s3: _FakeS3Client,
+) -> None:
     """
     After uploads for every RAW_ARTIFACT_PHASE, list_scan_artifacts(phase, raw_only=True)
     returns at least one key under that phase — acceptance proxy for MinIO without real MinIO.
@@ -95,9 +96,9 @@ def test_full_scan_concept_each_phase_raw_key_upload_then_listable(fake_s3: _Fak
         all_keys = {row["key"] for row in listed_all_raw}
         assert len(all_keys) >= len(RAW_ARTIFACT_PHASES)
         for phase in RAW_ARTIFACT_PHASES:
-            assert any(
-                k.startswith(f"{tenant_id}/{scan_id}/{phase}/raw/") for k in all_keys
-            ), f"no raw key under phase prefix {phase}"
+            assert any(k.startswith(f"{tenant_id}/{scan_id}/{phase}/raw/") for k in all_keys), (
+                f"no raw key under phase prefix {phase}"
+            )
 
 
 @pytest.mark.storage_contract
@@ -107,18 +108,20 @@ def test_list_pagination_still_finds_all_phase_keys(fake_s3: _FakeS3Client) -> N
 
     tenant_id = "t-paginate"
     scan_id = "s-paginate"
-    with patch.object(s3_mod, "_LIST_OBJECTS_PAGE_SIZE", 2):
-        with patch("src.storage.s3._get_client", return_value=fake_s3):
-            for i, phase in enumerate(sorted(RAW_ARTIFACT_PHASES)):
-                upload_raw_artifact(
-                    tenant_id,
-                    scan_id,
-                    phase,
-                    f"ts{i}",
-                    "probe",
-                    "bin",
-                    b"x",
-                )
-            out = list_scan_artifacts(tenant_id, scan_id, phase=None, raw_only=True)
+    with (
+        patch.object(s3_mod, "_LIST_OBJECTS_PAGE_SIZE", 2),
+        patch("src.storage.s3._get_client", return_value=fake_s3),
+    ):
+        for i, phase in enumerate(sorted(RAW_ARTIFACT_PHASES)):
+            upload_raw_artifact(
+                tenant_id,
+                scan_id,
+                phase,
+                f"ts{i}",
+                "probe",
+                "bin",
+                b"x",
+            )
+        out = list_scan_artifacts(tenant_id, scan_id, phase=None, raw_only=True)
     assert out is not None
     assert len(out) >= len(RAW_ARTIFACT_PHASES)

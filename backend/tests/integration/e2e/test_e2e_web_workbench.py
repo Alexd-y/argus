@@ -77,7 +77,7 @@ def _request(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
             payload = resp.read()
             status = resp.status
     except urllib.error.HTTPError as exc:
@@ -187,7 +187,9 @@ def created_attack(wb_project: WbProject) -> WbAttack:
     return WbAttack(attack_id=str(body["id"]), version=int(body["version"]))
 
 
-def test_intruder_attack_created_with_payload_reference(created_attack: WbAttack) -> None:
+def test_intruder_attack_created_with_payload_reference(
+    created_attack: WbAttack,
+) -> None:
     status, body = _request("GET", f"/api/v1/wb/intruder/attacks/{created_attack.attack_id}")
     assert status == 200
     assert isinstance(body, dict)
@@ -217,7 +219,9 @@ def completed_attack(created_attack: WbAttack) -> dict[str, Any]:
     raise TimeoutError(f"attack {created_attack.attack_id} did not finish within timeout: {final}")
 
 
-def test_intruder_attack_reaches_terminal_state(completed_attack: dict[str, Any]) -> None:
+def test_intruder_attack_reaches_terminal_state(
+    completed_attack: dict[str, Any],
+) -> None:
     assert completed_attack.get("status") in _TERMINAL_STATUSES
     # A ``sniper`` run against an in-scope host must have attempted requests.
     assert int(completed_attack.get("requests_completed", 0)) > 0
@@ -228,7 +232,8 @@ def test_intruder_requests_recorded_metadata_only(
 ) -> None:
     _ = completed_attack
     status, body = _request(
-        "GET", f"/api/v1/wb/intruder/attacks/{created_attack.attack_id}/requests?limit=100"
+        "GET",
+        f"/api/v1/wb/intruder/attacks/{created_attack.attack_id}/requests?limit=100",
     )
     assert status == 200
     assert isinstance(body, dict)

@@ -81,7 +81,7 @@ def _parse_robots_rules(text: str) -> tuple[list[str], list[str], list[str]]:
 def _loc_urls_from_sitemap(text: str) -> list[str]:
     return [
         u.strip()
-        for u in re.findall(r"<loc>\s*([^<]+)\s*</loc>", text or "", flags=re.I)
+        for u in re.findall(r"<loc>\s*([^<]+)\s*</loc>", text or "", flags=re.IGNORECASE)
         if u.strip()
     ][:5000]
 
@@ -253,7 +253,10 @@ async def _maybe_run_extended_crawl(origin: str, *, tenant_id: str, scan_id: str
             ext="txt",
         )
     except Exception:
-        logger.info("robots_ext_gospider_skipped", extra={"event": "robots_ext_gospider_skipped"})
+        logger.info(
+            "robots_ext_gospider_skipped",
+            extra={"event": "robots_ext_gospider_skipped"},
+        )
 
     argv_p = ["parsero", "-u", origin, "-o", "-l", "50"]
     try:

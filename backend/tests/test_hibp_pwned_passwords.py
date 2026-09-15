@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from src.data_sources.hibp_pwned_passwords import (
     collect_password_candidates_from_structure,
     summarize_pwned_passwords_for_report,
@@ -44,16 +43,18 @@ async def test_summarize_opt_in_no_passwords():
 @pytest.mark.asyncio
 async def test_summarize_pwned_count_with_mock():
     mock_settings = SimpleNamespace(hibp_password_check_opt_in=True)
-    with patch("src.data_sources.hibp_pwned_passwords.settings", mock_settings):
-        with patch(
+    with (
+        patch("src.data_sources.hibp_pwned_passwords.settings", mock_settings),
+        patch(
             "src.data_sources.hibp_pwned_passwords.pwned_password_usage_count",
             new_callable=AsyncMock,
-        ) as mock_pwned:
-            mock_pwned.return_value = 3
-            out = await summarize_pwned_passwords_for_report(
-                {"exploits": [{"password": "hunter2"}]},
-                max_checks=2,
-            )
+        ) as mock_pwned,
+    ):
+        mock_pwned.return_value = 3
+        out = await summarize_pwned_passwords_for_report(
+            {"exploits": [{"password": "hunter2"}]},
+            max_checks=2,
+        )
     assert out is not None
     assert out.get("checks_run") == 1
     assert out.get("pwned_count") == 1

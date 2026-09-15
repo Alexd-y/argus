@@ -74,7 +74,9 @@ def _snapshot_pdf_bytes(html: str, completed_at: str) -> bytes | None:
     return None
 
 
-def _scan_meta_for_snapshot(built: Any, report_data: Any, scan_id: str, tenant_id: str) -> dict[str, Any]:
+def _scan_meta_for_snapshot(
+    built: Any, report_data: Any, scan_id: str, tenant_id: str
+) -> dict[str, Any]:
     """Assemble snapshot scan-meta from ScanReportData.scan (tolerant getattr)."""
     scan_row = getattr(getattr(built, "scan_report_data", None), "scan", None)
     return {
@@ -277,11 +279,16 @@ async def run_generate_report_pipeline(
             update(Report)
             .where(cast(Report.id, String) == report_id)
             .values(
-                generation_status="failed", last_error_message="Missing scan_id for report storage"
+                generation_status="failed",
+                last_error_message="Missing scan_id for report storage",
             )
         )
         await session.commit()
-        return {"status": "failed", "report_id": report_id, "error": "No scan_id for report"}
+        return {
+            "status": "failed",
+            "report_id": report_id,
+            "error": "No scan_id for report",
+        }
 
     fmt_list = normalize_generation_formats(formats, report.requested_formats)
 
@@ -338,7 +345,11 @@ async def run_generate_report_pipeline(
                 )
             )
             await session.commit()
-            return {"status": "failed", "report_id": report_id, "error": "validation_failed"}
+            return {
+                "status": "failed",
+                "report_id": report_id,
+                "error": "validation_failed",
+            }
 
         generated: dict[str, str] = {}
         # B6-T02 / T48 — resolve once per pipeline run; ``generate_pdf`` is the
@@ -419,20 +430,41 @@ async def run_generate_report_pipeline(
                 generated[vfmt] = vkey
                 # Companion CSVs — technologies, outdated components, tool health
                 for comp_name, comp_gen, comp_content_type in [
-                    ("technologies_csv", generate_technologies_csv, "text/csv; charset=utf-8"),
-                    ("outdated_components_csv", generate_outdated_components_csv, "text/csv; charset=utf-8"),
-                    ("tool_health_csv", generate_tool_health_csv, "text/csv; charset=utf-8"),
+                    (
+                        "technologies_csv",
+                        generate_technologies_csv,
+                        "text/csv; charset=utf-8",
+                    ),
+                    (
+                        "outdated_components_csv",
+                        generate_outdated_components_csv,
+                        "text/csv; charset=utf-8",
+                    ),
+                    (
+                        "tool_health_csv",
+                        generate_tool_health_csv,
+                        "text/csv; charset=utf-8",
+                    ),
                 ]:
                     comp_bytes = comp_gen(report_data, jinja_context=built.template_context)
                     comp_key = upload(
-                        tenant_id, scan_id, tier_str, report_id, comp_name,
-                        comp_bytes, content_type=comp_content_type,
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        comp_name,
+                        comp_bytes,
+                        content_type=comp_content_type,
                     )
                     if comp_key:
                         await _upsert_report_object(
-                            session, tenant_id=tenant_id, scan_id=scan_id,
-                            report_id=report_id, fmt=comp_name,
-                            object_key=comp_key, size_bytes=len(comp_bytes),
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt=comp_name,
+                            object_key=comp_key,
+                            size_bytes=len(comp_bytes),
                         )
                         generated[comp_name] = comp_key
                 # Export validation report
@@ -440,15 +472,23 @@ async def run_generate_report_pipeline(
                     report_data, jinja_context=built.template_context
                 )
                 val_key = upload(
-                    tenant_id, scan_id, tier_str, report_id,
-                    "export_validation_report", val_report,
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    "export_validation_report",
+                    val_report,
                     content_type="application/json; charset=utf-8",
                 )
                 if val_key:
                     await _upsert_report_object(
-                        session, tenant_id=tenant_id, scan_id=scan_id,
-                        report_id=report_id, fmt="export_validation_report",
-                        object_key=val_key, size_bytes=len(val_report),
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt="export_validation_report",
+                        object_key=val_key,
+                        size_bytes=len(val_report),
                     )
                     generated["export_validation_report"] = val_key
 
@@ -479,9 +519,7 @@ async def run_generate_report_pipeline(
                         report_id,
                         canon_fmt,
                         artifact.content,
-                        content_type=_CANONICAL_CONTENT_TYPES.get(
-                            canon_fmt, artifact.mime_type
-                        ),
+                        content_type=_CANONICAL_CONTENT_TYPES.get(canon_fmt, artifact.mime_type),
                     )
                     if canon_key:
                         await _upsert_report_object(
@@ -506,7 +544,120 @@ async def run_generate_report_pipeline(
             except Exception:  # noqa: BLE001 — canonical snapshot is additive
                 logger.warning(
                     "canonical_snapshot_failed",
-                    extra={"event": "canonical_snapshot_failed", "report_id": report_id},
+                    extra={
+                        "event": "canonical_snapshot_failed",
+                        "report_id": report_id,
+                    },
+                )
+
+        # Valhalla mandatory LLM remediation/closure deliverable (VH-LLM):
+        # per-finding remediation plan + closure conclusion projected into
+        # MD/XML/HTML/JSON + a release manifest, all from one document tree.
+        # Opt-in + fail-soft: never breaks the standard Valhalla outputs.
+        if tier_str == "valhalla" and settings.valhalla_llm_remediation_enabled:
+            try:
+                from src.reports.llm_remediation.facade_binding import (
+                    build_facade_llm_callable,
+                )
+                from src.reports.llm_remediation.integration import (
+                    generate_valhalla_llm_release,
+                )
+
+                vsnapshot = build_snapshot_from_report_data(
+                    report_data,
+                    scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+                    scan_report_data=getattr(built, "scan_report_data", None),
+                )
+                vfindings = [
+                    {
+                        "finding_id": f.finding_id,
+                        "title": f.title,
+                        "severity": f.severity,
+                        "verification_status": f.verification_status,
+                        "evidence_refs": list(f.evidence_ids),
+                        "description": f.description,
+                        "cwe": f.cwe,
+                    }
+                    for f in vsnapshot.findings
+                ]
+                vmeta = {
+                    "report_id": report_id,
+                    "report_version": vsnapshot.snapshot_hash or report_id,
+                    "tenant_id": tenant_id,
+                    "scan_id": scan_id,
+                    "target": vsnapshot.target,
+                }
+                _vdoc, vrelease = generate_valhalla_llm_release(
+                    vfindings,
+                    report_meta=vmeta,
+                    llm_callable=build_facade_llm_callable(scan_id=scan_id, tenant_id=tenant_id),
+                    formats=["json", "md", "xml", "html"],
+                    canonical_snapshot_hash=vsnapshot.snapshot_hash,
+                    provider="facade",
+                    model="report_writer",
+                )
+                for vfmt, artifact in vrelease.artifacts.items():
+                    llm_fmt = f"valhalla_llm_{vfmt}"
+                    llm_key = upload(
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        llm_fmt,
+                        artifact.content,
+                        content_type=artifact.mime_type,
+                    )
+                    if llm_key:
+                        await _upsert_report_object(
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt=llm_fmt,
+                            object_key=llm_key,
+                            size_bytes=artifact.size_bytes,
+                        )
+                        generated[llm_fmt] = llm_key
+                manifest_bytes = vrelease.manifest.model_dump_json(indent=2).encode("utf-8")
+                manifest_key = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    "valhalla_llm_manifest",
+                    manifest_bytes,
+                    content_type="application/json",
+                )
+                if manifest_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt="valhalla_llm_manifest",
+                        object_key=manifest_key,
+                        size_bytes=len(manifest_bytes),
+                    )
+                    generated["valhalla_llm_manifest"] = manifest_key
+                logger.info(
+                    "valhalla_llm_release_emitted",
+                    extra={
+                        "event": "valhalla_llm_release_emitted",
+                        "report_id": report_id,
+                        "generation_status": vrelease.manifest.generation_status.value,
+                        "assessment_completeness": (
+                            vrelease.manifest.assessment_completeness.value
+                        ),
+                        "formats": sorted(vrelease.artifacts.keys()),
+                    },
+                )
+            except Exception:  # noqa: BLE001 — VH-LLM deliverable is additive
+                logger.warning(
+                    "valhalla_llm_release_failed",
+                    extra={
+                        "event": "valhalla_llm_release_failed",
+                        "report_id": report_id,
+                    },
                 )
 
         expected_keys = set(fmt_list)
@@ -563,9 +714,7 @@ async def run_generate_report_pipeline(
                     totals = cov_occ.get("totals")
                     if isinstance(totals, dict):
                         log_extra["coverage_not_tested"] = totals.get("not_tested")
-                        log_extra["coverage_covered_no_finding"] = totals.get(
-                            "covered_no_finding"
-                        )
+                        log_extra["coverage_covered_no_finding"] = totals.get("covered_no_finding")
                     log_extra["occurrences_n"] = (
                         totals.get("occurrences") if isinstance(totals, dict) else None
                     )
@@ -604,7 +753,7 @@ async def generate_valhalla_report_pipeline(
     report_id: str,
     tenant_id: str,
     scan_id_hint: str | None,
-    include_minio: bool = True,
+    include_minio: bool = True,  # noqa: ARG001 - retained for signature/API compatibility
     redis_client: Any | None = None,
     llm_callable: Callable[[str, dict], str] | None = None,
 ) -> dict[str, Any]:
@@ -629,7 +778,13 @@ async def generate_valhalla_report_pipeline(
         content_type: str,
     ) -> str | None:
         return default_upload_report(
-            tenant_id, scan_id, tier, report_id, fmt, data, content_type=content_type,
+            tenant_id,
+            scan_id,
+            tier,
+            report_id,
+            fmt,
+            data,
+            content_type=content_type,
         )
 
     ensure_bucket()
@@ -653,7 +808,11 @@ async def generate_valhalla_report_pipeline(
             )
         )
         await session.commit()
-        return {"status": "failed", "report_id": report_id, "error": "No scan_id for report"}
+        return {
+            "status": "failed",
+            "report_id": report_id,
+            "error": "No scan_id for report",
+        }
 
     await session.execute(
         update(Report)
@@ -663,7 +822,7 @@ async def generate_valhalla_report_pipeline(
     await session.commit()
 
     try:
-        redis = redis_client if redis_client is not None else get_redis()
+        redis_client if redis_client is not None else get_redis()
         pipeline_result = await generate_valhalla_report(
             session=session,
             scan_id=scan_id,
@@ -711,6 +870,7 @@ async def generate_valhalla_report_pipeline(
         # Also render markdown and upload as archival artifact
         context_obj = pipeline_result.get("context")
         from src.reports.valhalla_report import ValhallaReportContext as VRC
+
         md_ctx = VRC.model_validate(context_obj) if isinstance(context_obj, dict) else None
         if md_ctx is not None:
             md_data = render_valhalla_report(md_ctx, format="md")
@@ -784,4 +944,8 @@ async def generate_valhalla_report_pipeline(
     except Exception:
         with contextlib.suppress(Exception):
             await session.rollback()
-    return {"status": "failed", "report_id": report_id, "error": "valhalla_generation_failed"}
+    return {
+        "status": "failed",
+        "report_id": report_id,
+        "error": "valhalla_generation_failed",
+    }

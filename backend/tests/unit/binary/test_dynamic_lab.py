@@ -1,12 +1,10 @@
 """Tests for Binary Dynamic Lab and Custody."""
 
-import pytest
-from unittest.mock import patch, AsyncMock
-
 from src.workers.binary.dynamic.lab import (
-    DynamicResult, CustodyRecord,
-    run_dynamic_analysis, quarantine_sample,
-    request_export_approval, _classify_dynamic_output,
+    CustodyRecord,
+    DynamicResult,
+    _classify_dynamic_output,
+    request_export_approval,
 )
 
 

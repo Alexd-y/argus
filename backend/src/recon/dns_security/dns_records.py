@@ -71,10 +71,7 @@ def _axfr_succeeded(axfr_stdout: str) -> bool:
     # A successful AXFR streams the whole zone: SOA present and several records.
     if "in soa" not in low and " soa " not in low:
         return False
-    answer_lines = [
-        ln for ln in axfr_stdout.splitlines()
-        if _ANSWER_LINE_RE.match(ln.strip())
-    ]
+    answer_lines = [ln for ln in axfr_stdout.splitlines() if _ANSWER_LINE_RE.match(ln.strip())]
     return len(answer_lines) >= 2
 
 

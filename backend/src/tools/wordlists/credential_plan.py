@@ -75,7 +75,10 @@ def build_credential_test_plan(
         registry, config.password_wordlist, "password", allow_fetch=allow_fetch
     )
     pair_path = _resolve_category(
-        registry, config.credential_pair_wordlist, "default_credentials", allow_fetch=allow_fetch
+        registry,
+        config.credential_pair_wordlist,
+        "default_credentials",
+        allow_fetch=allow_fetch,
     )
 
     inline = tuple(config.usernames)

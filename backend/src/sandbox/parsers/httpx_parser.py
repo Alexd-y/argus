@@ -219,16 +219,14 @@ def _normalise_tech(value: Any) -> tuple[str, ...]:
     elif isinstance(value, list):
         items = [str(t).strip() for t in value if isinstance(t, (str, int))]
     elif isinstance(value, dict):
-        items = [str(t).strip() for t in value.keys() if isinstance(t, str)]
+        items = [str(t).strip() for t in value if isinstance(t, str)]
     else:
         items = []
     cleaned = sorted({t for t in items if t})
     return tuple(cleaned)
 
 
-def _build_evidence(
-    record: dict[str, Any], *, url: str, tech_list: tuple[str, ...]
-) -> str:
+def _build_evidence(record: dict[str, Any], *, url: str, tech_list: tuple[str, ...]) -> str:
     """Build a compact evidence JSON for downstream redaction + persistence.
 
     Keeps only the fields that have probative value for a tech-disclosure

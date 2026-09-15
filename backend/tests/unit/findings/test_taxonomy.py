@@ -61,10 +61,7 @@ class TestNormalizeLifecycle:
         assert normalize_lifecycle(status=status) == expected
 
     def test_false_positive_flag_wins(self) -> None:
-        assert (
-            normalize_lifecycle(status="fixed", false_positive=True)
-            == Lifecycle.FALSE_POSITIVE
-        )
+        assert normalize_lifecycle(status="fixed", false_positive=True) == Lifecycle.FALSE_POSITIVE
 
 
 class TestNormalizeRecordKind:
@@ -84,10 +81,7 @@ class TestNormalizeRecordKind:
         )
 
     def test_default_vulnerability(self) -> None:
-        assert (
-            normalize_record_kind(category="sqli", severity="high")
-            == RecordKind.VULNERABILITY
-        )
+        assert normalize_record_kind(category="sqli", severity="high") == RecordKind.VULNERABILITY
 
 
 class TestDeriveRemediationPriority:
@@ -107,14 +101,12 @@ class TestDeriveRemediationPriority:
 
     def test_kev_bumps_one_step(self) -> None:
         assert (
-            derive_remediation_priority(severity="high", kev_listed=True)
-            == RemediationPriority.P0
+            derive_remediation_priority(severity="high", kev_listed=True) == RemediationPriority.P0
         )
 
     def test_high_epss_bumps_one_step(self) -> None:
         assert (
-            derive_remediation_priority(severity="medium", epss_score=0.9)
-            == RemediationPriority.P1
+            derive_remediation_priority(severity="medium", epss_score=0.9) == RemediationPriority.P1
         )
 
     def test_bump_never_exceeds_p0(self) -> None:
@@ -125,6 +117,5 @@ class TestDeriveRemediationPriority:
 
     def test_low_epss_does_not_bump(self) -> None:
         assert (
-            derive_remediation_priority(severity="medium", epss_score=0.1)
-            == RemediationPriority.P2
+            derive_remediation_priority(severity="medium", epss_score=0.1) == RemediationPriority.P2
         )

@@ -312,7 +312,7 @@ class PayloadBuilder:
     def _run_preflight(
         self,
         *,
-        request: PayloadBuildRequest,
+        request: PayloadBuildRequest,  # noqa: ARG002 - retained for signature/API compatibility
         preflight_context: PolicyContext | None,
         target_spec: TargetSpec | None,
     ) -> PreflightDecision:

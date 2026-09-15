@@ -43,7 +43,7 @@ class ToolAdapter(abc.ABC):
     def supported_stages(self) -> list[int]:
         """Recon stages this tool supports."""
 
-    async def validate_config(self, config: dict[str, Any]) -> bool:
+    async def validate_config(self, config: dict[str, Any]) -> bool:  # noqa: ARG002 - adapter base-class default signature
         """Validate tool-specific configuration. Override for custom validation."""
         return True
 
@@ -56,14 +56,12 @@ class ToolAdapter(abc.ABC):
         """Parse raw tool output into structured dicts."""
 
     @abc.abstractmethod
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert parsed results into canonical finding format."""
 
     async def execute(
         self,
-        target: str,
+        target: str,  # noqa: ARG002 - adapter base-class default signature
         config: dict[str, Any],
         scope_validator: ScopeValidator | None = None,
     ) -> ToolResult:

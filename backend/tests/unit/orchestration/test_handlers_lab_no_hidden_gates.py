@@ -143,9 +143,7 @@ def test_attach_stamps_execution_mode_for_all_eight_phases(phase_name: str):
     "scenario",
     ["production", "lab_lease", "missing_lease"],
 )
-def test_destructive_tool_policy_production_lab_missing_lease(
-    tool_name: str, scenario: str
-):
+def test_destructive_tool_policy_production_lab_missing_lease(tool_name: str, scenario: str):
     """Production keeps approval; LAB+lease allow-all; missing lease deny."""
     if scenario == "production":
         decision = resolve_tool_policy_from_options(

@@ -22,9 +22,7 @@ class NvdIntelAdapter(IntelAdapter):
         client = NVDClient()
         keyword = domain.replace(".", " ").split()[0] if domain else "web"
         try:
-            data = await client.query(
-                params={"keywordSearch": keyword, "resultsPerPage": 10}
-            )
+            data = await client.query(params={"keywordSearch": keyword, "resultsPerPage": 10})
         except Exception:
             return {
                 "source": self.name,

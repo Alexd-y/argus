@@ -51,7 +51,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -75,7 +75,7 @@ _CANONICAL_FILENAME: Final[str] = "naabu.json"
 _MAX_FINDINGS: Final[int] = 100_000
 
 
-DedupKey: TypeAlias = tuple[str, int, str]
+type DedupKey = tuple[str, int, str]
 
 
 def parse_naabu_jsonl(

@@ -107,8 +107,12 @@ def _load_routes() -> dict[str, PhaseRoute]:
             primary_alias=primary_alias,
             mode=mode,
             fallback=fallback,
-            reviewer_alias=(str(raw["reviewer_alias"]).strip() if raw.get("reviewer_alias") else None),
-            evidence_contract=(str(raw["evidence_contract"]).strip() if raw.get("evidence_contract") else None),
+            reviewer_alias=(
+                str(raw["reviewer_alias"]).strip() if raw.get("reviewer_alias") else None
+            ),
+            evidence_contract=(
+                str(raw["evidence_contract"]).strip() if raw.get("evidence_contract") else None
+            ),
             degrade=(str(raw["degrade"]).strip() if raw.get("degrade") else None),
         )
 

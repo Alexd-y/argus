@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.core.config import Settings
 from src.payloads.registry import PayloadRegistry
 from src.recon.vulnerability_analysis.active_scan.ai_payload_candidates import (
@@ -35,9 +34,7 @@ def test_ai_payload_candidate_requires_signed_catalog_or_approval(
         argus_ai_generated_lab_payloads=False,
     )
     assert (
-        classify_payload_candidate(
-            "sqli_safe:canary_a", settings, registry=loaded_registry
-        )
+        classify_payload_candidate("sqli_safe:canary_a", settings, registry=loaded_registry)
         is PayloadCandidateClass.SAFE_CATALOG
     )
     assert (

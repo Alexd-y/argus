@@ -27,13 +27,9 @@ from src.db.models import Scan
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE_STATUSES: frozenset[str] = frozenset(
-    {"queued", "running", "awaiting_approval"}
-)
+_ACTIVE_STATUSES: frozenset[str] = frozenset({"queued", "running", "awaiting_approval"})
 
-_TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {"completed", "failed", "cancelled"}
-)
+_TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
 
 _DEFAULT_MAX_CONCURRENT: int = 3
 

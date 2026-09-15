@@ -8,12 +8,11 @@ round-trip, and the 6-phase ordering rules.
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
-
 from src.llm_orchestrator.schemas.loader import (
     PayloadStrategyV1,
     RiskRating,
@@ -34,8 +33,8 @@ from src.pipeline.contracts import (
     RemediationDTO,
     ReproducerSpecDTO,
     RiskLevel,
-    SSVCDecision,
     ScanPhase,
+    SSVCDecision,
     TargetSpec,
     ToolJob,
     ValidationJob,
@@ -687,8 +686,8 @@ class TestFindingDTO:
 
     def test_last_seen_before_first_seen(self) -> None:
         kwargs = self._base_finding_kwargs()
-        kwargs["first_seen"] = datetime.now(tz=timezone.utc)
-        kwargs["last_seen"] = datetime.now(tz=timezone.utc) - timedelta(days=1)
+        kwargs["first_seen"] = datetime.now(tz=UTC)
+        kwargs["last_seen"] = datetime.now(tz=UTC) - timedelta(days=1)
         with pytest.raises(ValidationError):
             FindingDTO(**kwargs)  # type: ignore[arg-type]
 
@@ -806,9 +805,7 @@ class TestPhaseTransition:
         destination: ScanPhase,
         expected: bool,
     ) -> None:
-        assert (
-            PhaseTransition(source=source, destination=destination).is_allowed() is expected
-        )
+        assert PhaseTransition(source=source, destination=destination).is_allowed() is expected
 
 
 class TestPhaseOutput:

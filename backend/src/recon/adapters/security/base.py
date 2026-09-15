@@ -35,9 +35,7 @@ class SecurityToolAdapter(ToolAdapter):
         if not self.is_available():
             return True
         use_sandbox = config.get("sandbox", False)
-        if use_sandbox and not settings.sandbox_enabled:
-            return True
-        return False
+        return bool(use_sandbox and not settings.sandbox_enabled)
 
     async def run(self, target: str, config: dict[str, Any]) -> list[dict[str, Any]]:
         """Run tool, parse output, return normalized findings.

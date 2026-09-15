@@ -78,9 +78,7 @@ def build_credential_evidence(
         "username": username,
         "password": REDACTED_PASSWORD_MARKER,
         "password_length": int(password_length) if password_length else 0,
-        "fingerprint_hash": stable_hash_12(
-            f"{host.lower()}|{service.lower()}|{username}"
-        ),
+        "fingerprint_hash": stable_hash_12(f"{host.lower()}|{service.lower()}|{username}"),
     }
     if extra:
         payload.update(extra)

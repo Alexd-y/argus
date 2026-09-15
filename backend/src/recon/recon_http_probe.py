@@ -150,9 +150,7 @@ def _nuclei_template_segment_rejected(seg: str) -> bool:
     s = seg.strip()
     if not s or len(s) > 1024:
         return True
-    if ".." in s or "\n" in s or "\r" in s or "\0" in s:
-        return True
-    return False
+    return bool(".." in s or "\n" in s or "\r" in s or "\x00" in s)
 
 
 def _tool_binary_visible(argv0: str, app_settings: Settings) -> bool:
@@ -183,7 +181,7 @@ def _parse_httpx_tech_lines(stdout: str) -> list[tuple[str, str, str]]:
         if not isinstance(obj, dict):
             continue
         raw_url = str(obj.get("url") or obj.get("input") or "").strip()
-        host = (str(obj.get("host") or "").strip().lower())
+        host = str(obj.get("host") or "").strip().lower()
         if not host and raw_url:
             try:
                 host = (urlparse(raw_url).hostname or "").strip().lower()
@@ -316,15 +314,17 @@ def merge_http_probe_tech_stack(
     for hk, blob in sorted(by_host.items()):
         for t in blob.get("technologies") or []:
             if isinstance(t, dict) and t.get("name"):
-                flat.append({
-                    "host": hk,
-                    "name": t["name"],
-                    "version": t.get("version"),
-                    "sources": list(t.get("sources") or []),
-                })
+                flat.append(
+                    {
+                        "host": hk,
+                        "name": t["name"],
+                        "version": t.get("version"),
+                        "sources": list(t.get("sources") or []),
+                    }
+                )
 
     return {
-        "by_host": {k: v for k, v in sorted(by_host.items())},
+        "by_host": dict(sorted(by_host.items())),
         "technologies": flat,
         "tech_stack": {
             "primary_host": primary_host,
@@ -348,7 +348,10 @@ async def run_recon_http_probe_bundle(
     out: dict[str, Any] = {}
     safe_url = safe_http_url_for_argv(target)
     if not safe_url:
-        logger.info("recon_http_probe_skipped", extra={"event": "recon_http_probe_skipped", "reason": "invalid_target_url"})
+        logger.info(
+            "recon_http_probe_skipped",
+            extra={"event": "recon_http_probe_skipped", "reason": "invalid_target_url"},
+        )
         return out
 
     ph = _host_from_target_url(target)
@@ -378,7 +381,11 @@ async def run_recon_http_probe_bundle(
         if not _tool_binary_visible(bin0, s):
             logger.info(
                 "recon_http_probe_skipped",
-                extra={"event": "recon_http_probe_skipped", "tool": name, "reason": "binary_missing"},
+                extra={
+                    "event": "recon_http_probe_skipped",
+                    "tool": name,
+                    "reason": "binary_missing",
+                },
             )
             return {
                 "success": False,
@@ -396,7 +403,11 @@ async def run_recon_http_probe_bundle(
         if not pol.allowed:
             logger.info(
                 "recon_http_probe_skipped",
-                extra={"event": "recon_http_probe_skipped", "tool": name, "reason": pol.reason},
+                extra={
+                    "event": "recon_http_probe_skipped",
+                    "tool": name,
+                    "reason": pol.reason,
+                },
             )
             return {
                 "success": False,
@@ -410,7 +421,11 @@ async def run_recon_http_probe_bundle(
             if not va.allowed:
                 logger.info(
                     "recon_http_probe_skipped",
-                    extra={"event": "recon_http_probe_skipped", "tool": name, "reason": va.reason},
+                    extra={
+                        "event": "recon_http_probe_skipped",
+                        "tool": name,
+                        "reason": va.reason,
+                    },
                 )
                 return {
                     "success": False,
@@ -456,6 +471,9 @@ async def run_recon_http_probe_bundle(
         try:
             await asyncio.to_thread(raw_sink.upload_json, "http_probe_tech_stack", merged)
         except Exception:
-            logger.warning("http_probe_tech_stack_upload_failed", extra={"event": "http_probe_tech_stack_upload_failed"})
+            logger.warning(
+                "http_probe_tech_stack_upload_failed",
+                extra={"event": "http_probe_tech_stack_upload_failed"},
+            )
 
     return out

@@ -16,7 +16,7 @@ def _req(raw: bytes) -> NormalizedRequest:
 
 GET_API = _req(b"GET /api/users HTTP/1.1\r\nHost: app.example.com\r\n\r\n")
 POST_JSON = _req(
-    b"POST /submit HTTP/1.1\r\nHost: app.example.com\r\n" b"Content-Type: application/json\r\n\r\n"
+    b"POST /submit HTTP/1.1\r\nHost: app.example.com\r\nContent-Type: application/json\r\n\r\n"
 )
 
 

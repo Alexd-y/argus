@@ -40,7 +40,12 @@ def test_extract_cve_ids_from_finding() -> None:
 
 def test_apply_default_finding_metadata_active_scan_no_poc() -> None:
     """Active scan WITHOUT real PoC evidence → confidence='likely' (ARGUS-004)."""
-    f: dict = {"source": "active_scan", "source_tool": "nuclei", "title": "t", "severity": "high"}
+    f: dict = {
+        "source": "active_scan",
+        "source_tool": "nuclei",
+        "title": "t",
+        "severity": "high",
+    }
     apply_default_finding_metadata(f)
     assert f["confidence"] == "likely"
     assert f["evidence_type"] == "observed"
@@ -67,7 +72,11 @@ def test_apply_default_finding_metadata_active_scan_with_poc() -> None:
 
 def test_apply_default_finding_metadata_threat_model() -> None:
     """Threat model source → confidence='possible' (ARGUS-004)."""
-    f: dict = {"source": "threat_model", "title": "Potential IDOR", "severity": "medium"}
+    f: dict = {
+        "source": "threat_model",
+        "title": "Potential IDOR",
+        "severity": "medium",
+    }
     apply_default_finding_metadata(f)
     assert f["confidence"] == "possible"
     assert f["evidence_type"] == "threat_model_inference"

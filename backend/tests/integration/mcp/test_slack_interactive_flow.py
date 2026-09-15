@@ -31,13 +31,12 @@ import json
 import time
 import urllib.parse
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Final
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from src.api.routers.mcp_slack_callbacks import (
     SLACK_AUDIT_TENANT_ID,
     _reset_audit_logger,
@@ -110,7 +109,7 @@ def _approval_event(
         approval_id=approval_id,
         root_cause_hash=None,
         evidence_url="https://argus.example/evidence/arg048",
-        occurred_at=datetime(2026, 4, 21, 8, 30, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 4, 21, 8, 30, tzinfo=UTC),
         extra_tags=(),
     )
 
@@ -133,9 +132,7 @@ def _slack_block_payload_for(action_id: str, *, user_id: str) -> bytes:
 def _sign(body: bytes, *, timestamp: int | None = None) -> dict[str, str]:
     ts = str(timestamp if timestamp is not None else int(time.time()))
     base = b"v0:" + ts.encode("ascii") + b":" + body
-    digest = hmac.new(
-        SIGNING_SECRET.encode("utf-8"), base, hashlib.sha256
-    ).hexdigest()
+    digest = hmac.new(SIGNING_SECRET.encode("utf-8"), base, hashlib.sha256).hexdigest()
     return {
         "X-Slack-Signature": f"v0={digest}",
         "X-Slack-Request-Timestamp": ts,
@@ -186,9 +183,7 @@ def test_end_to_end_approve_records_audit(
     """
     event = _approval_event(approval_id="approval-arg048-e2e-1")
     payload = build_slack_payload(event)
-    actions_block = next(
-        b for b in payload["blocks"] if b.get("type") == "actions"
-    )
+    actions_block = next(b for b in payload["blocks"] if b.get("type") == "actions")
     approve_action_id = next(
         e["action_id"] for e in actions_block["elements"] if e["style"] == "primary"
     )
@@ -196,9 +191,7 @@ def test_end_to_end_approve_records_audit(
     body = _slack_block_payload_for(approve_action_id, user_id="UE2E1")
     headers = _sign(body)
 
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["action"] == "approve"
     assert resp.json()["approval_id"] == "approval-arg048-e2e-1"
@@ -223,9 +216,7 @@ def test_end_to_end_deny_records_negative_audit(
 ) -> None:
     event = _approval_event(approval_id="approval-arg048-e2e-2")
     payload = build_slack_payload(event)
-    actions_block = next(
-        b for b in payload["blocks"] if b.get("type") == "actions"
-    )
+    actions_block = next(b for b in payload["blocks"] if b.get("type") == "actions")
     deny_action_id = next(
         e["action_id"] for e in actions_block["elements"] if e["style"] == "danger"
     )
@@ -233,9 +224,7 @@ def test_end_to_end_deny_records_negative_audit(
     body = _slack_block_payload_for(deny_action_id, user_id="UE2E2")
     headers = _sign(body)
 
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["action"] == "deny"
 
@@ -257,9 +246,7 @@ def test_replay_protection_rejects_stale_repost(
 ) -> None:
     event = _approval_event(approval_id="approval-arg048-replay")
     payload = build_slack_payload(event)
-    actions_block = next(
-        b for b in payload["blocks"] if b.get("type") == "actions"
-    )
+    actions_block = next(b for b in payload["blocks"] if b.get("type") == "actions")
     approve_action_id = next(
         e["action_id"] for e in actions_block["elements"] if e["style"] == "primary"
     )
@@ -267,14 +254,10 @@ def test_replay_protection_rejects_stale_repost(
     body = _slack_block_payload_for(approve_action_id, user_id="UREPLAY")
     stale_ts = int(time.time()) - 10 * 60
     headers = _sign(body, timestamp=stale_ts)
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 401
     assert resp.json()["detail"] == "stale_timestamp"
-    assert (
-        len(list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))) == 0
-    )
+    assert len(list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -298,13 +281,9 @@ def test_concurrent_callbacks_for_distinct_approvals(
         "approval-arg048-multi-3",
     ]
     for i, approval_id in enumerate(approval_ids):
-        body = _slack_block_payload_for(
-            f"approve::{approval_id}", user_id=f"UMULTI{i}"
-        )
+        body = _slack_block_payload_for(f"approve::{approval_id}", user_id=f"UMULTI{i}")
         headers = _sign(body)
-        resp = client.post(
-            "/mcp/notifications/slack/callback", content=body, headers=headers
-        )
+        resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
         assert resp.status_code == 200, resp.text
 
     events = list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))
@@ -328,9 +307,7 @@ def test_oversized_approval_id_is_rejected(
     huge = "x" * 200
     body = _slack_block_payload_for(f"approve::{huge}", user_id="UHUGE")
     headers = _sign(body)
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 422
     assert resp.json()["detail"] == "invalid_approval_id"
 
@@ -347,17 +324,11 @@ def test_user_id_extracted_when_user_object_minimal(
     payload = {
         "type": "block_actions",
         "user": {"id": "UMINIMAL"},
-        "actions": [
-            {"action_id": "approve::approval-min", "value": "approval-min"}
-        ],
+        "actions": [{"action_id": "approve::approval-min", "value": "approval-min"}],
     }
-    body = urllib.parse.urlencode({"payload": json.dumps(payload)}).encode(
-        "utf-8"
-    )
+    body = urllib.parse.urlencode({"payload": json.dumps(payload)}).encode("utf-8")
     headers = _sign(body)
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 200
     events = list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))
     assert events[0].payload["slack_user_id"] == "UMINIMAL"
@@ -374,17 +345,11 @@ def test_missing_user_object_is_recorded_as_unknown(
 ) -> None:
     payload = {
         "type": "block_actions",
-        "actions": [
-            {"action_id": "approve::approval-noUser", "value": "approval-noUser"}
-        ],
+        "actions": [{"action_id": "approve::approval-noUser", "value": "approval-noUser"}],
     }
-    body = urllib.parse.urlencode({"payload": json.dumps(payload)}).encode(
-        "utf-8"
-    )
+    body = urllib.parse.urlencode({"payload": json.dumps(payload)}).encode("utf-8")
     headers = _sign(body)
-    resp = client.post(
-        "/mcp/notifications/slack/callback", content=body, headers=headers
-    )
+    resp = client.post("/mcp/notifications/slack/callback", content=body, headers=headers)
     assert resp.status_code == 200
     events = list(audit_sink.iter_events(tenant_id=SLACK_AUDIT_TENANT_ID))
     assert events[0].payload["slack_user_id"] == "unknown"

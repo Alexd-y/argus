@@ -43,16 +43,12 @@ def test_password_redacted_in_sidecar(tmp_path: Path) -> None:
 
 
 def test_dedup_on_host_user(tmp_path: Path) -> None:
-    payload = (
-        b"host=10.0.0.1:user=root:pass=a [200]\nhost=10.0.0.1:user=root:pass=b [200]\n"
-    )
+    payload = b"host=10.0.0.1:user=root:pass=a [200]\nhost=10.0.0.1:user=root:pass=b [200]\n"
     assert len(parse_patator(payload, b"", tmp_path, "patator")) == 1
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    (tmp_path / "patator.log").write_bytes(
-        b"host=canonical.example:user=admin:pass=pwd [Found]\n"
-    )
+    (tmp_path / "patator.log").write_bytes(b"host=canonical.example:user=admin:pass=pwd [Found]\n")
     decoy = b"host=decoy.example:user=admin:pass=pwd [Found]\n"
     parse_patator(decoy, b"", tmp_path, "patator")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")

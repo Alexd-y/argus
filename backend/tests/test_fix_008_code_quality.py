@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-
 BACKEND_SRC = Path(__file__).resolve().parent.parent / "src"
 
 
@@ -25,15 +24,18 @@ class TestExploitationJsonLoadsWrapped:
                 continue
             func = node.func
             is_json_loads = False
-            if isinstance(func, ast.Attribute) and func.attr == "loads":
-                if isinstance(func.value, ast.Name) and func.value.id == "json":
-                    is_json_loads = True
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr == "loads"
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "json"
+            ):
+                is_json_loads = True
             if not is_json_loads:
                 continue
             parent_try = _find_parent_try(tree, node)
             assert parent_try is not None, (
-                f"json.loads at line {node.lineno} in exploitation.py "
-                "is not wrapped in try/except"
+                f"json.loads at line {node.lineno} in exploitation.py is not wrapped in try/except"
             )
 
 
@@ -69,9 +71,7 @@ class TestMainMigrationHandling:
             pytest.skip("main.py not found")
         source = path.read_text(encoding="utf-8")
         assert "subprocess.run" in source or "subprocess" in source
-        assert "returncode" in source, (
-            "main.py must check alembic subprocess return code"
-        )
+        assert "returncode" in source, "main.py must check alembic subprocess return code"
         assert "FileNotFoundError" in source or "except" in source, (
             "main.py must handle missing alembic command"
         )

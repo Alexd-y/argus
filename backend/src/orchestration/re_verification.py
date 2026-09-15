@@ -74,7 +74,10 @@ class ReVerificationTracker:
         elif request.original_endpoint:
             try:
                 import httpx
-                async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, verify=False) as client:
+
+                async with httpx.AsyncClient(
+                    timeout=15.0, follow_redirects=True, verify=False
+                ) as client:
                     resp = await client.get(request.original_endpoint)
                 still_vulnerable = 200 <= resp.status_code < 500
                 details = f"HTTP {resp.status_code} on {request.original_endpoint}"
@@ -88,7 +91,9 @@ class ReVerificationTracker:
                 extra={"finding_id": request.finding_id},
             )
             still_vulnerable = None
-            details = "No scanner function provided and no endpoint to probe — verification not performed"
+            details = (
+                "No scanner function provided and no endpoint to probe — verification not performed"
+            )
 
         if still_vulnerable is None:
             status = "unverified"

@@ -49,6 +49,7 @@ class DomainValidator:
         if "://" in value:
             try:
                 from urllib.parse import urlparse
+
                 parsed = urlparse(value)
                 host = parsed.hostname or parsed.netloc.split(":")[0]
                 return host or value

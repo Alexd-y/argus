@@ -174,9 +174,7 @@ def _bind_tenant(headers: Mapping[str, str], bound_tenant: str, *, method: str) 
                 "requested_tenant": requested,
             },
         )
-        raise TenantMismatchError(
-            "X-Tenant-ID does not match the authenticated tenant."
-        )
+        raise TenantMismatchError("X-Tenant-ID does not match the authenticated tenant.")
     return bound_tenant
 
 
@@ -207,9 +205,7 @@ def authenticate(
     if auth_value.lower().startswith(_BEARER_PREFIX):
         presented_bearer = auth_value[len(_BEARER_PREFIX) :].strip() or None
 
-    auth_required = (
-        require_auth if require_auth is not None else _is_auth_required(transport)
-    )
+    auth_required = require_auth if require_auth is not None else _is_auth_required(transport)
 
     if presented_bearer:
         if _try_static_token(presented_bearer):
@@ -243,9 +239,7 @@ def authenticate(
         if bound_tenant is not None:
             return MCPAuthContext(
                 user_id="argus-api-key" if not is_admin else "argus-admin",
-                tenant_id=_bind_tenant(
-                    canonical_headers, bound_tenant, method="api_key"
-                ),
+                tenant_id=_bind_tenant(canonical_headers, bound_tenant, method="api_key"),
                 method="api_key",
                 is_admin=is_admin,
             )

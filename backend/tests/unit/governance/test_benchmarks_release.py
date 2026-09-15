@@ -1,13 +1,13 @@
 """Tests for Benchmark Runner and Release Governance."""
 
-import pytest
 from src.governance.benchmarks.runner import (
-    BenchmarkResult, CWEMetrics,
-    run_synthetic_benchmark, BENCHMARK_PROFILES,
+    BENCHMARK_PROFILES,
+    run_synthetic_benchmark,
 )
 from src.governance.release.gates import (
-    EvalDelta, ReleaseGate, SystemCard,
-    compute_eval_delta, check_release_gates, generate_system_card,
+    check_release_gates,
+    compute_eval_delta,
+    generate_system_card,
 )
 
 
@@ -43,16 +43,44 @@ class TestSyntheticBenchmark:
 
 class TestEvalDelta:
     def test_compute_delta_improvement(self):
-        before = {"model": "old", "overall_precision": 0.85, "overall_recall": 0.80, "overall_f1": 0.82, "false_positive_rate": 0.20, "validated_finding_rate": 0.70}
-        after = {"model": "new", "overall_precision": 0.92, "overall_recall": 0.88, "overall_f1": 0.90, "false_positive_rate": 0.15, "validated_finding_rate": 0.78}
+        before = {
+            "model": "old",
+            "overall_precision": 0.85,
+            "overall_recall": 0.80,
+            "overall_f1": 0.82,
+            "false_positive_rate": 0.20,
+            "validated_finding_rate": 0.70,
+        }
+        after = {
+            "model": "new",
+            "overall_precision": 0.92,
+            "overall_recall": 0.88,
+            "overall_f1": 0.90,
+            "false_positive_rate": 0.15,
+            "validated_finding_rate": 0.78,
+        }
         delta = compute_eval_delta(before, after)
         assert delta.precision_delta > 0
         assert delta.false_positive_rate_delta < 0  # FP улучшился
         assert delta.verdict == "pass"
 
     def test_compute_delta_regression(self):
-        before = {"model": "old", "overall_precision": 0.92, "overall_recall": 0.88, "overall_f1": 0.90, "false_positive_rate": 0.10, "validated_finding_rate": 0.78}
-        after = {"model": "new", "overall_precision": 0.80, "overall_recall": 0.75, "overall_f1": 0.77, "false_positive_rate": 0.25, "validated_finding_rate": 0.60}
+        before = {
+            "model": "old",
+            "overall_precision": 0.92,
+            "overall_recall": 0.88,
+            "overall_f1": 0.90,
+            "false_positive_rate": 0.10,
+            "validated_finding_rate": 0.78,
+        }
+        after = {
+            "model": "new",
+            "overall_precision": 0.80,
+            "overall_recall": 0.75,
+            "overall_f1": 0.77,
+            "false_positive_rate": 0.25,
+            "validated_finding_rate": 0.60,
+        }
         delta = compute_eval_delta(before, after)
         assert delta.f1_delta < -0.02
         assert delta.verdict == "block"
@@ -60,7 +88,12 @@ class TestEvalDelta:
 
 class TestReleaseGates:
     def test_all_gates_pass(self):
-        result = {"overall_precision": 0.92, "overall_recall": 0.88, "overall_f1": 0.90, "false_positive_rate": 0.05}
+        result = {
+            "overall_precision": 0.92,
+            "overall_recall": 0.88,
+            "overall_f1": 0.90,
+            "false_positive_rate": 0.05,
+        }
         gates = check_release_gates(result, safety_alerts=2, hallucination_rate=0.01)
         assert all(g.passed for g in gates)
 
@@ -77,13 +110,21 @@ class TestReleaseGates:
         assert fp_gate.passed is False
 
     def test_safety_alerts_above_cap_fails(self):
-        result = {"overall_precision": 0.90, "overall_recall": 0.85, "false_positive_rate": 0.05}
+        result = {
+            "overall_precision": 0.90,
+            "overall_recall": 0.85,
+            "false_positive_rate": 0.05,
+        }
         gates = check_release_gates(result, safety_alerts=10)
         safety_gate = [g for g in gates if g.name == "safety_incidents_cap"][0]
         assert safety_gate.passed is False
 
     def test_hallucination_above_cap_fails(self):
-        result = {"overall_precision": 0.90, "overall_recall": 0.85, "false_positive_rate": 0.05}
+        result = {
+            "overall_precision": 0.90,
+            "overall_recall": 0.85,
+            "false_positive_rate": 0.05,
+        }
         gates = check_release_gates(result, hallucination_rate=0.05)
         hall_gate = [g for g in gates if g.name == "hallucination_cap"][0]
         assert hall_gate.passed is False
@@ -92,7 +133,8 @@ class TestReleaseGates:
 class TestSystemCard:
     def test_generates_complete_card(self):
         card = generate_system_card(
-            model="TestModel-7B", version="2.0.0",
+            model="TestModel-7B",
+            version="2.0.0",
             benchmark_result={"overall_f1": 0.91},
         )
         assert card.model == "TestModel-7B"

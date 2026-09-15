@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.quick.budget import QuickBudgetManager, normalize_host_key
 from src.quick.circuit_breaker import (
     CIRCUIT_OPEN_REASON,
@@ -159,7 +158,5 @@ def test_open_circuit_filters_va_plan_steps_without_raising() -> None:
         ("httpx", _HOST_A),
         ("nuclei", _HOST_B),
     )
-    remaining = tuple(
-        step for step in plan if not breaker.is_open(step[0], step[1])
-    )
+    remaining = tuple(step for step in plan if not breaker.is_open(step[0], step[1]))
     assert remaining == (("httpx", _HOST_A), ("nuclei", _HOST_B))

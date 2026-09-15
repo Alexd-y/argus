@@ -61,9 +61,7 @@ def test_empty_stdout_returns_no_findings(tmp_path: Path) -> None:
 
 
 def test_happy_path_emits_one_finding_per_principal(tmp_path: Path) -> None:
-    findings = parse_impacket_secretsdump(
-        _ntds_dump(), b"", tmp_path, "impacket_secretsdump"
-    )
+    findings = parse_impacket_secretsdump(_ntds_dump(), b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 5
     for finding in findings:
         assert finding.category is FindingCategory.AUTH
@@ -93,12 +91,8 @@ def test_kerberos_aes_keys_are_redacted(tmp_path: Path) -> None:
 
 
 def test_kerberos_blob_is_redacted(tmp_path: Path) -> None:
-    payload = (
-        b"$krb5tgs$23$*sqlsvc$CONTOSO$cifs/dc01.contoso.local*$cafe1234$babefacecafe\n"
-    )
-    findings = parse_impacket_secretsdump(
-        payload, b"", tmp_path, "impacket_secretsdump"
-    )
+    payload = b"$krb5tgs$23$*sqlsvc$CONTOSO$cifs/dc01.contoso.local*$cafe1234$babefacecafe\n"
+    findings = parse_impacket_secretsdump(payload, b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     assert "$krb5tgs$" not in sidecar
@@ -107,9 +101,7 @@ def test_kerberos_blob_is_redacted(tmp_path: Path) -> None:
 
 def test_dcc2_blob_is_recognised_and_redacted(tmp_path: Path) -> None:
     payload = b"CONTOSO\\admin:$DCC2$10240#admin#a1b2c3d4e5f60718293a4b5c6d7e8f90\n"
-    findings = parse_impacket_secretsdump(
-        payload, b"", tmp_path, "impacket_secretsdump"
-    )
+    findings = parse_impacket_secretsdump(payload, b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     assert "a1b2c3d4e5f60718293a4b5c6d7e8f90" not in sidecar
@@ -121,9 +113,7 @@ def test_dedup_collapses_duplicate_principals(tmp_path: Path) -> None:
         b"CONTOSO\\administrator:500:aad3b435b51404eeaad3b435b51404ee:"
         b"31d6cfe0d16ae931b73c59d7e0c089c0:::\n"
     )
-    findings = parse_impacket_secretsdump(
-        line + line + line, b"", tmp_path, "impacket_secretsdump"
-    )
+    findings = parse_impacket_secretsdump(line + line + line, b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 1
 
 
@@ -135,9 +125,7 @@ def test_malformed_lines_are_skipped(tmp_path: Path) -> None:
         b"CONTOSO\\administrator:500:aad3b435b51404eeaad3b435b51404ee:"
         b"31d6cfe0d16ae931b73c59d7e0c089c0:::\n"
     )
-    findings = parse_impacket_secretsdump(
-        payload, b"", tmp_path, "impacket_secretsdump"
-    )
+    findings = parse_impacket_secretsdump(payload, b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 1
 
 
@@ -145,9 +133,7 @@ def test_sidecar_contains_tool_id_and_synthetic_id(tmp_path: Path) -> None:
     parse_impacket_secretsdump(_ntds_dump(), b"", tmp_path, "impacket_secretsdump")
     sidecar_lines = [
         line
-        for line in (tmp_path / EVIDENCE_SIDECAR_NAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").splitlines()
         if line
     ]
     parsed = [json.loads(line) for line in sidecar_lines]
@@ -156,12 +142,8 @@ def test_sidecar_contains_tool_id_and_synthetic_id(tmp_path: Path) -> None:
 
 
 def test_findings_are_sorted_deterministically(tmp_path: Path) -> None:
-    findings_a = parse_impacket_secretsdump(
-        _ntds_dump(), b"", tmp_path, "impacket_secretsdump"
-    )
-    findings_b = parse_impacket_secretsdump(
-        _ntds_dump(), b"", tmp_path, "impacket_secretsdump"
-    )
+    findings_a = parse_impacket_secretsdump(_ntds_dump(), b"", tmp_path, "impacket_secretsdump")
+    findings_b = parse_impacket_secretsdump(_ntds_dump(), b"", tmp_path, "impacket_secretsdump")
     assert len(findings_a) == len(findings_b)
 
 
@@ -170,9 +152,7 @@ def test_lsa_plain_password_hex_line_is_redacted(tmp_path: Path) -> None:
         b"CONTOSO\\DC01$:plain_password_hex:"
         b"abcdef0123456789fedcba9876543210abcdef0123456789fedcba9876543210\n"
     )
-    findings = parse_impacket_secretsdump(
-        payload, b"", tmp_path, "impacket_secretsdump"
-    )
+    findings = parse_impacket_secretsdump(payload, b"", tmp_path, "impacket_secretsdump")
     assert len(findings) == 1
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     assert "abcdef0123456789fedcba9876543210" not in sidecar

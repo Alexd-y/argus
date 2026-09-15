@@ -36,9 +36,7 @@ async def login(req: LoginRequest) -> dict:
         )
 
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(User).where(User.email == req.mail, User.is_active == True)  # noqa: E712
-        )
+        result = await session.execute(select(User).where(User.email == req.mail, User.is_active))
         user = result.scalar_one_or_none()
 
     if user:

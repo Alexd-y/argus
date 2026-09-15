@@ -18,14 +18,13 @@ from __future__ import annotations
 
 import types
 from collections.abc import Callable, Mapping
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.auth.session_store import SessionStore
 from src.orchestration.auth_config import PrincipalRole
 from src.pipeline.contracts.tool_job import TargetKind, TargetSpec
@@ -78,7 +77,7 @@ class StubTransport:
         """Return the distinct ``Cookie`` header values seen for a principal."""
         return {
             spec.headers.get("Cookie", "")
-            for spec, who in zip(self.calls, self.principals)
+            for spec, who in zip(self.calls, self.principals, strict=False)
             if who == principal
         }
 
@@ -213,7 +212,7 @@ def eap_gate_factory(
                 targets=targets,
                 allow_action_classes=allow_classes,
                 max_request_budget=10_000,
-                expires=datetime.now(tz=timezone.utc) + timedelta(days=1),
+                expires=datetime.now(tz=UTC) + timedelta(days=1),
             ),
             private_key=private_key,
         )

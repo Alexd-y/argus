@@ -448,7 +448,7 @@ def _raise_mfa_enrollment_required(*, subject: str | None) -> NoReturn:
 async def require_admin_mfa_passed(
     request: Request,
     _admin_gate: None = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db),  # noqa: B008 - FastAPI dependency-injection idiom
 ) -> None:
     """Gate sensitive admin routes on a fresh MFA challenge.
 

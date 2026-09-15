@@ -16,11 +16,10 @@ os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-prod-but-required-by-settings")
 os.environ.setdefault("ARGUS_TEST_MODE", "1")
 
-import pytest  # noqa: E402
-
-from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger  # noqa: E402
-from src.mcp.auth import MCPAuthContext  # noqa: E402
-from src.mcp.context import (  # noqa: E402
+import pytest
+from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger
+from src.mcp.auth import MCPAuthContext
+from src.mcp.context import (
     set_audit_logger,
     set_auth_override,
     set_notification_dispatcher,

@@ -24,7 +24,6 @@ from typing import Final
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications import (
     AdapterResult,
     JiraAdapter,
@@ -38,7 +37,6 @@ from src.reports.replay_command_sanitizer import (
     SanitizeContext,
     sanitize_replay_command,
 )
-
 
 # Each row: (label, raw_secret, needle).
 # `needle` is the high-entropy substring that MUST never appear in any
@@ -123,14 +121,10 @@ def _http_handler_capture(
     SECRET_PATTERNS,
     ids=[label for label, _, _ in SECRET_PATTERNS],
 )
-def test_slack_result_does_not_carry_secret(
-    label: str, raw_secret: str, needle: str
-) -> None:
+def test_slack_result_does_not_carry_secret(label: str, raw_secret: str, needle: str) -> None:
     captured: list[httpx.Request] = []
     slack = SlackNotifier(
-        webhook_url=raw_secret
-        if "webhook" in label
-        else "https://hooks.slack.example/T0/B0/inert",
+        webhook_url=raw_secret if "webhook" in label else "https://hooks.slack.example/T0/B0/inert",
         client=httpx.AsyncClient(
             transport=httpx.MockTransport(
                 _http_handler_capture(captured, lambda: httpx.Response(200))
@@ -151,9 +145,7 @@ def test_slack_result_does_not_carry_secret(
     SECRET_PATTERNS,
     ids=[label for label, _, _ in SECRET_PATTERNS],
 )
-def test_linear_result_does_not_carry_secret(
-    label: str, raw_secret: str, needle: str
-) -> None:
+def test_linear_result_does_not_carry_secret(label: str, raw_secret: str, needle: str) -> None:
     captured: list[httpx.Request] = []
     linear = LinearAdapter(
         api_key=raw_secret if "linear" in label else "lin_api_inert",
@@ -163,9 +155,7 @@ def test_linear_result_does_not_carry_secret(
             transport=httpx.MockTransport(
                 _http_handler_capture(
                     captured,
-                    lambda: httpx.Response(
-                        200, json={"data": {"issueCreate": {"success": True}}}
-                    ),
+                    lambda: httpx.Response(200, json={"data": {"issueCreate": {"success": True}}}),
                 )
             ),
             timeout=5.0,
@@ -184,9 +174,7 @@ def test_linear_result_does_not_carry_secret(
     SECRET_PATTERNS,
     ids=[label for label, _, _ in SECRET_PATTERNS],
 )
-def test_jira_result_does_not_carry_secret(
-    label: str, raw_secret: str, needle: str
-) -> None:
+def test_jira_result_does_not_carry_secret(label: str, raw_secret: str, needle: str) -> None:
     captured: list[httpx.Request] = []
     jira = JiraAdapter(
         site_url="https://argus.atlassian.example",
@@ -195,9 +183,7 @@ def test_jira_result_does_not_carry_secret(
         project_key="SEC",
         client=httpx.AsyncClient(
             transport=httpx.MockTransport(
-                _http_handler_capture(
-                    captured, lambda: httpx.Response(201, json={"key": "SEC-1"})
-                )
+                _http_handler_capture(captured, lambda: httpx.Response(201, json={"key": "SEC-1"}))
             ),
             timeout=5.0,
         ),
@@ -224,9 +210,7 @@ def test_dispatch_audit_log_does_not_carry_secret(
     label: str, raw_secret: str, needle: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     slack = SlackNotifier(
-        webhook_url=raw_secret
-        if "webhook" in label
-        else "https://hooks.slack.example/T/B/x",
+        webhook_url=raw_secret if "webhook" in label else "https://hooks.slack.example/T/B/x",
         client=httpx.AsyncClient(
             transport=httpx.MockTransport(lambda _: httpx.Response(200)),
             timeout=5.0,
@@ -242,9 +226,7 @@ def test_dispatch_audit_log_does_not_carry_secret(
     )
     disp.set_adapter_enabled("slack", True)
     ev = _build_event()
-    with caplog.at_level(
-        logging.INFO, logger="src.mcp.services.notifications.dispatcher"
-    ):
+    with caplog.at_level(logging.INFO, logger="src.mcp.services.notifications.dispatcher"):
         asyncio.run(disp.dispatch(ev))
     asyncio.run(disp.aclose())
 
@@ -286,9 +268,7 @@ def test_sanitiser_produces_summary_safe_for_all_adapters() -> None:
 
     slack = SlackNotifier(
         webhook_url="https://hooks.slack.example/T/B/x",
-        client=httpx.AsyncClient(
-            transport=httpx.MockTransport(_slack_handler), timeout=5.0
-        ),
+        client=httpx.AsyncClient(transport=httpx.MockTransport(_slack_handler), timeout=5.0),
         backoff_base_seconds=0.0,
         backoff_factor=1.0,
         rng=lambda: 1.0,

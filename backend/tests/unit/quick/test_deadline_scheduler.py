@@ -236,11 +236,14 @@ def test_cancelled_pick_returns_no_task() -> None:
     )
     assert pick.task is None
     assert pick.skip_reason is ScheduleSkipReason.CANCELLED
-    assert scheduler.eligible_tasks(
-        scan_id=_SCAN_ID,
-        completed_ids=set(),
-        cancelled=True,
-    ) == ()
+    assert (
+        scheduler.eligible_tasks(
+            scan_id=_SCAN_ID,
+            completed_ids=set(),
+            cancelled=True,
+        )
+        == ()
+    )
 
 
 def test_per_host_concurrency_skips_same_host_picks_other() -> None:

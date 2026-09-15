@@ -8,7 +8,6 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.payloads.registry import PayloadRegistry, PayloadSignatureError
 
 _BACKEND: Final[Path] = Path(__file__).resolve().parents[1]

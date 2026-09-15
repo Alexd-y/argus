@@ -24,7 +24,9 @@ def complete_recon_dir(tmp_path: Path) -> Path:
 
 
 @pytest.mark.asyncio
-async def test_execute_threat_modeling_run_file_based_fallback(complete_recon_dir: Path) -> None:
+async def test_execute_threat_modeling_run_file_based_fallback(
+    complete_recon_dir: Path,
+) -> None:
     """Pipeline runs with file-based recon_dir and LLM fallback (no LLM)."""
     result = await execute_threat_modeling_run(
         engagement_id="e1",
@@ -41,8 +43,11 @@ async def test_execute_threat_modeling_run_file_based_fallback(complete_recon_di
 
 
 @pytest.mark.asyncio
-async def test_execute_threat_modeling_run_with_mock_llm(complete_recon_dir: Path) -> None:
+async def test_execute_threat_modeling_run_with_mock_llm(
+    complete_recon_dir: Path,
+) -> None:
     """Pipeline uses injected llm_callable when provided."""
+
     def mock_llm(_prompt: str, context: dict) -> str:
         task = context.get("task", "")
         if task == "critical_assets":

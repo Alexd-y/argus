@@ -17,7 +17,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.findings.epss_client import HttpClientProtocol, HttpResponse, RedisLike
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -26,7 +25,6 @@ from src.pipeline.contracts.finding_dto import (
     FindingStatus,
     SSVCDecision,
 )
-
 
 # ---------------------------------------------------------------------------
 # FindingDTO builder

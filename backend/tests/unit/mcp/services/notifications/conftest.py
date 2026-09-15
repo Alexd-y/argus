@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable, Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications.schemas import (
     NotificationEvent,
     NotificationSeverity,
@@ -40,7 +40,7 @@ def make_event(
         approval_id=approval_id,
         root_cause_hash=root_cause_hash,
         evidence_url=evidence_url,
-        occurred_at=datetime(2026, 4, 19, 10, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 4, 19, 10, 0, tzinfo=UTC),
         extra_tags=("cwe-89", "owasp-a03"),
     )
 
@@ -100,10 +100,8 @@ def make_mock_client() -> Iterator[
     import asyncio
 
     for client in clients:
-        try:
+        with contextlib.suppress(Exception):
             asyncio.get_event_loop().run_until_complete(client.aclose())
-        except Exception:
-            pass
 
 
 def collect_responses(

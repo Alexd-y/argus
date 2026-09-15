@@ -64,7 +64,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -129,7 +129,7 @@ _HEADER_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -260,9 +260,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         if value in (None, "", 0) and key != "hop":
             continue
         cleaned[key] = value
-    return json.dumps(
-        scrub_evidence_strings(cleaned), sort_keys=True, ensure_ascii=False
-    )
+    return json.dumps(scrub_evidence_strings(cleaned), sort_keys=True, ensure_ascii=False)
 
 
 def _persist_sidecar(

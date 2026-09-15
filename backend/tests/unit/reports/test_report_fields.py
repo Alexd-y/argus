@@ -34,11 +34,13 @@ def test_rate_limit_remediation_default():
 
 
 def test_explicit_remediation_preserved_and_bridged():
-    f = _meta({
-        "title": "SPF record missing",
-        "severity": "medium",
-        "remediation": "Publish v=spf1 ... -all",
-    })
+    f = _meta(
+        {
+            "title": "SPF record missing",
+            "severity": "medium",
+            "remediation": "Publish v=spf1 ... -all",
+        }
+    )
     assert f["remediation"] == "Publish v=spf1 ... -all"
     assert f["applicability_notes"] == "Publish v=spf1 ... -all"
 

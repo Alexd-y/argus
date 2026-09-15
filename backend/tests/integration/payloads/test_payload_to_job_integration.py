@@ -18,17 +18,15 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.payloads.builder import (
-    PayloadBuildRequest,
     PayloadBuilder,
+    PayloadBuildRequest,
 )
 from src.payloads.integration import (
     PayloadDeliveryConfigMap,
     attach_payload_bundle_to_job,
 )
 from src.payloads.registry import PayloadRegistry
-
 
 _NAMESPACE: Final[str] = "argus-sandbox"
 
@@ -68,9 +66,7 @@ def _baseline_job_manifest(name: str = "argus-validator-1") -> dict[str, Any]:
                         {
                             "name": "validator",
                             "image": "argus/validator:1.0.0",
-                            "env": [
-                                {"name": "ARGUS_TARGET", "value": "https://example"}
-                            ],
+                            "env": [{"name": "ARGUS_TARGET", "value": "https://example"}],
                             "volumeMounts": [{"name": "out", "mountPath": "/out"}],
                         }
                     ],

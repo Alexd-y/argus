@@ -41,7 +41,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -60,7 +59,6 @@ from src.sandbox.parsers.semgrep_parser import (
 from src.sandbox.parsers.trivy_parser import (
     EVIDENCE_SIDECAR_NAME as TRIVY_SIDECAR_NAME,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -123,9 +121,7 @@ def _trivy_payload(*, tool_id: str = "trivy_image") -> bytes:
             "ArtifactName": "registry.example/foo:1.2.3"
             if tool_id == "trivy_image"
             else "/in/repo",
-            "ArtifactType": "container_image"
-            if tool_id == "trivy_image"
-            else "filesystem",
+            "ArtifactType": "container_image" if tool_id == "trivy_image" else "filesystem",
             "Results": [
                 {
                     "Target": "registry.example/foo:1.2.3 (debian 12.5)",
@@ -209,9 +205,7 @@ def _semgrep_payload() -> bytes:
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -272,9 +266,7 @@ def test_arg018_does_not_drop_prior_cycle_registrations() -> None:
 
 
 @pytest.mark.parametrize("tool_id", TRIVY_TOOL_IDS)
-def test_dispatch_routes_each_trivy_tool_to_shared_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_trivy_tool_to_shared_parser(tool_id: str, tmp_path: Path) -> None:
     """Both Trivy tool_ids route via JSON_OBJECT and produce findings."""
     artifacts_dir = tmp_path / tool_id
     artifacts_dir.mkdir()
@@ -339,9 +331,7 @@ def test_dispatch_trivy_image_ignores_sibling_trivy_fs_artifact(
 
 
 @pytest.mark.parametrize("tool_id", TRIVY_TOOL_IDS)
-def test_dispatch_writes_trivy_sidecar_with_correct_tool_id(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_writes_trivy_sidecar_with_correct_tool_id(tool_id: str, tmp_path: Path) -> None:
     """Each Trivy dispatch emits ``trivy_findings.jsonl`` tagged with tool_id."""
     artifacts_dir = tmp_path / tool_id
     artifacts_dir.mkdir()
@@ -355,9 +345,7 @@ def test_dispatch_writes_trivy_sidecar_with_correct_tool_id(
     assert findings
 
     sidecar = artifacts_dir / TRIVY_SIDECAR_NAME
-    assert sidecar.is_file(), (
-        f"{tool_id}: trivy parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: trivy parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert len(parsed) == len(findings)
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -493,8 +481,7 @@ def test_deferred_arg018_tools_have_no_parser(
         )
 
     assert len(findings) == 1, (
-        f"{tool_id}: expected one heartbeat via JSON_OBJECT misroute, "
-        f"got {len(findings)} findings"
+        f"{tool_id}: expected one heartbeat via JSON_OBJECT misroute, got {len(findings)} findings"
     )
     heartbeat = findings[0]
     assert heartbeat.category is FindingCategory.INFO
@@ -531,9 +518,7 @@ def test_semgrep_payload_misrouted_via_trivy_tool_id_is_inert(
         tmp_path,
         tool_id="trivy_image",
     )
-    assert findings == [], (
-        "trivy parser must produce no findings on a semgrep-shaped envelope"
-    )
+    assert findings == [], "trivy parser must produce no findings on a semgrep-shaped envelope"
 
 
 def test_trivy_payload_misrouted_via_semgrep_tool_id_is_inert(
@@ -552,9 +537,7 @@ def test_trivy_payload_misrouted_via_semgrep_tool_id_is_inert(
         tmp_path,
         tool_id="semgrep",
     )
-    assert findings == [], (
-        "semgrep parser must produce no findings on a trivy-shaped envelope"
-    )
+    assert findings == [], "semgrep parser must produce no findings on a trivy-shaped envelope"
 
 
 # ---------------------------------------------------------------------------
@@ -563,9 +546,7 @@ def test_trivy_payload_misrouted_via_semgrep_tool_id_is_inert(
 
 
 @pytest.mark.parametrize("tool_id", TRIVY_TOOL_IDS)
-def test_trivy_dispatch_is_deterministic_across_repeated_runs(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_trivy_dispatch_is_deterministic_across_repeated_runs(tool_id: str, tmp_path: Path) -> None:
     """Two trivy dispatches on the same payload produce identical sidecars."""
     artifacts_a = tmp_path / "a"
     artifacts_b = tmp_path / "b"

@@ -177,7 +177,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -311,7 +311,7 @@ _SEVERITY_RANK: Final[dict[str, int]] = {
 
 # Stable dedup key shape: ``(kind, *rest)``. Module-level alias keeps
 # the dedup loop signature short.
-DedupKey: TypeAlias = tuple[str, ...]
+type DedupKey = tuple[str, ...]
 
 
 # Per-tool canonical artifact filename. Both Trivy callers emit the
@@ -584,9 +584,7 @@ def _load_payload(
     fall back to :data:`_DEFAULT_CANONICAL_FILENAME` so a future caller
     is parsed best-effort instead of returning ``[]`` silently.
     """
-    canonical_name = _CANONICAL_FILENAME_BY_TOOL.get(
-        tool_id, _DEFAULT_CANONICAL_FILENAME
-    )
+    canonical_name = _CANONICAL_FILENAME_BY_TOOL.get(tool_id, _DEFAULT_CANONICAL_FILENAME)
     canonical = _safe_join(artifacts_dir, canonical_name)
     if canonical is not None and canonical.is_file():
         try:
@@ -935,8 +933,7 @@ def _coerce_cwe(value: Any) -> int | None:
         return value
     if isinstance(value, str):
         candidate = value.strip().upper()
-        if candidate.startswith("CWE-"):
-            candidate = candidate[4:]
+        candidate = candidate.removeprefix("CWE-")
         if candidate.isdigit():
             cwe_id = int(candidate)
             return cwe_id if cwe_id > 0 else None

@@ -45,7 +45,6 @@ from collections.abc import Iterator
 from typing import Final
 
 import pytest
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -217,9 +216,7 @@ def _make_report_data(
                 description="HTTP req/resp dump",
             )
         ],
-        screenshots=[
-            ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")
-        ],
+        screenshots=[ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")],
         timeline=[
             TimelineEntry(
                 phase="recon",
@@ -366,9 +363,7 @@ def test_render_latex_template_emits_compileable_source(
     not _latex_engine_available(),
     reason="neither xelatex nor latexmk on PATH (install texlive/MikTeX)",
 )
-@pytest.mark.skipif(
-    not _pypdf_available(), reason="pypdf required for PDF text extraction"
-)
+@pytest.mark.skipif(not _pypdf_available(), reason="pypdf required for PDF text extraction")
 @pytest.mark.parametrize(
     "tier",
     [ReportTier.MIDGARD, ReportTier.ASGARD, ReportTier.VALHALLA],
@@ -404,17 +399,13 @@ def test_latex_weasyprint_pdf_parity(
 
     # WeasyPrint output
     os.environ["REPORT_PDF_BACKEND"] = WeasyPrintBackend.name
-    weasy_bundle = service.render_bundle(
-        report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    weasy_bundle = service.render_bundle(report_data, tier=tier, fmt=ReportFormat.PDF)
     assert weasy_bundle.size_bytes > 0
     assert weasy_bundle.content[:5] == PDF_MAGIC
 
     # LaTeX output
     os.environ["REPORT_PDF_BACKEND"] = LatexBackend.name
-    latex_bundle = service.render_bundle(
-        report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    latex_bundle = service.render_bundle(report_data, tier=tier, fmt=ReportFormat.PDF)
     assert latex_bundle.size_bytes > 0
     assert latex_bundle.content[:5] == PDF_MAGIC
 
@@ -423,24 +414,16 @@ def test_latex_weasyprint_pdf_parity(
 
     # Invariant 2: identifiers must travel through unchanged.
     for identifier in (report_data.tenant_id, report_data.scan_id):
-        assert identifier in weasy_text, (
-            f"WeasyPrint output missing identifier {identifier!r}"
-        )
-        assert identifier in latex_text, (
-            f"LaTeX output missing identifier {identifier!r}"
-        )
+        assert identifier in weasy_text, f"WeasyPrint output missing identifier {identifier!r}"
+        assert identifier in latex_text, f"LaTeX output missing identifier {identifier!r}"
 
     # Invariant 3: severity headlines must exist in both outputs.
     # ``case-insensitive`` because LaTeX preamble may force smallcaps.
     weasy_lower = weasy_text.lower()
     latex_lower = latex_text.lower()
     for headline in ("critical", "high"):
-        assert headline in weasy_lower, (
-            f"WeasyPrint output missing severity headline {headline!r}"
-        )
-        assert headline in latex_lower, (
-            f"LaTeX output missing severity headline {headline!r}"
-        )
+        assert headline in weasy_lower, f"WeasyPrint output missing severity headline {headline!r}"
+        assert headline in latex_lower, f"LaTeX output missing severity headline {headline!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -455,9 +438,7 @@ def test_latex_weasyprint_pdf_parity(
     not _latex_engine_available(),
     reason="neither xelatex nor latexmk on PATH (install texlive/MikTeX)",
 )
-@pytest.mark.skipif(
-    not _pypdf_available(), reason="pypdf required for PDF text extraction"
-)
+@pytest.mark.skipif(not _pypdf_available(), reason="pypdf required for PDF text extraction")
 @pytest.mark.parametrize(
     "tier",
     [ReportTier.MIDGARD, ReportTier.ASGARD, ReportTier.VALHALLA],
@@ -475,14 +456,10 @@ def test_latex_weasyprint_finding_title_parity(
     report_data = _make_report_data()
 
     os.environ["REPORT_PDF_BACKEND"] = WeasyPrintBackend.name
-    weasy_bundle = service.render_bundle(
-        report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    weasy_bundle = service.render_bundle(report_data, tier=tier, fmt=ReportFormat.PDF)
 
     os.environ["REPORT_PDF_BACKEND"] = LatexBackend.name
-    latex_bundle = service.render_bundle(
-        report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    latex_bundle = service.render_bundle(report_data, tier=tier, fmt=ReportFormat.PDF)
 
     weasy_text = _extract_pdf_text(weasy_bundle.content).lower()
     latex_text = _extract_pdf_text(latex_bundle.content).lower()
@@ -520,9 +497,7 @@ def test_latex_weasyprint_finding_title_parity(
     not _latex_engine_available(),
     reason="neither xelatex nor latexmk on PATH (install texlive/MikTeX)",
 )
-@pytest.mark.skipif(
-    not _pypdf_available(), reason="pypdf required for PDF text extraction"
-)
+@pytest.mark.skipif(not _pypdf_available(), reason="pypdf required for PDF text extraction")
 @pytest.mark.parametrize(
     "label,raw_secret,needle",
     LATEX_PARITY_SECRETS,
@@ -547,14 +522,10 @@ def test_no_secret_leak_in_either_backend(
     report_data = _make_report_data(extra_finding_description=description)
 
     os.environ["REPORT_PDF_BACKEND"] = WeasyPrintBackend.name
-    weasy_bundle = service.render_bundle(
-        report_data, tier=ReportTier.ASGARD, fmt=ReportFormat.PDF
-    )
+    weasy_bundle = service.render_bundle(report_data, tier=ReportTier.ASGARD, fmt=ReportFormat.PDF)
 
     os.environ["REPORT_PDF_BACKEND"] = LatexBackend.name
-    latex_bundle = service.render_bundle(
-        report_data, tier=ReportTier.ASGARD, fmt=ReportFormat.PDF
-    )
+    latex_bundle = service.render_bundle(report_data, tier=ReportTier.ASGARD, fmt=ReportFormat.PDF)
 
     weasy_text = _extract_pdf_text(weasy_bundle.content)
     latex_text = _extract_pdf_text(latex_bundle.content)
@@ -640,7 +611,9 @@ def test_latex_truncate_respects_limit_and_appends_ellipsis(
 
 
 @pytest.mark.parametrize("tier", list(ReportTier))
-def test_resolve_latex_template_path_returns_existing_main_tex(tier: ReportTier) -> None:
+def test_resolve_latex_template_path_returns_existing_main_tex(
+    tier: ReportTier,
+) -> None:
     """Every supported tier MUST have an on-disk `main.tex.j2` shipped
     with the backend; otherwise `generate_pdf` silently falls back to
     the Phase-1 stub at runtime and Phase-2 parity is lost.

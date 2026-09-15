@@ -113,7 +113,15 @@ export type ReportDownloadFormat =
   | "json"
   | "csv"
   | "md"
-  | "valhalla_sections.csv";
+  | "valhalla_sections.csv"
+  // Valhalla mandatory LLM remediation/closure deliverable (per-finding plan +
+  // closure conclusion) projected into four parity formats + release manifest.
+  | "valhalla_llm_json"
+  | "valhalla_llm_md"
+  | "valhalla_llm_xml"
+  | "valhalla_llm_html"
+  | "valhalla_llm_pdf"
+  | "valhalla_llm_manifest";
 
 export type GetReportDownloadUrlOptions = {
   /**

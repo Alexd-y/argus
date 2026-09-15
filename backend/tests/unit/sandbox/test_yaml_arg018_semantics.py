@@ -62,7 +62,6 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import (
@@ -71,7 +70,6 @@ from src.sandbox.adapter_base import (
     ToolDescriptor,
 )
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # ---------------------------------------------------------------------------
 # Cohort definitions — pinned hard so a silent drop / addition breaks CI.
@@ -449,9 +447,7 @@ def catalog_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -500,8 +496,7 @@ def test_category_matches_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = CATEGORY_BY_TOOL[tool_id]
     assert descriptor.category is expected, (
-        f"{tool_id}: category={descriptor.category.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: category={descriptor.category.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -511,8 +506,7 @@ def test_phase_matches_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = PHASE_BY_TOOL[tool_id]
     assert descriptor.phase is expected, (
-        f"{tool_id}: phase={descriptor.phase.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: phase={descriptor.phase.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -537,9 +531,7 @@ def test_image_matches_per_cohort_pin(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG018_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -612,13 +604,9 @@ def test_parse_strategy_matches_per_tool_split(catalog_dir: Path, tool_id: str) 
 def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
     """Whatever evidence path is declared lives under ``/out``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.evidence_artifacts, (
-        f"{tool_id}: must declare at least one evidence artefact"
-    )
+    assert descriptor.evidence_artifacts, f"{tool_id}: must declare at least one evidence artefact"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", ARG018_TOOL_IDS)
@@ -626,9 +614,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-018 tool ships at least one CWE hint."""
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     assert "cwe_hints" in payload, f"{tool_id}.yaml missing the cwe_hints key"
-    assert isinstance(payload["cwe_hints"], list), (
-        f"{tool_id}.yaml: cwe_hints must be a list"
-    )
+    assert isinstance(payload["cwe_hints"], list), f"{tool_id}.yaml: cwe_hints must be a list"
     assert payload["cwe_hints"], f"{tool_id}.yaml: cwe_hints must be non-empty"
 
 
@@ -636,9 +622,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
 def test_owasp_wstg_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-018 tool ships at least one OWASP-WSTG hint."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for ARG-018 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for ARG-018 tools"
 
 
 # ---------------------------------------------------------------------------
@@ -647,15 +631,12 @@ def test_owasp_wstg_non_empty(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG018_TOOL_IDS)
-def test_default_timeout_matches_per_tool_floor(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_default_timeout_matches_per_tool_floor(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-018 tool floors at the per-tool minimum from the cycle plan."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = DEFAULT_TIMEOUT_S_BY_TOOL[tool_id]
     assert descriptor.default_timeout_s >= expected, (
-        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s "
-        f"below floor of {expected}s"
+        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s below floor of {expected}s"
     )
 
 
@@ -666,8 +647,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -677,9 +657,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG018_TOOL_IDS)
-def test_command_template_first_token_is_real_binary(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_first_token_is_real_binary(catalog_dir: Path, tool_id: str) -> None:
     """The first argv token is the real binary (or the documented sh wrapper)."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.command_template, f"{tool_id}: command_template must be non-empty"
@@ -699,9 +677,7 @@ def test_command_template_first_token_is_real_binary(
     "tool_id",
     [t for t in ARG018_TOOL_IDS if t not in SH_WRAPPED_TOOLS],
 )
-def test_command_template_argv_has_no_shell_metachars(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_argv_has_no_shell_metachars(catalog_dir: Path, tool_id: str) -> None:
     """Non-wrapper tools must have argv tokens free of shell metacharacters."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     for index, token in enumerate(descriptor.command_template):
@@ -718,9 +694,9 @@ def test_command_template_argv_has_no_shell_metachars(
 
 
 _BACKLOG_SECTION_BY_COHORT: Final[dict[str, str]] = {
-    **{tid: "§4.14" for tid in API_GRAPHQL_TOOL_IDS},
-    **{tid: "§4.15" for tid in CLOUD_IAC_TOOL_IDS},
-    **{tid: "§4.16" for tid in CODE_SECRETS_TOOL_IDS},
+    **dict.fromkeys(API_GRAPHQL_TOOL_IDS, "§4.14"),
+    **dict.fromkeys(CLOUD_IAC_TOOL_IDS, "§4.15"),
+    **dict.fromkeys(CODE_SECRETS_TOOL_IDS, "§4.16"),
 }
 
 
@@ -740,15 +716,12 @@ def test_description_has_upstream_attribution(catalog_dir: Path, tool_id: str) -
 
 
 @pytest.mark.parametrize("tool_id", ARG018_TOOL_IDS)
-def test_description_references_backlog_section(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_description_references_backlog_section(catalog_dir: Path, tool_id: str) -> None:
     """Description references the matching Backlog §4.14/§4.15/§4.16 section."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected_section = _BACKLOG_SECTION_BY_COHORT[tool_id]
     assert expected_section in descriptor.description, (
-        f"{tool_id}: description must reference Backlog {expected_section} "
-        f"for traceability"
+        f"{tool_id}: description must reference Backlog {expected_section} for traceability"
     )
 
 

@@ -57,7 +57,11 @@ class ProviderHealth:
         total = self.success_count + self.failure_count
         self.success_rate_5m = self.success_count / total if total else 0.0
         self.last_error_code = error_code
-        if self.failure_count >= 3 and self.circuit == CircuitState.CLOSED or self.circuit == CircuitState.HALF_OPEN:
+        if (
+            self.failure_count >= 3
+            and self.circuit == CircuitState.CLOSED
+            or self.circuit == CircuitState.HALF_OPEN
+        ):
             self.circuit = CircuitState.OPEN
 
     def is_available(self) -> bool:
@@ -104,8 +108,7 @@ class ProviderRegistry:
         # actually serves (e.g. a laptop Ollama tag, or a differently-named AWS
         # deployment) without a code change. Default preserves prod behaviour.
         wrb_model = (
-            os.environ.get("WHITERABBITNEO_MODEL", "").strip()
-            or "taico-ai/WhiteRabbitNeo-v3-7B"
+            os.environ.get("WHITERABBITNEO_MODEL", "").strip() or "taico-ai/WhiteRabbitNeo-v3-7B"
         )
         qwythos_url = os.environ.get("QWYTHOS_URL", "").strip()
         gemma_url = os.environ.get("GEMMA_LOCAL_URL", "").strip()

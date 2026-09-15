@@ -207,9 +207,7 @@ class EpssClient:
         try:
             raw = self._redis.get(self._cache_key(cve_id))
         except Exception:
-            _logger.warning(
-                "epss.cache_get_failed", extra={"event": "epss_cache_get_failed"}
-            )
+            _logger.warning("epss.cache_get_failed", extra={"event": "epss_cache_get_failed"})
             return None
         if raw is None:
             return None
@@ -227,9 +225,7 @@ class EpssClient:
         try:
             self._redis.setex(self._cache_key(cve_id), self._ttl, f"{score:.6f}")
         except Exception:
-            _logger.warning(
-                "epss.cache_put_failed", extra={"event": "epss_cache_put_failed"}
-            )
+            _logger.warning("epss.cache_put_failed", extra={"event": "epss_cache_put_failed"})
 
     async def _fetch_remote(self, cve_id: str) -> float | None:
         url = f"{self._api_url}?cve={cve_id}"
@@ -239,9 +235,7 @@ class EpssClient:
         try:
             response = await self._http.get(url, timeout=self._timeout)
         except Exception:
-            _logger.warning(
-                "epss.http_failed", extra={"event": "epss_http_failed"}
-            )
+            _logger.warning("epss.http_failed", extra={"event": "epss_http_failed"})
             return None
         if int(getattr(response, "status_code", 0)) != 200:
             _logger.warning(
@@ -265,9 +259,7 @@ class EpssClient:
             return []
         return _parse_epss_batch_response(response)
 
-    async def _request_with_retry(
-        self, url: str, *, timeout: float
-    ) -> HttpResponse | None:
+    async def _request_with_retry(self, url: str, *, timeout: float) -> HttpResponse | None:
         attempt = 0
         while True:
             try:

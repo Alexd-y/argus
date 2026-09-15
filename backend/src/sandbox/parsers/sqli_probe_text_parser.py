@@ -154,4 +154,4 @@ def _category_for_tool(
     return FindingCategory.SQLI, (89,), 8.5
 
 
-__all__ = ["parse_sqli_probe_text", "EVIDENCE_SIDECAR"]
+__all__ = ["EVIDENCE_SIDECAR", "parse_sqli_probe_text"]

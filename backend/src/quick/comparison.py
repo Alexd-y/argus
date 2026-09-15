@@ -142,7 +142,9 @@ def _ratio(numerator: int, denominator: int, *, digits: int = RATIO_DIGITS) -> f
     return round(numerator / denominator, digits)
 
 
-def _index_unique(items: Sequence[LabeledFixture] | Sequence[ObservedTarget]) -> dict[str, Any]:
+def _index_unique(
+    items: Sequence[LabeledFixture] | Sequence[ObservedTarget],
+) -> dict[str, Any]:
     indexed: dict[str, Any] = {}
     for item in items:
         if item.target in indexed:
@@ -163,8 +165,12 @@ def compute_precision_recall(
     false_negatives = 0
     targets = set(labeled_map) | set(observed_map)
     for target in targets:
-        expected = _id_set(labeled_map[target].expected_finding_ids) if target in labeled_map else set()
-        found = _id_set(observed_map[target].observed_finding_ids) if target in observed_map else set()
+        expected = (
+            _id_set(labeled_map[target].expected_finding_ids) if target in labeled_map else set()
+        )
+        found = (
+            _id_set(observed_map[target].observed_finding_ids) if target in observed_map else set()
+        )
         true_positives += len(expected & found)
         false_positives += len(found - expected)
         false_negatives += len(expected - found)

@@ -60,7 +60,10 @@ def test_lab_unrestricted_still_allow_all() -> None:
 
 def test_quick_is_not_lab_and_not_in_allow_all_set() -> None:
     assert ExecutionMode.QUICK.value == "quick"
-    assert ExecutionMode.QUICK in ALLOWED_EXECUTION_MODES or ExecutionMode.QUICK.value in ALLOWED_EXECUTION_MODES
+    assert (
+        ExecutionMode.QUICK in ALLOWED_EXECUTION_MODES
+        or ExecutionMode.QUICK.value in ALLOWED_EXECUTION_MODES
+    )
     ctx = ModeContext(
         tenant_id="t-1",
         engagement_id="e-1",

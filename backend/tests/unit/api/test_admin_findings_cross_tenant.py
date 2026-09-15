@@ -15,11 +15,10 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.core.config import settings
 from src.core.observability import tenant_hash, user_id_hash
 from src.db.models import Finding as FindingModel
+from starlette.testclient import TestClient
 
 LIST = "/api/v1/admin/findings"
 _ADMIN_KEY = "secret-admin-key"
@@ -109,25 +108,25 @@ class TestAdminFindingsAuth:
 class TestSuperAdminCrossTenant:
     """Default role (no header) ⇒ super-admin cross-tenant behaviour preserved."""
 
-    def test_default_role_cross_tenant_returns_rows_no_set_local(
-        self, client: TestClient
-    ) -> None:
+    def test_default_role_cross_tenant_returns_rows_no_set_local(self, client: TestClient) -> None:
         rows = [
             _finding_row(severity="critical", cvss=9.8),
             _finding_row(severity="high", cvss=7.5),
         ]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                with patch(
-                    "src.api.routers.admin_findings.set_session_tenant",
-                    new_callable=AsyncMock,
-                ) as mock_set_tenant:
-                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+            ),
+            patch(
+                "src.api.routers.admin_findings.set_session_tenant",
+                new_callable=AsyncMock,
+            ) as mock_set_tenant,
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS)
         assert r.status_code == 200
         data = r.json()
         assert data["total"] == 2
@@ -142,15 +141,17 @@ class TestSuperAdminCrossTenant:
         rows = [_finding_row(severity="medium", cvss=5.0)]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+            )
         assert r.status_code == 200
         assert r.json()["total"] == 1
 
@@ -159,20 +160,22 @@ class TestSuperAdminCrossTenant:
         rows = [_finding_row(tid=tid, severity="low")]
         session = _build_session_with_set_local(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                with patch(
-                    "src.api.routers.admin_findings.set_session_tenant",
-                    new_callable=AsyncMock,
-                ) as mock_set_tenant:
-                    r = client.get(
-                        LIST,
-                        headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
-                        params={"tenant_id": tid},
-                    )
+            ),
+            patch(
+                "src.api.routers.admin_findings.set_session_tenant",
+                new_callable=AsyncMock,
+            ) as mock_set_tenant,
+        ):
+            r = client.get(
+                LIST,
+                headers={**_ADMIN_HEADERS, "X-Admin-Role": "super-admin"},
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         mock_set_tenant.assert_awaited_once()
         assert mock_set_tenant.await_args[0][1] == tid
@@ -186,20 +189,22 @@ class TestAdminScopedRole:
         rows = [_finding_row(tid=tid, severity="high")]
         session = _build_session_with_set_local(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "admin",
-                        "X-Admin-Tenant": tid,
-                    },
-                    params={"tenant_id": tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "admin",
+                    "X-Admin-Tenant": tid,
+                },
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         assert r.json()["total"] == 1
 
@@ -252,20 +257,22 @@ class TestOperatorScopedRole:
         rows = [_finding_row(tid=tid, severity="info")]
         session = _build_session_with_set_local(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers={
-                        **_ADMIN_HEADERS,
-                        "X-Admin-Role": "operator",
-                        "X-Admin-Tenant": tid,
-                    },
-                    params={"tenant_id": tid},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "operator",
+                    "X-Admin-Tenant": tid,
+                },
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         assert r.json()["total"] == 1
 
@@ -289,12 +296,14 @@ class TestPaginationAndFilters:
     def test_empty_result_envelope(self, client: TestClient) -> None:
         session = _build_session([], total=0)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(LIST, headers=_ADMIN_HEADERS)
+            ),
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS)
         assert r.status_code == 200
         data = r.json()
         assert data["findings"] == []
@@ -305,16 +314,18 @@ class TestPaginationAndFilters:
         rows = [_finding_row() for _ in range(50)]
         session = _build_session(rows, total=120)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"limit": 50, "offset": 0},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"limit": 50, "offset": 0},
+            )
         assert r.status_code == 200
         data = r.json()
         assert data["total"] == 120
@@ -327,16 +338,18 @@ class TestPaginationAndFilters:
         rows = [_finding_row() for _ in range(20)]
         session = _build_session(rows, total=120)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"limit": 50, "offset": 100},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"limit": 50, "offset": 100},
+            )
         assert r.status_code == 200
         data = r.json()
         assert data["offset"] == 100
@@ -349,16 +362,18 @@ class TestPaginationAndFilters:
         ]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params=[("severity", "critical"), ("severity", "high")],
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params=[("severity", "critical"), ("severity", "high")],
+            )
         assert r.status_code == 200
         assert r.json()["total"] == 2
 
@@ -367,16 +382,18 @@ class TestPaginationAndFilters:
         rows = [_finding_row(title="100%_loss")]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"q": "100%_loss"},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"q": "100%_loss"},
+            )
         assert r.status_code == 200
         assert r.json()["total"] == 1
 
@@ -384,16 +401,18 @@ class TestPaginationAndFilters:
         rows = [_finding_row(false_positive=True)]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={"false_positive": "true"},
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"false_positive": "true"},
+            )
         assert r.status_code == 200
         data = r.json()
         assert data["total"] == 1
@@ -403,19 +422,21 @@ class TestPaginationAndFilters:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
                 "src.api.routers.admin_findings.async_session_factory",
                 factory,
-            ):
-                r = client.get(
-                    LIST,
-                    headers=_ADMIN_HEADERS,
-                    params={
-                        "since": "2026-04-01T00:00:00Z",
-                        "until": "2026-04-30T00:00:00Z",
-                    },
-                )
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={
+                    "since": "2026-04-01T00:00:00Z",
+                    "until": "2026-04-30T00:00:00Z",
+                },
+            )
         assert r.status_code == 200
 
 
@@ -473,21 +494,23 @@ class TestAuditLogging:
         rows = [_finding_row(tid=tid)]
         session = _build_session_with_set_local(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(
-                        LIST,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "admin",
-                            "X-Admin-Tenant": tid,
-                        },
-                        params={"tenant_id": tid},
-                    )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "admin",
+                    "X-Admin-Tenant": tid,
+                },
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -526,13 +549,15 @@ class TestAuditLogging:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS)
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -561,22 +586,24 @@ class TestOperatorAttribution:
         rows = [_finding_row(tid=tid)]
         session = _build_session_with_set_local(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(
-                        LIST,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "admin",
-                            "X-Admin-Tenant": tid,
-                            "X-Operator-Subject": operator,
-                        },
-                        params={"tenant_id": tid},
-                    )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "admin",
+                    "X-Admin-Tenant": tid,
+                    "X-Operator-Subject": operator,
+                },
+                params={"tenant_id": tid},
+            )
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -618,13 +645,15 @@ class TestOperatorAttribution:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS)
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -643,20 +672,22 @@ class TestOperatorAttribution:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(
-                        LIST,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "super-admin",
-                            "X-Operator-Subject": "carol@argus.example",
-                        },
-                    )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "super-admin",
+                    "X-Operator-Subject": "carol@argus.example",
+                },
+            )
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -667,9 +698,7 @@ class TestOperatorAttribution:
         assert getattr(record, "tenant_hash", "sentinel") is None
         assert getattr(record, "cross_tenant", None) is True
         # Operator attribution still present even without role tenant.
-        assert getattr(record, "user_id_hash", None) == user_id_hash(
-            "carol@argus.example"
-        )
+        assert getattr(record, "user_id_hash", None) == user_id_hash("carol@argus.example")
 
     def test_super_admin_cross_tenant_role_tenant_hash_set_when_header_sent(
         self,
@@ -681,20 +710,22 @@ class TestOperatorAttribution:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(
-                        LIST,
-                        headers={
-                            **_ADMIN_HEADERS,
-                            "X-Admin-Role": "super-admin",
-                            "X-Admin-Tenant": my_tid,
-                        },
-                    )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers={
+                    **_ADMIN_HEADERS,
+                    "X-Admin-Role": "super-admin",
+                    "X-Admin-Tenant": my_tid,
+                },
+            )
         assert r.status_code == 200
         record = next(
             (rec for rec in caplog.records if rec.message == "admin.findings_query"),
@@ -726,21 +757,23 @@ class TestReservedQueryParams:
         session = _build_session(rows)
         factory = _session_factory(session)
         spy = _build_filters_spy()
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    with patch(
-                        "src.api.routers.admin_findings._build_filters",
-                        spy,
-                    ):
-                        r = client.get(
-                            LIST,
-                            headers=_ADMIN_HEADERS,
-                            params={"kev_listed": "true"},
-                        )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+            patch(
+                "src.api.routers.admin_findings._build_filters",
+                spy,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"kev_listed": "true"},
+            )
         assert r.status_code == 200, r.text
         spy.assert_called_once()
         call_kwargs = spy.call_args.kwargs
@@ -769,21 +802,23 @@ class TestReservedQueryParams:
         session = _build_session(rows)
         factory = _session_factory(session)
         spy = _build_filters_spy()
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    with patch(
-                        "src.api.routers.admin_findings._build_filters",
-                        spy,
-                    ):
-                        r = client.get(
-                            LIST,
-                            headers=_ADMIN_HEADERS,
-                            params={"ssvc_action": "act"},
-                        )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+            patch(
+                "src.api.routers.admin_findings._build_filters",
+                spy,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"ssvc_action": "act"},
+            )
         assert r.status_code == 200, r.text
         spy.assert_called_once()
         call_kwargs = spy.call_args.kwargs
@@ -807,13 +842,15 @@ class TestReservedQueryParams:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(LIST, headers=_ADMIN_HEADERS)
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(LIST, headers=_ADMIN_HEADERS)
         assert r.status_code == 200
         warning = next(
             (
@@ -833,17 +870,19 @@ class TestReservedQueryParams:
         rows = [_finding_row()]
         session = _build_session(rows)
         factory = _session_factory(session)
-        with caplog.at_level(logging.INFO):
-            with patch.object(settings, "admin_api_key", _ADMIN_KEY):
-                with patch(
-                    "src.api.routers.admin_findings.async_session_factory",
-                    factory,
-                ):
-                    r = client.get(
-                        LIST,
-                        headers=_ADMIN_HEADERS,
-                        params={"kev_listed": "false", "ssvc_action": "track"},
-                    )
+        with (
+            caplog.at_level(logging.INFO),
+            patch.object(settings, "admin_api_key", _ADMIN_KEY),
+            patch(
+                "src.api.routers.admin_findings.async_session_factory",
+                factory,
+            ),
+        ):
+            r = client.get(
+                LIST,
+                headers=_ADMIN_HEADERS,
+                params={"kev_listed": "false", "ssvc_action": "track"},
+            )
         assert r.status_code == 200, r.text
         warning = next(
             (

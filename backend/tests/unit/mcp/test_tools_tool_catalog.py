@@ -28,7 +28,7 @@ from collections.abc import Iterator
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
+from pydantic import ValidationError
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -119,9 +119,7 @@ def registry() -> Iterator[_FakeRegistry]:
     """Fresh fake registry per test, restored on teardown."""
     descriptors = [
         _make_descriptor(tool_id="subfinder", risk=RiskLevel.PASSIVE),
-        _make_descriptor(
-            tool_id="nuclei", risk=RiskLevel.MEDIUM, category=ToolCategory.WEB_VA
-        ),
+        _make_descriptor(tool_id="nuclei", risk=RiskLevel.MEDIUM, category=ToolCategory.WEB_VA),
         _make_descriptor(
             tool_id="sqlmap",
             risk=RiskLevel.HIGH,
@@ -291,9 +289,7 @@ class TestToolRunTrigger:
             ToolRunTriggerInput(
                 tool_id="sqlmap",
                 target="https://example.com",
-                justification=(
-                    "Authorised pentest engagement against in-scope domain."
-                ),
+                justification=("Authorised pentest engagement against in-scope domain."),
             ),
         )
         assert isinstance(result, ToolRunTriggerResult)
@@ -350,5 +346,5 @@ class TestMcpToolCatalogToolRunStatus:
 
     def test_short_id_rejected_by_schema(self) -> None:
         # ``tool_run_id`` has min_length=8; Pydantic rejects shorter values.
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             ToolRunStatusInput(tool_run_id="abc")

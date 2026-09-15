@@ -83,6 +83,7 @@ class BrandModel(BaseModel):
         self.logo_base64_svg = base64.b64encode(raw).decode("ascii")
         try:
             import cairosvg
+
             png_bytes = cairosvg.svg2png(bytestring=raw, output_width=240, output_height=101)
             self.logo_base64_png = base64.b64encode(png_bytes).decode("ascii")
         except Exception:
@@ -127,7 +128,9 @@ logger = logging.getLogger(__name__)
 
 _ROBOTS_KEY_HINTS = frozenset({"robots", "robots_txt", "robotstxt"})
 _SITEMAP_KEY_HINTS = frozenset({"sitemap", "sitemap_xml", "sitemapxml"})
-_TLS_ARTIFACT_HINTS = frozenset({"testssl", "sslscan", "tls", "ssl", "openssl", "s_client", "nmap_ssl", "nse_ssl"})
+_TLS_ARTIFACT_HINTS = frozenset(
+    {"testssl", "sslscan", "tls", "ssl", "openssl", "s_client", "nmap_ssl", "nse_ssl"}
+)
 _DEP_ARTIFACT_HINTS = frozenset(
     {
         "trivy",
@@ -152,7 +155,16 @@ _HTTP_HEADER_ARTIFACT_HINTS = frozenset(
     {"headers", "http_audit", "httpx", "nikto", "response", "raw_http", "curl"}
 )
 _EMAIL_FALLBACK_ARTIFACT_HINTS = frozenset(
-    {"theharvester", "email", "contact", "html", "javascript", "js", "sitemap", "robots"}
+    {
+        "theharvester",
+        "email",
+        "contact",
+        "html",
+        "javascript",
+        "js",
+        "sitemap",
+        "robots",
+    }
 )
 _CVE_RE = re.compile(r"\bCVE-\d{4}-\d{4,7}\b", re.IGNORECASE)
 _CVSS_V3_INLINE_RE = re.compile(
@@ -599,7 +611,9 @@ def build_xss_structured_rows_from_findings(
         legacy_pl = poc.get("payload")
         payload_entered = _truncate_xss_field(pe.strip() if isinstance(pe, str) else None)
         payload_used = _truncate_xss_field(
-            pu.strip() if isinstance(pu, str) else (legacy_pl.strip() if isinstance(legacy_pl, str) else None)
+            pu.strip()
+            if isinstance(pu, str)
+            else (legacy_pl.strip() if isinstance(legacy_pl, str) else None)
         )
         pref = _normalize_payload_reflected_value(poc)
         refl_ctx = poc.get("reflection_context") or poc.get("context")
@@ -649,7 +663,10 @@ def build_csrf_structured_rows_from_findings(
         fid = _finding_id_for_risk(f, i)
         title = _truncate_xss_field(str(f.get("title") or "").strip(), 300) or ""
         endpoint = poc.get("url") or poc.get("endpoint") or f.get("affected_endpoint", "")
-        endpoint_s = _truncate_xss_field(endpoint.strip() if isinstance(endpoint, str) else None, 512) or None
+        endpoint_s = (
+            _truncate_xss_field(endpoint.strip() if isinstance(endpoint, str) else None, 512)
+            or None
+        )
         method = str(poc.get("method", "POST") or "POST")
         state_changing = poc.get("state_changing")
         token_status = str(poc.get("csrf_token_status", "missing") or "missing")
@@ -700,15 +717,25 @@ def build_cmdi_structured_rows_from_findings(
         fid = _finding_id_for_risk(f, i)
         title = _truncate_xss_field(str(f.get("title") or "").strip(), 300) or ""
         param = poc.get("parameter") or poc.get("input", "")
-        param_s = _truncate_xss_field(param.strip() if isinstance(param, str) else None, 256) or None
+        param_s = (
+            _truncate_xss_field(param.strip() if isinstance(param, str) else None, 256) or None
+        )
         payload = poc.get("payload", "")
-        payload_s = _truncate_xss_field(payload.strip() if isinstance(payload, str) else None, 512) or None
+        payload_s = (
+            _truncate_xss_field(payload.strip() if isinstance(payload, str) else None, 512) or None
+        )
         marker = poc.get("harmless_marker", "")
-        marker_s = _truncate_xss_field(marker.strip() if isinstance(marker, str) else None, 256) or None
+        marker_s = (
+            _truncate_xss_field(marker.strip() if isinstance(marker, str) else None, 256) or None
+        )
         output = poc.get("controlled_output", poc.get("command_output", ""))
-        output_s = _truncate_xss_field(output.strip() if isinstance(output, str) else None, 512) or None
+        output_s = (
+            _truncate_xss_field(output.strip() if isinstance(output, str) else None, 512) or None
+        )
         proof = poc.get("server_proof", poc.get("log_entry", ""))
-        proof_s = _truncate_xss_field(proof.strip() if isinstance(proof, str) else None, 512) or None
+        proof_s = (
+            _truncate_xss_field(proof.strip() if isinstance(proof, str) else None, 512) or None
+        )
         source = str(poc.get("output_source", "stdout") or "stdout")
         nc = str(poc.get("negative_control", "") or "")
         nc_s = _truncate_xss_field(nc, 256) or None
@@ -845,15 +872,21 @@ class ValhallaMandatorySectionsModel(BaseModel):
     outdated_components: ValhallaSectionEnvelopeModel = Field(
         default_factory=ValhallaSectionEnvelopeModel
     )
-    ssl_tls_analysis: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+    ssl_tls_analysis: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
     security_headers_analysis: ValhallaSectionEnvelopeModel = Field(
         default_factory=ValhallaSectionEnvelopeModel
     )
     robots_sitemap_analysis: ValhallaSectionEnvelopeModel = Field(
         default_factory=ValhallaSectionEnvelopeModel
     )
-    leaked_emails: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
-    port_exposure: ValhallaSectionEnvelopeModel = Field(default_factory=ValhallaSectionEnvelopeModel)
+    leaked_emails: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
+    port_exposure: ValhallaSectionEnvelopeModel = Field(
+        default_factory=ValhallaSectionEnvelopeModel
+    )
 
 
 class CredentialExposureRowModel(BaseModel):
@@ -874,6 +907,7 @@ class CredentialExposureRowModel(BaseModel):
     api_status: str = ""
     legal_basis: str = ""
     result_confidence: str = ""
+
 
 class BreachDetailModel(BaseModel):
     """Per-email breach evidence row from HIBP."""
@@ -1088,7 +1122,9 @@ class RetestItemModel(BaseModel):
     severity: str = ""
     verification_command: str = ""
     expected_result: str = ""
-    retest_status: Literal["pending", "confirmed_fixed", "partially_fixed", "not_fixed", "risk_accepted"] = "pending"
+    retest_status: Literal[
+        "pending", "confirmed_fixed", "partially_fixed", "not_fixed", "risk_accepted"
+    ] = "pending"
 
 
 class RetestPlanModel(BaseModel):
@@ -1099,7 +1135,9 @@ class RetestPlanModel(BaseModel):
     retest_scope: list[RetestItemModel] = Field(default_factory=list)
     retest_timeline: str = "14-30 days after remediation"
     retest_methodology: str = "Re-run all active scan tools + manual verification"
-    retest_acceptance_criteria: str = "All P0 findings confirmed fixed; P1 findings confirmed fixed or risk accepted"
+    retest_acceptance_criteria: str = (
+        "All P0 findings confirmed fixed; P1 findings confirmed fixed or risk accepted"
+    )
 
 
 class EndpointHeaderData(BaseModel):
@@ -1125,9 +1163,7 @@ class EndpointHeaderData(BaseModel):
             return False
         if self.status_code == 0 and not self.response_headers:
             return False
-        if url.startswith("$") or "{" in url or "}" in url:
-            return False
-        return True
+        return not (url.startswith("$") or "{" in url or "}" in url)
 
 
 class FullHeadersContext(BaseModel):
@@ -1156,7 +1192,9 @@ class ValhallaReportContext(BaseModel):
         default_factory=RobotsSitemapMergedSummaryModel
     )
     tech_stack_table: list[TechStackTableRow] = Field(default_factory=list)
-    tech_stack_structured: TechStackStructuredModel = Field(default_factory=TechStackStructuredModel)
+    tech_stack_structured: TechStackStructuredModel = Field(
+        default_factory=TechStackStructuredModel
+    )
     tech_stack_fallback_message: str | None = None
     ssl_tls_fallback_message: str | None = None
     security_headers_fallback_message: str | None = None
@@ -1404,7 +1442,9 @@ def _raw_tool_issues_from_artifacts(
     for tool, info in sorted(state.items()):
         exit_code = info.get("exit_code")
         exit_bad = isinstance(exit_code, int) and exit_code != 0
-        exit_recoverable = exit_code == 127  # binary not found — partial output may still be parseable
+        exit_recoverable = (
+            exit_code == 127
+        )  # binary not found — partial output may still be parseable
         error_reason = str(info.get("error_reason") or "").strip()
         stderr_note = str(info.get("stderr_note") or "").strip()
         stdout_seen = bool(info.get("stdout_seen"))
@@ -1665,9 +1705,13 @@ def _artifact_non_empty_body_for_needles(
                 continue
             if low.endswith("_meta.txt") or low.rsplit("/", 1)[-1].endswith("_meta.txt"):
                 continue
-            if require_stdoutish and "stdout" not in low and "output" not in low:
-                if not any(x in low for x in _RAW_ARTIFACT_JSONISH_KEY_FRAGMENTS):
-                    continue
+            if (
+                require_stdoutish
+                and "stdout" not in low
+                and "output" not in low
+                and not any(x in low for x in _RAW_ARTIFACT_JSONISH_KEY_FRAGMENTS)
+            ):
+                continue
             blob = _safe_download_raw(key)
             if not blob:
                 continue
@@ -1734,7 +1778,9 @@ def _collect_robots_sitemap_from_keys(
                     allow_rule_count=len(alw),
                 )
     elif robot_key:
-        robots = RobotsTxtAnalysisModel(found=True, raw_excerpt=None, disallowed_paths_sample=[], sitemap_hints=[])
+        robots = RobotsTxtAnalysisModel(
+            found=True, raw_excerpt=None, disallowed_paths_sample=[], sitemap_hints=[]
+        )
 
     if fetch_bodies and sm_key:
         blob = _safe_download_raw(sm_key)
@@ -1791,7 +1837,7 @@ def _naabu_text_from_raw_keys(
             continue
         t = _text_from_raw_bytes(blob) or ""
         if t.strip():
-            chunks.append(t[: _MAX_TECH_MERGE])
+            chunks.append(t[:_MAX_TECH_MERGE])
     merged = "\n".join(chunks)
     if len(merged) > _MAX_TECH_MERGE:
         return merged[: _MAX_TECH_MERGE - 1] + "…"
@@ -1835,14 +1881,19 @@ def _build_port_exposure_summary(
     if ports:
         has_recon = True
         sources.append("recon phase output")
-        hints.extend(f"{int(p)}/tcp" for p in sorted({int(x) for x in ports if isinstance(x, (int, float))})[:48])
+        hints.extend(
+            f"{int(p)}/tcp"
+            for p in sorted({int(x) for x in ports if isinstance(x, (int, float))})[:48]
+        )
     ps = (structured.ports_summary or "").strip()
     ss = (structured.services_summary or "").strip()
     if ps or ss:
         sources.append("fingerprinting / recon merge")
     parsed_target = urlparse(target_hint if "://" in target_hint else f"//{target_hint}")
     scheme = (parsed_target.scheme or "").lower()
-    host_from_target = parsed_target.hostname or (target_hint.split("/", 1)[0] if target_hint else "")
+    host_from_target = parsed_target.hostname or (
+        target_hint.split("/", 1)[0] if target_hint else ""
+    )
     raw_key_names = " ".join(k.lower() for k, _p in raw_artifact_keys)
     http_artifact_observed = any(
         token in raw_key_names
@@ -1858,8 +1909,12 @@ def _build_port_exposure_summary(
             "head_spider",
         )
     )
-    tls_artifact_observed = any(token in raw_key_names for token in ("testssl", "sslscan", "tls", "openssl"))
-    https_confirmed = tls_observed or http_observed or http_artifact_observed or tls_artifact_observed
+    tls_artifact_observed = any(
+        token in raw_key_names for token in ("testssl", "sslscan", "tls", "openssl")
+    )
+    https_confirmed = (
+        tls_observed or http_observed or http_artifact_observed or tls_artifact_observed
+    )
     http_confirmed = http_observed or http_artifact_observed
     if not hints and host_from_target:
         if scheme == "https" and https_confirmed:
@@ -1868,13 +1923,25 @@ def _build_port_exposure_summary(
         elif scheme == "http" and http_confirmed:
             sources.append("HTTP artifact fallback")
             hints.append("80/tcp open (confirmed by HTTP response artifact)")
-    elif host_from_target and scheme == "https" and https_confirmed and not any("443/" in h for h in hints):
+    elif (
+        host_from_target
+        and scheme == "https"
+        and https_confirmed
+        and not any("443/" in h for h in hints)
+    ):
         sources.append("HTTPS artifact fallback")
         hints.append("443/tcp open (confirmed by collected HTTPS/HTTP artifact)")
-    elif host_from_target and scheme == "http" and http_confirmed and not any("80/" in h for h in hints):
+    elif (
+        host_from_target
+        and scheme == "http"
+        and http_confirmed
+        and not any("80/" in h for h in hints)
+    ):
         sources.append("HTTP artifact fallback")
         hints.append("80/tcp open (confirmed by HTTP response artifact)")
-    summary_bits = [x for x in (ps, ss, _services_summary_from_nmap_text(nmap_blob)) if (x or "").strip()]
+    summary_bits = [
+        x for x in (ps, ss, _services_summary_from_nmap_text(nmap_blob)) if (x or "").strip()
+    ]
     summary_text = "; ".join(summary_bits)[:2000] if summary_bits else ""
     if not summary_text and hints:
         summary_text = "Open port signals: " + ", ".join(hints[:16])
@@ -1941,7 +2008,12 @@ def build_evidence_inventory_rows(
         poc = f.get("proof_of_concept")
         poc_bits: list[str] = []
         if isinstance(poc, dict):
-            for key in ("request_method", "request_url", "response_status", "validation_status"):
+            for key in (
+                "request_method",
+                "request_url",
+                "response_status",
+                "validation_status",
+            ):
                 val = poc.get(key)
                 if val:
                     poc_bits.append(f"{key}={str(val)[:120]}")
@@ -1978,7 +2050,9 @@ def build_evidence_inventory_rows(
                 finding_or_section="Technology stack",
                 source_tool="WhatWeb / HTTP artifacts / recon",
                 evidence_type="Technology fingerprint",
-                summary=_truncate(sample or "Technology rows parsed from collected artifacts.", 500),
+                summary=_truncate(
+                    sample or "Technology rows parsed from collected artifacts.", 500
+                ),
                 timestamp="—",
                 status="collected",
             )
@@ -2026,11 +2100,12 @@ def build_evidence_inventory_rows(
     if port_rows or (port_exposure and port_exposure.has_open_ports):
         n += 1
         port_summary = "; ".join(
-            f"{r.port}/{r.protocol} {r.state} {r.service}".strip()
-            for r in (port_rows or [])[:8]
+            f"{r.port}/{r.protocol} {r.state} {r.service}".strip() for r in (port_rows or [])[:8]
         )
         if not port_summary and port_exposure:
-            port_summary = port_exposure.summary_text or "; ".join(port_exposure.open_port_hints[:8])
+            port_summary = port_exposure.summary_text or "; ".join(
+                port_exposure.open_port_hints[:8]
+            )
         rows.append(
             EvidenceInventoryRowModel(
                 evidence_id=f"EV-{n:04d}",
@@ -2088,7 +2163,10 @@ def _walk_collect_whatweb_candidates(obj: Any, acc: list[dict[str, Any]]) -> Non
             if obj.get("target") is not None or obj.get("http_status") is not None:
                 acc.append(obj)
                 return
-            if any(isinstance(plugs.get(k), (dict, str)) for k in ("HTTPServer", "Apache", "nginx", "WordPress")):
+            if any(
+                isinstance(plugs.get(k), (dict, str))
+                for k in ("HTTPServer", "Apache", "nginx", "WordPress")
+            ):
                 acc.append(obj)
                 return
         tool = str(obj.get("tool") or "").lower()
@@ -2253,9 +2331,24 @@ def _apply_recon_fallbacks_to_structured(
                         host = str(ent.get("host") or "").strip()
                         detail = host
                         name_l = val.lower()
-                        if any(x in name_l for x in ("nginx", "apache", "caddy", "iis", "openresty")) and not m.web_server:
+                        if (
+                            any(
+                                x in name_l
+                                for x in (
+                                    "nginx",
+                                    "apache",
+                                    "caddy",
+                                    "iis",
+                                    "openresty",
+                                )
+                            )
+                            and not m.web_server
+                        ):
                             m.web_server = (val + (f" ({detail})" if detail else ""))[:1024]
-                        elif any(x in name_l for x in ("wordpress", "drupal", "joomla")) and not m.cms:
+                        elif (
+                            any(x in name_l for x in ("wordpress", "drupal", "joomla"))
+                            and not m.cms
+                        ):
                             m.cms = (val + (f" ({detail})" if detail else ""))[:1024]
                         else:
                             add_fw(val if not detail else f"{val} ({detail})")
@@ -2331,7 +2424,10 @@ def _split_component_version(value: str) -> tuple[str, str]:
     raw = (value or "").strip()
     if not raw:
         return "", ""
-    m = re.search(r"(?P<name>[A-Za-z][A-Za-z0-9 ._+-]{1,80}?)[/\s]+(?P<ver>\d+(?:\.\d+){1,4}[A-Za-z0-9._+-]*)", raw)
+    m = re.search(
+        r"(?P<name>[A-Za-z][A-Za-z0-9 ._+-]{1,80}?)[/\s]+(?P<ver>\d+(?:\.\d+){1,4}[A-Za-z0-9._+-]*)",
+        raw,
+    )
     if not m:
         return raw, ""
     name = m.group("name").strip(" -/")
@@ -2351,7 +2447,9 @@ def _tech_stack_note_for_category(category: str, source: str) -> str:
     return "Parsed technology signal; verify version before treating it as authoritative."
 
 
-def _tech_rows_from_structured(model: TechStackStructuredModel) -> list[TechStackTableRow]:
+def _tech_rows_from_structured(
+    model: TechStackStructuredModel,
+) -> list[TechStackTableRow]:
     rows: list[TechStackTableRow] = []
     if model.web_server.strip():
         name, version = _split_component_version(model.web_server[:512])
@@ -2858,7 +2956,13 @@ def _apply_tech_marker_rows_to_structured(
             m.web_server = name[:1024]
         elif cat == "cms" and not m.cms:
             m.cms = name[:1024]
-        elif cat in {"frontend_framework", "backend_framework", "framework", "hosting_provider", "cdn_waf"}:
+        elif cat in {
+            "frontend_framework",
+            "backend_framework",
+            "framework",
+            "hosting_provider",
+            "cdn_waf",
+        }:
             add_unique(m.frameworks, name)
         elif cat in {"javascript_library", "javascript_bundle", "javascript"}:
             add_unique(m.js_libraries, name)
@@ -2915,24 +3019,29 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
                 issuer = issuer or _truncate(finding, 512)
             if "protocol" in fid or fid.startswith("sslv") or "tls1" in fid:
                 protocols.append(_truncate(finding, 240))
-            if any(
-                x in low or x in fid
-                for x in (
-                    "sslv2",
-                    "sslv3",
-                    "tls1",
-                    "tls 1.0",
-                    "tls1_0",
-                    "tls1.0",
-                    "tls 1.1",
-                    "tls1_1",
-                    "tls1.1",
+            if (
+                any(
+                    x in low or x in fid
+                    for x in (
+                        "sslv2",
+                        "sslv3",
+                        "tls1",
+                        "tls 1.0",
+                        "tls1_0",
+                        "tls1.0",
+                        "tls 1.1",
+                        "tls1_1",
+                        "tls1.1",
+                    )
                 )
-            ) and len(weak_proto) < 32:
+                and len(weak_proto) < 32
+            ):
                 weak_proto.append(_truncate(finding, 400))
-            if any(x in low for x in ("cbc", "rc4", "weak", "deprecated", "sslv2", "sslv3")):
-                if len(weak) < 48:
-                    weak.append(_truncate(finding, 400))
+            if (
+                any(x in low for x in ("cbc", "rc4", "weak", "deprecated", "sslv2", "sslv3"))
+                and len(weak) < 48
+            ):
+                weak.append(_truncate(finding, 400))
     protos = blob.get("protocols")
     if isinstance(protos, dict) and not protocols:
         for label, detail in list(protos.items())[:32]:
@@ -2970,7 +3079,11 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
                 break
     if subject_m:
         cert_subject = subject_m.group(1).strip()[:512]
-    cert_date_m = re.search(r"(?:not\s+after|validity\s+to|expires?)\s*[=:]\s*(.+)", str(blob), re.IGNORECASE)
+    cert_date_m = re.search(
+        r"(?:not\s+after|validity\s+to|expires?)\s*[=:]\s*(.+)",
+        str(blob),
+        re.IGNORECASE,
+    )
     if cert_date_m:
         cert_expiry = cert_date_m.group(1).strip()[:256]
     tls_versions = [p for p in protocols if any(v in p.lower() for v in ("tls", "ssl"))]
@@ -2982,7 +3095,9 @@ def _ssl_from_testssl_json(blob: dict[str, Any]) -> SslTlsAnalysisModel:
     if weak_proto:
         recommendations_list.append("Disable weak protocols: " + ", ".join(weak_proto[:4]))
     if weak:
-        recommendations_list.append("Remove weak ciphers: configure server to prefer ECDHE-AESGCM suites")
+        recommendations_list.append(
+            "Remove weak ciphers: configure server to prefer ECDHE-AESGCM suites"
+        )
     if not hsts_present:
         recommendations_list.append("Enable HSTS with max-age >= 31536000")
     return SslTlsAnalysisModel(
@@ -3034,8 +3149,15 @@ _TESTSSL_PROTOCOL_RE = re.compile(
 )
 _TESTSSL_WEAK_PROTOS = frozenset({"sslv2", "sslv3", "tls 1.0", "tls 1.1", "tls1.0", "tls1.1"})
 _TESTSSL_VULN_MARKERS = (
-    "BEAST", "POODLE", "Heartbleed", "ROBOT", "DROWN",
-    "LOGJAM", "FREAK", "SWEET32", "Lucky13",
+    "BEAST",
+    "POODLE",
+    "Heartbleed",
+    "ROBOT",
+    "DROWN",
+    "LOGJAM",
+    "FREAK",
+    "SWEET32",
+    "Lucky13",
 )
 _TESTSSL_CIPHER_RE = re.compile(
     r"(TLS_\w+|ECDHE-\w+|DHE-\w+|AES\w+|RC4-\w+)",
@@ -3085,19 +3207,27 @@ def _parse_openssl_sclient_output(stdout: str) -> SslTlsAnalysisModel:
     issuer_m = _OPENSSL_ISSUER_RE.search(stdout)
     if issuer_m:
         issuer = issuer_m.group(1).strip()[:512]
-    cert_block = re.search(r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----", stdout, re.DOTALL)
+    cert_block = re.search(
+        r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----", stdout, re.DOTALL
+    )
     if cert_block:
         try:
             from cryptography import x509
             from cryptography.hazmat.backends import default_backend
-            pem_data = "-----BEGIN CERTIFICATE-----" + cert_block.group(1) + "-----END CERTIFICATE-----"
+
+            pem_data = (
+                "-----BEGIN CERTIFICATE-----" + cert_block.group(1) + "-----END CERTIFICATE-----"
+            )
             cert = x509.load_pem_x509_certificate(pem_data.encode(), default_backend())
-            issuer = issuer or ", ".join(
-                f"{oid._name}={v}"
-                for oid, v in cert.issuer
-                if isinstance(v, str)
-            )[:512]
-            validity = f"{cert.not_valid_before_utc.isoformat()} - {cert.not_valid_after_utc.isoformat()}"
+            issuer = (
+                issuer
+                or ", ".join(f"{oid._name}={v}" for oid, v in cert.issuer if isinstance(v, str))[
+                    :512
+                ]
+            )
+            validity = (
+                f"{cert.not_valid_before_utc.isoformat()} - {cert.not_valid_after_utc.isoformat()}"
+            )
         except Exception:
             na = re.search(r"Not After\s*:\s*(.+)", stdout)
             nb = re.search(r"Not Before\s*:\s*(.+)", stdout)
@@ -3242,10 +3372,16 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
     xml_issuer = re.search(r"<issuer>\s*([^<]+)\s*</issuer>", stdout, re.IGNORECASE)
     if xml_issuer:
         issuer = xml_issuer.group(1).strip()[:512]
-    xml_not_before = re.search(r"<not-valid-before>\s*([^<]+)\s*</not-valid-before>", stdout, re.IGNORECASE)
-    xml_not_after = re.search(r"<not-valid-after>\s*([^<]+)\s*</not-valid-after>", stdout, re.IGNORECASE)
+    xml_not_before = re.search(
+        r"<not-valid-before>\s*([^<]+)\s*</not-valid-before>", stdout, re.IGNORECASE
+    )
+    xml_not_after = re.search(
+        r"<not-valid-after>\s*([^<]+)\s*</not-valid-after>", stdout, re.IGNORECASE
+    )
     if xml_not_before and xml_not_after:
-        validity = f"{xml_not_before.group(1).strip()[:120]} - {xml_not_after.group(1).strip()[:120]}"
+        validity = (
+            f"{xml_not_before.group(1).strip()[:120]} - {xml_not_after.group(1).strip()[:120]}"
+        )
     elif xml_not_after:
         validity = xml_not_after.group(1).strip()[:256]
     for xml_proto, label in (
@@ -3256,15 +3392,29 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         ("tls12", "TLS 1.2"),
         ("tls13", "TLS 1.3"),
     ):
-        if re.search(rf"<[^>]*(?:protocol|type)=[\"']{xml_proto}[\"'][^>]*(?:enabled|status)=[\"'](?:1|true|accepted)[\"']", stdout, re.IGNORECASE):
+        if re.search(
+            rf"<[^>]*(?:protocol|type)=[\"']{xml_proto}[\"'][^>]*(?:enabled|status)=[\"'](?:1|true|accepted)[\"']",
+            stdout,
+            re.IGNORECASE,
+        ):
             protocols.append(label)
-            if label.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or label.lower() in _TESTSSL_WEAK_PROTOS:
+            if (
+                label.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS
+                or label.lower() in _TESTSSL_WEAK_PROTOS
+            ):
                 weak_protocols.append(label)
-    for m in re.finditer(r"sslversion=[\"'](SSLv[23]|TLSv1\.[0-3]|TLS\s*1\.[0-3])[\"']", stdout, re.IGNORECASE):
+    for m in re.finditer(
+        r"sslversion=[\"'](SSLv[23]|TLSv1\.[0-3]|TLS\s*1\.[0-3])[\"']",
+        stdout,
+        re.IGNORECASE,
+    ):
         proto = m.group(1).replace("TLSv", "TLS ")
         if proto not in protocols:
             protocols.append(proto)
-        if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or proto.lower() in _TESTSSL_WEAK_PROTOS:
+        if (
+            proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS
+            or proto.lower() in _TESTSSL_WEAK_PROTOS
+        ):
             weak_protocols.append(proto)
 
     for m in _TESTSSL_PROTOCOL_RE.finditer(stdout):
@@ -3272,10 +3422,22 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         status = m.group(2).strip().lower()
         if status in {"offered", "enabled", "accepted"}:
             protocols.append(proto)
-            if proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS or proto.lower() in _TESTSSL_WEAK_PROTOS:
+            if (
+                proto.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS
+                or proto.lower() in _TESTSSL_WEAK_PROTOS
+            ):
                 weak_protocols.append(proto)
 
-    for proto in ("TLSv1.0", "TLSv1.1", "TLSv1.2", "TLSv1.3", "TLS 1.0", "TLS 1.1", "TLS 1.2", "TLS 1.3"):
+    for proto in (
+        "TLSv1.0",
+        "TLSv1.1",
+        "TLSv1.2",
+        "TLSv1.3",
+        "TLS 1.0",
+        "TLS 1.1",
+        "TLS 1.2",
+        "TLS 1.3",
+    ):
         for pm in re.finditer(rf"\b{re.escape(proto)}\b", stdout, re.IGNORECASE):
             snip = stdout[pm.start() : min(len(stdout), pm.end() + 80)].lower()
             if any(word in snip for word in ("disabled", "not offered", "rejected", "no ")):
@@ -3283,7 +3445,10 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
             normalized = proto.replace("TLSv", "TLS ")
             if normalized not in protocols:
                 protocols.append(normalized)
-            if normalized.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS and normalized not in weak_protocols:
+            if (
+                normalized.lower().replace(" ", "") in _TESTSSL_WEAK_PROTOS
+                and normalized not in weak_protocols
+            ):
                 weak_protocols.append(normalized)
             break
 
@@ -3295,8 +3460,12 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
     if issuer_match:
         issuer = issuer_match.group(1).strip()[:512]
 
-    not_before = re.search(r"(?:Not Before|notBefore=|Not valid before)\s*:?\s*(.+)", stdout, re.IGNORECASE)
-    not_after = re.search(r"(?:Not After|notAfter=|Not valid after)\s*:?\s*(.+)", stdout, re.IGNORECASE)
+    not_before = re.search(
+        r"(?:Not Before|notBefore=|Not valid before)\s*:?\s*(.+)", stdout, re.IGNORECASE
+    )
+    not_after = re.search(
+        r"(?:Not After|notAfter=|Not valid after)\s*:?\s*(.+)", stdout, re.IGNORECASE
+    )
     if not_before and not_after:
         validity = f"{not_before.group(1).strip()[:120]} - {not_after.group(1).strip()[:120]}"
     elif not_after:
@@ -3306,7 +3475,9 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
     if hsts_match:
         hsts = _truncate(hsts_match.group(1).strip(), 500)
     else:
-        hsts_header_match = re.search(r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE)
+        hsts_header_match = re.search(
+            r"strict-transport-security\s*:\s*(.+)", stdout, re.IGNORECASE
+        )
         if hsts_header_match:
             hsts = _truncate(hsts_header_match.group(1).strip(), 500)
 
@@ -3324,7 +3495,9 @@ def _parse_testssl_text_output(stdout: str) -> SslTlsAnalysisModel:
         if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
             weak_ciphers.append(cipher)
 
-    cipher_match = re.search(r"(?:Cipher|Selected cipher)\s*:?\s*([A-Z0-9_-]+)", stdout, re.IGNORECASE)
+    cipher_match = re.search(
+        r"(?:Cipher|Selected cipher)\s*:?\s*([A-Z0-9_-]+)", stdout, re.IGNORECASE
+    )
     if cipher_match:
         cipher = cipher_match.group(1).strip()
         if any(tok in cipher.lower() for tok in _TESTSSL_WEAK_CIPHER_TOKENS):
@@ -3515,7 +3688,9 @@ def _http_headers_merged_from_recon_and_phases(
     return merged
 
 
-def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> SecurityHeadersAnalysisModel:
+def _security_headers_from_host_map(
+    http_headers: dict[str, dict[str, str]],
+) -> SecurityHeadersAnalysisModel:
     rows: list[dict[str, Any]] = []
     if not http_headers:
         return SecurityHeadersAnalysisModel()
@@ -3558,7 +3733,7 @@ def _security_headers_from_host_map(http_headers: dict[str, dict[str, str]]) -> 
     # Report as "inconsistent" if present on some but not all
     missing: list[str] = []
     inconsistent: list[str] = []
-    for low_name, display in canonical:
+    for low_name, _display in canonical:
         total = header_hosts_total.get(low_name, 0)
         present_count = len(header_hosts_present.get(low_name, []))
         if total > 0 and present_count == 0:
@@ -3645,7 +3820,9 @@ def _extract_missing_security_headers_from_text(text: str) -> list[str]:
     return found
 
 
-def _security_headers_from_findings(findings: list[dict[str, Any]]) -> SecurityHeadersAnalysisModel:
+def _security_headers_from_findings(
+    findings: list[dict[str, Any]],
+) -> SecurityHeadersAnalysisModel:
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
     seen_rows: set[tuple[str, str]] = set()
@@ -3653,7 +3830,14 @@ def _security_headers_from_findings(findings: list[dict[str, Any]]) -> SecurityH
         if not isinstance(f, dict):
             continue
         parts: list[str] = []
-        for key in ("title", "name", "description", "evidence", "proof", "applicability_notes"):
+        for key in (
+            "title",
+            "name",
+            "description",
+            "evidence",
+            "proof",
+            "applicability_notes",
+        ):
             v = f.get(key)
             if isinstance(v, str) and v.strip():
                 parts.append(v)
@@ -3710,8 +3894,11 @@ def _security_headers_from_findings(findings: list[dict[str, Any]]) -> SecurityH
     return SecurityHeadersAnalysisModel(
         rows=rows[:500],
         missing_recommended=miss_sorted[:24],
-        summary="Missing recommended headers: " + ", ".join(miss_sorted[:12]) + " (from finding evidence)",
+        summary="Missing recommended headers: "
+        + ", ".join(miss_sorted[:12])
+        + " (from finding evidence)",
     )
+
 
 _NIKTO_MISSING_HDR_RE = re.compile(
     r"(?:Missing|absent|not set)[^:]*:\s*([\w-]+)",
@@ -3796,7 +3983,10 @@ def _security_headers_from_nikto_stdout(
         if hdrs:
             logger.info(
                 "sec_headers_nikto_fallback_used",
-                extra={"event": "sec_headers_nikto_fallback_used", "key_suffix": key[-64:]},
+                extra={
+                    "event": "sec_headers_nikto_fallback_used",
+                    "key_suffix": key[-64:],
+                },
             )
             return {"nikto_target": hdrs}
     return {}
@@ -3876,7 +4066,10 @@ def _security_headers_from_raw_http_responses(
         if hdrs:
             logger.info(
                 "sec_headers_raw_http_fallback_used",
-                extra={"event": "sec_headers_raw_http_fallback_used", "key_suffix": key[-64:]},
+                extra={
+                    "event": "sec_headers_raw_http_fallback_used",
+                    "key_suffix": key[-64:],
+                },
             )
             return {"raw_http_target": hdrs}
     return {}
@@ -3929,7 +4122,12 @@ def _dependency_rows_from_artifact_json(val: Any, source_key: str) -> list[Depen
                     detail="package manifest",
                 )
             )
-        for block_name in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+        for block_name in (
+            "dependencies",
+            "devDependencies",
+            "peerDependencies",
+            "optionalDependencies",
+        ):
             deps = val.get(block_name)
             if isinstance(deps, dict):
                 for pkg, ver in list(deps.items())[:300]:
@@ -4023,7 +4221,14 @@ def derive_exploit_available_flag(f: dict[str, Any]) -> bool:
     st = str(f.get("source_tool") or "").lower()
     if st == "searchsploit" or "exploit" in st:
         return True
-    return bool(_CVE_RE.search(blob) and re.search(r"\b(exploit|proof.of.concept|poc|metasploit|weaponized)\b", blob, re.IGNORECASE))
+    return bool(
+        _CVE_RE.search(blob)
+        and re.search(
+            r"\b(exploit|proof.of.concept|poc|metasploit|weaponized)\b",
+            blob,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _cvss_vector_string(f: dict[str, Any]) -> str | None:
@@ -4136,7 +4341,10 @@ def _cve_known_exploit_heuristic(f: dict[str, Any]) -> bool:
         return False
     low = blob.lower()
     return bool(
-        re.search(r"\b(exploit|metasploit|searchsploit|weaponized|poc|proof.of.concept)\b", low)
+        re.search(
+            r"\b(exploit|metasploit|searchsploit|weaponized|poc|proof.of.concept)\b",
+            low,
+        )
     )
 
 
@@ -4179,12 +4387,12 @@ def _critical_vuln_include(f: dict[str, Any]) -> bool:
     cvss = float(_cr) if isinstance(_cr, (int, float)) else None
     is_critical_sev = sev == "critical"
     is_cvss_9_plus = cvss is not None and cvss >= 9.0
-    if not (is_critical_sev or is_cvss_9_plus):
-        return False
-    return True
+    return is_critical_sev or is_cvss_9_plus
 
 
-def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[CriticalVulnRefModel]:
+def _critical_vulns_from_findings(
+    findings: list[dict[str, Any]],
+) -> list[CriticalVulnRefModel]:
     """VAL-003 — Critical severity or CVSS ≥ 9, validated, strong evidence, exploit demonstrated; excludes header-only."""
     out: list[CriticalVulnRefModel] = []
     for i, f in enumerate(findings):
@@ -4220,7 +4428,9 @@ def _critical_vulns_from_findings(findings: list[dict[str, Any]]) -> list[Critic
     return out
 
 
-def _outdated_from_findings(findings: list[dict[str, Any]]) -> list[OutdatedComponentRow]:
+def _outdated_from_findings(
+    findings: list[dict[str, Any]],
+) -> list[OutdatedComponentRow]:
     out: list[OutdatedComponentRow] = []
     for f in findings[:200]:
         title = str(f.get("title") or "")
@@ -4253,16 +4463,38 @@ def _outdated_from_whatweb(merged: dict[str, Any] | None) -> list[OutdatedCompon
     plugs = merged.get("plugins")
     if not isinstance(plugs, dict) or not plugs:
         return []
-    _WW_NOISE = frozenset({
-        "cookies", "email", "httponly", "ip", "open-graph-protocol",
-        "script", "title", "uncommonheaders", "x-frame-options",
-        "x-xss-protection", "x-content-type-options", "x-host",
-        "strict-transport-security", "content-security-policy",
-        "referrer-policy", "permissions-policy", "cross-origin-opener-policy",
-        "cross-origin-resource-policy", "cross-origin-embedder-policy",
-        "html5", "charset", "meta", "viewport",
-        "country", "city", "region", "locale", "location",
-    })
+    _WW_NOISE = frozenset(
+        {
+            "cookies",
+            "email",
+            "httponly",
+            "ip",
+            "open-graph-protocol",
+            "script",
+            "title",
+            "uncommonheaders",
+            "x-frame-options",
+            "x-xss-protection",
+            "x-content-type-options",
+            "x-host",
+            "strict-transport-security",
+            "content-security-policy",
+            "referrer-policy",
+            "permissions-policy",
+            "cross-origin-opener-policy",
+            "cross-origin-resource-policy",
+            "cross-origin-embedder-policy",
+            "html5",
+            "charset",
+            "meta",
+            "viewport",
+            "country",
+            "city",
+            "region",
+            "locale",
+            "location",
+        }
+    )
     rows: list[OutdatedComponentRow] = []
     for name, pval in list(plugs.items())[:80]:
         pname = str(name).strip().lower()
@@ -4349,7 +4581,9 @@ def _walk_collect_searchsploit_text(obj: Any, acc: list[str]) -> None:
             _walk_collect_searchsploit_text(it, acc)
 
 
-def _outdated_from_searchsploit_phase(phase_outputs: list[tuple[str, dict[str, Any] | None]]) -> list[OutdatedComponentRow]:
+def _outdated_from_searchsploit_phase(
+    phase_outputs: list[tuple[str, dict[str, Any] | None]],
+) -> list[OutdatedComponentRow]:
     chunks: list[str] = []
     for _ph, od in phase_outputs:
         if isinstance(od, dict):
@@ -4412,7 +4646,9 @@ def _outdated_from_trivy_dependency_rows(
     return rows[:80]
 
 
-def _outdated_from_dependency_inventory(deps: list[DependencyAnalysisRow]) -> list[OutdatedComponentRow]:
+def _outdated_from_dependency_inventory(
+    deps: list[DependencyAnalysisRow],
+) -> list[OutdatedComponentRow]:
     rows: list[OutdatedComponentRow] = []
     seen: set[str] = set()
     for d in deps[:300]:
@@ -4446,7 +4682,9 @@ def _outdated_from_dependency_inventory(deps: list[DependencyAnalysisRow]) -> li
     return rows
 
 
-def _merge_outdated_rows(groups: list[list[OutdatedComponentRow]]) -> list[OutdatedComponentRow]:
+def _merge_outdated_rows(
+    groups: list[list[OutdatedComponentRow]],
+) -> list[OutdatedComponentRow]:
     merged: dict[str, OutdatedComponentRow] = {}
     for group in groups:
         for r in group:
@@ -4459,13 +4697,15 @@ def _merge_outdated_rows(groups: list[list[OutdatedComponentRow]]) -> list[Outda
                 merged[key] = OutdatedComponentRow(
                     component=cur.component,
                     installed_version=cur.installed_version or r.installed_version,
-                latest_stable=cur.latest_stable if (cur.latest_stable or "") != "—" else r.latest_stable,
-                support_status=cur.support_status or r.support_status,
-                cves=cves,
-                source=cur.source or r.source,
-                recommendation=(cur.recommendation or r.recommendation)[:800],
-                exploit_available=bool(cur.exploit_available or r.exploit_available),
-            )
+                    latest_stable=cur.latest_stable
+                    if (cur.latest_stable or "") != "—"
+                    else r.latest_stable,
+                    support_status=cur.support_status or r.support_status,
+                    cves=cves,
+                    source=cur.source or r.source,
+                    recommendation=(cur.recommendation or r.recommendation)[:800],
+                    exploit_available=bool(cur.exploit_available or r.exploit_available),
+                )
     return list(merged.values())[:120]
 
 
@@ -4491,7 +4731,9 @@ def _assemble_outdated_components(
     )
 
 
-def _tech_entries_from_whatweb_merged(merged: dict[str, Any] | None) -> list[TechStackEntryModel]:
+def _tech_entries_from_whatweb_merged(
+    merged: dict[str, Any] | None,
+) -> list[TechStackEntryModel]:
     if not isinstance(merged, dict):
         return []
     plugs = merged.get("plugins")
@@ -4644,10 +4886,21 @@ def _masked_emails_from_theharvester_raw(
     return acc[:64]
 
 
-_HARVESTER_NOISE_LOCALS = frozenset({
-    "noreply", "no-reply", "admin", "example", "test", "info",
-    "support", "postmaster", "hostmaster", "webmaster", "abuse",
-})
+_HARVESTER_NOISE_LOCALS = frozenset(
+    {
+        "noreply",
+        "no-reply",
+        "admin",
+        "example",
+        "test",
+        "info",
+        "support",
+        "postmaster",
+        "hostmaster",
+        "webmaster",
+        "abuse",
+    }
+)
 
 
 def _parse_harvester_emails(stdout: str) -> list[str]:
@@ -4770,22 +5023,43 @@ def _tls_version_cell(proto_blobs: list[str], version: str) -> str:
 def _header_row_risk_rec(header_display: str, present: bool) -> tuple[str, str]:
     h = (header_display or "").lower()
     if present:
-        return "low", "Maintain header values during releases; re-test after framework upgrades."
+        return (
+            "low",
+            "Maintain header values during releases; re-test after framework upgrades.",
+        )
     if "content-security-policy" in h or h.strip() == "csp":
-        return "medium", "Add a strict Content-Security-Policy using nonces or hashes; avoid unsafe-inline for scripts when feasible."
+        return (
+            "medium",
+            "Add a strict Content-Security-Policy using nonces or hashes; avoid unsafe-inline for scripts when feasible.",
+        )
     if "frame" in h:
-        return "medium", "Set X-Frame-Options DENY/SAMEORIGIN or CSP frame-ancestors to mitigate clickjacking."
+        return (
+            "medium",
+            "Set X-Frame-Options DENY/SAMEORIGIN or CSP frame-ancestors to mitigate clickjacking.",
+        )
     if "content-type" in h:
         return "low", "Set X-Content-Type-Options: nosniff."
     if "strict-transport" in h or "hsts" in h:
-        return "medium", "Enable HSTS for HTTPS; use includeSubDomains when all subdomains are HTTPS-ready; preload only with operational commitment."
+        return (
+            "medium",
+            "Enable HSTS for HTTPS; use includeSubDomains when all subdomains are HTTPS-ready; preload only with operational commitment.",
+        )
     if "referrer" in h:
         return "low", "Set Referrer-Policy to match privacy requirements."
     if "xss-protection" in h:
-        return "low", "Do not rely on X-XSS-Protection; prefer CSP. Remove or leave disabled per browser policy."
+        return (
+            "low",
+            "Do not rely on X-XSS-Protection; prefer CSP. Remove or leave disabled per browser policy.",
+        )
     if "permissions" in h:
-        return "low", "Set Permissions-Policy to disable unused powerful browser features."
-    return "low", "Configure this response header in line with application architecture."
+        return (
+            "low",
+            "Set Permissions-Policy to disable unused powerful browser features.",
+        )
+    return (
+        "low",
+        "Configure this response header in line with application architecture.",
+    )
 
 
 def build_ssl_tls_table_rows(
@@ -4813,8 +5087,10 @@ def build_ssl_tls_table_rows(
                     sans = c.get("subject_alternative_names")
                     subj = cn
                     if isinstance(sans, list) and sans:
-                        subj = f"{cn} / SAN: {', '.join(str(x) for x in sans[:6])}" if cn else ", ".join(
-                            str(x) for x in sans[:8]
+                        subj = (
+                            f"{cn} / SAN: {', '.join(str(x) for x in sans[:6])}"
+                            if cn
+                            else ", ".join(str(x) for x in sans[:8])
                         )
                     nb = str(c.get("validity_not_before") or "").strip()
                     na = str(c.get("validity_not_after") or "").strip()
@@ -4861,7 +5137,9 @@ def build_ssl_tls_table_rows(
     return rows_out
 
 
-def build_security_headers_table_rows(sec: SecurityHeadersAnalysisModel) -> list[dict[str, Any]]:
+def build_security_headers_table_rows(
+    sec: SecurityHeadersAnalysisModel,
+) -> list[dict[str, Any]]:
     """VH-008 — customer columns for headers matrix."""
     out: list[dict[str, Any]] = []
     for i, r in enumerate(sec.rows or [], start=1):
@@ -4953,8 +5231,8 @@ def build_port_exposure_table_rows(
         text = str(hint).strip()
         m = _PORT_DETAILED_RE.match(text)
         if m:
-            ver_str = (m.group("version") or "")
-            svc_str = (m.group("service") or "")
+            ver_str = m.group("version") or ""
+            svc_str = m.group("service") or ""
             product_m = re.search(r"(\S+?)\s+(\S+)", ver_str)
             add(
                 port=m.group("port"),
@@ -4970,7 +5248,9 @@ def build_port_exposure_table_rows(
         mh = _PORT_HINT_RE.search(text)
         if mh:
             src = "naabu" if "naabu" in text.lower() else "recon/fallback"
-            service = "https" if mh.group("port") == "443" else "http" if mh.group("port") == "80" else ""
+            service = (
+                "https" if mh.group("port") == "443" else "http" if mh.group("port") == "80" else ""
+            )
             add(
                 port=mh.group("port"),
                 service=service,
@@ -4996,8 +5276,20 @@ def build_remediation_matrix_rows(
     """Build 16-column remediation matrix rows from findings (Step 12)."""
     rows: list[RemediationMatrixRow] = []
     effort_map = {"critical": 16, "high": 8, "medium": 4, "low": 2, "info": 1}
-    priority_map = {"critical": "P0", "high": "P0", "medium": "P1", "low": "P2", "info": "P3"}
-    deadline_map = {"critical": "48 hours", "high": "48 hours", "medium": "2 weeks", "low": "1 month", "info": "Next quarter"}
+    priority_map = {
+        "critical": "P0",
+        "high": "P0",
+        "medium": "P1",
+        "low": "P2",
+        "info": "P3",
+    }
+    deadline_map = {
+        "critical": "48 hours",
+        "high": "48 hours",
+        "medium": "2 weeks",
+        "low": "1 month",
+        "info": "Next quarter",
+    }
     sorted_findings = sorted(
         findings,
         key=lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(
@@ -5008,13 +5300,18 @@ def build_remediation_matrix_rows(
         if not isinstance(f, dict):
             continue
         sev = str(f.get("severity", "info")).lower()
-        poc = f.get("proof_of_concept", {}) or {}
+        f.get("proof_of_concept", {}) or {}
         cvss = f.get("cvss") or f.get("cvss_score")
         cvss_val = float(cvss) if cvss is not None else None
         effort_hours = effort_map.get(sev, 4)
         priority = priority_map.get(sev, "P3")
         deadline = deadline_map.get(sev, "Next quarter")
-        f_type = str(f.get("type", f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "")).upper()
+        f_type = str(
+            f.get(
+                "type",
+                f.get("data", {}).get("type") if isinstance(f.get("data"), dict) else "",
+            )
+        ).upper()
         fix_action = "Review finding details and apply appropriate fix"
         verification = "Re-test after fix applied"
         test_case = "Verify finding is no longer reproducible"
@@ -5024,10 +5321,16 @@ def build_remediation_matrix_rows(
         rollback = "Assess before deployment"
         acceptance = "Finding no longer reproducible under same conditions"
         dependencies = "None"
-        business_impact = str(f.get("business_impact", f.get("impact", "Potential security compromise")))[:200]
+        business_impact = str(
+            f.get("business_impact", f.get("impact", "Potential security compromise"))
+        )[:200]
         if "SQL" in f_type or "SQLI" in f_type:
-            fix_action = "Replace all dynamic SQL queries with parameterized statements or ORM methods"
-            verification = "Run sqlmap against affected endpoint — should report no injection points"
+            fix_action = (
+                "Replace all dynamic SQL queries with parameterized statements or ORM methods"
+            )
+            verification = (
+                "Run sqlmap against affected endpoint — should report no injection points"
+            )
             test_case = "Inject SQL payload (e.g., ' OR 1=1 --) — should be safely parameterized"
             owner = "Backend development team"
             layer = "app/backend/database"
@@ -5053,7 +5356,9 @@ def build_remediation_matrix_rows(
             rollback = "Medium — may require API changes"
             acceptance = "No shell metacharacters accepted; commix reports no injection points"
         elif "AUTH" in f_type or "LOGIN" in f_type or "SESSION" in f_type:
-            fix_action = "Implement proper authentication checks, session validation, and access controls"
+            fix_action = (
+                "Implement proper authentication checks, session validation, and access controls"
+            )
             verification = "Attempt unauthorized access — should receive 401/403"
             test_case = "Access protected resource without valid session — should be denied"
             owner = "Backend / Security team"
@@ -5063,7 +5368,9 @@ def build_remediation_matrix_rows(
             acceptance = "All protected endpoints require valid authentication; session tokens properly validated"
         elif "HEADER" in f_type:
             fix_action = "Add missing HTTP security headers at reverse proxy or application level"
-            verification = "curl -sS -I <url> | grep -iE 'content-security-policy|x-content-type-options'"
+            verification = (
+                "curl -sS -I <url> | grep -iE 'content-security-policy|x-content-type-options'"
+            )
             test_case = "Request any endpoint — verify all recommended headers present"
             owner = "Infrastructure / DevOps team"
             layer = "infrastructure/reverse-proxy"
@@ -5073,12 +5380,16 @@ def build_remediation_matrix_rows(
         elif "LINE_FINDING" in f_type:
             fix_action = "Validate and sanitize all input parameters on the endpoint. Check for information disclosure in HTTP response lines"
             verification = "curl -sS -D- -o /dev/null <affected_url> | head -1"
-            test_case = "Verify response contains no sensitive information in status line or headers"
+            test_case = (
+                "Verify response contains no sensitive information in status line or headers"
+            )
             owner = "Backend development team"
             layer = "app/backend"
             component = "HTTP response handler / error page template"
             rollback = "Low — response sanitization is backward compatible"
-            acceptance = "Response contains no sensitive information; re-scan confirms no LINE_FINDING"
+            acceptance = (
+                "Response contains no sensitive information; re-scan confirms no LINE_FINDING"
+            )
         elif "WHATWEB" in f_type or "PLUGIN" in f_type:
             fix_action = "Remove or obfuscate technology version disclosures from HTTP headers and error pages"
             verification = "whatweb -a 1 <affected_url> | grep -E '(Version|HTTPServer)' — should return no version strings"
@@ -5093,7 +5404,13 @@ def build_remediation_matrix_rows(
                 finding_id=str(f.get("id", f.get("finding_id", "")))[:64],
                 title=str(f.get("title", ""))[:256],
                 severity=sev.capitalize() if sev else "Info",
-                status=str(f.get("evidence_classification", f.get("validation_status", "unverified")) or "unverified").upper(),
+                status=str(
+                    f.get(
+                        "evidence_classification",
+                        f.get("validation_status", "unverified"),
+                    )
+                    or "unverified"
+                ).upper(),
                 cvss_score=cvss_val,
                 priority=priority,
                 deadline=deadline,
@@ -5125,8 +5442,10 @@ def build_remediation_matrix_rows(
                 if row.affected_layer == "infrastructure/reverse-proxy":
                     row.fix_action = infra_fix[:2000] or row.fix_action
                     row.config_component = (
-                        tech_stack_structured.get("web_server", "") or "reverse-proxy"
-                    ) if tech_stack_structured else row.config_component
+                        (tech_stack_structured.get("web_server", "") or "reverse-proxy")
+                        if tech_stack_structured
+                        else row.config_component
+                    )
         if infra.get("tls_hardening"):
             for row in rows:
                 ftype = (row.title or "").upper()
@@ -5147,7 +5466,12 @@ def _parse_hibp_data_from_phases(
         if not isinstance(od, dict):
             continue
         ph_lower = (_ph or "").lower()
-        if "hibp" in ph_lower or "breach" in ph_lower or "pwned" in ph_lower or "haveibeenpwned" in ph_lower:
+        if (
+            "hibp" in ph_lower
+            or "breach" in ph_lower
+            or "pwned" in ph_lower
+            or "haveibeenpwned" in ph_lower
+        ):
             emails_data = od.get("emails") or od.get("breaches") or od.get("results")
             if isinstance(emails_data, dict):
                 for email, data in emails_data.items():
@@ -5216,21 +5540,36 @@ def build_leaked_email_rows(
             raw_classes = hibp_entry.get("data_classes", hibp_entry.get("classes", []))
             if isinstance(raw_classes, list):
                 data_classes = [str(c)[:128] for c in raw_classes[:8] if str(c).strip()]
-            first_date = str(hibp_entry.get("first_breach_date", hibp_entry.get("first_seen", "")))[:40]
-            last_date = str(hibp_entry.get("last_breach_date", hibp_entry.get("last_seen", "")))[:40]
-            password_exposed = bool(hibp_entry.get("password_exposed", hibp_entry.get("has_password", False)))
-        source = "HIBP / OSINT / HTML / recon artifacts" if hibp_entry else "OSINT / HTML / recon artifacts"
+            first_date = str(hibp_entry.get("first_breach_date", hibp_entry.get("first_seen", "")))[
+                :40
+            ]
+            last_date = str(hibp_entry.get("last_breach_date", hibp_entry.get("last_seen", "")))[
+                :40
+            ]
+            password_exposed = bool(
+                hibp_entry.get("password_exposed", hibp_entry.get("has_password", False))
+            )
+        source = (
+            "HIBP / OSINT / HTML / recon artifacts"
+            if hibp_entry
+            else "OSINT / HTML / recon artifacts"
+        )
         risk_parts = []
         if breach_count > 0:
             risk_parts.append(f"Found in {breach_count} known data breach(es).")
         if password_exposed:
             risk_parts.append("Password hash/value was exposed in at least one breach.")
-        risk_parts.append("May support targeted phishing or reconnaissance; no mailbox compromise was demonstrated.")
+        risk_parts.append(
+            "May support targeted phishing or reconnaissance; no mailbox compromise was demonstrated."
+        )
         rows.append(
             LeakedEmailRowModel(
                 email=email,
                 source=source,
-                context="Masked email-like value parsed from collected ARGUS artifacts." + (f" Enriched with HIBP data ({breach_count} breach(es))." if breach_count else ""),
+                context="Masked email-like value parsed from collected ARGUS artifacts."
+                + (
+                    f" Enriched with HIBP data ({breach_count} breach(es))." if breach_count else ""
+                ),
                 risk=" ".join(risk_parts),
                 evidence_id=f"EV-EMAIL-{idx:04d}",
                 hibp_breach_count=breach_count,
@@ -5321,12 +5660,22 @@ def _raw_keys_hint_flags(raw_artifact_keys: list[tuple[str, str]]) -> dict[str, 
     keys_low = " ".join(k.lower() for k, _ in raw_artifact_keys)
     return {
         "has_whatweb": "whatweb" in keys_low,
-        "has_robots": any(_artifact_name_matches(k, _ROBOTS_KEY_HINTS) for k, _ in raw_artifact_keys),
-        "has_sitemap": any(_artifact_name_matches(k, _SITEMAP_KEY_HINTS) for k, _ in raw_artifact_keys),
-        "has_tls": any(_artifact_name_matches(k, _TLS_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
+        "has_robots": any(
+            _artifact_name_matches(k, _ROBOTS_KEY_HINTS) for k, _ in raw_artifact_keys
+        ),
+        "has_sitemap": any(
+            _artifact_name_matches(k, _SITEMAP_KEY_HINTS) for k, _ in raw_artifact_keys
+        ),
+        "has_tls": any(
+            _artifact_name_matches(k, _TLS_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+        ),
         "has_harvester": "theharvester" in keys_low,
-        "has_headers": any(_artifact_name_matches(k, _HTTP_HEADER_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
-        "has_dependency": any(_artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys),
+        "has_headers": any(
+            _artifact_name_matches(k, _HTTP_HEADER_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+        ),
+        "has_dependency": any(
+            _artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+        ),
         "has_email_fallback": any(
             _artifact_name_matches(k, _EMAIL_FALLBACK_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
         ),
@@ -5409,7 +5758,13 @@ def _no_conclusion_tool_reason(tool_label: str) -> str:
 
 
 _REPORT_SECTION_DATA_STATUSES = frozenset(
-    {"completed", "completed_with_fallback", "partial", "parsed_from_fallback", "no_observed_items_after_parsing"}
+    {
+        "completed",
+        "completed_with_fallback",
+        "partial",
+        "parsed_from_fallback",
+        "no_observed_items_after_parsing",
+    }
 )
 
 
@@ -5417,7 +5772,15 @@ def _tool_completed_present(
     tool_run_summaries: list[tuple[str, str]] | None,
     *needles: str,
 ) -> bool:
-    ok_statuses = {"success", "succeeded", "completed", "complete", "ok", "finished", "done"}
+    ok_statuses = {
+        "success",
+        "succeeded",
+        "completed",
+        "complete",
+        "ok",
+        "finished",
+        "done",
+    }
     for name, status in tool_run_summaries or []:
         n = (name or "").lower()
         st = (status or "").lower().strip()
@@ -5471,7 +5834,9 @@ def _compute_mandatory_sections_and_coverage(
         tool_run_summaries,
         raw_tool_issues=raw_tool_issues,
     )
-    has_dep_artifacts = any(_artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys)
+    has_dep_artifacts = any(
+        _artifact_name_matches(k, _DEP_ARTIFACT_HINTS) for k, _ in raw_artifact_keys
+    )
     whatweb_failed = _tool_issue_present(tool_errs, "whatweb")
     tls_failed = _tool_issue_present(tool_errs, "testssl", "sslscan", "sslyze", "tlsx")
     trivy_failed = _tool_issue_present(tool_errs, "trivy")
@@ -5479,28 +5844,47 @@ def _compute_mandatory_sections_and_coverage(
     harvester_failed = _tool_issue_present(tool_errs, "harvester")
     port_scan_failed = _tool_issue_present(tool_errs, "nmap", "naabu", "masscan")
     whatweb_completed = _tool_completed_present(tool_run_summaries, "whatweb")
-    tls_completed = _tool_completed_present(tool_run_summaries, "testssl", "sslscan", "sslyze", "tlsx")
+    tls_completed = _tool_completed_present(
+        tool_run_summaries, "testssl", "sslscan", "sslyze", "tlsx"
+    )
     trivy_completed = _tool_completed_present(tool_run_summaries, "trivy", "safety", "pip", "npm")
     header_tool_completed = _tool_completed_present(tool_run_summaries, "nikto", "httpx", "whatweb")
     harvester_completed = _tool_completed_present(tool_run_summaries, "harvester")
     port_scan_completed = _tool_completed_present(tool_run_summaries, "nmap", "naabu", "masscan")
 
     whatweb_raw_body = _artifact_non_empty_body_for_needles(
-        raw_artifact_keys, fetch_raw_bodies, ("whatweb", "http_audit", "httpx", "http_headers", "head_spider")
+        raw_artifact_keys,
+        fetch_raw_bodies,
+        ("whatweb", "http_audit", "httpx", "http_headers", "head_spider"),
     )
     tls_raw_body = _artifact_non_empty_body_for_needles(
-        raw_artifact_keys, fetch_raw_bodies, ("testssl", "sslscan", "sslyze", "tlsx", "openssl", "x509", "ssl_enum")
+        raw_artifact_keys,
+        fetch_raw_bodies,
+        ("testssl", "sslscan", "sslyze", "tlsx", "openssl", "x509", "ssl_enum"),
     )
     header_raw_body = _artifact_non_empty_body_for_needles(
         raw_artifact_keys,
         fetch_raw_bodies,
-        ("nikto", "httpx", "http_audit", "headers", "curl", "raw_http", "response", "security_header"),
+        (
+            "nikto",
+            "httpx",
+            "http_audit",
+            "headers",
+            "curl",
+            "raw_http",
+            "response",
+            "security_header",
+        ),
     )
     port_raw_body = _artifact_non_empty_body_for_needles(
-        raw_artifact_keys, fetch_raw_bodies, ("nmap", "naabu", "masscan", "recon_open_ports", "deep_port", "port_scan")
+        raw_artifact_keys,
+        fetch_raw_bodies,
+        ("nmap", "naabu", "masscan", "recon_open_ports", "deep_port", "port_scan"),
     )
     trivy_raw_body = _artifact_non_empty_body_for_needles(
-        raw_artifact_keys, fetch_raw_bodies, ("trivy", "safety", "npm_audit", "pip_audit", "osv")
+        raw_artifact_keys,
+        fetch_raw_bodies,
+        ("trivy", "safety", "npm_audit", "pip_audit", "osv"),
     )
 
     # --- tech_stack_structured
@@ -5562,12 +5946,19 @@ def _compute_mandatory_sections_and_coverage(
     else:
         tech_env = _envelope(
             "no_data",
-            (fallback_messages.get("tech_stack") or "Stack not identified: no WhatWeb output and insufficient recon signals."),
+            (
+                fallback_messages.get("tech_stack")
+                or "Stack not identified: no WhatWeb output and insufficient recon signals."
+            ),
         )
 
     # --- outdated_components
-    outdated_has_advisory = any(r.cves or "cve" in (r.recommendation or "").lower() for r in outdated)
-    outdated_has_sca_source = any("trivy" in (r.source or r.support_status or "").lower() for r in outdated)
+    outdated_has_advisory = any(
+        r.cves or "cve" in (r.recommendation or "").lower() for r in outdated
+    )
+    outdated_has_sca_source = any(
+        "trivy" in (r.source or r.support_status or "").lower() for r in outdated
+    )
     if outdated:
         if outdated_has_advisory or outdated_has_sca_source:
             outd_env = _envelope_completed()
@@ -5578,7 +5969,9 @@ def _compute_mandatory_sections_and_coverage(
             )
     elif trivy_failed:
         if not (has_dep_artifacts or trivy_completed):
-            outd_env = _envelope("not_assessed", _no_conclusion_tool_reason("Trivy/dependency scanner"))
+            outd_env = _envelope(
+                "not_assessed", _no_conclusion_tool_reason("Trivy/dependency scanner")
+            )
         elif fetch_raw_bodies and not trivy_raw_body:
             outd_env = _envelope(
                 "artifact_missing_body",
@@ -5652,7 +6045,9 @@ def _compute_mandatory_sections_and_coverage(
                 "artifact_missing_body",
                 "TLS scanner failure; testssl/sslscan stdout/body was not stored or was empty.",
             )
-            ssl_out.assessment_note = "testssl.sh execution failed with no output. Install testssl.sh and re-scan."
+            ssl_out.assessment_note = (
+                "testssl.sh execution failed with no output. Install testssl.sh and re-scan."
+            )
         else:
             ssl_env = _envelope(
                 "not_executed",
@@ -5698,7 +6093,10 @@ def _compute_mandatory_sections_and_coverage(
     else:
         ssl_env = _envelope(
             "no_data",
-            (fallback_messages.get("ssl_tls") or "SSL/TLS: no testssl/sslscan output and no certificate data."),
+            (
+                fallback_messages.get("ssl_tls")
+                or "SSL/TLS: no testssl/sslscan output and no certificate data."
+            ),
         )
         ssl_out.assessment_note = "No TLS/SSL assessment data available. Install testssl.sh and re-scan for TLS configuration analysis."
 
@@ -5717,8 +6115,13 @@ def _compute_mandatory_sections_and_coverage(
             "Partial headers present in data, but canonical security headers table was not built.",
         )
     elif header_tool_failed:
-        if not (raw_hints.get("has_headers") or raw_hints.get("has_whatweb") or header_tool_completed):
-            sec_env = _envelope("not_assessed", _no_conclusion_tool_reason("Nikto/httpx/WhatWeb header-capable tool"))
+        if not (
+            raw_hints.get("has_headers") or raw_hints.get("has_whatweb") or header_tool_completed
+        ):
+            sec_env = _envelope(
+                "not_assessed",
+                _no_conclusion_tool_reason("Nikto/httpx/WhatWeb header-capable tool"),
+            )
         elif fetch_raw_bodies and not header_raw_body:
             sec_env = _envelope(
                 "artifact_missing_body",
@@ -5770,7 +6173,10 @@ def _compute_mandatory_sections_and_coverage(
     if robots.found or sitemap.found:
         rs_env = _envelope_completed()
     elif rs_signal and (robots_sitemap_merged.notes or "").strip():
-        rs_env = _envelope("partial", "Merged robots/sitemap JSON available; raw robots/sitemap bodies may not have been parsed.")
+        rs_env = _envelope(
+            "partial",
+            "Merged robots/sitemap JSON available; raw robots/sitemap bodies may not have been parsed.",
+        )
     elif rs_signal:
         rs_env = _envelope_completed()
     elif not fetch_raw_bodies and (raw_hints.get("has_robots") or raw_hints.get("has_sitemap")):
@@ -5781,7 +6187,10 @@ def _compute_mandatory_sections_and_coverage(
     else:
         rs_env = _envelope(
             "no_data",
-            (fallback_messages.get("robots_sitemap") or "robots.txt and sitemap were not retrieved."),
+            (
+                fallback_messages.get("robots_sitemap")
+                or "robots.txt and sitemap were not retrieved."
+            ),
         )
 
     email_sources_exist = bool(
@@ -5816,7 +6225,10 @@ def _compute_mandatory_sections_and_coverage(
     elif harvester_enabled:
         em_env = _envelope(
             "not_executed",
-            (fallback_messages.get("leaked_emails") or "theHarvester enabled, but no masked emails found in data."),
+            (
+                fallback_messages.get("leaked_emails")
+                or "theHarvester enabled, but no masked emails found in data."
+            ),
         )
     else:
         em_env = _envelope(
@@ -5988,7 +6400,9 @@ def _dataclass_to_dict(obj: Any) -> dict[str, Any]:
 
 def _finding_is_rate_limit_signal(f: dict[str, Any]) -> bool:
     blob = f"{f.get('title', '')} {f.get('description', '')} {f.get('evidence', '')}".lower()
-    return bool(("rate" in blob and "limit" in blob) or "http 429" in blob or "too many requests" in blob)
+    return bool(
+        ("rate" in blob and "limit" in blob) or "http 429" in blob or "too many requests" in blob
+    )
 
 
 def _parse_auth_testing_context(
@@ -6024,7 +6438,22 @@ def _parse_auth_testing_context(
             continue
         title = str(f.get("title", "")).lower()
         desc = str(f.get("description", "")).lower()
-        if any(kw in title or kw in desc for kw in ("auth", "login", "session", "token", "jwt", "oauth", "mfa", "2fa", "bypass", "idor", "access control")):
+        if any(
+            kw in title or kw in desc
+            for kw in (
+                "auth",
+                "login",
+                "session",
+                "token",
+                "jwt",
+                "oauth",
+                "mfa",
+                "2fa",
+                "bypass",
+                "idor",
+                "access control",
+            )
+        ):
             auth_findings.append(f)
     ctx.auth_findings_count = len(auth_findings)
     for f in auth_findings:
@@ -6032,7 +6461,11 @@ def _parse_auth_testing_context(
             ctx.auth_bypass_attempts += 1
     matrix_rows: list[AuthMatrixRow] = []
     for f in auth_findings:
-        role = str(f.get("auth_state", {}).get("role", "unknown"))[:128] if isinstance(f.get("auth_state"), dict) else "unknown"
+        role = (
+            str(f.get("auth_state", {}).get("role", "unknown"))[:128]
+            if isinstance(f.get("auth_state"), dict)
+            else "unknown"
+        )
         resource = str(f.get("target_url", f.get("title", "")))[:256]
         access = "not_tested"
         sev = str(f.get("severity", "")).lower()
@@ -6085,8 +6518,16 @@ def _parse_full_headers_context(
                             url=str(url)[:512],
                             method=str(headers.get("method", "GET"))[:16],
                             status_code=int(headers.get("status_code", 0)),
-                            request_headers={str(k): str(v) for k, v in (req_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
-                            response_headers={str(k): str(v) for k, v in (resp_hdrs or {}).items() if isinstance(v, (str, int, float))}[:32],
+                            request_headers={
+                                str(k): str(v)
+                                for k, v in (req_hdrs or {}).items()
+                                if isinstance(v, (str, int, float))
+                            }[:32],
+                            response_headers={
+                                str(k): str(v)
+                                for k, v in (resp_hdrs or {}).items()
+                                if isinstance(v, (str, int, float))
+                            }[:32],
                             raw_request=str(headers.get("raw_request", ""))[:2048],
                             raw_response=str(headers.get("raw_response", ""))[:2048],
                             timestamp=str(headers.get("timestamp", ""))[:40],
@@ -6116,7 +6557,18 @@ def _parse_full_headers_context(
                             url=url,
                             method=str(data.get("method", "GET"))[:16],
                             status_code=int(data.get("status_code", data.get("status", 0))),
-                            response_headers=dict(islice(({str(k): str(v) for k, v in resp_hdrs.items() if isinstance(v, (str, int, float))}).items(), 32)),
+                            response_headers=dict(
+                                islice(
+                                    (
+                                        {
+                                            str(k): str(v)
+                                            for k, v in resp_hdrs.items()
+                                            if isinstance(v, (str, int, float))
+                                        }
+                                    ).items(),
+                                    32,
+                                )
+                            ),
                             raw_request=str(data.get("raw_request", ""))[:2048],
                             raw_response=str(data.get("raw_response", ""))[:2048],
                             timestamp=str(data.get("timestamp", ""))[:40],
@@ -6128,9 +6580,14 @@ def _parse_full_headers_context(
     if merged_http_headers:
         existing_urls = {eh.url for eh in endpoint_headers}
         known_sec_keys = {
-            "strict-transport-security", "content-security-policy", "x-content-type-options",
-            "x-frame-options", "x-xss-protection", "referrer-policy",
-            "permissions-policy", "cross-origin-opener-policy",
+            "strict-transport-security",
+            "content-security-policy",
+            "x-content-type-options",
+            "x-frame-options",
+            "x-xss-protection",
+            "referrer-policy",
+            "permissions-policy",
+            "cross-origin-opener-policy",
         }
         for host, hdrs in merged_http_headers.items():
             if host in existing_urls:
@@ -6150,14 +6607,21 @@ def _parse_full_headers_context(
     ctx.endpoint_headers = endpoint_headers[:128]
     ctx.total_endpoints_scanned = len(endpoint_headers)
     # X-XSS-Protection is deprecated (browsers ignore it) — never recommend adding it.
-    sec_headers = frozenset({
-        "strict-transport-security", "content-security-policy", "x-content-type-options",
-        "x-frame-options", "referrer-policy",
-        "permissions-policy", "cache-control", "pragma",
-    })
+    sec_headers = frozenset(
+        {
+            "strict-transport-security",
+            "content-security-policy",
+            "x-content-type-options",
+            "x-frame-options",
+            "referrer-policy",
+            "permissions-policy",
+            "cache-control",
+            "pragma",
+        }
+    )
     all_resp_keys: set[str] = set()
     for eh in endpoint_headers:
-        all_resp_keys.update(k.lower() for k in eh.response_headers.keys())
+        all_resp_keys.update(k.lower() for k in eh.response_headers)
     ctx.common_missing_headers = sorted(sec_headers - all_resp_keys)
     header_values: dict[str, set[str]] = {}
     for eh in endpoint_headers:
@@ -6248,7 +6712,9 @@ def build_valhalla_report_context(
         if isinstance(cand, dict):
             recon_pipeline_summary = cand
 
-    robots, sitemap = _collect_robots_sitemap_from_keys(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+    robots, sitemap = _collect_robots_sitemap_from_keys(
+        raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+    )
     robots_sitemap_merged = _build_robots_sitemap_merged(
         robots,
         sitemap,
@@ -6265,7 +6731,9 @@ def build_valhalla_report_context(
             break
 
     nmap_blob = _nmap_text_from_phase_outputs(phase_outputs)
-    what_candidates = _whatweb_roots_from_phase_outputs(phase_outputs) + _whatweb_roots_from_raw_keys(
+    what_candidates = _whatweb_roots_from_phase_outputs(
+        phase_outputs
+    ) + _whatweb_roots_from_raw_keys(
         raw_artifact_keys,
         fetch_bodies=fetch_raw_bodies,
     )
@@ -6276,7 +6744,11 @@ def build_valhalla_report_context(
             lowk = key.lower()
             if "whatweb" not in lowk:
                 continue
-            if "stdout" in lowk or "output" in lowk or _artifact_name_matches(key, _WHATWEB_KEY_HINTS):
+            if (
+                "stdout" in lowk
+                or "output" in lowk
+                or _artifact_name_matches(key, _WHATWEB_KEY_HINTS)
+            ):
                 blob = _safe_download_raw(key)
                 if not blob:
                     continue
@@ -6288,7 +6760,10 @@ def build_valhalla_report_context(
                     ww_merged = parsed
                     logger.info(
                         "whatweb_text_fallback_used",
-                        extra={"event": "whatweb_text_fallback_used", "key_suffix": key[-64:]},
+                        extra={
+                            "event": "whatweb_text_fallback_used",
+                            "key_suffix": key[-64:],
+                        },
                     )
                     break
 
@@ -6339,7 +6814,8 @@ def build_valhalla_report_context(
             cert_expiry=merged.cert_expiry or ssl_part.cert_expiry,
             hsts_present=merged.hsts_present or ssl_part.hsts_present,
             hsts_max_age=merged.hsts_max_age or ssl_part.hsts_max_age,
-            hsts_include_subdomains=merged.hsts_include_subdomains or ssl_part.hsts_include_subdomains,
+            hsts_include_subdomains=merged.hsts_include_subdomains
+            or ssl_part.hsts_include_subdomains,
             hsts_preload=merged.hsts_preload or ssl_part.hsts_preload,
             recommendations=merged.recommendations or ssl_part.recommendations,
         )
@@ -6347,7 +6823,9 @@ def build_valhalla_report_context(
         ssl_out = ssl_part
 
     if _ssl_surface_empty(ssl_out):
-        text_ssl = _ssl_from_testssl_text_artifacts(raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+        text_ssl = _ssl_from_testssl_text_artifacts(
+            raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+        )
         if text_ssl and not _ssl_surface_empty(text_ssl):
             ssl_out = SslTlsAnalysisModel(
                 issuer=text_ssl.issuer or ssl_out.issuer,
@@ -6363,7 +6841,8 @@ def build_valhalla_report_context(
                 cert_expiry=text_ssl.cert_expiry or ssl_out.cert_expiry,
                 hsts_present=text_ssl.hsts_present or ssl_out.hsts_present,
                 hsts_max_age=text_ssl.hsts_max_age or ssl_out.hsts_max_age,
-                hsts_include_subdomains=text_ssl.hsts_include_subdomains or ssl_out.hsts_include_subdomains,
+                hsts_include_subdomains=text_ssl.hsts_include_subdomains
+                or ssl_out.hsts_include_subdomains,
                 hsts_preload=text_ssl.hsts_preload or ssl_out.hsts_preload,
                 recommendations=text_ssl.recommendations or ssl_out.recommendations,
             )
@@ -6392,7 +6871,9 @@ def build_valhalla_report_context(
             _security_headers_from_security_headers_result(phase_outputs, recon_results),
             _security_headers_from_nikto_stdout(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
             _security_headers_from_whatweb_stdout(ww_merged),
-            _security_headers_from_raw_http_responses(raw_artifact_keys, fetch_bodies=fetch_raw_bodies),
+            _security_headers_from_raw_http_responses(
+                raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+            ),
         ]
         for fb_map in fallback_header_sources:
             if fb_map:
@@ -6475,11 +6956,15 @@ def build_valhalla_report_context(
     )
     if isinstance(anomalies_structured, dict):
         with contextlib.suppress(TypeError, ValueError):
-            emails.extend(_extract_emails_from_text(json.dumps(anomalies_structured, ensure_ascii=False)))
+            emails.extend(
+                _extract_emails_from_text(json.dumps(anomalies_structured, ensure_ascii=False))
+            )
     for _ph, inp in phase_inputs:
         if isinstance(inp, dict):
             with contextlib.suppress(TypeError, ValueError):
-                emails.extend(_extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000]))
+                emails.extend(
+                    _extract_emails_from_text(json.dumps(inp, ensure_ascii=False)[:20000])
+                )
 
     if not emails:
         harvester_phase_emails = _emails_from_harvester_phase_outputs(phase_outputs)
@@ -6487,7 +6972,10 @@ def build_valhalla_report_context(
             emails.extend(harvester_phase_emails)
             logger.info(
                 "emails_harvester_phase_fallback_used",
-                extra={"event": "emails_harvester_phase_fallback_used", "count": len(harvester_phase_emails)},
+                extra={
+                    "event": "emails_harvester_phase_fallback_used",
+                    "count": len(harvester_phase_emails),
+                },
             )
     if not emails and fetch_raw_bodies:
         for key, _p in raw_artifact_keys:
@@ -6505,7 +6993,10 @@ def build_valhalla_report_context(
                 emails.extend(parsed_emails)
                 logger.info(
                     "emails_raw_artifact_fallback_used",
-                    extra={"event": "emails_raw_artifact_fallback_used", "key_suffix": key[-64:]},
+                    extra={
+                        "event": "emails_raw_artifact_fallback_used",
+                        "key_suffix": key[-64:],
+                    },
                 )
             if len(emails) >= 64:
                 break
@@ -6704,7 +7195,9 @@ def build_valhalla_report_context(
     )
     security_headers_table_rows = build_security_headers_table_rows(sec_hdr)
     port_exposure_table_rows = build_port_exposure_table_rows(port_data, target_hint=target_guess)
-    hibp_data = _parse_hibp_data_from_phases(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies)
+    hibp_data = _parse_hibp_data_from_phases(
+        phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies
+    )
     leaked_email_rows = build_leaked_email_rows(final_emails, hibp_data=hibp_data)
     evidence_inv = build_evidence_inventory_rows(
         finding_dicts,
@@ -6876,14 +7369,25 @@ def build_valhalla_report_context(
         trivy_run_status=trivy_run_status,
         sca_manifest_count=sca_manifest_count,
         sca_artifact_count=sca_artifact_count,
-        active_injection_coverage=build_active_injection_coverage(findings, active_injection_scan_options),
+        active_injection_coverage=build_active_injection_coverage(
+            findings, active_injection_scan_options
+        ),
         auth_testing=_parse_auth_testing_context(phase_outputs, findings, scan_options),
-        full_headers=_parse_full_headers_context(phase_outputs, raw_artifact_keys, fetch_bodies=fetch_raw_bodies, merged_http_headers=merged_http_headers),
+        full_headers=_parse_full_headers_context(
+            phase_outputs,
+            raw_artifact_keys,
+            fetch_bodies=fetch_raw_bodies,
+            merged_http_headers=merged_http_headers,
+        ),
         remediation_matrix=build_remediation_matrix_rows(
             finding_dicts,
-            tech_stack_structured=structured.model_dump() if hasattr(structured, 'model_dump') else {},
-            ssl_tls_analysis=ssl_out.model_dump() if hasattr(ssl_out, 'model_dump') else {},
-            security_headers_analysis=sec_hdr.model_dump() if hasattr(sec_hdr, 'model_dump') else {},
+            tech_stack_structured=structured.model_dump()
+            if hasattr(structured, "model_dump")
+            else {},
+            ssl_tls_analysis=ssl_out.model_dump() if hasattr(ssl_out, "model_dump") else {},
+            security_headers_analysis=sec_hdr.model_dump()
+            if hasattr(sec_hdr, "model_dump")
+            else {},
         ),
         ownership_evidence=build_ownership_evidence(
             target_url=target_guess,
@@ -6899,10 +7403,9 @@ def build_valhalla_report_context(
             {
                 "findings_count": len(quick_fuzz_output.get("findings", [])),
                 "candidates_count": len(quick_fuzz_output.get("candidates", [])),
-                "by_category": list({
-                    f.get("category", "unknown")
-                    for f in quick_fuzz_output.get("findings", [])
-                }),
+                "by_category": list(
+                    {f.get("category", "unknown") for f in quick_fuzz_output.get("findings", [])}
+                ),
             }
             if quick_fuzz_output
             else {}
@@ -6942,7 +7445,12 @@ def _build_evidence_gate_map(findings: list[dict[str, Any]]) -> dict[str, str]:
 
 def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str, Any]:
     """Build evidence quality summary from per-finding gate classifications."""
-    gate_counts: dict[str, int] = {"validated": 0, "observed": 0, "candidate": 0, "inconclusive": 0}
+    gate_counts: dict[str, int] = {
+        "validated": 0,
+        "observed": 0,
+        "candidate": 0,
+        "inconclusive": 0,
+    }
     critical_high_gates: list[dict[str, str]] = []
     for f in findings:
         if not isinstance(f, dict):
@@ -6968,13 +7476,17 @@ def _build_evidence_quality_summary(findings: list[dict[str, Any]]) -> dict[str,
         if severity in ("critical", "high"):
             fid = str(f.get("finding_id", f.get("id", "")) or "")
             critical_high_gates.append({"finding_id": fid, "severity": severity, "gate": gate})
-    validated_required = all(r["gate"] == "validated" for r in critical_high_gates) if critical_high_gates else True
+    validated_required = (
+        all(r["gate"] == "validated" for r in critical_high_gates) if critical_high_gates else True
+    )
     return {
         "total_findings": len(findings),
         "gate_counts": gate_counts,
         "critical_high": critical_high_gates,
         "all_critical_high_validated": validated_required,
-        "score": 100 if validated_required else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
+        "score": 100
+        if validated_required
+        else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
     }
 
 
@@ -7002,7 +7514,7 @@ def validate_report_for_valhalla(context: ValhallaReportContext) -> dict:
 def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
     """VHL-GAP-001 — identify findings with insufficient evidence that need further testing."""
     gaps: list[dict[str, str]] = []
-    for f in (findings or []):
+    for f in findings or []:
         if not isinstance(f, dict):
             continue
         classification = str(f.get("evidence_classification", "") or "").lower()
@@ -7017,19 +7529,27 @@ def build_unresolved_gaps(findings: list[dict[str, Any]]) -> list[dict[str, str]
         recommended_tool = _recommend_gap_tool(f)
         poc = f.get("proof_of_concept", {}) or {}
         endpoint = str(poc.get("request_url", f.get("affected_endpoint", "")) or "")[:512]
-        gaps.append({
-            "finding_id": fid[:64],
-            "title": title[:256],
-            "severity": severity,
-            "evidence_classification": classification.upper() if classification else "INCONCLUSIVE",
-            "evidence_quality": quality,
-            "confidence": confidence,
-            "gap_type": gap_type,
-            "recommended_tool": recommended_tool,
-            "endpoint": endpoint,
-            "recommended_action": _gap_action(f, gap_type, recommended_tool, endpoint),
-        })
-    gaps.sort(key=lambda g: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(g.get("severity", "info").lower(), 5))
+        gaps.append(
+            {
+                "finding_id": fid[:64],
+                "title": title[:256],
+                "severity": severity,
+                "evidence_classification": classification.upper()
+                if classification
+                else "INCONCLUSIVE",
+                "evidence_quality": quality,
+                "confidence": confidence,
+                "gap_type": gap_type,
+                "recommended_tool": recommended_tool,
+                "endpoint": endpoint,
+                "recommended_action": _gap_action(f, gap_type, recommended_tool, endpoint),
+            }
+        )
+    gaps.sort(
+        key=lambda g: {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}.get(
+            g.get("severity", "info").lower(), 5
+        )
+    )
     return gaps[:48]
 
 
@@ -7078,15 +7598,15 @@ def _gap_action(f: dict[str, Any], gap_type: str, tool: str, endpoint: str) -> s
     method = str(poc.get("request_method", "GET") or "GET")
     url_hint = endpoint[:512] if endpoint else "TARGET_URL"
     actions = {
-        "missing_sqli_proof": f"{tool} -u \"{url_hint}\" --data \"{parameter}=test\" --batch --level=3 --risk=3",
-        "missing_xss_proof": f"{tool} url \"{url_hint}\" --cookie \"test=1\" -b \"{parameter}\" --deep-dom",
-        "missing_command_injection_proof": f"{tool} --url \"{url_hint}\" --data \"{parameter}=1\"",
-        "missing_header_validation": f"curl -sS -I -X {method} \"{url_hint}\"",
-        "missing_port_service_validation": f"nmap -sV -p- \"{url_hint.split('/')[0] or ''}\"",
-        "missing_osint_correlation": f"{tool} -d \"{url_hint.split('//')[-1].split('/')[0] or ''}\" -b all",
-        "missing_version_evidence": f"{tool} -u \"{url_hint}\" -t template/technologies/",
-        "missing_tls_evidence": f"{tool} \"{url_hint.split('//')[-1].split('/')[0] or ''}\"",
-        "insufficient_evidence": f"curl -sS -X {method} \"{url_hint}\" -v 2>&1",
+        "missing_sqli_proof": f'{tool} -u "{url_hint}" --data "{parameter}=test" --batch --level=3 --risk=3',
+        "missing_xss_proof": f'{tool} url "{url_hint}" --cookie "test=1" -b "{parameter}" --deep-dom',
+        "missing_command_injection_proof": f'{tool} --url "{url_hint}" --data "{parameter}=1"',
+        "missing_header_validation": f'curl -sS -I -X {method} "{url_hint}"',
+        "missing_port_service_validation": f'nmap -sV -p- "{url_hint.split("/")[0] or ""}"',
+        "missing_osint_correlation": f'{tool} -d "{url_hint.split("//")[-1].split("/")[0] or ""}" -b all',
+        "missing_version_evidence": f'{tool} -u "{url_hint}" -t template/technologies/',
+        "missing_tls_evidence": f'{tool} "{url_hint.split("//")[-1].split("/")[0] or ""}"',
+        "insufficient_evidence": f'curl -sS -X {method} "{url_hint}" -v 2>&1',
     }
     return actions.get(gap_type, f"Re-test with appropriate tool ({tool}) on {url_hint}")
 
@@ -7097,7 +7617,7 @@ def build_missing_artifact_report(
 ) -> list[dict[str, str]]:
     """VHL-ART-001 — identify findings missing required evidence artifacts."""
     missing: list[dict[str, str]] = []
-    for f in (findings or []):
+    for f in findings or []:
         if not isinstance(f, dict):
             continue
         fid = str(f.get("id", f.get("finding_id", "")) or "")
@@ -7119,14 +7639,16 @@ def build_missing_artifact_report(
         if classification in ("validated", "observed") and deficiencies:
             deficiencies.append("status_claims_stronger_than_evidence")
         if deficiencies:
-            missing.append({
-                "finding_id": fid[:64],
-                "title": str(f.get("title", ""))[:256],
-                "severity": str(f.get("severity", "") or ""),
-                "deficiencies": ", ".join(deficiencies),
-                "recommended_collection": _artifact_collection_hint(f, deficiencies),
-            })
-    for ph, od in (phase_outputs or []):
+            missing.append(
+                {
+                    "finding_id": fid[:64],
+                    "title": str(f.get("title", ""))[:256],
+                    "severity": str(f.get("severity", "") or ""),
+                    "deficiencies": ", ".join(deficiencies),
+                    "recommended_collection": _artifact_collection_hint(f, deficiencies),
+                }
+            )
+    for _ph, od in phase_outputs or []:
         if not isinstance(od, dict):
             continue
         for tool_signal in ("tool_failures", "failed_tools", "errors"):
@@ -7134,13 +7656,17 @@ def build_missing_artifact_report(
             if isinstance(failures, list):
                 for fail in failures[:16]:
                     if isinstance(fail, dict) and fail.get("tool"):
-                        missing.append({
-                            "finding_id": "",
-                            "title": f"Tool failure: {fail.get('tool', 'unknown')}",
-                            "severity": "info",
-                            "deficiencies": str(fail.get("error", fail.get("reason", "tool_failed")))[:300],
-                            "recommended_collection": f"Re-run {fail.get('tool', 'tool')} with debug flags; check sandbox binary path",
-                        })
+                        missing.append(
+                            {
+                                "finding_id": "",
+                                "title": f"Tool failure: {fail.get('tool', 'unknown')}",
+                                "severity": "info",
+                                "deficiencies": str(
+                                    fail.get("error", fail.get("reason", "tool_failed"))
+                                )[:300],
+                                "recommended_collection": f"Re-run {fail.get('tool', 'tool')} with debug flags; check sandbox binary path",
+                            }
+                        )
     return missing[:32]
 
 
@@ -7152,24 +7678,32 @@ def _artifact_collection_hint(f: dict[str, Any], deficiencies: list[str]) -> str
         return "Re-scan target to collect raw request/response pairs"
     hints: list[str] = []
     if "missing_raw_request" in deficiencies:
-        hints.append(f"curl -sS -X {method} '{endpoint}' -o /dev/null -D - 2>&1 | tee request_response.txt")
+        hints.append(
+            f"curl -sS -X {method} '{endpoint}' -o /dev/null -D - 2>&1 | tee request_response.txt"
+        )
     if "missing_raw_response" in deficiencies:
-        hints.append(f"Capture full HTTP response with headers via curl -v -X {method} '{endpoint}' 2>&1")
+        hints.append(
+            f"Capture full HTTP response with headers via curl -v -X {method} '{endpoint}' 2>&1"
+        )
     if "missing_timestamp" in deficiencies:
-        hints.append("Record UTC timestamp at evidence collection time (date -u +%Y-%m-%dT%H:%M:%SZ)")
+        hints.append(
+            "Record UTC timestamp at evidence collection time (date -u +%Y-%m-%dT%H:%M:%SZ)"
+        )
     if "missing_tool_command" in deficiencies:
         hints.append("Document exact command + arguments used to produce this finding")
     if "missing_tool_name" in deficiencies:
         hints.append("Tag finding with source tool name (nuclei, sqlmap, dalfox, etc.)")
     if "missing_reproduction_steps" in deficiencies:
-        hints.append("Document step-by-step reproduction: login state, HTTP method, payload, expected response")
+        hints.append(
+            "Document step-by-step reproduction: login state, HTTP method, payload, expected response"
+        )
     return "; ".join(hints[:3]) if hints else "Review finding and collect missing evidence"
 
 
 def build_next_scan_commands(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
     """VHL-CMD-001 — generate concrete shell commands for evidence re-collection."""
     commands: list[dict[str, str]] = []
-    for f in (findings or []):
+    for f in findings or []:
         if not isinstance(f, dict):
             continue
         classification = str(f.get("evidence_classification", "") or "").lower()
@@ -7178,17 +7712,19 @@ def build_next_scan_commands(findings: list[dict[str, Any]]) -> list[dict[str, s
         fid = str(f.get("id", f.get("finding_id", "")) or "")
         poc = f.get("proof_of_concept", {}) or {}
         endpoint = str(poc.get("request_url", f.get("affected_endpoint", "")) or "")
-        parameter = str(poc.get("parameter", f.get("affected_parameter", "")) or "")
-        method = str(poc.get("request_method", "GET") or "GET")
+        str(poc.get("parameter", f.get("affected_parameter", "")) or "")
+        str(poc.get("request_method", "GET") or "GET")
         gap_type = _classify_gap_type(f)
         cmd = _gap_action(f, gap_type, _recommend_gap_tool(f), endpoint)
         if cmd:
-            commands.append({
-                "finding_id": fid[:64],
-                "command": cmd[:2000],
-                "expected_output": _expected_output_hint(gap_type),
-                "priority": str(f.get("severity", "medium"))[:16],
-            })
+            commands.append(
+                {
+                    "finding_id": fid[:64],
+                    "command": cmd[:2000],
+                    "expected_output": _expected_output_hint(gap_type),
+                    "priority": str(f.get("severity", "medium"))[:16],
+                }
+            )
     return commands[:16]
 
 
@@ -7207,7 +7743,9 @@ def _expected_output_hint(gap_type: str) -> str:
     return hints.get(gap_type, "Sufficient evidence to reclassify finding as VALIDATED or OBSERVED")
 
 
-def build_wstg_gap_closure_commands(wstg_coverage: dict[str, Any] | None) -> list[dict[str, str]]:
+def build_wstg_gap_closure_commands(
+    wstg_coverage: dict[str, Any] | None,
+) -> list[dict[str, str]]:
     """Point 2 — generate concrete tool commands for not_covered/partial WSTG tests."""
     commands: list[dict[str, str]] = []
     if not wstg_coverage or not isinstance(wstg_coverage, dict):
@@ -7227,20 +7765,24 @@ def build_wstg_gap_closure_commands(wstg_coverage: dict[str, Any] | None) -> lis
         existing_tools = test.get("tools", [])
         # Generate relevant commands per WSTG category
         cmd = _wstg_command_for_test(test_id, test_name, category)
-        commands.append({
-            "wstg_id": test_id,
-            "test_name": test_name,
-            "category": category,
-            "status": status,
-            "current_tools": ", ".join(existing_tools) if isinstance(existing_tools, list) else str(existing_tools),
-            "recommended_command": cmd,
-            "expected_output": "Evidence that test was performed with tool output or manual validation",
-            "priority": "HIGH" if status == "not_covered" else "MEDIUM",
-        })
+        commands.append(
+            {
+                "wstg_id": test_id,
+                "test_name": test_name,
+                "category": category,
+                "status": status,
+                "current_tools": ", ".join(existing_tools)
+                if isinstance(existing_tools, list)
+                else str(existing_tools),
+                "recommended_command": cmd,
+                "expected_output": "Evidence that test was performed with tool output or manual validation",
+                "priority": "HIGH" if status == "not_covered" else "MEDIUM",
+            }
+        )
     return commands[:64]
 
 
-def _wstg_command_for_test(test_id: str, _name: str, category: str) -> str:
+def _wstg_command_for_test(test_id: str, _name: str, category: str) -> str:  # noqa: ARG001 - retained for signature/API compatibility
     tid = test_id.upper()
     if tid.startswith("WSTG-INFO"):
         return "subfinder -d TARGET; amass enum -d TARGET; whatweb TARGET_URL; curl -sS TARGET_URL/robots.txt"
@@ -7259,20 +7801,29 @@ def _wstg_command_for_test(test_id: str, _name: str, category: str) -> str:
     if tid.startswith("WSTG-ERRH"):
         return "curl -sS TARGET_URL/%00; curl -sS TARGET_URL/..%5c..%5c; ffuf -u TARGET_URL/FUZZ -w error_paths.txt"
     if tid.startswith("WSTG-CRYP"):
-        return "testssl TARGET_HOST; sslscan TARGET_HOST; nmap --script ssl-enum-ciphers TARGET_HOST"
+        return (
+            "testssl TARGET_HOST; sslscan TARGET_HOST; nmap --script ssl-enum-ciphers TARGET_HOST"
+        )
     if tid.startswith("WSTG-BUSL"):
         return "curl -sS TARGET_URL/checkout -X POST -d 'price=0.01&qty=999'; ffuf -u TARGET_URL/api/FUZZ -w api_endpoints.txt"
     if tid.startswith("WSTG-CLNT"):
-        return "nuclei -u TARGET_URL -t ~/nuclei-templates/http/cves/; retire.js --jspath TARGET_PATH"
+        return (
+            "nuclei -u TARGET_URL -t ~/nuclei-templates/http/cves/; retire.js --jspath TARGET_PATH"
+        )
     return f"curl -sS TARGET_URL -v 2>&1 | tee evidence_{tid}.txt"
 
 
-def build_credential_exposure_from_hibp(hibp_results: dict[str, Any] | None, target_domain: str = "") -> dict[str, Any]:
+def build_credential_exposure_from_hibp(
+    hibp_results: dict[str, Any] | None, target_domain: str = ""
+) -> dict[str, Any]:
     """Point 4 — build CredentialExposureModel from HIBP breach/pwned data."""
     result: dict[str, Any] = {
-        "checks_run": 0, "password_samples_available": False,
-        "hash_samples_available": False, "hibp_api_used": False,
-        "rows": [], "missing_artifacts": [],
+        "checks_run": 0,
+        "password_samples_available": False,
+        "hash_samples_available": False,
+        "hibp_api_used": False,
+        "rows": [],
+        "missing_artifacts": [],
     }
     if not hibp_results or not isinstance(hibp_results, dict):
         result["missing_artifacts"].append("authorized_password_samples_or_hashes")
@@ -7287,21 +7838,27 @@ def build_credential_exposure_from_hibp(hibp_results: dict[str, Any] | None, tar
         for b in breaches[:100]:
             if not isinstance(b, dict):
                 continue
-            result["rows"].append({
-                "checks_run": checks,
-                "authorized_source": str(b.get("source", b.get("breach_name", "")) or ""),
-                "sample_type": str(b.get("sample_type", "password_sample")),
-                "hibp_range_prefix": str(b.get("prefix", "") or "")[:5],
-                "pwned_count": int(b.get("pwned_count", b.get("count", 0)) or 0),
-                "matched": "yes" if int(b.get("pwned_count", b.get("count", 0)) or 0) > 0 else "no",
-                "account_or_email": str(b.get("email", b.get("account", "masked@***")) or "masked@***"),
-                "plaintext_stored": "no",
-                "evidence_id": str(b.get("evidence_id", f"hibp_{target_domain}") or ""),
-                "timestamp": str(b.get("timestamp", "") or ""),
-                "api_status": str(b.get("api_status", "completed") or ""),
-                "legal_basis": str(b.get("legal_basis", "authorized assessment") or ""),
-                "result_confidence": str(b.get("confidence", "high") or ""),
-            })
+            result["rows"].append(
+                {
+                    "checks_run": checks,
+                    "authorized_source": str(b.get("source", b.get("breach_name", "")) or ""),
+                    "sample_type": str(b.get("sample_type", "password_sample")),
+                    "hibp_range_prefix": str(b.get("prefix", "") or "")[:5],
+                    "pwned_count": int(b.get("pwned_count", b.get("count", 0)) or 0),
+                    "matched": "yes"
+                    if int(b.get("pwned_count", b.get("count", 0)) or 0) > 0
+                    else "no",
+                    "account_or_email": str(
+                        b.get("email", b.get("account", "masked@***")) or "masked@***"
+                    ),
+                    "plaintext_stored": "no",
+                    "evidence_id": str(b.get("evidence_id", f"hibp_{target_domain}") or ""),
+                    "timestamp": str(b.get("timestamp", "") or ""),
+                    "api_status": str(b.get("api_status", "completed") or ""),
+                    "legal_basis": str(b.get("legal_basis", "authorized assessment") or ""),
+                    "result_confidence": str(b.get("confidence", "high") or ""),
+                }
+            )
     if checks == 0:
         result["missing_artifacts"].append("authorized_password_samples_or_hashes")
     return result

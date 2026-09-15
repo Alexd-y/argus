@@ -65,20 +65,22 @@ class AIMLSecurityScanner:
     def scan_prompt_inputs(
         self,
         inputs: dict[str, str],
-        context: str = "",
+        context: str = "",  # noqa: ARG002 - retained for signature/API compatibility
     ) -> list[PromptInjectionFinding]:
         findings: list[PromptInjectionFinding] = []
         for field_name, value in inputs.items():
             for pattern, attack_type in PROMPT_INJECTION_PATTERNS:
                 if re.search(pattern, value, re.IGNORECASE):
-                    findings.append(PromptInjectionFinding(
-                        finding_type=attack_type,
-                        severity="high",
-                        input_field=field_name,
-                        pattern_matched=pattern,
-                        description=f"Prompt injection pattern '{attack_type}' detected in '{field_name}'",
-                        recommendation=f"Wrap '{field_name}' in <untrusted_input> tags and add instruction hierarchy",
-                    ))
+                    findings.append(
+                        PromptInjectionFinding(
+                            finding_type=attack_type,
+                            severity="high",
+                            input_field=field_name,
+                            pattern_matched=pattern,
+                            description=f"Prompt injection pattern '{attack_type}' detected in '{field_name}'",
+                            recommendation=f"Wrap '{field_name}' in <untrusted_input> tags and add instruction hierarchy",
+                        )
+                    )
         return findings
 
     def scan_mcp_tools(
@@ -90,29 +92,35 @@ class AIMLSecurityScanner:
             name = tool.get("name", "unknown")
             endpoint = tool.get("backend_endpoint", "")
             if not endpoint:
-                risks.append(MCPSupplyChainRisk(
-                    tool_name=name,
-                    risk_type="no_endpoint_validation",
-                    severity="medium",
-                    description=f"Tool '{name}' has no backend endpoint validation",
-                ))
+                risks.append(
+                    MCPSupplyChainRisk(
+                        tool_name=name,
+                        risk_type="no_endpoint_validation",
+                        severity="medium",
+                        description=f"Tool '{name}' has no backend endpoint validation",
+                    )
+                )
             args = tool.get("args_schema", [])
             for arg in args:
                 arg_name = arg.get("name", "unnamed")
                 if not arg.get("validation", ""):
-                    risks.append(MCPSupplyChainRisk(
-                        tool_name=name,
-                        risk_type="unvalidated_argument",
-                        severity="low",
-                        description=f"Tool '{name}' argument '{arg_name}' lacks input validation",
-                    ))
+                    risks.append(
+                        MCPSupplyChainRisk(
+                            tool_name=name,
+                            risk_type="unvalidated_argument",
+                            severity="low",
+                            description=f"Tool '{name}' argument '{arg_name}' lacks input validation",
+                        )
+                    )
                 if arg.get("sensitive", False) and not arg.get("encrypted", False):
-                    risks.append(MCPSupplyChainRisk(
-                        tool_name=name,
-                        risk_type="sensitive_argument_unencrypted",
-                        severity="medium",
-                        description=f"Tool '{name}' argument '{arg_name}' is sensitive but not encrypted",
-                    ))
+                    risks.append(
+                        MCPSupplyChainRisk(
+                            tool_name=name,
+                            risk_type="sensitive_argument_unencrypted",
+                            severity="medium",
+                            description=f"Tool '{name}' argument '{arg_name}' is sensitive but not encrypted",
+                        )
+                    )
         return risks
 
     def scan_training_data_leaks(
@@ -134,9 +142,9 @@ class AIMLSecurityScanner:
 
 
 __all__ = [
-    "AIMLSecurityScanner",
-    "AIMLSecurityScanResult",
-    "MCPSupplyChainRisk",
     "PROMPT_INJECTION_PATTERNS",
+    "AIMLSecurityScanResult",
+    "AIMLSecurityScanner",
+    "MCPSupplyChainRisk",
     "PromptInjectionFinding",
 ]

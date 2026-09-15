@@ -22,7 +22,6 @@ from typing import Any
 
 import pytest
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
-
 from src.core.observability import _MCP_STATUSES  # type: ignore[attr-defined]
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext

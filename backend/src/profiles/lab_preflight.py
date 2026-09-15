@@ -206,7 +206,10 @@ def _evaluate_lab_lease_core(
     if _aware(lease.expires_at) <= ref or lease.status.strip().lower() == "expired":
         raise LabLeaseExpiredError(
             "Lab lease has expired",
-            details={"lab_lease_id": lab_lease_id, "expires_at": _aware(lease.expires_at).isoformat()},
+            details={
+                "lab_lease_id": lab_lease_id,
+                "expires_at": _aware(lease.expires_at).isoformat(),
+            },
         )
     if scope is None:
         raise LabScopeRequiredError(
@@ -298,7 +301,10 @@ async def preflight_lab_lease(
     if not lab_lease_id or not str(lab_lease_id).strip():
         raise LabLeaseRequiredError(
             "Deep profile requires a valid lab_lease_id",
-            details={"engagement_id": engagement_id, "required_action": "issue_or_select_lab_lease"},
+            details={
+                "engagement_id": engagement_id,
+                "required_action": "issue_or_select_lab_lease",
+            },
         )
 
     lease_row = (

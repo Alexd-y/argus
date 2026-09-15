@@ -110,7 +110,9 @@ def test_compact_valhalla_ai_payload_includes_xss_structured() -> None:
     "src.services.reporting.get_finding_poc_screenshot_presigned_url",
     return_value="https://minio.example/presign/xss-cap.png",
 )
-def test_valhalla_findings_html_includes_xss_detail_labels(_mock_presign: object) -> None:
+def test_valhalla_findings_html_includes_xss_detail_labels(
+    _mock_presign: object,
+) -> None:
     fd = _synthetic_xss_finding()
     row = FindingRow(
         id=fd["id"],

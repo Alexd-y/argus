@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-
 ARGUS_ROOT = Path(__file__).resolve().parent.parent.parent
 ENV_EXAMPLE_PATH = ARGUS_ROOT / "infra" / ".env.example"
 

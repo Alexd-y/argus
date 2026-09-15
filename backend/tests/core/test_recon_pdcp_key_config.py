@@ -22,7 +22,9 @@ def test_recon_pdcp_api_key_from_pdcp_env(monkeypatch: pytest.MonkeyPatch) -> No
     assert s.recon_pdcp_api_key == "pdcp-secret-123"
 
 
-def test_recon_pdcp_api_key_from_recon_prefixed_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_recon_pdcp_api_key_from_recon_prefixed_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("PDCP_API_KEY", raising=False)
     monkeypatch.setenv("RECON_PDCP_API_KEY", "recon-scoped-key")
     s = Settings(_env_file=None)  # type: ignore[call-arg]

@@ -58,9 +58,7 @@ from src.quick.resolver import UnknownQuickProfileError
 
 _logger = logging.getLogger(__name__)
 
-_TERMINAL_STATUSES: frozenset[str] = frozenset(
-    {"completed", "failed", "cancelled", "errored"}
-)
+_TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled", "errored"})
 
 ScanDispatcher = Callable[[str, str, str, dict[str, Any]], Awaitable[None]]
 """Async callback invoked after the scan row is committed.
@@ -163,7 +161,9 @@ def lab_lease_skips_deep_justification(
     return is_lab_lease_active_from_options(scan_options, tenant_id=tenant_id)
 
 
-def _mcp_quick_error(exc: QuickCreateError | UnknownQuickProfileError) -> ValidationError:
+def _mcp_quick_error(
+    exc: QuickCreateError | UnknownQuickProfileError,
+) -> ValidationError:
     code = getattr(exc, "code", "mcp_validation_error")
     return ValidationError(str(exc) if str(exc) else code, code=code)
 
@@ -307,9 +307,7 @@ async def enqueue_scan(
             "mcp.scan.enqueue_failed",
             extra={"tenant_id": tenant_id, "target": payload.target},
         )
-        raise UpstreamServiceError(
-            "Failed to persist the scan row; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to persist the scan row; please retry later.") from exc
 
     await try_pick_queued_scan(tenant_id)
 
@@ -348,9 +346,7 @@ async def get_scan_status(*, tenant_id: str, scan_id: str) -> ScanStatusResult:
             )
             scan = scan_query.scalar_one_or_none()
             if scan is None:
-                raise ResourceNotFoundError(
-                    f"Scan {scan_id!r} was not found in this tenant scope."
-                )
+                raise ResourceNotFoundError(f"Scan {scan_id!r} was not found in this tenant scope.")
 
             severity_counts = await _severity_counts(session, scan_id, tenant_id)
 
@@ -371,9 +367,7 @@ async def get_scan_status(*, tenant_id: str, scan_id: str) -> ScanStatusResult:
             "mcp.scan.status_failed",
             extra={"scan_id": scan_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read scan status; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read scan status; please retry later.") from exc
 
 
 async def cancel_scan(*, tenant_id: str, scan_id: str, reason: str) -> ScanStatus:
@@ -389,9 +383,7 @@ async def cancel_scan(*, tenant_id: str, scan_id: str, reason: str) -> ScanStatu
             )
             scan = scan_query.scalar_one_or_none()
             if scan is None:
-                raise ResourceNotFoundError(
-                    f"Scan {scan_id!r} was not found in this tenant scope."
-                )
+                raise ResourceNotFoundError(f"Scan {scan_id!r} was not found in this tenant scope.")
             if (scan.status or "").lower() in _TERMINAL_STATUSES:
                 _logger.info(
                     "mcp.scan.cancel.noop",
@@ -436,14 +428,10 @@ async def cancel_scan(*, tenant_id: str, scan_id: str, reason: str) -> ScanStatu
             "mcp.scan.cancel_failed",
             extra={"scan_id": scan_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to cancel the scan; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to cancel the scan; please retry later.") from exc
 
 
-async def _severity_counts(
-    session: AsyncSession, scan_id: str, tenant_id: str
-) -> dict[str, int]:
+async def _severity_counts(session: AsyncSession, scan_id: str, tenant_id: str) -> dict[str, int]:
     """Aggregate findings by severity for the scan (canonical 6-band counts).
 
     Routes through :func:`src.findings.severity.aggregate_severity` so the MCP
@@ -501,9 +489,7 @@ async def get_scan_plan(*, tenant_id: str, scan_id: str) -> ScanPlanResult:
             )
             scan = scan_query.scalar_one_or_none()
             if scan is None:
-                raise ResourceNotFoundError(
-                    f"Scan {scan_id!r} was not found in this tenant scope."
-                )
+                raise ResourceNotFoundError(f"Scan {scan_id!r} was not found in this tenant scope.")
             mode = str(getattr(scan, "execution_mode", None) or ExecutionMode.PRODUCTION.value)
             if mode != ExecutionMode.QUICK.value:
                 raise ResourceNotFoundError(
@@ -523,7 +509,11 @@ async def get_scan_plan(*, tenant_id: str, scan_id: str) -> ScanPlanResult:
             profile = str(getattr(scan, "quick_profile", None) or "balanced")
             if plan_row is None:
                 options = scan.options if isinstance(scan.options, dict) else {}
-                budget = options.get("quick_budget") if isinstance(options.get("quick_budget"), dict) else {}
+                budget = (
+                    options.get("quick_budget")
+                    if isinstance(options.get("quick_budget"), dict)
+                    else {}
+                )
                 return ScanPlanResult(
                     scan_id=scan_id,
                     mode="quick",
@@ -531,7 +521,14 @@ async def get_scan_plan(*, tenant_id: str, scan_id: str) -> ScanPlanResult:
                     plan_version=0,
                     deadline_at=format_created_at_iso_z(getattr(scan, "deadline_at", None)),
                     budget=dict(budget) if isinstance(budget, dict) else {},
-                    stages=("discovery", "fingerprint", "test", "verify", "triage", "report"),
+                    stages=(
+                        "discovery",
+                        "fingerprint",
+                        "test",
+                        "verify",
+                        "triage",
+                        "report",
+                    ),
                     tasks=(),
                     coverage_intent=(),
                     assumptions=("awaiting_fingerprint",),
@@ -566,9 +563,7 @@ async def get_scan_plan(*, tenant_id: str, scan_id: str) -> ScanPlanResult:
             "mcp.scan.plan_failed",
             extra={"scan_id": scan_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read scan plan; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read scan plan; please retry later.") from exc
 
 
 async def get_scan_coverage(*, tenant_id: str, scan_id: str) -> ScanCoverageResult:
@@ -583,9 +578,7 @@ async def get_scan_coverage(*, tenant_id: str, scan_id: str) -> ScanCoverageResu
                 )
             )
             if scan_query.scalar_one_or_none() is None:
-                raise ResourceNotFoundError(
-                    f"Scan {scan_id!r} was not found in this tenant scope."
-                )
+                raise ResourceNotFoundError(f"Scan {scan_id!r} was not found in this tenant scope.")
         raw = snapshot_coverage_dicts(scan_id)
         results: list[dict[str, Any]] = []
         for item in raw:
@@ -602,9 +595,7 @@ async def get_scan_coverage(*, tenant_id: str, scan_id: str) -> ScanCoverageResu
             "mcp.scan.coverage_failed",
             extra={"scan_id": scan_id, "tenant_id": tenant_id},
         )
-        raise UpstreamServiceError(
-            "Failed to read scan coverage; please retry later."
-        ) from exc
+        raise UpstreamServiceError("Failed to read scan coverage; please retry later.") from exc
 
 
 __all__ = [

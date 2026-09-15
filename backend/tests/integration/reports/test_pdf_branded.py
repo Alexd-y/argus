@@ -30,7 +30,6 @@ from collections.abc import Iterator
 from typing import Final
 
 import pytest
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -156,9 +155,7 @@ def canonical_report_data() -> ReportData:
                 description="HTTP req/resp dump",
             )
         ],
-        screenshots=[
-            ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")
-        ],
+        screenshots=[ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")],
         timeline=[
             TimelineEntry(
                 phase="recon",
@@ -242,18 +239,14 @@ def test_weasyprint_branded_pdf_renders(
 ) -> None:
     """Branded template produces a non-empty PDF with the ``%PDF-`` magic."""
     os.environ["REPORT_PDF_BACKEND"] = WeasyPrintBackend.name
-    bundle = service.render_bundle(
-        canonical_report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    bundle = service.render_bundle(canonical_report_data, tier=tier, fmt=ReportFormat.PDF)
     assert bundle.size_bytes > 0
     assert bundle.content[:5] == PDF_MAGIC
 
 
 @pytest.mark.weasyprint_pdf
 @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
-@pytest.mark.skipif(
-    not _pypdf_available(), reason="pypdf required for PDF metadata extraction"
-)
+@pytest.mark.skipif(not _pypdf_available(), reason="pypdf required for PDF metadata extraction")
 @pytest.mark.parametrize(
     "tier,expected_min_pages,expect_toc",
     [
@@ -276,9 +269,7 @@ def test_weasyprint_branded_pdf_metadata_and_structure(
     import pypdf
 
     os.environ["REPORT_PDF_BACKEND"] = WeasyPrintBackend.name
-    bundle = service.render_bundle(
-        canonical_report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    bundle = service.render_bundle(canonical_report_data, tier=tier, fmt=ReportFormat.PDF)
     reader = pypdf.PdfReader(io.BytesIO(bundle.content))
 
     # Metadata contract: deterministic Creator. Title is informational.
@@ -307,9 +298,7 @@ def test_weasyprint_branded_pdf_metadata_and_structure(
 
 @pytest.mark.weasyprint_pdf
 @pytest.mark.skipif(WSP_SKIP, reason=WSP_REASON)
-@pytest.mark.skipif(
-    not _pypdf_available(), reason="pypdf required for PDF text extraction"
-)
+@pytest.mark.skipif(not _pypdf_available(), reason="pypdf required for PDF text extraction")
 @pytest.mark.parametrize(
     "tier",
     [ReportTier.MIDGARD, ReportTier.ASGARD, ReportTier.VALHALLA],
@@ -336,12 +325,8 @@ def test_weasyprint_branded_pdf_text_is_deterministic(
         reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
         return "\n".join((p.extract_text() or "") for p in reader.pages)
 
-    first = service.render_bundle(
-        canonical_report_data, tier=tier, fmt=ReportFormat.PDF
-    )
-    second = service.render_bundle(
-        canonical_report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    first = service.render_bundle(canonical_report_data, tier=tier, fmt=ReportFormat.PDF)
+    second = service.render_bundle(canonical_report_data, tier=tier, fmt=ReportFormat.PDF)
     assert _extract_text(first.content) == _extract_text(second.content)
 
 
@@ -372,9 +357,7 @@ def test_weasyprint_branded_pdf_watermark_changes_with_inputs(
     )
 
     text_a = pypdf.PdfReader(io.BytesIO(bundle_a.content)).pages[0].extract_text() or ""
-    text_a2 = (
-        pypdf.PdfReader(io.BytesIO(bundle_a2.content)).pages[0].extract_text() or ""
-    )
+    text_a2 = pypdf.PdfReader(io.BytesIO(bundle_a2.content)).pages[0].extract_text() or ""
     assert text_a == text_a2, "Cover-page text MUST be deterministic across renders"
 
 
@@ -406,9 +389,7 @@ def test_latex_backend_renders_minimal_pdf(
     deferred to Phase-2 (Cycle 5).
     """
     os.environ["REPORT_PDF_BACKEND"] = LatexBackend.name
-    bundle = service.render_bundle(
-        canonical_report_data, tier=tier, fmt=ReportFormat.PDF
-    )
+    bundle = service.render_bundle(canonical_report_data, tier=tier, fmt=ReportFormat.PDF)
     assert bundle.size_bytes > 0
     assert bundle.content[:5] == PDF_MAGIC
 

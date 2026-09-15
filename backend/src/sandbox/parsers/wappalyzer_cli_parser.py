@@ -28,7 +28,7 @@ import json
 import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -52,7 +52,7 @@ _CANONICAL_FILENAME: Final[str] = "wappalyzer.json"
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_wappalyzer_cli_json(

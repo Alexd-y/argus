@@ -38,10 +38,21 @@ def build_asset_inventory(findings: list[NormalizedFinding]) -> str:
     """Build asset_inventory.csv from normalized findings."""
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-    writer.writerow([
-        "asset", "type", "environment", "ip", "cname", "status",
-        "technologies", "cdn_waf", "priority", "source", "notes",
-    ])
+    writer.writerow(
+        [
+            "asset",
+            "type",
+            "environment",
+            "ip",
+            "cname",
+            "status",
+            "technologies",
+            "cdn_waf",
+            "priority",
+            "source",
+            "notes",
+        ]
+    )
 
     subdomain_findings = [f for f in findings if f.finding_type == "subdomain"]
     url_findings = [f for f in findings if f.finding_type == "url"]
@@ -57,11 +68,21 @@ def build_asset_inventory(findings: list[NormalizedFinding]) -> str:
             continue
         seen_assets.add(asset)
         techs = tech_map.get(asset, [])
-        writer.writerow([
-            asset, "subdomain", "", "", "",
-            "verified" if f.is_verified else "unverified",
-            "; ".join(techs), "", "medium", f.source_tool, "",
-        ])
+        writer.writerow(
+            [
+                asset,
+                "subdomain",
+                "",
+                "",
+                "",
+                "verified" if f.is_verified else "unverified",
+                "; ".join(techs),
+                "",
+                "medium",
+                f.source_tool,
+                "",
+            ]
+        )
 
     for f in ip_findings:
         data = f.data or {}
@@ -69,25 +90,41 @@ def build_asset_inventory(findings: list[NormalizedFinding]) -> str:
         if asset in seen_assets:
             continue
         seen_assets.add(asset)
-        writer.writerow([
-            asset, "ip", "",
-            asset, "",
-            "live" if f.is_verified else "resolved",
-            "", data.get("cdn_name", ""),
-            "medium", f.source_tool,
-            data.get("org", ""),
-        ])
+        writer.writerow(
+            [
+                asset,
+                "ip",
+                "",
+                asset,
+                "",
+                "live" if f.is_verified else "resolved",
+                "",
+                data.get("cdn_name", ""),
+                "medium",
+                f.source_tool,
+                data.get("org", ""),
+            ]
+        )
 
     for f in url_findings:
         data = f.data or {}
         url = data.get("url", f.value)
         status_code = data.get("status_code", "")
-        writer.writerow([
-            url, "url", "", "", "",
-            str(status_code),
-            "", "", "medium", f.source_tool,
-            data.get("title", ""),
-        ])
+        writer.writerow(
+            [
+                url,
+                "url",
+                "",
+                "",
+                "",
+                str(status_code),
+                "",
+                "",
+                "medium",
+                f.source_tool,
+                data.get("title", ""),
+            ]
+        )
 
     return output.getvalue()
 
@@ -96,24 +133,41 @@ def build_service_inventory(findings: list[NormalizedFinding]) -> str:
     """Build service_inventory.csv from service findings."""
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-    writer.writerow([
-        "host", "ip", "port", "protocol", "service", "version",
-        "banner", "expected", "risk_level", "source", "notes",
-    ])
+    writer.writerow(
+        [
+            "host",
+            "ip",
+            "port",
+            "protocol",
+            "service",
+            "version",
+            "banner",
+            "expected",
+            "risk_level",
+            "source",
+            "notes",
+        ]
+    )
 
     for f in findings:
         if f.finding_type != "service":
             continue
         data = f.data or {}
-        writer.writerow([
-            data.get("ip", ""), data.get("ip", ""),
-            data.get("port", ""), data.get("protocol", "tcp"),
-            data.get("service_name", ""), data.get("version", ""),
-            data.get("banner", ""),
-            "yes" if data.get("is_expected", True) else "no",
-            data.get("risk_level", "info"),
-            f.source_tool, "",
-        ])
+        writer.writerow(
+            [
+                data.get("ip", ""),
+                data.get("ip", ""),
+                data.get("port", ""),
+                data.get("protocol", "tcp"),
+                data.get("service_name", ""),
+                data.get("version", ""),
+                data.get("banner", ""),
+                "yes" if data.get("is_expected", True) else "no",
+                data.get("risk_level", "info"),
+                f.source_tool,
+                "",
+            ]
+        )
 
     return output.getvalue()
 
@@ -122,21 +176,37 @@ def build_api_inventory(findings: list[NormalizedFinding]) -> str:
     """Build api_inventory.csv from API endpoint findings."""
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-    writer.writerow([
-        "host", "endpoint", "version", "method", "auth_required",
-        "source", "category", "priority", "notes",
-    ])
+    writer.writerow(
+        [
+            "host",
+            "endpoint",
+            "version",
+            "method",
+            "auth_required",
+            "source",
+            "category",
+            "priority",
+            "notes",
+        ]
+    )
 
     for f in findings:
         if f.finding_type != "api_endpoint":
             continue
         data = f.data or {}
-        writer.writerow([
-            data.get("base_url", ""), data.get("path", ""),
-            data.get("api_version", ""), data.get("method", "GET"),
-            "yes" if data.get("auth_required") else "unknown",
-            f.source_tool, "", "medium", "",
-        ])
+        writer.writerow(
+            [
+                data.get("base_url", ""),
+                data.get("path", ""),
+                data.get("api_version", ""),
+                data.get("method", "GET"),
+                "yes" if data.get("auth_required") else "unknown",
+                f.source_tool,
+                "",
+                "medium",
+                "",
+            ]
+        )
 
     return output.getvalue()
 
@@ -145,22 +215,36 @@ def build_param_inventory(findings: list[NormalizedFinding]) -> str:
     """Build param_inventory.csv from parameter findings."""
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
-    writer.writerow([
-        "url", "parameter", "category", "sample_value",
-        "likely_sensitive", "priority", "source", "notes",
-    ])
+    writer.writerow(
+        [
+            "url",
+            "parameter",
+            "category",
+            "sample_value",
+            "likely_sensitive",
+            "priority",
+            "source",
+            "notes",
+        ]
+    )
 
     for f in findings:
         if f.finding_type != "parameter":
             continue
         data = f.data or {}
         examples = data.get("example_values", [])
-        writer.writerow([
-            data.get("url", ""), data.get("param_name", ""),
-            data.get("category", ""), examples[0] if examples else "",
-            "yes" if data.get("is_sensitive") else "no",
-            "medium", f.source_tool, "",
-        ])
+        writer.writerow(
+            [
+                data.get("url", ""),
+                data.get("param_name", ""),
+                data.get("category", ""),
+                examples[0] if examples else "",
+                "yes" if data.get("is_sensitive") else "no",
+                "medium",
+                f.source_tool,
+                "",
+            ]
+        )
 
     return output.getvalue()
 
@@ -237,9 +321,7 @@ def build_route_classification_from_inventory(
 
         classification = str(row.get(classification_key, "") or "").strip()
         if not classification:
-            classification = _derive_classification_from_path(
-                row.get(url_key, "") or route_path
-            )
+            classification = _derive_classification_from_path(row.get(url_key, "") or route_path)
 
         discovery_source = str(row.get(discovery_source_key, "") or "").strip()
         if not discovery_source:
@@ -247,12 +329,14 @@ def build_route_classification_from_inventory(
 
         evidence_ref = str(row.get(evidence_ref_key, "") or "").strip()
 
-        writer.writerow([
-            route_path,
-            host,
-            classification,
-            discovery_source,
-            evidence_ref,
-        ])
+        writer.writerow(
+            [
+                route_path,
+                host,
+                classification,
+                discovery_source,
+                evidence_ref,
+            ]
+        )
 
     return output.getvalue()

@@ -64,9 +64,7 @@ def test_header_rows_skipped(tmp_path: Path) -> None:
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    (tmp_path / "binwalk.log").write_bytes(
-        b"0             0x0             OpenSSH private key\n"
-    )
+    (tmp_path / "binwalk.log").write_bytes(b"0             0x0             OpenSSH private key\n")
     decoy = b"0             0x0             ELF, 64-bit LSB executable\n"
     findings = parse_binwalk(decoy, b"", tmp_path, "binwalk")
     assert any(f.category is FindingCategory.SECRET_LEAK for f in findings)

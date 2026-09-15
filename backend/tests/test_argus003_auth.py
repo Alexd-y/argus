@@ -39,6 +39,7 @@ class TestLoginEndpoint:
         # Need fresh app/client after config change — re-import
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         response = test_client.post(
             "/api/v1/auth/login",
@@ -60,6 +61,7 @@ class TestLoginEndpoint:
         _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         response = test_client.post(
             "/api/v1/auth/login",
@@ -82,6 +84,7 @@ class TestLoginEndpoint:
         )
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         response = test_client.post(
             "/api/v1/auth/login",
@@ -99,6 +102,7 @@ class TestLoginEndpoint:
         )
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         response = test_client.post(
             "/api/v1/auth/login",
@@ -138,6 +142,7 @@ class TestProtectedRoute:
         _patch_login_db_no_user(monkeypatch)
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         login_resp = test_client.post(
             "/api/v1/auth/login",
@@ -167,6 +172,7 @@ class TestProtectedRoute:
         monkeypatch.setattr("src.core.config.settings.api_keys", ["test-argus-api-key-one"])
         from main import app
         from starlette.testclient import TestClient
+
         test_client = TestClient(app)
         response = test_client.get(
             "/api/v1/auth/me",

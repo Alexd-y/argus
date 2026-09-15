@@ -77,7 +77,7 @@ def _request(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
             payload = resp.read()
             status = resp.status
     except urllib.error.HTTPError as exc:
@@ -124,6 +124,7 @@ def _list_reports_for_scan(scan_id: str) -> list[dict[str, Any]]:
 
 # ── Module-scope fixture: trigger the scan ONCE and reuse for every case ──
 
+
 @pytest.fixture(scope="module")
 def scan_session() -> Iterator[ScanSession]:
     """Trigger one scan against juice-shop and share the id across the module."""
@@ -136,6 +137,7 @@ def scan_session() -> Iterator[ScanSession]:
 
 # ── Case 1: POST /api/v1/scans returns 201 + scan_id ─────────────────────
 
+
 def test_scan_create_returns_uuid_and_queued_status(scan_session: ScanSession) -> None:
     assert scan_session.scan_id
     # Sanity-check UUID shape — 8-4-4-4-12 hex.
@@ -144,6 +146,7 @@ def test_scan_create_returns_uuid_and_queued_status(scan_session: ScanSession) -
 
 
 # ── Case 2: GET scan returns canonical fields ────────────────────────────
+
 
 def test_scan_get_returns_expected_shape(scan_session: ScanSession) -> None:
     status, body = _request("GET", f"/api/v1/scans/{scan_session.scan_id}")
@@ -157,6 +160,7 @@ def test_scan_get_returns_expected_shape(scan_session: ScanSession) -> None:
 
 # ── Case 3: scan reaches 'completed' within the timeout ──────────────────
 
+
 @pytest.fixture(scope="module")
 def completed_scan(scan_session: ScanSession) -> dict[str, Any]:
     deadline = time.monotonic() + SCAN_TIMEOUT_SECONDS
@@ -167,14 +171,19 @@ def completed_scan(scan_session: ScanSession) -> dict[str, Any]:
     return final
 
 
-def test_scan_progresses_to_completed_within_timeout(completed_scan: dict[str, Any]) -> None:
+def test_scan_progresses_to_completed_within_timeout(
+    completed_scan: dict[str, Any],
+) -> None:
     assert completed_scan["status"] == "completed"
     assert int(completed_scan.get("progress", 0)) >= 100
 
 
 # ── Case 4: findings list is non-empty (>= threshold) ────────────────────
 
-def test_scan_findings_meet_minimum_count(scan_session: ScanSession, completed_scan: dict[str, Any]) -> None:
+
+def test_scan_findings_meet_minimum_count(
+    scan_session: ScanSession, completed_scan: dict[str, Any]
+) -> None:
     _ = completed_scan
     status, body = _request("GET", f"/api/v1/scans/{scan_session.scan_id}/findings")
     assert status == 200
@@ -186,7 +195,10 @@ def test_scan_findings_meet_minimum_count(scan_session: ScanSession, completed_s
 
 # ── Case 5: statistics endpoint mirrors the list count ───────────────────
 
-def test_scan_findings_statistics_consistent(scan_session: ScanSession, completed_scan: dict[str, Any]) -> None:
+
+def test_scan_findings_statistics_consistent(
+    scan_session: ScanSession, completed_scan: dict[str, Any]
+) -> None:
     _ = completed_scan
     status, body = _request("GET", f"/api/v1/scans/{scan_session.scan_id}/findings/statistics")
     assert status == 200
@@ -203,6 +215,7 @@ def test_scan_findings_statistics_consistent(scan_session: ScanSession, complete
 
 # ── Case 6: generate-all enqueues a bundle ───────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def report_bundle(scan_session: ScanSession, completed_scan: dict[str, Any]) -> dict[str, Any]:
     _ = completed_scan
@@ -217,11 +230,14 @@ def report_bundle(scan_session: ScanSession, completed_scan: dict[str, Any]) -> 
     return body
 
 
-def test_generate_all_returns_accepted_with_bundle_metadata(report_bundle: dict[str, Any]) -> None:
+def test_generate_all_returns_accepted_with_bundle_metadata(
+    report_bundle: dict[str, Any],
+) -> None:
     assert isinstance(report_bundle, dict)
 
 
 # ── Case 7: report list contains the bundle members ──────────────────────
+
 
 def test_reports_list_contains_bundle_members(
     scan_session: ScanSession, report_bundle: dict[str, Any]
@@ -241,6 +257,7 @@ def test_reports_list_contains_bundle_members(
 
 # ── Case 8: every report moves out of pending/processing to ready ────────
 
+
 def test_all_reports_finish_generation(
     scan_session: ScanSession, report_bundle: dict[str, Any]
 ) -> None:
@@ -256,13 +273,16 @@ def test_all_reports_finish_generation(
             break
         time.sleep(POLL_INTERVAL_SECONDS)
     rows = _list_reports_for_scan(scan_session.scan_id)
-    pending = [r for r in rows if (r.get("generation_status") or "").lower() in ("pending", "processing")]
+    pending = [
+        r for r in rows if (r.get("generation_status") or "").lower() in ("pending", "processing")
+    ]
     assert not pending, f"{len(pending)} report(s) still pending/processing after timeout"
     failed = [r for r in rows if (r.get("generation_status") or "").lower() == "failed"]
     assert not failed, f"{len(failed)} report(s) finished in 'failed' state"
 
 
 # ── Case 9: report detail endpoint returns populated summary ─────────────
+
 
 def test_report_detail_summary_populated(
     scan_session: ScanSession, report_bundle: dict[str, Any]
@@ -289,6 +309,7 @@ def test_report_detail_summary_populated(
 
 
 # ── Case 10: idempotency — second generate-all does not duplicate ────────
+
 
 def test_second_generate_all_does_not_duplicate_bundle(
     scan_session: ScanSession, report_bundle: dict[str, Any]

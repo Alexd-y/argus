@@ -28,8 +28,9 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-from defusedxml import ElementTree as DET  # type: ignore[import-untyped]  # defusedxml has no upstream stubs
-
+from defusedxml import (
+    ElementTree as DET,  # type: ignore[import-untyped]  # defusedxml has no upstream stubs
+)
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -44,15 +45,12 @@ from src.reports.report_service import (
     ReportService,
 )
 
-
 # ---------------------------------------------------------------------------
 # Snapshot directory + refresh policy
 # ---------------------------------------------------------------------------
 
 
-SNAPSHOT_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "snapshots" / "reports"
-)
+SNAPSHOT_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "snapshots" / "reports"
 SNAPSHOT_REFRESH_ENV: Final[str] = "ARGUS_SNAPSHOT_REFRESH"
 SNAPSHOT_TOOL_VERSION: Final[str] = "arg-024-snapshot"
 
@@ -65,7 +63,12 @@ def _snapshot_path(fmt: ReportFormat) -> Path:
 
 
 def _refresh_requested() -> bool:
-    return os.environ.get(SNAPSHOT_REFRESH_ENV, "").strip() not in ("", "0", "false", "False")
+    return os.environ.get(SNAPSHOT_REFRESH_ENV, "").strip() not in (
+        "",
+        "0",
+        "false",
+        "False",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,9 +188,7 @@ def canonical_report_data() -> ReportData:
                 description="HTTP req/resp dump",
             )
         ],
-        screenshots=[
-            ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")
-        ],
+        screenshots=[ScreenshotEntry(object_key="screenshots/login.png", url_or_email="login")],
         timeline=[
             TimelineEntry(
                 phase="recon",
@@ -239,9 +240,7 @@ def test_midgard_renders_machine_format(
     assert bundle.verify_sha256()
 
 
-def test_midgard_html_renders(
-    service: ReportService, canonical_report_data: ReportData
-) -> None:
+def test_midgard_html_renders(service: ReportService, canonical_report_data: ReportData) -> None:
     bundle = service.render_bundle(
         canonical_report_data, tier=ReportTier.MIDGARD, fmt=ReportFormat.HTML
     )
@@ -321,9 +320,7 @@ def test_csv_payload_has_canonical_columns(
     assert "title" in header
 
 
-def test_json_payload_is_valid(
-    service: ReportService, canonical_report_data: ReportData
-) -> None:
+def test_json_payload_is_valid(service: ReportService, canonical_report_data: ReportData) -> None:
     bundle = service.render_bundle(
         canonical_report_data, tier=ReportTier.MIDGARD, fmt=ReportFormat.JSON
     )
@@ -398,12 +395,8 @@ def _refresh_or_assert(actual: bytes, snapshot: Path) -> None:
                 msg_lines.append(
                     f"First diverging byte at offset {i}: expected 0x{e:02x}, actual 0x{a:02x}"
                 )
-                msg_lines.append(
-                    f"Context: expected={expected[max(0, i - 32) : i + 32]!r}"
-                )
-                msg_lines.append(
-                    f"         actual=  {actual[max(0, i - 32) : i + 32]!r}"
-                )
+                msg_lines.append(f"Context: expected={expected[max(0, i - 32) : i + 32]!r}")
+                msg_lines.append(f"         actual=  {actual[max(0, i - 32) : i + 32]!r}")
                 break
         raise AssertionError("\n".join(msg_lines))
 
@@ -474,9 +467,7 @@ def test_metadata_consistency_across_formats(
         ReportFormat.HTML,
     )
     for fmt in formats:
-        bundle = service.render_bundle(
-            canonical_report_data, tier=ReportTier.MIDGARD, fmt=fmt
-        )
+        bundle = service.render_bundle(canonical_report_data, tier=ReportTier.MIDGARD, fmt=fmt)
         assert bundle.tier is ReportTier.MIDGARD
         assert bundle.format is fmt
         assert bundle.mime_type

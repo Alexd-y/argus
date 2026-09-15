@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -90,9 +89,7 @@ def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
 
 
 def test_finding_category_and_cwe(tmp_path: Path) -> None:
-    findings = parse_detect_secrets_json(
-        _payload(_entry()), b"", tmp_path, "detect_secrets"
-    )
+    findings = parse_detect_secrets_json(_payload(_entry()), b"", tmp_path, "detect_secrets")
     assert findings[0].category is FindingCategory.SECRET_LEAK
     assert set(findings[0].cwe) == {798, 312}
 
@@ -176,9 +173,7 @@ def test_hashed_secret_preserved_verbatim(tmp_path: Path) -> None:
         tmp_path,
         "detect_secrets",
     )
-    sidecar_blob = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip()
-    )
+    sidecar_blob = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").strip())
     assert sidecar_blob["hashed_secret"] == hashed
     assert _HASH_HEX_40_RE.match(sidecar_blob["hashed_secret"])
 
@@ -214,24 +209,19 @@ def test_dedup_collapses_same_plugin_filename_hash(tmp_path: Path) -> None:
     assert len(findings) == 1
 
 
-def test_envelope_not_dict_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     canonical = tmp_path / "detect-secrets.json"
     canonical.write_bytes(b'["not", "a", "baseline"]')
     with caplog.at_level("WARNING"):
         findings = parse_detect_secrets_json(b"", b"", tmp_path, "detect_secrets")
     assert findings == []
     assert any(
-        "detect_secrets_parser_envelope_not_object"
-        in (record.__dict__.get("event") or "")
+        "detect_secrets_parser_envelope_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
 
-def test_results_missing_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_results_missing_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     payload = json.dumps({"version": "1.5.0", "plugins_used": []}).encode("utf-8")
     with caplog.at_level("WARNING"):
         findings = parse_detect_secrets_json(payload, b"", tmp_path, "detect_secrets")
@@ -260,10 +250,7 @@ def test_cap_reached_emits_warning_and_truncates(
 ) -> None:
     monkeypatch.setattr(detect_secrets_module, "_MAX_FINDINGS", 2)
     payload = _payload(
-        *(
-            _entry(hashed_secret=f"deadbeef{i:032x}", filename=f"file{i}.env")
-            for i in range(5)
-        )
+        *(_entry(hashed_secret=f"deadbeef{i:032x}", filename=f"file{i}.env") for i in range(5))
     )
     with caplog.at_level("WARNING"):
         findings = parse_detect_secrets_json(payload, b"", tmp_path, "detect_secrets")

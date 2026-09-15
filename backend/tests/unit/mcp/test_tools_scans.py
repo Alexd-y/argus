@@ -19,7 +19,7 @@ import asyncio
 
 import pytest
 from mcp.server.fastmcp import FastMCP
-
+from pydantic import ValidationError as PydanticValidationError
 from src.mcp.audit_logger import MCPAuditLogger
 from src.mcp.auth import MCPAuthContext
 from src.mcp.context import set_audit_logger, set_auth_override
@@ -104,7 +104,7 @@ class TestScanCreateValidation:
     def test_invalid_target_rejected_by_pydantic(self) -> None:
         # Pydantic validates the input *before* the tool fn runs; we can
         # therefore assert directly on the schema constructor.
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanCreateInput(target="  ", profile=ScanProfile.STANDARD)
 
 
@@ -254,9 +254,7 @@ class TestScanCancel:
         monkeypatch: pytest.MonkeyPatch,
         audit_logger: MCPAuditLogger,
     ) -> None:
-        async def _fake_cancel(
-            *, tenant_id: str, scan_id: str, reason: str
-        ) -> ScanStatus:
+        async def _fake_cancel(*, tenant_id: str, scan_id: str, reason: str) -> ScanStatus:
             assert reason == "operator-stop"
             return ScanStatus.CANCELLED
 
@@ -273,7 +271,7 @@ class TestScanCancel:
 
     def test_cancel_short_reason_rejected_by_pydantic(self) -> None:
         # Pydantic enforces the min_length=4 reason at schema construction.
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanCancelInput(scan_id="scan-12345678", reason="no")
 
 
@@ -281,21 +279,21 @@ class TestScanCreateInputValidation:
     """Pure schema validation — no app required."""
 
     def test_target_must_match_pattern(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanCreateInput(target="not a url with spaces")  # type: ignore[arg-type]
 
     def test_justification_max_length(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanCreateInput(target="example.com", justification="x" * 600)  # type: ignore[arg-type]
 
 
 class TestScanStatusInputValidation:
     def test_short_id_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanStatusInput(scan_id="abc")  # type: ignore[arg-type]
 
 
 class TestScanCancelInputValidation:
     def test_short_id_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(PydanticValidationError):
             ScanCancelInput(scan_id="abc", reason="long enough reason")  # type: ignore[arg-type]

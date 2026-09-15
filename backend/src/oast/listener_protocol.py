@@ -242,9 +242,7 @@ class BurpCollaboratorClientStub:
 
     backend_name: str = "burp_collaborator"
 
-    def __init__(
-        self, *, biid: str | None = None, server_url: str | None = None
-    ) -> None:
+    def __init__(self, *, biid: str | None = None, server_url: str | None = None) -> None:
         # ``biid`` is the Collaborator authentication token; the real
         # client validates it before issuing requests. We accept it now so
         # the constructor signature stays stable when the implementation
@@ -274,9 +272,7 @@ class BurpCollaboratorClientStub:
 
     def deliver(self, interaction: OASTInteraction) -> None:
         del interaction
-        raise NotImplementedError(
-            "Burp Collaborator delivery is server-driven, not client-driven."
-        )
+        raise NotImplementedError("Burp Collaborator delivery is server-driven, not client-driven.")
 
 
 __all__ = [

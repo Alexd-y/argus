@@ -94,7 +94,9 @@ class QuickModeDisabledError(QuickCreateError):
 class ConflictingExecutionModeError(QuickCreateError):
     code = CONFLICTING_EXECUTION_MODE
 
-    def __init__(self, message: str = "lab_unrestricted cannot be combined with quick options") -> None:
+    def __init__(
+        self, message: str = "lab_unrestricted cannot be combined with quick options"
+    ) -> None:
         super().__init__(message, code=CONFLICTING_EXECUTION_MODE)
 
 
@@ -146,7 +148,10 @@ def assert_execution_mode_payload(
         emit_quick_audit_event(
             "quick.policy",
             scan_id="",
-            payload={"decision": QUICK_MODE_DISABLED, "execution_mode": execution_mode.value},
+            payload={
+                "decision": QUICK_MODE_DISABLED,
+                "execution_mode": execution_mode.value,
+            },
         )
         raise QuickModeDisabledError()
     if execution_mode is ExecutionMode.QUICK:

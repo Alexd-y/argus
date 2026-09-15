@@ -105,10 +105,7 @@ def _fts_score(query: str, document: str) -> float:
 
 def _metadata_matches(metadata: Mapping[str, Any], prefilter: Mapping[str, Any]) -> bool:
     """Require every prefilter key to match chunk metadata (exact equality)."""
-    for key, expected in prefilter.items():
-        if metadata.get(key) != expected:
-            return False
-    return True
+    return all(metadata.get(key) == expected for key, expected in prefilter.items())
 
 
 def resolve_allowed_collections(
@@ -117,10 +114,7 @@ def resolve_allowed_collections(
 ) -> frozenset[CollectionName]:
     """Return collections permitted for the execution mode."""
     resolved_mode = parse_execution_mode(mode)
-    if requested is not None:
-        candidates = frozenset(requested)
-    else:
-        candidates = frozenset(CollectionName)
+    candidates = frozenset(requested) if requested is not None else frozenset(CollectionName)
 
     if resolved_mode is ExecutionMode.LAB_UNRESTRICTED:
         return candidates

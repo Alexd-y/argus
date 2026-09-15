@@ -52,7 +52,7 @@ _CVE_ENRICH_SYSTEM = (
 _CVE_ENRICH_USER = (
     "Research CVE {cve_id} affecting {product}.\n"
     "Return JSON with these exact keys:\n"
-    '{{\n'
+    "{{\n"
     '  "cvss_v3": <float or null>,\n'
     '  "severity": "<critical/high/medium/low>",\n'
     '  "description": "<one sentence>",\n'
@@ -63,7 +63,7 @@ _CVE_ENRICH_USER = (
     '  "actively_exploited": <true/false>,\n'
     '  "affected_versions": ["<version range>"],\n'
     '  "remediation": "<one sentence action>"\n'
-    '}}'
+    "}}"
 )
 
 _OSINT_SYSTEM = (
@@ -81,13 +81,13 @@ _OSINT_USER = (
     "4. Any public security disclosures or bug bounty reports\n"
     "5. Company/org background relevant to attack surface\n\n"
     "Return JSON with these exact keys:\n"
-    '{{\n'
+    "{{\n"
     '  "breaches": [{{"source": "<str>", "date": "<str>", "description": "<str>"}}],\n'
     '  "tech_stack": ["<technology>"],\n'
     '  "subdomains": ["<subdomain>"],\n'
     '  "public_vulns": ["<description>"],\n'
     '  "org_info": {{"industry": "<str>", "size": "<str>", "notes": "<str>"}}\n'
-    '}}'
+    "}}"
 )
 
 

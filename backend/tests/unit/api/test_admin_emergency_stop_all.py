@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from src.api.routers.admin_emergency import (
     EVENT_RESUME_ALL,
     EVENT_STOP_ALL,
@@ -23,6 +21,7 @@ from src.api.routers.admin_emergency import (
 )
 from src.core.config import settings
 from src.policy.kill_switch import KillSwitchService
+from starlette.testclient import TestClient
 
 STOP_ALL = "/api/v1/admin/system/emergency/stop_all"
 RESUME_ALL = "/api/v1/admin/system/emergency/resume_all"
@@ -121,9 +120,7 @@ def override_kill_switch(client: TestClient, kill_switch: KillSwitchService):
 
 
 @pytest.fixture()
-def override_kill_switch_offline(
-    client: TestClient, offline_kill_switch: KillSwitchService
-):
+def override_kill_switch_offline(client: TestClient, offline_kill_switch: KillSwitchService):
     client.app.dependency_overrides[_kill_switch_dep] = lambda: offline_kill_switch
     try:
         yield offline_kill_switch
@@ -463,7 +460,7 @@ class TestEmergencyAuditTrail:
         self, *, rows_actions: list[str], reason: str | None = "test reason"
     ) -> AsyncMock:
         rows = []
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         for i, action in enumerate(rows_actions):
             row = MagicMock()
             row.id = str(uuid.uuid4())
@@ -488,9 +485,7 @@ class TestEmergencyAuditTrail:
         client: TestClient,
         override_kill_switch: KillSwitchService,
     ) -> None:
-        session = self._make_audit_session(
-            rows_actions=[EVENT_STOP_ALL, EVENT_RESUME_ALL]
-        )
+        session = self._make_audit_session(rows_actions=[EVENT_STOP_ALL, EVENT_RESUME_ALL])
         with patch(
             "src.api.routers.admin_emergency.async_session_factory",
             _session_factory(session),

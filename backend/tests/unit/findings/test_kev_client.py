@@ -7,11 +7,10 @@ import logging
 from datetime import date
 
 import pytest
-
 from src.findings.kev_client import KevClient
 from src.findings.kev_persistence import KevRecord
-from tests.unit.findings.conftest import FakeHttpClient, FakeHttpResponse, FakeRedis
 
+from tests.unit.findings.conftest import FakeHttpClient, FakeHttpResponse, FakeRedis
 
 _SAMPLE_CATALOG: dict[str, object] = {
     "vulnerabilities": [
@@ -65,9 +64,7 @@ async def test_cache_miss_fetches_and_caches(
     assert "CVE-2024-1001" in decoded
 
 
-async def test_cache_hit_skips_http(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_cache_hit_skips_http(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_redis.store["argus:kev:catalog"] = json.dumps(["CVE-2024-7777"])
     client = KevClient(fake_http, fake_redis)
     assert await client.is_listed("CVE-2024-7777") is True
@@ -87,9 +84,7 @@ async def test_http_failure_returns_false(fake_redis: FakeRedis) -> None:
     assert await client.is_listed("CVE-2024-1001") is False
 
 
-async def test_http_non_200_returns_false(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_http_non_200_returns_false(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_http.response = FakeHttpResponse(status_code=503)
     client = KevClient(fake_http, fake_redis)
     assert await client.is_listed("CVE-2024-1001") is False
@@ -135,9 +130,7 @@ async def test_cache_corrupt_value_falls_through(
 # ---------------------------------------------------------------------------
 
 
-async def test_refresh_returns_count(
-    fake_http: FakeHttpClient, fake_redis: FakeRedis
-) -> None:
+async def test_refresh_returns_count(fake_http: FakeHttpClient, fake_redis: FakeRedis) -> None:
     fake_http.response = FakeHttpResponse(status_code=200, json_payload=_SAMPLE_CATALOG)
     client = KevClient(fake_http, fake_redis)
     count = await client.refresh()
@@ -173,8 +166,7 @@ async def test_invalid_cve_logs_warning(
     with caplog.at_level(logging.WARNING, logger="src.findings.kev_client"):
         assert await client.is_listed("not-a-cve") is False
     assert any(
-        "kev_invalid_cve" in r.message or "kev.invalid_cve" in r.message
-        for r in caplog.records
+        "kev_invalid_cve" in r.message or "kev.invalid_cve" in r.message for r in caplog.records
     )
 
 
@@ -337,9 +329,7 @@ async def test_fetch_kev_catalog_handles_non_200(
 async def test_fetch_kev_catalog_handles_malformed_json(
     fake_http: FakeHttpClient, fake_redis: FakeRedis
 ) -> None:
-    fake_http.response = FakeHttpResponse(
-        status_code=200, raise_on_json=True
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, raise_on_json=True)
     client = KevClient(fake_http, fake_redis)
     assert await client.fetch_kev_catalog() is None
 
@@ -347,9 +337,7 @@ async def test_fetch_kev_catalog_handles_malformed_json(
 async def test_fetch_kev_catalog_returns_empty_for_missing_vulnerabilities(
     fake_http: FakeHttpClient, fake_redis: FakeRedis
 ) -> None:
-    fake_http.response = FakeHttpResponse(
-        status_code=200, json_payload={"otherKey": []}
-    )
+    fake_http.response = FakeHttpResponse(status_code=200, json_payload={"otherKey": []})
     client = KevClient(fake_http, fake_redis)
     records = await client.fetch_kev_catalog()
     assert records is None or records == []

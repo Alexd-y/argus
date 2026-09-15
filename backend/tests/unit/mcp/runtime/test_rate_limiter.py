@@ -24,7 +24,6 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-
 from src.mcp.exceptions import RateLimitedError
 from src.mcp.runtime.rate_limiter import (
     JSONRPC_RATE_LIMIT_CODE,
@@ -222,10 +221,7 @@ class TestInMemoryTokenBucket:
         async def runner() -> int:
             successes = 0
             results = await asyncio.gather(
-                *(
-                    bucket.acquire(client_id="c1", tenant_id="t1", tokens=1)
-                    for _ in range(50)
-                ),
+                *(bucket.acquire(client_id="c1", tenant_id="t1", tokens=1) for _ in range(50)),
                 return_exceptions=True,
             )
             for r in results:

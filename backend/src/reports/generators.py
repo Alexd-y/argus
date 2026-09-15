@@ -1,5 +1,6 @@
 """Report generators — HTML, JSON, PDF, CSV, Markdown."""
 
+import contextlib
 import csv
 import hashlib
 import io
@@ -269,7 +270,12 @@ def _timeline_row_to_entry(row: TimelineRow) -> TimelineEntry:
     )
 
 
-_VALIDATION_STATUS_VALUES = {"missing", "unverified", "partially_validated", "validated"}
+_VALIDATION_STATUS_VALUES = {
+    "missing",
+    "unverified",
+    "partially_validated",
+    "validated",
+}
 _EVIDENCE_QUALITY_VALUES = {"none", "weak", "moderate", "strong"}
 
 
@@ -312,9 +318,7 @@ def _effective_evidence_classification(finding: Any) -> str:
     return classify_evidence(finding)
 
 
-def _is_valhalla_context(
-    jinja_context: dict[str, Any] | None, tier: str | None = None
-) -> bool:
+def _is_valhalla_context(jinja_context: dict[str, Any] | None, tier: str | None = None) -> bool:
     """VHL-PROVABLE-001 — the provability partition applies to the Valhalla tier only."""
     if tier and str(tier).strip().lower() == "valhalla":
         return True
@@ -404,12 +408,8 @@ def build_report_data_from_scan_report(
     elif data.scan is not None:
         target = data.scan.target_url
 
-    summary = summary_dict_to_report_summary(
-        data.report.summary if data.report else None
-    )
-    sev_totals = executive_severity_totals_from_severity_strings(
-        f.severity for f in data.findings
-    )
+    summary = summary_dict_to_report_summary(data.report.summary if data.report else None)
+    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
     summary = summary.model_copy(
         update={
             "critical": sev_totals["critical"],
@@ -430,8 +430,7 @@ def build_report_data_from_scan_report(
 
     timeline = [_timeline_row_to_entry(t) for t in data.timeline]
     phase_outputs = [
-        PhaseOutputEntry(phase=row.phase, output_data=row.output_data)
-        for row in data.phase_outputs
+        PhaseOutputEntry(phase=row.phase, output_data=row.output_data) for row in data.phase_outputs
     ]
 
     s = dict(data.report.summary or {}) if data.report else {}
@@ -511,27 +510,19 @@ def build_report_data_from_db(
     """Build ReportData from DB entities."""
     s = report.summary or {}
     ai = s.get("ai_insights")
-    ai_insights = (
-        [str(x) for x in ai] if isinstance(ai, list) else [str(ai)] if ai else []
-    )
-    exec_summary = (
-        executive_summary or s.get("executive_summary") or (s.get("executiveSummary"))
-    )
+    ai_insights = [str(x) for x in ai] if isinstance(ai, list) else [str(ai)] if ai else []
+    exec_summary = executive_summary or s.get("executive_summary") or (s.get("executiveSummary"))
     if isinstance(exec_summary, dict):
         exec_summary = str(exec_summary)
     rem = (
-        remediation
-        if remediation is not None
-        else s.get("remediation") or s.get("recommendations")
+        remediation if remediation is not None else s.get("remediation") or s.get("recommendations")
     )
     if isinstance(rem, str):
         rem = [rem] if rem else []
     elif rem is None:
         rem = []
     summary = report_to_summary(report)
-    sev_totals = executive_severity_totals_from_severity_strings(
-        f.severity for f in findings
-    )
+    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in findings)
     summary = summary.model_copy(
         update={
             "critical": sev_totals["critical"],
@@ -554,23 +545,15 @@ def build_report_data_from_db(
             exploit_demonstrated=bool(getattr(f, "exploit_demonstrated", False)),
             exploit_summary=getattr(f, "exploit_summary", None),
             owasp_category=parse_owasp_category(f.owasp_category),
-            proof_of_concept=f.proof_of_concept
-            if isinstance(f.proof_of_concept, dict)
-            else None,
-            confidence=normalize_confidence(
-                getattr(f, "confidence", None), default="likely"
-            ),
+            proof_of_concept=f.proof_of_concept if isinstance(f.proof_of_concept, dict) else None,
+            confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
             validation_status=_effective_validation_status(
                 f,
                 _effective_evidence_quality(f),
             ),
             evidence_quality=_effective_evidence_quality(f),
-            evidence_type=normalize_evidence_type(
-                getattr(f, "evidence_type", None)
-            ),
-            evidence_refs=normalize_evidence_refs(
-                getattr(f, "evidence_refs", None)
-            ),
+            evidence_type=normalize_evidence_type(getattr(f, "evidence_type", None)),
+            evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
             reproducible_steps=getattr(f, "reproducible_steps", None),
             applicability_notes=getattr(f, "applicability_notes", None),
         )
@@ -608,9 +591,7 @@ def build_report_data_from_scan_findings(
 
     Used by T04 REST export of SARIF/JUnit directly from ``findings.scan_id``.
     """
-    sev_totals = executive_severity_totals_from_severity_strings(
-        f.severity for f in findings
-    )
+    sev_totals = executive_severity_totals_from_severity_strings(f.severity for f in findings)
     summary = ReportSummary(
         critical=sev_totals["critical"],
         high=sev_totals["high"],
@@ -643,20 +624,14 @@ def build_report_data_from_scan_findings(
                 proof_of_concept=f.proof_of_concept
                 if isinstance(f.proof_of_concept, dict)
                 else None,
-                confidence=normalize_confidence(
-                    getattr(f, "confidence", None), default="likely"
-                ),
+                confidence=normalize_confidence(getattr(f, "confidence", None), default="likely"),
                 validation_status=_effective_validation_status(
                     f,
                     _effective_evidence_quality(f),
                 ),
                 evidence_quality=_effective_evidence_quality(f),
-                evidence_type=normalize_evidence_type(
-                    getattr(f, "evidence_type", None)
-                ),
-                evidence_refs=normalize_evidence_refs(
-                    getattr(f, "evidence_refs", None)
-                ),
+                evidence_type=normalize_evidence_type(getattr(f, "evidence_type", None)),
+                evidence_refs=normalize_evidence_refs(getattr(f, "evidence_refs", None)),
                 reproducible_steps=getattr(f, "reproducible_steps", None),
                 applicability_notes=getattr(f, "applicability_notes", None),
             )
@@ -705,7 +680,12 @@ def build_owasp_compliance_rows(
         oc = row.get("owasp_category")
         if isinstance(oc, str) and oc in counts:
             counts[oc] += 1
-            ev = row.get("evidence_ids") or row.get("evidence_refs") or row.get("id") or row.get("finding_id")
+            ev = (
+                row.get("evidence_ids")
+                or row.get("evidence_refs")
+                or row.get("id")
+                or row.get("finding_id")
+            )
             ev_items: list[str] = []
             if isinstance(ev, list):
                 ev_items = [str(x)[:80] for x in ev if str(x).strip()]
@@ -737,7 +717,11 @@ def build_owasp_compliance_rows(
         if use_valhalla_owasp_2021_misconfig_labels:
             display_code, title_en, description = _VALHALLA_OWASP_2021_DISPLAY.get(
                 cid,
-                (cid, OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid), ent.description if ent else ""),
+                (
+                    cid,
+                    OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid),
+                    ent.description if ent else "",
+                ),
             )
             description_hover = ""
             title_ru = ""
@@ -770,7 +754,11 @@ def build_owasp_compliance_rows(
             findings_present = "Not assessed"
         else:
             assessed = "Yes" if use_valhalla_owasp_2021_misconfig_labels else "Assessed"
-            result = "No finding observed" if use_valhalla_owasp_2021_misconfig_labels else "No finding after assessment"
+            result = (
+                "No finding observed"
+                if use_valhalla_owasp_2021_misconfig_labels
+                else "No finding after assessment"
+            )
             findings_present = "0"
         row_out: dict[str, Any] = {
             "category_id": cid,
@@ -797,13 +785,10 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
     http_ev: dict[str, Any] = {}
     if poc.get("request_method") or poc.get("request_url"):
         http_ev["request_method"] = str(poc.get("request_method") or "GET")[:16]
-        http_ev["request_url"] = str(poc.get("request_url") or poc.get("url") or "")[
-            :2048
-        ]
+        http_ev["request_url"] = str(poc.get("request_url") or poc.get("url") or "")[:2048]
         if poc.get("request_headers") and isinstance(poc["request_headers"], dict):
             http_ev["request_headers"] = {
-                str(k)[:256]: str(v)[:4096]
-                for k, v in list(poc["request_headers"].items())[:30]
+                str(k)[:256]: str(v)[:4096] for k, v in list(poc["request_headers"].items())[:30]
             }
         if poc.get("request_body"):
             http_ev["request_body"] = str(poc["request_body"])[:4096]
@@ -812,13 +797,10 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
         )[:16]
         if poc.get("response_headers") and isinstance(poc["response_headers"], dict):
             http_ev["response_headers"] = {
-                str(k)[:256]: str(v)[:4096]
-                for k, v in list(poc["response_headers"].items())[:30]
+                str(k)[:256]: str(v)[:4096] for k, v in list(poc["response_headers"].items())[:30]
             }
         resp_body = (
-            poc.get("response_body_snippet")
-            or poc.get("response_snippet")
-            or poc.get("response")
+            poc.get("response_body_snippet") or poc.get("response_snippet") or poc.get("response")
         )
         if resp_body:
             http_ev["response_body_snippet"] = str(resp_body)[:2048]
@@ -847,8 +829,14 @@ def _extract_http_evidence(poc: dict[str, Any]) -> dict[str, Any] | None:
 _ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 _CANDIDATE_REQUIRED_FIELDS = {"finding_id", "title", "severity", "cwe"}
 _VALIDATED_REQUIRED_EVIDENCE = {
-    "raw_request", "raw_response", "endpoint", "parameter", "payload",
-    "observed_impact", "verification_command", "acceptance_criteria",
+    "raw_request",
+    "raw_response",
+    "endpoint",
+    "parameter",
+    "payload",
+    "observed_impact",
+    "verification_command",
+    "acceptance_criteria",
 }
 
 
@@ -881,17 +869,34 @@ def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
             target_domain = str(target).split("/")[0].split(":")[0]
 
     _KNOWN_SAAS_DOMAINS = {
-        "zoho", "zohocloud.ca", "zohocorp.com", "zohopublic.com",
-        "salesforce.com", "force.com", "hubspot.com", "hsforms.com",
-        "mailchimp.com", "typeform.com", "google.com", "facebook.com",
-        "linkedin.com", "twitter.com", "youtube.com", "github.com",
-        "aws.amazon.com", "cloudfront.net",
+        "zoho",
+        "zohocloud.ca",
+        "zohocorp.com",
+        "zohopublic.com",
+        "salesforce.com",
+        "force.com",
+        "hubspot.com",
+        "hsforms.com",
+        "mailchimp.com",
+        "typeform.com",
+        "google.com",
+        "facebook.com",
+        "linkedin.com",
+        "twitter.com",
+        "youtube.com",
+        "github.com",
+        "aws.amazon.com",
+        "cloudfront.net",
     }
 
     def _domain_from_url(u: str) -> str:
         try:
             p = urlparse(u if "://" in u else f"https://{u}")
-            return (p.hostname or p.netloc.split(":")[0] if p.netloc else "").lower().lstrip("www.")
+            return (
+                (p.hostname or p.netloc.split(":")[0] if p.netloc else "")
+                .lower()
+                .removeprefix("www.")
+            )
         except Exception:
             return ""
 
@@ -916,7 +921,11 @@ def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
             dom = _domain_from_url(u)
             if not dom:
                 continue
-            if target_domain and not dom.endswith(target_domain) and not target_domain.endswith(dom):
+            if (
+                target_domain
+                and not dom.endswith(target_domain)
+                and not target_domain.endswith(dom)
+            ):
                 is_external = True
                 external_domain = dom
             if any(dom.endswith(s) or dom == s for s in _KNOWN_SAAS_DOMAINS):
@@ -928,19 +937,27 @@ def _apply_scope_filter(findings: list[Finding], target: str) -> list[Finding]:
                 f.severity = "info"
                 f.evidence_classification = "CANDIDATE"
                 f.scope_status = "out_of_scope"
-                f.applicability_notes = f"Finding references external domain '{external_domain}' which is outside the target scope " f"({target_domain}). This is likely a third-party SaaS/service and should be manually verified."
+                f.applicability_notes = (
+                    f"Finding references external domain '{external_domain}' which is outside the target scope "
+                    f"({target_domain}). This is likely a third-party SaaS/service and should be manually verified."
+                )
                 logger.warning(
                     "scope_filter_out_of_scope",
-                    extra={"finding_id": getattr(f, "id", "?"),
-                           "external_domain": external_domain,
-                           "target_domain": target_domain},
+                    extra={
+                        "finding_id": getattr(f, "id", "?"),
+                        "external_domain": external_domain,
+                        "target_domain": target_domain,
+                    },
                 )
                 filtered += 1
             except Exception:
                 pass
 
     if filtered:
-        logger.info("scope_filter_applied", extra={"out_of_scope": filtered, "total": len(findings)})
+        logger.info(
+            "scope_filter_applied",
+            extra={"out_of_scope": filtered, "total": len(findings)},
+        )
     return findings
 
 
@@ -956,14 +973,17 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
         raw_resp = _safe_attr(f, "raw_response") or ""
         endpoint = _safe_attr(f, "affected_endpoint") or ""
         payload = getattr(f, "proof_of_concept", {}) or {}
-        if isinstance(payload, dict):
-            payload = payload.get("payload", "")
-        else:
-            payload = ""
+        payload = payload.get("payload", "") if isinstance(payload, dict) else ""
         impact = _safe_attr(f, "observed_impact") or ""
-        remediation = (_safe_attr(f, "fix_action") or
-                       (getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "")
-                       or "")
+        remediation = (
+            _safe_attr(f, "fix_action")
+            or (
+                getattr(f, "remediation", None)
+                if isinstance(getattr(f, "remediation", None), str)
+                else ""
+            )
+            or ""
+        )
         if not raw_req.strip():
             missing.append("raw_request")
         if not raw_resp.strip():
@@ -981,14 +1001,21 @@ def _apply_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 f.evidence_quality = "weak"
                 logger.warning(
                     "evidence_gate_downgrade",
-                    extra={"finding_id": getattr(f, "id", "?"), "missing": missing,
-                           "old_status": "VALIDATED", "new_status": "CANDIDATE"},
+                    extra={
+                        "finding_id": getattr(f, "id", "?"),
+                        "missing": missing,
+                        "old_status": "VALIDATED",
+                        "new_status": "CANDIDATE",
+                    },
                 )
                 downgraded += 1
             except Exception:
                 pass
     if downgraded:
-        logger.info("evidence_gate_applied", extra={"downgraded": downgraded, "total": len(findings)})
+        logger.info(
+            "evidence_gate_applied",
+            extra={"downgraded": downgraded, "total": len(findings)},
+        )
     return findings
 
 
@@ -1000,15 +1027,27 @@ def enforce_severity_by_evidence(findings: list[Finding]) -> list[Finding]:
         if sev == "high" and ec != "VALIDATED":
             try:
                 f.severity = "medium"
-                logger.warning("severity_downgraded_no_validated",
-                               extra={"finding_id": getattr(f, "id", "?"), "from": "high", "to": "medium"})
+                logger.warning(
+                    "severity_downgraded_no_validated",
+                    extra={
+                        "finding_id": getattr(f, "id", "?"),
+                        "from": "high",
+                        "to": "medium",
+                    },
+                )
             except Exception:
                 pass
         if sev == "critical" and ec != "VALIDATED":
             try:
                 f.severity = "high"
-                logger.warning("severity_downgraded_critical_no_validated",
-                               extra={"finding_id": getattr(f, "id", "?"), "from": "critical", "to": "high"})
+                logger.warning(
+                    "severity_downgraded_critical_no_validated",
+                    extra={
+                        "finding_id": getattr(f, "id", "?"),
+                        "from": "critical",
+                        "to": "high",
+                    },
+                )
             except Exception:
                 pass
     return findings
@@ -1038,7 +1077,9 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
             data = {}
         data_type = str(data.get("type") or "").upper()
         is_fuzz = "fuzz_hit" in title or "FUZZ_HIT" in data_type
-        is_cmdi_candidate = "command_injection_candidate" in title or "COMMAND_INJECTION_CANDIDATE" in data_type
+        is_cmdi_candidate = (
+            "command_injection_candidate" in title or "COMMAND_INJECTION_CANDIDATE" in data_type
+        )
 
         if not is_fuzz and not is_cmdi_candidate:
             continue
@@ -1046,18 +1087,27 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
         poc = getattr(f, "proof_of_concept", {}) or {}
         if not isinstance(poc, dict):
             poc = {}
-        verification = str(
-            poc.get("verification_method", poc.get("verification_line", "")) or ""
-        ).lower().strip()
+        verification = (
+            str(poc.get("verification_method", poc.get("verification_line", "")) or "")
+            .lower()
+            .strip()
+        )
         reflection = str(poc.get("reflection_context", "") or "").strip()
         browser_verified = str(poc.get("verified_via_browser", "") or "").lower() == "true"
         raw_resp = str(_safe_attr(f, "raw_response") or "").strip()
-        has_oast = str(poc.get("oast_callback", "") or "").lower() in ("true", "1", "yes", "validated")
+        has_oast = str(poc.get("oast_callback", "") or "").lower() in (
+            "true",
+            "1",
+            "yes",
+            "validated",
+        )
         has_cmd_output = bool(str(poc.get("command_output") or poc.get("cmd_output") or "").strip())
         has_screenshot = bool(
             poc.get("screenshot_key") or poc.get("poc_screenshot_url") or poc.get("screenshot_url")
         )
-        has_negative_control = bool(poc.get("negative_control_url") or poc.get("negative_control_result"))
+        has_negative_control = bool(
+            poc.get("negative_control_url") or poc.get("negative_control_result")
+        )
 
         if is_cmdi_candidate and not is_fuzz:
             has_cmd_proof = has_command_injection_proof(f)
@@ -1071,10 +1121,18 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
             or has_screenshot
             or has_negative_control
             or (raw_resp and len(raw_resp) > 50 and not _is_only_curl_command(raw_resp))
-            or (verification and verification not in (
-                "curl poc present", "verification_method: http reflection", "",
-                "banner_only", "tool_banner", "scanner_banner",
-            ))
+            or (
+                verification
+                and verification
+                not in (
+                    "curl poc present",
+                    "verification_method: http reflection",
+                    "",
+                    "banner_only",
+                    "tool_banner",
+                    "scanner_banner",
+                )
+            )
         )
 
         if is_fuzz and not has_real_proof:
@@ -1102,15 +1160,21 @@ def _apply_fuzz_hit_evidence_gate(findings: list[Finding]) -> list[Finding]:
                 source = getattr(f, "id", "?")
                 logger.warning(
                     "fuzz_hit_downgraded",
-                    extra={"finding_id": source, "old_severity": old_sev,
-                           "reason": reason},
+                    extra={
+                        "finding_id": source,
+                        "old_severity": old_sev,
+                        "reason": reason,
+                    },
                 )
                 downgraded += 1
             except Exception:
                 pass
 
     if downgraded:
-        logger.info("fuzz_hit_gate_applied", extra={"downgraded": downgraded, "total": len(findings)})
+        logger.info(
+            "fuzz_hit_gate_applied",
+            extra={"downgraded": downgraded, "total": len(findings)},
+        )
     return findings
 
 
@@ -1135,7 +1199,7 @@ def _verify_cross_format(
     findings: list[Finding],
     report_id: str,
     target: str,
-    scan_id: str | None = None,
+    scan_id: str | None = None,  # noqa: ARG001 - uniform report-generator signature
     *,
     expected_severity_totals: dict[str, int] | None = None,
     expected_finding_count: int | None = None,
@@ -1231,8 +1295,14 @@ def _finding_to_dict(
         "business_impact": _safe_attr(f, "business_impact") or "",
         "affected_layer": _safe_attr(f, "affected_layer") or "",
         "owner_team": _safe_attr(f, "owner_team") or "",
-        "exact_remediation": _safe_attr(f, "fix_action",
-            getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "") or "",
+        "exact_remediation": _safe_attr(
+            f,
+            "fix_action",
+            getattr(f, "remediation", None)
+            if isinstance(getattr(f, "remediation", None), str)
+            else "",
+        )
+        or "",
         "verification_command": _safe_attr(f, "verification_command") or "",
         "acceptance_criteria": _safe_attr(f, "acceptance_criteria") or "",
         "retest_status": _safe_attr(f, "retest_result") or "NOT_ASSESSED",
@@ -1387,11 +1457,7 @@ def _ai_sections_for_export(ai_sections: Any) -> Any:
     """Normalize AI sections for any export format: drop internal-only sections."""
     if not isinstance(ai_sections, dict):
         return ai_sections
-    return {
-        key: val
-        for key, val in ai_sections.items()
-        if key not in INTERNAL_ONLY_AI_SECTIONS
-    }
+    return {key: val for key, val in ai_sections.items() if key not in INTERNAL_ONLY_AI_SECTIONS}
 
 
 def _jinja_ai_sections_and_scan_artifacts(
@@ -1439,7 +1505,9 @@ def _threat_modeling_ref_for_valhalla_export(vc: dict[str, Any]) -> dict[str, An
     }
 
 
-def _exploitation_phases_for_valhalla_export(exploitation: list[Any] | None) -> list[dict[str, str]]:
+def _exploitation_phases_for_valhalla_export(
+    exploitation: list[Any] | None,
+) -> list[dict[str, str]]:
     """Drop raw output_data (vuln_analysis / threat_model JSON) from the Valhalla bundle."""
     out: list[dict[str, str]] = []
     for p in exploitation or []:
@@ -1451,7 +1519,9 @@ def _exploitation_phases_for_valhalla_export(exploitation: list[Any] | None) -> 
     return out
 
 
-def _raw_artifacts_stub_for_valhalla_export(raw_artifacts: list[Any] | None) -> list[dict[str, Any]]:
+def _raw_artifacts_stub_for_valhalla_export(
+    raw_artifacts: list[Any] | None,
+) -> list[dict[str, Any]]:
     """Replace inline raw artifact bodies with a count (VH-009 — no raw dumps in customer JSON)."""
     n = len(raw_artifacts) if isinstance(raw_artifacts, list) else 0
     if n <= 0:
@@ -1492,9 +1562,7 @@ def build_valhalla_report_payload(
     if not isinstance(recon, dict):
         recon = {}
     # Align with ``ReportData.findings`` (same list as JSON findings / pipeline), not stale report.summary.
-    exec_counts = executive_severity_totals_from_severity_strings(
-        f.severity for f in data.findings
-    )
+    exec_counts = executive_severity_totals_from_severity_strings(f.severity for f in data.findings)
     owasp = ctx.get("owasp_compliance_rows")
     if not isinstance(owasp, list):
         owasp = []
@@ -1581,9 +1649,7 @@ def build_valhalla_report_payload(
         "owasp_compliance": _canonical_json_nested(owasp),
         "robots_sitemap": _canonical_json_nested(robots_sitemap),
         "tech_stack": _canonical_json_nested(vc.get("tech_stack_table") or []),
-        "outdated_components": _canonical_json_nested(
-            vc.get("outdated_components") or []
-        ),
+        "outdated_components": _canonical_json_nested(vc.get("outdated_components") or []),
         "emails": _canonical_json_nested(vc.get("leaked_emails") or []),
         "leaked_email_rows": _canonical_json_nested(vc.get("leaked_email_rows") or []),
         "ssl_tls": _canonical_json_nested(vc.get("ssl_tls_analysis") or {}),
@@ -1597,7 +1663,9 @@ def build_valhalla_report_payload(
         "evidence_inventory": _canonical_json_nested(evidence_inv),
         "tool_health_summary": _canonical_json_nested(tool_health),
         "port_exposure": _canonical_json_nested(port_exposure),
-        "credential_exposure": _canonical_json_nested(credential_exposure) if credential_exposure else None,
+        "credential_exposure": _canonical_json_nested(credential_exposure)
+        if credential_exposure
+        else None,
         "auth_testing": _canonical_json_nested(auth_testing) if auth_testing else None,
         "wstg_coverage": _canonical_json_nested(wstg) if wstg else None,
         "threat_modeling_ref": _canonical_json_nested(threat_modeling_ref),
@@ -1625,12 +1693,15 @@ def _build_valhalla_report_context(
         build_csrf_structured_rows_from_findings,
         build_xss_structured_rows_from_findings,
     )
+
     ctx = jinja_context
     valhalla_ctx = ctx.get("valhalla_context")
     if not isinstance(valhalla_ctx, dict):
         valhalla_ctx = {}
     findings = list(data.findings)
-    finding_dicts = [f.model_dump(mode="json") if hasattr(f, "model_dump") else dict(f) for f in findings]
+    finding_dicts = [
+        f.model_dump(mode="json") if hasattr(f, "model_dump") else dict(f) for f in findings
+    ]
     # The per-finding gate is the evidence classification (validated/observed/candidate/
     # inconclusive) — the single source of truth populated during report assembly
     # (VHL-PROVABLE-001). Recompute it for any finding lacking a stored value.
@@ -1638,30 +1709,54 @@ def _build_valhalla_report_context(
         str(f.get("finding_id", f.get("id", ""))): _effective_evidence_classification(f)
         for f in finding_dicts
     }
-    gate_counts: dict[str, int] = {"validated": 0, "observed": 0, "candidate": 0, "inconclusive": 0}
+    gate_counts: dict[str, int] = {
+        "validated": 0,
+        "observed": 0,
+        "candidate": 0,
+        "inconclusive": 0,
+    }
     for gate_val in evidence_gate.values():
         gate_counts[gate_val] = gate_counts.get(gate_val, 0) + 1
     critical_high_gates = [
-        {"finding_id": str(f.get("finding_id", f.get("id", ""))), "severity": str(f.get("severity", "")).lower(), "gate": evidence_gate.get(str(f.get("finding_id", f.get("id", ""))), "inconclusive")}
+        {
+            "finding_id": str(f.get("finding_id", f.get("id", ""))),
+            "severity": str(f.get("severity", "")).lower(),
+            "gate": evidence_gate.get(str(f.get("finding_id", f.get("id", ""))), "inconclusive"),
+        }
         for f in finding_dicts
         if str(f.get("severity", "")).lower() in ("critical", "high")
     ]
-    all_validated = all(r["gate"] == "validated" for r in critical_high_gates) if critical_high_gates else True
+    all_validated = (
+        all(r["gate"] == "validated" for r in critical_high_gates) if critical_high_gates else True
+    )
     result = ValhallaReportContext()
     result_dict = result.model_dump(mode="json")
-    result_dict.update({
-        "evidence_gate": evidence_gate,
-        "evidence_quality": {
-            "total_findings": len(finding_dicts),
-            "gate_counts": gate_counts,
-            "critical_high": critical_high_gates,
-            "all_critical_high_validated": all_validated,
-            "score": 100 if all_validated else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
-        },
-        "xss_structured": [r.model_dump(mode="json") for r in build_xss_structured_rows_from_findings(finding_dicts)],
-        "csrf_structured": [r.model_dump(mode="json") for r in build_csrf_structured_rows_from_findings(finding_dicts)],
-        "cmdi_structured": [r.model_dump(mode="json") for r in build_cmdi_structured_rows_from_findings(finding_dicts)],
-    })
+    result_dict.update(
+        {
+            "evidence_gate": evidence_gate,
+            "evidence_quality": {
+                "total_findings": len(finding_dicts),
+                "gate_counts": gate_counts,
+                "critical_high": critical_high_gates,
+                "all_critical_high_validated": all_validated,
+                "score": 100
+                if all_validated
+                else sum(gate_counts.get(g, 0) for g in ("validated", "observed")),
+            },
+            "xss_structured": [
+                r.model_dump(mode="json")
+                for r in build_xss_structured_rows_from_findings(finding_dicts)
+            ],
+            "csrf_structured": [
+                r.model_dump(mode="json")
+                for r in build_csrf_structured_rows_from_findings(finding_dicts)
+            ],
+            "cmdi_structured": [
+                r.model_dump(mode="json")
+                for r in build_cmdi_structured_rows_from_findings(finding_dicts)
+            ],
+        }
+    )
     ctx_result = valhalla_ctx.copy()
     ctx_result.update(result_dict)
     return ctx_result
@@ -1676,21 +1771,36 @@ def generate_valhalla_sections_csv(
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
-    writer.writerow(["section", "content_markdown_or_json", "status", "evidence_ids", "parser_status", "updated_at"])
-    writer.writerow([
-        "brand",
-        json.dumps({
-            "name": brand.name,
-            "logo_file": brand.logo_file,
-            "logo_mime": brand.logo_mime,
-            "logo_sha256": brand.logo_sha256,
-        }, ensure_ascii=False),
-        "collected",
-        "",
-        "ok",
-        data.created_at or "",
-    ])
+    writer.writerow(
+        [
+            "section",
+            "content_markdown_or_json",
+            "status",
+            "evidence_ids",
+            "parser_status",
+            "updated_at",
+        ]
+    )
+    writer.writerow(
+        [
+            "brand",
+            json.dumps(
+                {
+                    "name": brand.name,
+                    "logo_file": brand.logo_file,
+                    "logo_mime": brand.logo_mime,
+                    "logo_sha256": brand.logo_sha256,
+                },
+                ensure_ascii=False,
+            ),
+            "collected",
+            "",
+            "ok",
+            data.created_at or "",
+        ]
+    )
     payload = build_valhalla_report_payload(jinja_context, data)
     text_keys = frozenset(
         {
@@ -1706,14 +1816,19 @@ def generate_valhalla_sections_csv(
             writer.writerow([key, str(val or ""), "", "", "", ""])
         else:
             writer.writerow(
-                [key, json.dumps(_canonical_json_nested(val), ensure_ascii=False), "", "", "", ""]
+                [
+                    key,
+                    json.dumps(_canonical_json_nested(val), ensure_ascii=False),
+                    "",
+                    "",
+                    "",
+                    "",
+                ]
             )
     return buf.getvalue().encode("utf-8")
 
 
-def generate_json(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
-) -> bytes:
+def generate_json(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
     """Generate JSON / JSOC report — full schema with brand, metadata, export_integrity, timeline, phase outputs, findings, evidence, screenshots, AI conclusions, remediation."""
     tech_sorted = sorted(str(t) for t in (data.technologies or []))
     findings_ordered = _findings_sorted(data.findings)
@@ -1748,12 +1863,12 @@ def generate_json(
         proj.setdefault("phase", p.phase)
         phase_outputs.append(proj)
     screenshots = [
-        {"object_key": s.object_key, "url_or_email": s.url_or_email}
-        for s in screenshot_rows
+        {"object_key": s.object_key, "url_or_email": s.url_or_email} for s in screenshot_rows
     ]
     ai_sections, scan_artifacts = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     active_web_scan = _jinja_active_web_scan(jinja_context)
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     now_utc = datetime.now(UTC).isoformat()
 
@@ -1776,25 +1891,29 @@ def generate_json(
         fid = finding_id_of(f)
         refs = getattr(f, "evidence_refs", []) or []
         for ref in refs:
-            evidence_inventory.append({
-                "finding_id": fid,
-                "evidence_id": str(ref),
-                "evidence_type": _safe_attr(f, "evidence_type") or "raw",
-                "source_tool": _safe_attr(f, "tool_name") or "",
-                "artifact_ref": str(ref),
-                "timestamp": _safe_attr(f, "timestamp_utc") or now_utc,
-                "parser_status": "parsed",
-            })
+            evidence_inventory.append(
+                {
+                    "finding_id": fid,
+                    "evidence_id": str(ref),
+                    "evidence_type": _safe_attr(f, "evidence_type") or "raw",
+                    "source_tool": _safe_attr(f, "tool_name") or "",
+                    "artifact_ref": str(ref),
+                    "timestamp": _safe_attr(f, "timestamp_utc") or now_utc,
+                    "parser_status": "parsed",
+                }
+            )
         if not refs:
-            evidence_inventory.append({
-                "finding_id": fid,
-                "evidence_id": "NONE",
-                "evidence_type": "none",
-                "source_tool": "",
-                "artifact_ref": "",
-                "timestamp": now_utc,
-                "parser_status": "missing",
-            })
+            evidence_inventory.append(
+                {
+                    "finding_id": fid,
+                    "evidence_id": "NONE",
+                    "evidence_type": "none",
+                    "source_tool": "",
+                    "artifact_ref": "",
+                    "timestamp": now_utc,
+                    "parser_status": "missing",
+                }
+            )
 
     output = {
         "format": "jsoc",
@@ -1821,61 +1940,60 @@ def generate_json(
         },
         "methodology": {"description": "Automated security assessment via ARGUS pipeline"},
         "wstg_coverage": _canonical_json_nested(
-            jinja_context.get("wstg_coverage", {})
-            if isinstance(jinja_context, dict) else {}
+            jinja_context.get("wstg_coverage", {}) if isinstance(jinja_context, dict) else {}
         ),
         "tool_health": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).tool_health_summary
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "tool_health_summary")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "tool_health_summary")
             else []
         ),
         "ssl_tls_analysis": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
             else {}
         ),
         "ssl_tls_table_rows": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).ssl_tls_table_rows
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_table_rows")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_table_rows")
             else []
         ),
         "port_exposure": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).port_exposure_table_rows
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "port_exposure_table_rows")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "port_exposure_table_rows")
             else []
         ),
         "port_exposure_summary": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).port_exposure.model_dump()
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "port_exposure")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "port_exposure")
             else {}
         ),
         "robots_sitemap": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).robots_sitemap_analysis.model_dump()
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "robots_sitemap_analysis")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "robots_sitemap_analysis")
             else {}
         ),
         "credential_exposure": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).credential_exposure.model_dump()
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "credential_exposure")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "credential_exposure")
             else {}
         ),
         "auth_testing": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).auth_testing.model_dump()
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "auth_testing")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "auth_testing")
             else {}
         ),
         "leaked_emails": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).leaked_email_rows
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "leaked_email_rows")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "leaked_email_rows")
             else []
         ),
         "technologies": tech_sorted,
@@ -1895,15 +2013,29 @@ def generate_json(
             {
                 "report_id": data.report_id,
                 "finding_id": finding_id_of(f),
-                "status": str(getattr(f, "evidence_classification",
-                                     getattr(f, "validation_status", "unverified")) or "unverified").upper(),
+                "status": str(
+                    getattr(
+                        f,
+                        "evidence_classification",
+                        getattr(f, "validation_status", "unverified"),
+                    )
+                    or "unverified"
+                ).upper(),
                 "affected_layer": _safe_attr(f, "affected_layer") or "NOT_ASSESSED",
                 "owner_team": _safe_attr(f, "owner_team") or "NOT_ASSESSED",
-                "config_or_component": _safe_attr(f, "config_or_component",
-                                                  _safe_attr(f, "affected_asset")) or "",
-                "exact_fix": (_safe_attr(f, "fix_action") or
-                              (getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "")
-                              or "NOT_ASSESSED"),
+                "config_or_component": _safe_attr(
+                    f, "config_or_component", _safe_attr(f, "affected_asset")
+                )
+                or "",
+                "exact_fix": (
+                    _safe_attr(f, "fix_action")
+                    or (
+                        getattr(f, "remediation", None)
+                        if isinstance(getattr(f, "remediation", None), str)
+                        else ""
+                    )
+                    or "NOT_ASSESSED"
+                ),
                 "verification_step": _safe_attr(f, "verification_command") or "NOT_ASSESSED",
                 "acceptance_criteria": _safe_attr(f, "acceptance_criteria") or "NOT_ASSESSED",
                 "retest_status": _safe_attr(f, "retest_result") or "NOT_ASSESSED",
@@ -1913,39 +2045,47 @@ def generate_json(
         "retest_checklist": build_retest_checklist_export(findings_ordered),
         "limitations": _canonical_json_nested(
             jinja_context.get("valhalla_context", None).test_limitations
-            if isinstance(jinja_context, dict) and
-               hasattr(jinja_context.get("valhalla_context", None), "test_limitations")
+            if isinstance(jinja_context, dict)
+            and hasattr(jinja_context.get("valhalla_context", None), "test_limitations")
             else []
         ),
         "unresolved_gaps": _unresolved_gaps_from_ctx(jinja_context),
         "verification_commands": [
             {"finding_id": cmd["finding_id"], "command": cmd["command"]}
-            for cmd in build_verification_commands(
-                [_finding_to_dict(f) for f in findings_ordered]
-            )
+            for cmd in build_verification_commands([_finding_to_dict(f) for f in findings_ordered])
         ],
         "infra_recommendations": _canonical_json_nested(
             generate_infra_recommendations(
-                tech_stack=jinja_context.get("valhalla_context", None).tech_stack_structured.model_dump()
-                if isinstance(jinja_context, dict) and hasattr(
-                    jinja_context.get("valhalla_context", None), "tech_stack_structured")
+                tech_stack=jinja_context.get(
+                    "valhalla_context", None
+                ).tech_stack_structured.model_dump()
+                if isinstance(jinja_context, dict)
+                and hasattr(jinja_context.get("valhalla_context", None), "tech_stack_structured")
                 else {},
                 findings=[_finding_to_dict(f) for f in findings_ordered],
                 ssl_tls=jinja_context.get("valhalla_context", None).ssl_tls_analysis.model_dump()
-                if isinstance(jinja_context, dict) and hasattr(
-                    jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
+                if isinstance(jinja_context, dict)
+                and hasattr(jinja_context.get("valhalla_context", None), "ssl_tls_analysis")
                 else {},
-                security_headers=jinja_context.get("valhalla_context", None).security_headers_analysis.model_dump()
-                if isinstance(jinja_context, dict) and hasattr(
-                    jinja_context.get("valhalla_context", None), "security_headers_analysis")
+                security_headers=jinja_context.get(
+                    "valhalla_context", None
+                ).security_headers_analysis.model_dump()
+                if isinstance(jinja_context, dict)
+                and hasattr(
+                    jinja_context.get("valhalla_context", None),
+                    "security_headers_analysis",
+                )
                 else {},
             )
         ),
         "truthfulness_metrics": build_truthfulness_metrics(
             findings=[_finding_to_dict(f) for f in findings_ordered],
             ai_sections=ai_sections or {},
-            coverage_pct=float((jinja_context.get("wstg_coverage") or {}).get("coverage_percentage", 0) or 0)
-            if isinstance(jinja_context, dict) else 0.0,
+            coverage_pct=float(
+                (jinja_context.get("wstg_coverage") or {}).get("coverage_percentage", 0) or 0
+            )
+            if isinstance(jinja_context, dict)
+            else 0.0,
         ),
         "timeline": timeline,
         "phase_outputs": phase_outputs,
@@ -1980,24 +2120,31 @@ def generate_json(
 
 def build_retest_checklist_export(findings: Iterable[Any]) -> list[dict[str, str]]:
     from src.reports.report_quality_gate import build_retest_checklist
+
     return build_retest_checklist(findings)
 
 
-def _unresolved_gaps_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+def _unresolved_gaps_from_ctx(
+    jinja_context: dict[str, Any] | None,
+) -> list[dict[str, str]]:
     vc = (jinja_context or {}).get("valhalla_context")
     if isinstance(vc, dict):
         return vc.get("unresolved_gaps", [])
     return getattr(vc, "unresolved_gaps", []) if vc is not None else []
 
 
-def _missing_artifacts_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+def _missing_artifacts_from_ctx(
+    jinja_context: dict[str, Any] | None,
+) -> list[dict[str, str]]:
     vc = (jinja_context or {}).get("valhalla_context")
     if isinstance(vc, dict):
         return vc.get("missing_artifacts", [])
     return getattr(vc, "missing_artifacts", []) if vc is not None else []
 
 
-def _next_scan_commands_from_ctx(jinja_context: dict[str, Any] | None) -> list[dict[str, str]]:
+def _next_scan_commands_from_ctx(
+    jinja_context: dict[str, Any] | None,
+) -> list[dict[str, str]]:
     vc = (jinja_context or {}).get("valhalla_context")
     if isinstance(vc, dict):
         return vc.get("next_scan_commands", [])
@@ -2006,11 +2153,12 @@ def _next_scan_commands_from_ctx(jinja_context: dict[str, Any] | None) -> list[d
 
 def _build_export_integrity(
     *,
-    jinja_context: dict[str, Any] | None,
-    data: ReportData,
+    jinja_context: dict[str, Any] | None,  # noqa: ARG001 - uniform report-generator signature
+    data: ReportData,  # noqa: ARG001 - uniform report-generator signature
     json_bytes: bytes,
 ) -> dict[str, str | bool]:
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     return {
         "html_sha256": "",
@@ -2097,7 +2245,8 @@ def _resolve_csv_section(
         return "PRESENT", json.dumps({"status": "PRESENT", "finding_count": len(findings)})
     if sec_key == "critical_vulns":
         n = sum(
-            1 for f in findings
+            1
+            for f in findings
             if str(getattr(f, "severity", "") or "").lower() in ("critical", "high")
         )
         return ("PRESENT" if n else "NOT_ASSESSED"), json.dumps(
@@ -2112,13 +2261,12 @@ def _resolve_csv_section(
     return "NOT_ASSESSED", not_assessed
 
 
-def generate_csv(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
-) -> bytes:
+def generate_csv(data: ReportData, *, jinja_context: dict[str, Any] | None = None) -> bytes:
     """Generate multi-file CSV bundle: findings.csv, evidence.csv, sections.csv, remediation.csv."""
     buf = io.StringIO()
     writer = csv.writer(buf, lineterminator="\n")
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
 
     # Single, severity-aligned finding set for every CSV sub-table: scope-filtered and
@@ -2133,20 +2281,43 @@ def generate_csv(
     writer.writerow(["# target", data.target or ""])
     writer.writerow(["# brand", brand.name])
     writer.writerow([])
-    writer.writerow([
-        "report_id", "scan_id", "target",
-        "finding_id", "status", "severity", "confidence", "title",
-        "affected_asset", "endpoint", "method", "parameter",
-        "authentication_state",
-        "cwe", "owasp", "cvss_vector", "cvss_score",
-        "evidence_ids", "raw_request_ref", "raw_response_ref",
-        "tool_name", "tool_version", "tool_command",
-        "manual_validation_result", "observed_impact",
-        "affected_layer", "owner_team",
-        "exact_remediation", "verification_command",
-        "acceptance_criteria", "retest_status",
-        "is_provable", "unconfirmed_reason",
-    ])
+    writer.writerow(
+        [
+            "report_id",
+            "scan_id",
+            "target",
+            "finding_id",
+            "status",
+            "severity",
+            "confidence",
+            "title",
+            "affected_asset",
+            "endpoint",
+            "method",
+            "parameter",
+            "authentication_state",
+            "cwe",
+            "owasp",
+            "cvss_vector",
+            "cvss_score",
+            "evidence_ids",
+            "raw_request_ref",
+            "raw_response_ref",
+            "tool_name",
+            "tool_version",
+            "tool_command",
+            "manual_validation_result",
+            "observed_impact",
+            "affected_layer",
+            "owner_team",
+            "exact_remediation",
+            "verification_command",
+            "acceptance_criteria",
+            "retest_status",
+            "is_provable",
+            "unconfirmed_reason",
+        ]
+    )
     for f in csv_findings:
         poc = getattr(f, "proof_of_concept", {}) or {}
         if not isinstance(poc, dict):
@@ -2157,15 +2328,33 @@ def generate_csv(
         status = str(ec or vs or "candidate").upper()
         provable = is_provable_from_raw(f)
         row = [
-            data.report_id or "", data.scan_id or "", data.target or "",
-            finding_id, status or "CANDIDATE",
+            data.report_id or "",
+            data.scan_id or "",
+            data.target or "",
+            finding_id,
+            status or "CANDIDATE",
             _safe_attr(f, "severity") or "INCONCLUSIVE",
             _safe_attr(f, "confidence", "likely") or "",
             _safe_attr(f, "title") or "NOT_ASSESSED",
             _safe_attr(f, "affected_asset") or "",
-            _safe_attr(f, "affected_endpoint", poc.get("request_url") if isinstance(poc, dict) else "") or "",
-            _safe_attr(f, "http_method", poc.get("request_method") if isinstance(poc, dict) else "") or "",
-            _safe_attr(f, "affected_parameter", poc.get("parameter") if isinstance(poc, dict) else "") or "",
+            _safe_attr(
+                f,
+                "affected_endpoint",
+                poc.get("request_url") if isinstance(poc, dict) else "",
+            )
+            or "",
+            _safe_attr(
+                f,
+                "http_method",
+                poc.get("request_method") if isinstance(poc, dict) else "",
+            )
+            or "",
+            _safe_attr(
+                f,
+                "affected_parameter",
+                poc.get("parameter") if isinstance(poc, dict) else "",
+            )
+            or "",
             _safe_attr(f, "auth_state") or "",
             _safe_attr(f, "cwe") or "",
             _safe_attr(f, "owasp_category") or "",
@@ -2181,7 +2370,14 @@ def generate_csv(
             _safe_attr(f, "observed_impact") or "",
             _safe_attr(f, "affected_layer") or "",
             _safe_attr(f, "owner_team") or "",
-            _safe_attr(f, "fix_action", getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "") or "",
+            _safe_attr(
+                f,
+                "fix_action",
+                getattr(f, "remediation", None)
+                if isinstance(getattr(f, "remediation", None), str)
+                else "",
+            )
+            or "",
             _safe_attr(f, "verification_command") or "",
             _safe_attr(f, "acceptance_criteria") or "",
             _safe_attr(f, "retest_result") or "",
@@ -2196,39 +2392,76 @@ def generate_csv(
     # ── evidence.csv ──────────────────────────────────────────────
     writer.writerow([])
     writer.writerow(["# evidence.csv"])
-    writer.writerow([
-        "report_id", "finding_id", "evidence_id", "evidence_type",
-        "source_tool", "artifact_ref", "timestamp", "parser_status", "status", "summary",
-    ])
+    writer.writerow(
+        [
+            "report_id",
+            "finding_id",
+            "evidence_id",
+            "evidence_type",
+            "source_tool",
+            "artifact_ref",
+            "timestamp",
+            "parser_status",
+            "status",
+            "summary",
+        ]
+    )
     for f in csv_findings:
         finding_id = finding_id_of(f)
         refs = getattr(f, "evidence_refs", []) or []
         if not refs:
-            writer.writerow([
-                data.report_id or "", finding_id, "NONE",
-                "none", "", "", "", "missing", "INCONCLUSIVE",
-                "INCONCLUSIVE: missing artifact",
-            ])
+            writer.writerow(
+                [
+                    data.report_id or "",
+                    finding_id,
+                    "NONE",
+                    "none",
+                    "",
+                    "",
+                    "",
+                    "missing",
+                    "INCONCLUSIVE",
+                    "INCONCLUSIVE: missing artifact",
+                ]
+            )
             continue
         for ref in refs:
-            writer.writerow([
-                data.report_id or "", finding_id, str(ref),
-                _safe_attr(f, "evidence_type") or "raw",
-                _safe_attr(f, "tool_name") or "",
-                str(ref),
-                _safe_attr(f, "timestamp_utc") or "",
-                "parsed",
-                str(getattr(f, "evidence_classification", getattr(f, "validation_status", "unverified")) or "unverified").upper(),
-                _safe_attr(f, "title", "")[:200],
-            ])
+            writer.writerow(
+                [
+                    data.report_id or "",
+                    finding_id,
+                    str(ref),
+                    _safe_attr(f, "evidence_type") or "raw",
+                    _safe_attr(f, "tool_name") or "",
+                    str(ref),
+                    _safe_attr(f, "timestamp_utc") or "",
+                    "parsed",
+                    str(
+                        getattr(
+                            f,
+                            "evidence_classification",
+                            getattr(f, "validation_status", "unverified"),
+                        )
+                        or "unverified"
+                    ).upper(),
+                    _safe_attr(f, "title", "")[:200],
+                ]
+            )
 
     # ── sections.csv ──────────────────────────────────────────────
     writer.writerow([])
     writer.writerow(["# sections.csv"])
-    writer.writerow([
-        "report_id", "section", "status", "content_markdown_or_json",
-        "evidence_ids", "parser_status", "updated_at",
-    ])
+    writer.writerow(
+        [
+            "report_id",
+            "section",
+            "status",
+            "content_markdown_or_json",
+            "evidence_ids",
+            "parser_status",
+            "updated_at",
+        ]
+    )
     ai_sections_raw, _ = _jinja_ai_sections_and_scan_artifacts(jinja_context)
     ai_sections = _ai_sections_for_export(ai_sections_raw)
     _valhalla_sections = _VALHALLA_REPORT_SECTION_ORDER
@@ -2236,52 +2469,101 @@ def generate_csv(
         sec_status, sec_content = _resolve_csv_section(
             sec_key, jinja_context, ai_sections, data, csv_findings
         )
-        writer.writerow([
-            data.report_id or "", sec_key, sec_status,
-            sec_content, "[]", "generated", data.created_at or "",
-        ])
+        writer.writerow(
+            [
+                data.report_id or "",
+                sec_key,
+                sec_status,
+                sec_content,
+                "[]",
+                "generated",
+                data.created_at or "",
+            ]
+        )
     if isinstance(ai_sections, dict):
         for extra_key in sorted(set(ai_sections.keys()) - set(_valhalla_sections)):
             extra_text = str(ai_sections[extra_key] or "")
-            writer.writerow([
-                data.report_id or "", extra_key,
-                "PRESENT" if extra_text.strip() else "NOT_ASSESSED",
-                extra_text[:4000] if extra_text else "",
-                "[]", "generated", data.created_at or "",
-            ])
+            writer.writerow(
+                [
+                    data.report_id or "",
+                    extra_key,
+                    "PRESENT" if extra_text.strip() else "NOT_ASSESSED",
+                    extra_text[:4000] if extra_text else "",
+                    "[]",
+                    "generated",
+                    data.created_at or "",
+                ]
+            )
 
     # ── remediation.csv ───────────────────────────────────────────
     writer.writerow([])
     writer.writerow(["# remediation.csv"])
-    writer.writerow([
-        "report_id", "finding_id", "status",
-        "affected_layer", "owner_team", "config_or_component",
-        "exact_fix", "priority", "rollback_risk",
-        "verification_step", "acceptance_criteria", "retest_status",
-    ])
+    writer.writerow(
+        [
+            "report_id",
+            "finding_id",
+            "status",
+            "affected_layer",
+            "owner_team",
+            "config_or_component",
+            "exact_fix",
+            "priority",
+            "rollback_risk",
+            "verification_step",
+            "acceptance_criteria",
+            "retest_status",
+        ]
+    )
     for f in csv_findings:
         finding_id = finding_id_of(f)
         sev = _safe_attr(f, "severity", "info")
-        prio = "CRITICAL" if sev == "critical" else "HIGH" if sev == "high" else "MEDIUM" if sev == "medium" else "LOW"
-        writer.writerow([
-            data.report_id or "", finding_id,
-            str(getattr(f, "evidence_classification", getattr(f, "validation_status", "unverified")) or "unverified").upper(),
-            _safe_attr(f, "affected_layer") or "NOT_ASSESSED",
-            _safe_attr(f, "owner_team") or "NOT_ASSESSED",
-            _safe_attr(f, "config_or_component", _safe_attr(f, "affected_asset")) or "",
-            _safe_attr(f, "fix_action", getattr(f, "remediation", None) if isinstance(getattr(f, "remediation", None), str) else "") or "NOT_ASSESSED",
-            prio,
-            _safe_attr(f, "rollback_risk") or "NOT_ASSESSED",
-            _safe_attr(f, "verification_command") or "NOT_ASSESSED",
-            _safe_attr(f, "acceptance_criteria") or "NOT_ASSESSED",
-            _safe_attr(f, "retest_result") or "NOT_ASSESSED",
-        ])
+        prio = (
+            "CRITICAL"
+            if sev == "critical"
+            else "HIGH"
+            if sev == "high"
+            else "MEDIUM"
+            if sev == "medium"
+            else "LOW"
+        )
+        writer.writerow(
+            [
+                data.report_id or "",
+                finding_id,
+                str(
+                    getattr(
+                        f,
+                        "evidence_classification",
+                        getattr(f, "validation_status", "unverified"),
+                    )
+                    or "unverified"
+                ).upper(),
+                _safe_attr(f, "affected_layer") or "NOT_ASSESSED",
+                _safe_attr(f, "owner_team") or "NOT_ASSESSED",
+                _safe_attr(f, "config_or_component", _safe_attr(f, "affected_asset")) or "",
+                _safe_attr(
+                    f,
+                    "fix_action",
+                    getattr(f, "remediation", None)
+                    if isinstance(getattr(f, "remediation", None), str)
+                    else "",
+                )
+                or "NOT_ASSESSED",
+                prio,
+                _safe_attr(f, "rollback_risk") or "NOT_ASSESSED",
+                _safe_attr(f, "verification_command") or "NOT_ASSESSED",
+                _safe_attr(f, "acceptance_criteria") or "NOT_ASSESSED",
+                _safe_attr(f, "retest_result") or "NOT_ASSESSED",
+            ]
+        )
 
     return buf.getvalue().encode("utf-8")
 
 
 def generate_technologies_csv(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
 ) -> bytes:
     """Generate technologies.csv — verified technology stack with detection sources."""
     buf = io.StringIO()
@@ -2290,30 +2572,54 @@ def generate_technologies_csv(
     writer.writerow(["# scan_id", data.scan_id or ""])
     writer.writerow(["# target", data.target or ""])
     writer.writerow([])
-    writer.writerow([
-        "detected_value", "version", "category", "confidence",
-        "source", "raw_evidence", "validation_method", "evidence_id",
-    ])
+    writer.writerow(
+        [
+            "detected_value",
+            "version",
+            "category",
+            "confidence",
+            "source",
+            "raw_evidence",
+            "validation_method",
+            "evidence_id",
+        ]
+    )
     technologies = getattr(data, "technologies", []) or []
     if not technologies:
-        writer.writerow([
-            "NOT_ASSESSED", "", "", "", "",
-            "no technology fingerprint captured (scanner failed or not run)",
-            "fingerprinting_not_run_or_failed", "",
-        ])
+        writer.writerow(
+            [
+                "NOT_ASSESSED",
+                "",
+                "",
+                "",
+                "",
+                "no technology fingerprint captured (scanner failed or not run)",
+                "fingerprinting_not_run_or_failed",
+                "",
+            ]
+        )
     else:
         for tech in sorted(technologies, key=lambda t: str(t).lower()):
             tech_str = str(tech)
-            writer.writerow([
-                tech_str, "unknown", "component",
-                "medium", "whatweb/httpx", tech_str,
-                "fingerprint", data.scan_id or "",
-            ])
+            writer.writerow(
+                [
+                    tech_str,
+                    "unknown",
+                    "component",
+                    "medium",
+                    "whatweb/httpx",
+                    tech_str,
+                    "fingerprint",
+                    data.scan_id or "",
+                ]
+            )
     return buf.getvalue().encode("utf-8")
 
 
 def generate_outdated_components_csv(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
 ) -> bytes:
     """Generate outdated_components.csv — EOL/CVE risk for detected components."""
     buf = io.StringIO()
@@ -2322,33 +2628,63 @@ def generate_outdated_components_csv(
     writer.writerow(["# scan_id", data.scan_id or ""])
     writer.writerow(["# target", data.target or ""])
     writer.writerow([])
-    writer.writerow([
-        "component", "detected_version", "latest_version",
-        "cve_or_advisory", "max_cvss", "eol_status",
-        "upgrade_effort", "package_manager", "severity",
-        "source", "recommendation",
-    ])
+    writer.writerow(
+        [
+            "component",
+            "detected_version",
+            "latest_version",
+            "cve_or_advisory",
+            "max_cvss",
+            "eol_status",
+            "upgrade_effort",
+            "package_manager",
+            "severity",
+            "source",
+            "recommendation",
+        ]
+    )
     technologies = getattr(data, "technologies", []) or []
     if not technologies:
-        writer.writerow([
-            "NOT_ASSESSED", "", "", "", "", "NOT_ASSESSED",
-            "NOT_ASSESSED", "", "INFO", "fingerprinting_not_run_or_failed",
-            "No components detected; run SCA (Trivy / Grype / OSV Scanner) after a successful fingerprint",
-        ])
+        writer.writerow(
+            [
+                "NOT_ASSESSED",
+                "",
+                "",
+                "",
+                "",
+                "NOT_ASSESSED",
+                "NOT_ASSESSED",
+                "",
+                "INFO",
+                "fingerprinting_not_run_or_failed",
+                "No components detected; run SCA (Trivy / Grype / OSV Scanner) after a successful fingerprint",
+            ]
+        )
     else:
         for tech in sorted(technologies, key=lambda t: str(t).lower()):
             tech_str = str(tech)
-            writer.writerow([
-                tech_str, "unknown", "NOT_ASSESSED",
-                "", "", "NOT_ASSESSED",
-                "NOT_ASSESSED", "", "INFO",
-                "fingerprint", "Run Trivy / Grype / OSV Scanner for version analysis",
-            ])
+            writer.writerow(
+                [
+                    tech_str,
+                    "unknown",
+                    "NOT_ASSESSED",
+                    "",
+                    "",
+                    "NOT_ASSESSED",
+                    "NOT_ASSESSED",
+                    "",
+                    "INFO",
+                    "fingerprint",
+                    "Run Trivy / Grype / OSV Scanner for version analysis",
+                ]
+            )
     return buf.getvalue().encode("utf-8")
 
 
 def generate_tool_health_csv(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,  # noqa: ARG001 - uniform report-generator signature
 ) -> bytes:
     """Generate tool_health.csv — per-capability execution status."""
     buf = io.StringIO()
@@ -2356,37 +2692,72 @@ def generate_tool_health_csv(
     writer.writerow(["# report_id", data.report_id or ""])
     writer.writerow(["# scan_id", data.scan_id or ""])
     writer.writerow([])
-    writer.writerow([
-        "capability", "tools_representative", "all_tools_executed",
-        "tool_command", "tool_version", "artifact_path",
-        "exit_code", "parser_status", "parsed_rows",
-        "failure_reason", "summary", "next_action",
-    ])
+    writer.writerow(
+        [
+            "capability",
+            "tools_representative",
+            "all_tools_executed",
+            "tool_command",
+            "tool_version",
+            "artifact_path",
+            "exit_code",
+            "parser_status",
+            "parsed_rows",
+            "failure_reason",
+            "summary",
+            "next_action",
+        ]
+    )
     th = getattr(data, "tool_health", None)
     if th and hasattr(th, "capabilities"):
         for cap in th.capabilities:
-            writer.writerow([
-                getattr(cap, "capability", "") or "",
-                getattr(cap, "tools_representative", "") or "",
-                str(getattr(cap, "all_tools_executed", False)),
-                getattr(cap, "tool_command", "") or "",
-                getattr(cap, "tool_version", "") or "",
-                getattr(cap, "artifact_path", "") or "",
-                str(getattr(cap, "exit_code", 0)),
-                getattr(cap, "parser_status", "NOT_ASSESSED") or "NOT_ASSESSED",
-                str(getattr(cap, "parsed_rows", 0)),
-                getattr(cap, "failure_reason", "") or "",
-                getattr(cap, "summary", "") or "",
-                getattr(cap, "next_action", "") or "",
-            ])
+            writer.writerow(
+                [
+                    getattr(cap, "capability", "") or "",
+                    getattr(cap, "tools_representative", "") or "",
+                    str(getattr(cap, "all_tools_executed", False)),
+                    getattr(cap, "tool_command", "") or "",
+                    getattr(cap, "tool_version", "") or "",
+                    getattr(cap, "artifact_path", "") or "",
+                    str(getattr(cap, "exit_code", 0)),
+                    getattr(cap, "parser_status", "NOT_ASSESSED") or "NOT_ASSESSED",
+                    str(getattr(cap, "parsed_rows", 0)),
+                    getattr(cap, "failure_reason", "") or "",
+                    getattr(cap, "summary", "") or "",
+                    getattr(cap, "next_action", "") or "",
+                ]
+            )
     else:
         capabilities = [
-            "recon", "port_discovery", "tls_assessment", "technology_fingerprinting",
-            "vuln_active_scan", "web_server_scan", "security_headers",
-            "email_osint", "dns_asn", "url_history", "sca_dependencies",
+            "recon",
+            "port_discovery",
+            "tls_assessment",
+            "technology_fingerprinting",
+            "vuln_active_scan",
+            "web_server_scan",
+            "security_headers",
+            "email_osint",
+            "dns_asn",
+            "url_history",
+            "sca_dependencies",
         ]
         for cap in capabilities:
-            writer.writerow([cap, "", "False", "", "", "", "0", "NOT_ASSESSED", "0", "", "NOT_ASSESSED", "Run tool health scan"])
+            writer.writerow(
+                [
+                    cap,
+                    "",
+                    "False",
+                    "",
+                    "",
+                    "",
+                    "0",
+                    "NOT_ASSESSED",
+                    "0",
+                    "",
+                    "NOT_ASSESSED",
+                    "Run tool health scan",
+                ]
+            )
     return buf.getvalue().encode("utf-8")
 
 
@@ -2395,6 +2766,7 @@ def generate_export_validation_report(
 ) -> bytes:
     """Generate export_validation_report.json — cross-format integrity verification."""
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     findings_count = len(data.findings) if data.findings else 0
     issues: list[str] = []
@@ -2404,7 +2776,9 @@ def generate_export_validation_report(
     if isinstance(jinja_context, dict):
         raw_totals = jinja_context.get("severity_counts")
         if isinstance(raw_totals, dict):
-            ctx_severity_totals = {k: int(v) for k, v in raw_totals.items() if isinstance(v, (int, float))}
+            ctx_severity_totals = {
+                k: int(v) for k, v in raw_totals.items() if isinstance(v, (int, float))
+            }
         raw_count = jinja_context.get("findings_count")
         if isinstance(raw_count, (int, float)):
             ctx_finding_count = int(raw_count)
@@ -2432,18 +2806,38 @@ def generate_export_validation_report(
             "cross_format_consistent": ok,
         },
         "section_status": {
-            "executive_summary": "PRESENT" if (data.executive_summary or "").strip() else "NOT_ASSESSED",
+            "executive_summary": "PRESENT"
+            if (data.executive_summary or "").strip()
+            else "NOT_ASSESSED",
             "findings": "PRESENT" if findings_count > 0 else "NOT_ASSESSED",
             "remediation": "PRESENT" if data.remediation else "NOT_ASSESSED",
-            "technologies": "PRESENT" if (getattr(data, "technologies", None) or []) else "NOT_ASSESSED",
+            "technologies": "PRESENT"
+            if (getattr(data, "technologies", None) or [])
+            else "NOT_ASSESSED",
             "timeline": "PRESENT" if (getattr(data, "timeline", None) or []) else "NOT_ASSESSED",
         },
         "evidence_integrity": {
             "total_findings": findings_count,
-            "validated": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "validated"),
-            "observed": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "observed"),
-            "candidate": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "candidate"),
-            "inconclusive": sum(1 for f in data.findings if str(getattr(f, "evidence_classification", "")).lower() == "inconclusive"),
+            "validated": sum(
+                1
+                for f in data.findings
+                if str(getattr(f, "evidence_classification", "")).lower() == "validated"
+            ),
+            "observed": sum(
+                1
+                for f in data.findings
+                if str(getattr(f, "evidence_classification", "")).lower() == "observed"
+            ),
+            "candidate": sum(
+                1
+                for f in data.findings
+                if str(getattr(f, "evidence_classification", "")).lower() == "candidate"
+            ),
+            "inconclusive": sum(
+                1
+                for f in data.findings
+                if str(getattr(f, "evidence_classification", "")).lower() == "inconclusive"
+            ),
         },
     }
     return json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8")
@@ -2481,6 +2875,7 @@ def generate_html(
     # Build remediation_matrix for HTML template (same logic as JSON generate_json)
     if "remediation_matrix" not in ctx:
         from src.reports.valhalla_report_context import build_remediation_matrix_rows
+
         html_findings = ctx.get("findings", [])
         if html_findings:
             ctx["remediation_matrix"] = build_remediation_matrix_rows(html_findings)
@@ -2488,13 +2883,16 @@ def generate_html(
     # Build infra_recommendations for HTML template (same logic as JSON generate_json)
     if "infra_recommendations" not in ctx:
         from src.reports.infra_recommendations import generate_infra_recommendations
+
         vc = ctx.get("valhalla_context") or {}
         findings = ctx.get("findings", [])
         ctx["infra_recommendations"] = generate_infra_recommendations(
             tech_stack=vc if isinstance(vc, dict) else {},
             findings=findings,
             ssl_tls=vc.get("ssl_tls_analysis", {}) if isinstance(vc, dict) else {},
-            security_headers=vc.get("security_headers_analysis", {}) if isinstance(vc, dict) else {},
+            security_headers=vc.get("security_headers_analysis", {})
+            if isinstance(vc, dict)
+            else {},
         )
 
     html_str = render_tier_report_html(eff_tier, ctx)
@@ -2574,6 +2972,7 @@ def _build_branded_pdf_context(
         scan_completed_at=data.created_at,
     )
     from src.reports.valhalla_report_context import get_brand
+
     brand = get_brand()
     ctx["brand_name"] = brand.name
     ctx["brand_logo_data_uri"] = (
@@ -2780,16 +3179,12 @@ def generate_pdf(
                     "error_type": type(exc).__name__,
                 },
             )
-            html_str = generate_html(
-                data, jinja_context=jinja_context, tier=tier
-            ).decode("utf-8")
+            html_str = generate_html(data, jinja_context=jinja_context, tier=tier).decode("utf-8")
             base_url = _legacy_base_url()
         else:
             base_url = str(branded_template.parent)
     else:
-        html_str = generate_html(data, jinja_context=jinja_context, tier=tier).decode(
-            "utf-8"
-        )
+        html_str = generate_html(data, jinja_context=jinja_context, tier=tier).decode("utf-8")
         base_url = _legacy_base_url()
 
     backend = get_active_backend()
@@ -2803,44 +3198,41 @@ def generate_pdf(
     latex_template_source: str | None = None
     xmpdata_source: str | None = None
     effective_pdfa_mode = False
-    if isinstance(backend, LatexBackend):
-        if resolve_latex_template_path(tier_str) is not None:
-            latex_ctx = ctx_for_latex
-            if latex_ctx is None:
-                latex_ctx = _build_branded_pdf_context(
-                    data, jinja_context, tier=tier_str
-                )
-            # ARG-058 — propagate the flag into the Jinja context so the
-            # shared ``_preamble/pdfa.tex.j2`` fragment can switch between
-            # the standard hyperref preamble and the pdfx PDF/A-2u stack.
-            latex_ctx = {**latex_ctx, "pdfa_mode": pdfa_mode}
+    if isinstance(backend, LatexBackend) and resolve_latex_template_path(tier_str) is not None:
+        latex_ctx = ctx_for_latex
+        if latex_ctx is None:
+            latex_ctx = _build_branded_pdf_context(data, jinja_context, tier=tier_str)
+        # ARG-058 — propagate the flag into the Jinja context so the
+        # shared ``_preamble/pdfa.tex.j2`` fragment can switch between
+        # the standard hyperref preamble and the pdfx PDF/A-2u stack.
+        latex_ctx = {**latex_ctx, "pdfa_mode": pdfa_mode}
+        try:
+            latex_template_source = render_latex_template(tier_str, latex_ctx)
+        except Exception as exc:  # noqa: BLE001 — template errors must not 503.
+            logger.warning(
+                "latex_template_render_failed",
+                extra={
+                    "event": "latex_template_render_failed",
+                    "tier": tier_str,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            latex_template_source = None
+        if pdfa_mode and latex_template_source is not None:
             try:
-                latex_template_source = render_latex_template(tier_str, latex_ctx)
-            except Exception as exc:  # noqa: BLE001 — template errors must not 503.
+                xmpdata_source = render_pdfa_xmpdata(tier_str, latex_ctx)
+                effective_pdfa_mode = True
+            except Exception as exc:  # noqa: BLE001 — fall back to non-PDFA.
                 logger.warning(
-                    "latex_template_render_failed",
+                    "pdfa_xmpdata_render_failed",
                     extra={
-                        "event": "latex_template_render_failed",
+                        "event": "pdfa_xmpdata_render_failed",
                         "tier": tier_str,
                         "error_type": type(exc).__name__,
                     },
                 )
-                latex_template_source = None
-            if pdfa_mode and latex_template_source is not None:
-                try:
-                    xmpdata_source = render_pdfa_xmpdata(tier_str, latex_ctx)
-                    effective_pdfa_mode = True
-                except Exception as exc:  # noqa: BLE001 — fall back to non-PDFA.
-                    logger.warning(
-                        "pdfa_xmpdata_render_failed",
-                        extra={
-                            "event": "pdfa_xmpdata_render_failed",
-                            "tier": tier_str,
-                            "error_type": type(exc).__name__,
-                        },
-                    )
-                    xmpdata_source = None
-                    effective_pdfa_mode = False
+                xmpdata_source = None
+                effective_pdfa_mode = False
 
     if isinstance(backend, DisabledBackend):
         # Mirror the previous contract: callers expect a clear failure they can
@@ -2856,9 +3248,7 @@ def generate_pdf(
                 "requested_default": WeasyPrintBackend.name,
             },
         )
-        raise RuntimeError(
-            "PDF generation unavailable (no WeasyPrint or LaTeX backend on host)"
-        )
+        raise RuntimeError("PDF generation unavailable (no WeasyPrint or LaTeX backend on host)")
 
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         output_path = Path(tmp.name)
@@ -2884,15 +3274,16 @@ def generate_pdf(
             raise RuntimeError(f"PDF generation failed (backend={backend.name})")
         return output_path.read_bytes()
     finally:
-        try:
+        # Tempfile cleanup failures must not mask successful generation.
+        with contextlib.suppress(OSError):
             output_path.unlink(missing_ok=True)
-        except OSError:
-            # Tempfile cleanup failures must not mask successful generation.
-            pass
 
 
 def generate_markdown(
-    data: ReportData, *, jinja_context: dict[str, Any] | None = None, tier: str | None = None
+    data: ReportData,
+    *,
+    jinja_context: dict[str, Any] | None = None,
+    tier: str | None = None,
 ) -> bytes:
     """Generate Markdown report — headings, tables, collapsible evidence blocks."""
     from src.reports.valhalla_report_context import get_brand
@@ -2958,11 +3349,25 @@ def generate_markdown(
         sev = str(getattr(f, "severity", "info") or "info").lower()
         title = _clean_ansi(str(getattr(f, "title", getattr(f, "name", "")) or ""))
         endpoint = str(getattr(f, "endpoint", getattr(f, "url", "")) or "")
-        status = str(getattr(f, "validation_status", getattr(f, "evidence_classification", "unverified"))) or "unverified"
-        lines.append(f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | `{endpoint}` | {status} |")
+        status = (
+            str(
+                getattr(
+                    f,
+                    "validation_status",
+                    getattr(f, "evidence_classification", "unverified"),
+                )
+            )
+            or "unverified"
+        )
+        lines.append(
+            f"| {idx} | {severity_emoji.get(sev, sev.upper())} | {title} | `{endpoint}` | {status} |"
+        )
 
     lines.append("")
-    lines.append("**Severity Breakdown:** " + ", ".join(f"{severity_emoji.get(k, k.upper())}: {v}" for k, v in sorted(counts.items())))
+    lines.append(
+        "**Severity Breakdown:** "
+        + ", ".join(f"{severity_emoji.get(k, k.upper())}: {v}" for k, v in sorted(counts.items()))
+    )
     lines.append("")
 
     lines.append("### Finding Details")
@@ -2975,12 +3380,17 @@ def generate_markdown(
         endpoint = str(getattr(f, "endpoint", getattr(f, "url", "")) or "")
         method = str(getattr(f, "method", "") or "")
         param = str(getattr(f, "parameter", "") or "")
-        status = str(getattr(f, "validation_status", getattr(f, "evidence_classification", ""))) or "unverified"
+        status = (
+            str(getattr(f, "validation_status", getattr(f, "evidence_classification", "")))
+            or "unverified"
+        )
         cwe = str(getattr(f, "cwe", "") or "")
         owasp = str(getattr(f, "owasp", "") or "")
         cvss_score = getattr(f, "cvss_score", None)
         cvss_vector = str(getattr(f, "cvss_vector", "") or "")
-        remediation = _clean_ansi(str(getattr(f, "remediation", getattr(f, "fix_action", "")) or ""))
+        remediation = _clean_ansi(
+            str(getattr(f, "remediation", getattr(f, "fix_action", "")) or "")
+        )
         verification = str(getattr(f, "verification_command", "") or "")
         tool_name = str(getattr(f, "tool_name", "") or "")
 
@@ -3106,7 +3516,9 @@ def generate_markdown(
             proj = _safe_phase_projection(tl.entry)
             phase = tl.phase or str(proj.get("phase") or "")
             dur = proj.get("duration_seconds")
-            out_sum = proj.get("output_summary") if isinstance(proj.get("output_summary"), dict) else {}
+            out_sum = (
+                proj.get("output_summary") if isinstance(proj.get("output_summary"), dict) else {}
+            )
             bits: list[str] = []
             summ = out_sum.get("summary")
             if isinstance(summ, str) and summ.strip():
@@ -3124,7 +3536,9 @@ def generate_markdown(
 
     lines.append("---")
     lines.append("")
-    lines.append(f"*Report generated by {brand.name} | Logo SHA-256: `{brand.logo_sha256}` | Export integrity verified*")
+    lines.append(
+        f"*Report generated by {brand.name} | Logo SHA-256: `{brand.logo_sha256}` | Export integrity verified*"
+    )
     lines.append("")
 
     return "\n".join(lines).encode("utf-8")

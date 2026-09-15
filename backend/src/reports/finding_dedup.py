@@ -237,6 +237,7 @@ def deduplicate_findings(findings: list[Any]) -> list[Any]:
 # Duplicate detection helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_hard_duplicate(candidate: Any, existing: Any) -> bool:
     """Same CWE + same normalised affected URL."""
     cand_cwe = _get_attr(candidate, "cwe")
@@ -261,6 +262,7 @@ def _is_soft_duplicate(candidate: Any, existing: Any) -> bool:
 # ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
+
 
 def _normalize_url(url: str) -> str:
     """Lowercase, strip fragments and trailing slashes for comparison."""

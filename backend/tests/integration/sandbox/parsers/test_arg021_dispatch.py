@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -85,7 +84,6 @@ from src.sandbox.parsers.terrascan_parser import (
 from src.sandbox.parsers.tfsec_parser import (
     EVIDENCE_SIDECAR_NAME as TFSEC_SIDECAR,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -448,9 +446,7 @@ _PAYLOAD_BY_TOOL: Final[dict[str, Any]] = {
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -532,9 +528,7 @@ def test_dispatch_writes_per_tool_sidecar(tool_id: str, tmp_path: Path) -> None:
     )
     assert findings
     sidecar = artifacts_dir / ARG021_TOOL_SIDECARS[tool_id]
-    assert sidecar.is_file(), (
-        f"{tool_id}: parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert parsed, f"{tool_id}: sidecar is empty"
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -604,9 +598,7 @@ def test_gitleaks_finding_has_secret_leak_category(tmp_path: Path) -> None:
         ("mobsf_api", "grype"),
     ],
 )
-def test_cross_routing_is_inert(
-    payload_tool: str, wrong_tool: str, tmp_path: Path
-) -> None:
+def test_cross_routing_is_inert(payload_tool: str, wrong_tool: str, tmp_path: Path) -> None:
     """A payload from tool X dispatched as tool Y must not produce findings."""
     findings = dispatch_parse(
         ParseStrategy.JSON_OBJECT,
@@ -634,12 +626,8 @@ def test_arg021_dispatch_is_deterministic(tool_id: str, tmp_path: Path) -> None:
     artifacts_b = tmp_path / "b"
     artifacts_a.mkdir()
     artifacts_b.mkdir()
-    dispatch_parse(
-        ParseStrategy.JSON_OBJECT, payload, b"", artifacts_a, tool_id=tool_id
-    )
-    dispatch_parse(
-        ParseStrategy.JSON_OBJECT, payload, b"", artifacts_b, tool_id=tool_id
-    )
+    dispatch_parse(ParseStrategy.JSON_OBJECT, payload, b"", artifacts_a, tool_id=tool_id)
+    dispatch_parse(ParseStrategy.JSON_OBJECT, payload, b"", artifacts_b, tool_id=tool_id)
     sidecar_name = ARG021_TOOL_SIDECARS[tool_id]
     a_bytes = (artifacts_a / sidecar_name).read_bytes()
     b_bytes = (artifacts_b / sidecar_name).read_bytes()
@@ -668,9 +656,7 @@ def test_all_arg021_parsers_in_single_artifacts_dir_keeps_sidecars_intact(
 
     for tool_id, sidecar_name in ARG021_TOOL_SIDECARS.items():
         sidecar = tmp_path / sidecar_name
-        assert sidecar.is_file(), (
-            f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
-        )
+        assert sidecar.is_file(), f"{tool_id}: sidecar {sidecar_name} missing after multi-tool run"
         records = _read_sidecar(sidecar)
         assert records, f"{tool_id}: sidecar {sidecar_name} is empty"
         assert all(r["tool_id"] == tool_id for r in records), (

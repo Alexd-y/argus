@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import contextlib
 import json
 import logging
 import os
@@ -39,6 +40,12 @@ from src.governance.safety.monitor import get_safety_monitor
 from src.llm.adapters import _get_key
 from src.llm.gateway import get_unified_llm_gateway
 from src.llm.phase_routing import PhaseRoute, get_phase_route
+from src.llm.provider_guard import (
+    CallScope,
+    provider_guard,
+    reset_call_scope,
+    set_call_scope,
+)
 from src.llm.router import call_llm as _router_call_llm
 from src.llm.schemas import (
     ContentClass,
@@ -49,10 +56,19 @@ from src.llm.schemas import (
 )
 from src.llm.task_router import _TASK_TO_ROLE, LLMTask, check_tier_escalation
 from src.llm.task_router import call_llm_for_task as _task_router_call
+from src.orchestration.agent_contracts import AgentUsage
 
 logger = logging.getLogger(__name__)
 
 _SYNC_TIMEOUT_SECONDS = 1800
+
+# §8.3 reserve-before-call: conservative pre-call budget estimate. Input tokens
+# are approximated at ~4 chars/token; the reservation reserves that plus a fixed
+# max-output headroom. The reservation is overwritten with provider-metadata
+# truth on settle, so these only bound the pre-call reservation, never billing.
+_EST_CHARS_PER_TOKEN = 4
+_EST_MAX_OUTPUT_TOKENS = 4096
+_EST_COST_PER_TOKEN_USD = 0.00001
 
 _tiktoken_enc = None
 
@@ -60,20 +76,25 @@ _tiktoken_enc = None
 _wrb_semaphore: asyncio.Semaphore | None = None
 _WRB_CONCURRENCY = 3
 
+
 def _get_wrb_semaphore() -> asyncio.Semaphore:
     global _wrb_semaphore
     if _wrb_semaphore is None:
         _wrb_semaphore = asyncio.Semaphore(_WRB_CONCURRENCY)
     return _wrb_semaphore
 
+
 # Tasks where cloud fallback is ALLOWED (report supplements / OSINT).
 # Pentest analysis tasks use WhiteRabbitNeo ONLY — no cloud fallback.
-_CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset({
-    LLMTask.REPORT_SECTION,
-    LLMTask.EXECUTIVE_SUMMARY,
-    LLMTask.COST_SUMMARY,
-    LLMTask.PERPLEXITY_OSINT,
-})
+_CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset(
+    {
+        LLMTask.REPORT_SECTION,
+        LLMTask.EXECUTIVE_SUMMARY,
+        LLMTask.COST_SUMMARY,
+        LLMTask.CLOSURE_ASSESSMENT,
+        LLMTask.PERPLEXITY_OSINT,
+    }
+)
 
 # Tasks that PREFER a cloud model: exploit/PoC payload generation requires strict,
 # valid-JSON output. The local WRB-7B frequently emits malformed payload JSON
@@ -81,10 +102,12 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset({
 # contract far more reliably. WRB stays the engine for every analysis task.
 # Behaviour is controlled by ARGUS_EXPLOIT_LLM: ``auto`` (cloud when a key exists,
 # else WRB), ``cloud`` (force cloud, error if no key), ``wrb`` (legacy WRB-only).
-_CLOUD_PREFERRED_TASKS: frozenset[LLMTask] = frozenset({
-    LLMTask.EXPLOIT_GENERATION,
-    LLMTask.POC_GENERATION,
-})
+_CLOUD_PREFERRED_TASKS: frozenset[LLMTask] = frozenset(
+    {
+        LLMTask.EXPLOIT_GENERATION,
+        LLMTask.POC_GENERATION,
+    }
+)
 
 _CLOUD_KEY_ENVS: tuple[str, ...] = (
     "DEEPSEEK_API_KEY",
@@ -115,6 +138,7 @@ _TASK_TO_PREFERRED_ALIAS: dict[LLMTask, str] = {
     LLMTask.REPORT_SECTION: "report_writer",
     LLMTask.EXECUTIVE_SUMMARY: "report_writer",
     LLMTask.REMEDIATION_PLAN: "report_writer",
+    LLMTask.CLOSURE_ASSESSMENT: "report_writer",
     LLMTask.COST_SUMMARY: "report_writer",
     LLMTask.QUICK_PLANNER: "quick_planner",
     LLMTask.QUICK_FINGERPRINT: "quick_triage",
@@ -341,9 +365,7 @@ def _envelope_to_text(
         error_code = envelope.result.get("error_code", "provider_error")
         raise RuntimeError(f"Unified LLM gateway provider error: {error_code}")
     if envelope.status != LlmResponseStatus.OK:
-        raise RuntimeError(
-            f"Unified LLM gateway returned non-ok status: {envelope.status}"
-        )
+        raise RuntimeError(f"Unified LLM gateway returned non-ok status: {envelope.status}")
 
     result = envelope.result
     if response_schema_id:
@@ -441,6 +463,7 @@ def _count_tokens_tiktoken(text: str) -> int:
     global _tiktoken_enc
     if _tiktoken_enc is None:
         import tiktoken
+
         _tiktoken_enc = tiktoken.get_encoding("cl100k_base")
     return len(_tiktoken_enc.encode(text))
 
@@ -458,7 +481,7 @@ def _record_llm_cost(
         from src.llm.cost_tracker import get_tracker
 
         tracker = get_tracker(scan_id)
-        try:
+        with contextlib.suppress(Exception):
             tracker.record(
                 phase=phase,
                 task=task_label,
@@ -466,8 +489,6 @@ def _record_llm_cost(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
             )
-        except Exception:
-            pass
     except Exception:
         pass
     try:
@@ -475,10 +496,14 @@ def _record_llm_cost(
             TokenUsageRecord,
             get_cost_tracker,
         )
+
         _cost_usd = (prompt_tokens + completion_tokens) * 0.00001
         _record = TokenUsageRecord(
-            phase=phase, tier=task_label, model=model,
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+            phase=phase,
+            tier=task_label,
+            model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             total_tokens=prompt_tokens + completion_tokens,
             estimated_cost_usd=_cost_usd,
         )
@@ -493,6 +518,7 @@ def _record_llm_cost(
 def _get_wrb_adapter():
     """Lazy-load WhiteRabbitNeo adapter — avoids circular imports at module level."""
     from src.llm.whiterabbitneo_adapter import get_whiterabbitneo_adapter
+
     return get_whiterabbitneo_adapter()
 
 
@@ -546,17 +572,30 @@ async def _call_via_local_openai(
     url = f"{base_url}/chat/completions"
     headers = {"Content-Type": "application/json"}
     timeout = httpx.Timeout(connect=10.0, read=timeout_sec, write=30.0, pool=10.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-    choices = data.get("choices", [])
-    if not choices:
-        raise ValueError("Empty response from local OpenAI-compatible model")
-    content = choices[0].get("message", {}).get("content", "")
-    text = (content or "").strip()
-    if scan_id:
+    async with provider_guard("local") as run:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise ValueError("Empty response from local OpenAI-compatible model")
+        content = choices[0].get("message", {}).get("content", "")
+        text = (content or "").strip()
         usage = data.get("usage") or {}
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(usage.get("prompt_tokens") or 0),
+                output_tokens=int(usage.get("completion_tokens") or 0),
+                cost_usd=_usage_cost_usd(
+                    usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0
+                ),
+                provider="local",
+                model=model,
+                estimated=False,
+            )
+        )
+    if scan_id:
         _record_llm_cost(
             scan_id,
             phase,
@@ -623,12 +662,19 @@ async def _execute_quick_route(
             try:
                 async with _get_wrb_semaphore():
                     return await _call_via_whiterabbitneo(
-                        system_prompt, user_prompt, task=task, scan_id=scan_id, phase=phase
+                        system_prompt,
+                        user_prompt,
+                        task=task,
+                        scan_id=scan_id,
+                        phase=phase,
                     )
             except Exception as exc:
                 logger.warning(
                     "quick_wrb_critic_failed",
-                    extra={"event": "quick_wrb_critic_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "quick_wrb_critic_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
                 raise RuntimeError("wrb_unavailable:quick_critic") from exc
         raise RuntimeError("wrb_unavailable:quick_critic")
@@ -664,10 +710,21 @@ async def _call_via_whiterabbitneo(
 ) -> str:
     """Call WhiteRabbitNeo adapter, record cost, return text."""
     wrb = _get_wrb_adapter()
-    text, usage = await wrb.call_with_usage(
-        user_prompt,
-        system_prompt=system_prompt,
-    )
+    async with provider_guard("wrb") as run:
+        text, usage = await wrb.call_with_usage(
+            user_prompt,
+            system_prompt=system_prompt,
+        )
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(usage["prompt_tokens"]),
+                output_tokens=int(usage["completion_tokens"]),
+                cost_usd=_usage_cost_usd(usage["prompt_tokens"], usage["completion_tokens"]),
+                provider="whiterabbitneo",
+                model="taico-ai/WhiteRabbitNeo-v3-7B",
+                estimated=False,
+            )
+        )
     if scan_id:
         _record_llm_cost(
             scan_id,
@@ -689,18 +746,29 @@ async def _call_via_task_router(
     phase: str = "unknown",
 ) -> str:
     """Fallback/legacy: call via task_router (cloud providers)."""
-    response = await _task_router_call(
-        task,
-        user_prompt,
-        system_prompt=system_prompt,
-    )
+    async with provider_guard("cloud") as run:
+        response = await _task_router_call(
+            task,
+            user_prompt,
+            system_prompt=system_prompt,
+        )
+        run.record_usage(
+            AgentUsage(
+                input_tokens=int(response.prompt_tokens or 0),
+                output_tokens=int(response.completion_tokens or 0),
+                cost_usd=_usage_cost_usd(
+                    response.prompt_tokens or 0, response.completion_tokens or 0
+                ),
+                provider="cloud",
+                model=str(response.model or ""),
+                estimated=False,
+            )
+        )
     if scan_id:
         prompt_tok = response.prompt_tokens
         completion_tok = response.completion_tokens
         if not prompt_tok and not completion_tok:
-            prompt_tok = _count_tokens_tiktoken(
-                (system_prompt or "") + (user_prompt or "")
-            )
+            prompt_tok = _count_tokens_tiktoken((system_prompt or "") + (user_prompt or ""))
             completion_tok = _count_tokens_tiktoken(response.text or "")
         _record_llm_cost(
             scan_id,
@@ -918,7 +986,77 @@ def _safety_check_response(response: str, task: str) -> None:
         logger.warning("SafetyMonitor error during response check", exc_info=True)
 
 
+def _estimate_call_tokens(system_prompt: str, user_prompt: str) -> int:
+    """Conservative pre-call token estimate for the §8.3 budget reservation."""
+    chars = len(system_prompt or "") + len(user_prompt or "")
+    return max(1, chars // _EST_CHARS_PER_TOKEN) + _EST_MAX_OUTPUT_TOKENS
+
+
+def _usage_cost_usd(input_tokens: int, output_tokens: int) -> float:
+    """Resolved per-call cost via the project's flat token cost model.
+
+    Mirrors ``_record_llm_cost`` so the budget ledger settles the same cost the
+    cost tracker books — keeping the two accounting paths consistent (§8.3).
+    """
+    return (int(input_tokens) + int(output_tokens)) * _EST_COST_PER_TOKEN_USD
+
+
 async def call_llm_unified(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    task: LLMTask | None = None,
+    model: str | None = None,
+    scan_id: str | None = None,
+    phase: str = "unknown",
+    response_schema_id: str | None = None,
+    use_unified: bool = False,
+    tenant_id: str | None = None,
+    engagement_id: str | None = None,
+    execution_mode: ExecutionMode | str | None = None,
+    preferred_alias: str | None = None,
+    content_class: ContentClass | str | None = None,
+    scan_options: dict | None = None,
+    prompt_id: str | None = None,
+) -> str:
+    """Public entry point — binds the §8.1/§8.3 call scope, then dispatches.
+
+    The scope (tenant/scan + a conservative pre-call token/cost estimate) is
+    bound for the duration of the call so provider helpers can apply the pool
+    slot + budget reservation without new parameters, and is always cleared
+    afterwards so it never leaks across calls sharing an event-loop task.
+    """
+    est_tokens = _estimate_call_tokens(system_prompt, user_prompt)
+    scope = CallScope(
+        tenant_id=tenant_id or settings.default_tenant_id,
+        scan_id=scan_id or "",
+        est_tokens=est_tokens,
+        est_cost_usd=est_tokens * _EST_COST_PER_TOKEN_USD,
+    )
+    token = set_call_scope(scope)
+    try:
+        return await _call_llm_unified_impl(
+            system_prompt,
+            user_prompt,
+            task=task,
+            model=model,
+            scan_id=scan_id,
+            phase=phase,
+            response_schema_id=response_schema_id,
+            use_unified=use_unified,
+            tenant_id=tenant_id,
+            engagement_id=engagement_id,
+            execution_mode=execution_mode,
+            preferred_alias=preferred_alias,
+            content_class=content_class,
+            scan_options=scan_options,
+            prompt_id=prompt_id,
+        )
+    finally:
+        reset_call_scope(token)
+
+
+async def _call_llm_unified_impl(
     system_prompt: str,
     user_prompt: str,
     *,
@@ -1005,9 +1143,7 @@ async def call_llm_unified(
             model=model,
         )
         if scan_id:
-            input_tokens = _count_tokens_tiktoken(
-                (system_prompt or "") + (user_prompt or "")
-            )
+            input_tokens = _count_tokens_tiktoken((system_prompt or "") + (user_prompt or ""))
             output_tokens = _count_tokens_tiktoken(result or "")
             _record_llm_cost(
                 scan_id,
@@ -1023,8 +1159,11 @@ async def call_llm_unified(
     # OSINT tasks — Perplexity directly (internet access required)
     if task == LLMTask.PERPLEXITY_OSINT:
         result = await _call_via_task_router(
-            system_prompt, user_prompt, task,
-            scan_id=scan_id, phase=phase,
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
         )
         _safety_check_response(result, task.value)
         return result
@@ -1051,8 +1190,12 @@ async def call_llm_unified(
     _route = get_phase_route(phase)
     if _route is not None:
         result = await _execute_phase_route(
-            _route, system_prompt, user_prompt, task,
-            scan_id=scan_id, phase=phase,
+            _route,
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
         )
         _safety_check_response(result, task.value)
         return result
@@ -1063,8 +1206,11 @@ async def call_llm_unified(
         if mode != "wrb" and _any_cloud_key_configured():
             try:
                 result = await _call_via_task_router(
-                    system_prompt, user_prompt, task,
-                    scan_id=scan_id, phase=phase,
+                    system_prompt,
+                    user_prompt,
+                    task,
+                    scan_id=scan_id,
+                    phase=phase,
                 )
                 _safety_check_response(result, task.value)
                 return result
@@ -1094,8 +1240,11 @@ async def call_llm_unified(
         async with semaphore:
             try:
                 result = await _call_via_whiterabbitneo(
-                    system_prompt, user_prompt,
-                    task=task, scan_id=scan_id, phase=phase,
+                    system_prompt,
+                    user_prompt,
+                    task=task,
+                    scan_id=scan_id,
+                    phase=phase,
                 )
                 _safety_check_response(result, task.value)
                 return result
@@ -1119,8 +1268,11 @@ async def call_llm_unified(
                         },
                     )
                     result = await _call_via_task_router(
-                        system_prompt, user_prompt, task,
-                        scan_id=scan_id, phase=phase,
+                        system_prompt,
+                        user_prompt,
+                        task,
+                        scan_id=scan_id,
+                        phase=phase,
                     )
                     _safety_check_response(result, task.value)
                     return result
@@ -1155,8 +1307,11 @@ async def call_llm_unified(
             },
         )
         result = await _call_via_task_router(
-            system_prompt, user_prompt, task,
-            scan_id=scan_id, phase=phase,
+            system_prompt,
+            user_prompt,
+            task,
+            scan_id=scan_id,
+            phase=phase,
         )
         _safety_check_response(result, task.value)
         return result
@@ -1267,8 +1422,11 @@ async def call_llm_with_escalation(
         Maximum number of escalation attempts (1 = at most one re-run).
     """
     response_text = await call_llm_unified(
-        system_prompt, user_prompt,
-        task=task, scan_id=scan_id, phase=phase,
+        system_prompt,
+        user_prompt,
+        task=task,
+        scan_id=scan_id,
+        phase=phase,
         execution_mode=execution_mode,
         scan_options=scan_options,
     )
@@ -1283,7 +1441,15 @@ async def call_llm_with_escalation(
         except (TypeError, ValueError):
             confidence = 0.7
     else:
-        hedge_words = ["might", "could be", "possibly", "perhaps", "maybe", "it seems", "uncertain"]
+        hedge_words = [
+            "might",
+            "could be",
+            "possibly",
+            "perhaps",
+            "maybe",
+            "it seems",
+            "uncertain",
+        ]
         lower = response_text.lower()
         hedges_found = sum(1 for w in hedge_words if w in lower)
         confidence = max(0.3, 1.0 - (hedges_found * 0.1))
@@ -1298,8 +1464,12 @@ async def call_llm_with_escalation(
         extra={
             "event": "confidence_escalation",
             "task": task.value,
-            "original_tier": escalation.original_tier.value if hasattr(escalation.original_tier, 'value') else str(escalation.original_tier),
-            "escalated_tier": escalation.escalated_tier.value if hasattr(escalation.escalated_tier, 'value') else str(escalation.escalated_tier),
+            "original_tier": escalation.original_tier.value
+            if hasattr(escalation.original_tier, "value")
+            else str(escalation.original_tier),
+            "escalated_tier": escalation.escalated_tier.value
+            if hasattr(escalation.escalated_tier, "value")
+            else str(escalation.escalated_tier),
             "confidence": confidence,
             "threshold": escalation.threshold,
             "scan_id": scan_id,

@@ -46,15 +46,25 @@ async def provision_container(
     """
     container_id = f"argus-validation-{uuid.uuid4().hex[:12]}"
     cmd = [
-        "docker", "run", "-d", "--rm",
-        "--name", container_id,
-        "--memory", f"{memory_limit_mb}m",
-        "--cpus", str(cpu_limit),
-        "--network", "none" if network_policy == "deny_all" else "bridge",
-        "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges:true",
+        "docker",
+        "run",
+        "-d",
+        "--rm",
+        "--name",
+        container_id,
+        "--memory",
+        f"{memory_limit_mb}m",
+        "--cpus",
+        str(cpu_limit),
+        "--network",
+        "none" if network_policy == "deny_all" else "bridge",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges:true",
         image,
-        "sleep", "3600",
+        "sleep",
+        "3600",
     ]
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -64,9 +74,7 @@ async def provision_container(
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
         if proc.returncode != 0:
-            raise EnvironmentError(
-                f"Container creation failed: {(stderr or b'').decode()[:500]}"
-            )
+            raise EnvironmentError(f"Container creation failed: {(stderr or b'').decode()[:500]}")
         cid = (stdout or b"").decode().strip()[:64]
         return {
             "id": cid or container_id,
@@ -76,23 +84,29 @@ async def provision_container(
             "network_policy": network_policy,
         }
     except TimeoutError:
-        raise EnvironmentError("Container creation timed out")
+        raise EnvironmentError("Container creation timed out") from None
 
 
 async def teardown_container(container_id: str) -> None:
     """Stop and remove a validation container."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "rm", "-f", container_id,
+            "docker",
+            "rm",
+            "-f",
+            container_id,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
         await asyncio.wait_for(proc.communicate(), timeout=10)
     except Exception as exc:
-        logger.warning("container_teardown_error", extra={
-            "container_id": container_id,
-            "error": str(exc),
-        })
+        logger.warning(
+            "container_teardown_error",
+            extra={
+                "container_id": container_id,
+                "error": str(exc),
+            },
+        )
 
 
 async def create_snapshot(container_id: str, snapshot_name: str = "") -> EnvironmentSnapshot:
@@ -100,7 +114,10 @@ async def create_snapshot(container_id: str, snapshot_name: str = "") -> Environ
     snap_name = snapshot_name or f"snap-{uuid.uuid4().hex[:8]}"
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "commit", container_id, snap_name,
+            "docker",
+            "commit",
+            container_id,
+            snap_name,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -128,12 +145,19 @@ async def rollback_to_snapshot(container_id: str, snapshot: EnvironmentSnapshot)
     try:
         await teardown_container(container_id)
         proc = await asyncio.create_subprocess_exec(
-            "docker", "run", "-d", "--rm",
-            "--name", container_id,
-            "--network", "none",
-            "--cap-drop", "ALL",
+            "docker",
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            container_id,
+            "--network",
+            "none",
+            "--cap-drop",
+            "ALL",
             snapshot.snapshot_path,
-            "sleep", "3600",
+            "sleep",
+            "3600",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -143,14 +167,19 @@ async def rollback_to_snapshot(container_id: str, snapshot: EnvironmentSnapshot)
         return False
 
 
-async def get_file_diff(
-    container_id: str, path: str = "/tmp"
-) -> dict[str, Any]:
+async def get_file_diff(container_id: str, path: str = "/tmp") -> dict[str, Any]:
     """Get file listing diff before/after validation run (snapshot based)."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "exec", container_id, "find", path,
-            "-type", "f", "-printf", r"%p\t%s\n",
+            "docker",
+            "exec",
+            container_id,
+            "find",
+            path,
+            "-type",
+            "f",
+            "-printf",
+            r"%p\t%s\n",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

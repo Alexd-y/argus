@@ -8,10 +8,9 @@ sends nothing at all.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.intruder.repository import (
     STATUS_CANCELLED,
@@ -35,7 +34,7 @@ def _attack(
     config: dict | None = None,
     checkpoint: dict | None = None,
 ) -> IntruderAttackDTO:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return IntruderAttackDTO(
         id="atk-1",
         tenant_id=_TENANT,
@@ -78,7 +77,7 @@ class _FakeRepo:
 
     async def record_request(self, _session, _tenant, **kwargs):
         self.records.append(kwargs)
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         return IntruderRequestDTO(
             id=f"req-{len(self.records)}",
             tenant_id=_TENANT,
@@ -106,7 +105,7 @@ class _SpySender:
         self.calls = 0
         self._boom_on = boom_on
 
-    def send(self, request, body: bytes) -> RawResponse:  # noqa: ARG002
+    def send(self, request, body: bytes) -> RawResponse:
         self.calls += 1
         marker = b"boom" if self._boom_on and self._boom_on in request.target else b"ok"
         raw = b"HTTP/1.1 200 OK\r\n\r\n" + marker
@@ -210,7 +209,11 @@ async def test_cancel_control_hook_halts_run() -> None:
         control_poll_interval=1,
     )
     summary = await service.run_attack(
-        None, _TENANT, "atk-1", scope_service=_scope(), payload_sets=[[b"a", b"b", b"c"]]
+        None,
+        _TENANT,
+        "atk-1",
+        scope_service=_scope(),
+        payload_sets=[[b"a", b"b", b"c"]],
     )
     assert summary.status == STATUS_CANCELLED
     assert summary.completed == 1  # first request ran, then cancel was observed
@@ -226,7 +229,11 @@ async def test_pause_control_hook_holds_run() -> None:
         control_poll_interval=1,
     )
     summary = await service.run_attack(
-        None, _TENANT, "atk-1", scope_service=_scope(), payload_sets=[[b"a", b"b", b"c"]]
+        None,
+        _TENANT,
+        "atk-1",
+        scope_service=_scope(),
+        payload_sets=[[b"a", b"b", b"c"]],
     )
     assert summary.status == STATUS_PAUSED
     assert repo._attack.checkpoint == {"next_index": 1}
@@ -265,7 +272,7 @@ async def test_send_failure_recorded_without_aborting_run() -> None:
         def __init__(self) -> None:
             self.calls = 0
 
-        def send(self, request, body):  # noqa: ARG002
+        def send(self, request, body):
             self.calls += 1
             if self.calls == 1:
                 raise RuntimeError("connection reset")
@@ -285,5 +292,7 @@ async def test_send_failure_recorded_without_aborting_run() -> None:
 def test_control_poll_interval_must_be_positive() -> None:
     with pytest.raises(ValueError, match="control_poll_interval"):
         IntruderService(
-            _FakeRepo(_attack(template=_TEMPLATE)), sender=_SpySender(), control_poll_interval=0
+            _FakeRepo(_attack(template=_TEMPLATE)),
+            sender=_SpySender(),
+            control_poll_interval=0,
         )

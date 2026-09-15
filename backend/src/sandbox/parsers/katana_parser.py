@@ -391,9 +391,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
         "content_type": record.get("content_type"),
         "source": record.get("source"),
     }
-    cleaned = {
-        key: value for key, value in payload.items() if value not in (None, "", [], {})
-    }
+    cleaned = {key: value for key, value in payload.items() if value not in (None, "", [], {})}
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
 

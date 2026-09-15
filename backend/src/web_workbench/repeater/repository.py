@@ -54,7 +54,9 @@ class OptimisticLockError(RepeaterRepositoryError):
     """The update's ``expected_version`` did not match the persisted row."""
 
 
-def _derive_target_metadata(raw_request: bytes) -> tuple[str | None, str | None, int | None]:
+def _derive_target_metadata(
+    raw_request: bytes,
+) -> tuple[str | None, str | None, int | None]:
     """Best-effort scheme/host/port for display; ``None`` if unparseable."""
     try:
         request = NormalizedRequest.parse(raw_request)

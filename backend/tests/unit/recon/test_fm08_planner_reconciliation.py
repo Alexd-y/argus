@@ -16,7 +16,9 @@ from src.recon.vulnerability_analysis.active_scan.planner import (
 )
 
 
-def _step(tool_id: str, url: str, *, plan_index: int = 0, job_source: str = "bundle") -> ActiveScanPlanStep:
+def _step(
+    tool_id: str, url: str, *, plan_index: int = 0, job_source: str = "bundle"
+) -> ActiveScanPlanStep:
     return ActiveScanPlanStep(
         plan_index=plan_index,
         tool_id=tool_id,

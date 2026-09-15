@@ -8,7 +8,6 @@ import re
 from uuid import UUID
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory, FindingStatus
 from src.web_workbench.checks.jwt_editor import (
     JwtError,
@@ -21,12 +20,12 @@ from src.web_workbench.checks.severity import CheckSeverity
 
 _CVSS_RE = re.compile(r"^CVSS:[34]\.[0-9]/[A-Z:/0-9]+$")
 _NOW = 1_700_000_000.0
-_IDS = dict(
-    tenant_id=UUID("11111111-1111-1111-1111-111111111111"),
-    scan_id=UUID("22222222-2222-2222-2222-222222222222"),
-    asset_id=UUID("33333333-3333-3333-3333-333333333333"),
-    tool_run_id=UUID("44444444-4444-4444-4444-444444444444"),
-)
+_IDS = {
+    "tenant_id": UUID("11111111-1111-1111-1111-111111111111"),
+    "scan_id": UUID("22222222-2222-2222-2222-222222222222"),
+    "asset_id": UUID("33333333-3333-3333-3333-333333333333"),
+    "tool_run_id": UUID("44444444-4444-4444-4444-444444444444"),
+}
 
 
 def _seg(obj: dict[str, object]) -> str:
@@ -159,4 +158,9 @@ def test_multiple_weaknesses_reported_together() -> None:
         signature=None,
     )
     codes = _codes(analyze_jwt(token, now=_NOW))
-    assert {"jwt-alg-none", "jwt-kid-injection", "jwt-no-expiry", "jwt-sensitive-claim"} <= codes
+    assert {
+        "jwt-alg-none",
+        "jwt-kid-injection",
+        "jwt-no-expiry",
+        "jwt-sensitive-claim",
+    } <= codes

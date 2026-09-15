@@ -19,7 +19,12 @@ from src.reports.finding_severity_normalizer import severity_from_cvss
 EvidenceQuality = Literal["none", "weak", "moderate", "strong"]
 EvidenceClassification = Literal["validated", "observed", "candidate", "inconclusive"]
 
-_EVIDENCE_QUALITY_RANK: dict[str, int] = {"none": 0, "weak": 1, "moderate": 2, "strong": 3}
+_EVIDENCE_QUALITY_RANK: dict[str, int] = {
+    "none": 0,
+    "weak": 1,
+    "moderate": 2,
+    "strong": 3,
+}
 
 # VAL-001 — header-gap / passive header observation default (CVSS 3.1); severity capped to Medium without chain.
 HEADER_ONLY_DEFAULT_CVSS_VECTOR = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"
@@ -30,12 +35,12 @@ _HEADER_ADVISORY_RE = re.compile(
     r"security\s+header|missing\s+header|http\s+response\s+header|incomplete\s+http\s+security|"
     r"content-security-policy|\bcsp\b|strict-transport|hsts|x-frame-options|"
     r"x-content-type|referrer-policy|permissions-policy",
-    re.I,
+    re.IGNORECASE,
 )
 _EXPLOIT_CHAIN_RE = re.compile(
     r"\b(rce|remote\s+code\s+execution|sql\s+injection|\bxss\b|cross-site\s+scripting|"
     r"auth(?:entication)?\s+bypass|command\s+injection|ssrf|xxe|lfi|path\s+traversal)\b",
-    re.I,
+    re.IGNORECASE,
 )
 ValidationStatus = Literal["missing", "unverified", "partially_validated", "validated"]
 
@@ -525,7 +530,16 @@ AUTHENTICATED_TESTING_GAP_WARNING = (
 )
 
 _FAILED_STATUSES = frozenset(
-    {"failed", "error", "timeout", "cancelled", "canceled", "aborted", "stderr", "nonzero"}
+    {
+        "failed",
+        "error",
+        "timeout",
+        "cancelled",
+        "canceled",
+        "aborted",
+        "stderr",
+        "nonzero",
+    }
 )
 _CRITICAL_SCANNER_DOMAINS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("tls_assessment", ("testssl", "sslscan", "sslyze", "tlsx"), "TLS assessment"),
@@ -535,11 +549,12 @@ _CRITICAL_SCANNER_DOMAINS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("port_exposure", ("nmap", "naabu", "masscan"), "port exposure"),
 )
 _RATE_LIMIT_RE = re.compile(
-    r"\b(rate[-\s]?limit(?:ing)?|http\s*429|too many requests|lockout|captcha)\b", re.I
+    r"\b(rate[-\s]?limit(?:ing)?|http\s*429|too many requests|lockout|captcha)\b", re.IGNORECASE
 )
-_LOGIN_RE = re.compile(r"\b(login|signin|sign-in|auth|authentication)\b", re.I)
+_LOGIN_RE = re.compile(r"\b(login|signin|sign-in|auth|authentication)\b", re.IGNORECASE)
 _RATE_LIMIT_WORKING_RE = re.compile(
-    r"\b(429|too many requests|retry-after|rate.limit.*enforced|rate.limit.*active|rate.limit.*work|throttl.*work|block.*after|limit.*trigger)\b", re.I
+    r"\b(429|too many requests|retry-after|rate.limit.*enforced|rate.limit.*active|rate.limit.*work|throttl.*work|block.*after|limit.*trigger)\b",
+    re.IGNORECASE,
 )
 # Negated mentions ("no HTTP 429", "did not return 429", "absence of throttling") must NOT
 # count as working rate limiting — otherwise a "missing rate limit" finding is misread as a
@@ -547,7 +562,7 @@ _RATE_LIMIT_WORKING_RE = re.compile(
 _RATE_LIMIT_NEGATION_RE = re.compile(
     r"\b(no|not|without|didn't|never|absence|absent|missing|lack(?:s|ing)?|fail(?:ed|s)?"
     r"|did\s+not)\b[^.]{0,40}\b(429|too\s+many\s+requests|rate[-\s]?limit|throttl)",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -701,7 +716,10 @@ def _finding_endpoint(finding: Any) -> str:
         raw = poc.get(key)
         if isinstance(raw, str) and raw.strip():
             return _normalize_endpoint(raw)
-    for raw in (_normalized_title(finding), str(_get_attr(finding, "description", "") or "")):
+    for raw in (
+        _normalized_title(finding),
+        str(_get_attr(finding, "description", "") or ""),
+    ):
         m = re.search(r"https?://[^\s'\"<>]+|/[A-Za-z0-9._~:/?#\[\]@!$&()*+,;=%-]+", raw)
         if m:
             return _normalize_endpoint(m.group(0))
@@ -783,7 +801,9 @@ def score_evidence_quality(finding: Any) -> EvidenceQuality:
     return "none"
 
 
-def validation_status_for_quality(evidence_quality: EvidenceQuality) -> ValidationStatus:
+def validation_status_for_quality(
+    evidence_quality: EvidenceQuality,
+) -> ValidationStatus:
     if evidence_quality == "strong":
         return "validated"
     if evidence_quality == "moderate":
@@ -818,18 +838,32 @@ def classify_evidence(finding: Any) -> EvidenceClassification:
     has_endpoint = bool(poc.get("request_url") or poc.get("affected_url") or poc.get("url"))
     has_parameter = bool(poc.get("parameter") or poc.get("param") or poc.get("injection_point"))
     has_payload = bool(poc.get("payload") or poc.get("payload_entered") or poc.get("payload_used"))
-    has_impact = bool(poc.get("observed_impact") or poc.get("response_status") or poc.get("payload_reflected"))
+    has_impact = bool(
+        poc.get("observed_impact") or poc.get("response_status") or poc.get("payload_reflected")
+    )
     has_repro = bool(_get_attr(finding, "reproducible_steps"))
     has_timestamp = bool(poc.get("timestamp") or poc.get("timestamps"))
 
-    validated_criteria_count = sum([
-        has_raw_request, has_raw_response, has_endpoint,
-        has_parameter, has_payload, has_impact, has_repro, has_timestamp
-    ])
+    validated_criteria_count = sum(
+        [
+            has_raw_request,
+            has_raw_response,
+            has_endpoint,
+            has_parameter,
+            has_payload,
+            has_impact,
+            has_repro,
+            has_timestamp,
+        ]
+    )
 
     # VALIDATED: strong evidence + most criteria met + confirmed/likely confidence
-    if (quality == "strong" and validated_criteria_count >= 5 and
-            confidence in ("confirmed", "likely") and val_status == "validated"):
+    if (
+        quality == "strong"
+        and validated_criteria_count >= 5
+        and confidence in ("confirmed", "likely")
+        and val_status == "validated"
+    ):
         return "validated"
 
     # OBSERVED: technical observation with limited impact (missing header, HTTP 429, banner)
@@ -837,7 +871,9 @@ def classify_evidence(finding: Any) -> EvidenceClassification:
     title = str(_get_attr(finding, "title") or "").lower()
     desc = str(_get_attr(finding, "description") or "").lower()
     is_header_observation = bool(_HEADER_ADVISORY_RE.search(title + " " + desc))
-    is_rate_limit_signal = "429" in str(poc.get("response_status") or "") or "rate" in title or "throttl" in title
+    is_rate_limit_signal = (
+        "429" in str(poc.get("response_status") or "") or "rate" in title or "throttl" in title
+    )
     is_banner_only = quality == "weak" and validated_criteria_count <= 1 and not has_payload
 
     if is_header_observation or is_rate_limit_signal or is_banner_only:
@@ -857,12 +893,12 @@ _INJECTION_OAST_RE = re.compile(
     r"\b(oast|interactsh|interact\.sh|burp(?:ollaborator)?|collaborator\.[a-z0-9._-]+|"
     r"dns\.callback|xss\.ht|webhook\.site|canarytoken|"
     r"oastify|projectdiscovery\.io/interact)\b",
-    re.I,
+    re.IGNORECASE,
 )
 _INJECTION_XSS_EXEC_RE = re.compile(
     r"\b(dalfox|xsstrike|playwright|puppeteer|selenium|headless|chromium|"
     r"browser_executed|dom[_\s-]?sink|burp.*scanner|oast|interactsh|collaborator)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -880,11 +916,14 @@ def map_injection_family(finding: Any) -> str | None:
     if raw in {"rce", "command_injection", "command injection", "code injection"}:
         return "rce"
     cwe = str(_get_attr(finding, "cwe") or "").lower()
-    blob = f"{_normalized_title(finding)}\n{str(_get_attr(finding, 'description', '') or '')}".lower()
+    blob = f"{_normalized_title(finding)}\n{_get_attr(finding, 'description', '') or ''!s}".lower()
     if "cwe-89" in cwe or cwe in {"89", "cwe-89"} or "sql injection" in blob or "sqli" in blob:
         return "sqli"
-    if "cwe-79" in cwe or cwe in {"79"} or "cross-site scripting" in blob or re.search(
-        r"\bxss\b", blob
+    if (
+        "cwe-79" in cwe
+        or cwe in {"79"}
+        or "cross-site scripting" in blob
+        or re.search(r"\bxss\b", blob)
     ):
         return "xss"
     if "cwe-918" in cwe or cwe in {"918"} or "ssrf" in blob:
@@ -913,7 +952,14 @@ def _injection_evidence_blob(finding: Any) -> str:
 def has_oast_callback_signal(finding: Any) -> bool:
     """Heuristic: OAST / out-of-band callback mentioned in evidence or PoC."""
     meta = _get_attr(finding, "finding_meta")
-    if isinstance(meta, dict) and meta.get("oast_callback") in (True, 1, "1", "true", "yes", "validated"):
+    if isinstance(meta, dict) and meta.get("oast_callback") in (
+        True,
+        1,
+        "1",
+        "true",
+        "yes",
+        "validated",
+    ):
         return True
     poc = _poc_dict(finding)
     if poc.get("oast_callback") in (True, 1, "1", "true", "yes", "validated"):
@@ -972,11 +1018,13 @@ def has_command_injection_proof(finding: Any) -> bool:
     ):
         return True
     blob = _injection_evidence_blob(finding)
-    has_cmd_output = bool(re.search(
-        r"\b(root|www-data|apache|nginx|nobody|uid=\d+|gid=\d+|Linux|Windows|Darwin|FreeBSD)\b",
-        blob,
-        re.I,
-    ))
+    has_cmd_output = bool(
+        re.search(
+            r"\b(root|www-data|apache|nginx|nobody|uid=\d+|gid=\d+|Linux|Windows|Darwin|FreeBSD)\b",
+            blob,
+            re.IGNORECASE,
+        )
+    )
     if has_cmd_output:
         return True
     return bool(_INJECTION_OAST_RE.search(blob))
@@ -988,9 +1036,7 @@ def _sqli_param_guess(poc: dict[str, Any]) -> bool:
         if isinstance(v, str) and v.strip():
             return True
     raw = str(poc.get("raw_request") or "") + str(poc.get("request") or "")
-    if re.search(r"[?&][a-zA-Z0-9_.]+\s*=", raw):
-        return True
-    return False
+    return bool(re.search(r"[?&][a-zA-Z0-9_.]+\s*=", raw))
 
 
 def _sqli_has_param_and_method_hint(finding: Any) -> bool:
@@ -999,9 +1045,23 @@ def _sqli_has_param_and_method_hint(finding: Any) -> bool:
     has_param = _sqli_param_guess(poc)
     raw = str(poc.get("raw_request") or "") + str(poc.get("request") or "")
     m = str(poc.get("request_method") or poc.get("method") or "").strip().upper()
-    has_method = m in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} or bool(
-        re.search(r"^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+http", raw, re.M | re.I)
-    ) or bool(re.search(r"^\s*(GET|POST|PUT|PATCH|DELETE)\s+/[\w./?&=%-]+", raw, re.M | re.I))
+    has_method = (
+        m in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+        or bool(
+            re.search(
+                r"^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+http",
+                raw,
+                re.MULTILINE | re.IGNORECASE,
+            )
+        )
+        or bool(
+            re.search(
+                r"^\s*(GET|POST|PUT|PATCH|DELETE)\s+/[\w./?&=%-]+",
+                raw,
+                re.MULTILINE | re.IGNORECASE,
+            )
+        )
+    )
     return has_param and has_method
 
 
@@ -1078,7 +1138,9 @@ def _destructive_tool_names_cited_structured(finding: Any) -> frozenset[str]:
     return frozenset(cited)
 
 
-def aggregate_injection_evidence_violations(findings: Iterable[Any]) -> tuple[list[str], bool]:
+def aggregate_injection_evidence_violations(
+    findings: Iterable[Any],
+) -> tuple[list[str], bool]:
     """Returns (warning lines, fail_flag).
 
     Fail when injection quality rules emit blocking tokens (missing refs, weak
@@ -1170,7 +1232,11 @@ def _normalize_active_injection_table_row(row: Any) -> dict[str, Any] | None:
     ev = row.get("evidence_ids") if row.get("evidence_ids") is not None else row.get("evidenceIds")
     if not isinstance(ev, list):
         ev = []
-    st = row.get("surfaces_tested") if row.get("surfaces_tested") is not None else row.get("surfacesTested")
+    st = (
+        row.get("surfaces_tested")
+        if row.get("surfaces_tested") is not None
+        else row.get("surfacesTested")
+    )
     if isinstance(st, list):
         surfaces: int | str = len(st)
     elif isinstance(st, int):
@@ -1203,7 +1269,7 @@ def _build_active_injection_table_rows(
     findings: list[Any] | None,
     families: dict[str, dict[str, str]],
     not_assessed_reasons: dict[str, Any],
-    tools_health: dict[str, Any],
+    tools_health: dict[str, Any],  # noqa: ARG001 - retained for signature/API compatibility
     client_rows: list[Any] | None,
 ) -> list[dict[str, Any]]:
     by_fam: dict[str, list[Any]] = {}
@@ -1230,7 +1296,9 @@ def _build_active_injection_table_rows(
             "family": fam,
             "assessed": assessed,
             "tool": _tool_label_for_family(fs),
-            "status": "findings_recorded" if fs else ("not_run" if assessed == "no" else "no_findings"),
+            "status": "findings_recorded"
+            if fs
+            else ("not_run" if assessed == "no" else "no_findings"),
             "surfaces_tested": _unique_surfaces_for_family(fs) if fs else 0,
             "evidence_ids": list(
                 dict.fromkeys(
@@ -1356,7 +1424,9 @@ def build_active_injection_coverage(
     }
 
 
-def build_active_injection_coverage_placeholder(findings: list[Any] | None) -> dict[str, Any]:
+def build_active_injection_coverage_placeholder(
+    findings: list[Any] | None,
+) -> dict[str, Any]:
     """Backward-compatible wrapper (no scan options)."""
     return build_active_injection_coverage(findings, None)
 
@@ -1434,9 +1504,7 @@ def _has_meaningful_exploit_evidence(finding: Any) -> bool:
         )
     ):
         return True
-    if poc.get("payload") or poc.get("payload_entered") or poc.get("javascript_code"):
-        return True
-    return False
+    return bool(poc.get("payload") or poc.get("payload_entered") or poc.get("javascript_code"))
 
 
 def _is_header_only_advisory_finding(finding: Any) -> bool:
@@ -1445,9 +1513,7 @@ def _is_header_only_advisory_finding(finding: Any) -> bool:
     blob = f"{title}\n{desc}"
     if not _HEADER_ADVISORY_RE.search(blob):
         return False
-    if _EXPLOIT_CHAIN_RE.search(blob) and _has_meaningful_exploit_evidence(finding):
-        return False
-    return True
+    return not (_EXPLOIT_CHAIN_RE.search(blob) and _has_meaningful_exploit_evidence(finding))
 
 
 def is_header_only_advisory_finding(finding: Any) -> bool:
@@ -1479,7 +1545,7 @@ def get_xss_validation_status(finding: Any) -> tuple[str, str]:
             "unvalidated",
             "XSS finding not verified via browser. Reflected payload may not execute "
             "in a real browser context due to CSP, encoding, or context mismatch. "
-            "Manual browser verification required."
+            "Manual browser verification required.",
         )
     return "partially_validated", ""
 
@@ -1495,13 +1561,14 @@ def get_command_injection_validation_status(finding: Any) -> tuple[str, str]:
     if has_command_injection_proof(finding):
         return "validated", ""
     title = str(_get_attr(finding, "title") or "").lower()
-    f_type = str(_get_attr(finding, "type") or
-                  (_get_attr(finding, "data") or {}).get("type", "")).upper()
+    f_type = str(
+        _get_attr(finding, "type") or (_get_attr(finding, "data") or {}).get("type", "")
+    ).upper()
     if "CANDIDATE" in f_type or "CANDIDATE" in title:
         return (
             "possible",
             "Command injection candidate not confirmed. Commix did not demonstrate RCE. "
-            "This finding requires manual verification with authenticated access."
+            "This finding requires manual verification with authenticated access.",
         )
     return "likely", ""
 
@@ -1572,7 +1639,7 @@ def _is_xss_finding(finding: Any) -> bool:
     cwe = str(_get_attr(finding, "cwe") or "").lower()
     if cwe in {"cwe-79", "79", "cwe-83"} or "cwe-79" in cwe:
         return True
-    t = f"{_normalized_title(finding)}\n{str(_get_attr(finding, 'description', '') or '')}".lower()
+    t = f"{_normalized_title(finding)}\n{_get_attr(finding, 'description', '') or ''!s}".lower()
     return "xss" in t or "cross-site scripting" in t
 
 
@@ -1641,9 +1708,12 @@ def _normalize_one_finding(finding: Any) -> Any | None:
         if notes == "" and quality == "weak":
             notes = "XSS-style finding lacks reflected/DOM/HTTP response or browser validation in evidence."
 
-    if map_injection_family(finding) == "xss" and confidence == "confirmed":
-        if not has_xss_browser_or_oast_signal(finding):
-            confidence = "likely"
+    if (
+        map_injection_family(finding) == "xss"
+        and confidence == "confirmed"
+        and not has_xss_browser_or_oast_signal(finding)
+    ):
+        confidence = "likely"
 
     # High/Critical with no PoC and not a header advisory cannot stand as confirmed.
     # Preserve the finding but downgrade it so the partition routes it to Unconfirmed
@@ -1662,7 +1732,9 @@ def _normalize_one_finding(finding: Any) -> Any | None:
 
     # Extract new finding card fields from PoC
     http_method = str(poc.get("http_method") or poc.get("method") or "").strip().upper() or None
-    auth_state = str(poc.get("auth_state") or poc.get("authentication") or "").strip().lower() or None
+    auth_state = (
+        str(poc.get("auth_state") or poc.get("authentication") or "").strip().lower() or None
+    )
     response_status = poc.get("response_status") or poc.get("status_code")
     if isinstance(response_status, str):
         with contextlib.suppress(ValueError):
@@ -1674,18 +1746,26 @@ def _normalize_one_finding(finding: Any) -> Any | None:
     tool_name = str(poc.get("tool_name") or poc.get("tool") or "").strip() or None
     tool_version = str(poc.get("tool_version") or poc.get("version") or "").strip() or None
     tool_command = str(poc.get("tool_command") or poc.get("command") or "").strip() or None
-    tool_output_excerpt = str(poc.get("tool_output") or poc.get("tool_output_excerpt") or poc.get("stdout") or "").strip()[:4000] or None
+    tool_output_excerpt = (
+        str(
+            poc.get("tool_output") or poc.get("tool_output_excerpt") or poc.get("stdout") or ""
+        ).strip()[:4000]
+        or None
+    )
     observed_impact = str(poc.get("observed_impact") or poc.get("impact") or "").strip() or None
-    affected_layer = str(poc.get("affected_layer") or poc.get("layer") or "").strip().lower() or None
-    config_component = str(poc.get("config_component") or poc.get("component") or "").strip() or None
+    affected_layer = (
+        str(poc.get("affected_layer") or poc.get("layer") or "").strip().lower() or None
+    )
+    config_component = (
+        str(poc.get("config_component") or poc.get("component") or "").strip() or None
+    )
     rollback_risk = str(poc.get("rollback_risk") or poc.get("rollback") or "").strip() or None
-    acceptance_criteria = str(poc.get("acceptance_criteria") or poc.get("acceptance") or "").strip() or None
+    acceptance_criteria = (
+        str(poc.get("acceptance_criteria") or poc.get("acceptance") or "").strip() or None
+    )
     retest_result = str(poc.get("retest_result") or poc.get("retest") or "").strip() or None
 
-    if cvss is not None:
-        final_severity = severity_from_cvss(cvss) or "info"
-    else:
-        final_severity = severity or "info"
+    final_severity = severity_from_cvss(cvss) or "info" if cvss is not None else severity or "info"
 
     _strip_legacy_cvss_from_poc(poc)
     if cvss is not None:
@@ -1816,7 +1896,10 @@ def _merge_rate_limit_findings(findings: list[Any]) -> list[Any]:
     merged = list(groups.values())
     for i, f in enumerate(merged):
         title = _normalized_title(f)
-        if title not in ("Missing or insufficient rate limiting on login endpoint", "Rate limiting observed on login endpoint"):
+        if title not in (
+            "Missing or insufficient rate limiting on login endpoint",
+            "Rate limiting observed on login endpoint",
+        ):
             poc = _poc_dict(f)
             rate_limit_working = _is_rate_limit_working(f)
             if rate_limit_working:
@@ -1874,7 +1957,9 @@ _HEADER_TABLE_GAP_NOTE = (
 )
 
 
-def apply_security_header_table_gap_to_findings(findings: Iterable[Any], vc: Any | None) -> list[Any]:
+def apply_security_header_table_gap_to_findings(
+    findings: Iterable[Any], vc: Any | None
+) -> list[Any]:
     """When header-gap findings exist but no header rows were parsed, mark advisory + explicit note.
 
     A "missing security header" claim that cannot be backed by a parsed header table is only
@@ -1927,9 +2012,11 @@ def _capability_coverage_from_valhalla(vc: Any) -> dict[str, Any]:
         return {}
 
     totals = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
-    status_counts = raw.get("coverage_status_counts") if isinstance(
-        raw.get("coverage_status_counts"), dict
-    ) else {}
+    status_counts = (
+        raw.get("coverage_status_counts")
+        if isinstance(raw.get("coverage_status_counts"), dict)
+        else {}
+    )
     invariants = raw.get("invariants") if isinstance(raw.get("invariants"), dict) else {}
 
     not_tested = int(totals.get("not_tested", status_counts.get("not_tested", 0)) or 0)
@@ -2007,7 +2094,13 @@ def _scan_type_from_options(options: dict[str, Any], scan: Any) -> str:
 
 
 def _authenticated_from_options(options: dict[str, Any]) -> bool:
-    for key in ("authenticated", "auth_enabled", "has_auth", "use_auth", "authenticated_scan"):
+    for key in (
+        "authenticated",
+        "auth_enabled",
+        "has_auth",
+        "use_auth",
+        "authenticated_scan",
+    ):
         raw = options.get(key)
         if isinstance(raw, bool):
             return raw
@@ -2089,9 +2182,13 @@ def build_report_quality_gate(data: Any) -> ReportQualityGate:
             f"Critical scanner execution failed for {failed}. Affected domains are not assessed."
         )
     gate.evidence_confidence = _overall_evidence_quality(findings)
-    if not gate.authenticated and gate.wstg_coverage_pct < 50.0:
-        if _EVIDENCE_QUALITY_RANK.get(gate.evidence_confidence, 0) > _EVIDENCE_QUALITY_RANK.get("moderate", 0):
-            gate.evidence_confidence = "moderate"
+    if (
+        not gate.authenticated
+        and gate.wstg_coverage_pct < 50.0
+        and _EVIDENCE_QUALITY_RANK.get(gate.evidence_confidence, 0)
+        > _EVIDENCE_QUALITY_RANK.get("moderate", 0)
+    ):
+        gate.evidence_confidence = "moderate"
     for f in findings:
         mismatch = severity_cvss_band_mismatch_reason(f)
         if mismatch:
@@ -2121,7 +2218,10 @@ def build_report_quality_gate(data: Any) -> ReportQualityGate:
         gate.report_mode_label = (
             f"{gate.scan_type.capitalize()} automated scan — WSTG coverage under 70%"
         )
-    elif gate.scan_type in {"quick", "light"} and gate.tool_health in {"degraded", "failed"}:
+    elif gate.scan_type in {"quick", "light"} and gate.tool_health in {
+        "degraded",
+        "failed",
+    }:
         gate.report_mode_label = (
             f"{gate.scan_type.capitalize()} automated scan with degraded tool execution"
         )
@@ -2172,10 +2272,7 @@ def _failed_area_sentence(gate: ReportQualityGate) -> str:
     if not gate.failed_domains:
         return ""
     areas = sorted(gate.failed_domains.values())
-    if len(areas) == 1:
-        area_text = areas[0]
-    else:
-        area_text = ", ".join(areas[:-1]) + f", and {areas[-1]}"
+    area_text = areas[0] if len(areas) == 1 else ", ".join(areas[:-1]) + f", and {areas[-1]}"
     return f" Several assessment areas, including {area_text}, were inconclusive because scanner execution failed."
 
 
@@ -2480,7 +2577,9 @@ def _technology_stack_unknown(data: Any) -> bool:
 def _mentions_specific_stack(text: str) -> bool:
     return bool(
         re.search(
-            r"\b(express|nginx|django|next\.?js|node\.?js|spring|rails|laravel)\b", text or "", re.I
+            r"\b(express|nginx|django|next\.?js|node\.?js|spring|rails|laravel)\b",
+            text or "",
+            re.IGNORECASE,
         )
     )
 
@@ -2583,80 +2682,209 @@ def _replace_forbidden_phrase(text: str) -> str:
         "comprehensive penetration test": "automated assessment",
     }
     for phrase, repl in replacements.items():
-        out = re.sub(re.escape(phrase), repl, out, flags=re.I)
+        out = re.sub(re.escape(phrase), repl, out, flags=re.IGNORECASE)
     return out
 
 
 _AI_PATTERN_RE = [
-    (re.compile(r"\b(it is|this is|there is)\s+(important|crucial|essential|vital|critical|key)\s+(to|that|for)\b", re.I), "documented finding:"),
-    (re.compile(r"\b(in|at|for)\s+(the|this)\s+(end|conclusion|summary|wrap-up)\b", re.I), "in this assessment:"),
-    (re.compile(r"\b(taken together|all in all|on balance|by and large|for the most part)\b", re.I), "based on evidence:"),
-    (re.compile(r"\b(it goes without saying|needless to say|as expected|as anticipated)\b", re.I), "observed:"),
-    (re.compile(r"\b(last but not least|first and foremost|above all|most importantly)\b", re.I), "notably:"),
-    (re.compile(r"\b(to put it (simply|bluntly|mildly|another way))\b", re.I), "stated:"),
-    (re.compile(r"\b(in (light|view) of (the|these|this))\b", re.I), "given:"),
-    (re.compile(r"\b(with (respect|regard) to)\b", re.I), "regarding:"),
-    (re.compile(r"\b(as (far as|to) (the|this|that))\b", re.I), "regarding:"),
-    (re.compile(r"\b(in (terms|relation) of)\b", re.I), "regarding:"),
-    (re.compile(r"\b(on (the|this|that) (note|front|matter|subject))\b", re.I), "regarding:"),
-    (re.compile(r"\b(by (the|this|that) (same|token|measure|standard))\b", re.I), "similarly:"),
-    (re.compile(r"\b(in (a|this|that) (same|similar|like|related) (way|manner|fashion|vein))\b", re.I), "similarly:"),
-    (re.compile(r"\b(in (contrast|comparison|opposition|juxtaposition|parallel))\b", re.I), "compared to:"),
-    (re.compile(r"\b(on (the|this|that) (other|flip|reverse|contrary) (hand|side))\b", re.I), "alternatively:"),
-    (re.compile(r"\b(having (said|stated|noted|established|determined) (that|this))\b", re.I), "given:"),
-    (re.compile(r"\b(that (said|stated|noted|established|determined))\b", re.I), "given:"),
-    (re.compile(r"\b(all (this|that) (said|stated|noted|established|determined))\b", re.I), "given:"),
-    (re.compile(r"\b(be (that|this|it) as it may)\b", re.I), "regardless:"),
-    (re.compile(r"\b(be (that|this|it) as it (should|would|could|might) (be|may))\b", re.I), "regardless:"),
-    (re.compile(r"\b(whether or (not|no))\b", re.I), "regardless:"),
-    (re.compile(r"\b(no (matter|significance) (what|how|why|when|where|who))\b", re.I), "regardless:"),
-    (re.compile(r"\b(in (any|every|no) (case|event|instance|situation|circumstance))\b", re.I), "regardless:"),
-    (re.compile(r"\b(at (any|every|no) (rate|time|point|moment|stage))\b", re.I), "regardless:"),
-    (re.compile(r"\b(for (all|any|no) (that|this|these|those))\b", re.I), "despite:"),
-    (re.compile(r"\b(in (spite|defiance|disregard) of)\b", re.I), "despite:"),
-    (re.compile(r"\b(notwithstanding (the|this|that|these|those))\b", re.I), "despite:"),
-    (re.compile(r"\b(nevertheless|nonetheless|notwithstanding)\b", re.I), "however:"),
-    (re.compile(r"\b(all (the|this|that|these|those) (same|while))\b", re.I), "however:"),
-    (re.compile(r"\b(even (so|then|still|though|if))\b", re.I), "however:"),
-    (re.compile(r"\b(despite (the|this|that|these|those))\b", re.I), "despite:"),
-    (re.compile(r"\b(in (contrast|comparison) (to|with))\b", re.I), "compared to:"),
-    (re.compile(r"\b(on (the|this|that) (contrary|other) (hand|side))\b", re.I), "alternatively:"),
-    (re.compile(r"\b(by (contrast|comparison))\b", re.I), "compared to:"),
-    (re.compile(r"\b(in (a|the|this|that) (same|similar|like|related) (way|manner|fashion))\b", re.I), "similarly:"),
-    (re.compile(r"\b(likewise|similarly|correspondingly|equally|comparably)\b", re.I), "similarly:"),
-    (re.compile(r"\b(in (the|this|that|same) (way|manner|fashion|vein|light))\b", re.I), "similarly:"),
-    (re.compile(r"\b(along (the|this|that) (same|similar|like|related) (lines|vein|theme|thread))\b", re.I), "similarly:"),
-    (re.compile(r"\b(in (a|the|this|that) (similar|like|related|comparable) (way|manner|fashion|vein))\b", re.I), "similarly:"),
-    (re.compile(r"\b(by (the|this|that) (same|similar|like|related) (token|measure|standard|yardstick))\b", re.I), "similarly:"),
-    (re.compile(r"\b(in (a|the|this|that) (same|similar|like|related) (manner|fashion|vein|light))\b", re.I), "similarly:"),
+    (
+        re.compile(
+            r"\b(it is|this is|there is)\s+(important|crucial|essential|vital|critical|key)\s+(to|that|for)\b",
+            re.IGNORECASE,
+        ),
+        "documented finding:",
+    ),
+    (
+        re.compile(
+            r"\b(in|at|for)\s+(the|this)\s+(end|conclusion|summary|wrap-up)\b", re.IGNORECASE
+        ),
+        "in this assessment:",
+    ),
+    (
+        re.compile(
+            r"\b(taken together|all in all|on balance|by and large|for the most part)\b",
+            re.IGNORECASE,
+        ),
+        "based on evidence:",
+    ),
+    (
+        re.compile(
+            r"\b(it goes without saying|needless to say|as expected|as anticipated)\b",
+            re.IGNORECASE,
+        ),
+        "observed:",
+    ),
+    (
+        re.compile(
+            r"\b(last but not least|first and foremost|above all|most importantly)\b",
+            re.IGNORECASE,
+        ),
+        "notably:",
+    ),
+    (
+        re.compile(r"\b(to put it (simply|bluntly|mildly|another way))\b", re.IGNORECASE),
+        "stated:",
+    ),
+    (re.compile(r"\b(in (light|view) of (the|these|this))\b", re.IGNORECASE), "given:"),
+    (re.compile(r"\b(with (respect|regard) to)\b", re.IGNORECASE), "regarding:"),
+    (re.compile(r"\b(as (far as|to) (the|this|that))\b", re.IGNORECASE), "regarding:"),
+    (re.compile(r"\b(in (terms|relation) of)\b", re.IGNORECASE), "regarding:"),
+    (
+        re.compile(r"\b(on (the|this|that) (note|front|matter|subject))\b", re.IGNORECASE),
+        "regarding:",
+    ),
+    (
+        re.compile(r"\b(by (the|this|that) (same|token|measure|standard))\b", re.IGNORECASE),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(in (a|this|that) (same|similar|like|related) (way|manner|fashion|vein))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(in (contrast|comparison|opposition|juxtaposition|parallel))\b", re.IGNORECASE
+        ),
+        "compared to:",
+    ),
+    (
+        re.compile(
+            r"\b(on (the|this|that) (other|flip|reverse|contrary) (hand|side))\b", re.IGNORECASE
+        ),
+        "alternatively:",
+    ),
+    (
+        re.compile(
+            r"\b(having (said|stated|noted|established|determined) (that|this))\b", re.IGNORECASE
+        ),
+        "given:",
+    ),
+    (
+        re.compile(r"\b(that (said|stated|noted|established|determined))\b", re.IGNORECASE),
+        "given:",
+    ),
+    (
+        re.compile(
+            r"\b(all (this|that) (said|stated|noted|established|determined))\b", re.IGNORECASE
+        ),
+        "given:",
+    ),
+    (re.compile(r"\b(be (that|this|it) as it may)\b", re.IGNORECASE), "regardless:"),
+    (
+        re.compile(
+            r"\b(be (that|this|it) as it (should|would|could|might) (be|may))\b", re.IGNORECASE
+        ),
+        "regardless:",
+    ),
+    (re.compile(r"\b(whether or (not|no))\b", re.IGNORECASE), "regardless:"),
+    (
+        re.compile(r"\b(no (matter|significance) (what|how|why|when|where|who))\b", re.IGNORECASE),
+        "regardless:",
+    ),
+    (
+        re.compile(
+            r"\b(in (any|every|no) (case|event|instance|situation|circumstance))\b",
+            re.IGNORECASE,
+        ),
+        "regardless:",
+    ),
+    (
+        re.compile(r"\b(at (any|every|no) (rate|time|point|moment|stage))\b", re.IGNORECASE),
+        "regardless:",
+    ),
+    (re.compile(r"\b(for (all|any|no) (that|this|these|those))\b", re.IGNORECASE), "despite:"),
+    (re.compile(r"\b(in (spite|defiance|disregard) of)\b", re.IGNORECASE), "despite:"),
+    (
+        re.compile(r"\b(notwithstanding (the|this|that|these|those))\b", re.IGNORECASE),
+        "despite:",
+    ),
+    (re.compile(r"\b(nevertheless|nonetheless|notwithstanding)\b", re.IGNORECASE), "however:"),
+    (
+        re.compile(r"\b(all (the|this|that|these|those) (same|while))\b", re.IGNORECASE),
+        "however:",
+    ),
+    (re.compile(r"\b(even (so|then|still|though|if))\b", re.IGNORECASE), "however:"),
+    (re.compile(r"\b(despite (the|this|that|these|those))\b", re.IGNORECASE), "despite:"),
+    (re.compile(r"\b(in (contrast|comparison) (to|with))\b", re.IGNORECASE), "compared to:"),
+    (
+        re.compile(r"\b(on (the|this|that) (contrary|other) (hand|side))\b", re.IGNORECASE),
+        "alternatively:",
+    ),
+    (re.compile(r"\b(by (contrast|comparison))\b", re.IGNORECASE), "compared to:"),
+    (
+        re.compile(
+            r"\b(in (a|the|this|that) (same|similar|like|related) (way|manner|fashion))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
+    (
+        re.compile(r"\b(likewise|similarly|correspondingly|equally|comparably)\b", re.IGNORECASE),
+        "similarly:",
+    ),
+    (
+        re.compile(r"\b(in (the|this|that|same) (way|manner|fashion|vein|light))\b", re.IGNORECASE),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(along (the|this|that) (same|similar|like|related) (lines|vein|theme|thread))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(in (a|the|this|that) (similar|like|related|comparable) (way|manner|fashion|vein))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(by (the|this|that) (same|similar|like|related) (token|measure|standard|yardstick))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
+    (
+        re.compile(
+            r"\b(in (a|the|this|that) (same|similar|like|related) (manner|fashion|vein|light))\b",
+            re.IGNORECASE,
+        ),
+        "similarly:",
+    ),
 ]
 
 # Code-snippet / debug-garbage patterns — remove entire section if found
 _CODE_GARBAGE_RE = [
-    re.compile(r'\bprint\s*\(\s*["\']Hello[,]?\s*World', re.I),
-    re.compile(r'^\s*#\s*This\s+is\s+a\s+comment', re.I),
-    re.compile(r'\bexample\.com\b', re.I),
-    re.compile(r'https?://target[/]', re.I),
-    re.compile(r'\x1b\[[0-9;]*[a-zA-Z]', re.I),
-    re.compile(r'\bprint\s*\(\s*["\'].*["\']\)', re.I),
-    re.compile(r'\bconsole\.log\s*\(', re.I),
-    re.compile(r'\bTODO\s*:', re.I),
-    re.compile(r'\bFIXME\s*:', re.I),
-    re.compile(r'\b(test|debug)\s+(code|snippet|placeholder|entry)\b', re.I),
+    re.compile(r'\bprint\s*\(\s*["\']Hello[,]?\s*World', re.IGNORECASE),
+    re.compile(r"^\s*#\s*This\s+is\s+a\s+comment", re.IGNORECASE),
+    re.compile(r"\bexample\.com\b", re.IGNORECASE),
+    re.compile(r"https?://target[/]", re.IGNORECASE),
+    re.compile(r"\x1b\[[0-9;]*[a-zA-Z]", re.IGNORECASE),
+    re.compile(r'\bprint\s*\(\s*["\'].*["\']\)', re.IGNORECASE),
+    re.compile(r"\bconsole\.log\s*\(", re.IGNORECASE),
+    re.compile(r"\bTODO\s*:", re.IGNORECASE),
+    re.compile(r"\bFIXME\s*:", re.IGNORECASE),
+    re.compile(r"\b(test|debug)\s+(code|snippet|placeholder|entry)\b", re.IGNORECASE),
     # C/C++ patterns
-    re.compile(r'^\s*#include\s*[<"]', re.I | re.MULTILINE),
-    re.compile(r'\bint\s+main\s*\(\s*\)', re.I),
-    re.compile(r'\bstd::(cout|cin|cerr|endl|vector|string|map|set)\b', re.I),
-    re.compile(r'\b(cout|cin)\s*<<', re.I),
-    re.compile(r'\b<iostream>', re.I),
-    re.compile(r'\b#include\s', re.I),
+    re.compile(r'^\s*#include\s*[<"]', re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bint\s+main\s*\(\s*\)", re.IGNORECASE),
+    re.compile(r"\bstd::(cout|cin|cerr|endl|vector|string|map|set)\b", re.IGNORECASE),
+    re.compile(r"\b(cout|cin)\s*<<", re.IGNORECASE),
+    re.compile(r"\b<iostream>", re.IGNORECASE),
+    re.compile(r"\b#include\s", re.IGNORECASE),
     # Python
-    re.compile(r'\bdef\s+(main|test|foo|bar)\s*\(\s*\)', re.I),
-    re.compile(r'\bSystem\.out\.println', re.I),
-    re.compile(r'\bpublic\s+static\s+void\s+main', re.I),
-    re.compile(r'\bpublic\s+class\s+\w+', re.I),
+    re.compile(r"\bdef\s+(main|test|foo|bar)\s*\(\s*\)", re.IGNORECASE),
+    re.compile(r"\bSystem\.out\.println", re.IGNORECASE),
+    re.compile(r"\bpublic\s+static\s+void\s+main", re.IGNORECASE),
+    re.compile(r"\bpublic\s+class\s+\w+", re.IGNORECASE),
     # Shell
-    re.compile(r'^\s*#!/bin/(bash|sh|zsh)\b', re.I | re.MULTILINE),
+    re.compile(r"^\s*#!/bin/(bash|sh|zsh)\b", re.IGNORECASE | re.MULTILINE),
 ]
 
 
@@ -2691,7 +2919,7 @@ def sanitize_ai_patterns(text: str) -> tuple[str, list[str]]:
 
 def enforce_severity_rules(findings: Iterable[Any]) -> list[dict[str, str]]:
     """VHL-SEV-001 — enforce severity rules for XSS, Command Injection, rate-limit signals.
-    
+
     Returns list of {'finding_id': str, 'action': str, 'reason': str} for violations found.
     """
     issues: list[dict[str, str]] = []
@@ -2702,45 +2930,67 @@ def enforce_severity_rules(findings: Iterable[Any]) -> list[dict[str, str]]:
         desc = str(_get_attr(f, "description", "") or "").lower()
         blob = title + " " + desc
         classification = str(_get_attr(f, "evidence_classification", "") or "").lower()
-        confidence = str(_get_attr(f, "confidence", "") or "").lower()
+        str(_get_attr(f, "confidence", "") or "").lower()
         poc = _poc_dict(f)
         # XSS: High only with browser execution proof
         is_xss = "xss" in blob or "cross-site" in blob or "cwe-79" in blob
         if is_xss and sev == "high" and classification != "validated":
             has_browser_proof = bool(
-                poc.get("browser_proof_url") or
-                poc.get("screenshot_url") or
-                poc.get("browser_executed")
+                poc.get("browser_proof_url")
+                or poc.get("screenshot_url")
+                or poc.get("browser_executed")
             )
             if not has_browser_proof:
-                issues.append({
-                    "finding_id": fid,
-                    "action": "downgrade_severity_to_medium",
-                    "reason": "XSS High requires browser execution proof; downgraded to Medium",
-                })
+                issues.append(
+                    {
+                        "finding_id": fid,
+                        "action": "downgrade_severity_to_medium",
+                        "reason": "XSS High requires browser execution proof; downgraded to Medium",
+                    }
+                )
         # Command Injection: High/Critical only with server-side command output
-        is_cmd = any(kw in blob for kw in ("command injection", "rce", "cwe-78", "command execution", "shell injection"))
+        is_cmd = any(
+            kw in blob
+            for kw in (
+                "command injection",
+                "rce",
+                "cwe-78",
+                "command execution",
+                "shell injection",
+            )
+        )
         if is_cmd and sev in ("critical", "high") and classification != "validated":
             has_server_output = bool(
-                poc.get("command_output") or
-                poc.get("shell_output") or
-                poc.get("server_response") or
-                (poc.get("raw_response") and len(str(poc.get("raw_response", ""))) > 100)
+                poc.get("command_output")
+                or poc.get("shell_output")
+                or poc.get("server_response")
+                or (poc.get("raw_response") and len(str(poc.get("raw_response", ""))) > 100)
             )
             if not has_server_output:
-                issues.append({
-                    "finding_id": fid,
-                    "action": "downgrade_severity_to_medium",
-                    "reason": "Command Injection High/Critical requires controlled server-side command output; downgraded to Medium",
-                })
+                issues.append(
+                    {
+                        "finding_id": fid,
+                        "action": "downgrade_severity_to_medium",
+                        "reason": "Command Injection High/Critical requires controlled server-side command output; downgraded to Medium",
+                    }
+                )
         # HTTP 429 rate-limit: observation, not vulnerability
-        if ("429" in str(poc.get("response_status") or "") or "rate limit" in blob or "too many requests" in blob):
-            if sev in ("high", "critical") and not (getattr(f, "exploit_demonstrated", False)):
-                issues.append({
+        if (
+            (
+                "429" in str(poc.get("response_status") or "")
+                or "rate limit" in blob
+                or "too many requests" in blob
+            )
+            and sev in ("high", "critical")
+            and not (getattr(f, "exploit_demonstrated", False))
+        ):
+            issues.append(
+                {
                     "finding_id": fid,
                     "action": "downgrade_severity_to_info",
                     "reason": "HTTP 429 on login is a positive observation, not a confirmed vulnerability; downgraded to Info",
-                })
+                }
+            )
     return issues
 
 
@@ -2760,19 +3010,22 @@ def build_retest_checklist(findings: Iterable[Any]) -> list[dict[str, str]]:
         method = poc.get("request_method", "GET") or "GET"
         payload = poc.get("payload", "") or ""
         verification = str(_get_attr(f, "verification_command", "") or "")
-        acceptance = str(_get_attr(f, "acceptance_criteria", "") or "")
-        items.append({
-            "finding_id": fid,
-            "title": title,
-            "severity": sev,
-            "endpoint": str(endpoint)[:512],
-            "parameter": str(parameter)[:256],
-            "method": str(method)[:16],
-            "payload_to_retest": str(payload)[:500],
-            "verification_command": verification[:500] or f"curl -X {method} '{endpoint}' -d 'safe_value'",
-            "expected_result": "Finding no longer reproducible; response returns expected safe output without vulnerability indicators",
-            "evidence_required": "Raw request/response pair at retest timestamp; response status code; updated finding status",
-        })
+        str(_get_attr(f, "acceptance_criteria", "") or "")
+        items.append(
+            {
+                "finding_id": fid,
+                "title": title,
+                "severity": sev,
+                "endpoint": str(endpoint)[:512],
+                "parameter": str(parameter)[:256],
+                "method": str(method)[:16],
+                "payload_to_retest": str(payload)[:500],
+                "verification_command": verification[:500]
+                or f"curl -X {method} '{endpoint}' -d 'safe_value'",
+                "expected_result": "Finding no longer reproducible; response returns expected safe output without vulnerability indicators",
+                "evidence_required": "Raw request/response pair at retest timestamp; response status code; updated finding status",
+            }
+        )
     return items
 
 
@@ -2794,9 +3047,13 @@ def verify_cross_format_consistency(
     counts = [html_findings, pdf_findings, md_findings, csv_findings, json_findings]
     non_zero = [c for c in counts if c > 0]
     if non_zero and len(set(non_zero)) > 1:
-        issues.append(f"Finding count mismatch across formats: html={html_findings}, pdf={pdf_findings}, md={md_findings}, csv={csv_findings}, json={json_findings}")
+        issues.append(
+            f"Finding count mismatch across formats: html={html_findings}, pdf={pdf_findings}, md={md_findings}, csv={csv_findings}, json={json_findings}"
+        )
     # Any format with 0 findings and non-zero hashes indicates potential corruption
-    formats_with_hashes = sum(1 for h in [html_sha256, pdf_sha256, md_sha256, csv_sha256, json_sha256] if h)
+    formats_with_hashes = sum(
+        1 for h in [html_sha256, pdf_sha256, md_sha256, csv_sha256, json_sha256] if h
+    )
     formats_with_findings = sum(1 for c in counts if c > 0)
     if formats_with_hashes > 0 and formats_with_findings == 0:
         issues.append("Content hashes present but no findings recorded; possible empty render")
@@ -2806,7 +3063,13 @@ def verify_cross_format_consistency(
 def validate_tls_analysis_status(ssl_tls_status: str) -> list[str]:
     """Check TLS analysis status and return warnings for critical gaps."""
     warnings: list[str] = []
-    critical_statuses = {"no_observed_items_after_parsing", "not_executed", "no_data", "not_assessed", ""}
+    critical_statuses = {
+        "no_observed_items_after_parsing",
+        "not_executed",
+        "no_data",
+        "not_assessed",
+        "",
+    }
     if ssl_tls_status.strip().lower() in critical_statuses:
         warnings.append(
             "CRITICAL GAP: TLS/SSL assessment was not performed (status: {}). "
@@ -2821,8 +3084,18 @@ def validate_mandatory_sections_health(
 ) -> list[str]:
     """Validate that mandatory report sections meet minimum data quality thresholds."""
     minimum_status: dict[str, set[str]] = {
-        "ssl_tls_analysis": {"completed", "completed_with_fallback", "parsed_from_fallback", "partial"},
-        "security_headers_analysis": {"completed", "completed_with_fallback", "parsed_from_fallback", "partial"},
+        "ssl_tls_analysis": {
+            "completed",
+            "completed_with_fallback",
+            "parsed_from_fallback",
+            "partial",
+        },
+        "security_headers_analysis": {
+            "completed",
+            "completed_with_fallback",
+            "parsed_from_fallback",
+            "partial",
+        },
         "outdated_components": {"completed", "completed_with_fallback", "partial"},
     }
     warnings: list[str] = []
@@ -2831,6 +3104,8 @@ def validate_mandatory_sections_health(
         if status not in ok_statuses:
             warnings.append(
                 "Section '{}' has status '{}' which is below minimum quality threshold. "
-                "Missing data reduces report provability and must be re-scanned.".format(section, status or "empty")
+                "Missing data reduces report provability and must be re-scanned.".format(
+                    section, status or "empty"
+                )
             )
     return warnings

@@ -21,11 +21,10 @@ Coverage scope:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-
 from src.mcp.schemas.finding import Severity
 from src.mcp.schemas.report import ReportFormat, ReportTier
 from src.mcp.schemas.scan import ScanProfile, ScanScopeInput, ScanStatus
@@ -78,9 +77,7 @@ class TestScanServiceHelpers:
             ("  Running  ", ScanStatus.RUNNING),
         ],
     )
-    def test_coerce_scan_status_known_values(
-        self, raw: str | None, expected: ScanStatus
-    ) -> None:
+    def test_coerce_scan_status_known_values(self, raw: str | None, expected: ScanStatus) -> None:
         assert scan_service._coerce_scan_status(raw) is expected
 
     def test_coerce_scan_status_unknown_falls_back_to_running(
@@ -106,9 +103,7 @@ class TestScanServiceHelpers:
         }
 
     def test_scope_to_options_custom(self) -> None:
-        scope = ScanScopeInput(
-            include_subdomains=True, max_depth=7, follow_redirects=False
-        )
+        scope = ScanScopeInput(include_subdomains=True, max_depth=7, follow_redirects=False)
         assert scan_service._scope_to_options(scope) == {
             "scope": {
                 "include_subdomains": True,
@@ -122,15 +117,15 @@ class TestScanServiceHelpers:
         [
             (
                 "2026-04-19T12:34:56Z",
-                datetime(2026, 4, 19, 12, 34, 56, tzinfo=timezone.utc),
+                datetime(2026, 4, 19, 12, 34, 56, tzinfo=UTC),
             ),
             (
                 "2026-04-19T12:34:56+00:00",
-                datetime(2026, 4, 19, 12, 34, 56, tzinfo=timezone.utc),
+                datetime(2026, 4, 19, 12, 34, 56, tzinfo=UTC),
             ),
             (
                 "2026-04-19T12:34:56",
-                datetime(2026, 4, 19, 12, 34, 56, tzinfo=timezone.utc),
+                datetime(2026, 4, 19, 12, 34, 56, tzinfo=UTC),
             ),
         ],
     )
@@ -151,9 +146,7 @@ class TestScanServiceHelpers:
             assert scan_service._resolve_dispatcher() is _fake
         finally:
             scan_service.set_scan_dispatcher(None)
-        assert (
-            scan_service._resolve_dispatcher() is scan_service._default_celery_dispatch
-        )
+        assert scan_service._resolve_dispatcher() is scan_service._default_celery_dispatch
 
 
 class TestFindingServiceHelpers:
@@ -178,17 +171,15 @@ class TestFindingServiceHelpers:
     ) -> None:
         with caplog.at_level("WARNING"):
             assert finding_service._coerce_severity("frob") is Severity.INFO
-        assert any(
-            "mcp.finding.unknown_severity" in rec.message for rec in caplog.records
-        )
+        assert any("mcp.finding.unknown_severity" in rec.message for rec in caplog.records)
 
     def test_ensure_aware_naive_to_utc(self) -> None:
         naive = datetime(2026, 4, 19, 12, 0, 0)
         aware = finding_service._ensure_aware(naive)
-        assert aware == naive.replace(tzinfo=timezone.utc)
+        assert aware == naive.replace(tzinfo=UTC)
 
     def test_ensure_aware_already_aware(self) -> None:
-        aware = datetime(2026, 4, 19, tzinfo=timezone.utc)
+        aware = datetime(2026, 4, 19, tzinfo=UTC)
         assert finding_service._ensure_aware(aware) == aware
 
     def test_ensure_aware_none(self) -> None:
@@ -203,12 +194,12 @@ class TestFindingServiceHelpers:
             owasp_category="A03",
             confidence="confirmed",
             false_positive=False,
-            created_at=datetime(2026, 4, 19, tzinfo=timezone.utc),
+            created_at=datetime(2026, 4, 19, tzinfo=UTC),
         )
         summary = finding_service._row_to_summary(row)  # type: ignore[arg-type]
         assert summary.title == "A" * 500
         assert summary.severity is Severity.HIGH
-        assert summary.created_at == datetime(2026, 4, 19, tzinfo=timezone.utc)
+        assert summary.created_at == datetime(2026, 4, 19, tzinfo=UTC)
 
     def test_row_to_detail_caps_evidence_refs_and_descriptions(self) -> None:
         row = _FindingRow(
@@ -270,9 +261,7 @@ class TestReportServiceHelpers:
     def test_coerce_tier(self, raw: str | None, expected: ReportTier) -> None:
         assert report_service._coerce_tier(raw) is expected
 
-    def test_coerce_tier_unknown_falls_back(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_coerce_tier_unknown_falls_back(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level("WARNING"):
             assert report_service._coerce_tier("ouroboros") is ReportTier.MIDGARD
         assert any("mcp.report.unknown_tier" in rec.message for rec in caplog.records)
@@ -283,9 +272,7 @@ class TestReportServiceHelpers:
                 "pdf": {"sha256": "ABCDEF" + "0" * 58},
             }
         }
-        assert report_service._extract_sha256(meta, ReportFormat.PDF) == (
-            "abcdef" + "0" * 58
-        )
+        assert report_service._extract_sha256(meta, ReportFormat.PDF) == ("abcdef" + "0" * 58)
 
     def test_extract_sha256_invalid_length(self) -> None:
         meta = {"artifacts": {"pdf": {"sha256": "abc"}}}
@@ -300,10 +287,7 @@ class TestReportServiceHelpers:
 
     def test_extract_presigned_url_present(self) -> None:
         meta = {"artifacts": {"json": {"presigned_url": "https://x"}}}
-        assert (
-            report_service._extract_presigned_url(meta, ReportFormat.JSON)
-            == "https://x"
-        )
+        assert report_service._extract_presigned_url(meta, ReportFormat.JSON) == "https://x"
 
     def test_extract_presigned_url_empty_string(self) -> None:
         meta = {"artifacts": {"json": {"presigned_url": ""}}}
@@ -312,7 +296,7 @@ class TestReportServiceHelpers:
     def test_extract_expiry_z_suffix(self) -> None:
         meta = {"artifacts": {"json": {"expires_at": "2026-04-19T12:34:56Z"}}}
         result = report_service._extract_expiry(meta, ReportFormat.JSON)
-        assert result == datetime(2026, 4, 19, 12, 34, 56, tzinfo=timezone.utc)
+        assert result == datetime(2026, 4, 19, 12, 34, 56, tzinfo=UTC)
 
     def test_extract_expiry_invalid(self) -> None:
         meta = {"artifacts": {"json": {"expires_at": "not-a-date"}}}
@@ -324,7 +308,7 @@ class TestReportServiceHelpers:
 
     def test_ensure_aware_helpers_align(self) -> None:
         naive = datetime(2026, 4, 19, 1, 2, 3)
-        assert report_service._ensure_aware(naive) == naive.replace(tzinfo=timezone.utc)
+        assert report_service._ensure_aware(naive) == naive.replace(tzinfo=UTC)
         assert report_service._ensure_aware(None) is None
 
 
@@ -350,9 +334,7 @@ class TestApprovalServiceHelpers:
         assert summary.signatures_present == 0
 
     def test_make_test_approval_matches_action_kind(self, tenant_id: str) -> None:
-        destructive = approval_service.make_test_approval(
-            tenant_id=tenant_id, action="destructive"
-        )
+        destructive = approval_service.make_test_approval(tenant_id=tenant_id, action="destructive")
         assert destructive.requires_dual_control is True
         normal = approval_service.make_test_approval(tenant_id=tenant_id)
         assert normal.requires_dual_control is False

@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -43,7 +42,6 @@ from src.sandbox.parsers import (
     reset_registry,
 )
 from src.sandbox.parsers.nuclei_parser import EVIDENCE_SIDECAR_NAME
-
 
 # ---------------------------------------------------------------------------
 # Hermetic registry fixture
@@ -141,9 +139,7 @@ def _nuclei_payload() -> bytes:
             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
         ),
     ]
-    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode(
-        "utf-8"
-    )
+    return ("\n".join(json.dumps(r, sort_keys=True) for r in records) + "\n").encode("utf-8")
 
 
 def _nikto_payload() -> bytes:
@@ -194,9 +190,7 @@ def _wapiti_payload() -> bytes:
 
 def _read_sidecar(path: Path) -> list[dict[str, Any]]:
     return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
     ]
 
 
@@ -243,9 +237,7 @@ def test_arg015_does_not_drop_prior_cycle_registrations() -> None:
 
 
 @pytest.mark.parametrize("tool_id", NUCLEI_TOOL_IDS)
-def test_dispatch_routes_each_nuclei_tool_to_shared_parser(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_routes_each_nuclei_tool_to_shared_parser(tool_id: str, tmp_path: Path) -> None:
     """All four nuclei tool_ids route via NUCLEI_JSONL and produce findings."""
     artifacts_dir = tmp_path / tool_id
     artifacts_dir.mkdir()
@@ -261,9 +253,7 @@ def test_dispatch_routes_each_nuclei_tool_to_shared_parser(
 
 
 @pytest.mark.parametrize("tool_id", NUCLEI_TOOL_IDS)
-def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_writes_shared_sidecar_with_correct_tool_id(tool_id: str, tmp_path: Path) -> None:
     """Each nuclei dispatch emits a sidecar tagged with its tool_id."""
     artifacts_dir = tmp_path / tool_id
     artifacts_dir.mkdir()
@@ -277,9 +267,7 @@ def test_dispatch_writes_shared_sidecar_with_correct_tool_id(
     assert findings
 
     sidecar = artifacts_dir / EVIDENCE_SIDECAR_NAME
-    assert sidecar.is_file(), (
-        f"{tool_id}: nuclei parser must write evidence sidecar at {sidecar}"
-    )
+    assert sidecar.is_file(), f"{tool_id}: nuclei parser must write evidence sidecar at {sidecar}"
     parsed = _read_sidecar(sidecar)
     assert len(parsed) == len(findings)
     assert all(rec["tool_id"] == tool_id for rec in parsed), (
@@ -377,8 +365,7 @@ def test_deferred_web_vuln_tools_have_no_parser(
         )
 
     assert len(findings) == 1, (
-        f"{tool_id}: expected exactly one heartbeat via JSON_OBJECT misroute, "
-        f"got {len(findings)}"
+        f"{tool_id}: expected exactly one heartbeat via JSON_OBJECT misroute, got {len(findings)}"
     )
     heartbeat = findings[0]
     assert heartbeat.category is FindingCategory.INFO
@@ -416,9 +403,7 @@ def test_wpscan_payload_misrouted_via_nuclei_jsonl_is_inert(tmp_path: Path) -> N
         tmp_path,
         tool_id="nikto",
     )
-    assert findings == [], (
-        "nikto parser must produce no findings on nuclei-shaped JSONL payload"
-    )
+    assert findings == [], "nikto parser must produce no findings on nuclei-shaped JSONL payload"
 
 
 # ---------------------------------------------------------------------------
@@ -427,9 +412,7 @@ def test_wpscan_payload_misrouted_via_nuclei_jsonl_is_inert(tmp_path: Path) -> N
 
 
 @pytest.mark.parametrize("tool_id", NUCLEI_TOOL_IDS)
-def test_dispatch_is_deterministic_across_repeated_runs(
-    tool_id: str, tmp_path: Path
-) -> None:
+def test_dispatch_is_deterministic_across_repeated_runs(tool_id: str, tmp_path: Path) -> None:
     """Two dispatch calls on the same payload produce identical sidecars."""
     artifacts_a = tmp_path / "a"
     artifacts_b = tmp_path / "b"

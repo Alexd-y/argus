@@ -60,9 +60,7 @@ class TerrascanAdapter(SecurityToolAdapter):
                         violations.extend(v)
         return [x for x in violations if isinstance(x, dict)]
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for item in raw_results:
             rule = item.get("rule_name") or item.get("ruleName") or "unknown"
@@ -70,18 +68,20 @@ class TerrascanAdapter(SecurityToolAdapter):
             fpath = item.get("file_name") or item.get("fileName") or ""
             line = item.get("line") or 0
             value = f"{fpath}:{line}:{rule}"
-            findings.append({
-                "finding_type": FindingType.MISCONFIGURATION,
-                "value": value,
-                "data": {
-                    "title": str(rule),
-                    "severity": sev,
-                    "category": item.get("category") or item.get("type"),
-                    "file_path": fpath,
-                    "line": line,
-                    "cwe": "CWE-1032",
-                },
-                "source_tool": "terrascan",
-                "confidence": 0.85,
-            })
+            findings.append(
+                {
+                    "finding_type": FindingType.MISCONFIGURATION,
+                    "value": value,
+                    "data": {
+                        "title": str(rule),
+                        "severity": sev,
+                        "category": item.get("category") or item.get("type"),
+                        "file_path": fpath,
+                        "line": line,
+                        "cwe": "CWE-1032",
+                    },
+                    "source_tool": "terrascan",
+                    "confidence": 0.85,
+                }
+            )
         return findings

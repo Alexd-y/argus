@@ -23,9 +23,7 @@ class TestResolveReconDir:
 
     def test_resolve_recon_dir_default_when_no_scope_config(self) -> None:
         """Uses default path when scope_config is None."""
-        with patch(
-            "src.recon.services.threat_model_run_service.settings"
-        ) as mock_settings:
+        with patch("src.recon.services.threat_model_run_service.settings") as mock_settings:
             mock_settings.recon_output_base_dir = "/base/recon"
             result = resolve_recon_dir("eng-001", scope_config=None)
         assert "eng-001" in str(result)
@@ -34,9 +32,7 @@ class TestResolveReconDir:
 
     def test_resolve_recon_dir_from_scope_config_absolute(self) -> None:
         """Uses scope_config.recon_dir when absolute path."""
-        with patch(
-            "src.recon.services.threat_model_run_service.settings"
-        ) as mock_settings:
+        with patch("src.recon.services.threat_model_run_service.settings") as mock_settings:
             mock_settings.recon_output_base_dir = "/base/recon"
             result = resolve_recon_dir(
                 "eng-002",
@@ -47,9 +43,7 @@ class TestResolveReconDir:
 
     def test_resolve_recon_dir_from_scope_config_relative(self) -> None:
         """Uses base + relative path when scope_config.recon_dir is relative."""
-        with patch(
-            "src.recon.services.threat_model_run_service.settings"
-        ) as mock_settings:
+        with patch("src.recon.services.threat_model_run_service.settings") as mock_settings:
             mock_settings.recon_output_base_dir = "/base/recon_output"
             result = resolve_recon_dir(
                 "eng-003",
@@ -60,9 +54,7 @@ class TestResolveReconDir:
 
     def test_resolve_recon_dir_ignores_non_string(self) -> None:
         """Falls back to default when recon_dir is not a string."""
-        with patch(
-            "src.recon.services.threat_model_run_service.settings"
-        ) as mock_settings:
+        with patch("src.recon.services.threat_model_run_service.settings") as mock_settings:
             mock_settings.recon_output_base_dir = "/base"
             result = resolve_recon_dir(
                 "eng-004",
@@ -101,10 +93,13 @@ class TestValidateReconDirWithinBase:
         base = tmp_path / "base"
         base.mkdir()
         escape = tmp_path / "base" / "eng" / ".." / ".." / "etc"
-        with patch(
-            "src.recon.services.threat_model_run_service._get_recon_base_dir",
-            return_value=base,
-        ), pytest.raises(ValueError, match="Invalid recon_dir path"):
+        with (
+            patch(
+                "src.recon.services.threat_model_run_service._get_recon_base_dir",
+                return_value=base,
+            ),
+            pytest.raises(ValueError, match="Invalid recon_dir path"),
+        ):
             validate_recon_dir_within_base(str(escape))
 
 

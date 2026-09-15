@@ -25,17 +25,43 @@ async def test_planned_gather_completes_when_plan_includes_registry_deferred_ste
         wordlist_path="",
         rate_limit_rps=10,
     )
-    tool_ok = {"success": True, "stdout": "", "stderr": "", "return_code": 0, "execution_time": 0.0}
+    tool_ok = {
+        "success": True,
+        "stdout": "",
+        "stderr": "",
+        "return_code": 0,
+        "execution_time": 0.0,
+    }
 
     async def fake_dns_bundle(*_a, **_kw):
         return ({}, None)
 
     with (
-        patch("src.orchestration.handlers._run_nmap", new_callable=AsyncMock, return_value=tool_ok),
-        patch("src.orchestration.handlers._run_dig", new_callable=AsyncMock, return_value=tool_ok),
-        patch("src.orchestration.handlers._run_whois", new_callable=AsyncMock, return_value=tool_ok),
-        patch("src.orchestration.handlers._query_crtsh", new_callable=AsyncMock, return_value={}),
-        patch("src.orchestration.handlers._query_shodan", new_callable=AsyncMock, return_value={}),
+        patch(
+            "src.orchestration.handlers._run_nmap",
+            new_callable=AsyncMock,
+            return_value=tool_ok,
+        ),
+        patch(
+            "src.orchestration.handlers._run_dig",
+            new_callable=AsyncMock,
+            return_value=tool_ok,
+        ),
+        patch(
+            "src.orchestration.handlers._run_whois",
+            new_callable=AsyncMock,
+            return_value=tool_ok,
+        ),
+        patch(
+            "src.orchestration.handlers._query_crtsh",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        patch(
+            "src.orchestration.handlers._query_shodan",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
         patch(
             "src.orchestration.handlers._extract_url_params_and_forms",
             new_callable=AsyncMock,

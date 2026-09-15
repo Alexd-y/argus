@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from src.core.config import Settings
 from src.recon.recon_dns_depth import (
     build_dnsx_argv,
@@ -17,10 +16,7 @@ from src.recon.recon_runtime import ReconRuntimeConfig, build_recon_runtime_conf
 
 
 def test_parse_dnsx_stdout_flattens_json_lines() -> None:
-    raw = (
-        '{"host":"ex.com","a":["1.1.1.1"]}\n'
-        '{"host":"ex.com","cname":["target.github.io"]}\n'
-    )
+    raw = '{"host":"ex.com","a":["1.1.1.1"]}\n{"host":"ex.com","cname":["target.github.io"]}\n'
     records, objs = parse_dnsx_stdout(raw)
     assert len(objs) == 2
     assert any(r["record_type"] == "A" and r["value"] == "1.1.1.1" for r in records)
@@ -136,7 +132,10 @@ async def test_run_recon_dns_depth_bundle_uploads_and_merges_tool_shape() -> Non
     sink.upload_text = MagicMock()
 
     with (
-        patch("src.recon.recon_dns_depth.build_dnsx_argv", return_value=["dnsx", "-d", "example.com", "-json", "-a"]),
+        patch(
+            "src.recon.recon_dns_depth.build_dnsx_argv",
+            return_value=["dnsx", "-d", "example.com", "-json", "-a"],
+        ),
         patch("src.recon.recon_dns_depth._run_dnsx_argv", return_value=dnsx_out),
     ):
         out = await run_recon_dns_depth_bundle("https://example.com", cfg, raw_sink=sink)
@@ -168,7 +167,10 @@ async def test_run_recon_dns_depth_bundle_inner_failure_is_soft() -> None:
         dns_depth_takeover_hints=False,
     )
     with (
-        patch("src.recon.recon_dns_depth.build_dnsx_argv", return_value=["dnsx", "-d", "example.com", "-json"]),
+        patch(
+            "src.recon.recon_dns_depth.build_dnsx_argv",
+            return_value=["dnsx", "-d", "example.com", "-json"],
+        ),
         patch("src.recon.recon_dns_depth._run_dnsx_argv", side_effect=RuntimeError("boom")),
     ):
         out = await run_recon_dns_depth_bundle("https://example.com", cfg, raw_sink=None)

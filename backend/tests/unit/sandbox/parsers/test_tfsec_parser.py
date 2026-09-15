@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -156,9 +155,7 @@ def test_dedup_collapses_identical_record(tmp_path: Path) -> None:
 def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     payload = _payload(
         _result(rule_id="rule-low", severity="LOW", filename="a.tf", start_line=1),
-        _result(
-            rule_id="rule-crit", severity="CRITICAL", filename="b.tf", start_line=2
-        ),
+        _result(rule_id="rule-crit", severity="CRITICAL", filename="b.tf", start_line=2),
         _result(rule_id="rule-high", severity="HIGH", filename="c.tf", start_line=3),
         _result(rule_id="rule-med", severity="MEDIUM", filename="d.tf", start_line=4),
     )
@@ -175,9 +172,7 @@ def test_findings_sorted_severity_desc(tmp_path: Path) -> None:
     ]
 
 
-def test_envelope_not_dict_returns_empty(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_dict_returns_empty(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         findings = parse_tfsec_json(b"[]", b"", tmp_path, "tfsec")
     assert findings == []
@@ -187,9 +182,7 @@ def test_envelope_not_dict_returns_empty(
     )
 
 
-def test_missing_location_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_location_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _result(location_present=False)
     payload = _payload(bad, _result(rule_id="AVD-OK"))
     with caplog.at_level(logging.WARNING):
@@ -201,9 +194,7 @@ def test_missing_location_emits_warning(
     )
 
 
-def test_missing_rule_id_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_missing_rule_id_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     bad = _result()
     bad.pop("rule_id")
     payload = _payload(bad, _result(rule_id="AVD-OK"))
@@ -218,10 +209,7 @@ def test_malformed_json_returns_empty(tmp_path: Path) -> None:
 
 def test_no_results_returns_empty(tmp_path: Path) -> None:
     assert (
-        parse_tfsec_json(
-            json.dumps({"results": []}).encode("utf-8"), b"", tmp_path, "tfsec"
-        )
-        == []
+        parse_tfsec_json(json.dumps({"results": []}).encode("utf-8"), b"", tmp_path, "tfsec") == []
     )
 
 

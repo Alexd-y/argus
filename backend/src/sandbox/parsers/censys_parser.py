@@ -32,7 +32,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -58,7 +58,7 @@ _CANONICAL_NAME: Final[str] = "censys.json"
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-_DedupKey: TypeAlias = tuple[str, int, str]
+type _DedupKey = tuple[str, int, str]
 
 
 def parse_censys(

@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -66,9 +65,7 @@ def _alert(
     }
 
 
-def _payload(
-    *alerts: dict[str, Any], site_name: str = "https://target.example.com"
-) -> bytes:
+def _payload(*alerts: dict[str, Any], site_name: str = "https://target.example.com") -> bytes:
     document = {
         "@version": "2.14.0",
         "@generated": "Mon, 19 May 2026 10:00:00",
@@ -205,8 +202,7 @@ def test_envelope_not_object_emits_warning(
         findings = parse_zap_baseline_json(b"", b"", tmp_path, "zap_baseline")
     assert findings == []
     assert any(
-        "zap_baseline_parser_envelope_not_object"
-        in (record.__dict__.get("event") or "")
+        "zap_baseline_parser_envelope_not_object" in (record.__dict__.get("event") or "")
         for record in caplog.records
     )
 
@@ -258,9 +254,7 @@ def test_site_field_not_a_list_returns_empty(tmp_path: Path) -> None:
     """Top-level ``site`` must be a list — otherwise the report is unusable."""
     document: dict[str, Any] = {"site": "scalar"}
     assert (
-        parse_zap_baseline_json(
-            json.dumps(document).encode("utf-8"), b"", tmp_path, "zap_baseline"
-        )
+        parse_zap_baseline_json(json.dumps(document).encode("utf-8"), b"", tmp_path, "zap_baseline")
         == []
     )
 
@@ -278,9 +272,7 @@ def test_alerts_field_not_a_list_skipped(tmp_path: Path) -> None:
     """Sites where ``alerts`` is not a list are skipped without raising."""
     document: dict[str, Any] = {"site": [{"@name": "x", "alerts": "not-a-list"}]}
     assert (
-        parse_zap_baseline_json(
-            json.dumps(document).encode("utf-8"), b"", tmp_path, "zap_baseline"
-        )
+        parse_zap_baseline_json(json.dumps(document).encode("utf-8"), b"", tmp_path, "zap_baseline")
         == []
     )
 

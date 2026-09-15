@@ -13,13 +13,15 @@ from unittest.mock import MagicMock
 import pytest
 
 # Skip entire module if MCP service layer cannot be imported (heavy deps)
-pytest.importorskip("src.mcp.services.tool_service", reason="MCP tool_service requires full runtime stack")
+pytest.importorskip(
+    "src.mcp.services.tool_service",
+    reason="MCP tool_service requires full runtime stack",
+)
 
 from src.mcp.exceptions import (
     ApprovalRequiredError,
     MCPError,
     ResourceNotFoundError,
-    UpstreamServiceError,
     ValidationError,
     is_known_error_code,
 )
@@ -35,6 +37,7 @@ from src.mcp.services.tool_service import (
     reset_registry_for_tests,
     trigger_tool_run,
 )
+from src.orchestration.state_machine import ScanPhase as ToolPhase
 from src.sandbox.adapter_base import (
     NetworkPolicyRef,
     ParseStrategy,
@@ -42,7 +45,6 @@ from src.sandbox.adapter_base import (
     ToolCategory,
     ToolDescriptor,
 )
-from src.orchestration.state_machine import ScanPhase as ToolPhase
 
 
 @pytest.fixture(autouse=True)
@@ -90,9 +92,7 @@ def _make_descriptor(
 def _fake_registry(descriptors: list[ToolDescriptor]) -> MagicMock:
     registry = MagicMock()
     registry.all_descriptors.return_value = descriptors
-    registry.get.side_effect = lambda tid: next(
-        (d for d in descriptors if d.tool_id == tid), None
-    )
+    registry.get.side_effect = lambda tid: next((d for d in descriptors if d.tool_id == tid), None)
     return registry
 
 
@@ -126,7 +126,12 @@ class TestListCatalog:
     _DESCRIPTORS = [
         _make_descriptor("nmap", category=ToolCategory.RECON, risk_level=RiskLevel.LOW),
         _make_descriptor("nuclei", category=ToolCategory.WEB_VA, risk_level=RiskLevel.MEDIUM),
-        _make_descriptor("sqlmap", category=ToolCategory.WEB_VA, risk_level=RiskLevel.HIGH, requires_approval=True),
+        _make_descriptor(
+            "sqlmap",
+            category=ToolCategory.WEB_VA,
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+        ),
         _make_descriptor("ffuf", category=ToolCategory.RECON, risk_level=RiskLevel.LOW),
     ]
 
@@ -166,7 +171,9 @@ class TestListCatalog:
 
     def test_cwe_hints_included(self) -> None:
         custom = _make_descriptor(
-            "custom", cwe_hints=(79, 89), risk_level=RiskLevel.MEDIUM,
+            "custom",
+            cwe_hints=(79, 89),
+            risk_level=RiskLevel.MEDIUM,
             category=ToolCategory.WEB_VA,
         )
         reset_registry_for_tests(_fake_registry([custom]))
@@ -188,11 +195,14 @@ class TestTriggerToolRun:
 
     _LOW_TOOL = _make_descriptor("nmap", risk_level=RiskLevel.LOW)
     _HIGH_TOOL = _make_descriptor(
-        "sqlmap", risk_level=RiskLevel.HIGH, requires_approval=True,
+        "sqlmap",
+        risk_level=RiskLevel.HIGH,
+        requires_approval=True,
         category=ToolCategory.WEB_VA,
     )
     _DESTRUCTIVE_TOOL = _make_descriptor(
-        "hydra", risk_level=RiskLevel.DESTRUCTIVE,
+        "hydra",
+        risk_level=RiskLevel.DESTRUCTIVE,
         category=ToolCategory.AUTH,
     )
 
@@ -206,17 +216,13 @@ class TestTriggerToolRun:
 
     def test_low_risk_tool_queued_without_approval(self) -> None:
         payload = ToolRunTriggerInput(tool_id="nmap", target="example.com")
-        result = trigger_tool_run(
-            payload=payload, actor="test-user", tenant_id="t1"
-        )
+        result = trigger_tool_run(payload=payload, actor="test-user", tenant_id="t1")
         assert result.status == ToolRunStatus.QUEUED
         assert result.requires_approval is False
         assert result.tool_run_id is not None
 
     def test_high_risk_tool_requires_justification(self) -> None:
-        payload = ToolRunTriggerInput(
-            tool_id="sqlmap", target="example.com", justification=""
-        )
+        payload = ToolRunTriggerInput(tool_id="sqlmap", target="example.com", justification="")
         with pytest.raises(ApprovalRequiredError, match="justification"):
             trigger_tool_run(payload=payload, actor="u1", tenant_id="t1")
 
@@ -226,9 +232,7 @@ class TestTriggerToolRun:
             target="example.com",
             justification="We need to verify SQL injection on the login form",
         )
-        result = trigger_tool_run(
-            payload=payload, actor="u1", tenant_id="t1"
-        )
+        result = trigger_tool_run(payload=payload, actor="u1", tenant_id="t1")
         assert result.status == ToolRunStatus.APPROVAL_PENDING
         assert result.requires_approval is True
         assert result.approval_request_id is not None
@@ -239,9 +243,7 @@ class TestTriggerToolRun:
             target="example.com",
             justification="Brute-force check of weak admin credentials per scope",
         )
-        result = trigger_tool_run(
-            payload=payload, actor="u1", tenant_id="t1"
-        )
+        result = trigger_tool_run(payload=payload, actor="u1", tenant_id="t1")
         assert result.status == ToolRunStatus.APPROVAL_PENDING
 
     def test_unknown_tool_raises_not_found(self) -> None:
@@ -310,9 +312,7 @@ class TestGetToolRunStatus:
         def lookup(_tenant: str, _run_id: str):
             return expected
 
-        result = get_tool_run_status(
-            tenant_id="t1", tool_run_id="run-abc1", lookup=lookup
-        )
+        result = get_tool_run_status(tenant_id="t1", tool_run_id="run-abc1", lookup=lookup)
         assert result is expected
         assert result.tool_run_id == "run-abc1"
         assert result.status == ToolRunStatus.COMPLETED
@@ -323,9 +323,7 @@ class TestGetToolRunStatus:
             return None
 
         with pytest.raises(ResourceNotFoundError, match="was not found"):
-            get_tool_run_status(
-                tenant_id="t1", tool_run_id="run-xyz", lookup=lookup
-            )
+            get_tool_run_status(tenant_id="t1", tool_run_id="run-xyz", lookup=lookup)
 
 
 # ---------------------------------------------------------------------------

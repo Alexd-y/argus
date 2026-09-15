@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 class ResumeDecision(StrEnum):
     """Decision for a phase when resuming a scan."""
 
-    SKIP = "skip"          # Already completed, skip and use cached output
-    RE_RUN = "re_run"      # Re-run even if previously completed
+    SKIP = "skip"  # Already completed, skip and use cached output
+    RE_RUN = "re_run"  # Re-run even if previously completed
     RUN_FRESH = "run_fresh"  # No previous completion, run normally
     SKIPPED_BY_PROFILE = "skipped_by_profile"  # Quick allowlist skip; not a failure
 
@@ -52,8 +52,7 @@ async def get_completed_phases(
 
     # Check ScanStep status
     steps_result = await session.execute(
-        select(ScanStep.step_name, ScanStep.status)
-        .where(cast(ScanStep.scan_id, String) == scan_id)
+        select(ScanStep.step_name, ScanStep.status).where(cast(ScanStep.scan_id, String) == scan_id)
     )
     for step_name, status in steps_result.all():
         if status == "completed":
@@ -64,8 +63,7 @@ async def get_completed_phases(
 
     # Cross-verify with PhaseOutput existence
     outputs_result = await session.execute(
-        select(PhaseOutput.phase)
-        .where(cast(PhaseOutput.scan_id, String) == scan_id)
+        select(PhaseOutput.phase).where(cast(PhaseOutput.scan_id, String) == scan_id)
     )
     phase_outputs: set[ScanPhase] = set()
     for (phase_name,) in outputs_result.all():
@@ -178,13 +176,12 @@ async def freeze_scan_scope(
         "vuln_classes": vuln_classes or [],
         "exploit_enabled": exploit_enabled,
         "target_url": target_url,
-        "frozen_at": str(__import__("datetime").datetime.now(tz=__import__("datetime").timezone.utc)),
+        "frozen_at": str(
+            __import__("datetime").datetime.now(tz=__import__("datetime").timezone.utc)
+        ),
     }
 
-    result = await session.execute(
-        select(Scan.options)
-        .where(cast(Scan.id, String) == scan_id)
-    )
+    result = await session.execute(select(Scan.options).where(cast(Scan.id, String) == scan_id))
     options = result.scalar_one_or_none() or {}
     if isinstance(options, str):
         try:
@@ -195,10 +192,9 @@ async def freeze_scan_scope(
     options["frozen_scope"] = scope_data
 
     from sqlalchemy import update
+
     await session.execute(
-        update(Scan)
-        .where(cast(Scan.id, String) == scan_id)
-        .values(options=options)
+        update(Scan).where(cast(Scan.id, String) == scan_id).values(options=options)
     )
     await session.commit()
 
@@ -208,10 +204,7 @@ async def get_frozen_scope(
     scan_id: str,
 ) -> dict[str, Any] | None:
     """Retrieve the frozen scope for a scan (set at initial run time)."""
-    result = await session.execute(
-        select(Scan.options)
-        .where(cast(Scan.id, String) == scan_id)
-    )
+    result = await session.execute(select(Scan.options).where(cast(Scan.id, String) == scan_id))
     options = result.scalar_one_or_none()
     if options is None:
         return None

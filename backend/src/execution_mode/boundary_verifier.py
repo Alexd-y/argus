@@ -95,21 +95,23 @@ class LabBoundaryVerifier:
                 deny_code=BoundaryDenyCode.MANIFEST_EXPIRED.value,
             )
 
-        if manifest.k8s_namespace:
-            if not k8s_namespace or k8s_namespace != manifest.k8s_namespace:
-                return BoundaryVerdict(
-                    allowed=False,
-                    reason="runner_namespace_unbound",
-                    deny_code=BoundaryDenyCode.NAMESPACE_REQUIRED.value,
-                )
+        if manifest.k8s_namespace and (
+            not k8s_namespace or k8s_namespace != manifest.k8s_namespace
+        ):
+            return BoundaryVerdict(
+                allowed=False,
+                reason="runner_namespace_unbound",
+                deny_code=BoundaryDenyCode.NAMESPACE_REQUIRED.value,
+            )
 
-        if manifest.vm_network_ids:
-            if not vm_network_id or vm_network_id not in manifest.vm_network_ids:
-                return BoundaryVerdict(
-                    allowed=False,
-                    reason="runner_vm_network_unbound",
-                    deny_code=BoundaryDenyCode.NAMESPACE_REQUIRED.value,
-                )
+        if manifest.vm_network_ids and (
+            not vm_network_id or vm_network_id not in manifest.vm_network_ids
+        ):
+            return BoundaryVerdict(
+                allowed=False,
+                reason="runner_vm_network_unbound",
+                deny_code=BoundaryDenyCode.NAMESPACE_REQUIRED.value,
+            )
 
         if asset_id and asset_id in manifest.asset_ids:
             proof = f"asset:{asset_id}:{manifest.manifest_id[:8]}"

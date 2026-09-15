@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from src.web_workbench.imports.har import ImportedExchange
 from src.web_workbench.imports.openapi import OpenApiImportError, import_openapi
 
@@ -57,11 +56,7 @@ def test_import_basic_operation() -> None:
 
 def test_yaml_spec_supported() -> None:
     yaml_spec = (
-        "openapi: 3.0.0\n"
-        "servers:\n  - url: https://api.test\n"
-        "paths:\n"
-        "  /ping:\n"
-        "    get: {}\n"
+        "openapi: 3.0.0\nservers:\n  - url: https://api.test\npaths:\n  /ping:\n    get: {}\n"
     )
     exchanges = import_openapi(yaml_spec)
     assert len(exchanges) == 1
@@ -80,7 +75,11 @@ def test_header_param_included() -> None:
             "/x": {
                 "get": {
                     "parameters": [
-                        {"name": "X-Tenant", "in": "header", "schema": {"type": "string"}}
+                        {
+                            "name": "X-Tenant",
+                            "in": "header",
+                            "schema": {"type": "string"},
+                        }
                     ]
                 }
             }
@@ -100,7 +99,10 @@ def test_enum_sample_used_for_path_param() -> None:
                             "name": "s",
                             "in": "path",
                             "required": True,
-                            "schema": {"type": "string", "enum": ["active", "inactive"]},
+                            "schema": {
+                                "type": "string",
+                                "enum": ["active", "inactive"],
+                            },
                         }
                     ]
                 }
@@ -166,7 +168,12 @@ def test_path_level_parameters_applied() -> None:
         paths={
             "/orgs/{org}": {
                 "parameters": [
-                    {"name": "org", "in": "path", "required": True, "schema": {"type": "string"}}
+                    {
+                        "name": "org",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    }
                 ],
                 "get": {},
             }
@@ -200,14 +207,22 @@ def test_swagger2_host_basepath() -> None:
 
 
 def test_base_url_override() -> None:
-    spec = {"openapi": "3.0.0", "servers": [{"url": "/relative"}], "paths": {"/x": {"get": {}}}}
+    spec = {
+        "openapi": "3.0.0",
+        "servers": [{"url": "/relative"}],
+        "paths": {"/x": {"get": {}}},
+    }
     ex = import_openapi(json.dumps(spec), base_url="https://override.test/base")[0]
     assert ex.request.header("Host") == "override.test"
     assert ex.request.target == "/base/x"
 
 
 def test_relative_server_without_base_url_rejected() -> None:
-    spec = {"openapi": "3.0.0", "servers": [{"url": "/relative"}], "paths": {"/x": {"get": {}}}}
+    spec = {
+        "openapi": "3.0.0",
+        "servers": [{"url": "/relative"}],
+        "paths": {"/x": {"get": {}}},
+    }
     with pytest.raises(OpenApiImportError):
         import_openapi(json.dumps(spec))
 

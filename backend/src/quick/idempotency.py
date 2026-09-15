@@ -48,9 +48,7 @@ def build_idempotency_key(
 ) -> str:
     """Stable key matching the Quick planner format, truncated or hashed to 256 chars."""
     digest = (template_digest or "").strip() or _EMPTY_DIGEST
-    raw = (
-        f"{scan_id}:{tool_id}:{target_ref}:{digest}:{int(plan_version)}"
-    )
+    raw = f"{scan_id}:{tool_id}:{target_ref}:{digest}:{int(plan_version)}"
     if len(raw) <= _KEY_MAX:
         return raw
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()

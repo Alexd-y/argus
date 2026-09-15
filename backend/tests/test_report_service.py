@@ -18,7 +18,6 @@ import json
 
 import pytest
 from defusedxml import ElementTree as DET
-
 from src.api.schemas import Finding, ReportSummary
 from src.reports.generators import (
     EvidenceEntry,
@@ -35,16 +34,23 @@ from src.reports.report_service import (
 
 def _summary() -> ReportSummary:
     return ReportSummary(
-        critical=2, high=1, medium=0, low=0, info=0,
-        technologies=["nginx"], sslIssues=0, headerIssues=0, leaksFound=False,
+        critical=2,
+        high=1,
+        medium=0,
+        low=0,
+        info=0,
+        technologies=["nginx"],
+        sslIssues=0,
+        headerIssues=0,
+        leaksFound=False,
     )
 
 
 def _full_data() -> ReportData:
     findings = [
         Finding(severity="critical", title="SQLi", description="d", cwe="CWE-89", cvss=9.8),
-        Finding(severity="critical", title="RCE",  description="d", cwe="CWE-78", cvss=9.5),
-        Finding(severity="high", title="XSS",      description="d", cwe="CWE-79", cvss=7.5),
+        Finding(severity="critical", title="RCE", description="d", cwe="CWE-78", cvss=9.5),
+        Finding(severity="high", title="XSS", description="d", cwe="CWE-79", cvss=7.5),
         Finding(severity="low", title="Header missing", description="d"),
     ]
     return ReportData(
@@ -203,7 +209,9 @@ class TestReportServiceDeterminism:
 
 
 class TestPdfErrorPath:
-    def test_pdf_missing_native_libs_raises_typed_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_pdf_missing_native_libs_raises_typed_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from src.reports import report_service as svc_mod
 
         def boom(*_args: object, **_kwargs: object) -> bytes:

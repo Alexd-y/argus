@@ -21,6 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _patch_login_db_no_user(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub async_session_factory so login queries see no user (no real DB)."""
 
@@ -29,6 +30,7 @@ def _patch_login_db_no_user(monkeypatch: pytest.MonkeyPatch) -> None:
             class _R:
                 def scalar_one_or_none(self):
                     return None
+
             return _R()
 
     class _CM:
@@ -351,7 +353,7 @@ class TestL17StubStepsRemoved:
     def test_no_stub_steps_export(self) -> None:
         import src.recon.step_registry as sr
 
-        assert not hasattr(sr, "STUB_STEPS") or getattr(sr, "STUB_STEPS") is sr.DEPRECATED_STEPS
+        assert not hasattr(sr, "STUB_STEPS") or sr.STUB_STEPS is sr.DEPRECATED_STEPS
         assert hasattr(sr, "DEPRECATED_STEPS")
 
     def test_deprecated_steps_is_frozenset(self) -> None:

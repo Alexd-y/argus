@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from starlette.testclient import TestClient
-
 from src.core.config import settings
+from starlette.testclient import TestClient
 
 
 def _mock_redis_for_stats_and_health() -> MagicMock:
@@ -55,12 +54,14 @@ class TestCacheRouterAdminAuth:
 class TestCacheRouterWithMocks:
     def test_health_ok_with_admin_key_and_mock_redis(self, client: TestClient) -> None:
         mock_r = _mock_redis_for_stats_and_health()
-        with patch.object(settings, "admin_api_key", "secret-admin-key"):
-            with patch("src.api.routers.cache.get_redis", return_value=mock_r):
-                response = client.get(
-                    "/api/v1/cache/health",
-                    headers={"X-Admin-Key": "secret-admin-key"},
-                )
+        with (
+            patch.object(settings, "admin_api_key", "secret-admin-key"),
+            patch("src.api.routers.cache.get_redis", return_value=mock_r),
+        ):
+            response = client.get(
+                "/api/v1/cache/health",
+                headers={"X-Admin-Key": "secret-admin-key"},
+            )
         assert response.status_code == 200
         body = response.json()
         assert body["connected"] is True
@@ -70,12 +71,14 @@ class TestCacheRouterWithMocks:
 
     def test_stats_ok_with_admin_key_and_mock_redis(self, client: TestClient) -> None:
         mock_r = _mock_redis_for_stats_and_health()
-        with patch.object(settings, "admin_api_key", "secret-admin-key"):
-            with patch("src.api.routers.cache.get_redis", return_value=mock_r):
-                response = client.get(
-                    "/api/v1/cache/stats",
-                    headers={"X-Admin-Key": "secret-admin-key"},
-                )
+        with (
+            patch.object(settings, "admin_api_key", "secret-admin-key"),
+            patch("src.api.routers.cache.get_redis", return_value=mock_r),
+        ):
+            response = client.get(
+                "/api/v1/cache/stats",
+                headers={"X-Admin-Key": "secret-admin-key"},
+            )
         assert response.status_code == 200
         data = response.json()
         assert data["connected"] is True
@@ -88,15 +91,17 @@ class TestCacheRouterWithMocks:
     def test_warm_ok_mocks_knowledge_base(self, client: TestClient) -> None:
         mock_kb = MagicMock()
         mock_kb.stats.return_value = {"key_count": 7}
-        with patch.object(settings, "admin_api_key", "secret-admin-key"):
-            with patch(
+        with (
+            patch.object(settings, "admin_api_key", "secret-admin-key"),
+            patch(
                 "src.api.routers.cache.get_knowledge_base",
                 return_value=mock_kb,
-            ):
-                response = client.post(
-                    "/api/v1/cache/warm",
-                    headers={"X-Admin-Key": "secret-admin-key"},
-                )
+            ),
+        ):
+            response = client.post(
+                "/api/v1/cache/warm",
+                headers={"X-Admin-Key": "secret-admin-key"},
+            )
         assert response.status_code == 200
         payload = response.json()
         assert payload["warmed_keys"] == 7

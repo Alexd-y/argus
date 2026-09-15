@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 
 import pytest
-
 from src.web_workbench.intruder.processors import (
     Processor,
     ProcessorError,
@@ -63,7 +62,10 @@ def test_chain_order_is_respected() -> None:
     # base64 then prefix: prefix wraps the encoded value, not the raw payload.
     out = apply_processors(
         b"x",
-        [Processor("encode", {"scheme": "base64"}), Processor("prefix", {"value": "P:"})],
+        [
+            Processor("encode", {"scheme": "base64"}),
+            Processor("prefix", {"value": "P:"}),
+        ],
     )
     assert out.startswith(b"P:")
     assert base64.b64decode(out[2:]) == b"x"

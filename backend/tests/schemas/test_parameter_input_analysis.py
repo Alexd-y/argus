@@ -2,12 +2,12 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from src.schemas.ai.common import ReconAiTask, build_task_metadata
 from src.schemas.ai.parameter_input_analysis import (
     ParameterInputAnalysisInput,
     ParameterInputAnalysisOutput,
 )
-from pydantic import ValidationError
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 
@@ -72,7 +72,9 @@ def test_parameter_input_rejects_wrong_meta_task() -> None:
                         "name": "redirect",
                         "source": "query",
                         "context_url": "https://example.com/?redirect=/home",
-                        "evidence_refs": ["route_inventory.csv:https://example.com/?redirect=/home"],
+                        "evidence_refs": [
+                            "route_inventory.csv:https://example.com/?redirect=/home"
+                        ],
                     }
                 ],
             }

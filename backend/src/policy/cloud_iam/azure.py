@@ -115,22 +115,21 @@ class AzureManagedIdentityAdapter:
         self,
         *,
         scope: str,
-        client_request_id: str,
+        client_request_id: str,  # noqa: ARG002 - cloud IAM token-provider interface parity signature
     ) -> AccessTokenResult:
         import asyncio
 
         def _call() -> AccessTokenResult:
             try:
-                from azure.core.exceptions import AzureError  # noqa: PLC0415
-                from azure.identity import ManagedIdentityCredential  # noqa: PLC0415
+                from azure.core.exceptions import AzureError
+                from azure.identity import ManagedIdentityCredential
             except ImportError as exc:  # pragma: no cover — declared dep
-                raise OwnershipVerificationError(
-                    REASON_AZURE_MI_TOKEN_REFRESH_FAILED
-                ) from exc
+                raise OwnershipVerificationError(REASON_AZURE_MI_TOKEN_REFRESH_FAILED) from exc
 
             credential: Any = (
-                self._credential_factory() if self._credential_factory else
-                ManagedIdentityCredential()
+                self._credential_factory()
+                if self._credential_factory
+                else ManagedIdentityCredential()
             )
             try:
                 token = credential.get_token(scope or self._scope)
@@ -251,13 +250,9 @@ class AzureManagedIdentityVerifier:
             except OwnershipTimeoutError:
                 raise
             except _AzureCallFailed:
-                raise OwnershipVerificationError(
-                    REASON_AZURE_MI_TOKEN_REFRESH_FAILED
-                ) from None
+                raise OwnershipVerificationError(REASON_AZURE_MI_TOKEN_REFRESH_FAILED) from None
             except Exception:
-                raise OwnershipVerificationError(
-                    REASON_AZURE_MI_TOKEN_REFRESH_FAILED
-                ) from None
+                raise OwnershipVerificationError(REASON_AZURE_MI_TOKEN_REFRESH_FAILED) from None
 
         try:
             return await run_with_timeout(_do, timeout_reason=REASON_AZURE_MI_TIMEOUT)
@@ -268,7 +263,7 @@ class AzureManagedIdentityVerifier:
                 allowed=False,
                 summary=REASON_AZURE_MI_TIMEOUT,
             )
-            raise OwnershipVerificationError(REASON_AZURE_MI_TIMEOUT)
+            raise OwnershipVerificationError(REASON_AZURE_MI_TIMEOUT) from None
         except OwnershipVerificationError as exc:
             self._emit(challenge, descriptor, allowed=False, summary=exc.summary)
             raise
@@ -282,10 +277,7 @@ class AzureManagedIdentityVerifier:
         tid = str(claims.get("tid", "")).strip().lower()
         oid = str(claims.get("oid", "")).strip().lower()
         mi_resource = str(
-            claims.get("xms_mirid")
-            or claims.get("mi_res_id")
-            or claims.get("xms_az_rid")
-            or ""
+            claims.get("xms_mirid") or claims.get("mi_res_id") or claims.get("xms_az_rid") or ""
         ).strip()
 
         if not tid or not constant_time_str_equal(tid, parsed.tenant_id):
@@ -298,11 +290,8 @@ class AzureManagedIdentityVerifier:
             raise OwnershipVerificationError(REASON_AZURE_MI_RESOURCE_NOT_OWNED)
 
         exp = claims.get("exp")
-        if isinstance(exp, (int, float)):
-            if int(exp) < int(utcnow().timestamp()):
-                raise OwnershipVerificationError(
-                    REASON_AZURE_MI_TOKEN_REFRESH_FAILED
-                )
+        if isinstance(exp, (int, float)) and int(exp) < int(utcnow().timestamp()):
+            raise OwnershipVerificationError(REASON_AZURE_MI_TOKEN_REFRESH_FAILED)
 
     def _emit(
         self,
@@ -362,10 +351,7 @@ def _parse_target(target: str) -> _ParsedAzureTarget:
     tenant_id = parts[0].strip().lower()
     object_id = parts[1].strip().lower()
     mi_resource_id = parts[2].strip().lower()
-    if (
-        len(tenant_id) != _AZURE_TENANT_ID_LEN
-        or len(object_id) != _AZURE_OBJECT_ID_LEN
-    ):
+    if len(tenant_id) != _AZURE_TENANT_ID_LEN or len(object_id) != _AZURE_OBJECT_ID_LEN:
         raise OwnershipVerificationError(REASON_AZURE_MI_TENANT_MISMATCH)
     if not mi_resource_id.startswith("/subscriptions/"):
         raise OwnershipVerificationError(REASON_AZURE_MI_RESOURCE_NOT_OWNED)

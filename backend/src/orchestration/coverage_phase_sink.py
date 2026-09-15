@@ -145,7 +145,9 @@ def _requirement_id() -> str:
     return str(uuid4())
 
 
-def serialize_coverage_results(results: Sequence[CoverageResult]) -> list[dict[str, Any]]:
+def serialize_coverage_results(
+    results: Sequence[CoverageResult],
+) -> list[dict[str, Any]]:
     return [item.model_dump(mode="json") for item in results]
 
 
@@ -165,7 +167,11 @@ def _lab_adjust_block(
     if not is_lab:
         return policy_blocked, blocked_reason
     if tool_error:
-        reason = blocked_reason if blocked_reason and blocked_reason != "policy_blocked" else "tool_error"
+        reason = (
+            blocked_reason
+            if blocked_reason and blocked_reason != "policy_blocked"
+            else "tool_error"
+        )
         return False, reason
     if target_unreachable:
         reason = (

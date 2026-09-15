@@ -58,7 +58,10 @@ from src.sandbox.parsers._jsonl_base import persist_jsonl_sidecar, safe_join_art
 _logger = logging.getLogger(__name__)
 
 EVIDENCE_SIDECAR_NAME: Final[str] = "ssl_enum_ciphers_findings.jsonl"
-_CANONICAL_FILENAMES: Final[tuple[str, ...]] = ("ssl_ciphers.xml", "ssl_enum_ciphers.xml")
+_CANONICAL_FILENAMES: Final[tuple[str, ...]] = (
+    "ssl_ciphers.xml",
+    "ssl_enum_ciphers.xml",
+)
 _SCRIPT_ID: Final[str] = "ssl-enum-ciphers"
 _MAX_FINDINGS: Final[int] = 2_000
 _MAX_CIPHERS_IN_EVIDENCE: Final[int] = 40

@@ -22,9 +22,7 @@ def parse_resolved(path: str | Path) -> dict[str, list[str]]:
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as e:
-        logger.warning(
-            "Failed to read resolved file", extra={"path": str(path), "error": str(e)}
-        )
+        logger.warning("Failed to read resolved file", extra={"path": str(path), "error": str(e)})
         return {}
 
     result: dict[str, list[str]] = {}

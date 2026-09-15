@@ -7,7 +7,6 @@ from datetime import timedelta
 from uuid import UUID
 
 import pytest
-
 from src.policy.audit import AuditEventType, AuditLogger, InMemoryAuditSink
 from src.policy.cloud_iam import _common as common
 from src.policy.cloud_iam._common import (
@@ -34,7 +33,6 @@ from src.policy.ownership import (
     OwnershipVerificationError,
 )
 
-
 # ---------------------------------------------------------------------------
 # utcnow / constant-time compare / hash_identifier
 # ---------------------------------------------------------------------------
@@ -56,9 +54,7 @@ class TestPureHelpers:
             ("\u00e9", "\u00e9", True),  # accented char round-trip
         ],
     )
-    def test_constant_time_str_equal(
-        self, left: str, right: str, expected: bool
-    ) -> None:
+    def test_constant_time_str_equal(self, left: str, right: str, expected: bool) -> None:
         assert constant_time_str_equal(left, right) is expected
 
     def test_hash_identifier_is_deterministic(self) -> None:
@@ -361,9 +357,7 @@ class TestCloudMethodMetadata:
             (OwnershipMethod.AZURE_MANAGED_IDENTITY, "azure"),
         ],
     )
-    def test_metadata_for_returns_provider(
-        self, method: OwnershipMethod, provider: str
-    ) -> None:
+    def test_metadata_for_returns_provider(self, method: OwnershipMethod, provider: str) -> None:
         assert metadata_for(method).cloud_provider == provider
 
     def test_metadata_for_rejects_non_cloud_methods(self) -> None:

@@ -21,9 +21,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-
 from src.payloads.registry import PayloadRegistry
-
 
 _PAYLOADS_RELATIVE: Final[tuple[str, ...]] = (
     "config",
@@ -82,9 +80,8 @@ def test_loading_registry_does_not_mutate_yaml_payloads(
         expected = initial_hashes.get(yaml_path.name)
         if expected is None or actual != expected:
             drift.append((yaml_path.name, expected or "<missing>", actual))
-    assert not drift, (
-        "payload YAML files mutated by registry load: "
-        + ", ".join(f"{name} expected={exp[:12]}.. got={act[:12]}.." for name, exp, act in drift)
+    assert not drift, "payload YAML files mutated by registry load: " + ", ".join(
+        f"{name} expected={exp[:12]}.. got={act[:12]}.." for name, exp, act in drift
     )
 
 

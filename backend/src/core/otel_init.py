@@ -278,7 +278,7 @@ def setup_observability(app: Any) -> Any | None:
     return _provider
 
 
-def setup_celery_observability(celery_app: Any) -> None:  # noqa: ARG001
+def setup_celery_observability(celery_app: Any) -> None:  # noqa: ARG001 - retained for signature/API compatibility
     """Worker-side OTel init.
 
     The ``celery_app`` argument is accepted for symmetry with the FastAPI

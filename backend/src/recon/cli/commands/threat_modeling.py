@@ -27,9 +27,9 @@ threat_modeling_app = typer.Typer(help="Threat modeling (Stage 2) commands.")
 
 @threat_modeling_app.command("run")
 def run_cmd(
-    engagement: str = typer.Option(..., "--engagement", "-e", help="Engagement ID"),  # noqa: B008
-    target: str | None = typer.Option(None, "--target", "-t", help="Optional target ID"),  # noqa: B008
-    recon_dir: Path | None = typer.Option(  # noqa: B008
+    engagement: str = typer.Option(..., "--engagement", "-e", help="Engagement ID"),
+    target: str | None = typer.Option(None, "--target", "-t", help="Optional target ID"),
+    recon_dir: Path | None = typer.Option(
         None,
         "--recon-dir",
         "-r",
@@ -45,6 +45,7 @@ def run_cmd(
     Uses DB for artifact storage. If --recon-dir is provided and exists,
     loads input bundle from files; otherwise loads from DB artifacts.
     """
+
     async def _do_run() -> None:
         async with async_session_factory() as db:
             try:
@@ -62,9 +63,7 @@ def run_cmd(
                     if resolved.exists() and resolved.is_dir():
                         recon_path = resolved
 
-                run = await create_threat_model_run(
-                    db, tenant_id, engagement, target_id=target
-                )
+                run = await create_threat_model_run(db, tenant_id, engagement, target_id=target)
                 console.print(f"[dim]Created run {run.id} (job_id={run.job_id})[/dim]")
 
                 result = await execute_threat_modeling_run(

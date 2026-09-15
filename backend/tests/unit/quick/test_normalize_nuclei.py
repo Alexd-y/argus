@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from src.quick.normalize import (
     QuickNormalizeContext,
     normalize_match,
@@ -33,23 +32,23 @@ def _mock_minio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx(**overrides: Any) -> QuickNormalizeContext:
-    base: dict[str, Any] = dict(
-        tenant_id=_TENANT_ID,
-        scan_id=_SCAN_ID,
-        engagement_id=_ENGAGEMENT_ID,
-        asset_id=_ASSET_ID,
-        asset=_ASSET,
-        tool_id="nuclei",
-        tool_version="3.3.0",
-        capability_id="web.application.cve.known_product",
-        phase="vuln_analysis",
-        task_id=_TASK_ID,
-        policy_decision_id=_POLICY_ID,
-        lease_id=_LEASE_ID,
-        template_id="http-cve-nginx",
-        template_digest="b" * 64,
-        protocol="https",
-    )
+    base: dict[str, Any] = {
+        "tenant_id": _TENANT_ID,
+        "scan_id": _SCAN_ID,
+        "engagement_id": _ENGAGEMENT_ID,
+        "asset_id": _ASSET_ID,
+        "asset": _ASSET,
+        "tool_id": "nuclei",
+        "tool_version": "3.3.0",
+        "capability_id": "web.application.cve.known_product",
+        "phase": "vuln_analysis",
+        "task_id": _TASK_ID,
+        "policy_decision_id": _POLICY_ID,
+        "lease_id": _LEASE_ID,
+        "template_id": "http-cve-nginx",
+        "template_digest": "b" * 64,
+        "protocol": "https",
+    }
     base.update(overrides)
     return QuickNormalizeContext(**base)
 
@@ -198,7 +197,9 @@ def test_normalize_tool_output_nested_matches_list() -> None:
     assert results[0].finding.template_id == "http-cve-nginx"
 
 
-def test_raw_artifact_not_stored_outside_raw_phases(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_raw_artifact_not_stored_outside_raw_phases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     called: list[str] = []
 
     def _sink(**kwargs: Any) -> str:

@@ -38,7 +38,7 @@ def _parse_json_scope(data: dict[str, Any]) -> BountyScope:
 def _parse_raw_text(text: str) -> BountyScope:
     """Parse a raw pasted bug bounty scope text block."""
     scope = BountyScope()
-    lines = [l.strip() for l in text.strip().split("\n") if l.strip()]
+    lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
 
     in_section: str | None = None
     for line in lines:
@@ -57,9 +57,17 @@ def _parse_raw_text(text: str) -> BountyScope:
             in_section = "special_rules"
             continue
 
-        if re.search(r"https?://|www\.|^\*\.", line) and in_section in (None, "in_scope"):
+        if re.search(r"https?://|www\.|^\*\.", line) and in_section in (
+            None,
+            "in_scope",
+        ):
             scope.in_scope.append(line.lstrip("-*• "))
-        elif in_section and in_section in ("in_scope", "out_of_scope", "vulnerability_types", "special_rules"):
+        elif in_section and in_section in (
+            "in_scope",
+            "out_of_scope",
+            "vulnerability_types",
+            "special_rules",
+        ):
             items = getattr(scope, in_section, None)
             if isinstance(items, list):
                 items.append(line.lstrip("-*• "))

@@ -14,8 +14,20 @@ init_app = typer.Typer(help="Initialize a new recon engagement workspace.")
 
 RECON_FOLDER_STRUCTURE: dict[str, list[str]] = {
     "00_scope": ["scope.txt", "roe.txt", "targets.txt", "contacts.txt"],
-    "01_domains": ["whois.txt", "rdap.txt", "dns_records.txt", "ns.txt", "mx.txt", "txt.txt", "caa.txt"],
-    "02_subdomains": ["subdomains_raw.txt", "subdomains_all.txt", "subdomains_clean.txt"],
+    "01_domains": [
+        "whois.txt",
+        "rdap.txt",
+        "dns_records.txt",
+        "ns.txt",
+        "mx.txt",
+        "txt.txt",
+        "caa.txt",
+    ],
+    "02_subdomains": [
+        "subdomains_raw.txt",
+        "subdomains_all.txt",
+        "subdomains_clean.txt",
+    ],
     "03_dns": ["resolved.txt", "unresolved.txt", "cname_map.csv"],
     "04_live_hosts": ["live_hosts.txt", "http_probe.csv"],
     "05_clustering": ["host_groups.md"],
@@ -24,19 +36,30 @@ RECON_FOLDER_STRUCTURE: dict[str, list[str]] = {
     "08_crawl": ["urls_raw.txt", "urls_dedup.txt", "params_candidates.txt"],
     "09_params": ["param_inventory.csv"],
     "10_js": ["js_findings.md", "api_candidates.txt", "secrets_candidates.txt"],
-    "11_api": ["api_inventory.csv", "graphql_notes.md", "swagger_refs.txt", "cors_notes.md"],
+    "11_api": [
+        "api_inventory.csv",
+        "graphql_notes.md",
+        "swagger_refs.txt",
+        "cors_notes.md",
+    ],
     "12_ports": ["service_inventory.csv", "unusual_services.txt"],
     "13_tls": ["tls_scan.txt", "headers_summary.md", "cookie_notes.md"],
     "14_content": ["content_discovery.txt", "interesting_paths_high.txt"],
     "15_osint": [
-        "github_findings.md", "repo_findings.md", "doc_metadata.md",
-        "employees_public_refs.md", "third_party_refs.md",
+        "github_findings.md",
+        "repo_findings.md",
+        "doc_metadata.md",
+        "employees_public_refs.md",
+        "third_party_refs.md",
     ],
     "16_hypothesis": ["hypotheses.md"],
     "17_attack_map": ["attack_surface.md"],
     "18_reporting": [
-        "recon_summary.md", "asset_inventory.csv", "service_inventory_final.csv",
-        "findings_for_next_phase.md", "priorities.md",
+        "recon_summary.md",
+        "asset_inventory.csv",
+        "service_inventory_final.csv",
+        "findings_for_next_phase.md",
+        "priorities.md",
     ],
 }
 
@@ -112,4 +135,6 @@ def create(
 
     folder_count = sum(1 for _ in recon_root.rglob("*") if _.is_dir())
     file_count = sum(1 for _ in recon_root.rglob("*") if _.is_file())
-    console.print(f"\n[bold]{folder_count}[/bold] directories, [bold]{file_count}[/bold] files created.")
+    console.print(
+        f"\n[bold]{folder_count}[/bold] directories, [bold]{file_count}[/bold] files created."
+    )

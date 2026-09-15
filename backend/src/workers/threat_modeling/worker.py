@@ -37,7 +37,9 @@ class AttackSurface:
 @dataclass
 class ThreatScenario:
     id: str = ""
-    stride_category: str = ""  # Spoofing | Tampering | Repudiation | InfoDisclosure | DoS | Elevation
+    stride_category: str = (
+        ""  # Spoofing | Tampering | Repudiation | InfoDisclosure | DoS | Elevation
+    )
     description: str = ""
     affected_assets: list[str] = field(default_factory=list)
     severity: str = ""  # critical | high | medium | low
@@ -88,18 +90,18 @@ def _prompt_threat_model(
 
 === CODE PROPERTY GRAPH ===
 Files analysed: {len(cpg.nodes)} nodes
-Entry points: {', '.join(entry_points[:30]) or 'none detected'}
-Sensitive sinks: {', '.join(sinks[:30]) or 'none detected'}
-Functions/methods: {', '.join(functions[:50]) or 'none detected'}
+Entry points: {", ".join(entry_points[:30]) or "none detected"}
+Sensitive sinks: {", ".join(sinks[:30]) or "none detected"}
+Functions/methods: {", ".join(functions[:50]) or "none detected"}
 
 Nodes detail:
 {nodes_summary}
 
 === DEPENDENCIES ===
-{json.dumps(dependencies[:100], indent=2) if dependencies else 'No dependencies analysed'}
+{json.dumps(dependencies[:100], indent=2) if dependencies else "No dependencies analysed"}
 
 === INFRASTRUCTURE (IaC) ===
-{json.dumps(iac_info, indent=2, default=str) if iac_info else 'No IaC configs analysed'}
+{json.dumps(iac_info, indent=2, default=str) if iac_info else "No IaC configs analysed"}
 
 === TASK ===
 Output a JSON threat model with:
@@ -162,6 +164,7 @@ async def run_threat_modeling(
     except json.JSONDecodeError:
         # Try extracting JSON from markdown code block
         import re
+
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response_text)
         if match:
             data = json.loads(match.group(1))
@@ -174,7 +177,12 @@ async def run_threat_modeling(
         repo_id="",
         version="1.0",
         commit_sha=commit_sha,
-        assets=[Asset(**a) if isinstance(a, dict) else Asset(name=str(a), asset_type="unknown", sensitivity="internal") for a in data.get("assets", [])],
+        assets=[
+            Asset(**a)
+            if isinstance(a, dict)
+            else Asset(name=str(a), asset_type="unknown", sensitivity="internal")
+            for a in data.get("assets", [])
+        ],
         attack_surfaces=[
             AttackSurface(**s) if isinstance(s, dict) else AttackSurface(name=str(s))
             for s in data.get("attack_surfaces", [])
@@ -221,7 +229,16 @@ def build_threat_model_diff(
         "commit": f"{previous.commit_sha} → {current.commit_sha}",
         "new_threats": list(curr_threat_ids - prev_threat_ids),
         "resolved_threats": list(prev_threat_ids - curr_threat_ids),
-        "new_cves": [c.cve_id for c in current.cves if c.cve_id not in {p.cve_id for p in previous.cves}],
-        "new_attack_surfaces": [s.name for s in current.attack_surfaces if s.name not in {p.name for p in previous.attack_surfaces}],
-        "asset_count": {"previous": len(previous.assets), "current": len(current.assets)},
+        "new_cves": [
+            c.cve_id for c in current.cves if c.cve_id not in {p.cve_id for p in previous.cves}
+        ],
+        "new_attack_surfaces": [
+            s.name
+            for s in current.attack_surfaces
+            if s.name not in {p.name for p in previous.attack_surfaces}
+        ],
+        "asset_count": {
+            "previous": len(previous.assets),
+            "current": len(current.assets),
+        },
     }

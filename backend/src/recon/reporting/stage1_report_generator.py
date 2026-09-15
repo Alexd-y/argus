@@ -37,7 +37,7 @@ def _derive_target_domain(recon_dir: Path) -> str:
     if scope_path.exists():
         try:
             text = scope_path.read_text(encoding="utf-8", errors="replace")
-            m = re.search(r"Target:\s*([^\s#\n]+)", text, re.I)
+            m = re.search(r"Target:\s*([^\s#\n]+)", text, re.IGNORECASE)
             if m:
                 return m.group(1).strip()
         except OSError:
@@ -46,7 +46,7 @@ def _derive_target_domain(recon_dir: Path) -> str:
     if targets_path.exists():
         try:
             text = targets_path.read_text(encoding="utf-8", errors="replace")
-            m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.I)
+            m = re.search(r"Primary Domain\s*\n\s*([^\s#\n]+)", text, re.IGNORECASE)
             if m:
                 return m.group(1).strip()
         except OSError:
@@ -88,14 +88,16 @@ def _run_intel_adapters(domain: str) -> dict:
     adapters_out: list[dict] = []
     for i, r in enumerate(results):
         if isinstance(r, Exception):
-            adapters_out.append({
-                "source": adapters[i].name if i < len(adapters) else "unknown",
-                "findings": [],
-                "skipped": True,
-                "error_code": "adapter_fetch_failed",
-                "error_category": "upstream_adapter_error",
-                "raw": None,
-            })
+            adapters_out.append(
+                {
+                    "source": adapters[i].name if i < len(adapters) else "unknown",
+                    "findings": [],
+                    "skipped": True,
+                    "error_code": "adapter_fetch_failed",
+                    "error_category": "upstream_adapter_error",
+                    "raw": None,
+                }
+            )
         else:
             adapters_out.append(r)
 
@@ -155,7 +157,6 @@ def generate_stage1_report(
         recon_dir=recon_dir,
         trace_id=trace_id,
     ):
-
         # --- DNS summary ---
         try:
             from src.recon.reporting.dns_builder import build_dns_summary
@@ -221,7 +222,11 @@ def generate_stage1_report(
             entries = build_tech_profile_json(http_probe_path=http_probe_path)
             json_path = recon_dir / "tech_profile.json"
             json_path.write_text(
-                json.dumps([e.model_dump(mode="json") for e in entries], indent=2, ensure_ascii=False),
+                json.dumps(
+                    [e.model_dump(mode="json") for e in entries],
+                    indent=2,
+                    ensure_ascii=False,
+                ),
                 encoding="utf-8",
             )
             generated.append(json_path)
@@ -272,7 +277,10 @@ def generate_stage1_report(
             detailed_path.write_text(detailed_csv, encoding="utf-8")
             generated.append(detailed_path)
         except Exception:
-            logger.warning("Skipped headers_summary", extra={"error_code": "headers_summary_failed"})
+            logger.warning(
+                "Skipped headers_summary",
+                extra={"error_code": "headers_summary_failed"},
+            )
 
         try:
             from src.recon.reporting.headers_builder import build_tls_summary
@@ -321,7 +329,10 @@ def generate_stage1_report(
                 out_path.write_text(content, encoding="utf-8")
                 generated.append(out_path)
         except Exception:
-            logger.warning("Skipped stage1 enrichment", extra={"error_code": "stage1_enrichment_failed"})
+            logger.warning(
+                "Skipped stage1 enrichment",
+                extra={"error_code": "stage1_enrichment_failed"},
+            )
 
         # Resolve LLM client once for anomalies + stage2 (if keys present)
         call_llm: Callable[[str, dict], str] | None = None
@@ -368,7 +379,11 @@ def generate_stage1_report(
         # --- Intel/OSINT enrichment (when adapters available) ---
         try:
             if skip_intel:
-                intel_data = {"target_domain": _derive_target_domain(recon_dir), "fetched_at": "", "adapters": []}
+                intel_data = {
+                    "target_domain": _derive_target_domain(recon_dir),
+                    "fetched_at": "",
+                    "adapters": [],
+                }
             else:
                 target_domain = _derive_target_domain(recon_dir)
                 intel_data = _run_intel_adapters(target_domain)
@@ -387,7 +402,10 @@ def generate_stage1_report(
                 summary_path.write_text(summary_content, encoding="utf-8")
                 generated.append(summary_path)
         except Exception:
-            logger.warning("Skipped intel enrichment", extra={"error_code": "intel_enrichment_failed"})
+            logger.warning(
+                "Skipped intel enrichment",
+                extra={"error_code": "intel_enrichment_failed"},
+            )
 
         # --- Tools & AI metadata for report ---
         tools_ai_metadata: dict = {}
@@ -399,8 +417,12 @@ def generate_stage1_report(
                 from src.recon.reporting.anomaly_builder import ANOMALY_PROMPT_TEMPLATE
                 from src.recon.reporting.stage1_enrichment_builder import _AI_TEMPLATES
                 from src.recon.reporting.stage2_builder import STAGE2_PROMPT_TEMPLATE
+
                 tools_ai_metadata["prompts_used"] = [
-                    {"name": "Anomaly interpretation", "description": ANOMALY_PROMPT_TEMPLATE},
+                    {
+                        "name": "Anomaly interpretation",
+                        "description": ANOMALY_PROMPT_TEMPLATE,
+                    },
                     {"name": "Stage 2 inputs", "description": STAGE2_PROMPT_TEMPLATE},
                     {
                         "name": "JS findings analysis",
@@ -420,7 +442,9 @@ def generate_stage1_report(
                     },
                     {
                         "name": "Content similarity interpretation",
-                        "description": _AI_TEMPLATES["content_similarity_interpretation"]["prompt_template"],
+                        "description": _AI_TEMPLATES["content_similarity_interpretation"][
+                            "prompt_template"
+                        ],
                     },
                     {
                         "name": "Anomaly interpretation (Stage1 validation)",
@@ -428,11 +452,15 @@ def generate_stage1_report(
                     },
                     {
                         "name": "Stage 2 preparation summary",
-                        "description": _AI_TEMPLATES["stage2_preparation_summary"]["prompt_template"],
+                        "description": _AI_TEMPLATES["stage2_preparation_summary"][
+                            "prompt_template"
+                        ],
                     },
                     {
                         "name": "Stage 3 preparation summary",
-                        "description": _AI_TEMPLATES["stage3_preparation_summary"]["prompt_template"],
+                        "description": _AI_TEMPLATES["stage3_preparation_summary"][
+                            "prompt_template"
+                        ],
                     },
                 ]
 

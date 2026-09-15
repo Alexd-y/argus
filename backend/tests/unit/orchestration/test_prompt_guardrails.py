@@ -6,9 +6,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from src.agents.va_orchestrator import DISCOVERY_SYSTEM_PROMPT
-from src.orchestration.prompt_registry import SYSTEM_PROMPT_BASE, UNTRUSTED_DATA_GUARDRAILS
+from src.orchestration.prompt_registry import (
+    SYSTEM_PROMPT_BASE,
+    UNTRUSTED_DATA_GUARDRAILS,
+)
 
 _PROMPTS_DIR = Path(__file__).resolve().parents[3] / "src" / "orchestration" / "prompts"
 

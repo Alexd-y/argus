@@ -22,13 +22,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.mcp.services.notifications._base import (
     TARGET_REDACTED_LEN,
     hash_target,
@@ -59,19 +58,13 @@ _HEX_REDACTED = re.compile(rf"^[0-9a-f]{{{TARGET_REDACTED_LEN}}}$")
 class TestRbac:
     """Role-based access control matrix for the LIST endpoint."""
 
-    async def test_list_403_for_operator(
-        self, api_client: AsyncClient
-    ) -> None:
+    async def test_list_403_for_operator(self, api_client: AsyncClient) -> None:
         r = await api_client.get(LIST_PATH, headers=headers_operator())
         assert r.status_code == 403
         assert r.json()["detail"] == "forbidden"
 
-    async def test_list_403_admin_without_tenant_header(
-        self, api_client: AsyncClient
-    ) -> None:
-        r = await api_client.get(
-            LIST_PATH, headers=headers_admin_no_tenant()
-        )
+    async def test_list_403_admin_without_tenant_header(self, api_client: AsyncClient) -> None:
+        r = await api_client.get(LIST_PATH, headers=headers_admin_no_tenant())
         assert r.status_code == 403
         assert r.json()["detail"] == "tenant_required"
 
@@ -80,12 +73,8 @@ class TestRbac:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-a-001"
-        )
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-b-001"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-a-001")
+        await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-b-001")
 
         r = await api_client.get(LIST_PATH, headers=headers_admin(TENANT_A))
 
@@ -101,12 +90,8 @@ class TestRbac:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-a-100"
-        )
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-b-100"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-a-100")
+        await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-b-100")
 
         r = await api_client.get(LIST_PATH, headers=headers_super_admin())
 
@@ -121,16 +106,10 @@ class TestRbac:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-a-200"
-        )
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-b-200"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-a-200")
+        await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-b-200")
 
-        r = await api_client.get(
-            LIST_PATH, headers=headers_super_admin(TENANT_B)
-        )
+        r = await api_client.get(LIST_PATH, headers=headers_super_admin(TENANT_B))
 
         assert r.status_code == 200
         body = r.json()
@@ -152,9 +131,7 @@ class TestPaginationAndFilters:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         for i in range(5):
-            await enqueue_dlq_entry(
-                session, tenant_id=TENANT_A, event_id=f"evt-page-{i:03}"
-            )
+            await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id=f"evt-page-{i:03}")
 
         first = await api_client.get(
             LIST_PATH,
@@ -197,15 +174,9 @@ class TestPaginationAndFilters:
         self, api_client: AsyncClient, session: AsyncSession
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        pending = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-pending"
-        )
-        replayed = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-replayed"
-        )
-        abandoned = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-abandoned"
-        )
+        pending = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-pending")
+        replayed = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-replayed")
+        abandoned = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-abandoned")
         await force_terminal_replayed(session, entry_id=replayed.id)
         await force_terminal_abandoned(session, entry_id=abandoned.id)
 
@@ -260,22 +231,15 @@ class TestPaginationAndFilters:
         self, api_client: AsyncClient, session: AsyncSession
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        old = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-old-0001"
-        )
-        recent = await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-recent-0002"
-        )
+        old = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-old-0001")
+        recent = await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-recent-0002")
         # Force `created_at` columns to known instants — server_default
         # sets `now()` so we backdate via raw SQL.
         old_when = datetime(2026, 1, 1, 12, 0, 0)
         recent_when = datetime(2026, 4, 22, 12, 0, 0)
         for entry_id, when in ((old.id, old_when), (recent.id, recent_when)):
             await session.execute(
-                text(
-                    "UPDATE webhook_dlq_entries SET created_at = :ts "
-                    "WHERE id = :id"
-                ),
+                text("UPDATE webhook_dlq_entries SET created_at = :ts WHERE id = :id"),
                 {"ts": when, "id": entry_id},
             )
         await session.commit()
@@ -358,9 +322,7 @@ class TestValidation:
         assert r.status_code == 422
 
     @pytest.mark.parametrize("offset", [-1, -100])
-    async def test_list_422_offset_negative(
-        self, api_client: AsyncClient, offset: int
-    ) -> None:
+    async def test_list_422_offset_negative(self, api_client: AsyncClient, offset: int) -> None:
         r = await api_client.get(
             LIST_PATH,
             headers=headers_super_admin(),
@@ -368,9 +330,7 @@ class TestValidation:
         )
         assert r.status_code == 422
 
-    async def test_list_422_limit_zero(
-        self, api_client: AsyncClient
-    ) -> None:
+    async def test_list_422_limit_zero(self, api_client: AsyncClient) -> None:
         r = await api_client.get(
             LIST_PATH,
             headers=headers_super_admin(),
@@ -443,9 +403,7 @@ class TestResponseShape:
     ) -> None:
         # Edge of valid range: limit=200 must still succeed.
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-clamp"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-clamp")
 
         r = await api_client.get(
             LIST_PATH,
@@ -462,9 +420,7 @@ class TestResponseShape:
         # Reads must not emit audit rows — only state-changing actions
         # (replay/abandon) write to AuditLog.
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_A, event_id="evt-no-audit"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_A, event_id="evt-no-audit")
 
         r = await api_client.get(LIST_PATH, headers=headers_admin(TENANT_A))
 
@@ -484,9 +440,7 @@ class TestCrossTenantProbe:
     ) -> None:
         await seed_tenant(session, tenant_id=TENANT_A, name="alpha")
         await seed_tenant(session, tenant_id=TENANT_B, name="bravo")
-        await enqueue_dlq_entry(
-            session, tenant_id=TENANT_B, event_id="evt-tenant-b-only"
-        )
+        await enqueue_dlq_entry(session, tenant_id=TENANT_B, event_id="evt-tenant-b-only")
 
         r = await api_client.get(LIST_PATH, headers=headers_admin(TENANT_A))
 

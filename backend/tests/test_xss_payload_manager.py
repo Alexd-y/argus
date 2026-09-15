@@ -6,10 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from src.recon.vulnerability_analysis.context_detector import ReflectionContextKey
 from src.recon.vulnerability_analysis.active_scan.xss_payload_manager import (
-    XSSPayloadManager,
     _BUILTIN_ATTRIBUTE_CONTEXT,
     _BUILTIN_DOM_CONTEXT,
     _BUILTIN_HTML_CONTEXT,
@@ -17,8 +14,10 @@ from src.recon.vulnerability_analysis.active_scan.xss_payload_manager import (
     _BUILTIN_MAP,
     _CONTEXT_CATEGORIES,
     _REFLECTION_TO_CATEGORY,
+    XSSPayloadManager,
     _load_file_payloads,
 )
+from src.recon.vulnerability_analysis.context_detector import ReflectionContextKey
 
 
 def _fresh_manager(**settings_overrides: object) -> XSSPayloadManager:
@@ -31,9 +30,7 @@ class TestReflectionToCategoryContract:
     """Contract: ``_REFLECTION_TO_CATEGORY`` keys match ``ReflectionContextKey`` (except UNKNOWN)."""
 
     def test_keys_match_enum_excluding_unknown(self) -> None:
-        expected = {
-            m.value for m in ReflectionContextKey if m is not ReflectionContextKey.UNKNOWN
-        }
+        expected = {m.value for m in ReflectionContextKey if m is not ReflectionContextKey.UNKNOWN}
         assert set(_REFLECTION_TO_CATEGORY.keys()) == expected
 
     def test_values_are_valid_context_categories(self) -> None:
@@ -243,7 +240,9 @@ class TestReflectionContextHintPayloadChoice:
         ],
     )
     def test_first_payload_matches_context_category(
-        self, hint: str, expected_first: str,
+        self,
+        hint: str,
+        expected_first: str,
     ) -> None:
         with patch(
             "src.recon.vulnerability_analysis.active_scan.xss_payload_manager.settings"
@@ -323,7 +322,8 @@ class TestXssPayloadCollectionUrl:
         ],
     )
     def test_blocked_collection_scheme_skips_http_and_uses_builtins_only(
-        self, blocked_url: str,
+        self,
+        blocked_url: str,
     ) -> None:
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)

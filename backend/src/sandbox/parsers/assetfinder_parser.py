@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import FindingDTO
 from src.sandbox.parsers._base import stable_hash_12
@@ -44,7 +44,7 @@ _CANONICAL_NAMES: Final[tuple[str, ...]] = (
 _MAX_FINDINGS: Final[int] = 5_000
 
 
-_DedupKey: TypeAlias = tuple[str]
+type _DedupKey = tuple[str]
 
 
 def parse_assetfinder(

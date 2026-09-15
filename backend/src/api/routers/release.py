@@ -30,24 +30,40 @@ class DeltaRequest(BaseModel):
 
 
 @router.post("/check")
-async def check_release(req: ReleaseCheckRequest, _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> dict[str, Any]:
+async def check_release(
+    req: ReleaseCheckRequest,
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
     from src.governance.release.gates import check_release_gates
 
     gates = check_release_gates(
-        req.benchmark_result, req.safety_alerts, req.hallucination_rate,
+        req.benchmark_result,
+        req.safety_alerts,
+        req.hallucination_rate,
     )
     all_passed = all(g.passed for g in gates)
     return {
         "model": req.model,
         "version": req.version,
         "passed": all_passed,
-        "gates": [{"name": g.name, "passed": g.passed, "threshold": g.threshold, "current": g.current_value} for g in gates],
+        "gates": [
+            {
+                "name": g.name,
+                "passed": g.passed,
+                "threshold": g.threshold,
+                "current": g.current_value,
+            }
+            for g in gates
+        ],
         "verdict": "approved" if all_passed else "blocked",
     }
 
 
 @router.post("/delta")
-async def eval_delta(req: DeltaRequest, _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> dict[str, Any]:
+async def eval_delta(
+    req: DeltaRequest,
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
     from src.governance.release.gates import compute_eval_delta
 
     delta = compute_eval_delta(req.before, req.after)
@@ -63,7 +79,11 @@ async def eval_delta(req: DeltaRequest, _principal: Annotated[SessionPrincipal, 
 
 
 @router.get("/card/{model}")
-async def get_system_card(model: str, version: str = "1.0.0", _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None) -> dict[str, Any]:
+async def get_system_card(
+    model: str,
+    version: str = "1.0.0",
+    _principal: Annotated[SessionPrincipal, Depends(require_admin_mfa_passed)] = None,
+) -> dict[str, Any]:
     from src.governance.release.gates import generate_system_card
 
     card = generate_system_card(model, version)

@@ -8,12 +8,11 @@ events are emitted with stable taxonomy values.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import (
     RiskLevel,
@@ -39,7 +38,6 @@ from src.policy.preflight import (
     PreflightDeniedError,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -51,7 +49,7 @@ def _make_proof(
     target: str,
     valid_for: timedelta = timedelta(hours=1),
 ) -> OwnershipProof:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return OwnershipProof(
         challenge_id=uuid4(),
         tenant_id=tenant_id,
@@ -96,9 +94,7 @@ class TestCompositionOrder:
         # Out-of-scope target — scope denies immediately, ownership lookup
         # never happens, policy / approval never happen.
         target = TargetSpec(kind=TargetKind.URL, url="https://other.com/")
-        ownership_store.save(
-            _make_proof(tenant_id=tenant_id, target="https://other.com/")
-        )
+        ownership_store.save(_make_proof(tenant_id=tenant_id, target="https://other.com/"))
         decision = preflight_checker.check(
             target_spec=target,
             port=None,
@@ -213,7 +209,7 @@ class TestApprovalGate:
         priv, _, _ = ed25519_keypair
         target = TargetSpec(kind=TargetKind.URL, url="https://api.example.com/v1/users")
         ownership_store.save(_make_proof(tenant_id=tenant_id, target=target.value))
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         request = ApprovalRequest(
             tenant_id=tenant_id,
             action=ApprovalAction.HIGH,
@@ -248,9 +244,7 @@ class TestApprovalGate:
 
 
 class TestPreflightAssertAllowed:
-    def test_raises_on_denial(
-        self, tenant_id: UUID, preflight_checker: PreflightChecker
-    ) -> None:
+    def test_raises_on_denial(self, tenant_id: UUID, preflight_checker: PreflightChecker) -> None:
         target = TargetSpec(kind=TargetKind.URL, url="https://blocked.com/")
         with pytest.raises(PreflightDeniedError) as exc_info:
             preflight_checker.assert_allowed(
@@ -304,7 +298,7 @@ class TestCheckToolJob:
         tool_job_factory: Callable[..., ToolJob],
     ) -> None:
         target = TargetSpec(kind=TargetKind.URL, url="https://api.example.com/v1/users")
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         expired = OwnershipProof(
             challenge_id=uuid4(),
             tenant_id=tenant_id,
@@ -371,9 +365,7 @@ class TestCheckToolJob:
             target=target.value,
             has_ownership_proof=True,
         )
-        decision = preflight_checker.check(
-            target_spec=target, port=443, policy_context=ctx
-        )
+        decision = preflight_checker.check(target_spec=target, port=443, policy_context=ctx)
         assert decision.allowed is False
         assert decision.failure_summary == "approval_missing"
         assert decision.approval_required is True

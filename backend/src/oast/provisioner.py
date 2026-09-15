@@ -76,9 +76,7 @@ _DNS_LABEL_FULL_LEN: Final[int] = len(_DNS_LABEL_PREFIX) + _DNS_LABEL_HEX_BYTES 
 _BASE_DOMAIN_HEADROOM: Final[int] = _DNS_LABEL_FULL_LEN + 1
 _PATH_TOKEN_BYTES: Final[int] = 16  # 32 hex chars = 128 bits
 
-_DNS_LABEL_RE: Final[re.Pattern[str]] = re.compile(
-    r"^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
-)
+_DNS_LABEL_RE: Final[re.Pattern[str]] = re.compile(r"^(?=.{1,63}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 _DNS_DOMAIN_RE: Final[re.Pattern[str]] = re.compile(
     r"^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)"
     r"(\.([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$"
@@ -150,9 +148,7 @@ class OASTToken(BaseModel):
     backend: OASTBackendKind = OASTBackendKind.INTERNAL
     created_at: datetime = Field(default_factory=_utcnow)
     expires_at: datetime
-    reserved_for_family: StrictStr | None = Field(
-        default=None, min_length=3, max_length=32
-    )
+    reserved_for_family: StrictStr | None = Field(default=None, min_length=3, max_length=32)
 
     @field_validator("dns_label")
     @classmethod
@@ -169,18 +165,12 @@ class OASTToken(BaseModel):
     def _check_subdomain(cls, value: str) -> str:
         lowered = value.strip().rstrip(".")
         if "." not in lowered:
-            raise ValueError(
-                "subdomain must be a fully-qualified DNS name with at least one dot"
-            )
+            raise ValueError("subdomain must be a fully-qualified DNS name with at least one dot")
         if not _DNS_DOMAIN_RE.fullmatch(lowered):
-            raise ValueError(
-                "subdomain contains characters not permitted by RFC 1035 / 1123"
-            )
+            raise ValueError("subdomain contains characters not permitted by RFC 1035 / 1123")
         for label in lowered.split("."):
             if len(label) > _MAX_DNS_LABEL_LEN:
-                raise ValueError(
-                    f"subdomain label {label!r} exceeds 63-character DNS limit"
-                )
+                raise ValueError(f"subdomain label {label!r} exceeds 63-character DNS limit")
         return lowered
 
     @field_validator("path_token")
@@ -188,8 +178,7 @@ class OASTToken(BaseModel):
     def _check_path_token(cls, value: str) -> str:
         if not _PATH_TOKEN_RE.fullmatch(value):
             raise ValueError(
-                "path_token must be 8-64 chars from the URL-safe alphabet "
-                "([A-Za-z0-9_-])"
+                "path_token must be 8-64 chars from the URL-safe alphabet ([A-Za-z0-9_-])"
             )
         return value
 
@@ -215,9 +204,7 @@ class OASTToken(BaseModel):
     @property
     def http_url(self) -> str:
         """Canonical HTTPS callback URL for the path-based channel."""
-        host = (
-            self.subdomain.split(".", 1)[1] if "." in self.subdomain else self.subdomain
-        )
+        host = self.subdomain.split(".", 1)[1] if "." in self.subdomain else self.subdomain
         return f"https://{host}/p/{self.path_token}"
 
     def is_active_at(self, moment: datetime) -> bool:
@@ -303,9 +290,7 @@ class InternalOASTProvisioner:
     ) -> None:
         normalized = base_domain.strip().rstrip(".").lower()
         if not _DNS_DOMAIN_RE.fullmatch(normalized):
-            raise OASTProvisioningError(
-                f"base_domain {base_domain!r} is not a valid DNS name"
-            )
+            raise OASTProvisioningError(f"base_domain {base_domain!r} is not a valid DNS name")
         if len(normalized) > _MAX_DNS_NAME_LEN - _BASE_DOMAIN_HEADROOM:
             # Leave room for the `argus-<hex>.` prefix (22 chars + dot = 23).
             raise OASTProvisioningError(
@@ -341,9 +326,7 @@ class InternalOASTProvisioner:
                 f"(got {ttl_seconds}s)"
             )
         if family is not None and not _FAMILY_HINT_RE.fullmatch(family):
-            raise OASTProvisioningError(
-                f"family hint {family!r} is not snake_case / too long"
-            )
+            raise OASTProvisioningError(f"family hint {family!r} is not snake_case / too long")
 
         token_id = self._id_factory()
         # ``argus-<16hex>`` is 22 characters — fits comfortably in DNS label
@@ -372,9 +355,7 @@ class InternalOASTProvisioner:
             if token_id in self._tokens:
                 # Extremely unlikely (UUID4 collision) — treat as a hard
                 # failure so callers do not silently overwrite state.
-                raise OASTProvisioningError(
-                    f"token id collision detected for {token_id}"
-                )
+                raise OASTProvisioningError(f"token id collision detected for {token_id}")
             self._tokens[token_id] = token
         _logger.info(
             "oast.token.issued",
@@ -560,9 +541,7 @@ class TokenFactoryFn(Protocol):
 
 def _default_token_hex(nbytes: int) -> str:
     if nbytes <= 0 or nbytes > 32:
-        raise OASTProvisioningError(
-            "token byte size must be in (0, 32] for safe DNS label packing"
-        )
+        raise OASTProvisioningError("token byte size must be in (0, 32] for safe DNS label packing")
     return secrets.token_hex(nbytes)
 
 

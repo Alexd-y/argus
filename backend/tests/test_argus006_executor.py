@@ -12,7 +12,7 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from src.tools.executor import (
+from src.tools.executor import (  # noqa: E402 — after sys.path insert
     build_gobuster_command,
     build_nikto_command,
     build_nmap_command,
@@ -88,8 +88,11 @@ class TestExecuteCommand:
             patch("src.tools.executor.run_argv_simple_sync") as mock_run,
         ):
             mock_run.return_value = {
-                "success": True, "stdout": "", "stderr": "",
-                "return_code": 0, "execution_time": 0.0,
+                "success": True,
+                "stdout": "",
+                "stderr": "",
+                "return_code": 0,
+                "execution_time": 0.0,
             }
             execute_command("nmap -sV 8.8.8.8")
         call_args = mock_run.call_args
@@ -109,8 +112,11 @@ class TestExecuteCommand:
             patch("src.tools.executor.run_argv_simple_sync") as mock_run,
         ):
             mock_run.return_value = {
-                "success": True, "stdout": "", "stderr": "",
-                "return_code": 0, "execution_time": 0.0,
+                "success": True,
+                "stdout": "",
+                "stderr": "",
+                "return_code": 0,
+                "execution_time": 0.0,
             }
             execute_command('nmap -sV "8.8.8.8; rm -rf /"')
         call_args = mock_run.call_args
@@ -156,7 +162,9 @@ class TestBuildCommands:
     def test_build_nmap_command_quotes_special_chars(self) -> None:
         """Arguments with spaces/special chars are properly quoted."""
         cmd = build_nmap_command("host with spaces", "-sV", "", "")
-        assert "host with spaces" in cmd or "'host with spaces'" in cmd or '"host with spaces"' in cmd
+        assert (
+            "host with spaces" in cmd or "'host with spaces'" in cmd or '"host with spaces"' in cmd
+        )
 
     def test_build_nuclei_command_basic(self) -> None:
         """build_nuclei_command produces valid nuclei command."""
@@ -166,7 +174,9 @@ class TestBuildCommands:
 
     def test_build_gobuster_command_basic(self) -> None:
         """build_gobuster_command produces valid gobuster command."""
-        cmd = build_gobuster_command("https://target.com", "dir", "/usr/share/wordlists/common.txt", "")
+        cmd = build_gobuster_command(
+            "https://target.com", "dir", "/usr/share/wordlists/common.txt", ""
+        )
         assert "gobuster" in cmd
         assert "target.com" in cmd
 

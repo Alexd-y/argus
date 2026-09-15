@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestFetchUrlMcpHttpxPrimary:
     """fetch_url_mcp must try httpx first."""
@@ -14,7 +12,10 @@ class TestFetchUrlMcpHttpxPrimary:
     @patch("src.recon.mcp.client.record_mcp_invocation")
     @patch("src.recon.mcp.client._fetch_via_httpx")
     def test_httpx_success_returns_directly(
-        self, mock_httpx: MagicMock, _audit: MagicMock, mock_policy: MagicMock,
+        self,
+        mock_httpx: MagicMock,
+        _audit: MagicMock,
+        mock_policy: MagicMock,
     ) -> None:
         mock_policy.return_value = MagicMock(allowed=True, policy_id="test", reason="ok")
         mock_httpx.return_value = {
@@ -71,7 +72,10 @@ class TestFetchUrlMcpHttpxPrimary:
     @patch("src.recon.mcp.client.record_mcp_invocation")
     @patch("src.recon.mcp.client._fetch_via_httpx")
     def test_policy_denied_returns_denied(
-        self, mock_httpx: MagicMock, _audit: MagicMock, mock_policy: MagicMock,
+        self,
+        mock_httpx: MagicMock,
+        _audit: MagicMock,
+        mock_policy: MagicMock,
     ) -> None:
         mock_policy.return_value = MagicMock(allowed=False, policy_id="deny", reason="blocked")
         from src.recon.mcp.client import fetch_url_mcp

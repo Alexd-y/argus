@@ -10,7 +10,9 @@ from src.orchestration.auth_config import ScopeRuleConfig, TargetConfig
 from src.policy.scope import ScopeKind, ScopeRule
 
 
-def target_config_to_scope_rules(config: TargetConfig) -> tuple[list[ScopeRule], list[ScopeRule]]:
+def target_config_to_scope_rules(
+    config: TargetConfig,
+) -> tuple[list[ScopeRule], list[ScopeRule]]:
     """Convert TargetConfig focus/avoid rules into ScopeEngine-compatible ScopeRules.
 
     Returns (allow_rules, deny_rules) tuples suitable for constructing

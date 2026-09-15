@@ -21,7 +21,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.payloads.registry import (
     PayloadFamily,
     PayloadFamilyNotFoundError,
@@ -31,7 +30,6 @@ from src.payloads.registry import (
     RegistryLoadError,
 )
 from src.sandbox.signing import SignatureRecord, SignaturesFile, sign_blob
-
 
 # ---------------------------------------------------------------------------
 # Pre-flight: invalid layouts

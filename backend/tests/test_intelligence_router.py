@@ -3,10 +3,9 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from starlette.testclient import TestClient
-
 from src.intel.shodan_enricher import ShodanResult, ShodanService
 from src.llm.errors import LLMProviderUnavailableError
+from starlette.testclient import TestClient
 
 INTEL_BASE = "/api/v1/intelligence"
 

@@ -9,7 +9,6 @@ contract has at least one happy + one rejection case.
 from __future__ import annotations
 
 import pytest
-
 from src.sandbox.templating import (
     ALLOWED_PLACEHOLDERS,
     TemplateRenderError,
@@ -18,7 +17,6 @@ from src.sandbox.templating import (
     render_argv,
     validate_template,
 )
-
 
 # ---------------------------------------------------------------------------
 # Allow-list happy paths
@@ -99,9 +97,7 @@ def test_render_returns_list_of_strings() -> None:
 
 def test_render_argv_preserves_argv_boundaries() -> None:
     template = ["wget", "{url}", "-O", "{out_dir}/dump.bin"]
-    argv = render_argv(
-        template, {"url": "https://example.com/x", "out_dir": "/out/job"}
-    )
+    argv = render_argv(template, {"url": "https://example.com/x", "out_dir": "/out/job"})
     assert argv == ["wget", "https://example.com/x", "-O", "/out/job/dump.bin"]
 
 

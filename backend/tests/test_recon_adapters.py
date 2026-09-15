@@ -1,10 +1,9 @@
 """Tests for recon tool adapters — subfinder and httpx parsing/normalization."""
 
 import pytest
-
-from src.recon.adapters.subfinder_adapter import SubfinderAdapter
-from src.recon.adapters.httpx_adapter import HttpxAdapter
 from src.recon.adapters import registry
+from src.recon.adapters.httpx_adapter import HttpxAdapter
+from src.recon.adapters.subfinder_adapter import SubfinderAdapter
 
 
 class TestSubfinderAdapter:

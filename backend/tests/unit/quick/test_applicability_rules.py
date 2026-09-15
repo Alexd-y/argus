@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.capabilities.schemas import (
     CapabilityApplicability,
     CapabilityFamily,
@@ -28,21 +27,21 @@ def _fact(value: str | None, confidence: float = 1.0) -> FingerprintFact:
 
 
 def _fingerprint(**overrides) -> AssetFingerprint:
-    base = dict(asset_id=_ASSET_ID)
+    base = {"asset_id": _ASSET_ID}
     base.update(overrides)
     return AssetFingerprint(**base)
 
 
 def _node(**overrides) -> CapabilityNode:
-    base = dict(
-        id="web.application.cve.known_product",
-        family=CapabilityFamily.WEB_APPLICATION,
-        asset_types=("web_app",),
-        production_risk=ProductionRisk.ACTIVE,
-        tools=("nuclei",),
-        quick_eligible=True,
-        applicability=CapabilityApplicability(),
-    )
+    base = {
+        "id": "web.application.cve.known_product",
+        "family": CapabilityFamily.WEB_APPLICATION,
+        "asset_types": ("web_app",),
+        "production_risk": ProductionRisk.ACTIVE,
+        "tools": ("nuclei",),
+        "quick_eligible": True,
+        "applicability": CapabilityApplicability(),
+    }
     base.update(overrides)
     return CapabilityNode(**base)
 

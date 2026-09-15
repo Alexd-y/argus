@@ -24,7 +24,7 @@ router = APIRouter(tags=["recon-artifacts"])
 async def list_all(
     engagement_id: str,
     artifact_type: str | None = None,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = Depends(get_db),
 ) -> ArtifactListResponse:
     """List artifacts for an engagement."""
     items = await get_artifacts_for_engagement(db, engagement_id, artifact_type)
@@ -36,7 +36,8 @@ async def list_all(
 
 @router.get("/recon/artifacts/{artifact_id}", response_model=ArtifactResponse)
 async def get_one(
-    artifact_id: str, db: AsyncSession = Depends(get_db)  # noqa: B008
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> ArtifactResponse:
     """Get artifact metadata."""
     art = await get_artifact(db, artifact_id)
@@ -47,7 +48,8 @@ async def get_one(
 
 @router.get("/recon/artifacts/{artifact_id}/download")
 async def download(
-    artifact_id: str, db: AsyncSession = Depends(get_db)  # noqa: B008
+    artifact_id: str,
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Get presigned download URL for artifact."""
     url = await get_artifact_download_url(db, artifact_id)

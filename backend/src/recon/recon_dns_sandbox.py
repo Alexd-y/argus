@@ -14,7 +14,9 @@ from src.recon.schemas.base import FindingType
 
 logger = logging.getLogger(__name__)
 
-_DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", re.I)
+_DOMAIN_RE = re.compile(
+    r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", re.IGNORECASE
+)
 
 
 def _apex_domain(raw: str) -> str:
@@ -60,20 +62,22 @@ def _subdomain_intel_rows(tool: str, stdout: str, *, domain: str) -> list[dict[s
         is_sub = tlow == dlow or tlow.endswith("." + dlow)
         if "." in token and is_sub and tlow not in seen:
             seen.add(tlow)
-            rows.append({
-                "finding_type": FindingType.CONTENT_ENTRY,
-                "value": f"{tool}:subdomain:{token}",
-                "data": {
-                    "type": "DNS_SUBDOMAIN",
-                    "hostname": token,
-                    "apex": domain,
+            rows.append(
+                {
+                    "finding_type": FindingType.CONTENT_ENTRY,
+                    "value": f"{tool}:subdomain:{token}",
+                    "data": {
+                        "type": "DNS_SUBDOMAIN",
+                        "hostname": token,
+                        "apex": domain,
+                        "cwe_id": "CWE-200",
+                        "description": f"{tool} reported hostname under {domain}.",
+                    },
+                    "source_tool": tool,
+                    "confidence": 0.45,
                     "cwe_id": "CWE-200",
-                    "description": f"{tool} reported hostname under {domain}.",
-                },
-                "source_tool": tool,
-                "confidence": 0.45,
-                "cwe_id": "CWE-200",
-            })
+                }
+            )
         if len(rows) >= max(1, int(settings.kal_recon_dns_max_lines)):
             break
     return rows

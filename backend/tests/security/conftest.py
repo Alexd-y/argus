@@ -49,7 +49,6 @@ from collections.abc import Iterator
 
 import pytest
 
-
 os.environ.setdefault("DEBUG", "true")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault(

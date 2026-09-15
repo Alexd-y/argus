@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from src.orchestration.phases import PHASE_ORDER, ScanPhase
 from src.quick.disallowed import NOT_SCHEDULED_BY_QUICK_PROFILE
 from src.quick.schemas import (
@@ -76,14 +75,17 @@ def test_stage_order_is_discovery_through_report() -> None:
 def test_allowlist_and_skipped_partition_all_phases() -> None:
     all_phases = frozenset(PHASE_ORDER)
     assert QUICK_PHASE_ALLOWLIST.isdisjoint(SKIPPED_BY_QUICK_PROFILE)
-    assert QUICK_PHASE_ALLOWLIST | SKIPPED_BY_QUICK_PROFILE == all_phases
-    assert SKIPPED_BY_QUICK_PROFILE == frozenset(
-        {
-            ScanPhase.SOURCE_ANALYSIS,
-            ScanPhase.QUICK_FUZZ,
-            ScanPhase.EXPLOITATION,
-            ScanPhase.POST_EXPLOITATION,
-        }
+    assert all_phases == QUICK_PHASE_ALLOWLIST | SKIPPED_BY_QUICK_PROFILE
+    assert (
+        frozenset(
+            {
+                ScanPhase.SOURCE_ANALYSIS,
+                ScanPhase.QUICK_FUZZ,
+                ScanPhase.EXPLOITATION,
+                ScanPhase.POST_EXPLOITATION,
+            }
+        )
+        == SKIPPED_BY_QUICK_PROFILE
     )
 
 
@@ -142,7 +144,12 @@ def test_workflow_orders_by_stage_then_priority() -> None:
         (
             _task(report, QuickTaskStage.REPORT, priority_score=0.99),
             _task(fp_low, QuickTaskStage.FINGERPRINT, priority_score=0.1, tool_id="httpx"),
-            _task(fp_high, QuickTaskStage.FINGERPRINT, priority_score=0.9, tool_id="whatweb"),
+            _task(
+                fp_high,
+                QuickTaskStage.FINGERPRINT,
+                priority_score=0.9,
+                tool_id="whatweb",
+            ),
             _task(disc, QuickTaskStage.DISCOVERY, priority_score=0.2),
         )
     )
@@ -241,9 +248,19 @@ def test_from_plan_and_resolve_stored_plan() -> None:
     as_dict = resolve_quick_plan(
         scan_id=_SCAN_ID,
         target=_TARGET,
-        options={"execution_mode": "quick", "quick_plan": plan.model_dump(mode="python")},
+        options={
+            "execution_mode": "quick",
+            "quick_plan": plan.model_dump(mode="python"),
+        },
     )
     assert as_dict is not None
     assert as_dict.scan_id == _SCAN_ID
-    assert resolve_quick_plan(scan_id=_SCAN_ID, target=_TARGET, options={"execution_mode": "production"}) is None
-    assert resolve_quick_plan(scan_id=_SCAN_ID, target="", options={"execution_mode": "quick"}) is None
+    assert (
+        resolve_quick_plan(
+            scan_id=_SCAN_ID, target=_TARGET, options={"execution_mode": "production"}
+        )
+        is None
+    )
+    assert (
+        resolve_quick_plan(scan_id=_SCAN_ID, target="", options={"execution_mode": "quick"}) is None
+    )

@@ -18,7 +18,7 @@ from src.playbooks.schema import HttpMethod, InputKind, Playbook
 _ME = {"id": 9, "email": "user@example.test", "role": "user"}
 
 
-def _make_logout_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_logout_vuln() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:
         if spec.method.value == "POST":
             return HttpResponse(status=200, body=json.dumps({"status": "logged_out"}))
@@ -28,7 +28,7 @@ def _make_logout_vuln() -> Callable[[HttpRequestSpec, "str | None"], HttpRespons
     return _r
 
 
-def _make_logout_secure() -> Callable[[HttpRequestSpec, "str | None"], HttpResponse]:
+def _make_logout_secure() -> Callable[[HttpRequestSpec, str | None], HttpResponse]:
     state = {"logged_out": False}
 
     def _r(spec: HttpRequestSpec, _principal: str | None) -> HttpResponse:

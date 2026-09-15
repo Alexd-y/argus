@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from src.quick.correlation import (
     correlate_results,
     mark_duplicate_occurrences,
@@ -36,20 +35,20 @@ def _mock_minio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _ctx(tool_id: str, **overrides: Any) -> QuickNormalizeContext:
-    base: dict[str, Any] = dict(
-        tenant_id=_TENANT_ID,
-        scan_id=_SCAN_ID,
-        engagement_id=_ENGAGEMENT_ID,
-        asset_id=_ASSET_ID,
-        asset=_ASSET,
-        tool_id=tool_id,
-        tool_version="1.0.0",
-        capability_id="web.application.forms.input_validation",
-        phase="vuln_analysis",
-        task_id=_TASK_ID,
-        policy_decision_id=_POLICY_ID,
-        protocol="https",
-    )
+    base: dict[str, Any] = {
+        "tenant_id": _TENANT_ID,
+        "scan_id": _SCAN_ID,
+        "engagement_id": _ENGAGEMENT_ID,
+        "asset_id": _ASSET_ID,
+        "asset": _ASSET,
+        "tool_id": tool_id,
+        "tool_version": "1.0.0",
+        "capability_id": "web.application.forms.input_validation",
+        "phase": "vuln_analysis",
+        "task_id": _TASK_ID,
+        "policy_decision_id": _POLICY_ID,
+        "protocol": "https",
+    }
     base.update(overrides)
     return QuickNormalizeContext(**base)
 
@@ -69,11 +68,21 @@ def _match(*, tool_id: str, severity: str, confidence: float, template_id: str) 
 
 def test_two_tools_same_fingerprint_one_finding_two_occurrences() -> None:
     nuclei = normalize_match(
-        _match(tool_id="nuclei", severity="high", confidence=0.9, template_id="xss-reflected"),
+        _match(
+            tool_id="nuclei",
+            severity="high",
+            confidence=0.9,
+            template_id="xss-reflected",
+        ),
         ctx=_ctx("nuclei", template_id="xss-reflected"),
     )
     httpx = normalize_match(
-        _match(tool_id="httpx", severity="medium", confidence=0.4, template_id="xss-generic"),
+        _match(
+            tool_id="httpx",
+            severity="medium",
+            confidence=0.4,
+            template_id="xss-generic",
+        ),
         ctx=_ctx("httpx", template_id="xss-generic", tool_version="1.6.0"),
     )
     assert nuclei.finding.finding_key == httpx.finding.finding_key
@@ -87,7 +96,10 @@ def test_two_tools_same_fingerprint_one_finding_two_occurrences() -> None:
     scanners = {occ.scanner for occ in item.occurrences}
     assert scanners == {"nuclei", "httpx"}
     assert len(item.evidence) == 2
-    assert set(item.finding.evidence_ids) == {nuclei.evidence.evidence_id, httpx.evidence.evidence_id}
+    assert set(item.finding.evidence_ids) == {
+        nuclei.evidence.evidence_id,
+        httpx.evidence.evidence_id,
+    }
     assert set(item.finding.occurrence_keys) == {
         nuclei.occurrence.occurrence_key,
         httpx.occurrence.occurrence_key,
@@ -121,11 +133,21 @@ def test_contradicting_evidence_is_retained() -> None:
 
 def test_mark_duplicate_occurrences_keeps_all_occurrences() -> None:
     first = normalize_match(
-        _match(tool_id="nuclei", severity="high", confidence=0.8, template_id="xss-reflected"),
+        _match(
+            tool_id="nuclei",
+            severity="high",
+            confidence=0.8,
+            template_id="xss-reflected",
+        ),
         ctx=_ctx("nuclei"),
     )
     second = normalize_match(
-        _match(tool_id="httpx", severity="high", confidence=0.8, template_id="xss-reflected"),
+        _match(
+            tool_id="httpx",
+            severity="high",
+            confidence=0.8,
+            template_id="xss-reflected",
+        ),
         ctx=_ctx("httpx"),
     )
     merged = correlate_results((first, second))[0]
@@ -154,7 +176,12 @@ def test_distinct_fingerprints_stay_separate() -> None:
 
 def test_overlay_ai_triage_cannot_drop_evidence() -> None:
     nuclei = normalize_match(
-        _match(tool_id="nuclei", severity="high", confidence=0.9, template_id="xss-reflected"),
+        _match(
+            tool_id="nuclei",
+            severity="high",
+            confidence=0.9,
+            template_id="xss-reflected",
+        ),
         ctx=_ctx("nuclei"),
     )
     item = correlate_results((nuclei,))[0]
@@ -176,7 +203,9 @@ def test_overlay_ai_triage_cannot_drop_evidence() -> None:
 
 
 def test_informational_excluded_from_selective_verification() -> None:
-    info_payload = _match(tool_id="nuclei", severity="info", confidence=0.2, template_id="tech-detect")
+    info_payload = _match(
+        tool_id="nuclei", severity="info", confidence=0.2, template_id="tech-detect"
+    )
     info_payload["category"] = "info"
     info = normalize_match(info_payload, ctx=_ctx("nuclei", template_id="tech-detect"))
     high = normalize_match(

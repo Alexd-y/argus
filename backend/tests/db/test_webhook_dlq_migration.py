@@ -195,12 +195,7 @@ def _make_sqlite_engine(*, fk_on: bool = True) -> Engine:
 
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "CREATE TABLE tenants ("
-                "id VARCHAR(36) PRIMARY KEY, "
-                "name VARCHAR(255) NOT NULL"
-                ")"
-            )
+            text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY, name VARCHAR(255) NOT NULL)")
         )
 
     return engine
@@ -306,9 +301,7 @@ def test_027_round_trip_idempotency_sqlite() -> None:
         idx_before = {ix["name"] for ix in first.get_indexes(_TABLE)}
 
         _apply_027_downgrade(engine)
-        assert not inspect(engine).has_table(_TABLE), (
-            f"downgrade() must drop {_TABLE!r}"
-        )
+        assert not inspect(engine).has_table(_TABLE), f"downgrade() must drop {_TABLE!r}"
 
         _apply_027_upgrade(engine)
         second = inspect(engine)
@@ -317,12 +310,10 @@ def test_027_round_trip_idempotency_sqlite() -> None:
         idx_after = {ix["name"] for ix in second.get_indexes(_TABLE)}
 
         assert cols_before == cols_after, (
-            f"column set drifted across round-trip: "
-            f"before={cols_before!r} after={cols_after!r}"
+            f"column set drifted across round-trip: before={cols_before!r} after={cols_after!r}"
         )
         assert idx_before == idx_after, (
-            f"index set drifted across round-trip: "
-            f"before={idx_before!r} after={idx_after!r}"
+            f"index set drifted across round-trip: before={idx_before!r} after={idx_after!r}"
         )
     finally:
         engine.dispose()
@@ -370,9 +361,7 @@ def test_027_table_shape_after_upgrade_sqlite() -> None:
         # uniqueness flag on an index — accept both shapes (SQLite emits a
         # synthetic ``sqlite_autoindex_*`` entry for unique constraints).
         unique_constraint_names: set[str] = {
-            uc["name"]
-            for uc in insp.get_unique_constraints(_TABLE)
-            if uc["name"] is not None
+            uc["name"] for uc in insp.get_unique_constraints(_TABLE) if uc["name"] is not None
         }
         unique_index_names: set[str] = {
             ix["name"]
@@ -452,10 +441,7 @@ def test_027_fk_cascade_on_tenant_delete_sqlite() -> None:
             _insert_dlq_row_via_sql(conn, tenant_id=tid, event_id="evt-1")
             _insert_dlq_row_via_sql(conn, tenant_id=tid, event_id="evt-2")
             count_before = conn.execute(
-                text(
-                    "SELECT COUNT(*) FROM webhook_dlq_entries "
-                    "WHERE tenant_id = :t"
-                ),
+                text("SELECT COUNT(*) FROM webhook_dlq_entries WHERE tenant_id = :t"),
                 {"t": tid},
             ).scalar_one()
             assert count_before == 2, "fixture insert smoke failed"
@@ -465,10 +451,7 @@ def test_027_fk_cascade_on_tenant_delete_sqlite() -> None:
 
         with engine.connect() as conn:
             count_after = conn.execute(
-                text(
-                    "SELECT COUNT(*) FROM webhook_dlq_entries "
-                    "WHERE tenant_id = :t"
-                ),
+                text("SELECT COUNT(*) FROM webhook_dlq_entries WHERE tenant_id = :t"),
                 {"t": tid},
             ).scalar_one()
             assert count_after == 0, (
@@ -551,10 +534,7 @@ def test_027_rls_isolation_select_postgres(migrated_pg_engine: Engine) -> None:
 
     with engine.connect() as conn:
         row = conn.execute(
-            text(
-                "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
-                "WHERE relname = :t"
-            ),
+            text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = :t"),
             {"t": _TABLE},
         ).one()
         assert row.relrowsecurity, f"{_TABLE} must have ROW LEVEL SECURITY enabled"
@@ -568,8 +548,7 @@ def test_027_rls_isolation_select_postgres(migrated_pg_engine: Engine) -> None:
             .all()
         )
         assert _POLICY in policy_names, (
-            f"canonical {_POLICY!r} policy missing on {_TABLE}; "
-            f"got {policy_names!r}"
+            f"canonical {_POLICY!r} policy missing on {_TABLE}; got {policy_names!r}"
         )
 
     with engine.begin() as conn:
@@ -590,25 +569,13 @@ def test_027_rls_isolation_select_postgres(migrated_pg_engine: Engine) -> None:
 
     with engine.begin() as conn:
         _set_session_tenant(conn, tenant_a)
-        rows_a = (
-            conn.execute(text("SELECT tenant_id FROM webhook_dlq_entries"))
-            .scalars()
-            .all()
-        )
-        assert rows_a == [tenant_a], (
-            f"tenant A session leaked other tenants' rows: {rows_a!r}"
-        )
+        rows_a = conn.execute(text("SELECT tenant_id FROM webhook_dlq_entries")).scalars().all()
+        assert rows_a == [tenant_a], f"tenant A session leaked other tenants' rows: {rows_a!r}"
 
     with engine.begin() as conn:
         _set_session_tenant(conn, tenant_b)
-        rows_b = (
-            conn.execute(text("SELECT tenant_id FROM webhook_dlq_entries"))
-            .scalars()
-            .all()
-        )
-        assert rows_b == [tenant_b], (
-            f"tenant B session leaked other tenants' rows: {rows_b!r}"
-        )
+        rows_b = conn.execute(text("SELECT tenant_id FROM webhook_dlq_entries")).scalars().all()
+        assert rows_b == [tenant_b], f"tenant B session leaked other tenants' rows: {rows_b!r}"
 
 
 @pytestmark_pg
@@ -627,9 +594,7 @@ def test_027_rls_force_owner_session_postgres(migrated_pg_engine: Engine) -> Non
 
     with engine.connect() as conn:
         relforcerowsecurity = conn.execute(
-            text(
-                "SELECT relforcerowsecurity FROM pg_class WHERE relname = :t"
-            ),
+            text("SELECT relforcerowsecurity FROM pg_class WHERE relname = :t"),
             {"t": _TABLE},
         ).scalar_one()
     assert relforcerowsecurity, (
@@ -657,9 +622,7 @@ def test_027_rls_force_owner_session_postgres(migrated_pg_engine: Engine) -> Non
     with engine.begin() as conn:
         _set_session_tenant(conn, tenant_b)
         a_visible = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM webhook_dlq_entries WHERE tenant_id = :t"
-            ),
+            text("SELECT COUNT(*) FROM webhook_dlq_entries WHERE tenant_id = :t"),
             {"t": tenant_a},
         ).scalar_one()
         assert a_visible == 0, (

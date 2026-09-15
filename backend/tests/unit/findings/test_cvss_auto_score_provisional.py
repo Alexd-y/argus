@@ -29,13 +29,23 @@ def test_unmatched_finding_keeps_source_severity_and_gets_no_cvss() -> None:
 
 def test_sqli_suggestion_is_provisional_and_does_not_overwrite_severity() -> None:
     scorer = CVSSAutoScorer()
-    finding = {"title": "Possible sqli in id parameter", "owasp_category": "A05", "severity": "medium"}
+    finding = {
+        "title": "Possible sqli in id parameter",
+        "owasp_category": "A05",
+        "severity": "medium",
+    }
     out = scorer.score_finding(finding)
 
     # Suggestion is present but authoritative fields are NOT touched.
     assert out["cvss_provisional"] is True
     assert out["cvss_auto_scored"] is True
-    assert out["cvss_suggested_severity"] in {"critical", "high", "medium", "low", "none"}
+    assert out["cvss_suggested_severity"] in {
+        "critical",
+        "high",
+        "medium",
+        "low",
+        "none",
+    }
     assert out["cvss_suggested_vector"].startswith("CVSS:3.1/")
     assert out["severity"] == "medium"  # not auto-promoted to Critical
     assert "cvss" not in out

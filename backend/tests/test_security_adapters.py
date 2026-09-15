@@ -3,7 +3,6 @@
 import asyncio
 
 import pytest
-
 from src.recon.adapters.security import (
     GitleaksAdapter,
     SearchsploitAdapter,
@@ -64,7 +63,12 @@ async def test_semgrep_run_with_raw_output():
 
 def test_is_available():
     """is_available returns bool (may be False if tool not installed)."""
-    for adapter_cls in (GitleaksAdapter, TrivyAdapter, SemgrepAdapter, SearchsploitAdapter):
+    for adapter_cls in (
+        GitleaksAdapter,
+        TrivyAdapter,
+        SemgrepAdapter,
+        SearchsploitAdapter,
+    ):
         adapter = adapter_cls()
         assert isinstance(adapter.is_available(), bool)
 

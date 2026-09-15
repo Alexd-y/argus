@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -82,7 +82,7 @@ _MAX_SCREENSHOT_FINDINGS: Final[int] = 250
 _MAX_REQUEST_FINDINGS: Final[int] = 250
 
 
-_REQUEST_DEDUP_KEY: TypeAlias = tuple[str, str, str, str]
+type _REQUEST_DEDUP_KEY = tuple[str, str, str, str]
 
 
 def parse_puppeteer_screens(
@@ -101,13 +101,9 @@ def parse_puppeteer_screens(
     evidence_blobs: list[str] = []
 
     findings.extend(
-        _emit_screenshot_findings(
-            manifest, evidence_blobs=evidence_blobs, tool_id=tool_id
-        )
+        _emit_screenshot_findings(manifest, evidence_blobs=evidence_blobs, tool_id=tool_id)
     )
-    findings.extend(
-        _emit_request_findings(har, evidence_blobs=evidence_blobs, tool_id=tool_id)
-    )
+    findings.extend(_emit_request_findings(har, evidence_blobs=evidence_blobs, tool_id=tool_id))
 
     if evidence_blobs:
         persist_jsonl_sidecar(

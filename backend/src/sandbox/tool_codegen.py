@@ -79,7 +79,9 @@ def derive_parser_map(descriptors: list[DescriptorLike]) -> dict[str, str]:
     return {str(d.tool_id): str(_val(d.parse_strategy)) for d in descriptors}
 
 
-def derive_risk_metadata(descriptors: list[DescriptorLike]) -> dict[str, dict[str, Any]]:
+def derive_risk_metadata(
+    descriptors: list[DescriptorLike],
+) -> dict[str, dict[str, Any]]:
     """tool_id → {risk_level, requires_approval, category, phase}."""
     return {
         str(d.tool_id): {

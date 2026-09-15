@@ -62,7 +62,7 @@ def validate_xss_evidence(proof_of_concept: dict) -> EvidenceQuality:
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),
-        missing_evidence=[name for name, _ in required if name not in found]
+        missing_evidence=[name for name, _ in required if name not in found],
     )
     quality.evidence_gate = calculate_evidence_gate(quality)
     return quality
@@ -91,7 +91,7 @@ def validate_csrf_evidence(proof_of_concept: dict) -> EvidenceQuality:
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),
-        missing_evidence=[name for name, _ in required if name not in found]
+        missing_evidence=[name for name, _ in required if name not in found],
     )
     quality.evidence_gate = calculate_evidence_gate(quality)
     return quality
@@ -117,7 +117,7 @@ def validate_cmdi_evidence(proof_of_concept: dict) -> EvidenceQuality:
     quality = EvidenceQuality(
         required_evidence_count=len(required),
         current_evidence_count=len(found),
-        missing_evidence=[name for name, _ in required if name not in found]
+        missing_evidence=[name for name, _ in required if name not in found],
     )
     quality.evidence_gate = calculate_evidence_gate(quality)
     return quality
@@ -134,9 +134,6 @@ def calculate_evidence_gate(quality: EvidenceQuality) -> EvidenceGate:
 
 
 def get_missing_artifact_message(
-    artifact_key: str,
-    section: str,
-    tool: str,
-    recovery_command: str
+    artifact_key: str, section: str, tool: str, recovery_command: str
 ) -> str:
     return f"Not assessed: missing artifact {artifact_key}\nAffected section: {section}\nTool: {tool}\nRecommendation: {recovery_command}"

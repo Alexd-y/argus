@@ -48,10 +48,7 @@ def test_parse_dalfox_stderr_reflected_in_param_name() -> None:
 
 
 def test_parse_dalfox_stderr_reflected_named_param_per_line() -> None:
-    stderr = (
-        "[I] Reflected level param =>\n"
-        "[I] Reflected world param =>\n"
-    )
+    stderr = "[I] Reflected level param =>\n[I] Reflected world param =>\n"
     target = "https://alf.nu/alert1?world=1&level=alert0"
     rows = parse_dalfox_stderr_hypotheses(stderr, target_url=target)
     assert len(rows) == 2

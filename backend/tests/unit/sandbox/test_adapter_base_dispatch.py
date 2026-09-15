@@ -28,7 +28,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import FindingCategory, FindingDTO
 from src.sandbox.adapter_base import ShellToolAdapter, ToolDescriptor
 from src.sandbox.parsers import HEARTBEAT_TAG_PREFIX
@@ -87,13 +86,11 @@ def test_parse_output_dispatches_to_registered_handler(
 
     assert findings, "httpx parser must emit at least one finding for a valid record"
     assert all(isinstance(f, FindingDTO) for f in findings)
-    assert not any(
-        "parse_output_not_implemented" in r.message for r in caplog.records
-    ), "legacy stub warning must not fire once dispatch_parse is wired in"
-    assert not any("parsers.dispatch.no_handler" in r.message for r in caplog.records)
-    assert not any(
-        "parsers.dispatch.unmapped_tool" in r.message for r in caplog.records
+    assert not any("parse_output_not_implemented" in r.message for r in caplog.records), (
+        "legacy stub warning must not fire once dispatch_parse is wired in"
     )
+    assert not any("parsers.dispatch.no_handler" in r.message for r in caplog.records)
+    assert not any("parsers.dispatch.unmapped_tool" in r.message for r in caplog.records)
 
 
 def test_parse_output_unmapped_tool_emits_heartbeat_and_warns(
@@ -114,13 +111,9 @@ def test_parse_output_unmapped_tool_emits_heartbeat_and_warns(
     adapter = ShellToolAdapter(descriptor)
 
     with caplog.at_level(logging.WARNING, logger="src.sandbox.parsers"):
-        findings = adapter.parse_output(
-            _HTTPX_JSONL_FIXTURE.encode("utf-8"), b"", tmp_path
-        )
+        findings = adapter.parse_output(_HTTPX_JSONL_FIXTURE.encode("utf-8"), b"", tmp_path)
 
-    assert len(findings) == 1, (
-        "unmapped-tool fail-soft must emit exactly one heartbeat FindingDTO"
-    )
+    assert len(findings) == 1, "unmapped-tool fail-soft must emit exactly one heartbeat FindingDTO"
     heartbeat = findings[0]
     assert isinstance(heartbeat, FindingDTO)
     assert heartbeat.category is FindingCategory.INFO

@@ -8,7 +8,6 @@ import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.x509.oid import ExtendedKeyUsageOID
-
 from src.web_workbench.proxy.ca_manager import CaError, CertificateAuthority
 
 
@@ -68,7 +67,7 @@ def test_issue_leaf_ip_san() -> None:
 def test_issue_leaf_short_validity() -> None:
     ca = CertificateAuthority.generate()
     leaf = ca.issue_leaf("x.example.com", validity=dt.timedelta(days=7))
-    assert leaf.not_valid_after > dt.datetime.now(tz=dt.timezone.utc)
+    assert leaf.not_valid_after > dt.datetime.now(tz=dt.UTC)
 
 
 def test_issue_leaf_rejects_empty_host() -> None:

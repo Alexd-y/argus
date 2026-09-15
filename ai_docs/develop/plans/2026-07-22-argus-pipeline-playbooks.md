@@ -50,13 +50,15 @@ P1-AUDIT-001
 ## Progress (updated by orchestrator)
 
 - ✅ P1-AUDIT-001: Read-only аудит (Completed)
-- ⏳ P2-PLAYBOOKS-002: Playbooks subsystem (Pending)
-- ⏳ P3-AUTH-003: Multi-principal auth (Pending)
-- ⏳ P4-SCENARIO-004: Scenario planner/executor/oracles/EAP (Pending)
-- ⏳ P5-SCEN-005: 12 сценариев + integration (Pending)
-- ⏳ P6-CHECKLIST-006: Checklist classification + Nuclei argus-* (Pending)
-- ⏳ P7-WSTG-007: WSTG registry + FindingDTO extension (Pending)
-- ⏳ P8-QA-008: QA / migrations / docs (Pending)
+- ✅ P2-PLAYBOOKS-002: Playbooks subsystem (Completed — `src/playbooks/*` + signed `config/playbooks/*`)
+- ✅ P3-AUTH-003: Multi-principal auth (Completed — `src/auth/session_store.py`, `PrincipalConfig`)
+- ✅ P4-SCENARIO-004: Scenario planner/executor/oracles/EAP (Completed — `src/policy/engagement_authorization.py`, oracles/cleanup)
+- ✅ P5-SCEN-005: 12 сценариев + integration (Completed — все 12 signed YAML + `tests/integration/playbooks/*`)
+- ✅ P6-CHECKLIST-006: Checklist classification + Nuclei argus-* (Completed — `config/checklist/az0x7_classified.yaml`, 4× `argus-*`)
+- ✅ P7-WSTG-007: WSTG registry + FindingDTO extension (Completed — единый registry, `wstg_coverage_v2.py` удалён, FindingDTO расширен)
+- ✅ P8-QA-008: QA / migrations / docs (Completed 2026-09-15 — тесты/подписи/import-cycles green; lint-фиксы SIM/RUF в playbooks)
+
+> **Закрытие 2026-09-15:** P2–P7 были реализованы и закоммичены в рамках последующей работы. Верификационный гейт P8 выполнен 2026-09-15: целевые тесты (992 + 520 + 158) зелёные, signatures no-drift зелёные, `test_no_cyclic_imports` зелёный, `ruff check src/playbooks` чист. Исправлены SIM102/SIM103/RUF022 в модулях playbooks. Репо-wide дрейф `black 26.5.1` (560 файлов) и общий ruff-baseline вне scope этого плана. Отчёт: `ai_docs/develop/reports/2026-09-15-orch-pipeline-playbooks-closeout.md`.
 
 ---
 

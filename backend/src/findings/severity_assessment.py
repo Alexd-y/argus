@@ -142,11 +142,7 @@ def conflicting_assessments(
     winner = effective if effective is not None else select_effective_assessment(live)
     if winner is None:
         return []
-    return [
-        r
-        for r in live
-        if r.assessment_id != winner.assessment_id and r.band != winner.band
-    ]
+    return [r for r in live if r.assessment_id != winner.assessment_id and r.band != winner.band]
 
 
 def build_manual_override(

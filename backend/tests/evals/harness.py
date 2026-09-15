@@ -15,15 +15,17 @@ from src.execution_mode import (
     evaluate_with_execution_mode,
 )
 from src.execution_mode.mode import parse_execution_mode
-from src.orchestration.execution_mode_context import resolve_tool_policy
 from src.findings.diff import DiffStatus, diff_findings
 from src.findings.lifecycle import FindingOccurrence, FindingState
 from src.nuclei.profile_compiler import NucleiProfileCompiler
-from src.orchestration.execution_mode_context import resolve_tool_policy_from_options
-from src.recon.mcp.policy import is_destructive_va_tool
+from src.orchestration.execution_mode_context import (
+    resolve_tool_policy,
+    resolve_tool_policy_from_options,
+)
 from src.rag import RagIngestionPipeline, RagQuery, RagRetriever
 from src.rag.hybrid_search import HybridSearchEngine
 from src.rag.schemas import CollectionName
+from src.recon.mcp.policy import is_destructive_va_tool
 
 FIXTURES_ROOT = Path(__file__).resolve().parent / "fixtures"
 
@@ -43,9 +45,7 @@ EVAL_CATEGORIES: tuple[str, ...] = tuple(CATEGORY_MINIMUMS.keys())
 VALID_EVIDENCE_CLASSIFICATIONS: frozenset[str] = frozenset(
     {"supported", "contradicted", "insufficient"}
 )
-VALID_TEMPLATE_SCHEMAS: frozenset[str] = frozenset(
-    {"TemplateProposal", "LabTemplateArtifact"}
-)
+VALID_TEMPLATE_SCHEMAS: frozenset[str] = frozenset({"TemplateProposal", "LabTemplateArtifact"})
 VALID_EXECUTION_MODES: frozenset[str] = frozenset({"production", "lab_unrestricted"})
 
 # Legacy alias: older fixtures lived under ``cross_tenant/``.
@@ -216,11 +216,15 @@ def validate_fixture_schema(fixture: dict[str, Any], category: str) -> list[str]
             DiffStatus(str(fixture["expected_status"]))
         except ValueError:
             violations.append(f"{fixture_id}: invalid expected_status")
-        if not fixture.get("finding_key") and not fixture.get("expected_by_key"):
-            if not isinstance(fixture.get("baseline_occurrences"), list) or not isinstance(
-                fixture.get("current_occurrences"), list
-            ):
-                violations.append(f"{fixture_id}: occurrences must be lists")
+        if (
+            not fixture.get("finding_key")
+            and not fixture.get("expected_by_key")
+            and (
+                not isinstance(fixture.get("baseline_occurrences"), list)
+                or not isinstance(fixture.get("current_occurrences"), list)
+            )
+        ):
+            violations.append(f"{fixture_id}: occurrences must be lists")
 
     elif category == "prompt_injection":
         violations.extend(
@@ -360,7 +364,9 @@ def _parse_manifest(raw: dict[str, Any]) -> LabScopeManifest:
     )
 
 
-def _issue_lab_lease_for_fixture(fixture: dict[str, Any]) -> tuple[LabScopeManifest, Any]:
+def _issue_lab_lease_for_fixture(
+    fixture: dict[str, Any],
+) -> tuple[LabScopeManifest, Any]:
     """Build manifest + usable lease for a LAB unrestricted plan fixture."""
     manifest = _parse_manifest(fixture["lab_scope"])
     verdict = LabBoundaryVerifier().verify(
@@ -438,9 +444,7 @@ def check_lab_plan_policy_bridge(fixture: dict[str, Any]) -> list[str]:
                 f"reason={decision.reason} code={decision.deny_code}"
             )
         if decision.requires_approval:
-            violations.append(
-                f"{fixture_id}: resolve_tool_policy requires_approval for {tool}"
-            )
+            violations.append(f"{fixture_id}: resolve_tool_policy requires_approval for {tool}")
     return violations
 
 
@@ -527,7 +531,9 @@ def check_lab_plan_fixture(fixture: dict[str, Any]) -> list[str]:
     return violations
 
 
-def compute_lab_unwanted_restriction_rate(fixtures: list[dict[str, Any]] | None = None) -> float:
+def compute_lab_unwanted_restriction_rate(
+    fixtures: list[dict[str, Any]] | None = None,
+) -> float:
     """Fraction of LAB plan fixtures with unwanted approval/downgrade restrictions."""
     items = fixtures if fixtures is not None else load_json_fixtures("lab_unrestricted_plans")
     if not items:
@@ -671,17 +677,19 @@ def check_production_plan_fixture(fixture: dict[str, Any]) -> list[str]:
         )
         risk = str(step.get("risk") or "high").lower()
         destructive = is_destructive_va_tool(tool)
-        if destructive and expect_gate:
-            if decision.allowed and not decision.requires_approval:
-                violations.append(
-                    f"{fixture_id}: tool {tool} bypassed production gate "
-                    f"(allowed={decision.allowed}, requires_approval={decision.requires_approval})"
-                )
-        elif risk in {"high", "destructive", "intrusive"} and expect_gate and destructive:
-            if decision.allowed and not decision.requires_approval:
-                violations.append(
-                    f"{fixture_id}: destructive tool {tool} bypassed production gate"
-                )
+        if destructive and expect_gate and decision.allowed and not decision.requires_approval:
+            violations.append(
+                f"{fixture_id}: tool {tool} bypassed production gate "
+                f"(allowed={decision.allowed}, requires_approval={decision.requires_approval})"
+            )
+        if (
+            risk in {"high", "destructive", "intrusive"}
+            and expect_gate
+            and destructive
+            and decision.allowed
+            and not decision.requires_approval
+        ):
+            violations.append(f"{fixture_id}: destructive tool {tool} bypassed production gate")
     return violations
 
 
@@ -748,15 +756,15 @@ def check_finding_diff_fixture(fixture: dict[str, Any]) -> list[str]:
             for key, exp in expected_map.items():
                 actual = by_key.get(str(key))
                 if actual is None or actual is not DiffStatus(str(exp)):
-                    violations.append(
-                        f"{fixture_id}: key {key} expected {exp}, got {actual}"
-                    )
+                    violations.append(f"{fixture_id}: key {key} expected {exp}, got {actual}")
         else:
             violations.append(f"{fixture_id}: ambiguous multi-key fixture without expected_by_key")
     return violations
 
 
-def compute_finding_diff_accuracy(fixtures: list[dict[str, Any]] | None = None) -> float:
+def compute_finding_diff_accuracy(
+    fixtures: list[dict[str, Any]] | None = None,
+) -> float:
     """Fraction of finding diff fixtures that match expected status."""
     items = fixtures if fixtures is not None else load_json_fixtures("finding_diff")
     if not items:

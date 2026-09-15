@@ -122,6 +122,7 @@ def _mock_db_session_create():
 
     def factory():
         return _cm()
+
     return factory
 
 
@@ -155,6 +156,7 @@ def _mock_db_scan_get(scan_id: str, exists: bool = True):
 
     def factory():
         return _cm()
+
     return factory
 
 
@@ -188,6 +190,7 @@ def _mock_db_report_generate(scan_id: str, *, scan_exists: bool = True):
 
     def factory():
         return _cm()
+
     return factory
 
 
@@ -199,32 +202,47 @@ def _mock_db_reports(
     from src.db.models import Finding as FindingModel
     from src.db.models import Report
 
-    report = Report(
-        id=report_id,
-        tenant_id="00000000-0000-0000-0000-000000000001",
-        scan_id=report_id,
-        target="https://filtered.com",
-        summary={
-            "critical": 0, "high": 1, "medium": 2, "low": 0, "info": 0,
-            "technologies": ["nginx"], "sslIssues": 0, "headerIssues": 0, "leaksFound": False,
-        },
-        technologies=["nginx", "php"],
-        created_at=datetime.now(UTC),
-    ) if has_reports else None
-
-    findings = [
-        FindingModel(
-            id="f-001",
+    report = (
+        Report(
+            id=report_id,
             tenant_id="00000000-0000-0000-0000-000000000001",
             scan_id=report_id,
-            report_id=report_id,
-            severity="high",
-            title="Test",
-            description="Desc",
-            cwe="CWE-79",
-            cvss=7.5,
-        ),
-    ] if has_reports else []
+            target="https://filtered.com",
+            summary={
+                "critical": 0,
+                "high": 1,
+                "medium": 2,
+                "low": 0,
+                "info": 0,
+                "technologies": ["nginx"],
+                "sslIssues": 0,
+                "headerIssues": 0,
+                "leaksFound": False,
+            },
+            technologies=["nginx", "php"],
+            created_at=datetime.now(UTC),
+        )
+        if has_reports
+        else None
+    )
+
+    findings = (
+        [
+            FindingModel(
+                id="f-001",
+                tenant_id="00000000-0000-0000-0000-000000000001",
+                scan_id=report_id,
+                report_id=report_id,
+                severity="high",
+                title="Test",
+                description="Desc",
+                cwe="CWE-79",
+                cvss=7.5,
+            ),
+        ]
+        if has_reports
+        else []
+    )
 
     empty_result = MagicMock()
     empty_result.scalar_one_or_none.return_value = None
@@ -260,6 +278,7 @@ def _mock_db_reports(
 
     def factory():
         return _cm()
+
     return factory
 
 
@@ -683,8 +702,17 @@ class TestFrontendApiContract:
             ]:
                 assert key in item, f"Report missing field: {key}"
             summary = item["summary"]
-            for k in ["critical", "high", "medium", "low", "info", "technologies",
-                      "sslIssues", "headerIssues", "leaksFound"]:
+            for k in [
+                "critical",
+                "high",
+                "medium",
+                "low",
+                "info",
+                "technologies",
+                "sslIssues",
+                "headerIssues",
+                "leaksFound",
+            ]:
                 assert k in summary, f"ReportSummary missing field: {k}"
             for f in item["findings"]:
                 assert "severity" in f and "title" in f and "description" in f

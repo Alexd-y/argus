@@ -44,9 +44,7 @@ async def _load_row(session: AsyncSession, tenant_id: str) -> ScanQuota | None:
     return result.scalar_one_or_none()
 
 
-async def _get_or_create_row(
-    session: AsyncSession, tenant_id: str, tier: str
-) -> ScanQuota:
+async def _get_or_create_row(session: AsyncSession, tenant_id: str, tier: str) -> ScanQuota:
     row = await _load_row(session, tenant_id)
     now = datetime.now(UTC)
     if row is None:
@@ -70,17 +68,13 @@ async def _get_or_create_row(
     return row
 
 
-async def get_quota_snapshot(
-    session: AsyncSession, tenant_id: str, tier: str
-) -> dict[str, object]:
+async def get_quota_snapshot(session: AsyncSession, tenant_id: str, tier: str) -> dict[str, object]:
     """Return the current quota snapshot (frontend ``ScanQuota`` shape)."""
     row = await _get_or_create_row(session, tenant_id, tier)
     return _row_to_state(row).snapshot()
 
 
-async def consume_scan(
-    session: AsyncSession, tenant_id: str, tier: str
-) -> tuple[bool, str | None]:
+async def consume_scan(session: AsyncSession, tenant_id: str, tier: str) -> tuple[bool, str | None]:
     """Spend one scan credit for the tenant. Returns (ok, source)."""
     row = await _get_or_create_row(session, tenant_id, tier)
     state = _row_to_state(row)

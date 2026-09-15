@@ -281,7 +281,9 @@ class QuickReport(_Frozen):
     skipped_timeouts_failures: tuple[StrictStr, ...] = Field(default_factory=tuple)
     budget_usage: dict[str, Any] = Field(default_factory=dict)
     versions: dict[str, StrictStr] = Field(default_factory=dict)
-    recommended_next_mode: Literal["production", "lab_unrestricted", "standard", "deep"] = "production"
+    recommended_next_mode: Literal["production", "lab_unrestricted", "standard", "deep"] = (
+        "production"
+    )
     follow_up_actions: tuple[StrictStr, ...] = Field(default_factory=tuple)
     incompleteness_warning: StrictStr = Field(
         default=(

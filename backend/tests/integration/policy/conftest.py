@@ -9,7 +9,7 @@ verify the closed-taxonomy denial path end-to-end.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -20,7 +20,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import (
     RiskLevel,
@@ -144,9 +143,7 @@ def policy_engine(tenant_policy: TenantPolicy) -> PolicyEngine:
 
 
 @pytest.fixture()
-def approval_service(
-    key_manager: KeyManager, audit_logger: AuditLogger
-) -> ApprovalService:
+def approval_service(key_manager: KeyManager, audit_logger: AuditLogger) -> ApprovalService:
     return ApprovalService(key_manager=key_manager, audit_logger=audit_logger)
 
 
@@ -174,7 +171,7 @@ def http_target() -> TargetSpec:
 
 @pytest.fixture()
 def fresh_proof(tenant_id: UUID, http_target: TargetSpec) -> OwnershipProof:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return OwnershipProof(
         challenge_id=uuid4(),
         tenant_id=tenant_id,
@@ -220,9 +217,7 @@ def tool_job_factory(tenant_id: UUID, scan_id: UUID) -> Callable[..., ToolJob]:
         kwargs: dict[str, Any] = {
             "tenant_id": tenant_id,
             "scan_id": scan_id,
-            "target": TargetSpec(
-                kind=TargetKind.URL, url="https://api.example.com/v1/users"
-            ),
+            "target": TargetSpec(kind=TargetKind.URL, url="https://api.example.com/v1/users"),
             "tool_id": "nmap_quick",
             "phase": ScanPhase.RECON,
             "risk_level": RiskLevel.PASSIVE,
@@ -255,16 +250,12 @@ def _policy_context(
 
 
 @pytest.fixture()
-def policy_context_factory(
-    tenant_id: UUID, scan_id: UUID
-) -> Callable[..., PolicyContext]:
+def policy_context_factory(tenant_id: UUID, scan_id: UUID) -> Callable[..., PolicyContext]:
     def _factory(**overrides: Any) -> PolicyContext:
         kwargs: dict[str, Any] = {
             "tenant_id": tenant_id,
             "scan_id": scan_id,
-            "target": TargetSpec(
-                kind=TargetKind.URL, url="https://api.example.com/v1/users"
-            ),
+            "target": TargetSpec(kind=TargetKind.URL, url="https://api.example.com/v1/users"),
         }
         kwargs.update(overrides)
         return _policy_context(**kwargs)

@@ -62,7 +62,7 @@ BUILTIN_PAYLOADS: Final[dict[str, list[str]]] = {
         '{"$where": "1==1"}',
         '{"$regex": ".*"}',
         '{"$exists": true}',
-        '[$ne]=invalid',
+        "[$ne]=invalid",
     ],
     "xxe": [
         '<?xml version="1.0"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo>&xxe;</foo>',
@@ -113,8 +113,9 @@ def load_payloads(
     if custom_wordlist_path:
         try:
             from pathlib import Path
+
             lines = Path(custom_wordlist_path).read_text(errors="ignore").splitlines()
-            custom = [l.strip() for l in lines if l.strip() and not l.startswith("#")]
+            custom = [line.strip() for line in lines if line.strip() and not line.startswith("#")]
             if custom:
                 payloads["custom"] = custom
         except OSError:

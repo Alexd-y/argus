@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -17,7 +18,18 @@ async def trace_syscalls(
 ) -> list[dict[str, str]]:
     """Trace syscalls during command execution inside sandbox container."""
     try:
-        cmd = ["docker", "exec", container_id, "strace", "-f", "-e", "trace=network,file,process", "-o", "/dev/stderr", "--"] + command.split()
+        cmd = [
+            "docker",
+            "exec",
+            container_id,
+            "strace",
+            "-f",
+            "-e",
+            "trace=network,file,process",
+            "-o",
+            "/dev/stderr",
+            "--",
+        ] + command.split()
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -48,11 +60,21 @@ async def capture_network_traffic(
     """
     try:
         cmd = [
-            "docker", "exec", container_id,
-            "tcpdump", "-i", interface, "-c", "50", "-n", "-q",
+            "docker",
+            "exec",
+            container_id,
+            "tcpdump",
+            "-i",
+            interface,
+            "-c",
+            "50",
+            "-n",
+            "-q",
         ]
         proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         captures: list[dict[str, Any]] = []
@@ -71,24 +93,32 @@ async def get_process_telemetry(container_id: str) -> dict[str, Any]:
     """Collect process and memory telemetry from sandbox."""
     try:
         ps_proc = await asyncio.create_subprocess_exec(
-            "docker", "top", container_id,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "docker",
+            "top",
+            container_id,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         ps_out, _ = await asyncio.wait_for(ps_proc.communicate(), timeout=10)
 
         stats_proc = await asyncio.create_subprocess_exec(
-            "docker", "stats", container_id, "--no-stream", "--format", "json",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "docker",
+            "stats",
+            container_id,
+            "--no-stream",
+            "--format",
+            "json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stats_out, _ = await asyncio.wait_for(stats_proc.communicate(), timeout=10)
 
         import json
+
         stats = {}
         if stats_out:
-            try:
+            with contextlib.suppress(json.JSONDecodeError, ValueError):
                 stats = json.loads(stats_out.decode().strip())
-            except (json.JSONDecodeError, ValueError):
-                pass
 
         return {
             "processes": (ps_out or b"").decode(errors="replace")[:2000],
@@ -102,7 +132,7 @@ class NetworkPolicyEnforcer:
     """Enforces network allowlist for validation environments."""
 
     @staticmethod
-    def default_deny_iptables(container_id: str) -> list[str]:
+    def default_deny_iptables(container_id: str) -> list[str]:  # noqa: ARG004 - iptables backend interface signature
         """Generate iptables commands for default-deny + allowlist DNS."""
         return [
             "iptables -P INPUT DROP",
@@ -113,7 +143,7 @@ class NetworkPolicyEnforcer:
         ]
 
     @staticmethod
-    def allow_outbound(container_id: str, domains: list[str]) -> list[str]:
+    def allow_outbound(container_id: str, domains: list[str]) -> list[str]:  # noqa: ARG004 - iptables backend interface signature
         """Generate iptables allow rules for specific domains."""
         rules = []
         for domain in domains:

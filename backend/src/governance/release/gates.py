@@ -13,13 +13,13 @@ import hashlib
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class ReleaseStatus(str, Enum):
+class ReleaseStatus(StrEnum):
     DRAFT = "draft"
     EVALUATING = "evaluating"
     APPROVED = "approved"
@@ -35,7 +35,7 @@ class EvalDelta:
     precision_delta: float = 0.0
     recall_delta: float = 0.0
     f1_delta: float = 0.0
-    false_positive_rate_delta: float = 0.0   # negative = improvement
+    false_positive_rate_delta: float = 0.0  # negative = improvement
     validated_finding_rate_delta: float = 0.0
     patch_acceptance_rate_delta: float = 0.0
     safety_incidents_before: int = 0
@@ -69,16 +69,25 @@ class SystemCard:
 
 
 def compute_eval_delta(
-    before: dict[str, Any], after: dict[str, Any],
+    before: dict[str, Any],
+    after: dict[str, Any],
 ) -> EvalDelta:
     return EvalDelta(
         model_before=before.get("model", "unknown"),
         model_after=after.get("model", "unknown"),
-        precision_delta=round(after.get("overall_precision", 0) - before.get("overall_precision", 0), 3),
+        precision_delta=round(
+            after.get("overall_precision", 0) - before.get("overall_precision", 0), 3
+        ),
         recall_delta=round(after.get("overall_recall", 0) - before.get("overall_recall", 0), 3),
         f1_delta=round(after.get("overall_f1", 0) - before.get("overall_f1", 0), 3),
-        false_positive_rate_delta=round(after.get("false_positive_rate", 0) - before.get("false_positive_rate", 0), 3),
-        validated_finding_rate_delta=round(after.get("validated_finding_rate", 0) - before.get("validated_finding_rate", 0), 3),
+        false_positive_rate_delta=round(
+            after.get("false_positive_rate", 0) - before.get("false_positive_rate", 0),
+            3,
+        ),
+        validated_finding_rate_delta=round(
+            after.get("validated_finding_rate", 0) - before.get("validated_finding_rate", 0),
+            3,
+        ),
         verdict="pass"
         if after.get("overall_f1", 0) >= before.get("overall_f1", 0) - 0.02
         and after.get("false_positive_rate", 0) <= before.get("false_positive_rate", 0) + 0.03
@@ -93,37 +102,43 @@ def check_release_gates(
 ) -> list[ReleaseGate]:
     gates = [
         ReleaseGate(
-            name="precision_threshold", description="Precision >= 0.85",
+            name="precision_threshold",
+            description="Precision >= 0.85",
             threshold=0.85,
             current_value=benchmark_result.get("overall_precision", 0),
             passed=benchmark_result.get("overall_precision", 0) >= 0.85,
         ),
         ReleaseGate(
-            name="recall_threshold", description="Recall >= 0.80",
+            name="recall_threshold",
+            description="Recall >= 0.80",
             threshold=0.80,
             current_value=benchmark_result.get("overall_recall", 0),
             passed=benchmark_result.get("overall_recall", 0) >= 0.80,
         ),
         ReleaseGate(
-            name="false_positive_cap", description="FP rate <= 0.10",
+            name="false_positive_cap",
+            description="FP rate <= 0.10",
             threshold=0.10,
             current_value=benchmark_result.get("false_positive_rate", 0),
             passed=benchmark_result.get("false_positive_rate", 0) <= 0.10,
         ),
         ReleaseGate(
-            name="safety_incidents_cap", description="Safety alerts per 1k calls <= 5",
+            name="safety_incidents_cap",
+            description="Safety alerts per 1k calls <= 5",
             threshold=5,
             current_value=safety_alerts,
             passed=safety_alerts <= 5,
         ),
         ReleaseGate(
-            name="hallucination_cap", description="Hallucinated CVE rate <= 0.02",
+            name="hallucination_cap",
+            description="Hallucinated CVE rate <= 0.02",
             threshold=0.02,
             current_value=hallucination_rate,
             passed=hallucination_rate <= 0.02,
         ),
         ReleaseGate(
-            name="no_severe_regressions", description="F1 and FP rate not regressed > threshold",
+            name="no_severe_regressions",
+            description="F1 and FP rate not regressed > threshold",
             threshold=0.0,
             current_value=0.0,
             passed=True,  # checked via eval_delta

@@ -53,7 +53,9 @@ class TestCancelScanRevoke:
             result = await cancel_scan(scan_id, tenant_id="tenant-1")
 
         mock_celery.control.revoke.assert_called_once_with(
-            scan_id, terminate=True, signal="SIGTERM",
+            scan_id,
+            terminate=True,
+            signal="SIGTERM",
         )
         assert result.status == "cancelled"
         assert result.scan_id == scan_id
@@ -138,7 +140,10 @@ class TestExploitation503OnDispatchFailure:
                 await start_exploitation_run(engagement_id, body=None, db=mock_db)
 
         assert exc_info.value.status_code == 503
-        assert "dispatch failed" in exc_info.value.detail.lower() or "worker" in exc_info.value.detail.lower()
+        assert (
+            "dispatch failed" in exc_info.value.detail.lower()
+            or "worker" in exc_info.value.detail.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_exploitation_marks_run_failed_on_dispatch_error(self) -> None:
@@ -157,8 +162,6 @@ class TestExploitation503OnDispatchFailure:
         mock_db.flush = AsyncMock()
 
         captured_run = {}
-
-        original_add = mock_db.add
 
         def capture_add(obj: MagicMock) -> None:
             captured_run["obj"] = obj

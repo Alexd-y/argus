@@ -18,18 +18,17 @@ preflight-denial behaviour.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.payloads.builder import (
     PayloadApprovalRequiredError,
+    PayloadBuilder,
     PayloadBuildError,
     PayloadBuildRequest,
-    PayloadBuilder,
 )
 from src.payloads.registry import PayloadRegistry
 from src.pipeline.contracts.phase_io import ScanPhase
@@ -47,7 +46,6 @@ from src.policy.ownership import (
 )
 from src.policy.policy_engine import PolicyContext
 from src.policy.preflight import PreflightChecker, PreflightDeniedError
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -70,7 +68,7 @@ def real_payload_registry() -> PayloadRegistry:
 
 
 def _fresh_proof(*, tenant_id: UUID, target: TargetSpec) -> OwnershipProof:
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     return OwnershipProof(
         challenge_id=uuid4(),
         tenant_id=tenant_id,
@@ -171,9 +169,7 @@ def test_builder_denies_out_of_scope_target(
     tenant_id: UUID,
     scan_id: UUID,
 ) -> None:
-    out_of_scope = TargetSpec(
-        kind=TargetKind.URL, url="https://attacker-controlled.com/login"
-    )
+    out_of_scope = TargetSpec(kind=TargetKind.URL, url="https://attacker-controlled.com/login")
     builder = PayloadBuilder(real_payload_registry, preflight_checker=preflight_checker)
     with pytest.raises(PreflightDeniedError) as exc_info:
         builder.build(
@@ -311,7 +307,7 @@ def test_family_approval_gate_still_enforced_after_preflight_pass(
     ownership_store.save(_fresh_proof(tenant_id=tenant_id, target=http_target))
 
     private_key, _, _ = ed25519_keypair
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     request = ApprovalRequest(
         tenant_id=tenant_id,
         action=ApprovalAction.HIGH,

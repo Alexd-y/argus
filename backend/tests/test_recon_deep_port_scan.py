@@ -148,7 +148,7 @@ async def test_run_recon_deep_port_scan_bundle_mocked_nmap() -> None:
         "nmap": {"structured": {"open_tcp_ports": ["80"], "mode": "legacy"}},
     }
 
-    async def _fake_to_thread(fn, *args, **kwargs):  # noqa: ANN001
+    async def _fake_to_thread(fn, *args, **kwargs):
         if getattr(fn, "__name__", "") == "run_kal_mcp_tool":
             return {
                 "success": True,

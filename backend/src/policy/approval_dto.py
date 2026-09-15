@@ -219,9 +219,9 @@ def _canonical_approval_payload(request: ApprovalRequest) -> bytes:
         "justification": request.justification,
         "expires_at": request.expires_at.astimezone(UTC).isoformat(),
     }
-    return json.dumps(
-        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
 
 
 __all__ = [

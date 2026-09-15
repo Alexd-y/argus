@@ -24,7 +24,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Final, TypeAlias
+from typing import Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -52,14 +52,47 @@ _MAX_FINDINGS: Final[int] = 500
 
 # Key WhoIS fields to extract.  Each pattern returns the value in group "value".
 _FIELD_PATTERNS: Final[tuple[tuple[str, re.Pattern[str]], ...]] = (
-    ("registrar", re.compile(r"(?:registrar|registrar\s*name)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("registrar_url", re.compile(r"(?:registrar\s*url|whois\s*server)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("creation_date", re.compile(r"(?:creation\s*date|created)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("updated_date", re.compile(r"(?:updated\s*date|modified)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("expiry_date", re.compile(r"(?:registry\s*expiry\s*date|expir(?:y|ation)\s*date|expires)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("registrant_org", re.compile(r"(?:registrant\s*(?:organization|org|name)|org\s*name)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("registrant_country", re.compile(r"(?:registrant\s*country|country)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
-    ("admin_email", re.compile(r"(?:admin\s*email|registrar\s*abuse\s*contact\s*email)\s*:\s*(?P<value>.+)", re.IGNORECASE)),
+    (
+        "registrar",
+        re.compile(r"(?:registrar|registrar\s*name)\s*:\s*(?P<value>.+)", re.IGNORECASE),
+    ),
+    (
+        "registrar_url",
+        re.compile(r"(?:registrar\s*url|whois\s*server)\s*:\s*(?P<value>.+)", re.IGNORECASE),
+    ),
+    (
+        "creation_date",
+        re.compile(r"(?:creation\s*date|created)\s*:\s*(?P<value>.+)", re.IGNORECASE),
+    ),
+    (
+        "updated_date",
+        re.compile(r"(?:updated\s*date|modified)\s*:\s*(?P<value>.+)", re.IGNORECASE),
+    ),
+    (
+        "expiry_date",
+        re.compile(
+            r"(?:registry\s*expiry\s*date|expir(?:y|ation)\s*date|expires)\s*:\s*(?P<value>.+)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "registrant_org",
+        re.compile(
+            r"(?:registrant\s*(?:organization|org|name)|org\s*name)\s*:\s*(?P<value>.+)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "registrant_country",
+        re.compile(r"(?:registrant\s*country|country)\s*:\s*(?P<value>.+)", re.IGNORECASE),
+    ),
+    (
+        "admin_email",
+        re.compile(
+            r"(?:admin\s*email|registrar\s*abuse\s*contact\s*email)\s*:\s*(?P<value>.+)",
+            re.IGNORECASE,
+        ),
+    ),
 )
 
 # Name server lines come in several flavours:
@@ -70,7 +103,7 @@ _NS_RE: Final[re.Pattern[str]] = re.compile(
     re.IGNORECASE,
 )
 
-_DedupKey: TypeAlias = tuple[str, str]
+type _DedupKey = tuple[str, str]
 
 
 def parse_whois(

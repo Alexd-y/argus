@@ -88,10 +88,7 @@ def is_probably_static_asset_url(url: str) -> bool:
         return True
     if not path or path.endswith("/"):
         return False
-    for suf in _STATIC_SUFFIXES:
-        if path.endswith(suf):
-            return True
-    return False
+    return any(path.endswith(suf) for suf in _STATIC_SUFFIXES)
 
 
 def _normalize_url_key(url: str) -> str:
@@ -257,7 +254,11 @@ async def run_recon_url_history_bundle(
         if not _tool_binary_visible(bin0, s):
             logger.info(
                 "recon_url_history_skipped",
-                extra={"event": "recon_url_history_skipped", "tool": name, "reason": "binary_missing"},
+                extra={
+                    "event": "recon_url_history_skipped",
+                    "tool": name,
+                    "reason": "binary_missing",
+                },
             )
             return {
                 "success": False,
@@ -275,7 +276,11 @@ async def run_recon_url_history_bundle(
         if not pol.allowed:
             logger.info(
                 "recon_url_history_skipped",
-                extra={"event": "recon_url_history_skipped", "tool": name, "reason": pol.reason},
+                extra={
+                    "event": "recon_url_history_skipped",
+                    "tool": name,
+                    "reason": pol.reason,
+                },
             )
             return {
                 "success": False,
@@ -341,18 +346,27 @@ async def run_recon_url_history_bundle(
                 "url_history_json_upload_failed",
                 extra={"event": "url_history_json_upload_failed"},
             )
-        for tool_key, block in (("gau", gau_r), ("waybackurls", wb_r), ("katana", kat_r)):
+        for tool_key, block in (
+            ("gau", gau_r),
+            ("waybackurls", wb_r),
+            ("katana", kat_r),
+        ):
             if tool_key == "katana" and kat_depth <= 0:
                 continue
             if isinstance(block, dict):
                 st = block.get("stdout")
                 if isinstance(st, str) and len(st) > 0:
                     try:
-                        await asyncio.to_thread(raw_sink.upload_text, f"url_history_{tool_key}_stdout", st)
+                        await asyncio.to_thread(
+                            raw_sink.upload_text, f"url_history_{tool_key}_stdout", st
+                        )
                     except Exception:
                         logger.warning(
                             "url_history_raw_upload_failed",
-                            extra={"event": "url_history_raw_upload_failed", "tool": tool_key},
+                            extra={
+                                "event": "url_history_raw_upload_failed",
+                                "tool": tool_key,
+                            },
                         )
 
     return out

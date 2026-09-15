@@ -359,9 +359,7 @@ class TestStructuredLoggingExtraFields:
         assert getattr(record, "phase", None) == "recon"
         assert getattr(record, "scan_id", None) == "scan-123"
 
-    def test_logging_extra_fields_phase_complete(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_logging_extra_fields_phase_complete(self, caplog: pytest.LogCaptureFixture) -> None:
         """Phase complete log includes duration_seconds in extra."""
         logger = logging.getLogger("src.orchestration.state_machine")
         with caplog.at_level(logging.INFO):

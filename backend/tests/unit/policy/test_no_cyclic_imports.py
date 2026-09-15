@@ -58,7 +58,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Resolve ``backend/`` (project import root). This file lives at
 # ``backend/tests/unit/policy/test_no_cyclic_imports.py`` so going up four
 # levels lands us in ``backend/``. We pass this both as ``cwd`` and as
@@ -145,7 +144,7 @@ def _build_subprocess_script(import_order: list[str]) -> str:
 
 def _run_in_subprocess(script: str) -> subprocess.CompletedProcess[str]:
     """Run ``script`` in a fresh interpreter rooted at ``backend/``."""
-    return subprocess.run(  # noqa: S603 — controlled args, no shell
+    return subprocess.run(
         [sys.executable, "-X", "dev", "-c", script],
         cwd=str(_BACKEND_DIR),
         capture_output=True,
@@ -163,7 +162,7 @@ def policy_modules() -> list[str]:
 @pytest.fixture(scope="module")
 def shuffled_orders(policy_modules: list[str]) -> list[list[str]]:
     """Five deterministic random orders of every policy module."""
-    rng = random.Random(42)  # noqa: S311 — non-cryptographic, determinism only
+    rng = random.Random(42)
     orders: list[list[str]] = []
     for _ in range(5):
         order = list(policy_modules)
@@ -354,6 +353,4 @@ def test_in_process_imports_emit_no_cycle_warnings() -> None:
         for record in records
         if any(marker in str(record.message).lower() for marker in cycle_markers)
     ]
-    assert not leaks, (
-        f"Cycle-related warnings recorded during in-process import: {leaks!r}"
-    )
+    assert not leaks, f"Cycle-related warnings recorded during in-process import: {leaks!r}"

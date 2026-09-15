@@ -191,9 +191,7 @@ def generate_backup_codes(count: int = _BACKUP_CODE_COUNT) -> list[str]:
     if count <= 0:
         raise AdminMfaError("backup_code_count_invalid")
     return [
-        "".join(
-            secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(_BACKUP_CODE_LENGTH)
-        )
+        "".join(secrets.choice(_BACKUP_CODE_ALPHABET) for _ in range(_BACKUP_CODE_LENGTH))
         for _ in range(count)
     ]
 
@@ -288,9 +286,7 @@ async def enroll_totp(
     else:
         if not backup_codes:
             raise AdminMfaError("backup_codes_required")
-        persisted_backup_hashes = [
-            _bcrypt_hash(_normalize_backup_code(c)) for c in backup_codes
-        ]
+        persisted_backup_hashes = [_bcrypt_hash(_normalize_backup_code(c)) for c in backup_codes]
 
     stmt = (
         update(AdminUser)
@@ -393,20 +389,14 @@ async def confirm_enrollment(
         update_values: dict[str, object] = {"mfa_enabled": True}
         emitted_count = len(state.backup_codes_hash)
     else:
-        backup_hashes = [
-            _bcrypt_hash(_normalize_backup_code(c)) for c in generated_codes
-        ]
+        backup_hashes = [_bcrypt_hash(_normalize_backup_code(c)) for c in generated_codes]
         update_values = {
             "mfa_enabled": True,
             "mfa_backup_codes_hash": backup_hashes,
         }
         emitted_count = len(backup_hashes)
 
-    stmt = (
-        update(AdminUser)
-        .where(AdminUser.subject == canonical)
-        .values(**update_values)
-    )
+    stmt = update(AdminUser).where(AdminUser.subject == canonical).values(**update_values)
     try:
         await db.execute(stmt)
     except SQLAlchemyError:
@@ -818,9 +808,7 @@ async def mark_session_mfa_passed(
         )
         return
 
-    select_stmt = select(AdminSession).where(
-        AdminSession.session_token_hash == session_token_hash
-    )
+    select_stmt = select(AdminSession).where(AdminSession.session_token_hash == session_token_hash)
     try:
         row = (await db.execute(select_stmt)).scalar_one_or_none()
     except SQLAlchemyError:

@@ -248,10 +248,7 @@ def _extract_from_inline_script(
             url = match.group(1).strip()
             if not url or len(url) > 500:
                 continue
-            if url.startswith("/"):
-                full_url = urljoin(page_url, url)
-            else:
-                full_url = url
+            full_url = urljoin(page_url, url) if url.startswith("/") else url
             safe_full_url = _sanitize_url_for_artifact(full_url)
             if safe_full_url not in seen_api:
                 seen_api.add(safe_full_url)
@@ -405,7 +402,10 @@ def _build_fetcher(
         except Exception:
             logger.info(
                 "stage1_enrichment_fetch_httpx_failed",
-                extra={"url": _sanitize_url_for_artifact(url), "error_code": "httpx_fetch_failed"},
+                extra={
+                    "url": _sanitize_url_for_artifact(url),
+                    "error_code": "httpx_fetch_failed",
+                },
             )
             return _FetchedPage(
                 url=url,
@@ -422,7 +422,10 @@ def _build_fetcher(
         except Exception:
             logger.info(
                 "stage1_enrichment_fetch_custom_failed",
-                extra={"url": _sanitize_url_for_artifact(url), "error_code": "custom_fetch_failed"},
+                extra={
+                    "url": _sanitize_url_for_artifact(url),
+                    "error_code": "custom_fetch_failed",
+                },
             )
             data = {}
         status = int(data.get("status", 0) or 0)
@@ -443,7 +446,10 @@ def _build_fetcher(
         except Exception:
             logger.info(
                 "stage1_enrichment_fetch_mcp_failed",
-                extra={"url": _sanitize_url_for_artifact(url), "error_code": "mcp_fetch_failed"},
+                extra={
+                    "url": _sanitize_url_for_artifact(url),
+                    "error_code": "mcp_fetch_failed",
+                },
             )
             return _FetchedPage(
                 url=url,
@@ -547,7 +553,11 @@ def _build_stage3_readiness(
     route_score = min(1.0, route_count / 20.0) if route_count else 0.0
     input_score = min(1.0, params_count / 15.0) if params_count else 0.0
     api_score = min(1.0, api_count / 10.0) if api_count else 0.0
-    content_score = min(1.0, (content_count + redirect_count) / 10.0) if (content_count or redirect_count) else 0.0
+    content_score = (
+        min(1.0, (content_count + redirect_count) / 10.0)
+        if (content_count or redirect_count)
+        else 0.0
+    )
     boundary_score = 1.0 if has_boundaries else 0.0
 
     coverage_scores = CoverageScores(
@@ -558,9 +568,7 @@ def _build_stage3_readiness(
         boundary_mapping=round(boundary_score, 2),
     )
 
-    avg_score = (
-        route_score + input_score + api_score + content_score + boundary_score
-    ) / 5.0
+    avg_score = (route_score + input_score + api_score + content_score + boundary_score) / 5.0
     if avg_score >= 0.7:
         status: str = "ready_for_stage3"
     elif avg_score >= 0.3:
@@ -582,7 +590,9 @@ def _build_stage3_readiness(
 
     recommended_follow_up: list[str] = []
     if route_score < 0.5:
-        recommended_follow_up.append("Expand route discovery for critical flows (login, admin, API).")
+        recommended_follow_up.append(
+            "Expand route discovery for critical flows (login, admin, API)."
+        )
     if input_score < 0.5:
         recommended_follow_up.append("Map additional input surfaces (forms, query params).")
     if api_score < 0.5:
@@ -624,7 +634,9 @@ def _build_stage3_readiness_md(
         "",
     ]
     if result.missing_evidence:
-        lines.extend(["## Missing Evidence", ""] + [f"- {e}" for e in result.missing_evidence[:20]] + [""])
+        lines.extend(
+            ["## Missing Evidence", ""] + [f"- {e}" for e in result.missing_evidence[:20]] + [""]
+        )
     if result.recommended_follow_up:
         lines.extend(
             ["## Recommended Follow-up", ""]
@@ -700,7 +712,9 @@ def _build_content_clusters(
             root_key = root_keys.get(_root_domain(host))
             similar_to_root = "yes" if root_key == key and bool(root_key) else "no"
             suspicious_host = "yes" if _is_suspicious_host(host) else "no"
-            catch_all_hint = "yes" if suspicious_host == "yes" and similar_to_root == "yes" else "no"
+            catch_all_hint = (
+                "yes" if suspicious_host == "yes" and similar_to_root == "yes" else "no"
+            )
             clusters.append(
                 {
                     "run_id": run_id,
@@ -769,7 +783,9 @@ def _build_redirect_clusters(
                     "source_url": source_url,
                     "status": status,
                     "redirect_target": redirect_target,
-                    "redirect_target_host": urlparse(redirect_target).netloc if redirect_target else "",
+                    "redirect_target_host": urlparse(redirect_target).netloc
+                    if redirect_target
+                    else "",
                     "redirect_path": redirect_path,
                     "cluster_size": len(rows),
                     "shared_with_root": shared_with_root,
@@ -846,7 +862,9 @@ def _build_anomaly_validation_rows(
                 "classification": anomaly_type,
                 "confidence": f"{confidence:.2f}",
                 "recommendation": recommendation,
-                "evidence_refs": "|".join([str(row.get("evidence_ref", "")), "content_clusters.csv"]),
+                "evidence_refs": "|".join(
+                    [str(row.get("evidence_ref", "")), "content_clusters.csv"]
+                ),
             }
         )
         hosts_seen.add(host)
@@ -870,7 +888,9 @@ def _build_anomaly_validation_rows(
                 "classification": anomaly_type,
                 "confidence": f"{confidence:.2f}",
                 "recommendation": recommendation,
-                "evidence_refs": "|".join([str(row.get("evidence_ref", "")), "redirect_clusters.csv"]),
+                "evidence_refs": "|".join(
+                    [str(row.get("evidence_ref", "")), "redirect_clusters.csv"]
+                ),
             }
         )
         hosts_seen.add(host)
@@ -886,14 +906,34 @@ def _classify_anomaly(
     shared_with_root: bool,
 ) -> tuple[str, float, str]:
     if suspicious_host and catch_all_hint:
-        return ("catch_all", 0.86, "Validate wildcard/catch-all routing at edge and app layer.")
+        return (
+            "catch_all",
+            0.86,
+            "Validate wildcard/catch-all routing at edge and app layer.",
+        )
     if suspicious_host and status == "404":
-        return ("forgotten_infra", 0.74, "Check DNS/CNAME ownership and decommissioned services.")
+        return (
+            "forgotten_infra",
+            0.74,
+            "Check DNS/CNAME ownership and decommissioned services.",
+        )
     if shared_with_root:
-        return ("platform_alias", 0.78, "Confirm aliasing is intended and has explicit access controls.")
+        return (
+            "platform_alias",
+            0.78,
+            "Confirm aliasing is intended and has explicit access controls.",
+        )
     if suspicious_host:
-        return ("legacy_naming", 0.61, "Validate naming consistency and ownership of legacy labels.")
-    return ("intentional_placeholder", 0.55, "Review business intent and exposure surface.")
+        return (
+            "legacy_naming",
+            0.61,
+            "Validate naming consistency and ownership of legacy labels.",
+        )
+    return (
+        "intentional_placeholder",
+        0.55,
+        "Review business intent and exposure surface.",
+    )
 
 
 def _build_anomaly_validation_md(
@@ -1021,9 +1061,7 @@ def _validate_schema(data: Any, schema: dict[str, Any], path: str = "$") -> list
 
     if expected_type == "string" and not isinstance(data, str):
         return [f"{path}: expected string"]
-    if expected_type == "number" and (
-        not isinstance(data, (int, float)) or isinstance(data, bool)
-    ):
+    if expected_type == "number" and (not isinstance(data, (int, float)) or isinstance(data, bool)):
         return [f"{path}: expected number"]
     if expected_type == "boolean" and not isinstance(data, bool):
         return [f"{path}: expected boolean"]
@@ -1058,11 +1096,7 @@ def _persist_ai_task(
 
     source_refs = sorted({str(ref) for ref in evidence_refs if str(ref).strip()})
     source_artifact_refs = sorted(
-        {
-            str(ref).split(":", 1)[0]
-            for ref in source_refs
-            if "." in str(ref).split(":", 1)[0]
-        }
+        {str(ref).split(":", 1)[0] for ref in source_refs if "." in str(ref).split(":", 1)[0]}
     )
     mcp_trace_refs = sorted(
         {
@@ -1307,7 +1341,9 @@ def build_stage1_enrichment_artifacts(
 
     crawl_targets = crawl_targets[:_MAX_PAGES]
     in_scope_hosts: set[str] = {_host_from_url(url) for url in live_hosts if _host_from_url(url)}
-    in_scope_hosts.update(str(row.get("host", "") or "").lower() for row in http_probe_rows if row.get("host"))
+    in_scope_hosts.update(
+        str(row.get("host", "") or "").lower() for row in http_probe_rows if row.get("host")
+    )
     in_scope_hosts.update(
         _host_from_url(str(row.get("url", "") or ""))
         for row in http_probe_rows
@@ -1474,7 +1510,10 @@ def build_stage1_enrichment_artifacts(
             except Exception:
                 logger.info(
                     "stage1_enrichment_html_parse_failed",
-                    extra={"url": _sanitize_url_for_artifact(fetched.url), "run_id": run_id},
+                    extra={
+                        "url": _sanitize_url_for_artifact(fetched.url),
+                        "run_id": run_id,
+                    },
                 )
             public_page_rows.append(
                 {
@@ -1516,7 +1555,9 @@ def build_stage1_enrichment_artifacts(
                     url=action,
                     status=0,
                     content_type="",
-                    evidence_ref=_build_evidence_ref("html_form", fetched.url, suffix=f"#{form_idx}"),
+                    evidence_ref=_build_evidence_ref(
+                        "html_form", fetched.url, suffix=f"#{form_idx}"
+                    ),
                     fetch_backend=fetched.fetch_backend,
                 )
                 for input_meta in form.get("inputs", []):
@@ -1626,11 +1667,15 @@ def build_stage1_enrichment_artifacts(
                                 "path": parsed_api.path or "/",
                                 "full_url": full_url,
                                 "source": "js_api_ref",
-                                "api_type": "graphql" if "graphql" in (parsed_api.path or "").lower() else "rest_like",
+                                "api_type": "graphql"
+                                if "graphql" in (parsed_api.path or "").lower()
+                                else "rest_like",
                                 "method_hint": "unknown",
                                 "schema_hint": "unknown",
                                 "auth_boundary_hint": (
-                                    "auth_related" if _AUTH_HINT_RE.search(full_url) else "frontend_to_backend"
+                                    "auth_related"
+                                    if _AUTH_HINT_RE.search(full_url)
+                                    else "frontend_to_backend"
                                 ),
                                 "fetch_backend": fetched.fetch_backend,
                                 "evidence_ref": item["evidence_ref"],
@@ -1670,9 +1715,7 @@ def build_stage1_enrichment_artifacts(
                 page_host = _host_from_url(fetched.url)
                 script_host = _host_from_url(script_url)
                 same_origin_in_scope = (
-                    bool(page_host)
-                    and page_host == script_host
-                    and page_host in in_scope_hosts
+                    bool(page_host) and page_host == script_host and page_host in in_scope_hosts
                 )
                 if not same_origin_in_scope:
                     row = js_bundle_index.get((safe_page_url, safe_script_url))
@@ -1680,7 +1723,10 @@ def build_stage1_enrichment_artifacts(
                         row["skipped_reason"] = "out_of_scope"
                     continue
                 script_target_key = (safe_page_url, safe_script_url)
-                if len(script_targets) < _MAX_SCRIPTS and script_target_key not in seen_script_targets:
+                if (
+                    len(script_targets) < _MAX_SCRIPTS
+                    and script_target_key not in seen_script_targets
+                ):
                     seen_script_targets.add(script_target_key)
                     script_targets.append((fetched.url, script_url, fetched.fetch_backend))
 
@@ -1691,7 +1737,10 @@ def build_stage1_enrichment_artifacts(
             continue
 
         js_row = js_bundle_index.get(
-            (_sanitize_url_for_artifact(page_url), _sanitize_url_for_artifact(script_url))
+            (
+                _sanitize_url_for_artifact(page_url),
+                _sanitize_url_for_artifact(script_url),
+            )
         )
         if js_row is not None:
             js_row["fetch_status"] = fetched_script.status
@@ -1701,7 +1750,9 @@ def build_stage1_enrichment_artifacts(
             value = match.group("route")
             if value.count("/") < 1 or len(value) > 120:
                 continue
-            js_client_routes.append({"value": value, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_client_routes.append(
+                {"value": value, "evidence_ref": _build_evidence_ref("js", script_url)}
+            )
             _append_route(
                 source="js_route_hint",
                 url=urljoin(page_url, value),
@@ -1715,7 +1766,12 @@ def build_stage1_enrichment_artifacts(
             path = match.group("path")
             full_url = urljoin(page_url, path)
             safe_full_url = _sanitize_url_for_artifact(full_url)
-            js_api_refs.append({"value": safe_full_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_api_refs.append(
+                {
+                    "value": safe_full_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
             api_key = (urlparse(full_url).netloc, urlparse(full_url).path)
             if api_key not in seen_api:
                 seen_api.add(api_key)
@@ -1731,7 +1787,9 @@ def build_stage1_enrichment_artifacts(
                         "method_hint": "unknown",
                         "schema_hint": "unknown",
                         "auth_boundary_hint": (
-                            "auth_related" if _AUTH_HINT_RE.search(full_url) else "frontend_to_backend"
+                            "auth_related"
+                            if _AUTH_HINT_RE.search(full_url)
+                            else "frontend_to_backend"
                         ),
                         "fetch_backend": fetched_script.fetch_backend,
                         "evidence_ref": _build_evidence_ref("js", script_url),
@@ -1739,15 +1797,40 @@ def build_stage1_enrichment_artifacts(
                 )
 
         if "hidden" in body.lower() or "internal" in body.lower():
-            js_hidden_hints.append({"value": script_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_hidden_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
         if _THIRD_PARTY_RE.search(script_url):
-            js_third_party.append({"value": script_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_third_party.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
         if _FEATURE_FLAG_RE.search(body):
-            js_feature_flags.append({"value": script_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_feature_flags.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
         if _AUTH_HINT_RE.search(body):
-            js_auth_hints.append({"value": script_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_auth_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
         if _CONFIG_HINT_RE.search(body):
-            js_config_hints.append({"value": script_url, "evidence_ref": _build_evidence_ref("js", script_url)})
+            js_config_hints.append(
+                {
+                    "value": script_url,
+                    "evidence_ref": _build_evidence_ref("js", script_url),
+                }
+            )
 
         markers = []
         lowered = body.lower()
@@ -1796,9 +1879,7 @@ def build_stage1_enrichment_artifacts(
                 "api_type": "graphql" if "graphql" in path.lower() else "rest_like",
                 "method_hint": "GET",
                 "schema_hint": schema_hint,
-                "auth_boundary_hint": (
-                    "auth_related" if _AUTH_HINT_RE.search(url) else "unknown"
-                ),
+                "auth_boundary_hint": ("auth_related" if _AUTH_HINT_RE.search(url) else "unknown"),
                 "fetch_backend": "endpoint_inventory",
                 "evidence_ref": f"endpoint_inventory.csv:{row_idx}",
             }
@@ -2143,7 +2224,13 @@ def build_stage1_enrichment_artifacts(
             continue
         by_context.setdefault(ctx, []).append(row)
     for context_url, grouped in by_context.items():
-        param_names = sorted({str(item.get("param_name", "")).strip() for item in grouped if str(item.get("param_name", "")).strip()})
+        param_names = sorted(
+            {
+                str(item.get("param_name", "")).strip()
+                for item in grouped
+                if str(item.get("param_name", "")).strip()
+            }
+        )
         if not param_names:
             continue
         route_param_map_rows.append(
@@ -2154,8 +2241,24 @@ def build_stage1_enrichment_artifacts(
                 "context_url": context_url,
                 "route_path": urlparse(context_url).path or "/",
                 "param_names": "|".join(param_names),
-                "sources": "|".join(sorted({str(item.get("param_source", "")) for item in grouped if item.get("param_source")})),
-                "evidence_refs": "|".join(sorted({str(item.get("evidence_ref", "")) for item in grouped if item.get("evidence_ref")})),
+                "sources": "|".join(
+                    sorted(
+                        {
+                            str(item.get("param_source", ""))
+                            for item in grouped
+                            if item.get("param_source")
+                        }
+                    )
+                ),
+                "evidence_refs": "|".join(
+                    sorted(
+                        {
+                            str(item.get("evidence_ref", ""))
+                            for item in grouped
+                            if item.get("evidence_ref")
+                        }
+                    )
+                ),
             }
         )
 
@@ -2211,7 +2314,8 @@ def build_stage1_enrichment_artifacts(
             "evidence_ref": row.get("evidence_ref", ""),
         }
         for row in api_rows
-        if str(row.get("api_type", "")).lower() == "graphql" or "graphql" in str(row.get("path", "")).lower()
+        if str(row.get("api_type", "")).lower() == "graphql"
+        or "graphql" in str(row.get("path", "")).lower()
     ]
     json_endpoint_candidates_rows = [
         {
@@ -2245,10 +2349,13 @@ def build_stage1_enrichment_artifacts(
     boundary_candidates = [
         row
         for row in api_rows
-        if row.get("source") in {"js_api_ref", "form_action", "route_inventory", "endpoint_inventory"}
+        if row.get("source")
+        in {"js_api_ref", "form_action", "route_inventory", "endpoint_inventory"}
     ]
     if not boundary_candidates:
-        frontend_backend_boundaries_md_lines.append("- [Observation] No boundary candidates discovered from Stage 1 evidence.")
+        frontend_backend_boundaries_md_lines.append(
+            "- [Observation] No boundary candidates discovered from Stage 1 evidence."
+        )
     else:
         for row in boundary_candidates[:120]:
             ev_ref = row.get("evidence_ref", "")
@@ -2297,7 +2404,9 @@ def build_stage1_enrichment_artifacts(
             cls = str(row.get("classification", "") or "unknown").strip() or "unknown"
             by_classification.setdefault(cls, []).append(row)
         summary_parts = [f"`{cls}`: {len(rows)}" for cls, rows in sorted(by_classification.items())]
-        app_flow_hints_lines.append(f"- [Observation] Route counts by classification: {', '.join(summary_parts)}")
+        app_flow_hints_lines.append(
+            f"- [Observation] Route counts by classification: {', '.join(summary_parts)}"
+        )
         app_flow_hints_lines.append("")
         app_flow_hints_lines.append("## Routes by Classification")
         app_flow_hints_lines.append("")
@@ -2313,7 +2422,9 @@ def build_stage1_enrichment_artifacts(
                     f"- [Evidence] `{route}` on `{host}` via `{discovery_source}` (`{evidence_ref}`)"
                 )
             if len(by_classification[cls]) > 50:
-                app_flow_hints_lines.append(f"- [Observation] ... and {len(by_classification[cls]) - 50} more")
+                app_flow_hints_lines.append(
+                    f"- [Observation] ... and {len(by_classification[cls]) - 50} more"
+                )
             app_flow_hints_lines.append("")
         app_flow_hints_lines.append("## Form Flow Indicators")
         app_flow_hints_lines.append("")
@@ -2371,7 +2482,9 @@ def build_stage1_enrichment_artifacts(
                 ]
             )
     if inconsistent_count == 0:
-        control_inconsistencies_lines.append("- [Observation] No control inconsistencies inferred from current header/tls evidence.")
+        control_inconsistencies_lines.append(
+            "- [Observation] No control inconsistencies inferred from current header/tls evidence."
+        )
     control_inconsistencies_md = "\n".join(control_inconsistencies_lines)
 
     response_similarity_rows: list[dict[str, Any]] = []
@@ -2411,7 +2524,9 @@ def build_stage1_enrichment_artifacts(
         f"- Trace ID: `{trace_token}`",
         "",
     ]
-    catch_all_rows = [row for row in content_cluster_rows if str(row.get("catch_all_hint", "no")) == "yes"]
+    catch_all_rows = [
+        row for row in content_cluster_rows if str(row.get("catch_all_hint", "no")) == "yes"
+    ]
     if not catch_all_rows:
         catch_all_evidence_lines.append("- [Observation] No catch-all indicators detected.")
     for row in catch_all_rows:
@@ -2497,7 +2612,9 @@ def build_stage1_enrichment_artifacts(
             item["shared_with_root"] = row.get("shared_with_root", "no")
             item["evidence_refs"].add(str(row.get("evidence_ref", "")))
             item["related_hosts"] = item["related_hosts"] | related
-            item["behavior_type"] = "content+redirect" if item.get("content_cluster") else "redirect"
+            item["behavior_type"] = (
+                "content+redirect" if item.get("content_cluster") else "redirect"
+            )
     hostname_behavior_matrix_rows = [
         {
             **{k: v for k, v in item.items() if k not in ("evidence_refs", "related_hosts")},
@@ -2531,16 +2648,30 @@ def build_stage1_enrichment_artifacts(
 
     output_files: dict[str, str] = {
         "route_inventory.csv": _as_csv(route_rows, route_columns),
-        "route_classification.csv": _as_csv(route_classification_rows, list(ROUTE_CLASSIFICATION_CSV_COLUMNS)),
+        "route_classification.csv": _as_csv(
+            route_classification_rows, list(ROUTE_CLASSIFICATION_CSV_COLUMNS)
+        ),
         "public_pages.csv": _as_csv(public_page_rows, public_columns),
         "forms_inventory.csv": _as_csv(forms_rows, forms_columns),
         "params_inventory.csv": _as_csv(params_rows, params_columns),
         "js_bundle_inventory.csv": _as_csv(js_bundle_rows, js_bundle_columns),
-        "js_routes.csv": _as_csv(js_routes_rows, ["run_id", "job_id", "trace_id", "route_hint", "evidence_ref"]),
-        "js_api_refs.csv": _as_csv(js_api_ref_rows, ["run_id", "job_id", "trace_id", "api_ref", "evidence_ref"]),
+        "js_routes.csv": _as_csv(
+            js_routes_rows,
+            ["run_id", "job_id", "trace_id", "route_hint", "evidence_ref"],
+        ),
+        "js_api_refs.csv": _as_csv(
+            js_api_ref_rows, ["run_id", "job_id", "trace_id", "api_ref", "evidence_ref"]
+        ),
         "js_integrations.csv": _as_csv(
             js_integration_rows,
-            ["run_id", "job_id", "trace_id", "integration_hint", "integration_type", "evidence_ref"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "integration_hint",
+                "integration_type",
+                "evidence_ref",
+            ],
         ),
         "js_config_hints.csv": _as_csv(
             js_config_hint_rows,
@@ -2550,19 +2681,55 @@ def build_stage1_enrichment_artifacts(
         "api_surface.csv": _as_csv(api_rows, api_columns),
         "input_surfaces.csv": _as_csv(
             input_surfaces_rows,
-            ["run_id", "job_id", "trace_id", "surface_type", "surface_name", "context_url", "classification", "evidence_ref"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "surface_type",
+                "surface_name",
+                "context_url",
+                "classification",
+                "evidence_ref",
+            ],
         ),
         "route_params_map.csv": _as_csv(
             route_param_map_rows,
-            ["run_id", "job_id", "trace_id", "context_url", "route_path", "param_names", "sources", "evidence_refs"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "context_url",
+                "route_path",
+                "param_names",
+                "sources",
+                "evidence_refs",
+            ],
         ),
         "graphql_candidates.csv": _as_csv(
             graphql_candidates_rows,
-            ["run_id", "job_id", "trace_id", "host", "path", "full_url", "source", "evidence_ref"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "host",
+                "path",
+                "full_url",
+                "source",
+                "evidence_ref",
+            ],
         ),
         "json_endpoint_candidates.csv": _as_csv(
             json_endpoint_candidates_rows,
-            ["run_id", "job_id", "trace_id", "host", "path", "full_url", "source", "evidence_ref"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "host",
+                "path",
+                "full_url",
+                "source",
+                "evidence_ref",
+            ],
         ),
         "frontend_backend_boundaries.md": frontend_backend_boundaries_md,
         "app_flow_hints.md": app_flow_hints_md,
@@ -2604,7 +2771,16 @@ def build_stage1_enrichment_artifacts(
         "anomaly_validation.md": anomaly_validation_md,
         "anomaly_validation.csv": _as_csv(
             anomaly_validation_rows,
-            ["run_id", "job_id", "trace_id", "host", "classification", "confidence", "recommendation", "evidence_refs"],
+            [
+                "run_id",
+                "job_id",
+                "trace_id",
+                "host",
+                "classification",
+                "confidence",
+                "recommendation",
+                "evidence_refs",
+            ],
         ),
         "hostname_behavior_matrix.csv": _as_csv(
             hostname_behavior_matrix_rows,
@@ -2643,19 +2819,35 @@ def build_stage1_enrichment_artifacts(
     js_input = {
         "meta": _meta(ReconAiTask.JS_FINDINGS_ANALYSIS),
         "script_findings": [
-            {"category": "client_route", "value": x["value"], "evidence_refs": [x["evidence_ref"]]}
+            {
+                "category": "client_route",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
             for x in js_client_routes[:100]
         ]
         + [
-            {"category": "api_ref", "value": x["value"], "evidence_refs": [x["evidence_ref"]]}
+            {
+                "category": "api_ref",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
             for x in js_api_refs[:100]
         ]
         + [
-            {"category": "frontend_marker", "value": x["value"], "evidence_refs": [x["evidence_ref"]]}
+            {
+                "category": "frontend_marker",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
             for x in js_frontend_markers[:100]
         ]
         + [
-            {"category": "hidden_hint", "value": x["value"], "evidence_refs": [x["evidence_ref"]]}
+            {
+                "category": "hidden_hint",
+                "value": x["value"],
+                "evidence_refs": [x["evidence_ref"]],
+            }
             for x in js_hidden_hints[:100]
         ],
     }
@@ -2902,11 +3094,15 @@ def build_stage1_enrichment_artifacts(
                 "cluster_id": row.get("cluster_id", ""),
                 "interpretation": (
                     "shared_404_or_platform_template"
-                    if row.get("template_hint") in {"shared_404_template", "shared_platform_template"}
+                    if row.get("template_hint")
+                    in {"shared_404_template", "shared_platform_template"}
                     else "unique_or_small_cluster"
                 ),
                 "confidence": 0.73 if int(row.get("cluster_size", 0) or 0) > 1 else 0.58,
-                "evidence_refs": [str(row.get("evidence_ref", "")), "content_clusters.csv"],
+                "evidence_refs": [
+                    str(row.get("evidence_ref", "")),
+                    "content_clusters.csv",
+                ],
             }
             for row in content_cluster_rows[:300]
         ],
@@ -2952,7 +3148,10 @@ def build_stage1_enrichment_artifacts(
                 "suspicious_host": str(row.get("suspicious_host", "no")) == "yes",
                 "catch_all_hint": str(row.get("catch_all_hint", "no")) == "yes",
                 "shared_with_root": str(row.get("similar_to_root", "no")) == "yes",
-                "evidence_refs": [str(row.get("evidence_ref", "")), "content_clusters.csv"],
+                "evidence_refs": [
+                    str(row.get("evidence_ref", "")),
+                    "content_clusters.csv",
+                ],
             }
             for row in content_cluster_rows[:300]
             if row.get("host")
@@ -2994,11 +3193,15 @@ def build_stage1_enrichment_artifacts(
         )
     )
 
-    focus_hosts = [str(item.get("host", "")) for item in anomaly_candidates[:20] if item.get("host")]
+    focus_hosts = [
+        str(item.get("host", "")) for item in anomaly_candidates[:20] if item.get("host")
+    ]
     stage2_input = {
         "meta": _meta(ReconAiTask.STAGE2_PREPARATION_SUMMARY),
         "focus_hosts": focus_hosts,
-        "risk_hypotheses": [str(item.get("classification", "")) for item in anomaly_candidates[:20]],
+        "risk_hypotheses": [
+            str(item.get("classification", "")) for item in anomaly_candidates[:20]
+        ],
     }
     stage2_output = {
         "summary": "Stage 2 preparation synthesized from validated anomalies and cluster behavior.",
@@ -3015,14 +3218,21 @@ def build_stage1_enrichment_artifacts(
                 "step": "Review redirect clusters for shared platform aliasing and routing controls.",
                 "priority": "medium",
                 "confidence": 0.69,
-                "evidence_refs": ["redirect_clusters.csv", "04_live_hosts/http_probe.csv"],
+                "evidence_refs": [
+                    "redirect_clusters.csv",
+                    "04_live_hosts/http_probe.csv",
+                ],
             },
             {
                 "statement_type": "hypothesis",
                 "step": "Prioritize hypothesis-driven checks for hosts with weak header posture.",
                 "priority": "medium",
                 "confidence": 0.67,
-                "evidence_refs": ["headers_detailed.csv", "tls_summary.md", "anomaly_validation.md"],
+                "evidence_refs": [
+                    "headers_detailed.csv",
+                    "tls_summary.md",
+                    "anomaly_validation.md",
+                ],
             },
         ],
     }
@@ -3057,7 +3267,9 @@ def build_stage1_enrichment_artifacts(
     stage3_input = {
         "meta": _meta(ReconAiTask.STAGE3_PREPARATION_SUMMARY),
         "focus_hosts": focus_hosts,
-        "risk_hypotheses": [str(item.get("classification", "")) for item in anomaly_candidates[:20]],
+        "risk_hypotheses": [
+            str(item.get("classification", "")) for item in anomaly_candidates[:20]
+        ],
         "stage3_readiness": stage3_readiness_result.model_dump(mode="json"),
     }
     stage3_output = {

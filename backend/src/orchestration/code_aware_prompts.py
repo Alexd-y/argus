@@ -61,7 +61,9 @@ def build_source_context(sources: list[CodeSource], limit: int = MAX_SOURCES_IN_
     return "\n".join(lines)
 
 
-def build_taint_path_context(taint_paths: list[TaintPath], limit: int = MAX_TAINT_PATHS_IN_PROMPT) -> str:
+def build_taint_path_context(
+    taint_paths: list[TaintPath], limit: int = MAX_TAINT_PATHS_IN_PROMPT
+) -> str:
     """Build a prompt section listing identified taint paths (source→sink)."""
     if not taint_paths:
         return "No taint paths identified in source analysis."

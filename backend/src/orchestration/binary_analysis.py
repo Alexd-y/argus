@@ -14,9 +14,18 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 BINARY_TOOLS = {
-    "binwalk": {"docker_image": "argus-kali-runner:latest", "description": "Firmware extraction and entropy analysis"},
-    "ghidra": {"docker_image": "argus-kali-runner:latest", "description": "Headless decompilation and analysis"},
-    "radare2": {"docker_image": "argus-kali-runner:latest", "description": "Disassembly and binary diffing"},
+    "binwalk": {
+        "docker_image": "argus-kali-runner:latest",
+        "description": "Firmware extraction and entropy analysis",
+    },
+    "ghidra": {
+        "docker_image": "argus-kali-runner:latest",
+        "description": "Headless decompilation and analysis",
+    },
+    "radare2": {
+        "docker_image": "argus-kali-runner:latest",
+        "description": "Disassembly and binary diffing",
+    },
 }
 
 
@@ -77,12 +86,14 @@ BINARY_USER_TEMPLATE = (
 def build_binary_prompt(binary_path: str, architecture: str, functions: str) -> tuple[str, str]:
     try:
         from src.orchestration.prompt_loader import get_loader
+
         loader = get_loader()
         if loader.available:
             try:
                 system, user = loader.render_extended_system_user(
                     "binary_analysis",
-                    binary_path=binary_path, architecture=architecture,
+                    binary_path=binary_path,
+                    architecture=architecture,
                     functions=functions[:20000],
                 )
                 if system.strip() and user.strip():
@@ -92,7 +103,8 @@ def build_binary_prompt(binary_path: str, architecture: str, functions: str) -> 
     except Exception:
         pass
     return BINARY_SYSTEM_PROMPT, BINARY_USER_TEMPLATE.format(
-        binary_path=binary_path, architecture=architecture,
+        binary_path=binary_path,
+        architecture=architecture,
         functions=functions[:20000],
     )
 
@@ -161,7 +173,9 @@ async def run_binary_analysis(
             except Exception as exc:
                 logger.warning("binwalk_failed", extra={"error": str(exc)})
 
-    functions_text = "\n".join(strings_out[:50]) if strings_out else "No decompiled functions available"
+    functions_text = (
+        "\n".join(strings_out[:50]) if strings_out else "No decompiled functions available"
+    )
     system_prompt, user_prompt = build_binary_prompt(
         binary_path=request.binary_path or request.binary_url,
         architecture=request.architecture or binary_type,
@@ -174,26 +188,30 @@ async def run_binary_analysis(
     vulns: list[BinaryVulnerability] = []
     try:
         response = await call_llm_unified(
-            system_prompt, user_prompt,
+            system_prompt,
+            user_prompt,
             task=LLMTask.VULN_ANALYSIS,
             scan_id=request.scan_id,
             phase="binary_analysis",
         )
         if response:
             import json
+
             text = response if isinstance(response, str) else str(response)
             try:
                 start = text.index("{")
                 end = text.rindex("}") + 1
                 parsed = json.loads(text[start:end])
                 for item in parsed.get("vulnerabilities", []):
-                    vulns.append(BinaryVulnerability(
-                        function_name=item.get("function_name", ""),
-                        vuln_type=item.get("vuln_type", ""),
-                        severity=item.get("severity", "medium"),
-                        description=item.get("description", ""),
-                        address=item.get("address", ""),
-                    ))
+                    vulns.append(
+                        BinaryVulnerability(
+                            function_name=item.get("function_name", ""),
+                            vuln_type=item.get("vuln_type", ""),
+                            severity=item.get("severity", "medium"),
+                            description=item.get("description", ""),
+                            address=item.get("address", ""),
+                        )
+                    )
             except (ValueError, json.JSONDecodeError):
                 logger.warning("binary_analysis_llm_parse_failed")
     except Exception as exc:

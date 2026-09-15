@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+from pydantic import ValidationError
 from src.schemas.ai.common import PriorityLevel
 from src.schemas.threat_modeling.schemas import (
     AIReasoningTrace,
@@ -27,7 +28,6 @@ from src.schemas.threat_modeling.schemas import (
 from src.schemas.threat_modeling.schemas import (
     TestingRoadmapItem as TestingRoadmapItemSchema,
 )
-from pydantic import ValidationError
 
 # --- CriticalAsset ---
 
@@ -383,13 +383,9 @@ class TestThreatModelInputBundle:
             target_id="t1",
             critical_assets=[CriticalAsset(id="a1", name="DB", asset_type="database")],
             trust_boundaries=[TrustBoundary(id="tb1", name="DMZ")],
-            attacker_profiles=[
-                AttackerProfile(id="ap1", name="APT", capability_level="high")
-            ],
+            attacker_profiles=[AttackerProfile(id="ap1", name="APT", capability_level="high")],
             entry_points=[EntryPoint(id="ep1", name="API", entry_type="api")],
-            application_flows=[
-                ApplicationFlow(id="f1", source="web", sink="api")
-            ],
+            application_flows=[ApplicationFlow(id="f1", source="web", sink="api")],
             artifact_refs=["artifact1.json"],
         )
         assert len(bundle.critical_assets) == 1

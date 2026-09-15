@@ -35,7 +35,10 @@ class TestReconSeedUrls:
     def test_extracts_from_assets_and_endpoints(self):
         recon = {
             "assets": ["https://x.test/login", "notaurl", "https://x.test/api"],
-            "endpoints": [{"url": "https://x.test/search"}, {"endpoint": "http://x.test/z"}],
+            "endpoints": [
+                {"url": "https://x.test/search"},
+                {"endpoint": "http://x.test/z"},
+            ],
             "subdomains": ["x.test"],  # bare host, not http → ignored
         }
         urls = _recon_seed_urls(recon)
@@ -54,7 +57,9 @@ class TestReconSeedUrls:
         assert _recon_seed_urls({}) == []
 
 
-def _hyp(finding_id: str, cat: FindingCategory, location: str, conf: float = 0.6) -> ExploitHypothesis:
+def _hyp(
+    finding_id: str, cat: FindingCategory, location: str, conf: float = 0.6
+) -> ExploitHypothesis:
     return ExploitHypothesis(
         finding_id=finding_id,
         vuln_type=cat,

@@ -112,9 +112,7 @@ logger = logging.getLogger(__name__)
 
 _DETAIL_FORBIDDEN: Final[str] = "forbidden"
 _DETAIL_TENANT_REQUIRED: Final[str] = "tenant_id is required for this role"
-_DETAIL_TENANT_HEADER_REQUIRED: Final[str] = (
-    "X-Admin-Tenant header is required for this role"
-)
+_DETAIL_TENANT_HEADER_REQUIRED: Final[str] = "X-Admin-Tenant header is required for this role"
 _DETAIL_TENANT_MISMATCH: Final[str] = "tenant mismatch"
 _DETAIL_TENANT_NOT_FOUND: Final[str] = "tenant not found"
 _DETAIL_EMERGENCY_ACTIVE: Final[str] = "emergency_already_active"
@@ -128,9 +126,7 @@ EVENT_THROTTLE: Final[str] = "emergency.throttle"
 
 #: Mirror of admin_bulk_ops._TERMINAL_SCAN_STATUSES — kept local to avoid an
 #: implicit cross-router import dependency on a private symbol.
-_TERMINAL_SCAN_STATUSES: Final[frozenset[str]] = frozenset(
-    {"completed", "failed", "cancelled"}
-)
+_TERMINAL_SCAN_STATUSES: Final[frozenset[str]] = frozenset({"completed", "failed", "cancelled"})
 
 
 def _system_tenant_id() -> str:
@@ -156,17 +152,13 @@ def _kill_switch_dep() -> KillSwitchService:
 def _require_super_admin(role: str) -> None:
     """Raise 403 unless ``role == 'super-admin'``."""
     if role != "super-admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN)
 
 
 def _require_admin_or_super(role: str) -> None:
     """Raise 403 unless role is ``admin`` or ``super-admin`` (operator → 403)."""
     if role not in {"admin", "super-admin"}:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_DETAIL_FORBIDDEN)
 
 
 def _enforce_tenant_scope(
@@ -502,9 +494,7 @@ async def emergency_throttle(
 
     async with async_session_factory() as session:
         tenant_exists = await session.execute(
-            select(func.count(Tenant.id)).where(
-                cast(Tenant.id, String) == target_tenant
-            )
+            select(func.count(Tenant.id)).where(cast(Tenant.id, String) == target_tenant)
         )
         if int(tenant_exists.scalar_one()) == 0:
             raise HTTPException(
@@ -632,9 +622,7 @@ async def emergency_status(
             "event": "argus.admin.emergency.status",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_id_hash": (
-                tenant_hash(effective_tenant) if effective_tenant else None
-            ),
+            "tenant_id_hash": (tenant_hash(effective_tenant) if effective_tenant else None),
             "global_active": global_out.active,
             "tenant_throttles_count": len(throttles),
         },
@@ -700,9 +688,7 @@ async def emergency_audit_trail(
     items: list[EmergencyAuditTrailItem] = []
     for row in rows:
         raw_details = (
-            _redact_audit_details(dict(row.details))
-            if isinstance(row.details, dict)
-            else None
+            _redact_audit_details(dict(row.details)) if isinstance(row.details, dict) else None
         )
         reason: str | None = None
         op_hash: str | None = None
@@ -731,9 +717,7 @@ async def emergency_audit_trail(
             "event": "argus.admin.emergency.audit_trail",
             "user_id_hash": user_id_hash(operator_subject),
             "role": role,
-            "tenant_id_hash": (
-                tenant_hash(effective_tenant) if effective_tenant else None
-            ),
+            "tenant_id_hash": (tenant_hash(effective_tenant) if effective_tenant else None),
             "result_count": len(items),
             "limit": limit,
             "has_more": has_more,

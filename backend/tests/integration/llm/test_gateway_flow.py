@@ -4,16 +4,15 @@ Tests: gateway request → policy enforcement → routing → cloud fallback.
 All external HTTP calls are mocked.
 """
 
-import json
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from src.llm_gateway.router import (
-    GatewayRequest, ChatMessage, GatewayResponse,
-    PolicyDeniedError, AllProvidersFailedError,
-)
+import pytest
 from src.llm_gateway.policy_enforcer import PolicyEnforcer
-from src.llm_gateway.provider_clients import ProviderRouter, ALIAS_REGISTRY
+from src.llm_gateway.provider_clients import ProviderRouter
+from src.llm_gateway.router import (
+    AllProvidersFailedError,
+    PolicyDeniedError,
+)
 
 
 class TestGatewayStandardPolicy:
@@ -44,14 +43,28 @@ class TestGatewayStandardPolicy:
 
     def test_source_code_blocks_cloud(self):
         policy = {"compliance": {"no_cloud_llm_for_source_code": True}}
-        req = type("req", (), {"model": "argus-planner-fast", "metadata": {"content_class": "source_code"}})()
+        req = type(
+            "req",
+            (),
+            {
+                "model": "argus-planner-fast",
+                "metadata": {"content_class": "source_code"},
+            },
+        )()
 
         with pytest.raises(PolicyDeniedError, match="(?i)source.code.*cloud"):
             self.enforcer.evaluate(policy, req)
 
     def test_source_code_allows_wrb(self):
         policy = {"compliance": {"no_cloud_llm_for_source_code": True}}
-        req = type("req", (), {"model": "argus-pentest-primary", "metadata": {"content_class": "source_code"}})()
+        req = type(
+            "req",
+            (),
+            {
+                "model": "argus-pentest-primary",
+                "metadata": {"content_class": "source_code"},
+            },
+        )()
 
         self.enforcer.evaluate(policy, req)  # should not raise
 
@@ -135,21 +148,37 @@ class TestMockedGatewayCall:
 
 class TestUsageLedger:
     def test_records_and_summarizes(self):
-        from src.llm_gateway.usage_ledger import record_usage, get_usage_summary, _ledger
+        from src.llm_gateway.usage_ledger import (
+            _ledger,
+            get_usage_summary,
+            record_usage,
+        )
 
         # Clear ledger
         _ledger.clear()
 
         record_usage(
-            tenant_id="t1", scan_id="s1", phase="recon", task="orchestration",
-            alias="argus-pentest-primary", provider="whiterabbitneo-7b",
-            model="WRB-7B", prompt_tokens=100, completion_tokens=50,
+            tenant_id="t1",
+            scan_id="s1",
+            phase="recon",
+            task="orchestration",
+            alias="argus-pentest-primary",
+            provider="whiterabbitneo-7b",
+            model="WRB-7B",
+            prompt_tokens=100,
+            completion_tokens=50,
             estimated_cost=0.0,
         )
         record_usage(
-            tenant_id="t1", scan_id="s1", phase="reporting", task="report_section",
-            alias="argus-report", provider="deepseek-v4-pro",
-            model="deepseek-v4-pro", prompt_tokens=80, completion_tokens=60,
+            tenant_id="t1",
+            scan_id="s1",
+            phase="reporting",
+            task="report_section",
+            alias="argus-report",
+            provider="deepseek-v4-pro",
+            model="deepseek-v4-pro",
+            prompt_tokens=80,
+            completion_tokens=60,
             estimated_cost=0.02,
         )
 
@@ -163,7 +192,9 @@ class TestUsageLedger:
 class TestRedactionIntegration:
     def test_end_to_end_redaction(self):
         from src.llm_gateway.redaction import (
-            hash_prompt, log_prompt, log_response, redact_api_keys,
+            log_prompt,
+            log_response,
+            redact_api_keys,
         )
 
         prompt = "API key: sk-proj-abc123 and bearer eyJhbGciOiJIUzI1NiJ9.token"

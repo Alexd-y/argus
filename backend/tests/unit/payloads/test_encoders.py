@@ -10,7 +10,6 @@ import base64
 import urllib.parse
 
 import pytest
-
 from src.payloads.encoders import (
     ENCODER_NAMES,
     UnknownEncoderError,
@@ -26,7 +25,6 @@ from src.payloads.encoders import (
     get_encoder,
 )
 
-
 # ---------------------------------------------------------------------------
 # Registry shape
 # ---------------------------------------------------------------------------
@@ -34,17 +32,20 @@ from src.payloads.encoders import (
 
 def test_encoder_registry_contains_expected_stages() -> None:
     """Spec change requires touching this test — guards against silent additions."""
-    assert ENCODER_NAMES == frozenset(
-        {
-            "identity",
-            "url",
-            "url_double",
-            "html",
-            "base64",
-            "unicode_escape",
-            "hex_x",
-            "hex_concat",
-        }
+    assert (
+        frozenset(
+            {
+                "identity",
+                "url",
+                "url_double",
+                "html",
+                "base64",
+                "unicode_escape",
+                "hex_x",
+                "hex_concat",
+            }
+        )
+        == ENCODER_NAMES
     )
 
 

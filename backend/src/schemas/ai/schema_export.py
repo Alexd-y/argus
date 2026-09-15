@@ -329,7 +329,10 @@ def to_report_notes(task_name: str, output_payload: dict[str, Any]) -> list[dict
     elif task_name == ReconAiTask.ANOMALY_INTERPRETATION.value:
         for item in output_payload.get("anomalies", [])[:20]:
             _note(f"{item.get('host', '')}: {item.get('classification', '')}")
-    elif task_name == ReconAiTask.STAGE2_PREPARATION_SUMMARY.value or task_name == ReconAiTask.STAGE3_PREPARATION_SUMMARY.value:
+    elif (
+        task_name == ReconAiTask.STAGE2_PREPARATION_SUMMARY.value
+        or task_name == ReconAiTask.STAGE3_PREPARATION_SUMMARY.value
+    ):
         for item in output_payload.get("next_steps", [])[:20]:
             _note(f"{item.get('priority', '')}: {item.get('step', '')}")
     else:

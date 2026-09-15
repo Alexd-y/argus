@@ -41,14 +41,13 @@ os.environ["DATABASE_URL"] = (
     "postgresql+asyncpg://mcp-unit-test:no-password@localhost:5432/mcp_test"
 )
 
-from collections.abc import Iterator  # noqa: E402
-from uuid import UUID, uuid4  # noqa: E402
+from collections.abc import Iterator
+from uuid import UUID, uuid4
 
-import pytest  # noqa: E402
-
-from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger  # noqa: E402
-from src.mcp.auth import MCPAuthContext  # noqa: E402
-from src.mcp.context import (  # noqa: E402
+import pytest
+from src.mcp.audit_logger import MCPAuditLogger, make_default_audit_logger
+from src.mcp.auth import MCPAuthContext
+from src.mcp.context import (
     set_audit_logger,
     set_auth_override,
     set_notification_dispatcher,

@@ -404,8 +404,7 @@ class DockerSandboxAdapter:
             )
         if descriptor.requires_approval and tool_job.approval_id is None:
             raise ApprovalRequiredError(
-                f"tool_id={descriptor.tool_id!r} requires approval but "
-                f"tool_job.approval_id is None"
+                f"tool_id={descriptor.tool_id!r} requires approval but tool_job.approval_id is None"
             )
 
     @staticmethod

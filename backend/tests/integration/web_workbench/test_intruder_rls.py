@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-
 from src.policy.scope import ScopeKind, ScopeRule
 from src.web_workbench.contracts.project import WorkbenchProjectCreate
 from src.web_workbench.intruder.repository import (

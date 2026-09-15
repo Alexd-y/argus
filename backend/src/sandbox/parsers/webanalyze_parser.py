@@ -37,7 +37,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -64,7 +64,7 @@ _CANONICAL_FILENAME: Final[str] = "webanalyze.json"
 _MAX_FINDINGS: Final[int] = 1_000
 
 
-_DedupKey: TypeAlias = tuple[str, str, str]
+type _DedupKey = tuple[str, str, str]
 
 
 def parse_webanalyze(

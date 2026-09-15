@@ -22,9 +22,18 @@ _FORBIDDEN: Final[tuple[tuple[re.Pattern[str], str], ...]] = (
     (re.compile(r"sk-or-v1-[0-9a-f]{20,}", re.IGNORECASE), "OpenRouter-like hex tail"),
     (re.compile(r"sk-proj-[A-Za-z0-9_-]{20,}"), "OpenAI project key-like tail"),
     (re.compile(r"pplx-[0-9A-Za-z]{20,}"), "Perplexity-like tail"),
-    (re.compile(r"(?i)deepseek_api_key=sk-[0-9a-f]{30,}\s*$"), "DeepSeek-like hex secret"),
-    (re.compile(r"(?i)kimi_api_key=sk-(?!REPLACE_ME)[A-Za-z0-9]{20,}\s*$"), "Kimi-like sk- secret"),
-    (re.compile(r"(?i)shodan_api_key=[A-Za-z0-9]{20,}\s*$"), "Shodan-like alphanumeric secret"),
+    (
+        re.compile(r"(?i)deepseek_api_key=sk-[0-9a-f]{30,}\s*$"),
+        "DeepSeek-like hex secret",
+    ),
+    (
+        re.compile(r"(?i)kimi_api_key=sk-(?!REPLACE_ME)[A-Za-z0-9]{20,}\s*$"),
+        "Kimi-like sk- secret",
+    ),
+    (
+        re.compile(r"(?i)shodan_api_key=[A-Za-z0-9]{20,}\s*$"),
+        "Shodan-like alphanumeric secret",
+    ),
 )
 
 

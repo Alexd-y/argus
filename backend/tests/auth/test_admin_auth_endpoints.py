@@ -22,10 +22,9 @@ client would silently drop the cookie on the next request).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from src.api.routers.admin_auth import ADMIN_SESSION_COOKIE
 from src.auth.admin_sessions import hash_session_token
 from src.auth.admin_users import hash_password
@@ -33,7 +32,6 @@ from src.core.config import settings
 from src.db.models import AdminSession, AdminUser
 
 from .conftest import TEST_ADMIN_SUBJECT, TEST_PLAINTEXT_PASSWORD
-
 
 # ---------------------------------------------------------------------------
 # Seeding helper.
@@ -55,8 +53,8 @@ async def _seed_admin(
             password_hash=digest,
             role=role,
             tenant_id=tenant_id,
-            created_at=datetime.now(timezone.utc),
-            disabled_at=datetime.now(timezone.utc) if disabled else None,
+            created_at=datetime.now(UTC),
+            disabled_at=datetime.now(UTC) if disabled else None,
         )
         s.add(row)
         await s.commit()
@@ -90,9 +88,9 @@ async def test_login_happy_path_sets_cookie_and_returns_payload(
     assert "subject" not in body, "login response must not echo the subject"
 
     set_cookie_headers = response.headers.get_list("set-cookie")
-    assert any(
-        ADMIN_SESSION_COOKIE in h for h in set_cookie_headers
-    ), f"missing {ADMIN_SESSION_COOKIE} cookie: {set_cookie_headers!r}"
+    assert any(ADMIN_SESSION_COOKIE in h for h in set_cookie_headers), (
+        f"missing {ADMIN_SESSION_COOKIE} cookie: {set_cookie_headers!r}"
+    )
 
     cookie_header = next(h for h in set_cookie_headers if ADMIN_SESSION_COOKIE in h)
     normalized = cookie_header.lower().replace(" ", "")
@@ -190,9 +188,7 @@ async def test_login_rate_limit_returns_429_with_retry_after(
 
     third = await api_client.post("/api/v1/auth/admin/login", json=body)
     assert third.status_code == 429
-    assert third.headers.get("Retry-After"), (
-        "rate-limit response MUST include a Retry-After header"
-    )
+    assert third.headers.get("Retry-After"), "rate-limit response MUST include a Retry-After header"
     assert "again later" in third.json()["detail"].lower()
 
 
@@ -216,9 +212,7 @@ async def test_login_does_not_log_plaintext_password(
 # ---------------------------------------------------------------------------
 
 
-async def test_logout_revokes_session_and_clears_cookie(
-    api_client, session_factory
-) -> None:
+async def test_logout_revokes_session_and_clears_cookie(api_client, session_factory) -> None:
     await _seed_admin(session_factory)
 
     login = await api_client.post(
@@ -234,18 +228,14 @@ async def test_logout_revokes_session_and_clears_cookie(
     assert response.json() == {"revoked": True}
 
     set_cookie_headers = response.headers.get_list("set-cookie")
-    deletion = next(
-        (h for h in set_cookie_headers if ADMIN_SESSION_COOKIE in h), None
-    )
+    deletion = next((h for h in set_cookie_headers if ADMIN_SESSION_COOKIE in h), None)
     assert deletion is not None, "logout MUST emit a deletion Set-Cookie header"
     assert "Max-Age=0" in deletion or "expires=Thu, 01 Jan 1970" in deletion.lower()
 
     async with session_factory() as s:
         row = await s.get(AdminSession, hash_session_token(session_id))
         assert row is not None
-        assert row.revoked_at is not None, (
-            "logout MUST tombstone the session row in admin_sessions"
-        )
+        assert row.revoked_at is not None, "logout MUST tombstone the session row in admin_sessions"
 
 
 async def test_logout_without_active_session_is_idempotent(
@@ -261,9 +251,7 @@ async def test_logout_without_active_session_is_idempotent(
 # ---------------------------------------------------------------------------
 
 
-async def test_whoami_with_valid_cookie_returns_principal(
-    api_client, session_factory
-) -> None:
+async def test_whoami_with_valid_cookie_returns_principal(api_client, session_factory) -> None:
     await _seed_admin(session_factory, role="admin")
 
     login = await api_client.post(
@@ -281,9 +269,7 @@ async def test_whoami_with_valid_cookie_returns_principal(
     assert body["expires_at"].endswith("Z")
 
 
-async def test_whoami_with_bearer_header_returns_principal(
-    api_client, session_factory
-) -> None:
+async def test_whoami_with_bearer_header_returns_principal(api_client, session_factory) -> None:
     await _seed_admin(session_factory, role="operator")
 
     await api_client.post(
@@ -309,9 +295,7 @@ async def test_whoami_without_session_returns_401(api_client) -> None:
     assert response.json() == {"detail": "Invalid credentials"}
 
 
-async def test_whoami_with_revoked_session_returns_401(
-    api_client, session_factory
-) -> None:
+async def test_whoami_with_revoked_session_returns_401(api_client, session_factory) -> None:
     await _seed_admin(session_factory)
 
     await api_client.post(
@@ -324,9 +308,7 @@ async def test_whoami_with_revoked_session_returns_401(
     assert response.status_code == 401
 
 
-async def test_whoami_with_expired_session_returns_401(
-    api_client, session_factory
-) -> None:
+async def test_whoami_with_expired_session_returns_401(api_client, session_factory) -> None:
     """Mutate ``expires_at`` into the past and confirm whoami refuses the cookie."""
     await _seed_admin(session_factory)
 
@@ -340,7 +322,7 @@ async def test_whoami_with_expired_session_returns_401(
     async with session_factory() as s:
         row = await s.get(AdminSession, hash_session_token(session_id))
         assert row is not None
-        row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        row.expires_at = datetime.now(UTC) - timedelta(seconds=10)
         await s.commit()
 
     response = await api_client.get("/api/v1/auth/admin/whoami")
@@ -384,13 +366,10 @@ async def test_full_session_id_never_logged(
     await api_client.get("/api/v1/auth/admin/whoami")
     await api_client.post("/api/v1/auth/admin/logout")
 
-    application_records = [
-        r for r in caplog.records if r.name.startswith("src.")
-    ]
+    application_records = [r for r in caplog.records if r.name.startswith("src.")]
     assert application_records, "expected at least one src.* log record"
     for record in application_records:
         msg = record.getMessage()
         assert session_id not in msg, (
-            "full session id MUST never reach the log surface; "
-            f"redaction broke in {record.name}"
+            f"full session id MUST never reach the log surface; redaction broke in {record.name}"
         )

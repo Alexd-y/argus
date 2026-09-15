@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-
 from src.pipeline.contracts.tool_job import TargetKind
 from src.web_workbench.proxy.transport import (
     DEFAULT_MAX_CAPTURE_BYTES,
@@ -17,13 +16,7 @@ from src.web_workbench.proxy.transport import (
 
 
 def test_request_head_round_trip_preserves_bytes() -> None:
-    raw = (
-        b"GET /a/b?x=1 HTTP/1.1\r\n"
-        b"Host: example.com\r\n"
-        b"X-Dup: one\r\n"
-        b"X-Dup: two\r\n"
-        b"\r\n"
-    )
+    raw = b"GET /a/b?x=1 HTTP/1.1\r\nHost: example.com\r\nX-Dup: one\r\nX-Dup: two\r\n\r\n"
     req = NormalizedRequest.parse(raw)
     assert req.method == "GET"
     assert req.target == "/a/b?x=1"

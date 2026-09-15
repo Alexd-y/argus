@@ -1,13 +1,14 @@
 """Tests for Binary Static Analysis and Clustering."""
 
-import pytest
-from pathlib import Path
-import tempfile
-
 from src.workers.binary.static.analyser import (
-    BinaryFormat, BinaryMetadata, BinaryAnalysisResult,
-    _detect_binary_format, _extract_strings, _detect_packer_hints,
-    _calc_entropy, _classify_capabilities,
+    BinaryAnalysisResult,
+    BinaryFormat,
+    BinaryMetadata,
+    _calc_entropy,
+    _classify_capabilities,
+    _detect_binary_format,
+    _detect_packer_hints,
+    _extract_strings,
 )
 
 
@@ -23,6 +24,7 @@ class TestDetectBinaryFormat:
 
     def test_detects_mach_o(self):
         import struct
+
         data = struct.pack(">I", 0xFEEDFACE) + b"\x00" * 60
         assert _detect_binary_format(data) == BinaryFormat.MACH_O
 

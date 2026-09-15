@@ -127,9 +127,7 @@ def test_leaked_hash_in_command_is_redacted(tmp_path: Path) -> None:
 
 
 def test_no_recognisable_markers_yields_no_finding(tmp_path: Path) -> None:
-    findings = parse_evil_winrm(
-        b"random\nlines\nwith\nno\nmarkers\n", b"", tmp_path, "evil_winrm"
-    )
+    findings = parse_evil_winrm(b"random\nlines\nwith\nno\nmarkers\n", b"", tmp_path, "evil_winrm")
     assert findings == []
 
 

@@ -36,10 +36,7 @@ class EvidenceBackedItem(BaseModel):
 
     @model_validator(mode="after")
     def _validate_evidence_requirements(self) -> EvidenceBackedItem:
-        if (
-            self.statement_type != StatementType.HYPOTHESIS
-            and not self.evidence_refs
-        ):
+        if self.statement_type != StatementType.HYPOTHESIS and not self.evidence_refs:
             raise ValueError(
                 "evidence_refs required for non-hypothesis statements; "
                 "use statement_type=hypothesis for assumptions",

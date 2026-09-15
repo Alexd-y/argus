@@ -19,7 +19,6 @@ import importlib
 from typing import Any
 
 import pytest
-
 from src.core import otel_init
 from src.core.observability import safe_set_span_attribute
 
@@ -61,9 +60,7 @@ def test_excluded_urls_includes_all_health_probes() -> None:
         assert endpoint in excluded
 
 
-def test_setup_skipped_when_disabled(
-    monkeypatch: pytest.MonkeyPatch, fake_app: Any
-) -> None:
+def test_setup_skipped_when_disabled(monkeypatch: pytest.MonkeyPatch, fake_app: Any) -> None:
     monkeypatch.setattr(otel_init.settings, "otel_enabled", False)
     result = otel_init.setup_observability(fake_app)
     assert result is None
@@ -90,9 +87,7 @@ def test_setup_installs_provider_when_enabled(
     not otel_init.OTEL_SDK_AVAILABLE,
     reason="OTel SDK not installed",
 )
-def test_setup_is_idempotent(
-    monkeypatch: pytest.MonkeyPatch, fake_app: Any
-) -> None:
+def test_setup_is_idempotent(monkeypatch: pytest.MonkeyPatch, fake_app: Any) -> None:
     monkeypatch.setattr(otel_init.settings, "otel_enabled", True)
     first = otel_init.setup_observability(fake_app)
     second = otel_init.setup_observability(fake_app)

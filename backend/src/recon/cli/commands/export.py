@@ -36,9 +36,7 @@ async def _export_artifacts(engagement_id: str, output_dir: Path) -> None:
     from src.recon.storage import download_artifact, get_stage_name
 
     async with async_session_factory() as session:
-        eng = await session.execute(
-            select(Engagement).where(Engagement.id == engagement_id)
-        )
+        eng = await session.execute(select(Engagement).where(Engagement.id == engagement_id))
         engagement = eng.scalar_one_or_none()
         if not engagement:
             console.print(f"[red]Engagement {engagement_id} not found[/red]")
@@ -72,4 +70,6 @@ async def _export_artifacts(engagement_id: str, output_dir: Path) -> None:
                     exported += 1
                 progress.advance(task)
 
-        console.print(f"[green]Exported {exported}/{len(artifact_list)} artifacts to {recon_root}[/green]")
+        console.print(
+            f"[green]Exported {exported}/{len(artifact_list)} artifacts to {recon_root}[/green]"
+        )

@@ -32,7 +32,8 @@ class CostRouter:
         return self._spent + estimated_cost <= self._max_cost or self._max_cost <= 0
 
     def select_cheapest(
-        self, providers: list[dict[str, Any]],
+        self,
+        providers: list[dict[str, Any]],
     ) -> dict[str, Any] | None:
         available = sorted(
             [p for p in providers if p.get("base_url")],
@@ -52,7 +53,10 @@ class CostRouter:
         if self._spent >= self._max_cost > 0:
             logger.warning("budget_exceeded", extra={"spent": self._spent, "max": self._max_cost})
         elif self.over_soft_limit:
-            logger.info("soft_limit_reached", extra={"spent": self._spent, "soft": self._soft_limit})
+            logger.info(
+                "soft_limit_reached",
+                extra={"spent": self._spent, "soft": self._soft_limit},
+            )
 
 
 def build_cost_router(scan_budget: dict[str, Any] | None) -> CostRouter:

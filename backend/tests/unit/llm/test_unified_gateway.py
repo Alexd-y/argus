@@ -174,7 +174,9 @@ class TestRoutingPolicy:
 
 class TestUnifiedGateway:
     @pytest.mark.asyncio
-    async def test_fallback_selects_next_provider_on_failure(self, isolated_registry: UnifiedRegistry):
+    async def test_fallback_selects_next_provider_on_failure(
+        self, isolated_registry: UnifiedRegistry
+    ):
         gateway = UnifiedLlmGateway(isolated_registry, RoutingPolicy(isolated_registry))
         request = _make_request(preferred_alias="security_reasoner")
 
@@ -313,9 +315,7 @@ class TestUnifiedGateway:
         assert "lab_unrestricted" in captured["system_prompt"]
 
     @pytest.mark.asyncio
-    async def test_schema_error_status_is_typed_enum(
-        self, isolated_registry: UnifiedRegistry
-    ):
+    async def test_schema_error_status_is_typed_enum(self, isolated_registry: UnifiedRegistry):
         gateway = UnifiedLlmGateway(isolated_registry, RoutingPolicy(isolated_registry))
 
         async def fake_invoke(route, req, system_prompt=""):

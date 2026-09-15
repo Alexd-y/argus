@@ -107,8 +107,7 @@ class MutationRule(BaseModel):
     def _check_name(cls, value: str) -> str:
         if value not in MUTATION_NAMES:
             raise ValueError(
-                f"unknown mutation rule {value!r}; "
-                f"must be one of {sorted(MUTATION_NAMES)}"
+                f"unknown mutation rule {value!r}; must be one of {sorted(MUTATION_NAMES)}"
             )
         return value
 
@@ -133,8 +132,7 @@ class EncodingPipeline(BaseModel):
         for stage in value:
             if stage not in ENCODER_NAMES:
                 raise ValueError(
-                    f"unknown encoder stage {stage!r}; "
-                    f"must be one of {sorted(ENCODER_NAMES)}"
+                    f"unknown encoder stage {stage!r}; must be one of {sorted(ENCODER_NAMES)}"
                 )
         return value
 
@@ -166,9 +164,7 @@ class PayloadFamily(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    family_id: StrictStr = Field(
-        min_length=3, max_length=32, pattern=_FAMILY_ID_PATTERN
-    )
+    family_id: StrictStr = Field(min_length=3, max_length=32, pattern=_FAMILY_ID_PATTERN)
     description: StrictStr = Field(min_length=1, max_length=500)
     cwe_ids: list[StrictInt] = Field(min_length=1, max_length=16)
     owasp_top10: list[StrictStr] = Field(min_length=1, max_length=10)
@@ -215,12 +211,14 @@ class PayloadFamily(BaseModel):
         if len(set(pipeline_names)) != len(pipeline_names):
             raise ValueError("encoding pipeline names must be unique within a family")
 
-        if self.risk_level in {RiskLevel.HIGH, RiskLevel.DESTRUCTIVE}:
-            if not self.requires_approval:
-                raise ValueError(
-                    f"family_id={self.family_id!r}: "
-                    f"risk_level={self.risk_level.value} requires requires_approval=True"
-                )
+        if (
+            self.risk_level in {RiskLevel.HIGH, RiskLevel.DESTRUCTIVE}
+            and not self.requires_approval
+        ):
+            raise ValueError(
+                f"family_id={self.family_id!r}: "
+                f"risk_level={self.risk_level.value} requires requires_approval=True"
+            )
         return self
 
 
@@ -297,13 +295,9 @@ class PayloadRegistry:
         Returns a :class:`PayloadRegistrySummary` on success.
         """
         if not self._payloads_dir.exists():
-            raise RegistryLoadError(
-                f"payloads directory {self._payloads_dir!s} does not exist"
-            )
+            raise RegistryLoadError(f"payloads directory {self._payloads_dir!s} does not exist")
         if not self._payloads_dir.is_dir():
-            raise RegistryLoadError(
-                f"payloads path {self._payloads_dir!s} is not a directory"
-            )
+            raise RegistryLoadError(f"payloads path {self._payloads_dir!s} is not a directory")
 
         try:
             self._key_manager.load()
@@ -313,26 +307,21 @@ class PayloadRegistry:
         signatures = self._load_signatures()
         yaml_paths = sorted(p for p in self._payloads_dir.glob("*.yaml") if p.is_file())
         if not yaml_paths:
-            raise RegistryLoadError(
-                f"no payload YAMLs found under {self._payloads_dir!s}"
-            )
+            raise RegistryLoadError(f"no payload YAMLs found under {self._payloads_dir!s}")
 
         registered: dict[str, _RegisteredFamily] = {}
         for yaml_path in yaml_paths:
             family = self._load_and_verify(yaml_path, signatures)
             if family.family_id in registered:
                 raise RegistryLoadError(
-                    f"duplicate family_id {family.family_id!r} "
-                    f"(already loaded from another YAML)"
+                    f"duplicate family_id {family.family_id!r} (already loaded from another YAML)"
                 )
             if family.family_id != yaml_path.stem:
                 raise RegistryLoadError(
                     f"family_id {family.family_id!r} does not match filename "
                     f"stem {yaml_path.stem!r}"
                 )
-            registered[family.family_id] = _RegisteredFamily(
-                family=family, yaml_path=yaml_path
-            )
+            registered[family.family_id] = _RegisteredFamily(family=family, yaml_path=yaml_path)
 
         self._registered = registered
         summary = self._build_summary()
@@ -380,17 +369,13 @@ class PayloadRegistry:
 
     def _load_signatures(self) -> SignaturesFile:
         if not self._signatures_path.exists():
-            raise RegistryLoadError(
-                f"SIGNATURES file {self._signatures_path!s} does not exist"
-            )
+            raise RegistryLoadError(f"SIGNATURES file {self._signatures_path!s} does not exist")
         try:
             return SignaturesFile.from_file(self._signatures_path)
         except SignatureError as exc:
             raise RegistryLoadError(f"failed to parse SIGNATURES: {exc}") from exc
 
-    def _load_and_verify(
-        self, yaml_path: Path, signatures: SignaturesFile
-    ) -> PayloadFamily:
+    def _load_and_verify(self, yaml_path: Path, signatures: SignaturesFile) -> PayloadFamily:
         try:
             yaml_bytes = yaml_path.read_bytes()
         except OSError as exc:
@@ -413,21 +398,16 @@ class PayloadRegistry:
         try:
             payload = yaml.safe_load(yaml_bytes)
         except yaml.YAMLError as exc:
-            raise RegistryLoadError(
-                f"YAML parse error in {relative_path!r}: {exc}"
-            ) from exc
+            raise RegistryLoadError(f"YAML parse error in {relative_path!r}: {exc}") from exc
 
         if not isinstance(payload, dict):
-            raise RegistryLoadError(
-                f"{relative_path!r} must be a YAML mapping at the top level"
-            )
+            raise RegistryLoadError(f"{relative_path!r} must be a YAML mapping at the top level")
 
         try:
             family = PayloadFamily(**payload)
         except ValidationError as exc:
             raise RegistryLoadError(
-                f"schema validation failed for {relative_path!r}: "
-                f"{exc.error_count()} errors"
+                f"schema validation failed for {relative_path!r}: {exc.error_count()} errors"
             ) from exc
 
         return family
@@ -466,7 +446,10 @@ class PayloadRegistry:
             raw = catalog_path.read_text(encoding="utf-8")
             manifest = json.loads(raw)
         except (OSError, json.JSONDecodeError) as exc:
-            _logger.warning("payload_catalog_index_unreadable", extra={"path": str(catalog_path), "error": str(exc)})
+            _logger.warning(
+                "payload_catalog_index_unreadable",
+                extra={"path": str(catalog_path), "error": str(exc)},
+            )
             return
 
         catalog_families: set[str] = set(manifest.get("families", []))
@@ -483,5 +466,9 @@ class PayloadRegistry:
         if unlisted:
             _logger.info(
                 "payload_catalog_unlisted",
-                extra={"count": len(unlisted), "families": sorted(unlisted), "hint": "Add to payload_catalog_index.json"},
+                extra={
+                    "count": len(unlisted),
+                    "families": sorted(unlisted),
+                    "hint": "Add to payload_catalog_index.json",
+                },
             )

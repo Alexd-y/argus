@@ -57,9 +57,7 @@ _ALLOWED_VALUES = ("standard", "pdfa-2u")
 
 # Gate for Layer B.
 _PG_URL_RAW = os.environ.get("DATABASE_URL", "")
-_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(
-    ("postgresql://", "postgresql+", "postgres://")
-)
+_HAS_POSTGRES_URL = _PG_URL_RAW.startswith(("postgresql://", "postgresql+", "postgres://"))
 
 pytestmark_pg = pytest.mark.skipif(
     not _HAS_POSTGRES_URL,
@@ -79,9 +77,7 @@ def _load_revision_module() -> Any:
     """Import the 029 migration file as a standalone module (no chain run)."""
     matches = list(_VERSIONS_DIR.glob(f"{_REVISION}_*.py"))
     assert matches, f"revision file for {_REVISION} not found"
-    spec = importlib.util.spec_from_file_location(
-        f"_alembic_{_REVISION}", matches[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"_alembic_{_REVISION}", matches[0])
     assert spec and spec.loader, f"unable to load spec for {matches[0]}"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -113,12 +109,10 @@ def _to_sync_url(url: str) -> str:
 def test_029_revision_metadata_pinned() -> None:
     module = _load_revision_module()
     assert module.revision == _REVISION, (
-        f"029 migration must declare revision={_REVISION!r}, "
-        f"got {module.revision!r}"
+        f"029 migration must declare revision={_REVISION!r}, got {module.revision!r}"
     )
     assert module.down_revision == _DOWN_REVISION, (
-        f"029 migration must chain off {_DOWN_REVISION!r}, "
-        f"got {module.down_revision!r}"
+        f"029 migration must chain off {_DOWN_REVISION!r}, got {module.down_revision!r}"
     )
     assert module.branch_labels is None, "029 must not introduce a branch label"
     assert module.depends_on is None, "029 must not depend on another revision"
@@ -126,12 +120,8 @@ def test_029_revision_metadata_pinned() -> None:
 
 def test_029_has_upgrade_and_downgrade_callables() -> None:
     module = _load_revision_module()
-    assert callable(getattr(module, "upgrade", None)), (
-        "029.upgrade missing or not callable"
-    )
-    assert callable(getattr(module, "downgrade", None)), (
-        "029.downgrade missing or not callable"
-    )
+    assert callable(getattr(module, "upgrade", None)), "029.upgrade missing or not callable"
+    assert callable(getattr(module, "downgrade", None)), "029.downgrade missing or not callable"
 
 
 def test_029_module_exports_taxonomy_constants() -> None:
@@ -158,21 +148,15 @@ def test_029_orm_tenant_has_pdf_archival_format_column() -> None:
     )
 
     table = cast(sa.Table, Tenant.__table__)
-    assert _COLUMN_NAME in table.columns, (
-        f"Tenant ORM missing {_COLUMN_NAME!r} column"
-    )
+    assert _COLUMN_NAME in table.columns, f"Tenant ORM missing {_COLUMN_NAME!r} column"
     column = table.columns[_COLUMN_NAME]
-    assert column.nullable is False, (
-        f"{_COLUMN_NAME} must be NOT NULL"
-    )
+    assert column.nullable is False, f"{_COLUMN_NAME} must be NOT NULL"
     assert column.server_default is not None, (
         f"{_COLUMN_NAME} must declare a server_default for back-fill safety"
     )
     server_default_arg = getattr(column.server_default, "arg", None)
     server_default_str = (
-        str(server_default_arg)
-        if server_default_arg is not None
-        else str(column.server_default)
+        str(server_default_arg) if server_default_arg is not None else str(column.server_default)
     )
     assert PDF_ARCHIVAL_FORMAT_DEFAULT in server_default_str, (
         f"{_COLUMN_NAME}.server_default must literal-match "
@@ -190,18 +174,13 @@ def test_029_orm_tenant_check_constraint_present() -> None:
 
     table = cast(sa.Table, Tenant.__table__)
     check_constraints = [
-        c
-        for c in table.constraints
-        if isinstance(c, sa.CheckConstraint) and c.name == _CHECK_NAME
+        c for c in table.constraints if isinstance(c, sa.CheckConstraint) and c.name == _CHECK_NAME
     ]
-    assert check_constraints, (
-        f"Tenant ORM missing CHECK constraint {_CHECK_NAME!r}"
-    )
+    assert check_constraints, f"Tenant ORM missing CHECK constraint {_CHECK_NAME!r}"
     sql = str(check_constraints[0].sqltext)
     for value in _ALLOWED_VALUES:
         assert value in sql, (
-            f"CHECK constraint {_CHECK_NAME!r} must enforce {value!r} "
-            f"(got: {sql!r})"
+            f"CHECK constraint {_CHECK_NAME!r} must enforce {value!r} (got: {sql!r})"
         )
 
 
@@ -223,13 +202,9 @@ def test_029_orm_validates_rejects_unknown_format() -> None:
 def pg_url(monkeypatch: pytest.MonkeyPatch) -> str:
     """Return the configured Postgres URL and patch the cached settings."""
     if _PG_URL_RAW.startswith("postgresql://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgresql://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif _PG_URL_RAW.startswith("postgres://"):
-        async_url = _PG_URL_RAW.replace(
-            "postgres://", "postgresql+asyncpg://", 1
-        )
+        async_url = _PG_URL_RAW.replace("postgres://", "postgresql+asyncpg://", 1)
     else:
         async_url = _PG_URL_RAW
     monkeypatch.setenv("DATABASE_URL", async_url)
@@ -263,13 +238,10 @@ def test_029_upgrade_adds_column_with_default(migrated_engine: Engine) -> None:
         f"{_TENANTS_TABLE} should expose {_COLUMN_NAME} after upgrade head"
     )
     column = columns[_COLUMN_NAME]
-    assert column["nullable"] is False, (
-        f"{_COLUMN_NAME} must be NOT NULL after upgrade head"
-    )
+    assert column["nullable"] is False, f"{_COLUMN_NAME} must be NOT NULL after upgrade head"
     server_default = column.get("default")
     assert server_default is not None and "standard" in str(server_default), (
-        f"{_COLUMN_NAME} must default to 'standard' "
-        f"(got server_default={server_default!r})"
+        f"{_COLUMN_NAME} must default to 'standard' (got server_default={server_default!r})"
     )
 
 
@@ -279,10 +251,7 @@ def test_029_check_constraint_rejects_unknown_value(migrated_engine: Engine) -> 
     """The CHECK constraint must reject literals outside the taxonomy."""
     with migrated_engine.begin() as conn:
         conn.execute(
-            text(
-                "INSERT INTO tenants (id, name, pdf_archival_format) "
-                "VALUES (:id, :name, :fmt)"
-            ),
+            text("INSERT INTO tenants (id, name, pdf_archival_format) VALUES (:id, :name, :fmt)"),
             {
                 "id": "00000000-0000-4000-8000-000000000001",
                 "name": "probe-valid",
@@ -292,10 +261,7 @@ def test_029_check_constraint_rejects_unknown_value(migrated_engine: Engine) -> 
 
     with migrated_engine.begin() as conn, pytest.raises(IntegrityError):
         conn.execute(
-            text(
-                "INSERT INTO tenants (id, name, pdf_archival_format) "
-                "VALUES (:id, :name, :fmt)"
-            ),
+            text("INSERT INTO tenants (id, name, pdf_archival_format) VALUES (:id, :name, :fmt)"),
             {
                 "id": "00000000-0000-4000-8000-000000000002",
                 "name": "probe-invalid",
@@ -334,15 +300,11 @@ def test_029_existing_rows_backfilled_to_standard(pg_url: str) -> None:
         engine = sa.create_engine(sync_url, future=True)
         with engine.connect() as conn:
             value = conn.execute(
-                text(
-                    "SELECT pdf_archival_format FROM tenants "
-                    "WHERE id = :id"
-                ),
+                text("SELECT pdf_archival_format FROM tenants WHERE id = :id"),
                 {"id": "00000000-0000-4000-8000-000000000003"},
             ).scalar_one()
         assert value == _DEFAULT_VALUE, (
-            f"Legacy tenant row must be back-filled to {_DEFAULT_VALUE!r}, "
-            f"got {value!r}"
+            f"Legacy tenant row must be back-filled to {_DEFAULT_VALUE!r}, got {value!r}"
         )
     finally:
         engine.dispose()

@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
-
-from src.schemas.recon.stage1 import TechProfileEntry
 from src.recon.reporting.tech_builder import build_tech_profile, build_tech_profile_json
+from src.schemas.recon.stage1 import TechProfileEntry
 
 
 @pytest.fixture
@@ -44,7 +43,7 @@ def test_build_tech_profile_json_matches_csv_content(http_probe_csv: Path) -> No
     csv_content = build_tech_profile(http_probe_csv)
     entries = build_tech_profile_json(http_probe_csv)
 
-    csv_lines = [l for l in csv_content.strip().splitlines() if l]
+    csv_lines = [line for line in csv_content.strip().splitlines() if line]
     csv_header = csv_lines[0]
     csv_data_rows = csv_lines[1:]
 
@@ -52,7 +51,7 @@ def test_build_tech_profile_json_matches_csv_content(http_probe_csv: Path) -> No
     assert "value" in csv_header
     assert len(entries) == len(csv_data_rows)
 
-    for i, entry in enumerate(entries):
+    for _i, entry in enumerate(entries):
         assert entry.indicator_type in ("platform", "cdn", "waf")
         assert entry.value
         assert "Server header" in entry.evidence or entry.evidence == "Server header"

@@ -46,9 +46,7 @@ def assert_tenant_match(auth: MCPAuthContext, claimed_tenant_id: str | None) -> 
     auth_tenant = (auth.tenant_id or "").strip()
     if not auth_tenant:
         _logger.error("mcp.tenancy.missing_authenticated_tenant")
-        raise TenantMismatchError(
-            "MCP authentication context is missing a tenant identifier."
-        )
+        raise TenantMismatchError("MCP authentication context is missing a tenant identifier.")
 
     if claimed_tenant_id is None:
         return auth_tenant

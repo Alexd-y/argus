@@ -212,7 +212,9 @@ def owasp_counts_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]
     return counts
 
 
-def severity_histogram_from_severity_strings(severities: Iterable[str | None]) -> dict[str, int]:
+def severity_histogram_from_severity_strings(
+    severities: Iterable[str | None],
+) -> dict[str, int]:
     """Histogram over raw severity labels (lowercased). Empty label → ``unknown`` (AI / diagnostics)."""
     hist: dict[str, int] = {}
     for raw in severities:
@@ -253,7 +255,9 @@ def severity_histogram_from_finding_rows(findings: list[FindingRow]) -> dict[str
     return severity_histogram_from_severity_strings(f.severity for f in findings)
 
 
-def executive_severity_totals_from_finding_rows(findings: list[FindingRow]) -> dict[str, int]:
+def executive_severity_totals_from_finding_rows(
+    findings: list[FindingRow],
+) -> dict[str, int]:
     return executive_severity_totals_from_severity_strings(f.severity for f in findings)
 
 
@@ -295,13 +299,17 @@ def headline_severity_totals(findings: list[Any], tier: str | None) -> dict[str,
     )
 
 
-def build_owasp_summary_from_counts(counts: dict[str, int]) -> dict[str, OwaspCategorySummaryEntry]:
+def build_owasp_summary_from_counts(
+    counts: dict[str, int],
+) -> dict[str, OwaspCategorySummaryEntry]:
     """Aggregate OWASP rows for templates from finding counts + OWASP category info (OWASP-002)."""
     out: dict[str, OwaspCategorySummaryEntry] = {}
     for cid in OWASP_TOP10_2025_CATEGORY_IDS:
         n = int(counts.get(cid, 0))
         info = get_owasp_category_info(cid)
-        title_ru = (info.get("title_ru") or "").strip() or OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, cid)
+        title_ru = (info.get("title_ru") or "").strip() or OWASP_TOP10_2025_CATEGORY_TITLES.get(
+            cid, cid
+        )
         desc = _owasp_description_from_loader_info(info)
         if not desc:
             desc = OWASP_TOP10_2025_CATEGORY_TITLES.get(cid, "")
@@ -559,7 +567,7 @@ def _parse_phase_from_key(key: str, tenant_id: str, scan_id: str) -> str:
     prefix = f"{tenant_id}/{scan_id}/"
     if not key.startswith(prefix):
         return "unknown"
-    rest = key[len(prefix):]
+    rest = key[len(prefix) :]
     segment = rest.split("/", 1)[0]
     if segment in RAW_ARTIFACT_PHASES:
         return segment
@@ -738,7 +746,11 @@ class ReportDataCollector:
             .order_by(PhaseInputModel.created_at)
         )
         phase_inputs = [
-            PhaseInputRow(phase=row.phase or "", input_data=row.input_data, created_at=row.created_at)
+            PhaseInputRow(
+                phase=row.phase or "",
+                input_data=row.input_data,
+                created_at=row.created_at,
+            )
             for row in pi_result.scalars().all()
         ]
 
@@ -751,7 +763,11 @@ class ReportDataCollector:
             .order_by(PhaseOutputModel.created_at)
         )
         phase_outputs = [
-            PhaseOutputRow(phase=row.phase or "", output_data=row.output_data, created_at=row.created_at)
+            PhaseOutputRow(
+                phase=row.phase or "",
+                output_data=row.output_data,
+                created_at=row.created_at,
+            )
             for row in po_result.scalars().all()
         ]
 
@@ -819,7 +835,9 @@ class ReportDataCollector:
                 cvss=row.cvss,
                 owasp_category=getattr(row, "owasp_category", None),
                 proof_of_concept=(
-                    row.proof_of_concept if isinstance(getattr(row, "proof_of_concept", None), dict) else None
+                    row.proof_of_concept
+                    if isinstance(getattr(row, "proof_of_concept", None), dict)
+                    else None
                 ),
                 confidence=str(getattr(row, "confidence", None) or "likely")[:20],
                 evidence_type=getattr(row, "evidence_type", None),
@@ -869,7 +887,9 @@ class ReportDataCollector:
         tech_profile_json = _stage1_json_list(s1, "tech_profile.json")
         anomalies_json = _stage1_json_dict(s1, "anomalies_structured.json")
         raw_key_tuples = [(a.key, a.phase) for a in raw_arts]
-        raw_artifact_type_list = [a.artifact_type for a in raw_arts if (a.artifact_type or "").strip()]
+        raw_artifact_type_list = [
+            a.artifact_type for a in raw_arts if (a.artifact_type or "").strip()
+        ]
         findings_payload: list[dict[str, Any]] = []
         for f in findings:
             row = f.model_dump(mode="json")
@@ -894,9 +914,7 @@ class ReportDataCollector:
             persisted_logical = await findings_repo.list_logical_findings_for_scan(
                 tenant_id=tid, scan_id=sid
             )
-            occ_list = await findings_repo.list_occurrences_for_scan(
-                tenant_id=tid, scan_id=sid
-            )
+            occ_list = await findings_repo.list_occurrences_for_scan(tenant_id=tid, scan_id=sid)
             persisted_occ = {item.occurrence_key: item for item in occ_list}
         except (ValueError, TypeError, RuntimeError, OSError):
             logger.warning(

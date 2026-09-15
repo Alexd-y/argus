@@ -5,7 +5,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from src.llm_orchestrator.llm_provider import (
     EchoLLMProvider,
     LLMProvider,
@@ -128,9 +127,7 @@ class TestEchoLLMProvider:
     async def test_text_format_does_not_parse_json(self) -> None:
         provider = EchoLLMProvider()
         provider.register_canned("demo_v1", "free text")
-        request = _make_request(
-            prompt_id="demo_v1", response_format=ResponseFormat.TEXT
-        )
+        request = _make_request(prompt_id="demo_v1", response_format=ResponseFormat.TEXT)
         response = await provider.call(request)
         assert response.parsed_json is None
         assert response.content == "free text"

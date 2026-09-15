@@ -104,30 +104,66 @@ STAGE1_BASELINE_ARTIFACTS: tuple[str, ...] = (
 STAGE1_REPORT_SECTIONS: tuple[dict[str, Any], ...] = (
     {"index": 1, "id": "section-01-executive-summary", "title": "Executive Summary"},
     {"index": 2, "id": "section-02-scope-methodology", "title": "Scope & Methodology"},
-    {"index": 3, "id": "section-03-domain-dns-findings", "title": "Domain and DNS Findings"},
-    {"index": 4, "id": "section-04-subdomain-classification", "title": "Subdomain Classification"},
-    {"index": 5, "id": "section-05-dns-validation-results", "title": "DNS Validation Results"},
+    {
+        "index": 3,
+        "id": "section-03-domain-dns-findings",
+        "title": "Domain and DNS Findings",
+    },
+    {
+        "index": 4,
+        "id": "section-04-subdomain-classification",
+        "title": "Subdomain Classification",
+    },
+    {
+        "index": 5,
+        "id": "section-05-dns-validation-results",
+        "title": "DNS Validation Results",
+    },
     {"index": 6, "id": "section-06-live-host-analysis", "title": "Live Host Analysis"},
     {"index": 7, "id": "section-07-technology-profile", "title": "Technology Profile"},
-    {"index": 8, "id": "section-08-javascript-frontend-analysis", "title": "JavaScript / Frontend Analysis"},
+    {
+        "index": 8,
+        "id": "section-08-javascript-frontend-analysis",
+        "title": "JavaScript / Frontend Analysis",
+    },
     {
         "index": 9,
         "id": "section-09-parameters-input-surfaces",
         "title": "Parameters and Input Surfaces",
     },
-    {"index": 10, "id": "section-10-api-surface-mapping", "title": "API Surface Mapping"},
-    {"index": 11, "id": "section-11-headers-cookies-tls-analysis", "title": "Headers / Cookies / TLS Analysis"},
+    {
+        "index": 10,
+        "id": "section-10-api-surface-mapping",
+        "title": "API Surface Mapping",
+    },
+    {
+        "index": 11,
+        "id": "section-11-headers-cookies-tls-analysis",
+        "title": "Headers / Cookies / TLS Analysis",
+    },
     {
         "index": 12,
         "id": "section-12-content-similarity-and-routing-behavior",
         "title": "Content Similarity and Routing Behavior",
     },
     {"index": 13, "id": "section-13-anomaly-validation", "title": "Anomaly Validation"},
-    {"index": 14, "id": "section-14-stage-2-preparation", "title": "Stage 2 Preparation"},
+    {
+        "index": 14,
+        "id": "section-14-stage-2-preparation",
+        "title": "Stage 2 Preparation",
+    },
     {"index": 15, "id": "section-15-tools-and-ai-used", "title": "Tools & AI Used"},
-    {"index": 16, "id": "section-16-intel-osint-enrichment", "title": "Intel/OSINT Enrichment"},
+    {
+        "index": 16,
+        "id": "section-16-intel-osint-enrichment",
+        "title": "Intel/OSINT Enrichment",
+    },
     {"index": 17, "id": "section-17-stage-3-readiness", "title": "Stage 3 Readiness"},
-    {"index": 18, "id": "section-18-route-classification", "title": "Route Classification"},
+    {
+        "index": 18,
+        "id": "section-18-route-classification",
+        "title": "Route Classification",
+    },
 )
 
 

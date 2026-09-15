@@ -23,7 +23,6 @@ from uuid import UUID, uuid4
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel, TargetKind, TargetSpec, ToolJob
 from src.sandbox.adapter_base import (
@@ -39,7 +38,6 @@ from src.sandbox.k8s_adapter import (
     SandboxRunMode,
     SandboxRunResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fake registry — no need to load real YAMLs for unit tests.
@@ -191,9 +189,7 @@ def test_invalid_default_pod_timeout_raises(
         )
 
 
-def test_empty_namespace_rejected(
-    tmp_path: Path, passive_descriptor: ToolDescriptor
-) -> None:
+def test_empty_namespace_rejected(tmp_path: Path, passive_descriptor: ToolDescriptor) -> None:
     registry = _FakeRegistry([passive_descriptor])
     with pytest.raises(SandboxConfigError, match="namespace"):
         KubernetesSandboxAdapter(
@@ -454,10 +450,7 @@ def test_dry_run_manifest_contains_argv_substituted(
     assert "/out/nmap" in result.manifest_yaml
     # No shell metas leaked through:
     for bad in (";", "&&", "|", "`", "$("):
-        assert (
-            bad not in "".join(active_job.parameters.values())
-            or bad not in result.manifest_yaml
-        )
+        assert bad not in "".join(active_job.parameters.values()) or bad not in result.manifest_yaml
 
 
 # ---------------------------------------------------------------------------
@@ -504,9 +497,7 @@ def test_cluster_mode_run_raises_clean_error_when_sdk_missing(
             raise ImportError(f"forced failure for {name!r}")
         return real_import_module(name, *args, **kwargs)
 
-    with patch(
-        "src.sandbox.k8s_adapter.importlib.import_module", side_effect=_fail_kubernetes
-    ):
+    with patch("src.sandbox.k8s_adapter.importlib.import_module", side_effect=_fail_kubernetes):
         result = asyncio.run(cluster_adapter.run(passive_job, passive_descriptor))
     assert result.completed is False
     # MED-2: closed taxonomy — SDK-missing collapses to cluster_apply_failed.

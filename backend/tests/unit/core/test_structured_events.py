@@ -97,18 +97,19 @@ def test_resolver_emits_event(caplog):
 
 def test_lab_preflight_denied_emits_event(caplog):
     import pytest
-
     from src.profiles.errors import LabEngagementRequiredError
     from src.profiles.lab_preflight import evaluate_lab_lease
 
-    with caplog.at_level(logging.WARNING, logger="argus.events"):
-        with pytest.raises(LabEngagementRequiredError):
-            evaluate_lab_lease(
-                tenant_id="t-1",
-                engagement_id=None,
-                lab_lease_id=None,
-                target="https://x.test",
-                lease=None,
-                scope=None,
-            )
+    with (
+        caplog.at_level(logging.WARNING, logger="argus.events"),
+        pytest.raises(LabEngagementRequiredError),
+    ):
+        evaluate_lab_lease(
+            tenant_id="t-1",
+            engagement_id=None,
+            lab_lease_id=None,
+            target="https://x.test",
+            lease=None,
+            scope=None,
+        )
     assert any(r.message == EVENT_LAB_LEASE_PREFLIGHT_DENIED for r in caplog.records)

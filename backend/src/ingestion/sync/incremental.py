@@ -15,12 +15,12 @@ def compute_content_hash(content: str | bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def compute_file_fingerprint(path: str, content_hash: str, modified_at: datetime | None = None) -> str:
+def compute_file_fingerprint(
+    path: str, content_hash: str, modified_at: datetime | None = None
+) -> str:
     """Stable fingerprint combining path + hash + optional timestamp."""
     ts = modified_at.isoformat() if modified_at else ""
-    return hashlib.blake2b(
-        f"{path}|{content_hash}|{ts}".encode(), digest_size=16
-    ).hexdigest()
+    return hashlib.blake2b(f"{path}|{content_hash}|{ts}".encode(), digest_size=16).hexdigest()
 
 
 class IncrementalSync:
@@ -34,7 +34,9 @@ class IncrementalSync:
         self.repo_id = repo_id
         self._fingerprints: dict[str, str] = {}  # path → fingerprint
 
-    def has_changed(self, path: str, content: str | bytes, modified_at: datetime | None = None) -> bool:
+    def has_changed(
+        self, path: str, content: str | bytes, modified_at: datetime | None = None
+    ) -> bool:
         content_hash = compute_content_hash(content)
         fingerprint = compute_file_fingerprint(path, content_hash, modified_at)
         previous = self._fingerprints.get(path)
@@ -43,7 +45,9 @@ class IncrementalSync:
         self._fingerprints[path] = fingerprint
         return True
 
-    def mark_synced(self, path: str, content: str | bytes, modified_at: datetime | None = None) -> None:
+    def mark_synced(
+        self, path: str, content: str | bytes, modified_at: datetime | None = None
+    ) -> None:
         content_hash = compute_content_hash(content)
         fingerprint = compute_file_fingerprint(path, content_hash, modified_at)
         self._fingerprints[path] = fingerprint

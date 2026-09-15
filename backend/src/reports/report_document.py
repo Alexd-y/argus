@@ -235,14 +235,12 @@ def apply_evidence_gate(
     for finding in findings:
         if finding.verification_status in _PROVABLE_STATUSES:
             if enforce_refs:
-                has_evidence = (
-                    any(e in ev_set for e in finding.evidence_ids)
-                    or bool(finding.raw_artifact_ref)
+                has_evidence = any(e in ev_set for e in finding.evidence_ids) or bool(
+                    finding.raw_artifact_ref
                 )
                 has_source = (
-                    (finding.tool_run_id in run_set if finding.tool_run_id else False)
-                    or bool(finding.validator_id)
-                )
+                    finding.tool_run_id in run_set if finding.tool_run_id else False
+                ) or bool(finding.validator_id)
             else:
                 has_evidence = bool(finding.evidence_ids)
                 has_source = bool(finding.tool_run_id or finding.validator_id)
@@ -258,7 +256,9 @@ def apply_evidence_gate(
                         ),
                     )
                 )
-                gated.append(finding.model_copy(update={"verification_status": "insufficient_evidence"}))
+                gated.append(
+                    finding.model_copy(update={"verification_status": "insufficient_evidence"})
+                )
                 continue
         gated.append(finding)
     return gated, errors

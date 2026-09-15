@@ -9,17 +9,17 @@ from typing import Any
 
 import httpx
 import pytest
-
 from src.mcp.services.notifications import (
-    AdapterResult,
     LINEAR_API_KEY_ENV,
     LINEAR_API_URL_ENV,
     LINEAR_DEFAULT_TEAM_ENV,
     LINEAR_TEAM_MAP_ENV,
+    AdapterResult,
     LinearAdapter,
     NotificationSeverity,
     build_linear_payload,
 )
+
 from tests.unit.mcp.services.notifications.conftest import (
     collect_responses,
     make_event,
@@ -108,24 +108,18 @@ class TestLinearPayload:
 class TestLinearTeamResolution:
     def test_team_map_takes_priority_over_default(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            )
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}}))
         )
         assert adapter.resolve_team_id("tenant-alpha") == "team-alpha"
 
     def test_default_team_used_when_unmapped(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            ),
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}})),
             team_map={"tenant-other": "team-other"},
         )
         assert adapter.resolve_team_id("tenant-alpha") == "team-default"
 
-    def test_env_team_map_loaded_when_no_explicit(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_team_map_loaded_when_no_explicit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(LINEAR_TEAM_MAP_ENV, json.dumps({"tenant-x": "tx"}))
         adapter = LinearAdapter(api_key="k", api_url="https://x", default_team_id="td")
         assert adapter.resolve_team_id("tenant-x") == "tx"
@@ -150,9 +144,7 @@ class TestLinearTeamResolution:
 class TestLinearHappyPath:
     def test_critical_event_delivered(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            )
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}}))
         )
         ev = make_event(severity=NotificationSeverity.CRITICAL)
         result = asyncio.run(adapter.send_with_retry(ev, tenant_id=ev.tenant_id))
@@ -163,9 +155,7 @@ class TestLinearHappyPath:
 
     def test_high_severity_also_delivered(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            )
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}}))
         )
         ev = make_event(severity=NotificationSeverity.HIGH)
         result = asyncio.run(adapter.send_with_retry(ev, tenant_id=ev.tenant_id))
@@ -176,9 +166,7 @@ class TestLinearHappyPath:
 
         def _handler(req: httpx.Request) -> httpx.Response:
             captured["headers"] = dict(req.headers)
-            return httpx.Response(
-                200, json={"data": {"issueCreate": {"success": True}}}
-            )
+            return httpx.Response(200, json={"data": {"issueCreate": {"success": True}}})
 
         adapter = _linear(handler=_handler)
         ev = make_event(severity=NotificationSeverity.HIGH)
@@ -190,9 +178,7 @@ class TestLinearHappyPath:
 
         def _handler(req: httpx.Request) -> httpx.Response:
             captured["body"] = json.loads(req.content)
-            return httpx.Response(
-                200, json={"data": {"issueCreate": {"success": True}}}
-            )
+            return httpx.Response(200, json={"data": {"issueCreate": {"success": True}}})
 
         adapter = _linear(handler=_handler)
         ev = make_event(severity=NotificationSeverity.HIGH)
@@ -251,9 +237,7 @@ class TestLinearMissingConfig:
         assert result.skipped_reason == "missing_team_mapping"
         asyncio.run(adapter.aclose())
 
-    def test_default_url_used_when_env_unset(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_default_url_used_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(LINEAR_API_URL_ENV, raising=False)
         adapter = LinearAdapter(api_key="k", default_team_id="t")
         assert adapter._resolve_api_url() == "https://api.linear.app/graphql"
@@ -285,9 +269,7 @@ class TestLinearRetry:
 class TestLinearSecretHygiene:
     def test_target_redacted_does_not_leak_url(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            )
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}}))
         )
         ev = make_event(severity=NotificationSeverity.HIGH)
         result = asyncio.run(adapter.send_with_retry(ev, tenant_id=ev.tenant_id))
@@ -299,9 +281,7 @@ class TestLinearSecretHygiene:
 class TestLinearIdempotency:
     def test_repeated_event_id_is_short_circuited(self) -> None:
         adapter = _linear(
-            handler=collect_responses(
-                (200, {"data": {"issueCreate": {"success": True}}})
-            )
+            handler=collect_responses((200, {"data": {"issueCreate": {"success": True}}}))
         )
         ev = make_event(severity=NotificationSeverity.HIGH)
         first = asyncio.run(adapter.send_with_retry(ev, tenant_id=ev.tenant_id))

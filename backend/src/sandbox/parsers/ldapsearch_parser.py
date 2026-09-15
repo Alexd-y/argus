@@ -47,7 +47,7 @@ import logging
 import re
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -109,7 +109,7 @@ _LDIF_ATTR_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-DedupKey: TypeAlias = tuple[str, str]
+type DedupKey = tuple[str, str]
 
 
 # ---------------------------------------------------------------------------
@@ -181,12 +181,8 @@ def _finalise_block(current: dict[str, list[str]]) -> dict[str, Any] | None:
     dn = dn_values[0].strip()
     if not dn:
         return None
-    object_classes = sorted(
-        {value.strip().lower() for value in current.get("objectClass") or []}
-    )
-    member_of = [value.strip() for value in current.get("memberOf") or []][
-        :_MAX_VALUES_PER_ATTR
-    ]
+    object_classes = sorted({value.strip().lower() for value in current.get("objectClass") or []})
+    member_of = [value.strip() for value in current.get("memberOf") or []][:_MAX_VALUES_PER_ATTR]
     privileged = _is_privileged(member_of)
     raw_attrs = {
         key: [value[:_MAX_VALUE_PER_ATTR] for value in values][:_MAX_VALUES_PER_ATTR]
@@ -283,8 +279,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
     redacted_attrs: dict[str, list[str]] = {}
     for attr, values in (record.get("attributes") or {}).items():
         redacted_attrs[attr] = [
-            redact_hash_string(value) if isinstance(value, str) else value
-            for value in values
+            redact_hash_string(value) if isinstance(value, str) else value for value in values
         ]
     payload: dict[str, Any] = {
         "tool_id": tool_id,

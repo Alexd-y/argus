@@ -138,9 +138,7 @@ class ToolRunTriggerResult(BaseModel):
     status: ToolRunStatus
     risk_level: ToolRiskLevel
     requires_approval: StrictBool = False
-    approval_request_id: StrictStr | None = Field(
-        default=None, min_length=8, max_length=64
-    )
+    approval_request_id: StrictStr | None = Field(default=None, min_length=8, max_length=64)
     audit_event_id: StrictStr | None = Field(default=None, max_length=64)
 
 
@@ -163,9 +161,7 @@ class ToolRunStatusResult(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     finding_count: int = Field(ge=0, default=0)
-    approval_request_id: StrictStr | None = Field(
-        default=None, min_length=8, max_length=64
-    )
+    approval_request_id: StrictStr | None = Field(default=None, min_length=8, max_length=64)
 
 
 __all__ = [

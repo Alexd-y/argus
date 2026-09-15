@@ -15,7 +15,6 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-
 from src.core.auth import AuthContext, get_optional_auth, get_required_auth
 from src.core.config import settings
 

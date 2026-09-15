@@ -41,11 +41,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import insert, select
-
 from src.auth import admin_sessions as admin_sessions_module
 from src.auth.admin_sessions import (
     create_session,
@@ -137,12 +136,10 @@ async def test_create_session_persists_token_hash(session) -> None:
 
     assert row.session_token_hash is not None
     assert len(row.session_token_hash) == 64, "sha256 hex digest is 64 chars"
-    assert row.session_token_hash == _expected_hash(
-        _DEFAULT_TEST_PEPPER, raw_token
-    ), "session_token_hash must equal HMAC-SHA256(pepper, raw_token)"
-    assert row.session_token_hash != raw_token, (
-        "raw token and hash must never coincide"
+    assert row.session_token_hash == _expected_hash(_DEFAULT_TEST_PEPPER, raw_token), (
+        "session_token_hash must equal HMAC-SHA256(pepper, raw_token)"
     )
+    assert row.session_token_hash != raw_token, "raw token and hash must never coincide"
 
 
 async def test_pepper_missing_create_session_refuses(
@@ -197,9 +194,7 @@ async def test_pepper_missing_resolver_returns_none_gracefully(
     monkeypatch.setattr(settings, "admin_session_pepper", "")
 
     principal = await resolve_session(session, session_id=raw_token)
-    assert principal is None, (
-        "missing pepper must short-circuit to None, not raise"
-    )
+    assert principal is None, "missing pepper must short-circuit to None, not raise"
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +214,7 @@ async def test_db_leak_attack_with_different_pepper_fails(
     """
     raw_token = "attacker-knows-this-raw-token-from-leak"
     digest_under_alt_pepper = _expected_hash(_ALT_PEPPER, raw_token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await session.execute(
         insert(AdminSession).values(
             session_token_hash=digest_under_alt_pepper,
@@ -267,18 +262,12 @@ async def test_revoke_session_works_via_hash(session) -> None:
 
     assert revoked is True
 
-    row = await _fetch_row_by_hash(
-        session, token_hash=hash_session_token(raw_token)
-    )
-    assert row is not None, (
-        "revoke is tombstone-only — the row must remain for audit"
-    )
+    row = await _fetch_row_by_hash(session, token_hash=hash_session_token(raw_token))
+    assert row is not None, "revoke is tombstone-only — the row must remain for audit"
     assert row.revoked_at is not None, "revoked_at must be set on tombstone"
 
     second = await revoke_session(session, session_id=raw_token)
-    assert second is False, (
-        "second revoke is a no-op (idempotent) — must return False"
-    )
+    assert second is False, "second revoke is a no-op (idempotent) — must return False"
 
 
 # ---------------------------------------------------------------------------

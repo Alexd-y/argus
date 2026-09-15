@@ -54,7 +54,9 @@ class LabExecutionLeaseRow(Base):
         String(36), ForeignKey("engagements.id", ondelete="CASCADE"), nullable=False
     )
     manifest_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("lab_scope_manifests.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("lab_scope_manifests.id", ondelete="CASCADE"),
+        nullable=False,
     )
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="lab_unrestricted")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")

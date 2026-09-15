@@ -13,7 +13,7 @@ from src.orchestration.source_analysis.tree_sitter_parser import (
 )
 
 __all__ = [
-    "SourceAnalyzer",
     "LanguageDetector",
+    "SourceAnalyzer",
     "TreeSitterParser",
 ]

@@ -6,14 +6,11 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.recon.vulnerability_analysis.active_scan.xss_verifier import (
     _build_verification_url,
     _extract_snippet,
 )
 from src.recon.vulnerability_analysis.xss_verifier import (
-    XSSVerificationResult,
     verify_xss_with_browser,
 )
 
@@ -98,11 +95,25 @@ class TestVerifiedTrueOnDialog:
         fake_module.sync_playwright = MagicMock(return_value=mock_pw)
 
         with (
-            patch.dict(sys.modules, {"playwright": ModuleType("playwright"), "playwright.sync_api": fake_module}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot", return_value=None),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
+                return_value=None,
+            ),
         ):
-            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID)
+            result = verify_xss_with_browser(
+                TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID
+            )
 
         assert result.verified is True
         assert result.alert_text == "1"
@@ -119,11 +130,25 @@ class TestVerifiedTrueOnDialog:
         fake_module.sync_playwright = MagicMock(return_value=mock_pw)
 
         with (
-            patch.dict(sys.modules, {"playwright": ModuleType("playwright"), "playwright.sync_api": fake_module}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot", return_value=None),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
+                return_value=None,
+            ),
         ):
-            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID)
+            result = verify_xss_with_browser(
+                TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID
+            )
 
         assert result.verified is True
         assert result.dialog_type == "confirm"
@@ -142,11 +167,25 @@ class TestVerifiedFalseNoDialog:
         fake_module.sync_playwright = MagicMock(return_value=mock_pw)
 
         with (
-            patch.dict(sys.modules, {"playwright": ModuleType("playwright"), "playwright.sync_api": fake_module}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot", return_value=None),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
+                return_value=None,
+            ),
         ):
-            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID)
+            result = verify_xss_with_browser(
+                TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID
+            )
 
         assert result.verified is False
         assert result.alert_text is None
@@ -159,9 +198,14 @@ class TestPlaywrightNotInstalled:
     def test_import_error_returns_graceful_error(self) -> None:
         with (
             patch.dict(sys.modules, {"playwright": None, "playwright.sync_api": None}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
         ):
-            original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+            original_import = (
+                __builtins__.__import__ if hasattr(__builtins__, "__import__") else __import__
+            )
 
             def _mock_import(name, *args, **kwargs):
                 if name == "playwright.sync_api":
@@ -191,10 +235,21 @@ class TestTimeoutHandling:
         fake_module.sync_playwright = MagicMock(return_value=mock_pw)
 
         with (
-            patch.dict(sys.modules, {"playwright": ModuleType("playwright"), "playwright.sync_api": fake_module}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
         ):
-            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID)
+            result = verify_xss_with_browser(
+                TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID
+            )
 
         assert result.verified is False
         assert result.error is not None
@@ -218,14 +273,25 @@ class TestScreenshotKey:
         expected_key = "screenshots/xss_verify_abc123.png"
 
         with (
-            patch.dict(sys.modules, {"playwright": ModuleType("playwright"), "playwright.sync_api": fake_module}),
-            patch("src.recon.vulnerability_analysis.active_scan.xss_verifier.settings", _mock_settings()),
+            patch.dict(
+                sys.modules,
+                {
+                    "playwright": ModuleType("playwright"),
+                    "playwright.sync_api": fake_module,
+                },
+            ),
+            patch(
+                "src.recon.vulnerability_analysis.active_scan.xss_verifier.settings",
+                _mock_settings(),
+            ),
             patch(
                 "src.recon.vulnerability_analysis.active_scan.xss_verifier._upload_screenshot",
                 return_value=expected_key,
             ),
         ):
-            result = verify_xss_with_browser(TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID)
+            result = verify_xss_with_browser(
+                TARGET_URL, PARAM, PAYLOAD, SCAN_ID, tenant_id=TENANT_ID
+            )
 
         assert result.verified is True
         assert result.screenshot_key == expected_key

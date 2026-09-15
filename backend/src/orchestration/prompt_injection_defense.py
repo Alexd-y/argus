@@ -62,6 +62,7 @@ def _sanitize_source(source: str) -> str:
     cleaned = _SOURCE_SANITIZE_RE.sub("_", source.strip().lower()).strip("_")
     return cleaned or "unknown"
 
+
 _INJECTION_PATTERNS = [
     re.compile(r"ignore\s+(previous|all|above)\s+instructions?", re.IGNORECASE),
     re.compile(r"disregard\s+(all|previous|instructions?)", re.IGNORECASE),
@@ -142,7 +143,7 @@ def _truncate_at_injection(text: str) -> str:
     for pattern in _INJECTION_PATTERNS:
         match = pattern.search(text)
         if match:
-            text = text[:match.start()].strip()
+            text = text[: match.start()].strip()
     return text
 
 

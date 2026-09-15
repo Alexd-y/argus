@@ -42,7 +42,9 @@ def check_tool_available(
 
     Results are cached for the lifetime of the scan to avoid repeated ``which`` calls.
     """
-    cache_key = f"{'sandbox' if (use_sandbox and settings.sandbox_enabled) else 'local'}:{tool_binary}"
+    cache_key = (
+        f"{'sandbox' if (use_sandbox and settings.sandbox_enabled) else 'local'}:{tool_binary}"
+    )
     cached = _TOOL_AVAILABILITY_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -51,7 +53,13 @@ def check_tool_available(
     if use_sandbox and settings.sandbox_enabled:
         try:
             proc = subprocess.run(
-                ["docker", "exec", settings.sandbox_container_name, "which", tool_binary],
+                [
+                    "docker",
+                    "exec",
+                    settings.sandbox_container_name,
+                    "which",
+                    tool_binary,
+                ],
                 capture_output=True,
                 text=True,
                 timeout=_AVAILABILITY_CHECK_TIMEOUT,

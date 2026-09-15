@@ -9,7 +9,6 @@ callers can attach a trustworthy provenance label.
 from __future__ import annotations
 
 import pytest
-
 from src.orchestration.prompt_injection_defense import (
     UNTRUSTED_CLOSE,
     UNTRUSTED_OPEN,

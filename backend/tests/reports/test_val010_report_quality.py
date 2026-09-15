@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from src.data_sources.hibp_pwned_passwords import finalize_hibp_pwned_password_summary
 from src.reports.data_collector import FindingRow, ScanReportData, ScanRowData
-from src.reports.finding_dedup import deduplicate_findings, merge_http_security_header_gaps
+from src.reports.finding_dedup import (
+    deduplicate_findings,
+    merge_http_security_header_gaps,
+)
 from src.reports.generators import build_owasp_compliance_rows
-from src.services.reporting import findings_rows_for_jinja
 from src.reports.report_quality_gate import (
     build_report_quality_gate,
     cvss_conflict_reason,
@@ -14,8 +16,11 @@ from src.reports.report_quality_gate import (
     safe_section_text,
 )
 from src.reports.template_env import render_tier_report_html
-from src.reports.valhalla_report_context import ValhallaReportContext, build_valhalla_report_context
-from src.services.reporting import ReportGenerator
+from src.reports.valhalla_report_context import (
+    ValhallaReportContext,
+    build_valhalla_report_context,
+)
+from src.services.reporting import ReportGenerator, findings_rows_for_jinja
 
 
 def test_deduplicates_security_header_findings() -> None:
@@ -229,7 +234,12 @@ def test_wstg_zero_adds_not_comprehensive_warning() -> None:
 def test_owasp_categories_not_assessed_when_coverage_zero() -> None:
     rows = build_owasp_compliance_rows(
         [],
-        wstg_coverage={"coverage_percentage": 0.0, "covered": 0, "total_tests": 96, "by_category": {}},
+        wstg_coverage={
+            "coverage_percentage": 0.0,
+            "covered": 0,
+            "total_tests": 96,
+            "by_category": {},
+        },
     )
     for cr in rows:
         assert cr["assessed"] == "Not assessed"

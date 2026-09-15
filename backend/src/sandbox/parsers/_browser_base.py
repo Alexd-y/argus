@@ -276,9 +276,7 @@ def iter_har_entries(
         raw_request = entry.get("request")
         request: dict[str, Any] = raw_request if isinstance(raw_request, dict) else {}
         raw_response = entry.get("response")
-        response: dict[str, Any] = (
-            raw_response if isinstance(raw_response, dict) else {}
-        )
+        response: dict[str, Any] = raw_response if isinstance(raw_response, dict) else {}
         method = request.get("method")
         url = request.get("url")
         status = response.get("status")

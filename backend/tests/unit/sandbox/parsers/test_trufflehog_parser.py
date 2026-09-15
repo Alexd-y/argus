@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -39,7 +38,6 @@ from src.sandbox.parsers.trufflehog_parser import (
     EVIDENCE_SIDECAR_NAME,
     parse_trufflehog_jsonl,
 )
-
 
 _AWS_KEY_RE = re.compile(r"AKIA[0-9A-Z]{16}")
 _HIGH_ENTROPY_RE = re.compile(r"[A-Za-z0-9/_+]{40,}")
@@ -228,10 +226,7 @@ def test_cap_reached_emits_warning_and_truncates(
 ) -> None:
     monkeypatch.setattr(trufflehog_module, "_MAX_FINDINGS", 2)
     payload = _payload(
-        *(
-            _record(detector_name=f"D{i}", file_path=f"f{i}.env", line=i + 1)
-            for i in range(5)
-        )
+        *(_record(detector_name=f"D{i}", file_path=f"f{i}.env", line=i + 1) for i in range(5))
     )
     with caplog.at_level("WARNING"):
         findings = parse_trufflehog_jsonl(payload, b"", tmp_path, "trufflehog")
@@ -243,9 +238,7 @@ def test_cap_reached_emits_warning_and_truncates(
 
 
 def test_extra_data_keys_surfaced_values_dropped(tmp_path: Path) -> None:
-    payload = _payload(
-        _record(extra={"account_id": "123456789012", "region": "us-east-1"})
-    )
+    payload = _payload(_record(extra={"account_id": "123456789012", "region": "us-east-1"}))
     parse_trufflehog_jsonl(payload, b"", tmp_path, "trufflehog")
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8")
     assert "account_id" in sidecar

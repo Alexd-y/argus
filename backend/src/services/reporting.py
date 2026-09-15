@@ -120,7 +120,10 @@ _RAW_TOOL_OUTPUT_NAME_RE = re.compile(
 # of the trailing suffix so Celery-produced artifacts are counted too.
 _ACTIVE_WEB_SCAN_TOOL_RE = re.compile(r"_tool_([a-z0-9]+)_", re.IGNORECASE)
 _ACTIVE_WEB_SCAN_PHASE_KEYS: frozenset[str] = frozenset(
-    {(VULN_ANALYSIS or "vuln_analysis").lower(), (EXPLOITATION or "exploitation").lower()}
+    {
+        (VULN_ANALYSIS or "vuln_analysis").lower(),
+        (EXPLOITATION or "exploitation").lower(),
+    }
 )
 
 # OWASP2-007 / RPT: AI slots that contextualize active (dynamic) testing in the report
@@ -248,7 +251,9 @@ def build_scan_artifacts_section_context(
                 "file_name": file_name,
                 "key": key,
                 "size": int(row.get("size") or 0),
-                "last_modified": format_created_at_iso_z(lm) if lm is not None else format_created_at_iso_z(None),
+                "last_modified": format_created_at_iso_z(lm)
+                if lm is not None
+                else format_created_at_iso_z(None),
                 "download_url": get_presigned_url_by_key(key),
             }
         )
@@ -259,8 +264,12 @@ def build_scan_artifacts_section_context(
         if not items:
             continue
         items.sort(key=lambda x: str(x.get("key") or ""))
-        tool_output_rows = [r for r in items if _is_raw_tool_output_file_name(str(r.get("file_name") or ""))]
-        other_rows = [r for r in items if not _is_raw_tool_output_file_name(str(r.get("file_name") or ""))]
+        tool_output_rows = [
+            r for r in items if _is_raw_tool_output_file_name(str(r.get("file_name") or ""))
+        ]
+        other_rows = [
+            r for r in items if not _is_raw_tool_output_file_name(str(r.get("file_name") or ""))
+        ]
         phase_blocks.append(
             {
                 "phase_key": bucket,
@@ -435,16 +444,18 @@ def _xss_poc_narrative_for_report(poc: dict[str, Any], param: str | None) -> str
     p_label = param.strip() if isinstance(param, str) and param.strip() else "parameter"
     if pe and rc:
         return (
-            f"A payload was injected via the \"{p_label}\" parameter; "
-            f"reflection detected in \"{rc}\" context. "
+            f'A payload was injected via the "{p_label}" parameter; '
+            f'reflection detected in "{rc}" context. '
             "Confirmation method is specified in the Verification line field."
         )
     if pe and isinstance(param, str) and param.strip():
-        return f"Payload was delivered through the \"{param.strip()}\" parameter."
+        return f'Payload was delivered through the "{param.strip()}" parameter.'
     return None
 
 
-def _build_xss_poc_detail_for_jinja(poc: dict[str, Any], row: dict[str, Any]) -> dict[str, str] | None:
+def _build_xss_poc_detail_for_jinja(
+    poc: dict[str, Any], row: dict[str, Any]
+) -> dict[str, str] | None:
     """Non-empty XSS subsection fields for Valhalla HTML (VHL / T7); keys align with PoC JSON."""
     param = row.get("parameter") or row.get("param") or _poc_nonempty_str(poc.get("parameter"))
     param_s = param if isinstance(param, str) else None
@@ -576,7 +587,11 @@ def render_findings_table_html(
     """Render ``partials/findings_table.html.j2`` with production Jinja env (RPT-008)."""
     from src.reports.template_env import get_report_jinja_environment
 
-    embed = settings.report_poc_embed_screenshot_inline if embed_poc_screenshot_inline is None else embed_poc_screenshot_inline
+    embed = (
+        settings.report_poc_embed_screenshot_inline
+        if embed_poc_screenshot_inline is None
+        else embed_poc_screenshot_inline
+    )
     tier_norm = normalize_report_tier(tier)
     env = get_report_jinja_environment()
     summary_arg = owasp_summary if owasp_summary else None
@@ -636,6 +651,7 @@ def exploitation_outputs_for_jinja(data: ScanReportData) -> list[dict[str, Any]]
         if (row.phase or "").lower() == phase_key:
             out.append({"phase": row.phase, "output_data": row.output_data})
     return out
+
 
 _SECTIONS_MIDGARD: tuple[str, ...] = (
     REPORT_AI_SECTION_EXECUTIVE_SUMMARY,
@@ -896,7 +912,9 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             "found": rob.found,
             "disallowed_paths_sample": (rob.disallowed_paths_sample or [])[:12],
             "sitemap_hints": (rob.sitemap_hints or [])[:8],
-            "raw_excerpt": _truncate_report_text(rob.raw_excerpt or "", 600) if rob.raw_excerpt else None,
+            "raw_excerpt": _truncate_report_text(rob.raw_excerpt or "", 600)
+            if rob.raw_excerpt
+            else None,
         },
         "sitemap": {
             "found": sm.found,
@@ -904,7 +922,11 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             "sample_urls": (sm.sample_urls or [])[:16],
         },
         "tech_stack_sample": [
-            {"category": r.category, "name": r.name, "detail": _truncate_report_text(r.detail, 200)}
+            {
+                "category": r.category,
+                "name": r.name,
+                "detail": _truncate_report_text(r.detail, 200),
+            }
             for r in (vc.tech_stack_table or [])[:_VALHALLA_AI_TECH_ROWS]
         ],
         "outdated_components": [
@@ -957,7 +979,9 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
             }
             for d in (vc.dependency_analysis or [])[:_VALHALLA_AI_DEP_ROWS]
         ],
-        "threat_model_excerpt": _truncate_report_text(vc.threat_model_excerpt, _VALHALLA_AI_EXCERPT_MAX),
+        "threat_model_excerpt": _truncate_report_text(
+            vc.threat_model_excerpt, _VALHALLA_AI_EXCERPT_MAX
+        ),
         "exploitation_post_excerpt": _truncate_report_text(
             vc.exploitation_post_excerpt, _VALHALLA_AI_EXCERPT_MAX
         ),
@@ -965,8 +989,7 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
         "leaked_emails_masked_n": len(vc.leaked_emails or []),
         "leaked_emails_masked_sample": list((vc.leaked_emails or [])[:12]),
         "appendix_tools": [
-            {"name": t.name, "version": t.version}
-            for t in (vc.appendix_tools or [])[:96]
+            {"name": t.name, "version": t.version} for t in (vc.appendix_tools or [])[:96]
         ],
         "tech_stack_structured": {
             "web_server": _truncate_report_text(vc.tech_stack_structured.web_server or "", 240),
@@ -1012,7 +1035,9 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
                 "vuln_id": v.vuln_id,
                 "title": _truncate_report_text(v.title or "", 500),
                 "cvss": float(v.cvss) if isinstance(v.cvss, (int, float)) else None,
-                "description": _truncate_report_text(v.description or "", _VALHALLA_AI_FINDING_DESC_MAX),
+                "description": _truncate_report_text(
+                    v.description or "", _VALHALLA_AI_FINDING_DESC_MAX
+                ),
                 "exploit_available": bool(v.exploit_demonstrated),
                 "exploit_demonstrated": bool(v.exploit_demonstrated),
             }
@@ -1023,13 +1048,19 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
                 "finding_id": _truncate_report_text(x.finding_id or "", 256),
                 "title": _truncate_report_text(x.title or "", 300),
                 "parameter": _truncate_report_text(x.parameter or "", 256) if x.parameter else None,
-                "payload_entered": _truncate_report_text(x.payload_entered or "", _VALHALLA_AI_POC_MAX_LEN)
+                "payload_entered": _truncate_report_text(
+                    x.payload_entered or "", _VALHALLA_AI_POC_MAX_LEN
+                )
                 if x.payload_entered
                 else None,
-                "payload_reflected": _truncate_report_text(x.payload_reflected or "", _VALHALLA_AI_POC_MAX_LEN)
+                "payload_reflected": _truncate_report_text(
+                    x.payload_reflected or "", _VALHALLA_AI_POC_MAX_LEN
+                )
                 if x.payload_reflected
                 else None,
-                "payload_used": _truncate_report_text(x.payload_used or "", _VALHALLA_AI_POC_MAX_LEN)
+                "payload_used": _truncate_report_text(
+                    x.payload_used or "", _VALHALLA_AI_POC_MAX_LEN
+                )
                 if x.payload_used
                 else None,
                 "reflection_context": _truncate_report_text(x.reflection_context or "", 400)
@@ -1054,7 +1085,9 @@ def _compact_valhalla_context_for_ai(vc: ValhallaReportContext) -> dict[str, Any
     }
 
 
-def _owasp_compliance_table_for_ai(data: ScanReportData, *, report_tier: str) -> list[dict[str, Any]]:
+def _owasp_compliance_table_for_ai(
+    data: ScanReportData, *, report_tier: str
+) -> list[dict[str, Any]]:
     """OWASP Top 10 rows aligned with HTML compliance table (compact)."""
     t = normalize_report_tier(report_tier)
     v2021 = t == "valhalla"
@@ -1157,9 +1190,7 @@ def build_active_web_scan_section_context(
     ai_rows = _active_web_scan_ai_summary_rows(ai_section_texts)
     has_artifact_signal = _active_web_scan_artifact_rows_exist(scan_artifacts)
     has_signals = bool(tools_run) or bool(ai_rows) or has_artifact_signal
-    placeholder_visible = {"midgard": False, "asgard": True, "valhalla": True}.get(
-        tier_norm, False
-    )
+    placeholder_visible = {"midgard": False, "asgard": True, "valhalla": True}.get(tier_norm, False)
     visible = placeholder_visible or has_signals
     return {
         "visible": visible,
@@ -1287,13 +1318,19 @@ class ReportGenerator:
                     item["poc_curl"] = _truncate_report_text(cc.strip(), _VALHALLA_AI_POC_MAX_LEN)
                 pl = poc_d.get("payload")
                 if isinstance(pl, str) and pl.strip():
-                    item["poc_payload"] = _truncate_report_text(pl.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                    item["poc_payload"] = _truncate_report_text(
+                        pl.strip(), _VALHALLA_AI_POC_MAX_LEN
+                    )
                 js = poc_d.get("javascript_code")
                 if isinstance(js, str) and js.strip():
-                    item["poc_javascript"] = _truncate_report_text(js.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                    item["poc_javascript"] = _truncate_report_text(
+                        js.strip(), _VALHALLA_AI_POC_MAX_LEN
+                    )
                 req = poc_d.get("request")
                 if isinstance(req, str) and req.strip():
-                    item["poc_request"] = _truncate_report_text(req.strip(), _VALHALLA_AI_POC_MAX_LEN)
+                    item["poc_request"] = _truncate_report_text(
+                        req.strip(), _VALHALLA_AI_POC_MAX_LEN
+                    )
                 sk = poc_d.get("screenshot_key")
                 item["screenshot_present"] = bool(isinstance(sk, str) and sk.strip())
             elif isinstance(poc, dict):
@@ -1403,7 +1440,11 @@ class ReportGenerator:
                 other_sections_summary=generated_summaries if generated_summaries else None,
             )
             text = results[section_key].get("text", "")
-            if isinstance(text, str) and text.strip() and results[section_key].get("status") == "ok":
+            if (
+                isinstance(text, str)
+                and text.strip()
+                and results[section_key].get("status") == "ok"
+            ):
                 generated_summaries[section_key] = _first_n_sentences(text, 2)
 
         text_map = self.ai_results_to_text_map(results)
@@ -1451,7 +1492,9 @@ class ReportGenerator:
         return ids
 
     @staticmethod
-    def ai_results_to_text_map(ai_section_results: dict[str, dict[str, Any]]) -> dict[str, str]:
+    def ai_results_to_text_map(
+        ai_section_results: dict[str, dict[str, Any]],
+    ) -> dict[str, str]:
         out: dict[str, str] = {}
         for key, res in ai_section_results.items():
             text = res.get("text")
@@ -1459,7 +1502,11 @@ class ReportGenerator:
                 continue
             st = res.get("status")
             err = res.get("error")
-            if st == "ok" or st == "skipped_no_llm" or err in ("llm_unavailable", "generation_failed"):
+            if (
+                st == "ok"
+                or st == "skipped_no_llm"
+                or err in ("llm_unavailable", "generation_failed")
+            ):
                 out[key] = text.strip()
         return out
 
@@ -1575,9 +1622,7 @@ class ReportGenerator:
             embed_poc_screenshot_inline = bool(embed_override)
         else:
             embed_poc_screenshot_inline = (
-                True
-                if tier_norm == "valhalla"
-                else settings.report_poc_embed_screenshot_inline
+                True if tier_norm == "valhalla" else settings.report_poc_embed_screenshot_inline
             )
         jinja_tiers: dict[str, Any] = {}
         for name in ("midgard", "asgard", "valhalla"):
@@ -1662,18 +1707,23 @@ class ReportGenerator:
         if tier_norm == "valhalla":
             validate_hibp_pwned_password_summary_light(data.hibp_pwned_password_summary)
 
-        _KNOWN_RU_FIELDS = frozenset({
-            "owasp_category_reference",
-        })
+        _KNOWN_RU_FIELDS = frozenset(
+            {
+                "owasp_category_reference",
+            }
+        )
         report_language = ctx.get("report_language", "en")
         if report_language == "en":
             for key, val in ctx.items():
                 if key in _KNOWN_RU_FIELDS:
                     continue
-                if isinstance(val, str) and any("\u0400" <= c <= "\u04FF" for c in val):
+                if isinstance(val, str) and any("\u0400" <= c <= "\u04ff" for c in val):
                     logger.warning(
                         "cyrillic_text_in_en_report_context",
-                        extra={"event": "cyrillic_text_in_en_report_context", "key": key},
+                        extra={
+                            "event": "cyrillic_text_in_en_report_context",
+                            "key": key,
+                        },
                     )
 
         return ctx

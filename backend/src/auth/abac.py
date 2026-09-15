@@ -13,13 +13,13 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class Role(str, Enum):
+class Role(StrEnum):
     VIEWER = "viewer"
     DEVELOPER = "developer"
     APPSEC_ANALYST = "appsec_analyst"
@@ -28,7 +28,7 @@ class Role(str, Enum):
     COMPLIANCE_OFFICER = "compliance_officer"
 
 
-class AccessAction(str, Enum):
+class AccessAction(StrEnum):
     READ = "read"
     WRITE = "write"
     DELETE = "delete"
@@ -38,7 +38,7 @@ class AccessAction(str, Enum):
     ADMIN = "admin"
 
 
-class ResourceType(str, Enum):
+class ResourceType(StrEnum):
     SCAN = "scan"
     FINDING = "finding"
     REPORT = "report"
@@ -93,38 +93,102 @@ _ROLE_PERMISSIONS: dict[Role, dict[ResourceType, set[AccessAction]]] = {
         ResourceType.PATCH: {AccessAction.READ, AccessAction.WRITE},
     },
     Role.APPSEC_ANALYST: {
-        ResourceType.SCAN: {AccessAction.READ, AccessAction.WRITE, AccessAction.EXECUTE},
-        ResourceType.FINDING: {AccessAction.READ, AccessAction.WRITE, AccessAction.APPROVE},
-        ResourceType.REPORT: {AccessAction.READ, AccessAction.WRITE, AccessAction.EXPORT},
+        ResourceType.SCAN: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.EXECUTE,
+        },
+        ResourceType.FINDING: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.APPROVE,
+        },
+        ResourceType.REPORT: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.EXPORT,
+        },
         ResourceType.REPO: {AccessAction.READ, AccessAction.WRITE},
         ResourceType.PATCH: {AccessAction.READ, AccessAction.APPROVE},
         ResourceType.SANDBOX: {AccessAction.READ, AccessAction.EXECUTE},
     },
     Role.SENIOR_RESEARCHER: {
-        ResourceType.SCAN: {AccessAction.READ, AccessAction.WRITE, AccessAction.EXECUTE},
-        ResourceType.FINDING: {AccessAction.READ, AccessAction.WRITE, AccessAction.APPROVE, AccessAction.EXPORT},
-        ResourceType.REPORT: {AccessAction.READ, AccessAction.WRITE, AccessAction.EXPORT},
+        ResourceType.SCAN: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.EXECUTE,
+        },
+        ResourceType.FINDING: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.APPROVE,
+            AccessAction.EXPORT,
+        },
+        ResourceType.REPORT: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.EXPORT,
+        },
         ResourceType.REPO: {AccessAction.READ, AccessAction.WRITE},
-        ResourceType.PATCH: {AccessAction.READ, AccessAction.WRITE, AccessAction.APPROVE},
+        ResourceType.PATCH: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.APPROVE,
+        },
         ResourceType.SANDBOX: {AccessAction.READ, AccessAction.EXECUTE},
         ResourceType.BINARY: {AccessAction.READ, AccessAction.EXECUTE},
     },
     Role.ORG_ADMIN: {
-        ResourceType.SCAN: {AccessAction.READ, AccessAction.WRITE, AccessAction.DELETE, AccessAction.EXECUTE},
-        ResourceType.FINDING: {AccessAction.READ, AccessAction.WRITE, AccessAction.APPROVE, AccessAction.EXPORT},
-        ResourceType.REPORT: {AccessAction.READ, AccessAction.WRITE, AccessAction.DELETE, AccessAction.EXPORT},
+        ResourceType.SCAN: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.DELETE,
+            AccessAction.EXECUTE,
+        },
+        ResourceType.FINDING: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.APPROVE,
+            AccessAction.EXPORT,
+        },
+        ResourceType.REPORT: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.DELETE,
+            AccessAction.EXPORT,
+        },
         ResourceType.REPO: {AccessAction.READ, AccessAction.WRITE, AccessAction.DELETE},
-        ResourceType.PATCH: {AccessAction.READ, AccessAction.WRITE, AccessAction.APPROVE},
-        ResourceType.SANDBOX: {AccessAction.READ, AccessAction.EXECUTE, AccessAction.ADMIN},
-        ResourceType.POLICY: {AccessAction.READ, AccessAction.WRITE, AccessAction.ADMIN},
-        ResourceType.AUDIT: {AccessAction.READ, AccessAction.EXPORT, AccessAction.ADMIN},
+        ResourceType.PATCH: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.APPROVE,
+        },
+        ResourceType.SANDBOX: {
+            AccessAction.READ,
+            AccessAction.EXECUTE,
+            AccessAction.ADMIN,
+        },
+        ResourceType.POLICY: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.ADMIN,
+        },
+        ResourceType.AUDIT: {
+            AccessAction.READ,
+            AccessAction.EXPORT,
+            AccessAction.ADMIN,
+        },
         ResourceType.USER: {
             AccessAction.READ,
             AccessAction.WRITE,
             AccessAction.DELETE,
             AccessAction.ADMIN,
         },
-        ResourceType.TENANT: {AccessAction.READ, AccessAction.WRITE, AccessAction.ADMIN},
+        ResourceType.TENANT: {
+            AccessAction.READ,
+            AccessAction.WRITE,
+            AccessAction.ADMIN,
+        },
     },
     Role.COMPLIANCE_OFFICER: {
         ResourceType.SCAN: {AccessAction.READ},
@@ -155,8 +219,8 @@ class ABACEngine:
         kill_switch_checker: Callable[[str, str], bool] | None = None,
         rate_limiter: Callable[[str], bool] | None = None,
     ) -> None:
-        self._kill_switch = kill_switch_checker or (lambda t, u: False)
-        self._rate_limiter = rate_limiter or (lambda u: True)
+        self._kill_switch = kill_switch_checker or (lambda t, u: False)  # noqa: ARG005 - retained for signature/API compatibility
+        self._rate_limiter = rate_limiter or (lambda u: True)  # noqa: ARG005 - retained for signature/API compatibility
         self._elevations: dict[str, float] = {}  # user_id → elevation_expiry
 
     def evaluate(self, request: AccessRequest) -> AccessDecision:
@@ -192,9 +256,7 @@ class ABACEngine:
             )
 
         # MFA requirement
-        requires_mfa = (
-            request.action in _MFA_REQUIRED_ACTIONS and not request.mfa_verified
-        )
+        requires_mfa = request.action in _MFA_REQUIRED_ACTIONS and not request.mfa_verified
         if requires_mfa:
             return AccessDecision(
                 allowed=False,
@@ -224,19 +286,23 @@ class ABACEngine:
         """Evaluate just-in-time elevation request."""
         if not request.mfa_verified:
             return AccessDecision(
-                allowed=False, reason="elevation_requires_mfa",
-                requires_mfa=True, requires_elevation=True,
+                allowed=False,
+                reason="elevation_requires_mfa",
+                requires_mfa=True,
+                requires_elevation=True,
             )
         if not request.device_trusted:
             return AccessDecision(
-                allowed=False, reason="elevation_requires_trusted_device",
+                allowed=False,
+                reason="elevation_requires_trusted_device",
                 requires_elevation=True,
             )
         # Grant 15-minute elevation
         self._elevations[request.user_id] = time.time() + 900
         watermark = generate_session_watermark(request)
         return AccessDecision(
-            allowed=True, reason="elevation_granted",
+            allowed=True,
+            reason="elevation_granted",
             watermark=watermark,
             expires_at=time.time() + 900,
         )
@@ -251,7 +317,7 @@ def generate_session_watermark(request: AccessRequest) -> str:
 def check_device_posture(
     user_agent: str = "",
     ip_address: str = "",
-    known_device_ids: set[str] | None = None,
+    known_device_ids: set[str] | None = None,  # noqa: ARG001 - retained for signature/API compatibility
 ) -> bool:
     """Basic device posture check."""
     return bool(user_agent and ip_address)

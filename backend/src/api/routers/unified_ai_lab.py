@@ -150,7 +150,9 @@ def _sha(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
-def _tenant_from_header(x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id")) -> str:
+def _tenant_from_header(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
+) -> str:
     if not x_tenant_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="tenant_required")
     return x_tenant_id
@@ -172,7 +174,11 @@ def _record_lab(tool: str, action: str) -> None:
     except (TypeError, ValueError, RuntimeError, OSError):
         logger.warning(
             "lab_execution_metric_failed",
-            extra={"event": "lab_execution_metric_failed", "tool": tool, "action": action},
+            extra={
+                "event": "lab_execution_metric_failed",
+                "tool": tool,
+                "action": action,
+            },
         )
 
 
@@ -510,7 +516,10 @@ async def retest_finding(
     )
     await repo.upsert_logical_finding(finding, scan_id=scan_id)
     await repo.save_retest_job(job)
-    return {"job": job.model_dump(mode="json"), "finding": finding.model_dump(mode="json")}
+    return {
+        "job": job.model_dump(mode="json"),
+        "finding": finding.model_dump(mode="json"),
+    }
 
 
 @findings_ext_router.get("/scans/{scan_id}/occurrences")
@@ -614,7 +623,12 @@ def record_rag_trace(body: RagTraceRecordRequest) -> dict[str, Any]:
 def get_rag_trace(scan_id: str) -> dict[str, Any]:
     row = _RAG_TRACES.get(scan_id)
     if row is None:
-        return {"scan_id": scan_id, "query": "", "citations": [], "collection": "scan_evidence"}
+        return {
+            "scan_id": scan_id,
+            "query": "",
+            "citations": [],
+            "collection": "scan_evidence",
+        }
     return row
 
 

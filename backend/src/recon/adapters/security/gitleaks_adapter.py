@@ -1,6 +1,7 @@
 """Gitleaks adapter — secrets in repos."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -38,9 +39,11 @@ class GitleaksAdapter(SecurityToolAdapter):
         cmd = [
             "gitleaks",
             "detect",
-            "--source", path,
+            "--source",
+            path,
             "--no-git",
-            "--report-format", "json",
+            "--report-format",
+            "json",
         ]
         report_path = config.get("report_path")
         if report_path:
@@ -66,9 +69,7 @@ class GitleaksAdapter(SecurityToolAdapter):
         if not os.path.isdir(path):
             return []
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             report_path = f.name
         try:
             cfg = {**config, "report_path": report_path}
@@ -77,7 +78,7 @@ class GitleaksAdapter(SecurityToolAdapter):
             use_sandbox = config.get("sandbox", False) and settings.sandbox_enabled
 
             loop = asyncio.get_event_loop()
-            exec_result = await loop.run_in_executor(
+            await loop.run_in_executor(
                 None,
                 lambda: execute_command(cmd_str, use_sandbox=use_sandbox),
             )
@@ -89,10 +90,8 @@ class GitleaksAdapter(SecurityToolAdapter):
                 raw = ""
         finally:
             if os.path.exists(report_path):
-                try:
+                with contextlib.suppress(OSError):
                     os.unlink(report_path)
-                except OSError:
-                    pass
 
         parsed = await self.parse_output(raw)
         return await self.normalize(parsed)
@@ -120,9 +119,7 @@ class GitleaksAdapter(SecurityToolAdapter):
                     continue
         return results
 
-    async def normalize(
-        self, raw_results: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    async def normalize(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Normalize to SECRET_CANDIDATE findings."""
         findings: list[dict[str, Any]] = []
         for item in raw_results:
@@ -131,17 +128,19 @@ class GitleaksAdapter(SecurityToolAdapter):
             file_path = item.get("File", item.get("file_path", ""))
             line = item.get("StartLine", item.get("line", 0))
             value_masked = secret[:8] + "***" if len(secret) > 8 else "***"
-            findings.append({
-                "finding_type": FindingType.SECRET_CANDIDATE,
-                "value": f"{file_path}:{line}:{rule_id}",
-                "data": {
-                    "secret_type": rule_id,
-                    "value_masked": value_masked,
-                    "file_path": file_path,
-                    "line": line,
+            findings.append(
+                {
+                    "finding_type": FindingType.SECRET_CANDIDATE,
+                    "value": f"{file_path}:{line}:{rule_id}",
+                    "data": {
+                        "secret_type": rule_id,
+                        "value_masked": value_masked,
+                        "file_path": file_path,
+                        "line": line,
+                        "confidence": 0.9,
+                    },
+                    "source_tool": "gitleaks",
                     "confidence": 0.9,
-                },
-                "source_tool": "gitleaks",
-                "confidence": 0.9,
-            })
+                }
+            )
         return findings

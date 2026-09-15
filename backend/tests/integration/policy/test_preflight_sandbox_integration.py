@@ -17,12 +17,11 @@ adapter:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import (
     RiskLevel,
@@ -48,7 +47,6 @@ from src.sandbox.k8s_adapter import (
     SandboxRunMode,
     SandboxRunResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures local to this integration module
@@ -215,7 +213,7 @@ def test_adapter_with_preflight_allowed_renders_job(
     scan_id: UUID,
 ) -> None:
     target = TargetSpec(kind=TargetKind.IP, ip="10.0.0.5")
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     ownership_store.save(
         OwnershipProof(
             challenge_id=uuid4(),
@@ -330,7 +328,7 @@ def test_adapter_denies_high_risk_job_without_approval(
     scan_id: UUID,
 ) -> None:
     target = TargetSpec(kind=TargetKind.IP, ip="10.0.0.5")
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     ownership_store.save(
         OwnershipProof(
             challenge_id=uuid4(),

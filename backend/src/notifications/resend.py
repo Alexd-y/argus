@@ -50,7 +50,10 @@ async def send_email(
     """
     to = (to or "").strip()
     if not settings.resend_api_key:
-        logger.info("resend_disabled", extra={"event": "resend_disabled", "reason": "no_api_key"})
+        logger.info(
+            "resend_disabled",
+            extra={"event": "resend_disabled", "reason": "no_api_key"},
+        )
         return False
     if not to or "@" not in to:
         logger.warning("resend_invalid_recipient", extra={"event": "resend_invalid_recipient"})
@@ -76,7 +79,10 @@ async def send_email(
                 json=payload,
             )
     except httpx.HTTPError as exc:
-        logger.warning("resend_send_failed", extra={"event": "resend_send_failed", "error": str(exc)})
+        logger.warning(
+            "resend_send_failed",
+            extra={"event": "resend_send_failed", "error": str(exc)},
+        )
         return False
 
     if resp.status_code >= 400:
@@ -86,7 +92,10 @@ async def send_email(
             extra={"event": "resend_send_rejected", "status_code": resp.status_code},
         )
         return False
-    logger.info("resend_send_ok", extra={"event": "resend_send_ok", "status_code": resp.status_code})
+    logger.info(
+        "resend_send_ok",
+        extra={"event": "resend_send_ok", "status_code": resp.status_code},
+    )
     return True
 
 

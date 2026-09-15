@@ -97,7 +97,7 @@ import json
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -138,7 +138,7 @@ _DEDUP_PAYLOAD_LEN: Final[int] = 200
 
 
 # Stable dedup key shape: (url, method, param, payload_prefix).
-DedupKey: TypeAlias = tuple[str, str, str, str]
+type DedupKey = tuple[str, str, str, str]
 
 
 # Severity bucket used when sorting (descending). ``critical`` sits
@@ -535,8 +535,7 @@ def _coerce_cwe_token(token: Any) -> int | None:
     if not isinstance(token, str):
         return None
     candidate = token.strip().upper()
-    if candidate.startswith("CWE-"):
-        candidate = candidate[4:]
+    candidate = candidate.removeprefix("CWE-")
     if not candidate.isdigit():
         return None
     value = int(candidate)

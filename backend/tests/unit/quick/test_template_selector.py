@@ -23,48 +23,48 @@ _SHA256 = "b" * 64
 
 
 def _config(**overrides) -> QuickScanConfig:
-    base = dict(
-        profile=QuickProfileName.BALANCED,
-        wall_clock_budget_seconds=900,
-        ai_budget_seconds=90,
-        reserve_for_validation_percent=20,
-        max_targets=10,
-        max_urls_per_host=50,
-        crawl_depth=2,
-        severity_floor=SeverityFloor.MEDIUM,
-        template_policy_id="quick-default",
-    )
+    base = {
+        "profile": QuickProfileName.BALANCED,
+        "wall_clock_budget_seconds": 900,
+        "ai_budget_seconds": 90,
+        "reserve_for_validation_percent": 20,
+        "max_targets": 10,
+        "max_urls_per_host": 50,
+        "crawl_depth": 2,
+        "severity_floor": SeverityFloor.MEDIUM,
+        "template_policy_id": "quick-default",
+    }
     base.update(overrides)
     return QuickScanConfig(**base)
 
 
 def _fingerprint(**overrides) -> AssetFingerprint:
-    base = dict(
-        asset_id=_ASSET_ID,
-        protocol=FingerprintFact(value="https", confidence=1.0),
-        service=FingerprintFact(value="http", confidence=0.9),
-        product=FingerprintFact(value="wordpress", confidence=0.9),
-        version=FingerprintFact(value="6.4", confidence=0.8),
-        cms=FingerprintFact(value="wordpress", confidence=0.9),
-        web_server=FingerprintFact(value="nginx", confidence=0.7),
-    )
+    base = {
+        "asset_id": _ASSET_ID,
+        "protocol": FingerprintFact(value="https", confidence=1.0),
+        "service": FingerprintFact(value="http", confidence=0.9),
+        "product": FingerprintFact(value="wordpress", confidence=0.9),
+        "version": FingerprintFact(value="6.4", confidence=0.8),
+        "cms": FingerprintFact(value="wordpress", confidence=0.9),
+        "web_server": FingerprintFact(value="nginx", confidence=0.7),
+    }
     base.update(overrides)
     return AssetFingerprint(**base)
 
 
 def _manifest(**overrides) -> NucleiTemplateManifest:
-    base = dict(
-        template_id="http-generic",
-        version="1",
-        source=TemplateSource.INTERNAL,
-        sha256=_SHA256,
-        signature="sig",
-        verified=True,
-        protocols=("http",),
-        risk_level="passive",
-        severity="high",
-        execution_modes=("production", "lab_unrestricted", "quick"),
-    )
+    base = {
+        "template_id": "http-generic",
+        "version": "1",
+        "source": TemplateSource.INTERNAL,
+        "sha256": _SHA256,
+        "signature": "sig",
+        "verified": True,
+        "protocols": ("http",),
+        "risk_level": "passive",
+        "severity": "high",
+        "execution_modes": ("production", "lab_unrestricted", "quick"),
+    }
     base.update(overrides)
     return NucleiTemplateManifest(**base)
 
@@ -118,7 +118,12 @@ def test_select_returns_frozen_ids_and_matching_sha256() -> None:
 def test_repeat_select_yields_identical_digest() -> None:
     manifests = (
         _manifest(template_id="cve-2024-9999", tags=("cve",), severity="high"),
-        _manifest(template_id="nginx-tech", tags=("nginx",), product="nginx", severity="medium"),
+        _manifest(
+            template_id="nginx-tech",
+            tags=("nginx",),
+            product="nginx",
+            severity="medium",
+        ),
         _manifest(template_id="http-generic", protocols=("http",), severity="medium"),
     )
     selector = _selector(manifests)

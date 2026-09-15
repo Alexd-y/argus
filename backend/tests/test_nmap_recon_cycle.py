@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from src.core.config import settings
 from src.recon.nmap_recon_cycle import (
     merge_open_ports,
@@ -53,9 +52,20 @@ def test_parse_nmap_xml_stdout_extracts_open_ports() -> None:
 async def test_legacy_path_when_sandbox_disabled() -> None:
     called: list[tuple[str, bool]] = []
 
-    def fake_exec(cmd: str, use_cache: bool = True, use_sandbox: bool = False, timeout_sec: int | None = None):
+    def fake_exec(
+        cmd: str,
+        use_cache: bool = True,
+        use_sandbox: bool = False,
+        timeout_sec: int | None = None,
+    ):
         called.append((cmd, use_sandbox))
-        return {"success": True, "stdout": "ok", "stderr": "", "return_code": 0, "execution_time": 0.1}
+        return {
+            "success": True,
+            "stdout": "ok",
+            "stderr": "",
+            "return_code": 0,
+            "execution_time": 0.1,
+        }
 
     with patch.object(settings, "sandbox_enabled", False):
         out = await run_nmap_recon_for_recon(
@@ -75,7 +85,12 @@ async def test_legacy_path_when_sandbox_disabled() -> None:
 async def test_sandbox_cycle_runs_tcp_and_nse() -> None:
     calls: list[str] = []
 
-    def fake_exec(cmd: str, use_cache: bool = True, use_sandbox: bool = False, timeout_sec: int | None = None):
+    def fake_exec(
+        cmd: str,
+        use_cache: bool = True,
+        use_sandbox: bool = False,
+        timeout_sec: int | None = None,
+    ):
         calls.append(cmd)
         return {
             "success": True,
@@ -108,9 +123,20 @@ async def test_sandbox_cycle_runs_tcp_and_nse() -> None:
 async def test_cidr_includes_sn_phase() -> None:
     calls: list[str] = []
 
-    def fake_exec(cmd: str, use_cache: bool = True, use_sandbox: bool = False, timeout_sec: int | None = None):
+    def fake_exec(
+        cmd: str,
+        use_cache: bool = True,
+        use_sandbox: bool = False,
+        timeout_sec: int | None = None,
+    ):
         calls.append(cmd)
-        return {"success": True, "stdout": _SAMPLE_XML, "stderr": "", "return_code": 0, "execution_time": 0.1}
+        return {
+            "success": True,
+            "stdout": _SAMPLE_XML,
+            "stderr": "",
+            "return_code": 0,
+            "execution_time": 0.1,
+        }
 
     with (
         patch.object(settings, "sandbox_enabled", True),

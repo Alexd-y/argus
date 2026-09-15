@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from src.schemas.ai.common import ReconAiTask, build_task_metadata
 from src.schemas.ai.schema_export import to_report_notes
 from src.schemas.ai.stage3_preparation_summary import (
@@ -11,7 +12,6 @@ from src.schemas.ai.stage3_preparation_summary import (
     build_stage3_next_step,
 )
 from src.schemas.recon.stage3_readiness import CoverageScores, Stage3ReadinessResult
-from pydantic import ValidationError
 
 EXAMPLES_AI_OUTPUTS_DIR = Path(__file__).resolve().parents[2] / "examples" / "ai_outputs"
 
@@ -92,7 +92,11 @@ def test_stage3_preparation_input_rejects_wrong_meta_task() -> None:
                 "risk_hypotheses": ["platform_alias"],
                 "stage3_readiness": {
                     "status": "partially_ready_for_stage3",
-                    "coverage_scores": {"route": 0.5, "input_surface": 0.5, "api_surface": 0.5},
+                    "coverage_scores": {
+                        "route": 0.5,
+                        "input_surface": 0.5,
+                        "api_surface": 0.5,
+                    },
                 },
             }
         )

@@ -102,15 +102,11 @@ async def admin_bulk_cancel_scans(
             row = res.scalar_one_or_none()
             if not row:
                 not_found_count += 1
-                results.append(
-                    BulkScanCancelItemResult(scan_id=scan_id, status="not_found")
-                )
+                results.append(BulkScanCancelItemResult(scan_id=scan_id, status="not_found"))
                 continue
             if row.status in _TERMINAL_SCAN_STATUSES:
                 skipped_terminal_count += 1
-                results.append(
-                    BulkScanCancelItemResult(scan_id=scan_id, status="skipped_terminal")
-                )
+                results.append(BulkScanCancelItemResult(scan_id=scan_id, status="skipped_terminal"))
                 continue
             await session.execute(
                 update(Scan)
@@ -121,9 +117,7 @@ async def admin_bulk_cancel_scans(
                 .values(status="cancelled", phase="cancelled")
             )
             cancelled_count += 1
-            results.append(
-                BulkScanCancelItemResult(scan_id=scan_id, status="cancelled")
-            )
+            results.append(BulkScanCancelItemResult(scan_id=scan_id, status="cancelled"))
 
         audit_id = gen_uuid()
         actor_h = user_id_hash(operator_subject)
@@ -208,9 +202,7 @@ async def admin_bulk_suppress_findings(
             if not row:
                 not_found_count += 1
                 results.append(
-                    BulkFindingSuppressItemResult(
-                        finding_id=finding_id, status="not_found"
-                    )
+                    BulkFindingSuppressItemResult(finding_id=finding_id, status="not_found")
                 )
                 continue
             if row.false_positive is True:
@@ -235,9 +227,7 @@ async def admin_bulk_suppress_findings(
             )
             suppressed_count += 1
             results.append(
-                BulkFindingSuppressItemResult(
-                    finding_id=finding_id, status="suppressed"
-                )
+                BulkFindingSuppressItemResult(finding_id=finding_id, status="suppressed")
             )
 
         audit_id = gen_uuid()

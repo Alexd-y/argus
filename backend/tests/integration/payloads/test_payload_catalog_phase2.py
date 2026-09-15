@@ -10,9 +10,13 @@ import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from src.payloads.registry import PayloadRegistry, PayloadSignatureError
-from src.sandbox.signing import SignatureRecord, SignaturesFile, public_key_id, sign_blob
+from src.sandbox.signing import (
+    SignatureRecord,
+    SignaturesFile,
+    public_key_id,
+    sign_blob,
+)
 
 PHASE2_SAFE_FAMILY_IDS: Final[frozenset[str]] = frozenset(
     {

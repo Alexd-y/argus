@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from src.core.config import settings
 from src.storage.s3 import rewrite_minio_url_for_report
 
@@ -16,7 +15,9 @@ _PRESIGNED_LIKE = (
 )
 
 
-def test_rewrite_minio_url_no_public_url_returns_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_minio_url_no_public_url_returns_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "minio_public_url", None)
     assert rewrite_minio_url_for_report(_PRESIGNED_LIKE) == _PRESIGNED_LIKE
 
@@ -53,7 +54,9 @@ def test_rewrite_minio_url_scheme_transition(
     assert "bucket/k?x=1" in out
 
 
-def test_rewrite_minio_url_preserves_complex_query(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_minio_url_preserves_complex_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "minio_public_url", "https://files.public.test")
     q = (
         "response-content-type=application%2Fpdf"
@@ -81,7 +84,9 @@ def test_rewrite_minio_url_empty_presigned_with_public_url_no_exception(
     assert out == "https://storage.example.com"
 
 
-def test_rewrite_minio_url_public_base_trailing_slash(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_minio_url_public_base_trailing_slash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "minio_public_url", "https://storage.example.com/")
     out = rewrite_minio_url_for_report(_PRESIGNED_LIKE)
     assert out.startswith("https://storage.example.com/")

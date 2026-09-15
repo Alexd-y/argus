@@ -4,12 +4,14 @@ import asyncio
 import logging
 from typing import Any
 
+from celery.exceptions import MaxRetriesExceededError
 from sqlalchemy import String, cast, select, update
 
 from src.celery_app import app
 from src.core.config import settings
 from src.db.models import Report, Scan
 from src.db.session import create_task_engine_and_session, set_session_tenant
+from src.orchestration.distributed_lease import LeaseContendedError
 from src.orchestration.state_machine import (
     ExploitationApprovalRequiredError,
     LabLeaseRequiredError,
@@ -100,12 +102,12 @@ def scan_phase_task(
                     return {"status": "cancelled", "scan_id": scan_id}
                 if current_status == "completed":
                     return {"status": "completed", "scan_id": scan_id}
-                wait_timeout = _scan_wait_timeout_seconds(options if isinstance(options, dict) else {})
+                wait_timeout = _scan_wait_timeout_seconds(
+                    options if isinstance(options, dict) else {}
+                )
                 try:
                     await asyncio.wait_for(
-                        run_scan_state_machine(
-                            session, scan_id, tenant_id, target_url, options
-                        ),
+                        run_scan_state_machine(session, scan_id, tenant_id, target_url, options),
                         timeout=wait_timeout,
                     )
                     return {"status": "completed", "scan_id": scan_id}
@@ -116,7 +118,10 @@ def scan_phase_task(
                     if is_quick_execution(options):
                         logger.warning(
                             "quick_scan_deadline_timeout",
-                            extra={"event": "quick_scan_deadline_timeout", "scan_id": scan_id},
+                            extra={
+                                "event": "quick_scan_deadline_timeout",
+                                "scan_id": scan_id,
+                            },
                         )
                     async with session_factory() as err_session:
                         await set_session_tenant(err_session, tenant_id)
@@ -134,6 +139,28 @@ def scan_phase_task(
                     return {"status": "timeout", "scan_id": scan_id}
                 except ExploitationApprovalRequiredError:
                     return {"status": "awaiting_approval", "scan_id": scan_id}
+                except LeaseContendedError as contended:
+                    # §8.1: distributed-pool contention is scheduling backpressure,
+                    # never a scan failure. Defer via a bounded Celery retry with
+                    # backoff; on exhaustion leave the scan un-failed for the queue
+                    # poller to re-dispatch (the deadline bound).
+                    logger.info(
+                        "scan_phase_lease_contended_defer",
+                        extra={
+                            "event": "scan_phase_lease_contended_defer",
+                            "scan_id": scan_id,
+                            "reason": str(contended),
+                        },
+                    )
+                    try:
+                        raise _self.retry(exc=contended, countdown=15, max_retries=6) from contended
+                    except MaxRetriesExceededError:
+                        await notify_scan_finished(tenant_id)
+                        return {
+                            "status": "deferred",
+                            "scan_id": scan_id,
+                            "error": "pool_contended",
+                        }
                 except LabLeaseRequiredError as lease_exc:
                     logger.error(
                         "lab_lease_required",
@@ -144,7 +171,11 @@ def scan_phase_task(
                         },
                     )
                     await notify_scan_finished(tenant_id)
-                    return {"status": "failed", "scan_id": scan_id, "error": "lab_lease_required"}
+                    return {
+                        "status": "failed",
+                        "scan_id": scan_id,
+                        "error": "lab_lease_required",
+                    }
                 except Exception as exc:
                     if _is_transient_error(exc) and _quick_retry_allowed(
                         options if isinstance(options, dict) else {},
@@ -232,7 +263,11 @@ def generate_all_reports_task(
                 res = await session.execute(select(Report).where(cast(Report.id, String) == rid))
                 rep = res.scalar_one_or_none()
                 if not rep:
-                    return {"status": "failed", "report_id": rid, "error": "Report not found"}
+                    return {
+                        "status": "failed",
+                        "report_id": rid,
+                        "error": "Report not found",
+                    }
                 row_formats = normalize_generation_formats(None, rep.requested_formats)
                 return await run_generate_report_pipeline(
                     session,
@@ -262,7 +297,11 @@ def generate_all_reports_task(
             if isinstance(r, Exception):
                 logger.error(
                     "generate_all_report_item_failed",
-                    extra={"event": "generate_all_report_item_failed", "report_id": rid, "bundle_id": bundle_id},
+                    extra={
+                        "event": "generate_all_report_item_failed",
+                        "report_id": rid,
+                        "bundle_id": bundle_id,
+                    },
                     exc_info=r,
                 )
                 normalized.append({"status": "failed", "report_id": rid, "error": "task_error"})
@@ -478,4 +517,4 @@ def va_active_scan_tool_task(
 
 
 # VA-003: named VA tool tasks (registers Celery task names on import)
-from . import tools as _va_named_tool_tasks  # noqa: F401
+from . import tools as _va_named_tool_tasks  # noqa: F401,E402

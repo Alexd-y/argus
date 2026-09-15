@@ -175,9 +175,7 @@ class CoverageResult(BaseModel):
     @model_validator(mode="after")
     def _covered_requires_execution_evidence(self) -> CoverageResult:
         if self.status in COVERED_STATUSES and not self.execution_evidence_id:
-            raise ValueError(
-                f"status {self.status.value} requires execution_evidence_id"
-            )
+            raise ValueError(f"status {self.status.value} requires execution_evidence_id")
         if self.status is CoverageStatus.COVERED_WITH_FINDING and not self.finding_id:
             raise ValueError("covered_with_finding requires finding_id")
         return self

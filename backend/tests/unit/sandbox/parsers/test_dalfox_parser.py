@@ -34,7 +34,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -153,8 +152,7 @@ def test_parse_dalfox_canonical_unreadable_falls_back_to_stdout(
     sidecar = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8")
     assert "from_stdout" in sidecar
     assert any(
-        getattr(r, "event", "") == "dalfox_parser_canonical_read_failed"
-        for r in caplog.records
+        getattr(r, "event", "") == "dalfox_parser_canonical_read_failed" for r in caplog.records
     )
 
 
@@ -304,9 +302,7 @@ def test_parse_dalfox_output_sorted_by_severity_descending(tmp_path: Path) -> No
     )
     sidecar_lines = [
         json.loads(line)
-        for line in (tmp_path / EVIDENCE_SIDECAR_NAME)
-        .read_text(encoding="utf-8")
-        .splitlines()
+        for line in (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
     severities = [r["severity"] for r in sidecar_lines]
@@ -399,9 +395,7 @@ def test_parse_dalfox_sidecar_records_carry_tool_id(tmp_path: Path) -> None:
         artifacts_dir=tmp_path,
         tool_id="dalfox",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["tool_id"] == "dalfox"
     assert sidecar["kind"] == "dalfox_xss"
     assert sidecar["param"] == "foo"
@@ -483,9 +477,7 @@ def test_parse_dalfox_malformed_json_returns_empty(
         )
     assert findings == []
     assert not (tmp_path / EVIDENCE_SIDECAR_NAME).exists()
-    assert any(
-        getattr(r, "event", "") == "parsers_json_malformed" for r in caplog.records
-    )
+    assert any(getattr(r, "event", "") == "parsers_json_malformed" for r in caplog.records)
 
 
 def test_parse_dalfox_non_object_non_array_root_returns_empty(
@@ -541,8 +533,7 @@ def test_parse_dalfox_result_missing_url_is_skipped_with_warning(
         )
     assert len(findings) == 1
     assert any(
-        getattr(r, "event", "") == "dalfox_parser_result_missing_url"
-        for r in caplog.records
+        getattr(r, "event", "") == "dalfox_parser_result_missing_url" for r in caplog.records
     )
 
 
@@ -566,9 +557,7 @@ def test_parse_dalfox_data_field_used_as_url_fallback(tmp_path: Path) -> None:
         tool_id="dalfox",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["url"] == "https://target.test/api?x=1"
 
 
@@ -599,9 +588,7 @@ def test_parse_dalfox_severity_unknown_falls_back_to_medium(tmp_path: Path) -> N
         tool_id="dalfox",
     )
     assert len(findings) == 1
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["severity"] == "medium"
 
 
@@ -631,9 +618,7 @@ def test_parse_dalfox_payload_over_evidence_cap_is_truncated(tmp_path: Path) -> 
         artifacts_dir=tmp_path,
         tool_id="dalfox",
     )
-    sidecar = json.loads(
-        (tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip()
-    )
+    sidecar = json.loads((tmp_path / EVIDENCE_SIDECAR_NAME).read_text(encoding="utf-8").strip())
     assert sidecar["payload"].endswith("...[truncated]")
     assert sidecar["evidence_snippet"].endswith("...[truncated]")
     assert sidecar["poc"].endswith("...[truncated]")

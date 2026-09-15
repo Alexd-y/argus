@@ -42,9 +42,7 @@ class TestWeakTlsSignal:
         assert weak_tls_signal({"description": "hostname mismatch on cert"})
 
     def test_healthy_handshake_has_no_signal(self):
-        assert not weak_tls_signal(
-            {"description": "TLS 1.3 offered (OK); strong ciphers only"}
-        )
+        assert not weak_tls_signal({"description": "TLS 1.3 offered (OK); strong ciphers only"})
 
     def test_empty_evidence(self):
         assert not weak_tls_signal({})

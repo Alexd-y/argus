@@ -83,7 +83,7 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Final, TypeAlias
+from typing import Any, Final
 
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
@@ -146,7 +146,7 @@ _HIGH_PLUGINS: Final[tuple[str, ...]] = (
 )
 
 
-DedupKey: TypeAlias = tuple[str, str, str]
+type DedupKey = tuple[str, str, str]
 
 
 def parse_detect_secrets_json(
@@ -227,11 +227,7 @@ def _emit(
 
 
 def _build_finding(record: dict[str, Any]) -> FindingDTO:
-    confidence = (
-        ConfidenceLevel.CONFIRMED
-        if record.get("is_verified")
-        else ConfidenceLevel.LIKELY
-    )
+    confidence = ConfidenceLevel.CONFIRMED if record.get("is_verified") else ConfidenceLevel.LIKELY
     return make_finding_dto(
         category=FindingCategory.SECRET_LEAK,
         cwe=[_CWE_HARDCODED_CREDS, _CWE_CLEARTEXT_STORAGE],
@@ -258,9 +254,7 @@ def _build_evidence(record: dict[str, Any], *, tool_id: str) -> str:
     return json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
 
 
-def _iter_normalised(
-    payload: dict[str, Any], *, tool_id: str
-) -> Iterator[dict[str, Any]]:
+def _iter_normalised(payload: dict[str, Any], *, tool_id: str) -> Iterator[dict[str, Any]]:
     results = payload.get("results")
     if not isinstance(results, dict):
         _logger.warning(

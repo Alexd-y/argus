@@ -79,19 +79,39 @@ class PayloadProfilePolicy:
         p = str(scan_profile).strip().lower()
         if p == "quick":
             # safe / low / allowed-medium; no approval-gated, no destructive.
-            return cls("quick", max_risk_rank=2, allow_requires_approval=False,
-                       allow_destructive=False, allow_oast=True)
+            return cls(
+                "quick",
+                max_risk_rank=2,
+                allow_requires_approval=False,
+                allow_destructive=False,
+                allow_oast=True,
+            )
         if p == "light":
             # safe active; higher risk only via explicit approval; no destructive.
-            return cls("light", max_risk_rank=2, allow_requires_approval=True,
-                       allow_destructive=False, allow_oast=True)
+            return cls(
+                "light",
+                max_risk_rank=2,
+                allow_requires_approval=True,
+                allow_destructive=False,
+                allow_oast=True,
+            )
         if p == "deep":
             # LAB catalog: high-risk always, approvals always, OAST allowed.
-            return cls("deep", max_risk_rank=4, allow_requires_approval=True,
-                       allow_destructive=True, allow_oast=True)
+            return cls(
+                "deep",
+                max_risk_rank=4,
+                allow_requires_approval=True,
+                allow_destructive=True,
+                allow_oast=True,
+            )
         # Fail-closed default: most restrictive.
-        return cls(p, max_risk_rank=1, allow_requires_approval=False,
-                   allow_destructive=False, allow_oast=False)
+        return cls(
+            p,
+            max_risk_rank=1,
+            allow_requires_approval=False,
+            allow_destructive=False,
+            allow_oast=False,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,9 +164,7 @@ def _matches_taxonomy(family: FamilyLike, anchors: set[int]) -> bool:
     return bool(anchors.intersection(set(family.cwe_ids)))
 
 
-def _policy_allows(
-    family: FamilyLike, policy: PayloadProfilePolicy
-) -> tuple[bool, str | None]:
+def _policy_allows(family: FamilyLike, policy: PayloadProfilePolicy) -> tuple[bool, str | None]:
     rank = _risk_rank(family.risk_level)
     risk_value = str(getattr(family.risk_level, "value", family.risk_level)).lower()
     if risk_value == "destructive" and not policy.allow_destructive:
@@ -219,9 +237,7 @@ def map_taxonomy_to_families(
     )
 
 
-def families_allowed_by_profile(
-    families: list[FamilyLike], scan_profile: str
-) -> frozenset[str]:
+def families_allowed_by_profile(families: list[FamilyLike], scan_profile: str) -> frozenset[str]:
     """Return family ids permitted by the profile policy (ignoring taxonomy match).
 
     This is the payload allow-list used to build an intent-compiler context — the

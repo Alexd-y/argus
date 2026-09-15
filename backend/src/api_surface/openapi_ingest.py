@@ -69,14 +69,9 @@ def _stable_fuzz_point_id(endpoint_id: str, parameter: ParameterDTO) -> str:
 
 
 def _load_document(raw: bytes | str) -> dict[str, Any]:
-    if isinstance(raw, str):
-        payload = raw.encode("utf-8")
-    else:
-        payload = raw
+    payload = raw.encode("utf-8") if isinstance(raw, str) else raw
     if len(payload) > _MAX_DOCUMENT_BYTES:
-        raise OpenApiIngestError(
-            f"document exceeds max size of {_MAX_DOCUMENT_BYTES} bytes"
-        )
+        raise OpenApiIngestError(f"document exceeds max size of {_MAX_DOCUMENT_BYTES} bytes")
     try:
         document = yaml.safe_load(payload)
     except yaml.YAMLError as exc:
@@ -112,16 +107,12 @@ def _scan_external_refs(node: Any) -> list[str]:
 def _enforce_production_ref_policy(document: dict[str, Any]) -> None:
     external_refs = _scan_external_refs(document)
     if external_refs:
-        raise OpenApiIngestError(
-            "production mode blocks external http(s) $ref resolution"
-        )
+        raise OpenApiIngestError("production mode blocks external http(s) $ref resolution")
 
 
 def _reject_unsafe_external_ref(ref: str, *, mode: ExecutionMode) -> None:
     if mode is ExecutionMode.PRODUCTION and _EXTERNAL_REF_RE.match(ref.strip()):
-        raise OpenApiIngestError(
-            "production mode blocks external http(s) $ref resolution"
-        )
+        raise OpenApiIngestError("production mode blocks external http(s) $ref resolution")
 
 
 def _resolve_ref(
@@ -318,13 +309,9 @@ def _parse_auth(
                     scheme_name=str(scheme_name),
                     kind=kind,
                     scopes=scope_tuple,
-                    in_location=(
-                        str(scheme["in"]) if isinstance(scheme.get("in"), str) else None
-                    ),
+                    in_location=(str(scheme["in"]) if isinstance(scheme.get("in"), str) else None),
                     param_name=(
-                        str(scheme["name"])
-                        if isinstance(scheme.get("name"), str)
-                        else None
+                        str(scheme["name"]) if isinstance(scheme.get("name"), str) else None
                     ),
                 )
             )
@@ -336,7 +323,7 @@ def _content_types(operation: dict[str, Any]) -> tuple[str, ...]:
     if isinstance(request_body, dict):
         content = request_body.get("content")
         if isinstance(content, dict):
-            return tuple(str(k) for k in content.keys())
+            return tuple(str(k) for k in content)
     consumes = operation.get("consumes")
     if isinstance(consumes, list):
         return tuple(str(c) for c in consumes)
@@ -359,7 +346,9 @@ def _risk_hints(operation: dict[str, Any], parameters: tuple[ParameterDTO, ...])
     return tuple(dict.fromkeys(hints))
 
 
-def _fuzz_points(endpoint_id: str, parameters: tuple[ParameterDTO, ...]) -> tuple[FuzzPointDTO, ...]:
+def _fuzz_points(
+    endpoint_id: str, parameters: tuple[ParameterDTO, ...]
+) -> tuple[FuzzPointDTO, ...]:
     points: list[FuzzPointDTO] = []
     for param in parameters:
         points.append(
@@ -451,7 +440,9 @@ def ingest_openapi(
             source_ref = f"{method} {path}"
             path_params = _parse_parameters(
                 document,
-                operation.get("parameters") if isinstance(operation.get("parameters"), list) else [],
+                operation.get("parameters")
+                if isinstance(operation.get("parameters"), list)
+                else [],
                 mode=resolved_mode,
                 warnings=warnings,
                 source_ref=source_ref,
@@ -513,7 +504,5 @@ def ingest_openapi(
         raise
     except Exception as exc:
         if resolved_mode is ExecutionMode.LAB_UNRESTRICTED:
-            raise OpenApiParseIsolationError(
-                "lab ingest isolated parse failure"
-            ) from exc
+            raise OpenApiParseIsolationError("lab ingest isolated parse failure") from exc
         raise OpenApiIngestError("openapi ingest failed") from exc

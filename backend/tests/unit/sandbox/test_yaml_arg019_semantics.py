@@ -90,7 +90,6 @@ from typing import Final
 
 import pytest
 import yaml
-
 from src.pipeline.contracts.phase_io import ScanPhase
 from src.pipeline.contracts.tool_job import RiskLevel
 from src.sandbox.adapter_base import (
@@ -99,7 +98,6 @@ from src.sandbox.adapter_base import (
     ToolDescriptor,
 )
 from src.sandbox.network_policies import NETWORK_POLICY_NAMES
-
 
 # ---------------------------------------------------------------------------
 # Cohort definitions — pinned hard so a silent drop / addition breaks CI.
@@ -429,9 +427,7 @@ def catalog_dir() -> Path:
 
 def _load_descriptor(catalog_dir: Path, tool_id: str) -> ToolDescriptor:
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
-    assert isinstance(payload, dict), (
-        f"{tool_id}.yaml must be a YAML mapping at the top level"
-    )
+    assert isinstance(payload, dict), f"{tool_id}.yaml must be a YAML mapping at the top level"
     return ToolDescriptor(**payload)
 
 
@@ -456,9 +452,7 @@ def test_per_cohort_inventory_sizes() -> None:
     assert len(BINARY_TOOL_IDS) == 5
     assert len(BROWSER_TOOL_IDS) == 5
     # No cross-cohort duplicates.
-    assert (
-        set(NETWORK_PROTOCOL_TOOL_IDS) & set(BINARY_TOOL_IDS) & set(BROWSER_TOOL_IDS)
-    ) == set()
+    assert (set(NETWORK_PROTOCOL_TOOL_IDS) & set(BINARY_TOOL_IDS) & set(BROWSER_TOOL_IDS)) == set()
 
 
 def test_per_tool_taxonomy_maps_cover_every_tool() -> None:
@@ -494,8 +488,7 @@ def test_category_matches_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = CATEGORY_BY_TOOL[tool_id]
     assert descriptor.category is expected, (
-        f"{tool_id}: category={descriptor.category.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: category={descriptor.category.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -505,8 +498,7 @@ def test_phase_matches_pin(catalog_dir: Path, tool_id: str) -> None:
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = PHASE_BY_TOOL[tool_id]
     assert descriptor.phase is expected, (
-        f"{tool_id}: phase={descriptor.phase.value!r} "
-        f"diverges from pinned {expected.value!r}"
+        f"{tool_id}: phase={descriptor.phase.value!r} diverges from pinned {expected.value!r}"
     )
 
 
@@ -533,9 +525,7 @@ def test_image_matches_per_cohort_pin(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG019_TOOL_IDS)
-def test_network_policy_name_is_a_known_template(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_network_policy_name_is_a_known_template(catalog_dir: Path, tool_id: str) -> None:
     """A YAML cannot reference a NetworkPolicy template that doesn't exist."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.network_policy.name in NETWORK_POLICY_NAMES, (
@@ -557,9 +547,7 @@ def test_network_policy_matches_per_tool_pin(catalog_dir: Path, tool_id: str) ->
 
 
 @pytest.mark.parametrize("tool_id", BINARY_TOOL_IDS)
-def test_binary_tools_egress_allowlist_is_empty(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_binary_tools_egress_allowlist_is_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every §4.18 entry MUST ship an empty ``egress_allowlist`` because
     they sit behind ``offline-no-egress`` — any populated allowlist
     would silently re-introduce egress for malicious samples.
@@ -605,9 +593,7 @@ def test_approval_matches_pinned_set(catalog_dir: Path, tool_id: str) -> None:
     "tool_id",
     BINARY_TOOL_IDS + tuple(t for t in BROWSER_TOOL_IDS if t != "playwright_runner"),
 )
-def test_binary_and_browser_tools_are_approval_free(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_binary_and_browser_tools_are_approval_free(catalog_dir: Path, tool_id: str) -> None:
     """Defence in depth on top of the per-tool pin: no §4.18 entry — and
     no §4.19 entry except ``playwright_runner`` (cycle-2 reviewer H1) —
     may opt into ``requires_approval=true``.  The deeper exploit paths
@@ -616,8 +602,7 @@ def test_binary_and_browser_tools_are_approval_free(
     """
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.requires_approval is False, (
-        f"{tool_id}: §4.18 / §4.19 (excl. playwright_runner) "
-        f"tools stay approval-free in Cycle 2"
+        f"{tool_id}: §4.18 / §4.19 (excl. playwright_runner) tools stay approval-free in Cycle 2"
     )
 
 
@@ -646,13 +631,9 @@ def test_parse_strategy_matches_per_tool_split(catalog_dir: Path, tool_id: str) 
 def test_evidence_artifacts_under_out(catalog_dir: Path, tool_id: str) -> None:
     """Whatever evidence path is declared lives under ``/out``."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.evidence_artifacts, (
-        f"{tool_id}: must declare at least one evidence artefact"
-    )
+    assert descriptor.evidence_artifacts, f"{tool_id}: must declare at least one evidence artefact"
     for path in descriptor.evidence_artifacts:
-        assert path.startswith("/out"), (
-            f"{tool_id}: evidence path {path!r} must live under /out"
-        )
+        assert path.startswith("/out"), f"{tool_id}: evidence path {path!r} must live under /out"
 
 
 @pytest.mark.parametrize("tool_id", ARG019_TOOL_IDS)
@@ -660,9 +641,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-019 tool ships at least one CWE hint."""
     payload = yaml.safe_load((catalog_dir / f"{tool_id}.yaml").read_bytes())
     assert "cwe_hints" in payload, f"{tool_id}.yaml missing the cwe_hints key"
-    assert isinstance(payload["cwe_hints"], list), (
-        f"{tool_id}.yaml: cwe_hints must be a list"
-    )
+    assert isinstance(payload["cwe_hints"], list), f"{tool_id}.yaml: cwe_hints must be a list"
     assert payload["cwe_hints"], f"{tool_id}.yaml: cwe_hints must be non-empty"
 
 
@@ -670,9 +649,7 @@ def test_cwe_hints_non_empty(catalog_dir: Path, tool_id: str) -> None:
 def test_owasp_wstg_non_empty(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-019 tool ships at least one OWASP-WSTG hint."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
-    assert descriptor.owasp_wstg, (
-        f"{tool_id}: owasp_wstg must be non-empty for ARG-019 tools"
-    )
+    assert descriptor.owasp_wstg, f"{tool_id}: owasp_wstg must be non-empty for ARG-019 tools"
 
 
 # ---------------------------------------------------------------------------
@@ -681,15 +658,12 @@ def test_owasp_wstg_non_empty(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG019_TOOL_IDS)
-def test_default_timeout_matches_per_tool_floor(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_default_timeout_matches_per_tool_floor(catalog_dir: Path, tool_id: str) -> None:
     """Every ARG-019 tool floors at the per-tool minimum from the cycle plan."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected = DEFAULT_TIMEOUT_S_BY_TOOL[tool_id]
     assert descriptor.default_timeout_s >= expected, (
-        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s "
-        f"below floor of {expected}s"
+        f"{tool_id}: default_timeout_s={descriptor.default_timeout_s}s below floor of {expected}s"
     )
 
 
@@ -700,8 +674,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
     assert descriptor.cpu_limit, f"{tool_id}: empty cpu_limit"
     assert descriptor.memory_limit, f"{tool_id}: empty memory_limit"
     assert descriptor.seccomp_profile == "runtime/default", (
-        f"{tool_id}: must use seccomp_profile=runtime/default, "
-        f"got {descriptor.seccomp_profile!r}"
+        f"{tool_id}: must use seccomp_profile=runtime/default, got {descriptor.seccomp_profile!r}"
     )
 
 
@@ -711,9 +684,7 @@ def test_cpu_and_memory_limits_set(catalog_dir: Path, tool_id: str) -> None:
 
 
 @pytest.mark.parametrize("tool_id", ARG019_TOOL_IDS)
-def test_command_template_first_token_is_real_binary(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_command_template_first_token_is_real_binary(catalog_dir: Path, tool_id: str) -> None:
     """The first argv token is the real binary (or the documented sh wrapper)."""
     descriptor = _load_descriptor(catalog_dir, tool_id)
     assert descriptor.command_template, f"{tool_id}: command_template must be non-empty"
@@ -757,24 +728,21 @@ def test_sh_wrapped_tools_use_dash_c_form(catalog_dir: Path, tool_id: str) -> No
 
 
 _BACKLOG_SECTION_BY_COHORT: Final[dict[str, str]] = {
-    **{tid: "§4.17" for tid in NETWORK_PROTOCOL_TOOL_IDS},
-    **{tid: "§4.18" for tid in BINARY_TOOL_IDS},
-    **{tid: "§4.19" for tid in BROWSER_TOOL_IDS},
+    **dict.fromkeys(NETWORK_PROTOCOL_TOOL_IDS, "§4.17"),
+    **dict.fromkeys(BINARY_TOOL_IDS, "§4.18"),
+    **dict.fromkeys(BROWSER_TOOL_IDS, "§4.19"),
 }
 
 
 @pytest.mark.parametrize("tool_id", ARG019_TOOL_IDS)
-def test_description_references_backlog_section(
-    catalog_dir: Path, tool_id: str
-) -> None:
+def test_description_references_backlog_section(catalog_dir: Path, tool_id: str) -> None:
     """Description references the matching Backlog §4.17/§4.18/§4.19
     section so future readers can trace the YAML back to the cycle plan.
     """
     descriptor = _load_descriptor(catalog_dir, tool_id)
     expected_section = _BACKLOG_SECTION_BY_COHORT[tool_id]
     assert expected_section in descriptor.description, (
-        f"{tool_id}: description must reference Backlog "
-        f"{expected_section} for traceability"
+        f"{tool_id}: description must reference Backlog {expected_section} for traceability"
     )
 
 
@@ -856,8 +824,7 @@ def test_command_template_writes_into_out_dir(catalog_dir: Path, tool_id: str) -
     descriptor = _load_descriptor(catalog_dir, tool_id)
     rendered = " ".join(descriptor.command_template)
     assert "{out_dir}" in rendered, (
-        f"{tool_id}: command_template must write into {{out_dir}} so "
-        f"the sandbox captures evidence"
+        f"{tool_id}: command_template must write into {{out_dir}} so the sandbox captures evidence"
     )
 
 
@@ -913,7 +880,7 @@ def test_arg019_approval_set_membership() -> None:
     assert network_subset == set(NETWORK_PROTOCOL_TOOL_IDS) & APPROVAL_REQUIRED
     assert (APPROVAL_REQUIRED & set(BINARY_TOOL_IDS)) == set()
     assert browser_subset == frozenset({"playwright_runner"})
-    assert APPROVAL_REQUIRED == network_subset | browser_subset
+    assert network_subset | browser_subset == APPROVAL_REQUIRED
 
 
 def test_arg019_total_count_matches_catalog_target() -> None:

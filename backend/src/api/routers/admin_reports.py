@@ -173,13 +173,7 @@ async def admin_list_reports(
         count_stmt = select(func.count()).select_from(Report).where(*filters)
         total = int((await session.execute(count_stmt)).scalar_one())
 
-        list_stmt = (
-            select(Report)
-            .where(*filters)
-            .order_by(order)
-            .offset(offset)
-            .limit(limit)
-        )
+        list_stmt = select(Report).where(*filters).order_by(order).offset(offset).limit(limit)
         rows = list((await session.execute(list_stmt)).scalars().all())
 
         report_ids = [r.id for r in rows]
@@ -197,8 +191,7 @@ async def admin_list_reports(
             for rid, sev, cnt in sev_rows:
                 pairs_by_report.setdefault(str(rid), []).append((sev, int(cnt)))
             severity_map = {
-                rid: aggregate_counts(pairs).as_dict()
-                for rid, pairs in pairs_by_report.items()
+                rid: aggregate_counts(pairs).as_dict() for rid, pairs in pairs_by_report.items()
             }
 
     items = []
@@ -253,15 +246,23 @@ async def admin_get_report_detail(
             raise HTTPException(status_code=404, detail="Report not found")
 
         obj_rows = (
-            await session.execute(
-                select(ReportObject)
-                .where(cast(ReportObject.report_id, String) == report_id)
-                .order_by(asc(ReportObject.created_at))
+            (
+                await session.execute(
+                    select(ReportObject)
+                    .where(cast(ReportObject.report_id, String) == report_id)
+                    .order_by(asc(ReportObject.created_at))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
-        finding_count_stmt = select(func.count()).select_from(Finding).where(
-            cast(Finding.report_id, String) == report_id,
+        finding_count_stmt = (
+            select(func.count())
+            .select_from(Finding)
+            .where(
+                cast(Finding.report_id, String) == report_id,
+            )
         )
         findings_total = int((await session.execute(finding_count_stmt)).scalar_one())
 
@@ -430,10 +431,12 @@ async def admin_download_report(
 
         obj = (
             await session.execute(
-                select(ReportObject).where(
+                select(ReportObject)
+                .where(
                     cast(ReportObject.report_id, String) == report_id,
                     ReportObject.format == format,
-                ).limit(1)
+                )
+                .limit(1)
             )
         ).scalar_one_or_none()
 
@@ -531,7 +534,10 @@ async def admin_regenerate_report(
     except Exception:
         logger.warning(
             "admin.report_regenerate.task_enqueue_failed",
-            extra={"event": "argus.admin.report_regenerate.task_enqueue_failed", "report_id": new_report.id},
+            extra={
+                "event": "argus.admin.report_regenerate.task_enqueue_failed",
+                "report_id": new_report.id,
+            },
             exc_info=True,
         )
 
@@ -596,7 +602,9 @@ async def admin_create_share_link(
 
     from src.core.config import settings
 
-    share_url = f"{settings.base_url}/shared/reports/{token}" if hasattr(settings, "base_url") else None
+    share_url = (
+        f"{settings.base_url}/shared/reports/{token}" if hasattr(settings, "base_url") else None
+    )
 
     return ReportShareLinkResponse(
         id=link.id,
@@ -635,12 +643,16 @@ async def admin_list_share_links(
         await set_session_tenant(session, effective_tenant or query_tid)
 
         rows = (
-            await session.execute(
-                select(ReportShareLink)
-                .where(cast(ReportShareLink.report_id, String) == report_id)
-                .order_by(desc(ReportShareLink.created_at))
+            (
+                await session.execute(
+                    select(ReportShareLink)
+                    .where(cast(ReportShareLink.report_id, String) == report_id)
+                    .order_by(desc(ReportShareLink.created_at))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     return [
         ReportShareLinkResponse(
@@ -697,12 +709,12 @@ async def admin_delete_share_link(
 
 
 __all__ = [
-    "admin_list_reports",
-    "admin_get_report_detail",
-    "admin_generate_report",
-    "admin_download_report",
-    "admin_regenerate_report",
     "admin_create_share_link",
-    "admin_list_share_links",
     "admin_delete_share_link",
+    "admin_download_report",
+    "admin_generate_report",
+    "admin_get_report_detail",
+    "admin_list_reports",
+    "admin_list_share_links",
+    "admin_regenerate_report",
 ]

@@ -66,10 +66,18 @@ class CoverageScores(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     route: float = Field(default=0.0, ge=0.0, le=1.0, description="Route discovery coverage")
-    input_surface: float = Field(default=0.0, ge=0.0, le=1.0, description="Input surface mapping coverage")
-    api_surface: float = Field(default=0.0, ge=0.0, le=1.0, description="API surface mapping coverage")
-    content_anomaly: float = Field(default=0.0, ge=0.0, le=1.0, description="Content/anomaly analysis coverage")
-    boundary_mapping: float = Field(default=0.0, ge=0.0, le=1.0, description="Boundary mapping coverage")
+    input_surface: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Input surface mapping coverage"
+    )
+    api_surface: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="API surface mapping coverage"
+    )
+    content_anomaly: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Content/anomaly analysis coverage"
+    )
+    boundary_mapping: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Boundary mapping coverage"
+    )
 
 
 class Stage3ReadinessResult(BaseModel):

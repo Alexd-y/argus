@@ -7,7 +7,7 @@ evidence tier (EvidenceTier), and source analysis phase.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -41,7 +41,7 @@ class PhaseDefinition:
     retry_prompt_key: str
 
 
-class ScanPhase(str, Enum):
+class ScanPhase(StrEnum):
     """8 phases of pentest pipeline (quick_fuzz added between recon and threat_modeling)."""
 
     SOURCE_ANALYSIS = "source_analysis"
@@ -66,7 +66,7 @@ PHASE_ORDER: list[ScanPhase] = [
 ]
 
 
-class ExploitationSubPhase(str, Enum):
+class ExploitationSubPhase(StrEnum):
     """Sub-phases within exploitation phase."""
 
     EXPLOIT_ATTEMPT = "exploit_attempt"
@@ -104,7 +104,9 @@ class CodeSink(BaseModel):
     )
     code_snippet: str = Field(default="", max_length=2000, description="Surrounding code.")
     function_name: str | None = Field(default=None, description="Containing function/method.")
-    severity: str = Field(default="medium", description="Estimated severity: low, medium, high, critical.")
+    severity: str = Field(
+        default="medium", description="Estimated severity: low, medium, high, critical."
+    )
 
 
 class CodeSource(BaseModel):

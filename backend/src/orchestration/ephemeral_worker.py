@@ -90,6 +90,14 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 
 
+class EphemeralWorkerError(RuntimeError):
+    """Raised when an isolated ephemeral container cannot be provided.
+
+    Signals that no real isolation was established — dependent findings must
+    NOT be marked confirmed and the failure must surface in coverage.
+    """
+
+
 @dataclass
 class ContainerSpec:
     """Specification for an ephemeral task container."""
@@ -131,10 +139,17 @@ class EphemeralWorkerPool:
         max_containers: int = 5,
         default_image: str = "argus-kali-runner:latest",
         prune_interval: int = 120,
+        mock_mode: bool = False,
     ) -> None:
         self._max_containers = max_containers
         self._default_image = default_image
         self._prune_interval = prune_interval
+        # When False (default, the real/working path), Docker unavailability or
+        # a container-creation error is a hard failure — we never hand back a
+        # pseudo container-ID that would let callers mistake "no isolation" for
+        # a successfully isolated run. ``mock_mode=True`` must be selected
+        # explicitly (e.g. by an offline test adapter) to opt into pseudo IDs.
+        self._mock_mode = mock_mode
         self._active: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
@@ -145,9 +160,11 @@ class EphemeralWorkerPool:
     ) -> str:
         """Create and start an ephemeral container for a task.
 
-        Returns the Docker container ID. When Docker SDK is available,
-        creates a real container with resource limits. Otherwise returns
-        a pseudo-ID for tracking.
+        Returns the Docker container ID of a real, running container. When
+        Docker is unavailable or container creation fails, the real path raises
+        ``EphemeralWorkerError`` — callers must treat this as a failed, NON-
+        isolated run (no confirmation status for any dependent finding). Only
+        when ``mock_mode=True`` is a pseudo-ID returned for offline tests.
         """
         if spec is None:
             spec = ContainerSpec(image=self._default_image)
@@ -156,9 +173,7 @@ class EphemeralWorkerPool:
 
         async with self._lock:
             if len(self._active) >= self._max_containers:
-                raise RuntimeError(
-                    f"Max concurrent containers ({self._max_containers}) reached"
-                )
+                raise RuntimeError(f"Max concurrent containers ({self._max_containers}) reached")
 
         logger.info(
             "Creating ephemeral container %s (image=%s, timeout=%ds)",
@@ -167,10 +182,11 @@ class EphemeralWorkerPool:
             spec.timeout_seconds,
         )
 
-        container_id = container_name
+        container_id: str | None = None
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.run(
                 image=spec.image,
@@ -190,13 +206,24 @@ class EphemeralWorkerPool:
             )
             container_id = container.id
             logger.info("Docker container created: %s", container_id)
-        except ImportError:
-            logger.debug("Docker SDK not available — using pseudo container tracking")
+        except ImportError as exc:
+            if not self._mock_mode:
+                raise EphemeralWorkerError(
+                    "Docker SDK not available — cannot provide an isolated "
+                    "ephemeral container (real isolation required)"
+                ) from exc
+            logger.debug("Docker SDK not available — mock_mode pseudo tracking")
+            container_id = container_name
         except Exception as docker_exc:
+            if not self._mock_mode:
+                raise EphemeralWorkerError(
+                    f"Ephemeral container creation failed: {docker_exc}"
+                ) from docker_exc
             logger.warning(
-                "Docker container creation failed (%s) — using pseudo tracking",
+                "Docker container creation failed (%s) — mock_mode pseudo tracking",
                 docker_exc,
             )
+            container_id = container_name
 
         self._active[container_id] = time.monotonic()
         return container_id
@@ -207,6 +234,7 @@ class EphemeralWorkerPool:
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.get(container_id)
             container.stop(timeout=10)
@@ -246,6 +274,7 @@ class EphemeralWorkerPool:
 
         try:
             import docker
+
             client = docker.from_env()
             container = client.containers.get(container_id)
 
@@ -253,9 +282,9 @@ class EphemeralWorkerPool:
             with tempfile.TemporaryDirectory(prefix="argus_artifacts_") as tmpdir:
                 archive_path = os.path.join(tmpdir, "artifacts.tar")
                 with open(archive_path, "wb") as f:
-                    for chunk in bits:
-                        f.write(chunk)
+                    f.writelines(bits)
                 import tarfile
+
                 with tarfile.open(archive_path) as tar:
                     tar.extractall(path=os.path.join(tmpdir, "extracted"), filter="data")
 
@@ -267,6 +296,7 @@ class EphemeralWorkerPool:
 
                 try:
                     from src.storage.s3 import upload_finding_poc_json
+
                     for root, _dirs, files in os.walk(artifacts_dir):
                         for fname in files:
                             fpath = os.path.join(root, fname)
@@ -278,7 +308,9 @@ class EphemeralWorkerPool:
                                 if content:
                                     await asyncio.to_thread(
                                         upload_finding_poc_json,
-                                        scan_id, key, {"artifact": fname, "data": content},
+                                        scan_id,
+                                        key,
+                                        {"artifact": fname, "data": content},
                                     )
                                     artifact_keys.append(key)
                             except Exception as fexc:
@@ -297,9 +329,7 @@ class EphemeralWorkerPool:
         """Remove containers that have been active too long."""
         now = time.monotonic()
         stale_ids = [
-            cid
-            for cid, created_at in self._active.items()
-            if (now - created_at) > max_age_seconds
+            cid for cid, created_at in self._active.items() if (now - created_at) > max_age_seconds
         ]
         for cid in stale_ids:
             logger.warning("Pruning stale container %s (age > %ds)", cid, max_age_seconds)
@@ -315,5 +345,6 @@ class EphemeralWorkerPool:
 __all__ = [
     "ContainerResult",
     "ContainerSpec",
+    "EphemeralWorkerError",
     "EphemeralWorkerPool",
 ]

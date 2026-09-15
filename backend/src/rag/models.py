@@ -42,7 +42,9 @@ class RagSource(Base):
     trust_level: Mapped[str] = mapped_column(String(32), nullable=False, default="signed")
     content_class: Mapped[str] = mapped_column(String(64), nullable=False, default="metadata")
     version: Mapped[str] = mapped_column(String(64), nullable=False, default="1")
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -73,7 +75,9 @@ class RagDocument(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False, default="text/plain")
     artifact_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -112,7 +116,9 @@ class RagChunk(Base):
     fts_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     valid_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -135,7 +141,9 @@ class RagEmbedding(Base):
     tenant_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True
     )
-    model_id: Mapped[str] = mapped_column(String(128), nullable=False, default="deterministic-hash-v1")
+    model_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="deterministic-hash-v1"
+    )
     dimensions: Mapped[int] = mapped_column(Integer, nullable=False, default=384)
     embedding_json: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     embedding_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
@@ -165,9 +173,13 @@ class RagIngestionJob(Base):
     collection: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="production")
-    redact_applied: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    redact_applied: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -195,7 +207,9 @@ class RagQueryTrace(Base):
     collections: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     result_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -224,7 +238,9 @@ class RagCitation(Base):
     source_id: Mapped[str] = mapped_column(String(36), nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, default=dict
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (

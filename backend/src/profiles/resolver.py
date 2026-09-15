@@ -189,7 +189,10 @@ def resolve_scan_profile(
         )
 
     # P1 hard invariant — defense in depth.
-    if resolved.execution_mode is ExecutionMode.LAB_UNRESTRICTED and resolved.external_profile is not ScanProfile.DEEP:
+    if (
+        resolved.execution_mode is ExecutionMode.LAB_UNRESTRICTED
+        and resolved.external_profile is not ScanProfile.DEEP
+    ):
         raise AssertionError("only deep may resolve to lab_unrestricted")
 
     emit_event(

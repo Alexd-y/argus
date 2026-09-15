@@ -52,9 +52,7 @@ class ValidationPlanError(ValueError):
     def __init__(self, field_path: str, reason: str) -> None:
         self.field_path = field_path
         self.reason = reason
-        super().__init__(
-            f"ValidationPlanV1 validation failed at {field_path!r}: {reason}"
-        )
+        super().__init__(f"ValidationPlanV1 validation failed at {field_path!r}: {reason}")
 
 
 class MutationClass(StrEnum):
@@ -223,17 +221,14 @@ def validate_validation_plan(payload: dict[str, Any]) -> ValidationPlanV1:
         )
     try:
         return ValidationPlanV1.model_validate(payload)
-    except Exception as exc:  # noqa: BLE001 - convert to domain error
+    except Exception as exc:
         loc = "<root>"
         errors_fn = getattr(exc, "errors", None)
         if callable(errors_fn):
             try:
                 items = errors_fn()
                 if items:
-                    loc = (
-                        ".".join(str(part) for part in items[0].get("loc", ()) or ())
-                        or "<root>"
-                    )
+                    loc = ".".join(str(part) for part in items[0].get("loc", ()) or ()) or "<root>"
             except Exception:  # noqa: BLE001 - best-effort path extraction
                 loc = "<root>"
         raise ValidationPlanError(

@@ -106,7 +106,9 @@ class TenantQuickLimits(_Frozen):
     """Optional per-tenant caps. Never raise a value above deployment clamps."""
 
     tenant_id: StrictStr = Field(min_length=1, max_length=36)
-    max_wall_clock_budget_seconds: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK)
+    max_wall_clock_budget_seconds: StrictInt | None = Field(
+        default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK
+    )
     max_ai_budget_seconds: StrictInt | None = Field(default=None, ge=0, le=_SCHEMA_MAX_AI)
     max_targets: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_TARGETS)
     max_urls_per_host: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_URLS)
@@ -118,9 +120,15 @@ class TenantQuickLimits(_Frozen):
 class DeploymentQuickClamps(_Frozen):
     """Upper clamps from Settings. ``None`` means «YAML default is the cap»."""
 
-    compact_wall_clock_seconds: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK)
-    balanced_wall_clock_seconds: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK)
-    extended_wall_clock_seconds: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK)
+    compact_wall_clock_seconds: StrictInt | None = Field(
+        default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK
+    )
+    balanced_wall_clock_seconds: StrictInt | None = Field(
+        default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK
+    )
+    extended_wall_clock_seconds: StrictInt | None = Field(
+        default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK
+    )
     max_wall_clock_seconds: StrictInt | None = Field(default=None, ge=1, le=_SCHEMA_MAX_WALL_CLOCK)
     cloud_llm_allowed: StrictBool = False
     max_concurrency: StrictInt = Field(default=10, ge=1, le=_SCHEMA_MAX_CONCURRENCY)
@@ -208,13 +216,19 @@ def load_quick_profiles(path: Path | None = None) -> QuickProfileCatalog:
     )
     missing = [name for name in required if name not in profiles]
     if missing:
-        raise QuickProfileCatalogError(f"quick_profile_catalog_missing_profiles:{','.join(missing)}")
+        raise QuickProfileCatalogError(
+            f"quick_profile_catalog_missing_profiles:{','.join(missing)}"
+        )
     schema_version = int(root.get("schema_version") or 1)
     catalog = QuickProfileCatalog(
         schema_version=schema_version,
         compact=_parse_profile_block(_require_mapping(profiles["compact"], "compact"), "compact"),
-        balanced=_parse_profile_block(_require_mapping(profiles["balanced"], "balanced"), "balanced"),
-        extended=_parse_profile_block(_require_mapping(profiles["extended"], "extended"), "extended"),
+        balanced=_parse_profile_block(
+            _require_mapping(profiles["balanced"], "balanced"), "balanced"
+        ),
+        extended=_parse_profile_block(
+            _require_mapping(profiles["extended"], "extended"), "extended"
+        ),
     )
     logger.info(
         "quick_profiles_loaded",

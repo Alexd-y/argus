@@ -164,7 +164,10 @@ class ScanKnowledgeBase:
         except Exception as exc:
             logger.warning(
                 "kb_redis_get_failed",
-                extra={"event": "kb_redis_get_failed", "error_type": type(exc).__name__},
+                extra={
+                    "event": "kb_redis_get_failed",
+                    "error_type": type(exc).__name__,
+                },
             )
             return None
 
@@ -177,7 +180,10 @@ class ScanKnowledgeBase:
         except Exception as exc:
             logger.warning(
                 "kb_redis_set_failed",
-                extra={"event": "kb_redis_set_failed", "error_type": type(exc).__name__},
+                extra={
+                    "event": "kb_redis_set_failed",
+                    "error_type": type(exc).__name__,
+                },
             )
             return False
 
@@ -195,7 +201,10 @@ class ScanKnowledgeBase:
             except Exception as exc:
                 logger.warning(
                     "kb_stats_hit_failed",
-                    extra={"event": "kb_stats_hit_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "kb_stats_hit_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
         self._mem_hits += 1
 
@@ -207,7 +216,10 @@ class ScanKnowledgeBase:
             except Exception as exc:
                 logger.warning(
                     "kb_stats_miss_failed",
-                    extra={"event": "kb_stats_miss_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "kb_stats_miss_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
         self._mem_misses += 1
 
@@ -345,7 +357,10 @@ class ScanKnowledgeBase:
         except Exception as exc:
             logger.warning(
                 "kb_warm_cache_failed",
-                extra={"event": "kb_warm_cache_failed", "error_type": type(exc).__name__},
+                extra={
+                    "event": "kb_warm_cache_failed",
+                    "error_type": type(exc).__name__,
+                },
             )
 
     def invalidate(self, pattern: str) -> int:
@@ -377,7 +392,10 @@ class ScanKnowledgeBase:
             except Exception as exc:
                 logger.warning(
                     "kb_invalidate_redis_failed",
-                    extra={"event": "kb_invalidate_redis_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "kb_invalidate_redis_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
         for k in list(self._memory):
             ks = str(k)
@@ -407,7 +425,10 @@ class ScanKnowledgeBase:
             except Exception as exc:
                 logger.warning(
                     "kb_stats_read_failed",
-                    extra={"event": "kb_stats_read_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "kb_stats_read_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
             try:
                 for key in self._redis.scan_iter(match="argus:kb:*", count=256):
@@ -421,7 +442,10 @@ class ScanKnowledgeBase:
             except Exception as exc:
                 logger.warning(
                     "kb_stats_scan_failed",
-                    extra={"event": "kb_stats_scan_failed", "error_type": type(exc).__name__},
+                    extra={
+                        "event": "kb_stats_scan_failed",
+                        "error_type": type(exc).__name__,
+                    },
                 )
         else:
             key_count = len(self._memory)

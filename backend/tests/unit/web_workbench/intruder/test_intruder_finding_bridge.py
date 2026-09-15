@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-
-from src.pipeline.contracts.finding_dto import ConfidenceLevel, EvidenceTier, FindingCategory
+from src.pipeline.contracts.finding_dto import (
+    ConfidenceLevel,
+    EvidenceTier,
+    FindingCategory,
+)
 from src.web_workbench.intruder.finding_bridge import flagged_request_to_finding
 from src.web_workbench.intruder.repository import IntruderRequestDTO
 
@@ -36,7 +39,7 @@ def _request(*, flagged: bool = True) -> IntruderRequestDTO:
         response_sha256="a" * 64,
         flagged=flagged,
         error_reason=None,
-        created_at=datetime.now(tz=timezone.utc),
+        created_at=datetime.now(tz=UTC),
     )
 
 
@@ -61,7 +64,10 @@ def test_missing_config_falls_back_to_generic() -> None:
 
 def test_unknown_category_falls_back_to_other() -> None:
     dto = flagged_request_to_finding(
-        _request(), attack_name="a", attack_config={"finding": {"category": "not-a-cat"}}, **_IDS
+        _request(),
+        attack_name="a",
+        attack_config={"finding": {"category": "not-a-cat"}},
+        **_IDS,
     )
     assert dto.category is FindingCategory.OTHER
 

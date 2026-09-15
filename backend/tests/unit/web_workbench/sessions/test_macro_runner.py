@@ -9,10 +9,9 @@ from __future__ import annotations
 import base64
 
 import pytest
-
 from src.policy.scope import ScopeKind, ScopeRule
-from src.web_workbench.proxy.forward_gate import ForwardGate
 from src.web_workbench.projects.service import ProjectScopeService
+from src.web_workbench.proxy.forward_gate import ForwardGate
 from src.web_workbench.repeater.engine import RawResponse
 from src.web_workbench.sessions.macro_runner import (
     MacroError,
@@ -42,7 +41,7 @@ class _CookieSender:
         self.last_body = b""
         self.calls = 0
 
-    def send(self, request, body: bytes) -> RawResponse:  # noqa: ARG002
+    def send(self, request, body: bytes) -> RawResponse:
         self.calls += 1
         self.last_body = body
         raw = (
@@ -100,7 +99,7 @@ def test_cookie_carried_across_steps() -> None:
         def __init__(self) -> None:
             self.cookies_seen: list[str | None] = []
 
-        def send(self, request, body):  # noqa: ARG002
+        def send(self, request, body):
             self.cookies_seen.append(request.header("Cookie"))
             return RawResponse(
                 status_code=200,

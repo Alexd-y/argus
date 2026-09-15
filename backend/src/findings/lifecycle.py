@@ -185,9 +185,7 @@ class FindingLifecycle(BaseModel):
         if assessment.finding_key != self.finding_key:
             raise ValueError("assessment finding_key mismatch")
         self.assessments = (*self.assessments, assessment)
-        if assessment.proposed_state is not None and self.can_transition(
-            assessment.proposed_state
-        ):
+        if assessment.proposed_state is not None and self.can_transition(assessment.proposed_state):
             self.state = assessment.proposed_state
             self.updated_at = assessment.created_at
         return self
@@ -218,7 +216,10 @@ class FindingLifecycleService:
         if assessment.finding_key != finding.finding_key:
             raise ValueError("assessment_finding_key_mismatch")
         finding.assessments.append(assessment)
-        if finding.state is FindingState.CANDIDATE or finding.state is FindingState.MACHINE_VALIDATED:
+        if (
+            finding.state is FindingState.CANDIDATE
+            or finding.state is FindingState.MACHINE_VALIDATED
+        ):
             finding.state = FindingState.AI_REVIEWED
         return finding
 

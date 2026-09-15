@@ -63,21 +63,21 @@ def _prompt_incident_enrichment(
     return f"""Correlate this security alert with potential code root causes.
 
 === ALERT ===
-Title: {alert.get('title', 'N/A')}
-Severity: {alert.get('severity', 'unknown')}
-Description: {alert.get('description', '')[:1000]}
+Title: {alert.get("title", "N/A")}
+Severity: {alert.get("severity", "unknown")}
+Description: {alert.get("description", "")[:1000]}
 
 === IOCs ===
-{json.dumps(iocs[:20], indent=2) if iocs else 'none'}
+{json.dumps(iocs[:20], indent=2) if iocs else "none"}
 
 === STACK TRACES ===
-{chr(10).join(traces[:5]) if traces else 'none'}
+{chr(10).join(traces[:5]) if traces else "none"}
 
 === AFFECTED SERVICES ===
-{', '.join(services[:10]) or 'unknown'}
+{", ".join(services[:10]) or "unknown"}
 
 === KNOWN SENSITIVE SINKS IN CODE ===
-{chr(10).join(kg_sinks[:30]) if kg_sinks else 'No code graph available'}
+{chr(10).join(kg_sinks[:30]) if kg_sinks else "No code graph available"}
 
 === TASK ===
 Respond with JSON:
@@ -122,7 +122,8 @@ async def enrich_incident(
             "Respond ONLY with valid JSON."
         )
         resp = await call_llm_unified(
-            system, prompt,
+            system,
+            prompt,
             task=LLMTask.DEDUP_ANALYSIS,
             phase="incident_enrichment",
         )
@@ -149,23 +150,27 @@ def generate_remediation_playbook(
     """Generate structured remediation playbook from enriched alert."""
     playbook = []
     for task in enriched.remediation_tasks:
-        playbook.append({
-            "incident_id": enriched.incident_id,
-            "task_id": str(uuid.uuid4()),
-            "title": task.get("title", "Unknown task"),
-            "priority": task.get("priority", "p3_medium"),
-            "assignee": task.get("assignee", "security-team"),
-            "status": "pending",
-            "code_root_cause": enriched.code_root_cause[:200],
-            "rollback_hints": enriched.rollback_hints,
-        })
+        playbook.append(
+            {
+                "incident_id": enriched.incident_id,
+                "task_id": str(uuid.uuid4()),
+                "title": task.get("title", "Unknown task"),
+                "priority": task.get("priority", "p3_medium"),
+                "assignee": task.get("assignee", "security-team"),
+                "status": "pending",
+                "code_root_cause": enriched.code_root_cause[:200],
+                "rollback_hints": enriched.rollback_hints,
+            }
+        )
     if not playbook:
-        playbook.append({
-            "incident_id": enriched.incident_id,
-            "task_id": str(uuid.uuid4()),
-            "title": f"Investigate {enriched.title[:100]}",
-            "priority": "p3_medium",
-            "assignee": "security-team",
-            "status": "pending",
-        })
+        playbook.append(
+            {
+                "incident_id": enriched.incident_id,
+                "task_id": str(uuid.uuid4()),
+                "title": f"Investigate {enriched.title[:100]}",
+                "priority": "p3_medium",
+                "assignee": "security-team",
+                "status": "pending",
+            }
+        )
     return playbook

@@ -272,9 +272,7 @@ def _run_tool(
                 "execution_time": 0.0,
             }
     logger.info("Running %s: %s", name, command[:100])
-    result = execute_command(
-        command, use_cache=False, use_sandbox=settings.sandbox_enabled
-    )
+    result = execute_command(command, use_cache=False, use_sandbox=settings.sandbox_enabled)
     return result
 
 
@@ -288,7 +286,9 @@ async def tools_nmap(req: NmapRequest) -> dict[str, Any]:
 @router.post("/nuclei")
 async def tools_nuclei(req: NucleiRequest) -> dict[str, Any]:
     """Nuclei vulnerability scan."""
-    cmd = build_nuclei_command(req.target, req.severity, req.tags, req.template, req.additional_args)
+    cmd = build_nuclei_command(
+        req.target, req.severity, req.tags, req.template, req.additional_args
+    )
     return _run_tool("nuclei", cmd, req.target)
 
 

@@ -155,7 +155,7 @@ class JiraAdapter(NotifierBase):
                 merged[severity] = value
         return merged
 
-    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:
+    def _describe_target(self, *, event: NotificationEvent, tenant_id: str) -> str:  # noqa: ARG002 - NotificationChannel interface signature
         site_url = self._resolve_site_url()
         if event.severity not in _NOTIFY_SEVERITIES:
             raise _AdapterDisabled(
@@ -168,9 +168,7 @@ class JiraAdapter(NotifierBase):
                 target_redacted=hash_target(""),
             )
         if not (
-            self._resolve_api_token()
-            and self._resolve_user_email()
-            and self._resolve_project_key()
+            self._resolve_api_token() and self._resolve_user_email() and self._resolve_project_key()
         ):
             raise _AdapterDisabled(
                 reason="missing_secret",
@@ -182,7 +180,7 @@ class JiraAdapter(NotifierBase):
         self,
         *,
         event: NotificationEvent,
-        tenant_id: str,
+        tenant_id: str,  # noqa: ARG002 - NotificationChannel interface signature
         target: str,
     ) -> httpx.Response:
         priority_map = self._resolve_priority_map()
@@ -226,9 +224,7 @@ def build_jira_payload(
         _paragraph(event.summary[:30_000]),
     ]
     if event.evidence_url:
-        description_paragraphs.append(
-            _paragraph_with_link("View evidence", event.evidence_url)
-        )
+        description_paragraphs.append(_paragraph_with_link("View evidence", event.evidence_url))
     metadata_lines: list[str] = [
         f"Tenant: {event.tenant_id}",
         f"Severity: {event.severity.value}",

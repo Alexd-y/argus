@@ -128,7 +128,13 @@ def test_in_flight_without_lease_is_blocked() -> None:
 def test_failed_and_lost_retry_only_while_lease_remains() -> None:
     store = QuickIdempotencyStore()
     failed_key = "scan:nuclei:failed"
-    store.claim(failed_key, scan_id=_SCAN_ID, tool_id="nuclei", plan_version=1, lease_remaining=True)
+    store.claim(
+        failed_key,
+        scan_id=_SCAN_ID,
+        tool_id="nuclei",
+        plan_version=1,
+        lease_remaining=True,
+    )
     store.complete(failed_key, succeeded=False)
     retry = store.claim(
         failed_key,
@@ -151,7 +157,13 @@ def test_failed_and_lost_retry_only_while_lease_remains() -> None:
     assert no_lease is IdempotencyClaim.BLOCKED
 
     lost_key = "scan:nuclei:lost"
-    store.claim(lost_key, scan_id=_SCAN_ID, tool_id="nuclei", plan_version=1, lease_remaining=True)
+    store.claim(
+        lost_key,
+        scan_id=_SCAN_ID,
+        tool_id="nuclei",
+        plan_version=1,
+        lease_remaining=True,
+    )
     store.mark_lost(lost_key)
     assert store.get(lost_key).status == "lost"
     lost_retry = store.claim(

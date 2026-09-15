@@ -23,8 +23,7 @@ class TestBuildRawPhaseObjectKey:
             "txt",
         )
         assert (
-            key
-            == "00000000-0000-0000-0000-000000000001/scan-abc/vuln_analysis/raw/"
+            key == "00000000-0000-0000-0000-000000000001/scan-abc/vuln_analysis/raw/"
             "2026-03-23T12:00:00Z_tool_xsstrike_stdout.txt"
         )
 
@@ -106,9 +105,7 @@ class TestUploadRawArtifact:
                 b'{"x":1}',
                 content_type=None,
             )
-        expected = (
-            "tenant-1/scan-1/recon/raw/2026-03-23T10:00:00Z_state_input.json"
-        )
+        expected = "tenant-1/scan-1/recon/raw/2026-03-23T10:00:00Z_state_input.json"
         assert key == expected
         mock_s3_client.put_object.assert_called_once()
         kwargs = mock_s3_client.put_object.call_args.kwargs
@@ -129,32 +126,23 @@ class TestUploadRawArtifact:
                 b"\x00",
                 content_type="application/custom",
             )
-        assert (
-            mock_s3_client.put_object.call_args.kwargs["ContentType"]
-            == "application/custom"
-        )
+        assert mock_s3_client.put_object.call_args.kwargs["ContentType"] == "application/custom"
 
     def test_returns_none_without_client(self) -> None:
         with patch("src.storage.s3._get_client", return_value=None):
-            out = upload_raw_artifact(
-                "t", "s", "exploitation", "ts", "x", "log", b"line\n"
-            )
+            out = upload_raw_artifact("t", "s", "exploitation", "ts", "x", "log", b"line\n")
         assert out is None
 
     def test_returns_none_on_validation_error(self, mock_s3_client: MagicMock) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            out = upload_raw_artifact(
-                "t", "s", "not_a_phase", "ts", "ok", "txt", b"x"
-            )
+            out = upload_raw_artifact("t", "s", "not_a_phase", "ts", "ok", "txt", b"x")
         assert out is None
         mock_s3_client.put_object.assert_not_called()
 
     def test_returns_none_on_put_failure(self, mock_s3_client: MagicMock) -> None:
         mock_s3_client.put_object.side_effect = OSError("network")
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            out = upload_raw_artifact(
-                "t", "s", "post_exploitation", "ts", "stderr", "txt", b"err"
-            )
+            out = upload_raw_artifact("t", "s", "post_exploitation", "ts", "stderr", "txt", b"err")
         assert out is None
 
     def test_empty_body_uploads_and_put_object_called(self, mock_s3_client: MagicMock) -> None:
@@ -166,15 +154,21 @@ class TestUploadRawArtifact:
         mock_s3_client.put_object.assert_called_once()
         assert mock_s3_client.put_object.call_args.kwargs["Body"] == b""
         assert (
-            mock_s3_client.put_object.call_args.kwargs["ContentType"]
-            == "application/octet-stream"
+            mock_s3_client.put_object.call_args.kwargs["ContentType"] == "application/octet-stream"
         )
 
     def test_binary_io_body_read_and_uploaded(self, mock_s3_client: MagicMock) -> None:
         stream = io.BytesIO(b"stream-bytes")
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
             key = upload_raw_artifact(
-                "t", "s", "vuln_analysis", "ts", "tool_out", "log", stream, content_type=None
+                "t",
+                "s",
+                "vuln_analysis",
+                "ts",
+                "tool_out",
+                "log",
+                stream,
+                content_type=None,
             )
         assert key == "t/s/vuln_analysis/raw/ts_tool_out.log"
         assert mock_s3_client.put_object.call_args.kwargs["Body"] == b"stream-bytes"
@@ -209,14 +203,9 @@ class TestUploadRawArtifact:
             )
         assert mock_s3_client.put_object.call_args.kwargs["ContentType"] == expected_ct
 
-    def test_empty_string_content_type_triggers_inference(
-        self, mock_s3_client: MagicMock
-    ) -> None:
+    def test_empty_string_content_type_triggers_inference(self, mock_s3_client: MagicMock) -> None:
         with patch("src.storage.s3._get_client", return_value=mock_s3_client):
-            upload_raw_artifact(
-                "t", "s", "recon", "ts", "x", "csv", b"1,2", content_type=""
-            )
+            upload_raw_artifact("t", "s", "recon", "ts", "x", "csv", b"1,2", content_type="")
         assert (
-            mock_s3_client.put_object.call_args.kwargs["ContentType"]
-            == "text/csv; charset=utf-8"
+            mock_s3_client.put_object.call_args.kwargs["ContentType"] == "text/csv; charset=utf-8"
         )

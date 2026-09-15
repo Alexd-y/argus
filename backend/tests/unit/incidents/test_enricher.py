@@ -1,12 +1,9 @@
 """Tests for Incident Enrichment."""
 
-import pytest
-
 from src.workers.incidents.enricher import (
     EnrichedAlert,
-    enrich_incident,
-    generate_remediation_playbook,
     _prompt_incident_enrichment,
+    generate_remediation_playbook,
 )
 
 
@@ -19,8 +16,11 @@ class TestEnrichedAlert:
 
     def test_with_data(self):
         alert = EnrichedAlert(
-            id="e1", incident_id="inc1", title="SQLi detected",
-            severity="high", iocs=[{"type": "ip", "value": "10.0.0.1"}],
+            id="e1",
+            incident_id="inc1",
+            title="SQLi detected",
+            severity="high",
+            iocs=[{"type": "ip", "value": "10.0.0.1"}],
         )
         assert alert.incident_id == "inc1"
         assert len(alert.iocs) == 1
@@ -29,7 +29,8 @@ class TestEnrichedAlert:
 class TestPromptBuilding:
     def test_builds_prompt_with_iocs(self):
         alert = {
-            "title": "Suspicious login", "severity": "high",
+            "title": "Suspicious login",
+            "severity": "high",
             "iocs": [{"type": "ip", "value": "1.2.3.4"}],
             "stack_traces": ["File app.py line 42 in login"],
             "affected_services": ["auth-service"],
@@ -48,9 +49,14 @@ class TestPromptBuilding:
 class TestPlaybook:
     def test_generates_tasks(self):
         alert = EnrichedAlert(
-            incident_id="inc1", title="RCE detected",
+            incident_id="inc1",
+            title="RCE detected",
             remediation_tasks=[
-                {"title": "Patch RCE", "assignee": "backend", "priority": "p1_critical"},
+                {
+                    "title": "Patch RCE",
+                    "assignee": "backend",
+                    "priority": "p1_critical",
+                },
                 {"title": "Review logs", "assignee": "soc", "priority": "p2_high"},
             ],
         )

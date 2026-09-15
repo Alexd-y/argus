@@ -177,7 +177,9 @@ def test_generate_json_includes_proof_of_concept() -> None:
     assert "alert(1)" in raw
     assert "curl -v" in raw
     parsed = json.loads(raw)
-    assert parsed["findings"][0]["proof_of_concept"]["javascript_code"] == "<script>alert(1)</script>"
+    assert (
+        parsed["findings"][0]["proof_of_concept"]["javascript_code"] == "<script>alert(1)</script>"
+    )
 
 
 @patch("src.services.reporting.get_finding_poc_screenshot_presigned_url")
@@ -284,7 +286,9 @@ def test_minimal_jinja_context_finding_dict_has_poc() -> None:
 
 
 def test_poc_schema_response_capped() -> None:
-    from src.recon.vulnerability_analysis.active_scan.poc_schema import build_proof_of_concept
+    from src.recon.vulnerability_analysis.active_scan.poc_schema import (
+        build_proof_of_concept,
+    )
 
     long_r = "R" * 2000
     d = build_proof_of_concept("nuclei", response=long_r)
@@ -309,7 +313,9 @@ def test_extract_response_snippet_around_payload() -> None:
 
 
 def test_infer_javascript_code_from_payload_detects_alert() -> None:
-    from src.recon.vulnerability_analysis.active_scan.poc_schema import infer_javascript_code_from_payload
+    from src.recon.vulnerability_analysis.active_scan.poc_schema import (
+        infer_javascript_code_from_payload,
+    )
 
     assert infer_javascript_code_from_payload("abcalert(1)") == "abcalert(1)"
     assert infer_javascript_code_from_payload("plain") is None

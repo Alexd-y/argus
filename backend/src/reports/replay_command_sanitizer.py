@@ -120,9 +120,7 @@ _SECRET_PATTERNS: Final[tuple[tuple[str, Pattern[str], str], ...]] = (
     # ---- JWT (3-segment base64url, optionally prefixed by Bearer)
     (
         "jwt",
-        re.compile(
-            r"\beyJ[A-Za-z0-9_=-]{8,}\.eyJ[A-Za-z0-9_=-]{8,}\.[A-Za-z0-9_=.+/-]{8,}\b"
-        ),
+        re.compile(r"\beyJ[A-Za-z0-9_=-]{8,}\.eyJ[A-Za-z0-9_=-]{8,}\.[A-Za-z0-9_=.+/-]{8,}\b"),
         REDACTED_JWT,
     ),
     # ---- AWS access key id (e.g. AKIA / ASIA / AGPA)
@@ -205,9 +203,7 @@ _SECRET_PATTERNS: Final[tuple[tuple[str, Pattern[str], str], ...]] = (
     # ---- Bearer / Authorization tokens (Bearer + opaque slug)
     (
         "bearer_token",
-        re.compile(
-            r"(?i)(Authorization:\s*Bearer\s+|Bearer\s+)([A-Za-z0-9._\-+/=]{8,})"
-        ),
+        re.compile(r"(?i)(Authorization:\s*Bearer\s+|Bearer\s+)([A-Za-z0-9._\-+/=]{8,})"),
         rf"\1{REDACTED_BEARER}",
     ),
     # ---- Generic api_key / api-token / secret / access_token = VALUE.
@@ -537,8 +533,7 @@ def sanitize_replay_command(
     stripped = _strip_destructive_tokens(argv)
     flag_redacted = _redact_password_flag_values(stripped)
     secrets_scrubbed = [
-        _apply_secret_patterns(token, canary_safe=canary_safe)
-        for token in flag_redacted
+        _apply_secret_patterns(token, canary_safe=canary_safe) for token in flag_redacted
     ]
     shell_safe = [_scrub_reverse_shells(token) for token in secrets_scrubbed]
     target_safe = [

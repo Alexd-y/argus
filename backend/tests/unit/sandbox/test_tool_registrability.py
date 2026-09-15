@@ -43,7 +43,9 @@ def test_missing_descriptor():
 
 def test_missing_parser_blocks_registration():
     d = FakeDescriptor("skipfish", ["skipfish"])
-    r = evaluate_tool_registrability(d, parser_tool_ids=PARSERS, known_executables=frozenset({"skipfish"}))
+    r = evaluate_tool_registrability(
+        d, parser_tool_ids=PARSERS, known_executables=frozenset({"skipfish"})
+    )
     assert not r.registrable
     assert REASON_PARSER_UNAVAILABLE in r.reasons
 
@@ -57,7 +59,9 @@ def test_missing_executable_blocks_registration():
 
 def test_empty_command_template_is_executable_missing():
     d = FakeDescriptor("weird", [])
-    r = evaluate_tool_registrability(d, parser_tool_ids=frozenset({"weird"}), known_executables=None)
+    r = evaluate_tool_registrability(
+        d, parser_tool_ids=frozenset({"weird"}), known_executables=None
+    )
     assert not r.registrable
     assert REASON_EXECUTABLE_MISSING in r.reasons
 
@@ -65,7 +69,10 @@ def test_empty_command_template_is_executable_missing():
 def test_profile_risk_ceiling_denies_destructive_for_quick():
     d = FakeDescriptor("sqlmap", ["sqlmap"], risk_level="destructive")
     r = evaluate_tool_registrability(
-        d, parser_tool_ids=PARSERS, known_executables=EXECUTABLES, payload_risk_ceiling="low"
+        d,
+        parser_tool_ids=PARSERS,
+        known_executables=EXECUTABLES,
+        payload_risk_ceiling="low",
     )
     assert not r.registrable
     assert REASON_PROFILE_CAPABILITY_DENIED in r.reasons
@@ -74,7 +81,10 @@ def test_profile_risk_ceiling_denies_destructive_for_quick():
 def test_profile_risk_ceiling_allows_destructive_for_deep():
     d = FakeDescriptor("sqlmap", ["sqlmap"], risk_level="destructive")
     r = evaluate_tool_registrability(
-        d, parser_tool_ids=PARSERS, known_executables=EXECUTABLES, payload_risk_ceiling="high"
+        d,
+        parser_tool_ids=PARSERS,
+        known_executables=EXECUTABLES,
+        payload_risk_ceiling="high",
     )
     assert r.registrable is True
 

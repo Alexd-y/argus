@@ -38,11 +38,11 @@ def compute_priority(
     """priority = Π factor^weight / max(cost, epsilon), clamped to [0, 1]."""
     resolved = weights or ScoringWeights()
     raw = (
-        (components.exploitability_probability ** resolved.exploitability)
-        * (components.expected_impact ** resolved.expected_impact)
-        * (components.evidence_confidence ** resolved.evidence_confidence)
-        * (components.asset_criticality ** resolved.asset_criticality)
-        * (components.coverage_value ** resolved.coverage_value)
+        (components.exploitability_probability**resolved.exploitability)
+        * (components.expected_impact**resolved.expected_impact)
+        * (components.evidence_confidence**resolved.evidence_confidence)
+        * (components.asset_criticality**resolved.asset_criticality)
+        * (components.coverage_value**resolved.coverage_value)
         / max(float(components.estimated_cost), float(resolved.epsilon))
     )
     if raw < 0.0:
@@ -63,7 +63,9 @@ def tie_break_key(
     return (-float(priority_score), capability_id, tool_id, template_id)
 
 
-def sort_candidates(items: list[tuple[float, str, str, str]]) -> list[tuple[float, str, str, str]]:
+def sort_candidates(
+    items: list[tuple[float, str, str, str]],
+) -> list[tuple[float, str, str, str]]:
     """Sort (score, capability_id, tool_id, template_id) deterministically."""
     return sorted(
         items,

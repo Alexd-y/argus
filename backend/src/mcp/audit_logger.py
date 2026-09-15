@@ -29,7 +29,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from src.policy.audit import (  # noqa: I001 — direct module import to avoid policy package init cycles
+from src.policy.audit import (
     AuditEvent,
     AuditEventType,
     AuditLogger,

@@ -129,9 +129,7 @@ def list_catalog(
     if risk_level is not None:
         descriptors = [d for d in descriptors if d.risk_level.value == risk_level.value]
     if requires_approval is not None:
-        descriptors = [
-            d for d in descriptors if bool(d.requires_approval) == requires_approval
-        ]
+        descriptors = [d for d in descriptors if bool(d.requires_approval) == requires_approval]
 
     total = len(descriptors)
     page = descriptors[offset : offset + max(limit, 0)]
@@ -191,9 +189,7 @@ def trigger_tool_run(
     registry = get_registry()
     descriptor = registry.get(payload.tool_id)
     if descriptor is None:
-        raise ResourceNotFoundError(
-            f"Tool {payload.tool_id!r} is not registered in the catalog."
-        )
+        raise ResourceNotFoundError(f"Tool {payload.tool_id!r} is not registered in the catalog.")
 
     risk_level_value = descriptor.risk_level.value
     risk_level = ToolRiskLevel(risk_level_value)
@@ -276,14 +272,10 @@ def get_tool_run_status(
     if not tool_run_id:
         raise ValidationError("tool_run_id is required.")
     if lookup is None:
-        raise ResourceNotFoundError(
-            f"Tool run {tool_run_id!r} is not visible to the MCP server."
-        )
+        raise ResourceNotFoundError(f"Tool run {tool_run_id!r} is not visible to the MCP server.")
     result = lookup(tenant_id, tool_run_id)
     if result is None:
-        raise ResourceNotFoundError(
-            f"Tool run {tool_run_id!r} was not found in this tenant scope."
-        )
+        raise ResourceNotFoundError(f"Tool run {tool_run_id!r} was not found in this tenant scope.")
     return result
 
 

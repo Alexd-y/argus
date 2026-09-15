@@ -30,24 +30,21 @@ def _wrap(title: str, body_html: str) -> str:
     )
 
 
-def report_ready_email(target: str, scan_id: str, view_url: str) -> tuple[str, str, str]:
+def report_ready_email(target: str, scan_id: str, view_url: str) -> tuple[str, str, str]:  # noqa: ARG001 - retained for signature/API compatibility
     """Email sent when a scan report is ready to view."""
     safe_target = escape(target)
     safe_url = escape(view_url, quote=True)
     subject = f"Your security report for {target} is ready"
     html = _wrap(
         "Your report is ready",
-        f'<p>The security assessment for <strong>{safe_target}</strong> has finished '
+        f"<p>The security assessment for <strong>{safe_target}</strong> has finished "
         "and your report is ready to view.</p>"
         f'<p style="margin:24px 0">'
         f'<a href="{safe_url}" style="background:#6d28d9;color:#fff;text-decoration:none;'
         'padding:10px 18px;border-radius:6px;display:inline-block">View report</a></p>'
         f'<p style="color:#888;font-size:12px">Or open: {safe_url}</p>',
     )
-    text = (
-        f"Your security report for {target} is ready.\n"
-        f"View it here: {view_url}\n"
-    )
+    text = f"Your security report for {target} is ready.\nView it here: {view_url}\n"
     return subject, html, text
 
 

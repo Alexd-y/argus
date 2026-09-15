@@ -53,7 +53,9 @@ class NucleiExecutionPlanner:
             if manifest.digest_sha256 != expected:
                 raise ValueError("selector_manifest_digest_mismatch")
             candidate_ids = tuple(
-                dict.fromkeys(str(item).strip() for item in manifest.template_ids if str(item).strip())
+                dict.fromkeys(
+                    str(item).strip() for item in manifest.template_ids if str(item).strip()
+                )
             )
         else:
             candidate_ids = tuple(

@@ -6,7 +6,6 @@ import base64
 import json
 
 import pytest
-
 from src.web_workbench.imports.har import (
     HarImportError,
     ImportedExchange,

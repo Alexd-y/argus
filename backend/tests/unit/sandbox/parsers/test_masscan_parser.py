@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-
 from src.pipeline.contracts.finding_dto import (
     ConfidenceLevel,
     FindingCategory,
@@ -121,9 +120,7 @@ def test_invalid_port_dropped_with_warning(
     )
 
 
-def test_envelope_not_list_emits_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_envelope_not_list_emits_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     canonical = tmp_path / "masscan.json"
     canonical.write_bytes(b'{"not": "an array"}')
     with caplog.at_level("WARNING"):
@@ -166,9 +163,7 @@ def test_findings_sorted_deterministically(tmp_path: Path) -> None:
     )
     parse_masscan_json(payload, b"", tmp_path, "masscan")
     sidecar_lines = (tmp_path / EVIDENCE_SIDECAR_NAME).read_text("utf-8").splitlines()
-    pairs = [
-        (json.loads(line)["ip"], json.loads(line)["port"]) for line in sidecar_lines
-    ]
+    pairs = [(json.loads(line)["ip"], json.loads(line)["port"]) for line in sidecar_lines]
     assert pairs == sorted(pairs)
 
 

@@ -67,9 +67,7 @@ def test_memory_addresses_redacted_in_sidecar(tmp_path: Path) -> None:
 
 
 def test_canonical_artifact_takes_precedence(tmp_path: Path) -> None:
-    canonical = json.dumps(
-        {"imports": [{"name": "system", "vaddr": "0x123456"}]}
-    ).encode()
+    canonical = json.dumps({"imports": [{"name": "system", "vaddr": "0x123456"}]}).encode()
     (tmp_path / "r2_info.json").write_bytes(canonical)
     decoy = json.dumps({"imports": [{"name": "popen", "vaddr": "0xabc"}]}).encode()
     findings = parse_radare2_info(decoy, b"", tmp_path, "radare2_info")

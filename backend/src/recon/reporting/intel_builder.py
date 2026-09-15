@@ -79,7 +79,7 @@ def build_intel_section_html(intel_findings: dict) -> str:
     """
     adapters_data = intel_findings.get("adapters", [])
     if not adapters_data:
-        return '<p><em>No intel adapters were run. Configure API keys (e.g. SHODAN_API_KEY) for enrichment.</em></p>'
+        return "<p><em>No intel adapters were run. Configure API keys (e.g. SHODAN_API_KEY) for enrichment.</em></p>"
 
     out: list[str] = []
 
@@ -110,11 +110,15 @@ def build_intel_section_html(intel_findings: dict) -> str:
                 out.append(f'<span class="badge badge-inference">{_escape(f_type)}</span> ')
                 out.append(f"<code>{_escape(str(value)[:200])}</code>")
                 if conf:
-                    out.append(f' <span class="badge" style="background:#e0e0e0;color:#424242;">conf:{conf}</span>')
+                    out.append(
+                        f' <span class="badge" style="background:#e0e0e0;color:#424242;">conf:{conf}</span>'
+                    )
                 if data:
                     extras = {k: v for k, v in data.items() if k not in ("source", "source_tool")}
                     if extras:
-                        summary = ", ".join(f"{k}={str(v)[:50]}" for k, v in list(extras.items())[:5])
+                        summary = ", ".join(
+                            f"{k}={str(v)[:50]}" for k, v in list(extras.items())[:5]
+                        )
                         out.append(f" <small>{_escape(summary)}</small>")
                 out.append("</li>")
             out.append("</ul>")

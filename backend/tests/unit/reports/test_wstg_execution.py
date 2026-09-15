@@ -62,7 +62,13 @@ def test_incomplete_criteria_blocks_completed():
 
 def test_multiple_required_scenarios_partial_when_one_missing():
     e1 = _exec("e1", "A", scenario_id="s1")
-    e2 = _exec("e2", "A", scenario_id="s2", status=ExecutionStatus.PARTIAL, criteria={"c": False})
+    e2 = _exec(
+        "e2",
+        "A",
+        scenario_id="s2",
+        status=ExecutionStatus.PARTIAL,
+        criteria={"c": False},
+    )
     agg = aggregate_executions([e1, e2], required_scenarios={"A": {"s1", "s2"}})
     assert agg["A"].required_scenarios_completed is False
     assert agg["A"].execution_status == ExecutionStatus.PARTIAL
