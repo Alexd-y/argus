@@ -1,7 +1,9 @@
 """VH-LLM-08: 4-format rendering, semantic parity, XML XSD validation."""
 
+import pytest
 from src.reports.llm_remediation.document import ValhallaFindingNode, ValhallaLlmDocument
 from src.reports.llm_remediation.render import (
+    _HAS_LXML,
     assert_semantic_parity,
     parity_facts,
     render_all_text_formats,
@@ -58,6 +60,19 @@ def test_xml_missing_required_structure_is_flagged():
     errors = validate_valhalla_xml('<wrong-root version="1.0"></wrong-root>')
     assert any("unexpected_root" in e for e in errors)
     assert any("missing_child" in e for e in errors)
+
+
+@pytest.mark.skipif(not _HAS_LXML, reason="lxml required for deep XSD validation")
+def test_xsd_catches_deep_nesting_violation(complete_document):
+    # Remove a required <objective> element inside remediation-analysis: the
+    # structural fallback would miss it, but the full XSD must reject it.
+    xml = (
+        render_xml(complete_document)
+        .replace("<objective>", "<wrong>")
+        .replace("</objective>", "</wrong>")
+    )
+    errors = validate_valhalla_xml(xml)
+    assert errors, "lxml XSD should reject a remediation-analysis missing <objective>"
 
 
 def test_html_escapes_payload_as_text():

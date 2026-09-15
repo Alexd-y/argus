@@ -412,20 +412,189 @@ VALHALLA_LLM_XSD = """<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            xmlns="urn:argus:valhalla-llm:v1"
            targetNamespace="urn:argus:valhalla-llm:v1"
-           elementFormDefault="unqualified">
-  <xs:element name="valhalla-llm-report">
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element name="meta"/>
-        <xs:element name="findings"/>
-        <xs:element name="closure-summary"/>
-      </xs:sequence>
-      <xs:attribute name="version" type="xs:string" use="required"/>
-      <xs:attribute name="doc_version" type="xs:string" use="required"/>
-      <xs:attribute name="content_hash" type="xs:string" use="required"/>
-      <xs:attribute name="assessment_completeness" type="xs:string" use="required"/>
-    </xs:complexType>
-  </xs:element>
+           elementFormDefault="qualified">
+
+  <!-- Generic id/text list wrappers -->
+  <xs:complexType name="CriterionIdList">
+    <xs:sequence>
+      <xs:element name="criterion-id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ReferenceIdList">
+    <xs:sequence>
+      <xs:element name="reference-id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="RetestIdList">
+    <xs:sequence>
+      <xs:element name="retest-id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="EvidenceIdList">
+    <xs:sequence>
+      <xs:element name="evidence-id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="FindingIdList">
+    <xs:sequence>
+      <xs:element name="finding-id" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ItemList">
+    <xs:sequence>
+      <xs:element name="item" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ActionList">
+    <xs:sequence>
+      <xs:element name="action" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="BlockerList">
+    <xs:sequence>
+      <xs:element name="blocker" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RootCauseType">
+    <xs:sequence>
+      <xs:element name="text" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="basis" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="FixStepType">
+    <xs:sequence>
+      <xs:element name="component" type="xs:string"/>
+      <xs:element name="action" type="xs:string"/>
+      <xs:element name="rationale" type="xs:string"/>
+      <xs:element name="acceptance-criteria-ids" type="CriterionIdList"/>
+      <xs:element name="source-reference-ids" type="ReferenceIdList"/>
+    </xs:sequence>
+    <xs:attribute name="step_id" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="FixStepsType">
+    <xs:sequence>
+      <xs:element name="fix-step" type="FixStepType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CriterionType">
+    <xs:sequence>
+      <xs:element name="measurable-property" type="xs:string"/>
+      <xs:element name="required-evidence" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="criterion_id" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="AcceptanceCriteriaType">
+    <xs:sequence>
+      <xs:element name="criterion" type="CriterionType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RetestType">
+    <xs:sequence>
+      <xs:element name="procedure" type="xs:string"/>
+      <xs:element name="expected-secure-result" type="xs:string"/>
+      <xs:element name="criteria-ids" type="CriterionIdList"/>
+    </xs:sequence>
+    <xs:attribute name="test_id" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="RetestPlanType">
+    <xs:sequence>
+      <xs:element name="retest" type="RetestType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RemediationType">
+    <xs:sequence>
+      <xs:element name="root-cause" type="RootCauseType"/>
+      <xs:element name="objective" type="xs:string"/>
+      <xs:element name="fix-steps" type="FixStepsType"/>
+      <xs:element name="acceptance-criteria" type="AcceptanceCriteriaType"/>
+      <xs:element name="retest-plan" type="RetestPlanType"/>
+      <xs:element name="missing-information" type="ItemList"/>
+    </xs:sequence>
+    <xs:attribute name="status" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="ClosureType">
+    <xs:sequence>
+      <xs:element name="text" type="xs:string"/>
+      <xs:element name="satisfied-criteria" type="CriterionIdList"/>
+      <xs:element name="unsatisfied-criteria" type="CriterionIdList"/>
+      <xs:element name="untested-criteria" type="CriterionIdList"/>
+      <xs:element name="supporting-retests" type="RetestIdList"/>
+      <xs:element name="supporting-evidence" type="EvidenceIdList"/>
+      <xs:element name="residual-risk" type="xs:string"/>
+      <xs:element name="next-actions" type="ActionList"/>
+      <xs:element name="blockers" type="BlockerList"/>
+    </xs:sequence>
+    <xs:attribute name="status" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="FindingType">
+    <xs:sequence>
+      <xs:element name="title" type="xs:string"/>
+      <xs:element name="remediation-analysis" type="RemediationType" minOccurs="0"/>
+      <xs:element name="closure-conclusion" type="ClosureType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="finding_id" type="xs:string" use="required"/>
+    <xs:attribute name="severity" type="xs:string"/>
+    <xs:attribute name="verification_status" type="xs:string"/>
+    <xs:attribute name="llm_analysis_status" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="FindingsType">
+    <xs:sequence>
+      <xs:element name="finding" type="FindingType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="count" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetaType">
+    <xs:sequence>
+      <xs:element name="report-id" type="xs:string"/>
+      <xs:element name="report-version" type="xs:string"/>
+      <xs:element name="target" type="xs:string"/>
+      <xs:element name="canonical-snapshot-hash" type="xs:string"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CountType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="key" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="CountsType">
+    <xs:sequence>
+      <xs:element name="count" type="CountType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="SummaryType">
+    <xs:sequence>
+      <xs:element name="overall-conclusion" type="xs:string" minOccurs="0"/>
+      <xs:element name="verified-closed" type="FindingIdList" minOccurs="0"/>
+      <xs:element name="not-verified-closed" type="FindingIdList" minOccurs="0"/>
+      <xs:element name="accepted-risk" type="FindingIdList" minOccurs="0"/>
+      <xs:element name="counts" type="CountsType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ReportType">
+    <xs:sequence>
+      <xs:element name="meta" type="MetaType"/>
+      <xs:element name="findings" type="FindingsType"/>
+      <xs:element name="closure-summary" type="SummaryType"/>
+    </xs:sequence>
+    <xs:attribute name="version" type="xs:string" use="required"/>
+    <xs:attribute name="doc_version" type="xs:string" use="required"/>
+    <xs:attribute name="content_hash" type="xs:string" use="required"/>
+    <xs:attribute name="assessment_completeness" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:element name="valhalla-llm-report" type="ReportType"/>
 </xs:schema>
 """
 

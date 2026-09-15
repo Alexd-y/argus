@@ -66,6 +66,13 @@ dependencies = [
     # HTML parsing for the XSS reflection-context detector
     # (src/recon/vulnerability_analysis/active_scan/context_detector.py).
     "beautifulsoup4>=4.12.0",
+    # Full XSD validation of the Valhalla LLM XML export (report renderer).
+    # defusedxml stays the parser for untrusted input; lxml is used only to
+    # validate our own generated XML against the bundled schema.
+    "lxml>=5.0.0",
+    # Pure-wheel PDF rasteriser (bundles pdfium, no native/poppler deps) for
+    # pixel-level Valhalla PDF visual QA.
+    "pypdfium2>=4.30.0",
 ]
 
 [project.optional-dependencies]
