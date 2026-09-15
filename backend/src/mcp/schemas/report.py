@@ -35,6 +35,9 @@ class ReportFormat(StrEnum):
     MARKDOWN = "md"
     SARIF = "sarif"
     JUNIT = "junit"
+    # Full structured XML export for the Valhalla LLM deliverable (distinct
+    # from JUnit's test-result XML).
+    XML = "xml"
 
 
 class ReportGenerateInput(BaseModel):

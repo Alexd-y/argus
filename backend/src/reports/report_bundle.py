@@ -58,6 +58,9 @@ class ReportFormat(StrEnum):
     MARKDOWN = "md"
     SARIF = "sarif"
     JUNIT = "junit"
+    # Full structured XML export (distinct from JUnit) — the Valhalla LLM
+    # deliverable projects its typed document tree into this format.
+    XML = "xml"
 
 
 # Canonical MIME types. Kept here (not in the router) so the bundle is the
@@ -71,6 +74,7 @@ _MIME_TYPES: dict[ReportFormat, str] = {
     ReportFormat.MARKDOWN: "text/markdown; charset=utf-8",
     ReportFormat.SARIF: "application/sarif+json",
     ReportFormat.JUNIT: "application/xml; charset=utf-8",
+    ReportFormat.XML: "application/xml; charset=utf-8",
 }
 
 
@@ -85,6 +89,7 @@ _FILE_EXTENSIONS: dict[ReportFormat, str] = {
     ReportFormat.MARKDOWN: "md",
     ReportFormat.SARIF: "sarif",
     ReportFormat.JUNIT: "xml",
+    ReportFormat.XML: "xml",
 }
 
 
