@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy import String, cast, select
 
-from src.db.models import Report
+from src.db.models import Report, ReportObject
 from src.db.session import async_session_factory, set_session_tenant
 from src.mcp.exceptions import (
     ResourceNotFoundError,
@@ -21,6 +21,7 @@ from src.mcp.schemas.report import (
     ReportGenerateResult,
     ReportTier,
 )
+from src.storage.s3 import get_presigned_url_by_key
 
 _logger = logging.getLogger(__name__)
 
@@ -148,6 +149,22 @@ async def get_report_download(
             sha256 = _extract_sha256(metadata, format)
             presigned = _extract_presigned_url(metadata, format)
             expires_at = _extract_expiry(metadata, format)
+            if presigned is None:
+                # Fall back to the persisted ReportObject row (the pipeline
+                # upserts one per artifact, incl. canonical_* and
+                # valhalla_llm_*), presigning its object key on demand. This
+                # keeps MCP download in step with the API download path.
+                report_object = (
+                    await session.execute(
+                        select(ReportObject).where(
+                            cast(ReportObject.report_id, String) == report_id,
+                            ReportObject.format == format.value,
+                            cast(ReportObject.tenant_id, String) == tenant_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if report_object is not None and report_object.object_key:
+                    presigned = get_presigned_url_by_key(report_object.object_key)
             return ReportDownloadResult(
                 report_id=report_id,
                 format=format,

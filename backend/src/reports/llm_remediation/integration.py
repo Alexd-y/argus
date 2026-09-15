@@ -14,12 +14,33 @@ from typing import Any
 
 from src.reports.llm_remediation.builder import build_valhalla_llm_document
 from src.reports.llm_remediation.bundle import ValhallaRelease, build_valhalla_release
-from src.reports.llm_remediation.closure_status import ClosureComputationInput
+from src.reports.llm_remediation.closure_status import (
+    ClosureComputationInput,
+    RetestExecution,
+    RetestOutcome,
+)
 from src.reports.llm_remediation.document import ValhallaLlmDocument
 from src.reports.llm_remediation.runner import LlmCallable, RemediationRunner
 
 _FALSE_POSITIVE_STATUSES = {"false_positive"}
 _RISK_ACCEPTED_STATUSES = {"accepted_risk", "risk_accepted", "accepted"}
+
+# Structured retest outcome vocabulary. Free-text ``retest_result`` is
+# deliberately NOT auto-mapped to a passing outcome: inferring a fix from vague
+# prose would risk a false ``fixed_verified`` (prompt L02/L03). Only an explicit
+# structured retest record contributes evidence to the closure computation.
+_RETEST_OUTCOME_MAP: dict[str, RetestOutcome] = {
+    "pass_secure": RetestOutcome.PASS_SECURE,
+    "pass": RetestOutcome.PASS_SECURE,
+    "secure": RetestOutcome.PASS_SECURE,
+    "fixed": RetestOutcome.PASS_SECURE,
+    "fail_vulnerable": RetestOutcome.FAIL_VULNERABLE,
+    "fail": RetestOutcome.FAIL_VULNERABLE,
+    "vulnerable": RetestOutcome.FAIL_VULNERABLE,
+    "inconclusive": RetestOutcome.INCONCLUSIVE,
+    "unreachable": RetestOutcome.UNREACHABLE,
+    "error": RetestOutcome.ERROR,
+}
 
 
 def _finding_id(finding: dict[str, Any]) -> str:
@@ -30,20 +51,53 @@ def _finding_status(finding: dict[str, Any]) -> str:
     return str(finding.get("validation_status") or finding.get("verification_status") or "").lower()
 
 
+def parse_finding_retests(finding: dict[str, Any]) -> tuple[RetestExecution, ...]:
+    """Build typed retest executions from a finding's structured ``retests``.
+
+    Expects ``finding["retests"]`` to be a list of dicts with ``outcome`` (one
+    of the :class:`RetestOutcome` vocabulary) and optional ``test_id``,
+    ``criteria_ids`` and ``evidence_ids``. Entries with an unknown/absent
+    outcome are skipped (conservative: unknown never counts as a pass). Free-text
+    fields are intentionally ignored here to avoid fabricating a fix.
+    """
+
+    raw = finding.get("retests")
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    executions: list[RetestExecution] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        outcome = _RETEST_OUTCOME_MAP.get(str(item.get("outcome", "")).strip().lower())
+        if outcome is None:
+            continue
+        executions.append(
+            RetestExecution(
+                test_id=str(item.get("test_id") or f"retest-{len(executions) + 1}"),
+                outcome=outcome,
+                criteria_ids=tuple(str(c) for c in (item.get("criteria_ids") or [])),
+                evidence_ids=tuple(str(e) for e in (item.get("evidence_ids") or [])),
+            )
+        )
+    return tuple(executions)
+
+
 def finding_to_closure_input(finding: dict[str, Any]) -> ClosureComputationInput:
     """Map a report finding to the deterministic closure-status inputs.
 
-    A first-pass assessment has no retest, so the computed status defaults to
+    Consumes structured retest data (``retests``) and known acceptance-criteria
+    ids (``acceptance_criteria_ids``) when present, so the computed status
+    reflects real retest evidence. Without retest data the status is
     ``not_retested`` (never a fabricated ``fixed_verified``). Explicit
-    false-positive / accepted-risk classifications are honoured. Structured
-    retest data, when present in a future data model, can be threaded in here.
+    false-positive / accepted-risk classifications are honoured.
     """
 
     status = _finding_status(finding)
+    criteria = tuple(str(c) for c in (finding.get("acceptance_criteria_ids") or []))
     return ClosureComputationInput(
         finding_id=_finding_id(finding),
-        acceptance_criteria_ids=(),
-        retests=(),
+        acceptance_criteria_ids=criteria,
+        retests=parse_finding_retests(finding),
         is_false_positive=status in _FALSE_POSITIVE_STATUSES,
         risk_accepted=status in _RISK_ACCEPTED_STATUSES,
     )
@@ -121,4 +175,5 @@ def generate_valhalla_llm_release(
 __all__ = [
     "finding_to_closure_input",
     "generate_valhalla_llm_release",
+    "parse_finding_retests",
 ]

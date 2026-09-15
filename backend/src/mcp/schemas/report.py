@@ -38,6 +38,14 @@ class ReportFormat(StrEnum):
     # Full structured XML export for the Valhalla LLM deliverable (distinct
     # from JUnit's test-result XML).
     XML = "xml"
+    # Valhalla mandatory LLM remediation/closure deliverable artifacts +
+    # release manifest (download-only; produced by the report pipeline).
+    VALHALLA_LLM_JSON = "valhalla_llm_json"
+    VALHALLA_LLM_MD = "valhalla_llm_md"
+    VALHALLA_LLM_XML = "valhalla_llm_xml"
+    VALHALLA_LLM_HTML = "valhalla_llm_html"
+    VALHALLA_LLM_PDF = "valhalla_llm_pdf"
+    VALHALLA_LLM_MANIFEST = "valhalla_llm_manifest"
 
 
 class ReportGenerateInput(BaseModel):

@@ -3,9 +3,11 @@
 import json
 
 from src.reports.llm_remediation.bundle import GenerationStatus
+from src.reports.llm_remediation.closure_status import compute_permitted_closure_status
 from src.reports.llm_remediation.integration import (
     finding_to_closure_input,
     generate_valhalla_llm_release,
+    parse_finding_retests,
 )
 
 REPORT_META = {
@@ -79,6 +81,74 @@ def test_closure_input_mapping():
     assert ra.risk_accepted
     plain = finding_to_closure_input({"finding_id": "F", "validation_status": "confirmed"})
     assert not plain.is_false_positive and not plain.risk_accepted
+
+
+def test_parse_finding_retests_skips_unknown_outcomes():
+    retests = parse_finding_retests(
+        {
+            "retests": [
+                {"test_id": "T1", "outcome": "pass_secure", "criteria_ids": ["C1"]},
+                {"test_id": "T2", "outcome": "wat"},  # unknown -> skipped
+                {"outcome": "fail"},  # id auto-assigned
+                "not-a-dict",
+            ]
+        }
+    )
+    assert [r.test_id for r in retests] == ["T1", "retest-2"]
+    assert retests[0].outcome.value == "pass_secure"
+    assert retests[1].outcome.value == "fail_vulnerable"
+
+
+def test_structured_retests_drive_fixed_verified():
+    finding = {
+        "finding_id": "F-1",
+        "verification_status": "confirmed",
+        "acceptance_criteria_ids": ["C1"],
+        "retests": [
+            {
+                "test_id": "T1",
+                "outcome": "pass_secure",
+                "criteria_ids": ["C1"],
+                "evidence_ids": ["E1"],
+            }
+        ],
+    }
+    result = compute_permitted_closure_status(finding_to_closure_input(finding))
+    assert result.permitted_status.value == "fixed_verified"
+
+
+def test_structured_retests_partial_and_inconclusive():
+    partial = compute_permitted_closure_status(
+        finding_to_closure_input(
+            {
+                "finding_id": "F-1",
+                "acceptance_criteria_ids": ["C1", "C2"],
+                "retests": [{"test_id": "T1", "outcome": "pass_secure", "criteria_ids": ["C1"]}],
+            }
+        )
+    )
+    assert partial.permitted_status.value == "partially_fixed"
+
+    inconclusive = compute_permitted_closure_status(
+        finding_to_closure_input(
+            {
+                "finding_id": "F-1",
+                "acceptance_criteria_ids": ["C1"],
+                "retests": [{"test_id": "T1", "outcome": "unreachable", "criteria_ids": ["C1"]}],
+            }
+        )
+    )
+    assert inconclusive.permitted_status.value == "inconclusive"
+
+
+def test_no_retests_stays_not_retested():
+    result = compute_permitted_closure_status(
+        finding_to_closure_input(
+            {"finding_id": "F-1", "acceptance_criteria_ids": ["C1"], "retest_result": "looks fixed"}
+        )
+    )
+    # Free-text retest_result must NOT fabricate a pass.
+    assert result.permitted_status.value == "not_retested"
 
 
 def test_generate_release_ready_when_all_validated():
