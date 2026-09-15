@@ -40,6 +40,7 @@ class LLMTask(Enum):
     EXPLOIT_GENERATION = "exploit_generation"
     VALIDATION_ONESHOT = "validation_oneshot"
     REMEDIATION_PLAN = "remediation_plan"
+    CLOSURE_ASSESSMENT = "closure_assessment"
     ZERO_DAY_ANALYSIS = "zero_day_analysis"
     DEDUP_ANALYSIS = "dedup_analysis"
     PERPLEXITY_OSINT = "perplexity_osint"
@@ -67,6 +68,7 @@ _TASK_TO_ROLE: dict[LLMTask, str] = {
     LLMTask.REPORT_SECTION: "report",
     LLMTask.EXECUTIVE_SUMMARY: "report",
     LLMTask.REMEDIATION_PLAN: "report",
+    LLMTask.CLOSURE_ASSESSMENT: "report",
     LLMTask.COST_SUMMARY: "report",
     LLMTask.QUICK_PLANNER: "planner",
     LLMTask.QUICK_FINGERPRINT: "planner",
@@ -204,6 +206,16 @@ ROUTING_TABLE: dict[LLMTask, LLMRoute] = {
         max_tokens=2000,
         temperature=0.1,
     ),
+    LLMTask.CLOSURE_ASSESSMENT: LLMRoute(
+        provider_env_key="OPENAI_API_KEY",
+        base_url="https://api.openai.com",
+        model="gpt-4o-mini",
+        fallback_env_key="DEEPSEEK_API_KEY",
+        fallback_base_url="https://api.deepseek.com",
+        fallback_model="deepseek-chat",
+        max_tokens=2000,
+        temperature=0.1,
+    ),
     LLMTask.ZERO_DAY_ANALYSIS: LLMRoute(
         provider_env_key="DEEPSEEK_API_KEY",
         base_url="https://api.deepseek.com",
@@ -323,6 +335,7 @@ TASK_TIERS: dict[LLMTask, dict[str, Any]] = {
     LLMTask.EXPLOIT_GENERATION: {"tier": LLMTier.LARGE, "escalation_threshold": 0.7},
     LLMTask.VALIDATION_ONESHOT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
     LLMTask.REMEDIATION_PLAN: {"tier": LLMTier.SMALL, "escalation_threshold": 0.5},
+    LLMTask.CLOSURE_ASSESSMENT: {"tier": LLMTier.SMALL, "escalation_threshold": 0.6},
     LLMTask.ZERO_DAY_ANALYSIS: {"tier": LLMTier.LARGE, "escalation_threshold": 0.8},
     LLMTask.DEDUP_ANALYSIS: {"tier": LLMTier.SMALL, "escalation_threshold": 0.4},
     LLMTask.PERPLEXITY_OSINT: {"tier": LLMTier.MEDIUM, "escalation_threshold": 0.7},

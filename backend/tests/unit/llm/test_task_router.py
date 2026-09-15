@@ -72,10 +72,12 @@ class TestLLMTaskEnum:
         assert LLMTask.QUICK_TRIAGE.value == "quick_triage"
         assert LLMTask.QUICK_CRITIC.value == "quick_critic"
         assert LLMTask.QUICK_REPORTER.value == "quick_reporter"
+        assert LLMTask.CLOSURE_ASSESSMENT.value == "closure_assessment"
 
-    def test_task_count_is_18(self):
+    def test_task_count_is_19(self):
+        # 18 original tasks + CLOSURE_ASSESSMENT (Valhalla LLM remediation/closure).
         tasks = list(LLMTask)
-        assert len(tasks) == 18
+        assert len(tasks) == 19
 
 
 class TestTaskToRoleMapping:

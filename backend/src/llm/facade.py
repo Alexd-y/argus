@@ -91,6 +91,7 @@ _CLOUD_FALLBACK_TASKS: frozenset[LLMTask] = frozenset(
         LLMTask.REPORT_SECTION,
         LLMTask.EXECUTIVE_SUMMARY,
         LLMTask.COST_SUMMARY,
+        LLMTask.CLOSURE_ASSESSMENT,
         LLMTask.PERPLEXITY_OSINT,
     }
 )
@@ -137,6 +138,7 @@ _TASK_TO_PREFERRED_ALIAS: dict[LLMTask, str] = {
     LLMTask.REPORT_SECTION: "report_writer",
     LLMTask.EXECUTIVE_SUMMARY: "report_writer",
     LLMTask.REMEDIATION_PLAN: "report_writer",
+    LLMTask.CLOSURE_ASSESSMENT: "report_writer",
     LLMTask.COST_SUMMARY: "report_writer",
     LLMTask.QUICK_PLANNER: "quick_planner",
     LLMTask.QUICK_FINGERPRINT: "quick_triage",
