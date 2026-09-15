@@ -550,6 +550,116 @@ async def run_generate_report_pipeline(
                     },
                 )
 
+        # Valhalla mandatory LLM remediation/closure deliverable (VH-LLM):
+        # per-finding remediation plan + closure conclusion projected into
+        # MD/XML/HTML/JSON + a release manifest, all from one document tree.
+        # Opt-in + fail-soft: never breaks the standard Valhalla outputs.
+        if tier_str == "valhalla" and settings.valhalla_llm_remediation_enabled:
+            try:
+                from src.reports.llm_remediation.facade_binding import (
+                    build_facade_llm_callable,
+                )
+                from src.reports.llm_remediation.integration import (
+                    generate_valhalla_llm_release,
+                )
+
+                vsnapshot = build_snapshot_from_report_data(
+                    report_data,
+                    scan_meta=_scan_meta_for_snapshot(built, report_data, scan_id, tenant_id),
+                    scan_report_data=getattr(built, "scan_report_data", None),
+                )
+                vfindings = [
+                    {
+                        "finding_id": f.finding_id,
+                        "title": f.title,
+                        "severity": f.severity,
+                        "verification_status": f.verification_status,
+                        "evidence_refs": list(f.evidence_ids),
+                        "description": f.description,
+                        "cwe": f.cwe,
+                    }
+                    for f in vsnapshot.findings
+                ]
+                vmeta = {
+                    "report_id": report_id,
+                    "report_version": vsnapshot.snapshot_hash or report_id,
+                    "tenant_id": tenant_id,
+                    "scan_id": scan_id,
+                    "target": vsnapshot.target,
+                }
+                _vdoc, vrelease = generate_valhalla_llm_release(
+                    vfindings,
+                    report_meta=vmeta,
+                    llm_callable=build_facade_llm_callable(scan_id=scan_id, tenant_id=tenant_id),
+                    formats=["json", "md", "xml", "html"],
+                    canonical_snapshot_hash=vsnapshot.snapshot_hash,
+                    provider="facade",
+                    model="report_writer",
+                )
+                for vfmt, artifact in vrelease.artifacts.items():
+                    llm_fmt = f"valhalla_llm_{vfmt}"
+                    llm_key = upload(
+                        tenant_id,
+                        scan_id,
+                        tier_str,
+                        report_id,
+                        llm_fmt,
+                        artifact.content,
+                        content_type=artifact.mime_type,
+                    )
+                    if llm_key:
+                        await _upsert_report_object(
+                            session,
+                            tenant_id=tenant_id,
+                            scan_id=scan_id,
+                            report_id=report_id,
+                            fmt=llm_fmt,
+                            object_key=llm_key,
+                            size_bytes=artifact.size_bytes,
+                        )
+                        generated[llm_fmt] = llm_key
+                manifest_bytes = vrelease.manifest.model_dump_json(indent=2).encode("utf-8")
+                manifest_key = upload(
+                    tenant_id,
+                    scan_id,
+                    tier_str,
+                    report_id,
+                    "valhalla_llm_manifest",
+                    manifest_bytes,
+                    content_type="application/json",
+                )
+                if manifest_key:
+                    await _upsert_report_object(
+                        session,
+                        tenant_id=tenant_id,
+                        scan_id=scan_id,
+                        report_id=report_id,
+                        fmt="valhalla_llm_manifest",
+                        object_key=manifest_key,
+                        size_bytes=len(manifest_bytes),
+                    )
+                    generated["valhalla_llm_manifest"] = manifest_key
+                logger.info(
+                    "valhalla_llm_release_emitted",
+                    extra={
+                        "event": "valhalla_llm_release_emitted",
+                        "report_id": report_id,
+                        "generation_status": vrelease.manifest.generation_status.value,
+                        "assessment_completeness": (
+                            vrelease.manifest.assessment_completeness.value
+                        ),
+                        "formats": sorted(vrelease.artifacts.keys()),
+                    },
+                )
+            except Exception:  # noqa: BLE001 — VH-LLM deliverable is additive
+                logger.warning(
+                    "valhalla_llm_release_failed",
+                    extra={
+                        "event": "valhalla_llm_release_failed",
+                        "report_id": report_id,
+                    },
+                )
+
         expected_keys = set(fmt_list)
         if tier_str == "valhalla" and "csv" in expected_keys:
             expected_keys.add(VALHALLA_SECTIONS_CSV_FORMAT)

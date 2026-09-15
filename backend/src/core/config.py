@@ -283,6 +283,18 @@ class Settings(BaseSettings):
             "canonical_report_snapshot_enabled",
         ),
     )
+    # Emit the mandatory per-finding Valhalla LLM remediation/closure deliverable
+    # (MD/XML/HTML/JSON + manifest) alongside the standard Valhalla artifacts.
+    # Opt-in + fail-soft: never breaks standard tier outputs. Requires a
+    # configured report LLM provider; without one the release is an honest
+    # incomplete draft, not a false final.
+    valhalla_llm_remediation_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "ARGUS_VALHALLA_LLM_REMEDIATION",
+            "valhalla_llm_remediation_enabled",
+        ),
+    )
     mcp_registrability_gate_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

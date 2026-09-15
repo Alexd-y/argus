@@ -39,6 +39,10 @@ from src.reports.llm_remediation.document import (
     ValhallaFindingNode,
     ValhallaLlmDocument,
 )
+from src.reports.llm_remediation.integration import (
+    finding_to_closure_input,
+    generate_valhalla_llm_release,
+)
 from src.reports.llm_remediation.render import (
     VALHALLA_LLM_XSD,
     assert_semantic_parity,
@@ -101,6 +105,8 @@ __all__ = [
     "build_valhalla_llm_document",
     "build_valhalla_release",
     "compute_permitted_closure_status",
+    "finding_to_closure_input",
+    "generate_valhalla_llm_release",
     "make_retest_execution",
     "parity_facts",
     "redact_text",

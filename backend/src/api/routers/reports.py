@@ -91,7 +91,26 @@ def _hostname_from_target_string(value: str) -> str | None:
         return None
 
 
-VALID_FORMATS = {"pdf", "html", "json", "csv", "md", VALHALLA_SECTIONS_CSV_FORMAT}
+# Valhalla mandatory LLM remediation/closure deliverable artifacts + manifest
+# (emitted by the report pipeline when valhalla_llm_remediation_enabled).
+_VALHALLA_LLM_FORMATS: dict[str, str] = {
+    "valhalla_llm_json": "application/json; charset=utf-8",
+    "valhalla_llm_md": "text/markdown; charset=utf-8",
+    "valhalla_llm_xml": "application/xml; charset=utf-8",
+    "valhalla_llm_html": "text/html; charset=utf-8",
+    "valhalla_llm_pdf": "application/pdf",
+    "valhalla_llm_manifest": "application/json; charset=utf-8",
+}
+
+VALID_FORMATS = {
+    "pdf",
+    "html",
+    "json",
+    "csv",
+    "md",
+    VALHALLA_SECTIONS_CSV_FORMAT,
+    *_VALHALLA_LLM_FORMATS,
+}
 CONTENT_TYPES = {
     "pdf": "application/pdf",
     "html": "text/html; charset=utf-8",
@@ -99,6 +118,7 @@ CONTENT_TYPES = {
     "csv": "text/csv; charset=utf-8",
     "md": "text/markdown; charset=utf-8",
     VALHALLA_SECTIONS_CSV_FORMAT: "text/csv; charset=utf-8",
+    **_VALHALLA_LLM_FORMATS,
 }
 
 
